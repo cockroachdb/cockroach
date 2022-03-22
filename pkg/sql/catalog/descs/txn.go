@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -44,17 +45,11 @@ func (cf *CollectionFactory) Txn(
 ) error {
 	// Waits for descriptors that were modified, skipping
 	// over ones that had their descriptor wiped.
-	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs []catalog.Descriptor) error {
+	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
 		// Wait for a single version on leased descriptors.
 		for _, ld := range modifiedDescriptors {
-			waitForNoVersion := false
+			waitForNoVersion := deletedDescs.Contains(ld.ID)
 			// Detect unpublished ones.
-			for _, deletedDesc := range deletedDescs {
-				if deletedDesc.GetID() == ld.ID {
-					waitForNoVersion = true
-					break
-				}
-			}
 			if waitForNoVersion {
 				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retry.Options{})
 				if err != nil {
@@ -71,15 +66,21 @@ func (cf *CollectionFactory) Txn(
 	}
 	for {
 		var modifiedDescriptors []lease.IDVersion
-		var deletedDescs []catalog.Descriptor
+		var deletedDescs catalog.DescriptorIDSet
 		var descsCol Collection
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			modifiedDescriptors = nil
-			deletedDescs = nil
-			descsCol = cf.MakeCollection(nil)
+			deletedDescs = catalog.DescriptorIDSet{}
+			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */)
 			defer descsCol.ReleaseAll(ctx)
-			if err := txn.SetSystemConfigTrigger(cf.leaseMgr.Codec().ForSystemTenant()); err != nil {
-				return err
+			if !cf.settings.Version.IsActive(
+				ctx, clusterversion.DisableSystemConfigGossipTrigger,
+			) {
+				if err := txn.DeprecatedSetSystemConfigTrigger(
+					cf.leaseMgr.Codec().ForSystemTenant(),
+				); err != nil {
+					return err
+				}
 			}
 			if err := f(ctx, txn, &descsCol); err != nil {
 				return err
@@ -169,12 +170,16 @@ func CheckTwoVersionInvariant(
 	// the current provisional commit timestamp for this transaction then if this
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
+
 	count, err := lease.CountLeases(ctx, ie, descs, txn.ProvisionalCommitTimestamp())
 	if err != nil {
 		return false, err
 	}
 	if count == 0 {
-		return false, nil
+		// This is the last step before committing a transaction which modifies
+		// descriptors. This is a perfect time to refresh the deadline prior to
+		// committing.
+		return false, descsCol.MaybeUpdateDeadline(ctx, txn)
 	}
 
 	// Restart the transaction so that it is able to replay itself at a newer timestamp

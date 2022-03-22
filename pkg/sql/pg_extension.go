@@ -64,10 +64,6 @@ func postgisColumnsTablePopulator(
 
 					var datumNDims tree.Datum
 					switch m.ShapeType {
-					case geopb.ShapeType_Point, geopb.ShapeType_LineString, geopb.ShapeType_Polygon,
-						geopb.ShapeType_MultiPoint, geopb.ShapeType_MultiLineString, geopb.ShapeType_MultiPolygon,
-						geopb.ShapeType_GeometryCollection:
-						datumNDims = tree.NewDInt(2)
 					case geopb.ShapeType_Geometry, geopb.ShapeType_Unset:
 						// For geometry_columns, the query in PostGIS COALESCES the value to 2.
 						// Otherwise, the value is NULL.
@@ -76,11 +72,33 @@ func postgisColumnsTablePopulator(
 						} else {
 							datumNDims = tree.DNull
 						}
+					default:
+						zm := m.ShapeType & (geopb.ZShapeTypeFlag | geopb.MShapeTypeFlag)
+						switch zm {
+						case geopb.ZShapeTypeFlag | geopb.MShapeTypeFlag:
+							datumNDims = tree.NewDInt(4)
+						case geopb.ZShapeTypeFlag, geopb.MShapeTypeFlag:
+							datumNDims = tree.NewDInt(3)
+						default:
+							datumNDims = tree.NewDInt(2)
+						}
 					}
 
-					shapeName := m.ShapeType.String()
-					if m.ShapeType == geopb.ShapeType_Unset {
-						shapeName = geopb.ShapeType_Geometry.String()
+					// PostGIS is weird on this one! It has the following behavior:
+					//
+					// * For Geometry, it uses the 2D shape type, all uppercase.
+					// * For Geography, use the correct OGR case for the shape type.
+					shapeName := geopb.ShapeType_Geometry.String()
+					if matchingFamily == types.GeometryFamily {
+						if m.ShapeType == geopb.ShapeType_Unset {
+							shapeName = strings.ToUpper(shapeName)
+						} else {
+							shapeName = strings.ToUpper(m.ShapeType.To2D().String())
+						}
+					} else {
+						if m.ShapeType != geopb.ShapeType_Unset {
+							shapeName = m.ShapeType.String()
+						}
 					}
 
 					if err := addRow(
@@ -90,7 +108,7 @@ func postgisColumnsTablePopulator(
 						tree.NewDString(col.GetName()),
 						datumNDims,
 						tree.NewDInt(tree.DInt(m.SRID)),
-						tree.NewDString(strings.ToUpper(shapeName)),
+						tree.NewDString(shapeName),
 					); err != nil {
 						return err
 					}

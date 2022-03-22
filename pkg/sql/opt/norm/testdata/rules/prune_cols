@@ -455,7 +455,7 @@ project
       │    └── projections
       │         └── a.f:3 / 2.0 [as=f:7, outer=(3)]
       └── filters
-           └── f:7 = i:2::FLOAT8 [outer=(2,7), immutable, constraints=(/7: (/NULL - ])]
+           └── f:7 = i:2::FLOAT8 [outer=(2,7), immutable, constraints=(/7: (/NULL - ]), fd=(2)-->(7)]
 
 # Detect PruneSelectCols and PushSelectIntoProject dependency cycle.
 norm
@@ -470,7 +470,7 @@ project
  │    ├── immutable
  │    ├── key: (1)
  │    ├── fd: ()-->(7), (1)-->(3)
- │    ├── group-by
+ │    ├── group-by (hash)
  │    │    ├── columns: k:1!null f:3 sum:7!null
  │    │    ├── grouping columns: k:1!null
  │    │    ├── key: (1)
@@ -1357,7 +1357,7 @@ distinct-on
 norm expect=PruneAggCols
 SELECT s, sumi FROM (SELECT sum(i) sumi, s, min(s||'foo') FROM a GROUP BY s) a
 ----
-group-by
+group-by (hash)
  ├── columns: s:4 sumi:7
  ├── grouping columns: s:4
  ├── key: (4)
@@ -1480,7 +1480,7 @@ scalar-group-by
 norm expect=PruneGroupByCols
 SELECT s, sum(i) FROM a GROUP BY s, s||'foo'
 ----
-group-by
+group-by (hash)
  ├── columns: s:4 sum:7
  ├── grouping columns: s:4
  ├── key: (4)
@@ -1495,7 +1495,7 @@ group-by
 norm expect=PruneGroupByCols
 SELECT avg(s::int+i), s, i FROM a GROUP BY s, i, i+1
 ----
-group-by
+group-by (hash)
  ├── columns: avg:8 s:4 i:2
  ├── grouping columns: i:2 s:4
  ├── immutable
@@ -1533,12 +1533,12 @@ project
 norm expect=PruneGroupByCols
 SELECT min(sm), i FROM (SELECT s, i, sum(k) sm, avg(k) av FROM a GROUP BY i, s) a GROUP BY i, i+1
 ----
-group-by
+group-by (hash)
  ├── columns: min:9!null i:2
  ├── grouping columns: i:2
  ├── key: (2)
  ├── fd: (2)-->(9)
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: i:2 s:4 sum:7!null
  │    ├── grouping columns: i:2 s:4
  │    ├── key: (2,4)
@@ -1684,7 +1684,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(8)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null sum:8
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
@@ -1837,17 +1837,17 @@ SELECT ntile(i) OVER () FROM a
 project
  ├── columns: ntile:7(int)
  ├── stats: [rows=1000]
- ├── cost: 1085.03
+ ├── cost: 1084.56
  ├── prune: (7)
  └── window partition=()
       ├── columns: t.public.a.i:2(int) ntile:7(int)
       ├── stats: [rows=1000]
-      ├── cost: 1075.02
+      ├── cost: 1074.54
       ├── prune: (7)
       ├── scan t.public.a
       │    ├── columns: t.public.a.i:2(int)
       │    ├── stats: [rows=1000]
-      │    ├── cost: 1075.01
+      │    ├── cost: 1074.52
       │    └── prune: (2)
       └── windows
            └── ntile [as=ntile:7, type=int, outer=(2)]
@@ -1955,17 +1955,17 @@ SELECT x FROM (SELECT ntile(i) OVER () x, ntile(f::int) OVER () y FROM a)
 project
  ├── columns: x:7(int)
  ├── stats: [rows=1000]
- ├── cost: 1085.03
+ ├── cost: 1084.56
  ├── prune: (7)
  └── window partition=()
       ├── columns: t.public.a.i:2(int) ntile:7(int)
       ├── stats: [rows=1000]
-      ├── cost: 1075.02
+      ├── cost: 1074.54
       ├── prune: (7)
       ├── scan t.public.a
       │    ├── columns: t.public.a.i:2(int)
       │    ├── stats: [rows=1000]
-      │    ├── cost: 1075.01
+      │    ├── cost: 1074.52
       │    └── prune: (2)
       └── windows
            └── ntile [as=ntile:7, type=int, outer=(2)]
@@ -2186,7 +2186,7 @@ update partial_indexes
       │    ├── scan partial_indexes
       │    │    ├── columns: a:7!null d:10
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(10)
@@ -2225,7 +2225,7 @@ update partial_indexes
       │    ├── scan partial_indexes
       │    │    ├── columns: a:7!null b:8 c:9 d:10
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8-10)
@@ -2244,8 +2244,8 @@ norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
 UPSERT INTO partial_indexes (a, d) VALUES (1, 2)
 ----
 upsert partial_indexes
+ ├── arbiter indexes: partial_indexes_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:11
  ├── fetch columns: a:11 d:14
  ├── insert-mapping:
@@ -2284,7 +2284,7 @@ upsert partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:11!null b:12 d:14
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12,14)
@@ -2301,8 +2301,8 @@ norm expect-not=PruneMutationFetchCols
 UPSERT INTO partial_indexes (a, b, d) VALUES (1, 2, 3)
 ----
 upsert partial_indexes
+ ├── arbiter indexes: partial_indexes_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -2342,7 +2342,7 @@ upsert partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:11!null b:12 c:13 d:14
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-14)
@@ -2360,8 +2360,8 @@ norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
 INSERT INTO partial_indexes (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET d = 3
 ----
 upsert partial_indexes
+ ├── arbiter indexes: partial_indexes_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:11
  ├── fetch columns: a:11 d:14
  ├── insert-mapping:
@@ -2400,7 +2400,7 @@ upsert partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:11!null b:12 d:14
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12,14)
@@ -2418,8 +2418,8 @@ norm expect-not=PruneMutationFetchCols
 INSERT INTO partial_indexes (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b = 3, d = 4
 ----
 upsert partial_indexes
+ ├── arbiter indexes: partial_indexes_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -2464,7 +2464,7 @@ upsert partial_indexes
       │    │    │    ├── scan partial_indexes
       │    │    │    │    ├── columns: a:11!null b:12 c:13 d:14
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
       │    │    │    │    ├── key: (11)
       │    │    │    │    └── fd: (11)-->(12-14)
@@ -2501,7 +2501,7 @@ delete partial_indexes
       │    ├── scan partial_indexes
       │    │    ├── columns: a:7!null b:8 c:9
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8,9)
@@ -2542,7 +2542,7 @@ update virt_partial_idx
       │    │    │    └── v:10
       │    │    │         └── b:9 + 1
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(12)
@@ -2591,7 +2591,7 @@ update virt_partial_idx
       │    │    │    │    └── v:10
       │    │    │    │         └── b:9 + 1
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
       │    │    │    ├── key: (8)
       │    │    │    └── fd: (8)-->(9,11,12)
@@ -2613,8 +2613,8 @@ norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
 UPSERT INTO virt_partial_idx (a, d) VALUES (1, 2)
 ----
 upsert virt_partial_idx
+ ├── arbiter indexes: virt_partial_idx_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:12
  ├── fetch columns: a:12 d:16
  ├── insert-mapping:
@@ -2665,7 +2665,7 @@ upsert virt_partial_idx
       │    │    │    │    │    └── v:14
       │    │    │    │    │         └── b:13 + 1
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13,16)
@@ -2684,8 +2684,8 @@ norm expect-not=PruneMutationFetchCols
 UPSERT INTO virt_partial_idx (a, b, d) VALUES (1, 2, 3)
 ----
 upsert virt_partial_idx
+ ├── arbiter indexes: virt_partial_idx_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:13
  ├── fetch columns: a:13 b:14 v:15 c:16 d:17
  ├── insert-mapping:
@@ -2738,7 +2738,7 @@ upsert virt_partial_idx
       │    │    │    │    │    └── v:15
       │    │    │    │    │         └── b:14 + 1
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:14 > 0 [outer=(14), constraints=(/14: [/1 - ]; tight)]
       │    │    │    │    ├── key: (13)
       │    │    │    │    └── fd: (13)-->(14,16,17)
@@ -2758,8 +2758,8 @@ norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
 INSERT INTO virt_partial_idx (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET d = 3
 ----
 upsert virt_partial_idx
+ ├── arbiter indexes: virt_partial_idx_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:12
  ├── fetch columns: a:12 d:16
  ├── insert-mapping:
@@ -2810,7 +2810,7 @@ upsert virt_partial_idx
       │    │    │    │    │    └── v:14
       │    │    │    │    │         └── b:13 + 1
       │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13,16)
@@ -2830,8 +2830,8 @@ norm expect-not=PruneMutationFetchCols
 INSERT INTO virt_partial_idx (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET b = 3, d = 4
 ----
 upsert virt_partial_idx
+ ├── arbiter indexes: virt_partial_idx_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:12
  ├── fetch columns: a:12 b:13 v:14 c:15 d:16
  ├── insert-mapping:
@@ -2890,7 +2890,7 @@ upsert virt_partial_idx
       │    │    │    │    │    │    └── v:14
       │    │    │    │    │    │         └── b:13 + 1
       │    │    │    │    │    ├── partial index predicates
-      │    │    │    │    │    │    └── secondary: filters
+      │    │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
       │    │    │    │    │    ├── key: (12)
       │    │    │    │    │    └── fd: (12)-->(13,15,16)
@@ -2934,7 +2934,7 @@ delete virt_partial_idx
       │    │    │    └── v:10
       │    │    │         └── b:9 + 1
       │    │    ├── partial index predicates
-      │    │    │    └── secondary: filters
+      │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,11)
@@ -2977,7 +2977,7 @@ update partial_indexes
       │    │    ├── scan partial_indexes
       │    │    │    ├── columns: a:7!null b:8 c:9
       │    │    │    ├── partial index predicates
-      │    │    │    │    └── secondary: filters
+      │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
       │    │    │    ├── key: (7)
       │    │    │    └── fd: (7)-->(8,9)
@@ -3103,8 +3103,8 @@ norm expect=PruneMutationInputCols
 INSERT INTO a (k, s) VALUES (1, 'foo') ON CONFLICT (k) DO UPDATE SET i=a.i+1
 ----
 upsert a
+ ├── arbiter indexes: a_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: k:11
  ├── fetch columns: k:11 i:12 f:13 s:14
  ├── insert-mapping:
@@ -3156,7 +3156,7 @@ INSERT INTO a (k, s) VALUES (1, 'foo') ON CONFLICT (k) DO UPDATE SET i=a.i+1 RET
 ----
 upsert a
  ├── columns: k:1!null i:2 f:3 s:4
- ├── arbiter indexes: primary
+ ├── arbiter indexes: a_pkey
  ├── canary column: k:11
  ├── fetch columns: k:11 i:12 f:13 s:14
  ├── insert-mapping:
@@ -3216,8 +3216,8 @@ norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
 UPSERT INTO family (a, b) VALUES (1, 2)
 ----
 upsert family
+ ├── arbiter indexes: family_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12
  ├── insert-mapping:
@@ -3266,7 +3266,7 @@ project
  ├── fd: ()-->(5)
  └── upsert family
       ├── columns: a:1!null e:5
-      ├── arbiter indexes: primary
+      ├── arbiter indexes: family_pkey
       ├── canary column: a:13
       ├── fetch columns: a:13 c:15 d:16 e:17
       ├── insert-mapping:
@@ -3324,8 +3324,8 @@ norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
 INSERT INTO family VALUES (1, 2, 3, 4) ON CONFLICT (a) DO UPDATE SET d=10
 ----
 upsert family
+ ├── arbiter indexes: family_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:13
  ├── fetch columns: a:13 c:15 d:16
  ├── insert-mapping:
@@ -3375,8 +3375,8 @@ norm expect=(PruneMutationInputCols)
 INSERT INTO mutation VALUES (1, 2, 3) ON CONFLICT (a) DO UPDATE SET b=10
 ----
 upsert mutation
+ ├── arbiter indexes: mutation_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:12
  ├── fetch columns: a:12 b:13 c:14 d:15 e:16
  ├── insert-mapping:
@@ -3532,8 +3532,8 @@ norm
 UPSERT INTO checks (a, c, d) VALUES (1, 3, 4)
 ----
 upsert checks
+ ├── arbiter indexes: checks_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14
  ├── insert-mapping:
@@ -3756,8 +3756,8 @@ norm expect=PruneMutationInputCols
 INSERT INTO uniq_fk_parent VALUES (2, 1) ON CONFLICT (k) DO UPDATE SET c = 1
 ----
 upsert uniq_fk_parent
+ ├── arbiter indexes: uniq_fk_parent_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: uniq_fk_parent.k:11
  ├── fetch columns: uniq_fk_parent.k:11 uniq_fk_parent.b:13 uniq_fk_parent.c:14
  ├── insert-mapping:
@@ -3770,7 +3770,7 @@ upsert uniq_fk_parent
  │    └── upsert_c:22 => uniq_fk_parent.c:4
  ├── input binding: &1
  ├── cascades
- │    └── fk_b_ref_uniq_fk_parent
+ │    └── uniq_fk_child_b_c_fkey
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
@@ -3868,8 +3868,8 @@ norm expect=PruneMutationInputCols
 INSERT INTO uniq_fk_parent VALUES (1) ON CONFLICT (k) DO UPDATE SET d = 1
 ----
 upsert uniq_fk_parent
+ ├── arbiter indexes: uniq_fk_parent_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: uniq_fk_parent.k:10
  ├── fetch columns: uniq_fk_parent.k:10 uniq_fk_parent.d:14
  ├── insert-mapping:
@@ -4570,7 +4570,7 @@ project
  ├── fd: ()-->(1-3)
  └── upsert returning_test
       ├── columns: a:1 b:2 c:3 rowid:8!null
-      ├── arbiter indexes: secondary
+      ├── arbiter indexes: returning_test_a_key
       ├── canary column: rowid:23
       ├── fetch columns: a:16 b:17 c:18 rowid:23
       ├── insert-mapping:
@@ -4668,7 +4668,7 @@ project
  ├── fd: ()-->(1-4)
  └── upsert returning_test
       ├── columns: a:1!null b:2!null c:3!null d:4 rowid:8!null
-      ├── arbiter indexes: primary
+      ├── arbiter indexes: returning_test_pkey
       ├── canary column: rowid:23
       ├── fetch columns: a:16 b:17 c:18 d:19 rowid:23
       ├── insert-mapping:
@@ -4938,12 +4938,12 @@ WITH foo AS (SELECT * FROM a)
 with &1 (foo)
  ├── columns: i:8(int)
  ├── stats: [rows=1000]
- ├── cost: 1105.63
+ ├── cost: 1104.86
  ├── prune: (8)
  ├── scan t.public.a
  │    ├── columns: t.public.a.k:1(int!null) t.public.a.i:2(int) t.public.a.f:3(float) t.public.a.s:4(string)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1105.61
+ │    ├── cost: 1104.82
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
@@ -4953,7 +4953,7 @@ with &1 (foo)
       ├── mapping:
       │    └──  t.public.a.i:2(int) => i:8(int)
       ├── stats: [rows=1000]
-      ├── cost: 0.01
+      ├── cost: 0.02
       ├── prune: (8)
       └── cte-uses
            └── &1: count=1 used-columns=(2)

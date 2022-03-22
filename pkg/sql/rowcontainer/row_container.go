@@ -151,7 +151,7 @@ type MemRowContainer struct {
 
 	evalCtx *tree.EvalContext
 
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 }
 
 var _ heap.Interface = &MemRowContainer{}
@@ -220,8 +220,9 @@ func (mc *MemRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) e
 // Sort is part of the SortableRowContainer interface.
 func (mc *MemRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
-	cancelChecker := cancelchecker.NewCancelChecker(ctx)
-	sort.Sort(mc, cancelChecker)
+	var cancelChecker cancelchecker.CancelChecker
+	cancelChecker.Reset(ctx)
+	sort.Sort(mc, &cancelChecker)
 }
 
 // Reorder implements ReorderableRowContainer. We don't need to create a new
@@ -373,7 +374,7 @@ type DiskBackedRowContainer struct {
 	// encodings keeps around the DatumEncoding equivalents of the encoding
 	// directions in ordering to avoid conversions in hot paths.
 	encodings  []descpb.DatumEncoding
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 	scratchKey []byte
 
 	spilled bool
@@ -420,14 +421,17 @@ func (f *DiskBackedRowContainer) Init(
 }
 
 // DoDeDuplicate causes DiskBackedRowContainer to behave as an implementation
-// of DeDupingRowContainer. It should not be mixed with calls to AddRow(). It
-// de-duplicates the keys such that only the first row with the given key will
-// be stored. The index returned in AddRowWithDedup() is a dense index
-// starting from 0, representing when that key was first added. This feature
-// does not combine with Sort(), Reorder() etc., and only to be used for
-// assignment of these dense indexes. The main reason to add this to
-// DiskBackedRowContainer is to avoid significant code duplication in
-// constructing another row container.
+// of DeDupingRowContainer. It should not be mixed with calls to AddRow().
+//
+// The rows are deduplicated along the columns in the ordering (the values on
+// those columns are the key). Only the first row with a given key will be
+// stored. The index returned in AddRowWithDedup() is a dense index starting
+// from 0, representing when that key was first added. This feature does not
+// combine with Sort(), Reorder() etc., and only to be used for assignment of
+// these dense indexes.
+//
+// The main reason to add this to DiskBackedRowContainer is to avoid significant
+// code duplication in constructing another row container.
 func (f *DiskBackedRowContainer) DoDeDuplicate() {
 	f.deDuplicate = true
 	f.keyToIndex = make(map[string]int)
@@ -635,7 +639,7 @@ type DiskBackedIndexedRowContainer struct {
 
 	scratchEncRow rowenc.EncDatumRow
 	storedTypes   []*types.T
-	datumAlloc    rowenc.DatumAlloc
+	datumAlloc    tree.DatumAlloc
 	rowAlloc      rowenc.EncDatumRowAlloc
 	idx           uint64 // the index of the next row to be added into the container
 

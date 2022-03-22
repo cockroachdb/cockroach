@@ -23,6 +23,7 @@ import (
 type multiRegionTestClusterParams struct {
 	baseDir         string
 	replicationMode base.TestClusterReplicationMode
+	useDatabase     string
 }
 
 // MultiRegionTestClusterParamsOption is an option that can be passed to
@@ -44,6 +45,13 @@ func WithReplicationMode(
 ) MultiRegionTestClusterParamsOption {
 	return func(params *multiRegionTestClusterParams) {
 		params.replicationMode = replicationMode
+	}
+}
+
+// WithUseDatabase is an option to set the UseDatabase server option.
+func WithUseDatabase(db string) MultiRegionTestClusterParamsOption {
+	return func(params *multiRegionTestClusterParams) {
+		params.useDatabase = db
 	}
 }
 
@@ -69,6 +77,7 @@ func TestingCreateMultiRegionCluster(
 		serverArgs[i] = base.TestServerArgs{
 			Knobs:         knobs,
 			ExternalIODir: params.baseDir,
+			UseDatabase:   params.useDatabase,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
 			},

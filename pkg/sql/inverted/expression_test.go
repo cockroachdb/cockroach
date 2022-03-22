@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -80,13 +81,13 @@ type UnknownExpression struct {
 	tight bool
 }
 
-func (u UnknownExpression) IsTight() bool { return u.tight }
-func (u UnknownExpression) SetNotTight()  { u.tight = false }
-func (u UnknownExpression) String() string {
+func (u *UnknownExpression) IsTight() bool { return u.tight }
+func (u *UnknownExpression) SetNotTight()  { u.tight = false }
+func (u *UnknownExpression) String() string {
 	return fmt.Sprintf("unknown expression: tight=%t", u.tight)
 }
-func (u UnknownExpression) Copy() Expression {
-	return UnknownExpression{tight: u.tight}
+func (u *UnknownExpression) Copy() Expression {
+	return &UnknownExpression{tight: u.tight}
 }
 
 // Makes a (shallow) copy of the root node of the expression identified
@@ -112,8 +113,8 @@ func getExprCopy(
 		}
 	case NonInvertedColExpression:
 		return NonInvertedColExpression{}
-	case UnknownExpression:
-		return UnknownExpression{tight: e.tight}
+	case *UnknownExpression:
+		return &UnknownExpression{tight: e.tight}
 	default:
 		d.Fatalf(t, "unknown expr type")
 		return nil
@@ -139,7 +140,7 @@ func TestExpression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	exprsByName := make(map[string]Expression)
 
-	datadriven.RunTest(t, "testdata/expression", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "expression"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "new-span-leaf":
 			var name string
@@ -157,7 +158,7 @@ func TestExpression(t *testing.T) {
 			d.ScanArgs(t, "name", &name)
 			var tight bool
 			d.ScanArgs(t, "tight", &tight)
-			expr := UnknownExpression{tight: tight}
+			expr := &UnknownExpression{tight: tight}
 			exprsByName[name] = expr
 			return fmt.Sprintf("%v", expr)
 		case "new-non-inverted-leaf":

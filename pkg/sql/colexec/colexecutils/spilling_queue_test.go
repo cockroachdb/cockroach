@@ -38,7 +38,7 @@ func TestSpillingQueue(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, rewindable := range []bool{false, true} {
 		for _, memoryLimit := range []int64{
 			10 << 10,                        /* 10 KiB */
@@ -46,7 +46,7 @@ func TestSpillingQueue(t *testing.T) {
 			1 << 30,                         /* 1 GiB */
 		} {
 			alwaysCompress := rng.Float64() < 0.5
-			diskQueueCacheMode := colcontainer.DiskQueueCacheModeDefault
+			diskQueueCacheMode := colcontainer.DiskQueueCacheModeIntertwinedCalls
 			var dequeuedProbabilityBeforeAllEnqueuesAreDone float64
 			// testReuseCache will test the reuse cache modes.
 			testReuseCache := rng.Float64() < 0.5
@@ -106,8 +106,7 @@ func TestSpillingQueue(t *testing.T) {
 			op.Init(ctx)
 			typs := op.Typs()
 
-			queueCfg.CacheMode = diskQueueCacheMode
-			queueCfg.SetDefaultBufferSizeBytesForCacheMode()
+			queueCfg.SetCacheMode(diskQueueCacheMode)
 			queueCfg.TestingKnobs.AlwaysCompress = alwaysCompress
 
 			// We need to create a separate unlimited allocator for the spilling
@@ -258,9 +257,9 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeDefault
+	queueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeIntertwinedCalls)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	numBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(4)) + rng.Intn(int(spillingQueueInitialItemsLen))
 	op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
 		// TODO(yuzefovich): for some types (e.g. types.MakeArray(types.Int))
@@ -277,7 +276,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	// Choose a memory limit such that at most two batches can be kept in the
 	// in-memory buffer at a time (single batch is not enough because the queue
 	// delays the release of the memory by one batch).
-	memoryLimit := int64(2 * colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()))
+	memoryLimit := 2 * colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize())
 	if memoryLimit < mon.DefaultPoolAllocationSize {
 		memoryLimit = mon.DefaultPoolAllocationSize
 	}
@@ -336,7 +335,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	typs := []*types.T{types.Int}
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
@@ -430,7 +429,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	typs := []*types.T{types.Int}
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()

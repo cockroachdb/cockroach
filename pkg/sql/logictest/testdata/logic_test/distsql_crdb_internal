@@ -37,11 +37,18 @@ NULL       /1       {1}       1
 /9         NULL     {5}       5
 
 
+# As of #69273, crdb_internal.reset_sql_stats()'s behavior changes from in-memory
+# only to truncating system table. Hence, we create a small table here to
+# to ensure that this test doesn't run for a very long time.
+statement ok
+CREATE TABLE smalldata (a INT, PRIMARY KEY (a))
+
+statement ok
+INSERT INTO smalldata VALUES (1), (2), (3)
+
 query II
-SELECT a, count(*) AS cnt FROM data GROUP BY a HAVING crdb_internal.reset_sql_stats() ORDER BY a LIMIT 5
+SELECT a, count(*) AS cnt FROM smalldata GROUP BY a HAVING crdb_internal.reset_sql_stats() ORDER BY a
 ----
-1 1000
-2 1000
-3 1000
-4 1000
-5 1000
+1 1
+2 1
+3 1

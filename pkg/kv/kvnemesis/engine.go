@@ -54,7 +54,7 @@ func (e *Engine) Close() {
 func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 	iter := e.kvs.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: key, Timestamp: ts}))
+	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: key, Timestamp: ts}))
 	if !iter.Valid() {
 		return roachpb.Value{}
 	}
@@ -67,6 +67,9 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 	if !mvccKey.Key.Equal(key) {
 		return roachpb.Value{}
 	}
+	if len(iter.Value()) == 0 {
+		return roachpb.Value{}
+	}
 	var valCopy []byte
 	e.b, valCopy = e.b.Copy(iter.Value(), 0 /* extraCap */)
 	return roachpb.Value{RawBytes: valCopy, Timestamp: mvccKey.Timestamp}
@@ -75,7 +78,15 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 // Put inserts a key/value/timestamp tuple. If an exact key/timestamp pair is
 // Put again, it overwrites the previous value.
 func (e *Engine) Put(key storage.MVCCKey, value []byte) {
-	if err := e.kvs.Set(storage.EncodeKey(key), value, nil); err != nil {
+	if err := e.kvs.Set(storage.EncodeMVCCKey(key), value, nil); err != nil {
+		panic(err)
+	}
+}
+
+// Delete writes a tombstone value for a given key/timestamp. This is
+// equivalent to a Put with an empty value.
+func (e *Engine) Delete(key storage.MVCCKey) {
+	if err := e.kvs.Set(storage.EncodeMVCCKey(key), nil, nil); err != nil {
 		panic(err)
 	}
 }

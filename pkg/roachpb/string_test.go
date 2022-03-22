@@ -11,6 +11,9 @@
 package roachpb_test
 
 import (
+	"context"
+	"fmt"
+	"path/filepath"
 	"testing"
 
 	// Hook up the pretty printer.
@@ -18,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
@@ -60,15 +65,21 @@ func TestBatchRequestString(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	txn := roachpb.MakeTransaction(
 		"test",
-		nil, /* baseKey */
+		nil, // baseKey
 		roachpb.NormalUserPriority,
 		hlc.Timestamp{}, // now
 		0,               // maxOffsetNs
+		99,              // coordinatorNodeID
 	)
 	txn.ID = uuid.NamespaceDNS
 	ba.Txn = &txn
 	ba.WaitPolicy = lock.WaitPolicy_Error
 	ba.CanForwardReadTimestamp = true
+	ba.BoundedStaleness = &roachpb.BoundedStalenessHeader{
+		MinTimestampBound:       hlc.Timestamp{WallTime: 1},
+		MinTimestampBoundStrict: true,
+		MaxTimestampBound:       hlc.Timestamp{WallTime: 2},
+	}
 	for i := 0; i < 100; i++ {
 		var ru roachpb.RequestUnion
 		ru.MustSetInner(&roachpb.GetRequest{})
@@ -79,13 +90,13 @@ func TestBatchRequestString(t *testing.T) {
 	ba.Requests = append(ba.Requests, ru)
 
 	{
-		exp := `Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min),... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTxn(commit:false) [/Min], [txn: 6ba7b810], [wait-policy: Error], [can-forward-ts]`
+		exp := `Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min),... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTxn(abort) [/Min], [txn: 6ba7b810], [wait-policy: Error], [can-forward-ts], [bounded-staleness, min_ts_bound: 0.000000001,0, min_ts_bound_strict, max_ts_bound: 0.000000002,0]`
 		act := ba.String()
 		require.Equal(t, exp, act)
 	}
 
 	{
-		exp := `Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›),... 76 skipped ..., Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), EndTxn(commit:false) [‹/Min›], [txn: 6ba7b810], [wait-policy: Error], [can-forward-ts]`
+		exp := `Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›),... 76 skipped ..., Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), Get [‹/Min›,‹/Min›), EndTxn(abort) [‹/Min›], [txn: 6ba7b810], [wait-policy: Error], [can-forward-ts], [bounded-staleness, min_ts_bound: 0.000000001,0, min_ts_bound_strict, max_ts_bound: 0.000000002,0]`
 		act := redact.Sprint(ba)
 		require.EqualValues(t, exp, act)
 	}
@@ -113,4 +124,56 @@ func TestRangeDescriptorStringRedact(t *testing.T) {
 		`r1:‹{c-g}› [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`,
 		redact.Sprint(desc),
 	)
+}
+
+func TestSpansString(t *testing.T) {
+	for _, tc := range []struct {
+		spans    roachpb.Spans
+		expected string
+	}{
+		{
+			spans:    roachpb.Spans{},
+			expected: "",
+		},
+		{
+			spans:    roachpb.Spans{{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
+			expected: "{a-b}",
+		},
+		{
+			spans:    roachpb.Spans{{Key: roachpb.Key("a")}, {Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
+			expected: "a, {c-d}",
+		},
+	} {
+		require.Equal(t, tc.expected, tc.spans.String())
+	}
+}
+
+func TestReplicaUnavailableError(t *testing.T) {
+	ctx := context.Background()
+	rDesc := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 2, ReplicaID: 3}
+	var set roachpb.ReplicaSet
+	set.AddReplica(rDesc)
+	desc := roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax, set)
+
+	errSlowProposal := errors.New("slow proposal")
+	var err = roachpb.NewReplicaUnavailableError(errSlowProposal, desc, rDesc)
+	err = errors.DecodeError(ctx, errors.EncodeError(ctx, err))
+	// Sanity check that Unwrap() was implemented.
+	require.True(t, errors.Is(err, errSlowProposal), "%+v", err)
+	require.True(t, errors.HasType(err, (*roachpb.ReplicaUnavailableError)(nil)), "%+v", err)
+
+	s := fmt.Sprintf("%s\n%s", err, redact.Sprint(err))
+	echotest.Require(t, s, filepath.Join("testdata", "replica_unavailable_error.txt"))
+}
+
+func TestAmbiguousResultError(t *testing.T) {
+	ctx := context.Background()
+
+	wrapped := errors.Errorf("boom with a %s", redact.Unsafe("secret"))
+	var err error = roachpb.NewAmbiguousResultError(wrapped)
+	err = errors.DecodeError(ctx, errors.EncodeError(ctx, err))
+	require.True(t, errors.Is(err, wrapped), "%+v", err)
+
+	s := fmt.Sprintf("%s\n%s", err, redact.Sprint(err))
+	echotest.Require(t, s, filepath.Join("testdata", "ambiguous_result_error.txt"))
 }

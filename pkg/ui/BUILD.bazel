@@ -1,8 +1,19 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
 
 go_library(
     name = "ui",
     srcs = ["ui.go"],
+    # keep
+    embedsrcs = select({
+        "//pkg/ui:cockroach_with_ui": [
+            "dist_vendor/list.min.js",
+            "dist_vendor/.gitkeep",
+        ],
+        "//conditions:default": [
+            "dist_vendor/.gitkeep",
+        ],
+    }),
     importpath = "github.com/cockroachdb/cockroach/pkg/ui",
     visibility = ["//visibility:public"],
     deps = [
@@ -10,6 +21,44 @@ go_library(
         "//pkg/build",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_elazarl_go_bindata_assetfs//:go-bindata-assetfs",
+    ],
+)
+
+config_setting(
+    name = "cockroach_with_ui",
+    define_values = {
+        "cockroach_with_ui": "y",
+    },
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "gen-empty-index.html",
+    outs = ["index.html"],
+    cmd = """
+    cat >$@ <<EOF
+<!DOCTYPE html>
+<title>CockroachDB</title>
+Binary built without web UI.
+<hr>
+<em>%s</em>
+EOF
+""",
+    visibility = ["//pkg/ui:__subpackages__"],
+)
+
+genrule(
+    name = "listjs",
+    srcs = ["@npm//:node_modules/list.js/dist/list.min.js"],
+    outs = ["dist_vendor/list.min.js"],
+    cmd = "cp ./$(location @npm//:node_modules/list.js/dist/list.min.js) $@",
+    tools = ["@npm//list.js"],
+)
+
+test_suite(
+    name = "lint",
+    tests = [
+        "//pkg/ui/workspaces/cluster-ui:lint",
+        "//pkg/ui/workspaces/db-console:lint",
     ],
 )

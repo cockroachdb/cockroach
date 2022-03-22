@@ -15,7 +15,7 @@ import (
 	"crypto/tls"
 )
 
-//go:generate mockgen -package=certmgr -destination=mocks_generated.go -source=cert.go . Cert
+//go:generate mockgen -package=certmgr -destination=mocks_generated_test.go . Cert
 
 // Cert is a generic presentation on managed certificate that can be reloaded.
 // A managed certificate allows the certificates to be rotated by a cert manager.

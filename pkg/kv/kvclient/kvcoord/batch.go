@@ -18,17 +18,19 @@ import (
 
 var emptySpan = roachpb.Span{}
 
-// truncate restricts all contained requests to the given key range and returns
-// a new, truncated, BatchRequest. All requests contained in that batch are
-// "truncated" to the given span, and requests which are found to not overlap
-// the given span at all are removed. A mapping of response index to batch index
-// is returned. For example, if
+// Truncate restricts all requests to the given key range and returns new,
+// truncated, requests. All returned requests are "truncated" to the given span,
+// and requests which are found to not overlap the given span at all are
+// removed. A mapping of response index to request index is returned. For
+// example, if
 //
-// ba = Put[a], Put[c], Put[b],
+// reqs = Put[a], Put[c], Put[b],
 // rs = [a,bb],
 //
-// then truncate(ba,rs) returns a batch (Put[a], Put[b]) and positions [0,2].
-func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, []int, error) {
+// then Truncate(reqs,rs) returns (Put[a], Put[b]) and positions [0,2].
+func Truncate(
+	reqs []roachpb.RequestUnion, rs roachpb.RSpan,
+) ([]roachpb.RequestUnion, []int, error) {
 	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
 		header := args.Header().Span()
 		if !roachpb.IsRange(args) {
@@ -95,30 +97,29 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 	// slice, only when something changed (copy-on-write).
 
 	var positions []int
-	truncBA := ba
-	truncBA.Requests = nil
-	for pos, arg := range ba.Requests {
+	var truncReqs []roachpb.RequestUnion
+	for pos, arg := range reqs {
 		hasRequest, newSpan, err := truncateOne(arg.GetInner())
 		if hasRequest {
 			// Keep the old one. If we must adjust the header, must copy.
-			inner := ba.Requests[pos].GetInner()
+			inner := reqs[pos].GetInner()
 			oldHeader := inner.Header()
 			if newSpan.EqualValue(oldHeader.Span()) {
-				truncBA.Requests = append(truncBA.Requests, ba.Requests[pos])
+				truncReqs = append(truncReqs, reqs[pos])
 			} else {
 				oldHeader.SetSpan(newSpan)
 				shallowCopy := inner.ShallowCopy()
 				shallowCopy.SetHeader(oldHeader)
-				truncBA.Requests = append(truncBA.Requests, roachpb.RequestUnion{})
-				truncBA.Requests[len(truncBA.Requests)-1].MustSetInner(shallowCopy)
+				truncReqs = append(truncReqs, roachpb.RequestUnion{})
+				truncReqs[len(truncReqs)-1].MustSetInner(shallowCopy)
 			}
 			positions = append(positions, pos)
 		}
 		if err != nil {
-			return roachpb.BatchRequest{}, nil, err
+			return nil, nil, err
 		}
 	}
-	return truncBA, positions, nil
+	return truncReqs, positions, nil
 }
 
 // prev gives the right boundary of the union of all requests which don't
@@ -126,15 +127,15 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 // exclusive, that is, the returned RKey is to be used as the exclusive
 // right endpoint in finding the next range to query.
 //
-// Informally, a call `prev(ba, k)` means: we've already executed the parts
-// of `ba` that intersect `[k, KeyMax)`; please tell me how far to the
+// Informally, a call `prev(reqs, k)` means: we've already executed the parts
+// of `reqs` that intersect `[k, KeyMax)`; please tell me how far to the
 // left the next relevant request begins.
 //
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'roachpb'.
-func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
+func prev(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMin
-	for _, union := range ba.Requests {
+	for _, union := range reqs {
 		inner := union.GetInner()
 		h := inner.Header()
 		addr, err := keys.Addr(h.Key)
@@ -143,18 +144,19 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 		}
 		endKey := h.EndKey
 		if len(endKey) == 0 {
-			// This is unintuitive, but if we have a point request at `x=k` then that request has
-			// already been satisfied (since the batch has already been executed for all keys `>=
-			// k`). We treat `k` as `[k,k)` which does the right thing below. It also does when `x >
-			// k` and `x < k`, so we're good.
+			// If we have a point request for `x < k` then that request has not been
+			// satisfied (since the batch has only been executed for keys `>=k`). We
+			// treat `x` as `[x, x.Next())` which does the right thing below. This
+			// also works when `x > k` or `x=k` as the logic below will skip `x`.
 			//
-			// Note that if `x` is /Local/k/something, then AddrUpperBound below will turn it into
-			// `k\x00`, and so we're looking at the key range `[k, k\x00)`. This is exactly what we
-			// want since otherwise the result would be `k` and so the caller would restrict itself
-			// to `key < k`, but that excludes `k` itself and thus all local keys attached to it.
+			// Note that if the key is /Local/x/something, then instead of using
+			// /Local/x/something.Next() as the end key, we rely on AddrUpperBound to
+			// handle local keys. In particular, AddrUpperBound will turn it into
+			// `x\x00`, so we're looking at the key-range `[x, x.Next())`. This is
+			// exactly what we want as the local key is contained in that range.
 			//
-			// See TestBatchPrevNext for a test case with commentary.
-			endKey = h.Key
+			// See TestBatchPrevNext for test cases with commentary.
+			endKey = h.Key.Next()
 		}
 		eAddr, err := keys.AddrUpperBound(endKey)
 		if err != nil {
@@ -189,20 +191,20 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 	return candidate, nil
 }
 
-// next gives the left boundary of the union of all requests which don't affect
+// Next gives the left boundary of the union of all requests which don't affect
 // keys less than the given key. Note that the left boundary is inclusive, that
 // is, the returned RKey is the inclusive left endpoint of the keys the request
 // should operate on next.
 //
-// Informally, a call `next(ba, k)` means: we've already executed the parts of
-// `ba` that intersect `[KeyMin, k)`; please tell me how far to the right the
+// Informally, a call `Next(reqs, k)` means: we've already executed the parts of
+// `reqs` that intersect `[KeyMin, k)`; please tell me how far to the right the
 // next relevant request begins.
 //
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
-func next(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
+func Next(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
 	candidate := roachpb.RKeyMax
-	for _, union := range ba.Requests {
+	for _, union := range reqs {
 		inner := union.GetInner()
 		h := inner.Header()
 		addr, err := keys.Addr(h.Key)

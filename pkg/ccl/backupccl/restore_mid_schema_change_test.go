@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -58,8 +58,8 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 
 	skip.UnderRaceWithIssue(t, 56584)
 
-	const (
-		testdataBase = "testdata/restore_mid_schema_change"
+	var (
+		testdataBase = testutils.TestDataPath(t, "restore_mid_schema_change")
 		exportDirs   = testdataBase + "/exports"
 	)
 	for _, isClusterRestore := range []bool{true, false} {
@@ -143,10 +143,12 @@ func expectedSCJobCount(scName string, isClusterRestore, after bool) int {
 		numBackgroundSCJobs = 1
 	}
 
+	// We drop defaultdb and postgres for full cluster restores
+	numBackgroundDropDatabaseSCJobs := 2
 	// Since we're doing a cluster restore, we need to account for all of
 	// the schema change jobs that existed in the backup.
 	if isClusterRestore {
-		expNumSCJobs += numBackgroundSCJobs
+		expNumSCJobs += numBackgroundSCJobs + numBackgroundDropDatabaseSCJobs
 
 		// If we're performing a cluster restore, we also need to include the drop
 		// crdb_temp_system job.
@@ -159,7 +161,7 @@ func expectedSCJobCount(scName string, isClusterRestore, after bool) int {
 func validateTable(
 	t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner, dbName string, tableName string,
 ) {
-	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tableName)
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tableName)
 	// There should be no mutations on these table descriptors at this point.
 	require.Equal(t, 0, len(desc.TableDesc().Mutations))
 
@@ -253,8 +255,8 @@ func restoreMidSchemaChange(
 		if isClusterRestore {
 			restoreQuery = "RESTORE from $1"
 		}
-		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", LocalFoo))
-		sqlDB.Exec(t, restoreQuery, LocalFoo)
+		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", localFoo))
+		sqlDB.Exec(t, restoreQuery, localFoo)
 		// Wait for all jobs to terminate. Some may fail since we don't restore
 		// adding spans.
 		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'failed')", [][]string{})

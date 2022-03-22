@@ -14,10 +14,12 @@ package backfill
 
 import (
 	"context"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -34,6 +37,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+)
+
+// IndexBackfillCheckpointInterval is the duration between backfill detail updates.
+//
+// Note: it might be surprising to find this defined here given this layer does
+// not actually perform any checkpointing. The reason it has been moved here from
+// sql is to avoid any dependency cycles inside the declarative schema changer.
+var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"bulkio.index_backfill.checkpoint_interval",
+	"the amount of time between index backfill checkpoint updates",
+	30*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // MutationFilter is the type of a simple predicate on a mutation.
@@ -47,7 +63,8 @@ func ColumnMutationFilter(m catalog.Mutation) bool {
 
 // IndexMutationFilter is a filter that allows mutations that add indexes.
 func IndexMutationFilter(m catalog.Mutation) bool {
-	return m.AsIndex() != nil && m.Adding()
+	idx := m.AsIndex()
+	return idx != nil && !idx.IsTemporaryIndexForBackfill() && m.Adding()
 }
 
 // ColumnBackfiller is capable of running a column backfill for all
@@ -61,11 +78,15 @@ type ColumnBackfiller struct {
 	updateExprs []tree.TypedExpr
 	evalCtx     *tree.EvalContext
 
-	fetcher row.Fetcher
-	alloc   rowenc.DatumAlloc
+	fetcher     row.Fetcher
+	fetcherCols []descpb.ColumnID
+	colIdxMap   catalog.TableColMap
+	alloc       tree.DatumAlloc
 
 	// mon is a memory monitor linked with the ColumnBackfiller on creation.
 	mon *mon.BytesMonitor
+
+	rowMetrics *row.Metrics
 }
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
@@ -90,6 +111,7 @@ func (cb *ColumnBackfiller) init(
 	computedExprs []tree.TypedExpr,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
+	rowMetrics *row.Metrics,
 ) error {
 	cb.evalCtx = evalCtx
 	cb.updateCols = append(cb.added, cb.dropped...)
@@ -109,19 +131,16 @@ func (cb *ColumnBackfiller) init(
 	}
 
 	// We need all the non-virtual columns.
-	var valNeededForCol util.FastIntSet
-	for i, c := range desc.PublicColumns() {
+	for _, c := range desc.PublicColumns() {
 		if !c.IsVirtual() {
-			valNeededForCol.Add(i)
+			cb.fetcherCols = append(cb.fetcherCols, c.GetID())
 		}
 	}
 
-	tableArgs := row.FetcherTableArgs{
-		Desc:            desc,
-		Index:           desc.GetPrimaryIndex(),
-		ColIdxMap:       catalog.ColumnIDToOrdinalMap(desc.PublicColumns()),
-		Cols:            desc.PublicColumns(),
-		ValNeededForCol: valNeededForCol,
+	cb.colIdxMap = catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(&spec, evalCtx.Codec, desc, desc.GetPrimaryIndex(), cb.fetcherCols); err != nil {
+		return err
 	}
 
 	// Create a bound account associated with the column backfiller.
@@ -129,17 +148,17 @@ func (cb *ColumnBackfiller) init(
 		return errors.AssertionFailedf("no memory monitor linked to ColumnBackfiller during init")
 	}
 	cb.mon = mon
+	cb.rowMetrics = rowMetrics
 
 	return cb.fetcher.Init(
 		evalCtx.Context,
-		evalCtx.Codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		false, /* isCheck */
+		0, /* lockTimeout */
 		&cb.alloc,
 		cb.mon,
-		tableArgs,
+		&spec,
 	)
 }
 
@@ -152,6 +171,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
+	rowMetrics *row.Metrics,
 ) error {
 	cb.initCols(desc)
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(
@@ -172,7 +192,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	if err != nil {
 		return err
 	}
-	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon)
+	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics)
 }
 
 // InitForDistributedUse initializes a ColumnBackfiller for use as part of a
@@ -192,14 +212,14 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in the column expressions.
 	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
+		resolver := flowCtx.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
-		if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), resolver); err != nil {
+		if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), &resolver); err != nil {
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
 		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = resolver
+		semaCtx.TypeResolver = &resolver
 		var err error
 		defaultExprs, err = schemaexpr.MakeDefaultExprs(
 			ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, &semaCtx,
@@ -226,9 +246,10 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	// Release leases on any accessed types now that type metadata is installed.
 	// We do this so that leases on any accessed types are not held for the
 	// entire backfill process.
-	flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
+	flowCtx.Descriptors.ReleaseAll(ctx)
 
-	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon)
+	rowMetrics := flowCtx.GetRowMetrics()
+	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics)
 }
 
 // Close frees the resources used by the ColumnBackfiller.
@@ -246,7 +267,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	txn *kv.Txn,
 	tableDesc catalog.TableDescriptor,
 	sp roachpb.Span,
-	chunkSize int64,
+	chunkSize rowinfra.RowLimit,
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
@@ -265,6 +286,9 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		requestedCols,
 		row.UpdaterOnlyColumns,
 		&cb.alloc,
+		&cb.evalCtx.Settings.SV,
+		cb.evalCtx.SessionData().Internal,
+		cb.rowMetrics,
 	)
 	if err != nil {
 		return roachpb.Key{}, err
@@ -286,17 +310,15 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	if err := cb.fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize,
+		ctx, txn, []roachpb.Span{sp}, rowinfra.DefaultBatchBytesLimit, chunkSize,
 		traceKV, false, /* forceProductionKVBatchSize */
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return roachpb.Key{}, err
 	}
 
-	oldValues := make(tree.Datums, len(ru.FetchCols))
 	updateValues := make(tree.Datums, len(cb.updateExprs))
 	b := txn.NewBatch()
-	rowLength := 0
 	iv := &schemaexpr.RowIndexedVarContainer{
 		Cols:    make([]catalog.Column, 0, len(tableDesc.PublicColumns())+len(cb.added)),
 		Mapping: ru.FetchColIDtoRowIndex,
@@ -304,15 +326,25 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	iv.Cols = append(iv.Cols, tableDesc.PublicColumns()...)
 	iv.Cols = append(iv.Cols, cb.added...)
 	cb.evalCtx.IVarContainer = iv
-	for i := int64(0); i < chunkSize; i++ {
-		datums, _, _, err := cb.fetcher.NextRowDecoded(ctx)
+
+	fetchedValues := make(tree.Datums, cb.colIdxMap.Len())
+	iv.CurSourceRow = make(tree.Datums, len(iv.Cols))
+	// We can have more FetchCols than public columns; fill the rest with NULLs.
+	oldValues := make(tree.Datums, len(ru.FetchCols))
+	for i := range oldValues {
+		oldValues[i] = tree.DNull
+	}
+
+	for i := int64(0); i < int64(chunkSize); i++ {
+		ok, err := cb.fetcher.NextRowDecodedInto(ctx, fetchedValues, cb.colIdxMap)
 		if err != nil {
 			return roachpb.Key{}, err
 		}
-		if datums == nil {
+		if !ok {
 			break
 		}
-		iv.CurSourceRow = datums
+
+		iv.CurSourceRow = append(iv.CurSourceRow[:0], fetchedValues...)
 
 		// Evaluate the new values. This must be done separately for
 		// each row so as to handle impure functions correctly.
@@ -333,15 +365,8 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			}
 			updateValues[j] = val
 		}
-		copy(oldValues, datums)
-		// Update oldValues with NULL values where values weren't found;
-		// only update when necessary.
-		if rowLength != len(datums) {
-			rowLength = len(datums)
-			for j := rowLength; j < len(oldValues); j++ {
-				oldValues[j] = tree.DNull
-			}
-		}
+		copy(oldValues, fetchedValues)
+
 		// No existing secondary indexes will be updated by adding or dropping a
 		// column. It is safe to use an empty PartialIndexUpdateHelper in this
 		// case.
@@ -422,9 +447,11 @@ type IndexBackfiller struct {
 	// backfilled.
 	indexesToEncode []catalog.Index
 
+	// valNeededForCol contains the indexes (into cols) of all columns that we
+	// need to fetch values for.
 	valNeededForCol util.FastIntSet
 
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 
 	// mon is a memory monitor linked with the IndexBackfiller on creation.
 	mon            *mon.BytesMonitor
@@ -474,8 +501,10 @@ func (ib *IndexBackfiller) InitForLocalUse(
 }
 
 // constructExprs is a helper to construct the index and column expressions
-// required for an index backfill. It also returns the set of columns referenced
-// by any of these exprs.
+// required for an index backfill. It also returns the set of non-virtual
+// columns referenced by any of these exprs that should be fetched from the
+// primary index. Virtual columns are not included because they don't exist in
+// the primary index.
 //
 // The cols argument is the full set of cols in the table (including those being
 // added). The addedCols argument is the set of non-public, non-computed
@@ -543,21 +572,34 @@ func constructExprs(
 		colExprs[id] = computedExprs[i]
 	}
 
-	// Ensure that only existing columns are added to the needed set. Otherwise
-	// the fetcher may complain that the columns don't exist. There's a somewhat
-	// subtle invariant that if any dependencies exist between computed columns
-	// and default values that the computed column be a later column and thus the
-	// default value will have been populated. Computed columns are not permitted
-	// to reference each other.
-	addToReferencedColumns := func(cols catalog.TableColSet) {
-		cols.ForEach(func(col descpb.ColumnID) {
-			if !addedColSet.Contains(col) {
-				referencedColumns.Add(col)
+	// Ensure that only existing, non-virtual columns are added to the needed
+	// set. Otherwise the fetcher may complain that the columns don't exist.
+	// There's a somewhat subtle invariant that if any dependencies exist
+	// between computed columns and default values that the computed column be a
+	// later column and thus the default value will have been populated.
+	// Computed columns are not permitted to reference each other.
+	addToReferencedColumns := func(cols catalog.TableColSet) error {
+		for colID, ok := cols.Next(0); ok; colID, ok = cols.Next(colID + 1) {
+			if addedColSet.Contains(colID) {
+				continue
 			}
-		})
+			col, err := desc.FindColumnWithID(colID)
+			if err != nil {
+				return errors.AssertionFailedf("column %d does not exist", colID)
+			}
+			if col.IsVirtual() {
+				continue
+			}
+			referencedColumns.Add(colID)
+		}
+		return nil
 	}
-	addToReferencedColumns(predicateRefColIDs)
-	addToReferencedColumns(computedExprRefColIDs)
+	if err := addToReferencedColumns(predicateRefColIDs); err != nil {
+		return nil, nil, catalog.TableColSet{}, err
+	}
+	if err := addToReferencedColumns(computedExprRefColIDs); err != nil {
+		return nil, nil, catalog.TableColSet{}, err
+	}
 	return predicates, colExprs, referencedColumns, nil
 }
 
@@ -586,16 +628,16 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in partial index predicate expressions.
 	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
+		resolver := flowCtx.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
 		if err = typedesc.HydrateTypesInTableDescriptor(
-			ctx, desc.TableDesc(), resolver,
+			ctx, desc.TableDesc(), &resolver,
 		); err != nil {
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
 		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = resolver
+		semaCtx.TypeResolver = &resolver
 		// Convert any partial index predicate strings into expressions.
 		predicates, colExprs, referencedColumns, err = constructExprs(
 			ctx, desc, ib.added, ib.cols, ib.addedCols, ib.computedCols, evalCtx, &semaCtx,
@@ -607,7 +649,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	// Release leases on any accessed types now that type metadata is installed.
 	// We do this so that leases on any accessed types are not held for the
 	// entire backfill process.
-	flowCtx.TypeResolverFactory.Descriptors.ReleaseAll(ctx)
+	flowCtx.Descriptors.ReleaseAll(ctx)
 
 	// Add the columns referenced in the predicate to valNeededForCol so that
 	// columns necessary to evaluate the predicate expression are fetched.
@@ -776,6 +818,19 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	memUsedPerChunk += indexEntriesInChunkInitialBufferSize
 	entries := make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
 
+	var fetcherCols []descpb.ColumnID
+	for i, c := range ib.cols {
+		if ib.valNeededForCol.Contains(i) {
+			fetcherCols = append(fetcherCols, c.GetID())
+		}
+	}
+	if ib.rowVals == nil {
+		ib.rowVals = make(tree.Datums, len(ib.cols))
+		// We don't produce values for all columns, so initialize with NULLs.
+		for i := range ib.rowVals {
+			ib.rowVals[i] = tree.DNull
+		}
+	}
 	// Get the next set of rows.
 	//
 	// Running the scan and applying the changes in many transactions
@@ -784,30 +839,28 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// during the scan. Index entries in the new index are being
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
-	tableArgs := row.FetcherTableArgs{
-		Desc:            tableDesc,
-		Index:           tableDesc.GetPrimaryIndex(),
-		ColIdxMap:       ib.colIdxMap,
-		Cols:            ib.cols,
-		ValNeededForCol: ib.valNeededForCol,
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(
+		&spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
+	); err != nil {
+		return nil, nil, 0, err
 	}
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
 		ib.evalCtx.Context,
-		ib.evalCtx.Codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
-		false, /* isCheck */
+		0, /* lockTimeout */
 		&ib.alloc,
 		ib.mon,
-		tableArgs,
+		&spec,
 	); err != nil {
 		return nil, nil, 0, err
 	}
 	defer fetcher.Close(ctx)
 	if err := fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, initBufferSize,
+		ctx, txn, []roachpb.Span{sp}, rowinfra.DefaultBatchBytesLimit, initBufferSize,
 		traceKV, false, /* forceProductionKVBatchSize */
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
@@ -850,20 +903,13 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		return nil
 	}
 	for i := int64(0); i < chunkSize; i++ {
-		encRow, _, _, err := fetcher.NextRow(ctx)
+		ok, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
 		if err != nil {
 			return nil, nil, 0, err
 		}
-		if encRow == nil {
+		if !ok {
 			break
 		}
-		if len(ib.rowVals) == 0 {
-			ib.rowVals = make(tree.Datums, len(encRow))
-		}
-		if err := rowenc.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.alloc); err != nil {
-			return nil, nil, 0, err
-		}
-
 		iv.CurSourceRow = ib.rowVals
 
 		// First populate default values, then populate computed expressions which

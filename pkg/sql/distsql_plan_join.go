@@ -11,7 +11,7 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -41,6 +41,7 @@ type joinPlanningInfo struct {
 	// then a hash join is planned.
 	leftMergeOrd, rightMergeOrd                 execinfrapb.Ordering
 	leftPlanDistribution, rightPlanDistribution physicalplan.PlanDistribution
+	allowPartialDistribution                    bool
 }
 
 // makeCoreSpec creates a processor core for hash and merge joins based on the
@@ -201,25 +202,25 @@ func distsqlSetOpJoinType(setOpType tree.UnionType) descpb.JoinType {
 	}
 }
 
-// getNodesOfRouters returns all nodes that routers are put on.
-func getNodesOfRouters(
+// getSQLInstanceIDsOfRouters returns all nodes that routers are put on.
+func getSQLInstanceIDsOfRouters(
 	routers []physicalplan.ProcessorIdx, processors []physicalplan.Processor,
-) (nodes []roachpb.NodeID) {
-	seen := make(map[roachpb.NodeID]struct{})
+) (sqlInstanceIDs []base.SQLInstanceID) {
+	seen := make(map[base.SQLInstanceID]struct{})
 	for _, pIdx := range routers {
-		n := processors[pIdx].Node
+		n := processors[pIdx].SQLInstanceID
 		if _, ok := seen[n]; !ok {
 			seen[n] = struct{}{}
-			nodes = append(nodes, n)
+			sqlInstanceIDs = append(sqlInstanceIDs, n)
 		}
 	}
-	return nodes
+	return sqlInstanceIDs
 }
 
 func findJoinProcessorNodes(
 	leftRouters, rightRouters []physicalplan.ProcessorIdx, processors []physicalplan.Processor,
-) (nodes []roachpb.NodeID) {
+) (instances []base.SQLInstanceID) {
 	// TODO(radu): for now we run a join processor on every node that produces
 	// data for either source. In the future we should be smarter here.
-	return getNodesOfRouters(append(leftRouters, rightRouters...), processors)
+	return getSQLInstanceIDsOfRouters(append(leftRouters, rightRouters...), processors)
 }

@@ -95,3 +95,32 @@ func MisplannedRanges(
 
 	return misplannedRanges
 }
+
+// SpansWithCopy tracks a set of spans (which can be modified) along with the
+// copy of the original one if needed.
+// NB: Spans field is **not** owned by SpansWithCopy (it comes from the
+// TableReader spec).
+type SpansWithCopy struct {
+	Spans     roachpb.Spans
+	SpansCopy roachpb.Spans
+}
+
+// MakeSpansCopy makes a copy of s.Spans (which are assumed to have already been
+// set).
+func (s *SpansWithCopy) MakeSpansCopy() {
+	if cap(s.SpansCopy) >= len(s.Spans) {
+		s.SpansCopy = s.SpansCopy[:len(s.Spans)]
+	} else {
+		s.SpansCopy = make(roachpb.Spans, len(s.Spans))
+	}
+	copy(s.SpansCopy, s.Spans)
+}
+
+// Reset deeply resets s.
+func (s *SpansWithCopy) Reset() {
+	for i := range s.SpansCopy {
+		s.SpansCopy[i] = roachpb.Span{}
+	}
+	s.Spans = nil
+	s.SpansCopy = s.SpansCopy[:0]
+}

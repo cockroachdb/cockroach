@@ -20,8 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var fdAnnID = opt.NewTableAnnID()
@@ -697,7 +698,7 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 		len(setPrivate.OutCols) != len(setPrivate.RightCols) {
 		panic(errors.AssertionFailedf(
 			"lists in SetPrivate are not all the same length. new:%d, left:%d, right:%d",
-			log.Safe(len(setPrivate.OutCols)), log.Safe(len(setPrivate.LeftCols)), log.Safe(len(setPrivate.RightCols)),
+			redact.Safe(len(setPrivate.OutCols)), redact.Safe(len(setPrivate.LeftCols)), redact.Safe(len(setPrivate.RightCols)),
 		))
 	}
 
@@ -750,6 +751,18 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 			var remapped props.FuncDepSet
 			remapped.RemapFrom(&rightProps.FuncDeps, setPrivate.RightCols, setPrivate.OutCols)
 			rel.FuncDeps.AddFrom(&remapped)
+		}
+
+		// If columns at ordinals (i, j) are equivalent in the left input, then the
+		// output columns at ordinals at (i, j) are also equivalent. Although we
+		// have already copied the left FDs above, we also need to add equivalencies
+		// in case some left input columns were projected multiple times.
+		for i := range setPrivate.OutCols {
+			for j := i + 1; j < len(setPrivate.OutCols); j++ {
+				if leftProps.FuncDeps.AreColsEquiv(setPrivate.LeftCols[i], setPrivate.LeftCols[j]) {
+					rel.FuncDeps.AddEquivalency(setPrivate.OutCols[i], setPrivate.OutCols[j])
+				}
+			}
 		}
 	}
 
@@ -1021,6 +1034,12 @@ func (b *logicalPropsBuilder) buildAlterTableRelocateProps(
 	b.buildBasicProps(relocate, relocate.Columns, rel)
 }
 
+func (b *logicalPropsBuilder) buildAlterRangeRelocateProps(
+	relocate *AlterRangeRelocateExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(relocate, relocate.Columns, rel)
+}
+
 func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *props.Relational) {
 	b.buildBasicProps(ctl, opt.ColList{}, rel)
 }
@@ -1053,17 +1072,39 @@ func (b *logicalPropsBuilder) buildExportProps(export *ExportExpr, rel *props.Re
 	b.buildBasicProps(export, export.Columns, rel)
 }
 
+func (b *logicalPropsBuilder) buildTopKProps(topK *TopKExpr, rel *props.Relational) {
+	// TopK has the same logical properties as limit.
+	b.buildLimitOrTopKProps(topK, rel, topK.K, true /* haveConstLimit */)
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildTopK(topK, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relational) {
-	BuildSharedProps(limit, &rel.Shared, b.evalCtx)
-
-	inputProps := limit.Input.Relational()
-
 	haveConstLimit := false
 	constLimit := int64(math.MaxUint32)
 	if cnst, ok := limit.Limit.(*ConstExpr); ok {
 		haveConstLimit = true
 		constLimit = int64(*cnst.Value.(*tree.DInt))
 	}
+	b.buildLimitOrTopKProps(limit, rel, constLimit, haveConstLimit)
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildLimit(limit, rel)
+	}
+}
+
+func (b *logicalPropsBuilder) buildLimitOrTopKProps(
+	limitNode RelExpr, rel *props.Relational, constLimit int64, haveConstLimit bool,
+) {
+	BuildSharedProps(limitNode, &rel.Shared, b.evalCtx)
+
+	inputProps := limitNode.Child(0).(RelExpr).Relational()
 
 	// Side Effects
 	// ------------
@@ -1103,12 +1144,6 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 		rel.Cardinality = props.ZeroCardinality
 	} else if constLimit < math.MaxUint32 {
 		rel.Cardinality = rel.Cardinality.Limit(uint32(constLimit))
-	}
-
-	// Statistics
-	// ----------
-	if !b.disableStats {
-		b.sb.buildLimit(limit, rel)
 	}
 }
 
@@ -1481,6 +1516,20 @@ func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *p
 				// Filter conjunct of the form x = $1. This filter cannot generate
 				// constraints, but still tell us that the column is constant.
 				constCols.Add(leftVar.Col)
+
+			default:
+				// We have an equality of the form
+				//   x = <some expression>.
+				// If the expression is non-volatile and is not composite sensitive,
+				// then x is functionally determined by the columns that appear in the
+				// expression.
+				if !scalar.VolatilitySet.HasVolatile() &&
+					!CanBeCompositeSensitive(b.mem.Metadata(), eq.Right) {
+					outerCols := getOuterCols(eq.Right)
+					if !outerCols.Contains(leftVar.Col) {
+						scalar.FuncDeps.AddSynthesizedCol(getOuterCols(eq.Right), leftVar.Col)
+					}
+				}
 			}
 		}
 	}
@@ -1543,9 +1592,9 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *tree.EvalContex
 		if c, ok := t.Right.(*ConstExpr); ok {
 			switch v := c.Value.(type) {
 			case *tree.DInt:
-				nonZero = (*v != 0)
+				nonZero = *v != 0
 			case *tree.DFloat:
-				nonZero = (*v != 0.0)
+				nonZero = *v != 0.0
 			case *tree.DDecimal:
 				nonZero = !v.IsZero()
 			}
@@ -1566,9 +1615,10 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *tree.EvalContex
 	case *FunctionExpr:
 		shared.VolatilitySet.Add(t.Overload.Volatility)
 
-	case *CastExpr:
-		from, to := t.Input.DataType(), t.Typ
-		volatility, ok := tree.LookupCastVolatility(from, to, evalCtx.SessionData)
+	case *CastExpr, *AssignmentCastExpr:
+		from := e.Child(0).(opt.ScalarExpr).DataType()
+		to := e.Private().(*types.T)
+		volatility, ok := tree.LookupCastVolatility(from, to, evalCtx.SessionData())
 		if !ok {
 			panic(errors.AssertionFailedf("no volatility for cast %s::%s", from, to))
 		}
@@ -1749,48 +1799,50 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	}
 
 	// Add keys from unique constraints.
-	if !md.TableMeta(tabID).IgnoreUniqueWithoutIndexKeys {
-		for i := 0; i < tab.UniqueCount(); i++ {
-			unique := tab.Unique(i)
+	for i := 0; i < tab.UniqueCount(); i++ {
+		unique := tab.Unique(i)
 
-			if !unique.Validated() {
-				// This unique constraint has not been validated, so we cannot use it
-				// as a key.
-				continue
-			}
+		if md.TableMeta(tabID).IgnoreUniqueWithoutIndexKeys && !unique.UniquenessGuaranteedByAnotherIndex() {
+			continue
+		}
 
-			if _, isPartial := unique.Predicate(); isPartial {
-				// Partial constraints cannot be considered while building functional
-				// dependency keys for the table because their keys are only unique
-				// for a subset of the rows in the table.
-				continue
-			}
+		if !unique.Validated() {
+			// This unique constraint has not been validated, so we cannot use it
+			// as a key.
+			continue
+		}
 
-			// If any of the columns are nullable, add a lax key FD. Otherwise, add a
-			// strict key.
-			var keyCols opt.ColSet
-			hasNulls := false
-			for i := 0; i < unique.ColumnCount(); i++ {
-				ord := unique.ColumnOrdinal(tab, i)
-				keyCols.Add(tabID.ColumnID(ord))
-				if tab.Column(ord).IsNullable() {
-					hasNulls = true
-				}
-			}
+		if _, isPartial := unique.Predicate(); isPartial {
+			// Partial constraints cannot be considered while building functional
+			// dependency keys for the table because their keys are only unique
+			// for a subset of the rows in the table.
+			continue
+		}
 
-			if excludeColumn != 0 && keyCols.Contains(excludeColumn) {
-				// See comment above where excludeColumn is set.
-				// (Virtual tables currently do not have UNIQUE WITHOUT INDEX constraints
-				// or implicitly partitioned UNIQUE indexes, but we add this check in case
-				// of future changes.)
-				continue
+		// If any of the columns are nullable, add a lax key FD. Otherwise, add a
+		// strict key.
+		var keyCols opt.ColSet
+		hasNulls := false
+		for i := 0; i < unique.ColumnCount(); i++ {
+			ord := unique.ColumnOrdinal(tab, i)
+			keyCols.Add(tabID.ColumnID(ord))
+			if tab.Column(ord).IsNullable() {
+				hasNulls = true
 			}
+		}
 
-			if hasNulls {
-				fd.AddLaxKey(keyCols, allCols)
-			} else {
-				fd.AddStrictKey(keyCols, allCols)
-			}
+		if excludeColumn != 0 && keyCols.Contains(excludeColumn) {
+			// See comment above where excludeColumn is set.
+			// (Virtual tables currently do not have UNIQUE WITHOUT INDEX constraints
+			// or implicitly partitioned UNIQUE indexes, but we add this check in case
+			// of future changes.)
+			continue
+		}
+
+		if hasNulls {
+			fd.AddLaxKey(keyCols, allCols)
+		} else {
+			fd.AddStrictKey(keyCols, allCols)
 		}
 	}
 
@@ -1883,6 +1935,9 @@ func (b *logicalPropsBuilder) rejectNullCols(filters FiltersExpr) opt.ColSet {
 func (b *logicalPropsBuilder) addFiltersToFuncDep(filters FiltersExpr, fdset *props.FuncDepSet) {
 	for i := range filters {
 		filterProps := filters[i].ScalarProps()
+		if buildutil.CrdbTestBuild && !filterProps.Populated {
+			panic(errors.AssertionFailedf("filter properties not populated"))
+		}
 		fdset.AddFrom(&filterProps.FuncDeps)
 	}
 
@@ -2514,6 +2569,15 @@ func (b *logicalPropsBuilder) buildNormCycleTestRelProps(
 ) {
 }
 
+func (b *logicalPropsBuilder) buildMemoCycleTestRelProps(
+	mc *MemoCycleTestRelExpr, rel *props.Relational,
+) {
+	// Make the cardinality non-zero to prevent SimplifyZeroCardinalityGroup
+	// from transforming mc into an empty Values expression.
+	inputProps := mc.Input.Relational()
+	rel.Cardinality = inputProps.Cardinality
+}
+
 // WithUses returns the WithUsesMap for the given expression.
 func WithUses(r opt.Expr) props.WithUsesMap {
 	switch e := r.(type) {
@@ -2618,15 +2682,24 @@ func deriveWithUses(r opt.Expr) props.WithUsesMap {
 func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 	// check is a recursive function which returns the following:
 	//  - isCompositeInsensitive as defined above.
-	//  - isCompositeIndependent is a stronger property, which says that for equal
+	//  - isCompositeIdentical is a stronger property, which says that for equal
 	//    outer column values, the expression results are always *identical* (not
 	//    just logically equal).
 	//
 	// A composite-insensitive expression with a non-composite result type is by
-	// definition also composite-independent.
+	// definition also composite-identical.
 	//
 	// Any purely scalar expression which depends only on non-composite outer
-	// columns is composite-independent.
+	// columns is composite-identical.
+	exprIsCompositeInsensitive := func(e opt.Expr) bool {
+		if opt.IsCompositeInsensitiveOp(e) {
+			return true
+		}
+		if funcExpr, ok := e.(*FunctionExpr); ok && funcExpr.Properties.CompositeInsensitive {
+			return true
+		}
+		return false
+	}
 	var check func(e opt.Expr) (isCompositeInsensitive, isCompositeIdentical bool)
 	check = func(e opt.Expr) (isCompositeInsensitive, isCompositeIdentical bool) {
 		if _, ok := e.(RelExpr); ok {
@@ -2637,7 +2710,7 @@ func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 			// Outer column references are our base case. They are always
 			// composite-insensitive. If they are not of composite type, they are also
 			// composite-identical.
-			return true, !colinfo.HasCompositeKeyEncoding(v.Typ)
+			return true, !colinfo.CanHaveCompositeKeyEncoding(v.Typ)
 		}
 
 		allChildrenCompositeIdentical := true
@@ -2656,10 +2729,12 @@ func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
 			return true, true
 		}
 
-		if opt.IsCompositeInsensitiveOp(e) {
+		if exprIsCompositeInsensitive(e) {
 			// The operator is known to be composite-insensitive. If its result is a
 			// non-composite type, it is also composite-identical.
-			return true, !colinfo.HasCompositeKeyEncoding(e.(opt.ScalarExpr).DataType())
+			return true, !colinfo.CanHaveCompositeKeyEncoding(
+				e.(opt.ScalarExpr).DataType(),
+			)
 		}
 
 		return false, false

@@ -66,6 +66,10 @@ func newConfluentSchemaRegistry(baseURL string) (*confluentSchemaRegistry, error
 		return nil, errors.Wrap(err, "malformed schema registry url")
 	}
 
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, errors.Errorf("unsupported scheme: %q", u.Scheme)
+	}
+
 	query := u.Query()
 	var caCert []byte
 	if caCertString := query.Get(changefeedbase.RegistryParamCACert); caCertString != "" {

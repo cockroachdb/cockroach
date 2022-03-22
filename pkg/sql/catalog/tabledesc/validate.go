@@ -11,14 +11,16 @@
 package tabledesc
 
 import (
-	"fmt"
-	"strings"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -43,29 +46,32 @@ func (desc *wrapper) ValidateTxnCommit(
 		vea.Report(unimplemented.NewWithIssue(48026,
 			"primary key dropped without subsequent addition of new primary key in same transaction"))
 	}
+	// Check that the mutation ID values are appropriately set when a declarative
+	// schema change is underway.
+	if n := len(desc.Mutations); n > 0 && desc.GetDeclarativeSchemaChangerState() != nil {
+		lastMutationID := desc.Mutations[n-1].MutationID
+		if lastMutationID != desc.NextMutationID {
+			vea.Report(errors.AssertionFailedf(
+				"expected next mutation ID to be %d in table undergoing declarative schema change, found %d instead",
+				lastMutationID, desc.NextMutationID))
+		}
+	}
 }
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
 func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
+	// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
 		ids.Add(desc.GetParentSchemaID())
 	}
-	// Collect referenced table IDs in foreign keys and interleaves.
+	// Collect referenced table IDs in foreign keys.
 	for _, fk := range desc.OutboundFKs {
 		ids.Add(fk.ReferencedTableID)
 	}
 	for _, fk := range desc.InboundFKs {
 		ids.Add(fk.OriginTableID)
-	}
-	for _, idx := range desc.NonDropIndexes() {
-		for i := 0; i < idx.NumInterleaveAncestors(); i++ {
-			ids.Add(idx.GetInterleaveAncestor(i).TableID)
-		}
-		for i := 0; i < idx.NumInterleavedBy(); i++ {
-			ids.Add(idx.GetInterleavedBy(i).Table)
-		}
 	}
 	// Collect user defined type Oids and sequence references in columns.
 	for _, col := range desc.DeletableColumns() {
@@ -93,6 +99,9 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	})
 	// Add collected Oids to return set.
 	for oid := range visitor.OIDs {
+		if !types.IsOIDUserDefinedType(oid) {
+			continue
+		}
 		id, err := typedesc.UserDefinedTypeOIDToID(oid)
 		if err != nil {
 			return catalog.DescriptorIDSet{}, err
@@ -122,9 +131,13 @@ func (desc *wrapper) ValidateCrossReferences(
 	dbDesc, err := vdg.GetDatabaseDescriptor(desc.GetParentID())
 	if err != nil {
 		vea.Report(err)
+	} else if dbDesc.Dropped() {
+		vea.Report(errors.AssertionFailedf("parent database %q (%d) is dropped",
+			dbDesc.GetName(), dbDesc.GetID()))
 	}
 
 	// Check that parent schema exists.
+	// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
 	if desc.GetParentSchemaID() != keys.PublicSchemaID && !desc.IsTemporary() {
 		schemaDesc, err := vdg.GetSchemaDescriptor(desc.GetParentSchemaID())
 		if err != nil {
@@ -134,11 +147,15 @@ func (desc *wrapper) ValidateCrossReferences(
 			vea.Report(errors.AssertionFailedf("parent schema %d is in different database %d",
 				desc.GetParentSchemaID(), schemaDesc.GetParentID()))
 		}
+		if schemaDesc != nil && schemaDesc.Dropped() {
+			vea.Report(errors.AssertionFailedf("parent schema %q (%d) is dropped",
+				schemaDesc.GetName(), schemaDesc.GetID()))
+		}
 	}
 
 	if dbDesc != nil {
 		// Validate the all types present in the descriptor exist.
-		typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, vdg.GetTypeDescriptor)
+		typeIDs, _, err := desc.GetAllReferencedTypeIDs(dbDesc, vdg.GetTypeDescriptor)
 		if err != nil {
 			vea.Report(err)
 		} else {
@@ -149,9 +166,67 @@ func (desc *wrapper) ValidateCrossReferences(
 		}
 
 		// Validate table locality.
-		if err := desc.validateTableLocalityConfig(dbDesc, vdg); err != nil {
+		if err := multiregion.ValidateTableLocalityConfig(desc, dbDesc, vdg); err != nil {
 			vea.Report(errors.Wrap(err, "invalid locality config"))
 			return
+		}
+	}
+
+	// For views, check dependent relations.
+	if desc.IsView() {
+		for _, id := range desc.DependsOn {
+			vea.Report(desc.validateOutboundTableRef(id, vdg))
+		}
+		for _, id := range desc.DependsOnTypes {
+			vea.Report(desc.validateOutboundTypeRef(id, vdg))
+		}
+	}
+
+	for _, by := range desc.DependedOnBy {
+		vea.Report(desc.validateInboundTableRef(by, vdg))
+	}
+
+	// For row-level TTL, only ascending PKs are permitted.
+	if desc.HasRowLevelTTL() {
+		pk := desc.GetPrimaryIndex()
+		if col, err := desc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err != nil {
+			vea.Report(errors.Wrapf(err, "expected column %s", colinfo.TTLDefaultExpirationColumnName))
+		} else {
+			intervalExpr := desc.GetRowLevelTTL().DurationExpr
+			expectedStr := `current_timestamp():::TIMESTAMPTZ + ` + string(intervalExpr)
+			if col.GetDefaultExpr() != expectedStr {
+				vea.Report(pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"expected DEFAULT expression of %s to be %s",
+					colinfo.TTLDefaultExpirationColumnName,
+					expectedStr,
+				))
+			}
+			if col.GetOnUpdateExpr() != expectedStr {
+				vea.Report(pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"expected ON UPDATE expression of %s to be %s",
+					colinfo.TTLDefaultExpirationColumnName,
+					expectedStr,
+				))
+			}
+		}
+
+		for i := 0; i < pk.NumKeyColumns(); i++ {
+			dir := pk.GetKeyColumnDirection(i)
+			if dir != descpb.IndexDescriptor_ASC {
+				vea.Report(unimplemented.NewWithIssuef(
+					76912,
+					`non-ascending ordering on PRIMARY KEYs are not supported`,
+				))
+			}
+		}
+		if len(desc.OutboundFKs) > 0 || len(desc.InboundFKs) > 0 {
+			vea.Report(unimplemented.NewWithIssuef(
+				76407,
+				`foreign keys to/from table with TTL "%s" are not permitted`,
+				desc.Name,
+			))
 		}
 	}
 
@@ -178,82 +253,89 @@ func (desc *wrapper) ValidateCrossReferences(
 			}
 		}
 	}
-
-	// Check interleaves.
-	for _, indexI := range desc.NonDropIndexes() {
-		vea.Report(desc.validateIndexInterleave(indexI, vdg))
-	}
-	// TODO(dan): Also validate SharedPrefixLen in the interleaves.
 }
 
-func (desc *wrapper) validateIndexInterleave(
-	indexI catalog.Index, vdg catalog.ValidationDescGetter,
+func (desc *wrapper) validateOutboundTableRef(
+	id descpb.ID, vdg catalog.ValidationDescGetter,
 ) error {
-	// Check interleaves.
-	if indexI.NumInterleaveAncestors() > 0 {
-		// Only check the most recent ancestor, the rest of them don't point
-		// back.
-		ancestor := indexI.GetInterleaveAncestor(indexI.NumInterleaveAncestors() - 1)
-		targetTable, err := vdg.GetTableDescriptor(ancestor.TableID)
-		if err != nil {
-			return errors.Wrapf(err,
-				"invalid interleave: missing table=%d index=%d", ancestor.TableID, errors.Safe(ancestor.IndexID))
-		}
-		targetIndex, err := targetTable.FindIndexWithID(ancestor.IndexID)
-		if err != nil {
-			return errors.Wrapf(err,
-				"invalid interleave: missing table=%s index=%d", targetTable.GetName(), errors.Safe(ancestor.IndexID))
-		}
-
-		found := false
-		for j := 0; j < targetIndex.NumInterleavedBy(); j++ {
-			backref := targetIndex.GetInterleavedBy(j)
-			if backref.Table == desc.ID && backref.Index == indexI.GetID() {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return errors.AssertionFailedf(
-				"missing interleave back reference to %q@%q from %q@%q",
-				desc.Name, indexI.GetName(), targetTable.GetName(), targetIndex.GetName())
+	referencedTable, err := vdg.GetTableDescriptor(id)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on relation reference")
+	}
+	if referencedTable.Dropped() {
+		return errors.AssertionFailedf("depends-on relation %q (%d) is dropped",
+			referencedTable.GetName(), referencedTable.GetID())
+	}
+	for _, by := range referencedTable.TableDesc().DependedOnBy {
+		if by.ID == desc.GetID() {
+			return nil
 		}
 	}
+	return errors.AssertionFailedf("depends-on relation %q (%d) has no corresponding depended-on-by back reference",
+		referencedTable.GetName(), id)
+}
 
-	interleaveBackrefs := make(map[descpb.ForeignKeyReference]struct{})
-	for j := 0; j < indexI.NumInterleavedBy(); j++ {
-		backref := indexI.GetInterleavedBy(j)
-		if _, ok := interleaveBackrefs[backref]; ok {
-			return errors.AssertionFailedf("duplicated interleave backreference %+v", backref)
-		}
-		interleaveBackrefs[backref] = struct{}{}
-		targetTable, err := vdg.GetTableDescriptor(backref.Table)
-		if err != nil {
-			return errors.Wrapf(err,
-				"invalid interleave backreference table=%d index=%d",
-				backref.Table, backref.Index)
-		}
-		targetIndex, err := targetTable.FindIndexWithID(backref.Index)
-		if err != nil {
-			return errors.Wrapf(err,
-				"invalid interleave backreference table=%s index=%d",
-				targetTable.GetName(), backref.Index)
-		}
-		if targetIndex.NumInterleaveAncestors() == 0 {
-			return errors.AssertionFailedf(
-				"broken interleave backward reference from %q@%q to %q@%q",
-				desc.Name, indexI.GetName(), targetTable.GetName(), targetIndex.GetName())
-		}
-		// The last ancestor is required to be a backreference.
-		ancestor := targetIndex.GetInterleaveAncestor(targetIndex.NumInterleaveAncestors() - 1)
-		if ancestor.TableID != desc.ID || ancestor.IndexID != indexI.GetID() {
-			return errors.AssertionFailedf(
-				"broken interleave backward reference from %q@%q to %q@%q",
-				desc.Name, indexI.GetName(), targetTable.GetName(), targetIndex.GetName())
-		}
+func (desc *wrapper) validateOutboundTypeRef(id descpb.ID, vdg catalog.ValidationDescGetter) error {
+	typ, err := vdg.GetTypeDescriptor(id)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on type reference")
 	}
-
+	if typ.Dropped() {
+		return errors.AssertionFailedf("depends-on type %q (%d) is dropped",
+			typ.GetName(), typ.GetID())
+	}
+	// TODO(postamar): maintain back-references in type, and validate these.
 	return nil
+}
+
+func (desc *wrapper) validateInboundTableRef(
+	by descpb.TableDescriptor_Reference, vdg catalog.ValidationDescGetter,
+) error {
+	backReferencedTable, err := vdg.GetTableDescriptor(by.ID)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depended-on-by relation back reference")
+	}
+	if backReferencedTable.Dropped() {
+		return errors.AssertionFailedf("depended-on-by relation %q (%d) is dropped",
+			backReferencedTable.GetName(), backReferencedTable.GetID())
+	}
+	if desc.IsSequence() {
+		// The ColumnIDs field takes a different meaning when the validated
+		// descriptor is for a sequence. In this case, they refer to the columns
+		// in the referenced descriptor instead.
+		for _, colID := range by.ColumnIDs {
+			col, _ := backReferencedTable.FindColumnWithID(colID)
+			if col == nil {
+				return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
+					backReferencedTable.GetName(), by.ID, colID)
+			}
+			var found bool
+			for i := 0; i < col.NumUsesSequences(); i++ {
+				if col.GetUsesSequenceID(i) == desc.GetID() {
+					found = true
+					break
+				}
+			}
+			if found {
+				continue
+			}
+			return errors.AssertionFailedf(
+				"depended-on-by relation %q (%d) has no reference to this sequence in column %q (%d)",
+				backReferencedTable.GetName(), by.ID, col.GetName(), col.GetID())
+		}
+	}
+
+	// View back-references need corresponding forward reference.
+	if !backReferencedTable.IsView() {
+		return nil
+	}
+	for _, id := range backReferencedTable.TableDesc().DependsOn {
+		if id == desc.GetID() {
+			return nil
+		}
+	}
+	return errors.AssertionFailedf("depended-on-by view %q (%d) has no corresponding depends-on forward reference",
+		backReferencedTable.GetName(), by.ID)
 }
 
 func (desc *wrapper) validateOutboundFK(
@@ -264,6 +346,10 @@ func (desc *wrapper) validateOutboundFK(
 		return errors.Wrapf(err,
 			"invalid foreign key: missing table=%d", fk.ReferencedTableID)
 	}
+	if referencedTable.Dropped() {
+		return errors.AssertionFailedf("referenced table %q (%d) is dropped",
+			referencedTable.GetName(), referencedTable.GetID())
+	}
 	found := false
 	_ = referencedTable.ForeachInboundFK(func(backref *descpb.ForeignKeyConstraint) error {
 		if !found && backref.OriginTableID == desc.ID && backref.Name == fk.Name {
@@ -273,65 +359,6 @@ func (desc *wrapper) validateOutboundFK(
 	})
 	if found {
 		return nil
-	}
-	// In 20.2 we introduced a bug where we fail to upgrade the FK references
-	// on the referenced descriptors from their pre-19.2 format when reading
-	// them during validation (#57032). So we account for the possibility of
-	// un-upgraded foreign key references on the other table. This logic
-	// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
-	unupgradedFKsPresent := false
-	if err := catalog.ForEachIndex(referencedTable, catalog.IndexOpts{}, func(referencedIdx catalog.Index) error {
-		if found {
-			// TODO (lucy): If we ever revisit the tabledesc.immutable methods, add
-			// a way to break out of the index loop.
-			return nil
-		}
-		if len(referencedIdx.IndexDesc().ReferencedBy) > 0 {
-			unupgradedFKsPresent = true
-		} else {
-			return nil
-		}
-		// Determine whether the index on the other table is a unique index that
-		// could support this FK constraint.
-		if !referencedIdx.IsValidReferencedUniqueConstraint(fk.ReferencedColumnIDs) {
-			return nil
-		}
-		// Now check the backreferences. Backreferences in ReferencedBy only had
-		// Index and Table populated.
-		for i := range referencedIdx.IndexDesc().ReferencedBy {
-			backref := &referencedIdx.IndexDesc().ReferencedBy[i]
-			if backref.Table != desc.ID {
-				continue
-			}
-			// Look up the index that the un-upgraded reference refers to and
-			// see if that index could support the foreign key reference. (Note
-			// that it shouldn't be possible for this index to not exist. See
-			// planner.MaybeUpgradeDependentOldForeignKeyVersionTables, which is
-			// called from the drop index implementation.)
-			originalOriginIndex, err := desc.FindIndexWithID(backref.Index)
-			if err != nil {
-				return errors.AssertionFailedf(
-					"missing index %d on %q from pre-19.2 foreign key "+
-						"backreference %q on %q",
-					backref.Index, desc.Name, fk.Name, referencedTable.GetName(),
-				)
-			}
-			if originalOriginIndex.IsValidOriginIndex(fk.OriginColumnIDs) {
-				found = true
-				break
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if found {
-		return nil
-	}
-	if unupgradedFKsPresent {
-		return errors.AssertionFailedf("missing fk back reference %q to %q "+
-			"from %q (un-upgraded foreign key references present)",
-			fk.Name, desc.Name, referencedTable.GetName())
 	}
 	return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
 		fk.Name, desc.Name, referencedTable.GetName())
@@ -345,6 +372,10 @@ func (desc *wrapper) validateInboundFK(
 		return errors.Wrapf(err,
 			"invalid foreign key backreference: missing table=%d", backref.OriginTableID)
 	}
+	if originTable.Dropped() {
+		return errors.AssertionFailedf("origin table %q (%d) is dropped",
+			originTable.GetName(), originTable.GetID())
+	}
 	found := false
 	_ = originTable.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		if !found && fk.ReferencedTableID == desc.ID && fk.Name == backref.Name {
@@ -354,60 +385,6 @@ func (desc *wrapper) validateInboundFK(
 	})
 	if found {
 		return nil
-	}
-	// In 20.2 we introduced a bug where we fail to upgrade the FK references
-	// on the referenced descriptors from their pre-19.2 format when reading
-	// them during validation (#57032). So we account for the possibility of
-	// un-upgraded foreign key references on the other table. This logic
-	// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
-	unupgradedFKsPresent := false
-	if err := catalog.ForEachIndex(originTable, catalog.IndexOpts{}, func(originIdx catalog.Index) error {
-		if found {
-			// TODO (lucy): If we ever revisit the tabledesc.immutable methods, add
-			// a way to break out of the index loop.
-			return nil
-		}
-		fk := originIdx.IndexDesc().ForeignKey
-		if fk.IsSet() {
-			unupgradedFKsPresent = true
-		} else {
-			return nil
-		}
-		// Determine whether the index on the other table is a index that could
-		// support this FK constraint on the referencing side. Such an index would
-		// have been required in earlier versions.
-		if !originIdx.IsValidOriginIndex(backref.OriginColumnIDs) {
-			return nil
-		}
-		if fk.Table != desc.ID {
-			return nil
-		}
-		// Look up the index that the un-upgraded reference refers to and
-		// see if that index could support the foreign key reference. (Note
-		// that it shouldn't be possible for this index to not exist. See
-		// planner.MaybeUpgradeDependentOldForeignKeyVersionTables, which is
-		// called from the drop index implementation.)
-		originalReferencedIndex, err := desc.FindIndexWithID(fk.Index)
-		if err != nil {
-			return errors.AssertionFailedf(
-				"missing index %d on %q from pre-19.2 foreign key forward reference %q on %q",
-				fk.Index, desc.Name, backref.Name, originTable.GetName(),
-			)
-		}
-		if originalReferencedIndex.IsValidReferencedUniqueConstraint(backref.ReferencedColumnIDs) {
-			found = true
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if found {
-		return nil
-	}
-	if unupgradedFKsPresent {
-		return errors.AssertionFailedf("missing fk forward reference %q to %q from %q "+
-			"(un-upgraded foreign key references present)",
-			backref.Name, desc.Name, originTable.GetName())
 	}
 	return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
 		backref.Name, desc.Name, originTable.GetName())
@@ -465,11 +442,28 @@ func validateMutation(m *descpb.DescriptorMutation) error {
 			return errors.AssertionFailedf(
 				"materialized view refresh mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
 		}
+	case *descpb.DescriptorMutation_ModifyRowLevelTTL:
+		if m.Direction == descpb.DescriptorMutation_NONE {
+			return errors.AssertionFailedf(
+				"modify row level TTL mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
+		}
 	default:
 		return errors.AssertionFailedf(
 			"mutation in state %s, direction %s, and no column/index descriptor",
 			errors.Safe(m.State), errors.Safe(m.Direction))
 	}
+
+	switch m.State {
+	case descpb.DescriptorMutation_BACKFILLING:
+		if _, ok := m.Descriptor_.(*descpb.DescriptorMutation_Index); !ok {
+			return errors.AssertionFailedf("non-index mutation in state %s", errors.Safe(m.State))
+		}
+	case descpb.DescriptorMutation_MERGING:
+		if _, ok := m.Descriptor_.(*descpb.DescriptorMutation_Index); !ok {
+			return errors.AssertionFailedf("non-index mutation in state %s", errors.Safe(m.State))
+		}
+	}
+
 	return nil
 }
 
@@ -495,8 +489,62 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		vea.Report(errors.AssertionFailedf("invalid parent ID %d", desc.GetParentID()))
 	}
 
+	// Validate the privilege descriptor.
+	if desc.Privileges == nil {
+		vea.Report(errors.AssertionFailedf("privileges not set"))
+	} else {
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Table))
+	}
+
+	// Validate that the depended-on-by references are well-formed.
+	for _, ref := range desc.DependedOnBy {
+		if ref.ID == descpb.InvalidID {
+			vea.Report(errors.AssertionFailedf(
+				"invalid relation ID %d in depended-on-by references",
+				ref.ID))
+		}
+		if len(ref.ColumnIDs) > catalog.MakeTableColSet(ref.ColumnIDs...).Len() {
+			vea.Report(errors.AssertionFailedf("duplicate column IDs found in depended-on-by references: %v",
+				ref.ColumnIDs))
+		}
+	}
+
+	if !desc.IsView() {
+		if len(desc.DependsOn) > 0 {
+			vea.Report(errors.AssertionFailedf(
+				"has depends-on references despite not being a view"))
+		}
+		if len(desc.DependsOnTypes) > 0 {
+			vea.Report(errors.AssertionFailedf(
+				"has depends-on-types references despite not being a view"))
+		}
+	}
+
 	if desc.IsSequence() {
 		return
+	}
+
+	// Validate the depended-on-by references to this table's columns and indexes
+	// for non-sequence relations.
+	// The ColumnIDs field takes a different meaning when the validated
+	// descriptor is for a sequence, in that case they refer to the columns of the
+	// referenced relation. This case is handled during cross-reference
+	// validation.
+	for _, ref := range desc.DependedOnBy {
+		if ref.IndexID != 0 {
+			if idx, _ := desc.FindIndexWithID(ref.IndexID); idx == nil {
+				vea.Report(errors.AssertionFailedf(
+					"index ID %d found in depended-on-by references, no such index in this relation",
+					ref.IndexID))
+			}
+		}
+		for _, colID := range ref.ColumnIDs {
+			if col, _ := desc.FindColumnWithID(colID); col == nil {
+				vea.Report(errors.AssertionFailedf(
+					"column ID %d found in depended-on-by references, no such column in this relation",
+					colID))
+			}
+		}
 	}
 
 	if len(desc.Columns) == 0 {
@@ -511,7 +559,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return
 	}
 
-	// TODO(dt, nathan): virtual descs don't validate (missing privs, PK, etc).
 	if desc.IsVirtualTable() {
 		return
 	}
@@ -570,18 +617,18 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		if hasErrs {
 			return
 		}
+		desc.validateConstraintIDs(vea)
 	}
 
-	// Validate the privilege descriptor.
-	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Table))
-
-	// Ensure that mutations cannot be queued if a primary key change or
-	// an alter column type schema change has either been started in
+	// Ensure that mutations cannot be queued if a primary key change, TTL change
+	// or an alter column type schema change has either been started in
 	// this transaction, or is currently in progress.
 	var alterPKMutation descpb.MutationID
 	var alterColumnTypeMutation descpb.MutationID
+	var modifyTTLMutation descpb.MutationID
 	var foundAlterPK bool
 	var foundAlterColumnType bool
+	var foundModifyTTL bool
 
 	for _, m := range desc.Mutations {
 		// If we have seen an alter primary key mutation, then
@@ -614,6 +661,20 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			}
 			return
 		}
+		if foundModifyTTL {
+			if modifyTTLMutation == m.MutationID {
+				vea.Report(pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot perform other schema changes in the same transaction as a TTL mutation",
+				))
+			} else {
+				vea.Report(pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot perform a schema change operation while a TTL change is in progress",
+				))
+			}
+			return
+		}
 		if m.GetPrimaryKeySwap() != nil {
 			foundAlterPK = true
 			alterPKMutation = m.MutationID
@@ -622,17 +683,21 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			foundAlterColumnType = true
 			alterColumnTypeMutation = m.MutationID
 		}
+		if m.GetModifyRowLevelTTL() != nil {
+			foundModifyTTL = true
+			modifyTTLMutation = m.MutationID
+		}
 	}
 
 	// Validate that the presence of MutationJobs (from the old schema changer)
-	// and the presence of a NewSchemaChangeJobID are mutually exclusive. (Note
+	// and the presence of a DeclarativeSchemaChangeJobID are mutually exclusive. (Note
 	// the jobs themselves can be running simultaneously, since a resumer can
 	// still be running after the schema change is complete from the point of view
 	// of the descriptor, in both the new and old schema change jobs.)
-	if len(desc.MutationJobs) > 0 && desc.NewSchemaChangeJobID != 0 {
+	if dscs := desc.DeclarativeSchemaChangerState; dscs != nil && len(desc.MutationJobs) > 0 {
 		vea.Report(errors.AssertionFailedf(
-			"invalid concurrent new-style schema change job %d and old-style schema change jobs %v",
-			desc.NewSchemaChangeJobID, desc.MutationJobs))
+			"invalid concurrent declarative schema change job %d and legacy schema change jobs %v",
+			dscs.JobID, desc.MutationJobs))
 	}
 
 	// Check that all expression strings can be parsed.
@@ -641,6 +706,75 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		vea.Report(err)
 		return nil
 	})
+
+	vea.Report(ValidateRowLevelTTL(desc.GetRowLevelTTL()))
+
+	// Validate that there are no column with both a foreign key ON UPDATE and an
+	// ON UPDATE expression. This check is made to ensure that we know which ON
+	// UPDATE action to perform when a FK UPDATE happens.
+	ValidateOnUpdate(desc, vea.Report)
+}
+
+// ValidateOnUpdate returns an error if there is a column with both a foreign
+// key constraint and an ON UPDATE expression, nil otherwise.
+func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error)) {
+	var onUpdateCols catalog.TableColSet
+	for _, col := range desc.AllColumns() {
+		if col.HasOnUpdate() {
+			onUpdateCols.Add(col.GetID())
+		}
+	}
+
+	_ = desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+		if fk.OnUpdate == catpb.ForeignKeyAction_NO_ACTION ||
+			fk.OnUpdate == catpb.ForeignKeyAction_RESTRICT {
+			return nil
+		}
+		for _, fkCol := range fk.OriginColumnIDs {
+			if onUpdateCols.Contains(fkCol) {
+				col, err := desc.FindColumnWithID(fkCol)
+				if err != nil {
+					return err
+				}
+				errReportFn(pgerror.Newf(pgcode.InvalidTableDefinition,
+					"cannot specify both ON UPDATE expression and a foreign key"+
+						" ON UPDATE action for column %q",
+					col.ColName(),
+				))
+			}
+		}
+		return nil
+	})
+}
+
+func (desc *wrapper) validateConstraintIDs(vea catalog.ValidationErrorAccumulator) {
+	if !vea.IsActive(ConstraintIDsAddedToTableDescsVersion) {
+		return
+	}
+	if !desc.IsTable() {
+		return
+	}
+	constraints, err := desc.GetConstraintInfo()
+	if err != nil {
+		vea.Report(err)
+		return
+	}
+	// Sort the names to get deterministic behaviour, since
+	// constraints are stored in a map.
+	orderedNames := make([]string, 0, len(constraints))
+	for name := range constraints {
+		orderedNames = append(orderedNames, name)
+	}
+	sort.Strings(orderedNames)
+	for _, name := range orderedNames {
+		constraint := constraints[name]
+		if constraint.ConstraintID == 0 {
+			vea.Report(errors.AssertionFailedf("constraint id was missing for constraint: %s with name %q",
+				constraint.Kind,
+				name))
+
+		}
+	}
 }
 
 func (desc *wrapper) validateColumns(
@@ -672,7 +806,7 @@ func (desc *wrapper) validateColumns(
 		columnNames[column.GetName()] = column.GetID()
 
 		if other, ok := columnIDs[column.GetID()]; ok {
-			return fmt.Errorf("column %q duplicate ID of column %q: %d",
+			return errors.Newf("column %q duplicate ID of column %q: %d",
 				column.GetName(), other.Name, column.GetID())
 		}
 		columnIDs[column.GetID()] = column.ColumnDesc()
@@ -693,15 +827,42 @@ func (desc *wrapper) validateColumns(
 				return err
 			}
 			if !valid {
-				return fmt.Errorf("computed column %q refers to unknown columns in expression: %s",
+				return errors.Newf("computed column %q refers to unknown columns in expression: %s",
 					column.GetName(), column.GetComputeExpr())
 			}
 		} else if column.IsVirtual() {
-			return fmt.Errorf("virtual column %q is not computed", column.GetName())
+			return errors.Newf("virtual column %q is not computed", column.GetName())
+		}
+
+		if column.IsComputed() {
+			if column.HasDefault() {
+				return pgerror.Newf(pgcode.InvalidTableDefinition,
+					"computed column %q cannot also have a DEFAULT expression",
+					column.GetName(),
+				)
+			}
+			if column.HasOnUpdate() {
+				return pgerror.Newf(pgcode.InvalidTableDefinition,
+					"computed column %q cannot also have an ON UPDATE expression",
+					column.GetName(),
+				)
+			}
 		}
 
 		if column.IsHidden() && column.IsInaccessible() {
-			return fmt.Errorf("column %q cannot be hidden and inaccessible", column.GetName())
+			return errors.Newf("column %q cannot be hidden and inaccessible", column.GetName())
+		}
+
+		if column.IsComputed() && column.IsGeneratedAsIdentity() {
+			return errors.Newf("both generated identity and computed expression specified for column %q", column.GetName())
+		}
+
+		if column.IsNullable() && column.IsGeneratedAsIdentity() {
+			return errors.Newf("conflicting NULL/NOT NULL declarations for column %q", column.GetName())
+		}
+
+		if column.HasOnUpdate() && column.IsGeneratedAsIdentity() {
+			return errors.Newf("both generated identity and on update expression specified for column %q", column.GetName())
 		}
 	}
 	return nil
@@ -711,10 +872,10 @@ func (desc *wrapper) validateColumnFamilies(
 	columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
 ) error {
 	if len(desc.Families) < 1 {
-		return fmt.Errorf("at least 1 column family must be specified")
+		return errors.Newf("at least 1 column family must be specified")
 	}
 	if desc.Families[0].ID != descpb.FamilyID(0) {
-		return fmt.Errorf("the 0th family must have ID 0")
+		return errors.Newf("the 0th family must have ID 0")
 	}
 
 	familyNames := map[string]struct{}{}
@@ -736,43 +897,43 @@ func (desc *wrapper) validateColumnFamilies(
 		}
 
 		if _, ok := familyNames[family.Name]; ok {
-			return fmt.Errorf("duplicate family name: %q", family.Name)
+			return errors.Newf("duplicate family name: %q", family.Name)
 		}
 		familyNames[family.Name] = struct{}{}
 
 		if other, ok := familyIDs[family.ID]; ok {
-			return fmt.Errorf("family %q duplicate ID of family %q: %d",
+			return errors.Newf("family %q duplicate ID of family %q: %d",
 				family.Name, other, family.ID)
 		}
 		familyIDs[family.ID] = family.Name
 
 		if family.ID >= desc.NextFamilyID {
-			return fmt.Errorf("family %q invalid family ID (%d) > next family ID (%d)",
+			return errors.Newf("family %q invalid family ID (%d) > next family ID (%d)",
 				family.Name, family.ID, desc.NextFamilyID)
 		}
 
 		if len(family.ColumnIDs) != len(family.ColumnNames) {
-			return fmt.Errorf("mismatched column ID size (%d) and name size (%d)",
+			return errors.Newf("mismatched column ID size (%d) and name size (%d)",
 				len(family.ColumnIDs), len(family.ColumnNames))
 		}
 
 		for i, colID := range family.ColumnIDs {
 			col, ok := columnIDs[colID]
 			if !ok {
-				return fmt.Errorf("family %q contains unknown column \"%d\"", family.Name, colID)
+				return errors.Newf("family %q contains unknown column \"%d\"", family.Name, colID)
 			}
 			if col.Name != family.ColumnNames[i] {
-				return fmt.Errorf("family %q column %d should have name %q, but found name %q",
+				return errors.Newf("family %q column %d should have name %q, but found name %q",
 					family.Name, colID, col.Name, family.ColumnNames[i])
 			}
 			if col.Virtual {
-				return fmt.Errorf("virtual computed column %q cannot be part of a family", col.Name)
+				return errors.Newf("virtual computed column %q cannot be part of a family", col.Name)
 			}
 		}
 
 		for _, colID := range family.ColumnIDs {
 			if famID, ok := colIDToFamilyID[colID]; ok {
-				return fmt.Errorf("column %d is in both family %d and %d", colID, famID, family.ID)
+				return errors.Newf("column %d is in both family %d and %d", colID, famID, family.ID)
 			}
 			colIDToFamilyID[colID] = family.ID
 		}
@@ -780,7 +941,7 @@ func (desc *wrapper) validateColumnFamilies(
 	for colID, colDesc := range columnIDs {
 		if !colDesc.Virtual {
 			if _, ok := colIDToFamilyID[colID]; !ok {
-				return fmt.Errorf("column %q is not in any column family", colDesc.Name)
+				return errors.Newf("column %q is not in any column family", colDesc.Name)
 			}
 		}
 	}
@@ -798,7 +959,7 @@ func (desc *wrapper) validateCheckConstraints(
 		for _, colID := range chk.ColumnIDs {
 			_, ok := columnIDs[colID]
 			if !ok {
-				return fmt.Errorf("check constraint %q contains unknown column \"%d\"", chk.Name, colID)
+				return errors.Newf("check constraint %q contains unknown column \"%d\"", chk.Name, colID)
 			}
 		}
 
@@ -812,7 +973,7 @@ func (desc *wrapper) validateCheckConstraints(
 			return err
 		}
 		if !valid {
-			return fmt.Errorf("check constraint %q refers to unknown columns in expression: %s",
+			return errors.Newf("check constraint %q refers to unknown columns in expression: %s",
 				chk.Name, chk.Expr)
 		}
 	}
@@ -832,7 +993,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 
 		// Verify that the table ID is valid.
 		if c.TableID != desc.ID {
-			return fmt.Errorf(
+			return errors.Newf(
 				"TableID mismatch for unique without index constraint %q: \"%d\" doesn't match descriptor: \"%d\"",
 				c.Name, c.TableID, desc.ID,
 			)
@@ -843,12 +1004,12 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 		for _, colID := range c.ColumnIDs {
 			_, ok := columnIDs[colID]
 			if !ok {
-				return fmt.Errorf(
+				return errors.Newf(
 					"unique without index constraint %q contains unknown column \"%d\"", c.Name, colID,
 				)
 			}
 			if seen.Contains(int(colID)) {
-				return fmt.Errorf(
+				return errors.Newf(
 					"unique without index constraint %q contains duplicate column \"%d\"", c.Name, colID,
 				)
 			}
@@ -865,7 +1026,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 				return err
 			}
 			if !valid {
-				return fmt.Errorf(
+				return errors.Newf(
 					"partial unique without index constraint %q refers to unknown columns in predicate: %s",
 					c.Name,
 					c.Predicate,
@@ -892,13 +1053,6 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		columnsByID[col.GetID()] = col
 	}
 
-	// Verify that the primary index columns are not virtual.
-	for _, pkID := range desc.PrimaryIndex.KeyColumnIDs {
-		if col := columnsByID[pkID]; col != nil && col.IsVirtual() {
-			return fmt.Errorf("primary index column %q cannot be virtual", col.GetName())
-		}
-	}
-
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
 	for _, idx := range desc.NonDropIndexes() {
@@ -906,73 +1060,110 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			return err
 		}
 		if idx.GetID() == 0 {
-			return fmt.Errorf("invalid index ID %d", idx.GetID())
+			return errors.Newf("invalid index ID %d", idx.GetID())
+		}
+
+		if idx.IndexDesc().ForeignKey.IsSet() || len(idx.IndexDesc().ReferencedBy) > 0 {
+			return errors.AssertionFailedf("index %q contains deprecated foreign key representation", idx.GetName())
+		}
+
+		if len(idx.IndexDesc().Interleave.Ancestors) > 0 || len(idx.IndexDesc().InterleavedBy) > 0 {
+			return errors.Newf("index is interleaved")
 		}
 
 		if _, indexNameExists := indexNames[idx.GetName()]; indexNameExists {
 			for i := range desc.Indexes {
 				if desc.Indexes[i].Name == idx.GetName() {
 					// This error should be caught in MakeIndexDescriptor or NewTableDesc.
-					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", idx.GetName()))
+					return errors.HandleAsAssertionFailure(errors.Newf("duplicate index name: %q", idx.GetName()))
 				}
 			}
 			// This error should be caught in MakeIndexDescriptor.
-			return errors.HandleAsAssertionFailure(fmt.Errorf(
+			return errors.HandleAsAssertionFailure(errors.Newf(
 				"duplicate: index %q in the middle of being added, not yet public", idx.GetName()))
 		}
 		indexNames[idx.GetName()] = struct{}{}
 
 		if other, ok := indexIDs[idx.GetID()]; ok {
-			return fmt.Errorf("index %q duplicate ID of index %q: %d",
+			return errors.Newf("index %q duplicate ID of index %q: %d",
 				idx.GetName(), other, idx.GetID())
 		}
 		indexIDs[idx.GetID()] = idx.GetName()
 
 		if idx.GetID() >= desc.NextIndexID {
-			return fmt.Errorf("index %q invalid index ID (%d) > next index ID (%d)",
+			return errors.Newf("index %q invalid index ID (%d) > next index ID (%d)",
 				idx.GetName(), idx.GetID(), desc.NextIndexID)
 		}
 
 		if len(idx.IndexDesc().KeyColumnIDs) != len(idx.IndexDesc().KeyColumnNames) {
-			return fmt.Errorf("mismatched column IDs (%d) and names (%d)",
+			return errors.Newf("mismatched column IDs (%d) and names (%d)",
 				len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnNames))
 		}
 		if len(idx.IndexDesc().KeyColumnIDs) != len(idx.IndexDesc().KeyColumnDirections) {
-			return fmt.Errorf("mismatched column IDs (%d) and directions (%d)",
+			return errors.Newf("mismatched column IDs (%d) and directions (%d)",
 				len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnDirections))
 		}
 		// In the old STORING encoding, stored columns are in ExtraColumnIDs;
 		// tolerate a longer list of column names.
 		if len(idx.IndexDesc().StoreColumnIDs) > len(idx.IndexDesc().StoreColumnNames) {
-			return fmt.Errorf("mismatched STORING column IDs (%d) and names (%d)",
+			return errors.Newf("mismatched STORING column IDs (%d) and names (%d)",
 				len(idx.IndexDesc().StoreColumnIDs), len(idx.IndexDesc().StoreColumnNames))
 		}
 
 		if len(idx.IndexDesc().KeyColumnIDs) == 0 {
-			return fmt.Errorf("index %q must contain at least 1 column", idx.GetName())
+			return errors.Newf("index %q must contain at least 1 column", idx.GetName())
 		}
 
 		var validateIndexDup catalog.TableColSet
 		for i, name := range idx.IndexDesc().KeyColumnNames {
+			inIndexColID := idx.IndexDesc().KeyColumnIDs[i]
 			colID, ok := columnNames[name]
 			if !ok {
-				return fmt.Errorf("index %q contains unknown column %q", idx.GetName(), name)
+				return errors.Newf("index %q contains unknown column %q", idx.GetName(), name)
 			}
-			if colID != idx.IndexDesc().KeyColumnIDs[i] {
-				return fmt.Errorf("index %q column %q should have ID %d, but found ID %d",
-					idx.GetName(), name, colID, idx.IndexDesc().KeyColumnIDs[i])
+			if colID != inIndexColID {
+				return errors.Newf("index %q column %q should have ID %d, but found ID %d",
+					idx.GetName(), name, colID, inIndexColID)
 			}
 			if validateIndexDup.Contains(colID) {
-				return pgerror.Newf(pgcode.FeatureNotSupported, "index %q contains duplicate column %q", idx.GetName(), name)
+				col, _ := desc.FindColumnWithID(colID)
+				if col.IsExpressionIndexColumn() {
+					return pgerror.Newf(pgcode.FeatureNotSupported,
+						"index %q contains duplicate expression %q",
+						idx.GetName(), col.GetComputeExpr(),
+					)
+				}
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"index %q contains duplicate column %q",
+					idx.GetName(), name,
+				)
 			}
 			validateIndexDup.Add(colID)
 		}
+		for i, colID := range idx.IndexDesc().StoreColumnIDs {
+			inIndexColName := idx.IndexDesc().StoreColumnNames[i]
+			col, exists := columnsByID[colID]
+			if !exists {
+				return errors.Newf("index %q contains stored column %q with unknown ID %d", idx.GetName(), inIndexColName, colID)
+			}
+			if col.GetName() != inIndexColName {
+				return errors.Newf("index %q stored column ID %d should have name %q, but found name %q",
+					idx.GetName(), colID, col.ColName(), inIndexColName)
+			}
+		}
+		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
+			if _, exists := columnsByID[colID]; !exists {
+				return errors.Newf("index %q key suffix column ID %d is invalid",
+					idx.GetName(), colID)
+			}
+		}
+
 		if idx.IsSharded() {
 			if err := desc.ensureShardedIndexNotComputed(idx.IndexDesc()); err != nil {
 				return err
 			}
 			if _, exists := columnNames[idx.GetSharded().Name]; !exists {
-				return fmt.Errorf("index %q refers to non-existent shard column %q",
+				return errors.Newf("index %q refers to non-existent shard column %q",
 					idx.GetName(), idx.GetSharded().Name)
 			}
 		}
@@ -986,19 +1177,66 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 				return err
 			}
 			if !valid {
-				return fmt.Errorf("partial index %q refers to unknown columns in predicate: %s",
+				return errors.Newf("partial index %q refers to unknown columns in predicate: %s",
 					idx.GetName(), idx.GetPredicate())
 			}
 		}
-		// Ensure that indexes do not STORE virtual columns.
-		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
-			if col := columnsByID[colID]; col != nil && col.IsVirtual() {
-				return fmt.Errorf("index %q cannot store virtual column %d", idx.GetName(), col)
+
+		if !idx.IsMutation() {
+			if idx.IndexDesc().UseDeletePreservingEncoding {
+				return errors.Newf("public index %q is using the delete preserving encoding", idx.GetName())
 			}
 		}
+
+		// Ensure that indexes do not STORE virtual columns as suffix columns unless
+		// they are primary key columns or future primary key columns (when `ALTER
+		// PRIMARY KEY` is executed and a primary key mutation exists).
+		curPKColIDs := catalog.MakeTableColSet(desc.PrimaryIndex.KeyColumnIDs...)
+		newPKColIDs := catalog.MakeTableColSet()
+		for _, mut := range desc.Mutations {
+			if mut.GetPrimaryKeySwap() != nil {
+				newPKIdxID := mut.GetPrimaryKeySwap().NewPrimaryIndexId
+				newPK, err := desc.FindIndexWithID(newPKIdxID)
+				if err != nil {
+					return err
+				}
+				newPKColIDs.UnionWith(newPK.CollectKeyColumnIDs())
+			}
+		}
+		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
+			if _, ok := columnsByID[colID]; !ok {
+				return errors.Newf("column %d does not exist in table %s", colID, desc.Name)
+			}
+			col := columnsByID[colID]
+			if !col.IsVirtual() {
+				continue
+			}
+
+			// When newPKColIDs is empty, it means there's no `ALTER PRIMARY KEY` in
+			// progress.
+			if newPKColIDs.Len() == 0 && curPKColIDs.Contains(colID) {
+				continue
+			}
+
+			// When newPKColIDs is not empty, it means there is an in-progress `ALTER
+			// PRIMARY KEY`. We don't allow queueing schema changes when there's a
+			// primary key mutation, so it's safe to make the assumption that `Adding`
+			// indexes are associated with the new primary key because they are
+			// rewritten and `Non-adding` indexes should only contain virtual column
+			// from old primary key.
+			isOldPKCol := !idx.Adding() && curPKColIDs.Contains(colID)
+			isNewPKCol := idx.Adding() && newPKColIDs.Contains(colID)
+			if newPKColIDs.Len() > 0 && (isOldPKCol || isNewPKCol) {
+				continue
+			}
+
+			return errors.Newf("index %q cannot store virtual column %q", idx.GetName(), col.GetName())
+		}
+
+		// Ensure that indexes do not STORE virtual columns.
 		for i, colID := range idx.IndexDesc().StoreColumnIDs {
 			if col := columnsByID[colID]; col != nil && col.IsVirtual() {
-				return fmt.Errorf("index %q cannot store virtual column %q",
+				return errors.Newf("index %q cannot store virtual column %q",
 					idx.GetName(), idx.IndexDesc().StoreColumnNames[i])
 			}
 		}
@@ -1015,12 +1253,6 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		// Ensure that index column ID subsets are well formed.
 		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {
 			continue
-		}
-		if !idx.Primary() && idx.Public() {
-			if idx.GetVersion() == descpb.PrimaryIndexWithStoredColumnsVersion {
-				return errors.AssertionFailedf("secondary index %q has invalid version %d which is for primary indexes",
-					idx.GetName(), idx.GetVersion())
-			}
 		}
 		slices := []struct {
 			name  string
@@ -1091,7 +1323,7 @@ func (desc *wrapper) ensureShardedIndexNotComputed(index *descpb.IndexDescriptor
 // stored sorted by upper bound. colOffset is non-zero for subpartitions and
 // indicates how many index columns to skip over.
 func (desc *wrapper) validatePartitioningDescriptor(
-	a *rowenc.DatumAlloc,
+	a *tree.DatumAlloc,
 	idx catalog.Index,
 	part catalog.Partitioning,
 	colOffset int,
@@ -1108,16 +1340,6 @@ func (desc *wrapper) validatePartitioningDescriptor(
 		return nil
 	}
 
-	// TODO(dan): The sqlccl.GenerateSubzoneSpans logic is easier if we disallow
-	// setting zone configs on indexes that are interleaved into another index.
-	// InterleavedBy is fine, so using the root of the interleave hierarchy will
-	// work. It is expected that this is sufficient for real-world use cases.
-	// Revisit this restriction if that expectation is wrong.
-	if idx.NumInterleaveAncestors() > 0 {
-		return errors.Errorf("cannot set a zone config for interleaved index %s; "+
-			"set it on the root of the interleaved hierarchy instead", idx.GetName())
-	}
-
 	// We don't need real prefixes in the DecodePartitionTuple calls because we're
 	// only using it to look for collisions and the prefix would be the same for
 	// all of them. Faking them out with DNull allows us to make O(list partition)
@@ -1128,10 +1350,10 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	}
 
 	if part.NumLists() == 0 && part.NumRanges() == 0 {
-		return fmt.Errorf("at least one of LIST or RANGE partitioning must be used")
+		return errors.Newf("at least one of LIST or RANGE partitioning must be used")
 	}
 	if part.NumLists() > 0 && part.NumRanges() > 0 {
-		return fmt.Errorf("only one LIST or RANGE partitioning may used")
+		return errors.Newf("only one LIST or RANGE partitioning may used")
 	}
 
 	// Do not validate partitions which use unhydrated user-defined types.
@@ -1157,11 +1379,11 @@ func (desc *wrapper) validatePartitioningDescriptor(
 
 	checkName := func(name string) error {
 		if len(name) == 0 {
-			return fmt.Errorf("PARTITION name must be non-empty")
+			return errors.Newf("PARTITION name must be non-empty")
 		}
 		if indexName, exists := partitionNames[name]; exists {
 			if indexName == idx.GetName() {
-				return fmt.Errorf("PARTITION %s: name must be unique (used twice in index %q)",
+				return errors.Newf("PARTITION %s: name must be unique (used twice in index %q)",
 					name, indexName)
 			}
 		}
@@ -1182,7 +1404,7 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			}
 
 			if len(values) == 0 {
-				return fmt.Errorf("PARTITION %s: must contain values", name)
+				return errors.Newf("PARTITION %s: must contain values", name)
 			}
 			// NB: key encoding is used to check uniqueness because it has
 			// to match the behavior of the value when indexed.
@@ -1190,10 +1412,10 @@ func (desc *wrapper) validatePartitioningDescriptor(
 				tuple, keyPrefix, err := rowenc.DecodePartitionTuple(
 					a, codec, desc, idx, part, valueEncBuf, fakePrefixDatums)
 				if err != nil {
-					return fmt.Errorf("PARTITION %s: %v", name, err)
+					return errors.Wrapf(err, "PARTITION %s", name)
 				}
 				if _, exists := listValues[string(keyPrefix)]; exists {
-					return fmt.Errorf("%s cannot be present in more than one partition", tuple)
+					return errors.Newf("%s cannot be present in more than one partition", tuple)
 				}
 				listValues[string(keyPrefix)] = struct{}{}
 			}
@@ -1220,23 +1442,23 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			fromDatums, fromKey, err := rowenc.DecodePartitionTuple(
 				a, codec, desc, idx, part, from, fakePrefixDatums)
 			if err != nil {
-				return fmt.Errorf("PARTITION %s: %v", name, err)
+				return errors.Wrapf(err, "PARTITION %s", name)
 			}
 			toDatums, toKey, err := rowenc.DecodePartitionTuple(
 				a, codec, desc, idx, part, to, fakePrefixDatums)
 			if err != nil {
-				return fmt.Errorf("PARTITION %s: %v", name, err)
+				return errors.Wrapf(err, "PARTITION %s", name)
 			}
 			pi := partitionInterval{name, fromKey, toKey}
 			if overlaps := tree.Get(pi.Range()); len(overlaps) > 0 {
-				return fmt.Errorf("partitions %s and %s overlap",
+				return errors.Newf("partitions %s and %s overlap",
 					overlaps[0].(partitionInterval).name, name)
 			}
 			if err := tree.Insert(pi, false /* fast */); errors.Is(err, interval.ErrEmptyRange) {
-				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is equal to upper bound %s",
+				return errors.Newf("PARTITION %s: empty range: lower bound %s is equal to upper bound %s",
 					name, fromDatums, toDatums)
 			} else if errors.Is(err, interval.ErrInvertedRange) {
-				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is greater than upper bound %s",
+				return errors.Newf("PARTITION %s: empty range: lower bound %s is greater than upper bound %s",
 					name, fromDatums, toDatums)
 			} else if err != nil {
 				return errors.Wrapf(err, "PARTITION %s", name)
@@ -1272,234 +1494,10 @@ func (ps partitionInterval) Range() interval.Range {
 func (desc *wrapper) validatePartitioning() error {
 	partitionNames := make(map[string]string)
 
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	return catalog.ForEachNonDropIndex(desc, func(idx catalog.Index) error {
 		return desc.validatePartitioningDescriptor(
 			a, idx, idx.GetPartitioning(), 0 /* colOffset */, partitionNames,
 		)
 	})
-}
-
-// validateTableLocalityConfig validates whether the descriptor's locality
-// config is valid under the given database.
-func (desc *wrapper) validateTableLocalityConfig(
-	db catalog.DatabaseDescriptor, vdg catalog.ValidationDescGetter,
-) error {
-
-	if desc.LocalityConfig == nil {
-		if db.IsMultiRegion() {
-			return pgerror.Newf(
-				pgcode.InvalidTableDefinition,
-				"database %s is multi-region enabled, but table %s has no locality set",
-				db.GetName(),
-				desc.GetName(),
-			)
-		}
-		// Nothing to validate for non-multi-region databases.
-		return nil
-	}
-
-	if !db.IsMultiRegion() {
-		s := tree.NewFmtCtx(tree.FmtSimple)
-		var locality string
-		// Formatting the table locality config should never fail; if it does, the
-		// error message is more clear if we construct a dummy locality here.
-		if err := FormatTableLocalityConfig(desc.LocalityConfig, s); err != nil {
-			locality = "INVALID LOCALITY"
-		}
-		locality = s.String()
-		return pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"database %s is not multi-region enabled, but table %s has locality %s set",
-			db.GetName(),
-			desc.GetName(),
-			locality,
-		)
-	}
-
-	regionsEnumID, err := db.MultiRegionEnumID()
-	if err != nil {
-		return err
-	}
-	regionsEnumDesc, err := vdg.GetTypeDescriptor(regionsEnumID)
-	if err != nil {
-		return errors.Wrapf(err, "multi-region enum with ID %d does not exist", regionsEnumID)
-	}
-
-	// Check non-table items have a correctly set locality.
-	if desc.IsSequence() {
-		if !desc.IsLocalityRegionalByTable() {
-			return errors.AssertionFailedf(
-				"expected sequence %s to have locality REGIONAL BY TABLE",
-				desc.Name,
-			)
-		}
-	}
-	if desc.IsView() {
-		if desc.MaterializedView() {
-			if !desc.IsLocalityGlobal() {
-				return errors.AssertionFailedf(
-					"expected materialized view %s to have locality GLOBAL",
-					desc.Name,
-				)
-			}
-		} else {
-			if !desc.IsLocalityRegionalByTable() {
-				return errors.AssertionFailedf(
-					"expected view %s to have locality REGIONAL BY TABLE",
-					desc.Name,
-				)
-			}
-		}
-	}
-
-	// REGIONAL BY TABLE tables homed in the primary region should include a
-	// reference to the multi-region type descriptor and a corresponding
-	// backreference. All other patterns should only contain a reference if there
-	// is an explicit column which uses the multi-region type descriptor as its
-	// *types.T. While the specific cases are validated below, we search for the
-	// region enum ID in the references list just once, up top here.
-	typeIDs, err := desc.GetAllReferencedTypeIDs(db, vdg.GetTypeDescriptor)
-	if err != nil {
-		return err
-	}
-	regionEnumIDReferenced := false
-	for _, typeID := range typeIDs {
-		if typeID == regionsEnumID {
-			regionEnumIDReferenced = true
-			break
-		}
-	}
-	columnTypesTypeIDs, err := desc.getAllReferencedTypesInTableColumns(vdg.GetTypeDescriptor)
-	if err != nil {
-		return err
-	}
-	switch lc := desc.LocalityConfig.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_Global_:
-		if regionEnumIDReferenced {
-			if _, found := columnTypesTypeIDs[regionsEnumID]; !found {
-				return errors.AssertionFailedf(
-					"expected no region Enum ID to be referenced by a GLOBAL TABLE: %q"+
-						" but found: %d",
-					desc.GetName(),
-					regionsEnumDesc.GetID(),
-				)
-			}
-		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
-		if !desc.IsPartitionAllBy() {
-			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
-		}
-		// For REGIONAL BY ROW tables, ensure partitions in the PRIMARY KEY match
-		// the database descriptor. Ensure each public region has a partition,
-		// and each transitioning region name to possibly have a partition.
-		// We do validation that ensures all index partitions are the same on
-		// PARTITION ALL BY.
-		regions, err := regionsEnumDesc.RegionNames()
-		if err != nil {
-			return err
-		}
-		regionNames := make(map[descpb.RegionName]struct{}, len(regions))
-		for _, region := range regions {
-			regionNames[region] = struct{}{}
-		}
-		transitioningRegions, err := regionsEnumDesc.TransitioningRegionNames()
-		if err != nil {
-			return err
-		}
-		transitioningRegionNames := make(map[descpb.RegionName]struct{}, len(regions))
-		for _, region := range transitioningRegions {
-			transitioningRegionNames[region] = struct{}{}
-		}
-
-		part := desc.GetPrimaryIndex().GetPartitioning()
-		err = part.ForEachList(func(name string, _ [][]byte, _ catalog.Partitioning) error {
-			regionName := descpb.RegionName(name)
-			// Any transitioning region names may exist.
-			if _, ok := transitioningRegionNames[regionName]; ok {
-				return nil
-			}
-			// If a region is not found in any of the region names, we have an unknown
-			// partition.
-			if _, ok := regionNames[regionName]; !ok {
-				return errors.AssertionFailedf(
-					"unknown partition %s on PRIMARY INDEX of table %s",
-					name,
-					desc.GetName(),
-				)
-			}
-			delete(regionNames, regionName)
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-
-		// Any regions that are not deleted from the above loop is missing.
-		for regionName := range regionNames {
-			return errors.AssertionFailedf(
-				"missing partition %s on PRIMARY INDEX of table %s",
-				regionName,
-				desc.GetName(),
-			)
-		}
-
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-
-		// Table is homed in an explicit (non-primary) region.
-		if lc.RegionalByTable.Region != nil {
-			foundRegion := false
-			regions, err := regionsEnumDesc.RegionNamesForValidation()
-			if err != nil {
-				return err
-			}
-			for _, r := range regions {
-				if *lc.RegionalByTable.Region == r {
-					foundRegion = true
-					break
-				}
-			}
-			if !foundRegion {
-				return errors.WithHintf(
-					pgerror.Newf(
-						pgcode.InvalidTableDefinition,
-						`region "%s" has not been added to database "%s"`,
-						*lc.RegionalByTable.Region,
-						db.DatabaseDesc().Name,
-					),
-					"available regions: %s",
-					strings.Join(regions.ToStrings(), ", "),
-				)
-			}
-			if !regionEnumIDReferenced {
-				return errors.AssertionFailedf(
-					"expected multi-region enum ID %d to be referenced on REGIONAL BY TABLE: %q locality "+
-						"config, but did not find it",
-					regionsEnumID,
-					desc.GetName(),
-				)
-			}
-		} else {
-			if regionEnumIDReferenced {
-				// It may be the case that the multi-region type descriptor is used
-				// as the type of the table column. Validations should only fail if
-				// that is not the case.
-				if _, found := columnTypesTypeIDs[regionsEnumID]; !found {
-					return errors.AssertionFailedf(
-						"expected no region Enum ID to be referenced by a REGIONAL BY TABLE: %q homed in the "+
-							"primary region, but found: %d",
-						desc.GetName(),
-						regionsEnumDesc.GetID(),
-					)
-				}
-			}
-		}
-	default:
-		return pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"unknown locality level: %T",
-			lc,
-		)
-	}
-	return nil
 }

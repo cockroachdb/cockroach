@@ -478,7 +478,8 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 		require.Equal(t, scanArgs.Span(), refReq.Span())
 		require.Equal(t, origReadTs, refReq.RefreshFrom)
 
-		return nil, roachpb.NewErrorf("encountered recently written key")
+		return nil, roachpb.NewError(roachpb.NewRefreshFailedError(
+			roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
 	}
 	unexpected := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Fail(t, "unexpected")
@@ -489,7 +490,9 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	br, pErr = tsr.SendLocked(ctx, ba)
 	require.Nil(t, br)
 	require.NotNil(t, pErr)
-	require.Regexp(t, `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh\)`, pErr)
+	require.Regexp(t,
+		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive refresh "+
+			"due to a conflict: committed value on key \"a\"\\)", pErr)
 	require.Equal(t, int64(2), tsr.refreshSuccess.Count())
 	require.Equal(t, int64(1), tsr.refreshFail.Count())
 	require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -80,6 +81,7 @@ func (insecureCtx) HTTPRequestScheme() string {
 func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// This test is verifying the (unimplemented) authentication of SSL
 		// client certificates over HTTP endpoints. Web session authentication
@@ -87,10 +89,10 @@ func TestSSLEnforcement(t *testing.T) {
 		// clients being instantiated.
 		DisableWebSessionAuthentication: true,
 	})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
-		return rpc.NewContext(rpc.ContextOptions{
+		return rpc.NewContext(ctx, rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
 			Config:   cfg,
 			Clock:    hlc.NewClock(hlc.UnixNano, 1),
@@ -187,7 +189,7 @@ func TestSSLEnforcement(t *testing.T) {
 	}
 }
 
-func TestVerifyPassword(t *testing.T) {
+func TestVerifyPasswordDBConsole(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -200,8 +202,7 @@ func TestVerifyPassword(t *testing.T) {
 	if util.RaceEnabled {
 		// The default bcrypt cost makes this test approximately 30s slower when the
 		// race detector is on.
-		defer func(prev int) { security.BcryptCost = prev }(security.BcryptCost)
-		security.BcryptCost = bcrypt.MinCost
+		security.BcryptCost.Override(ctx, &ts.Cfg.Settings.SV, int64(bcrypt.MinCost))
 	}
 
 	//location is used for timezone testing.
@@ -221,6 +222,7 @@ func TestVerifyPassword(t *testing.T) {
 		{"druidia", "12345", "", "", nil},
 
 		{"richardc", "12345", "NOLOGIN", "", nil},
+		{"richardc2", "12345", "NOSQLLOGIN", "", nil},
 		{"before_epoch", "12345", "", "VALID UNTIL '1969-01-01'", nil},
 		{"epoch", "12345", "", "VALID UNTIL '1970-01-01'", nil},
 		{"cockroach", "12345", "", "VALID UNTIL '2100-01-01'", nil},
@@ -242,37 +244,38 @@ func TestVerifyPassword(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
+		testName           string
 		username           string
 		password           string
 		shouldAuthenticate bool
-		expectedErrString  string
 	}{
-		{"azure_diamond", "hunter2", true, ""},
-		{"azure_diamond", "hunter", false, "crypto/bcrypt"},
-		{"azure_diamond", "", false, "crypto/bcrypt"},
-		{"azure_diamond", "🍦", false, "crypto/bcrypt"},
-		{"azure_diamond", "hunter2345", false, "crypto/bcrypt"},
-		{"azure_diamond", "shunter2", false, "crypto/bcrypt"},
-		{"azure_diamond", "12345", false, "crypto/bcrypt"},
-		{"azure_diamond", "*******", false, "crypto/bcrypt"},
-		{"druidia", "12345", true, ""},
-		{"druidia", "hunter2", false, "crypto/bcrypt"},
-		{"root", "", false, "crypto/bcrypt"},
-		{"", "", false, "does not exist"},
-		{"doesntexist", "zxcvbn", false, "does not exist"},
+		{"valid login", "azure_diamond", "hunter2", true},
+		{"wrong password", "azure_diamond", "hunter", false},
+		{"empty password", "azure_diamond", "", false},
+		{"wrong emoji password", "azure_diamond", "🍦", false},
+		{"correct password with suffix should fail", "azure_diamond", "hunter2345", false},
+		{"correct password with prefix should fail", "azure_diamond", "shunter2", false},
+		{"wrong password all numeric", "azure_diamond", "12345", false},
+		{"wrong password all stars", "azure_diamond", "*******", false},
+		{"valid login numeric password", "druidia", "12345", true},
+		{"wrong password matching other user", "druidia", "hunter2", false},
+		{"root with empty password should fail", "root", "", false},
+		{"empty username and password should fail", "", "", false},
+		{"username does not exist should fail", "doesntexist", "zxcvbn", false},
 
-		{"richardc", "12345", false,
-			"richardc does not have login privilege"},
-		{"before_epoch", "12345", false, ""},
-		{"epoch", "12345", false, ""},
-		{"cockroach", "12345", true, ""},
-		{"toolate", "12345", false, ""},
-		{"timelord", "12345", true, ""},
-		{"cthon98", "12345", true, ""},
+		{"user with NOLOGIN role option should fail", "richardc", "12345", false},
+		// This is the one test case where SQL and DB Console login outcomes differ.
+		{"user with NOSQLLOGIN role option should succeed", "richardc2", "12345", true},
+		{"user with VALID UNTIL before the Unix epoch should fail", "before_epoch", "12345", false},
+		{"user with VALID UNTIL at Unix epoch should fail", "epoch", "12345", false},
+		{"user with VALID UNTIL future date should succeed", "cockroach", "12345", true},
+		{"user with VALID UNTIL 10 minutes ago should fail", "toolate", "12345", false},
+		{"user with VALID UNTIL future time in Shanghai time zone should succeed", "timelord", "12345", true},
+		{"user with VALID UNTIL NULL should succeed", "cthon98", "12345", true},
 	} {
-		t.Run("", func(t *testing.T) {
+		t.Run(tc.testName, func(t *testing.T) {
 			username := security.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			valid, expired, err := ts.authentication.verifyPassword(context.Background(), username, tc.password)
+			valid, expired, err := ts.authentication.verifyPasswordDBConsole(context.Background(), username, tc.password)
 			if err != nil {
 				t.Errorf(
 					"credentials %s/%s failed with error %s, wanted no error",
@@ -483,7 +486,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	tryLogin := func(username, password string) (*http.Response, error) {
 		// We need to instantiate our own HTTP Request, because we must inspect
 		// the returned headers.
-		httpClient, err := ts.GetHTTPClient()
+		httpClient, err := ts.GetUnauthenticatedHTTPClient()
 		if util.RaceEnabled {
 			httpClient.Timeout += 30 * time.Second
 		}
@@ -608,7 +611,7 @@ func TestLogout(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	invalidAuthClient, err := s.GetHTTPClient()
+	invalidAuthClient, err := s.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -644,19 +647,23 @@ func TestAuthenticationMux(t *testing.T) {
 	tsrv := s.(*TestServer)
 
 	// Both the normal and authenticated client will be used for each test.
-	normalClient, err := tsrv.GetHTTPClient()
+	normalClient, err := tsrv.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
-	authClient, err := tsrv.GetAdminAuthenticatedHTTPClient()
+	authClient, err := tsrv.GetAdminHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	runRequest := func(
-		client http.Client, method string, path string, body []byte, expected int,
+		client http.Client, method string, path string, body []byte, cookieHeader string, expected int,
 	) error {
 		req, err := http.NewRequest(method, tsrv.AdminURL()+path, bytes.NewBuffer(body))
+		if cookieHeader != "" {
+			// The client still attaches its own cookies to this one.
+			req.Header.Set("cookie", cookieHeader)
+		}
 		if err != nil {
 			return err
 		}
@@ -688,22 +695,24 @@ func TestAuthenticationMux(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		method string
-		path   string
-		body   []byte
+		method       string
+		path         string
+		body         []byte
+		cookieHeader string
 	}{
-		{"GET", adminPrefix + "users", nil},
-		{"GET", statusPrefix + "sessions", nil},
-		{"POST", ts.URLPrefix + "query", tsReqBuffer.Bytes()},
+		{"GET", adminPrefix + "users", nil, ""},
+		{"GET", adminPrefix + "users", nil, "session=badcookie"},
+		{"GET", statusPrefix + "sessions", nil, ""},
+		{"POST", ts.URLPrefix + "query", tsReqBuffer.Bytes(), ""},
 	} {
 		t.Run("path="+tc.path, func(t *testing.T) {
 			// Verify normal client returns 401 Unauthorized.
-			if err := runRequest(normalClient, tc.method, tc.path, tc.body, http.StatusUnauthorized); err != nil {
+			if err := runRequest(normalClient, tc.method, tc.path, tc.body, tc.cookieHeader, http.StatusUnauthorized); err != nil {
 				t.Fatalf("request %s failed when not authorized: %s", tc.path, err)
 			}
 
 			// Verify authenticated client returns 200 OK.
-			if err := runRequest(authClient, tc.method, tc.path, tc.body, http.StatusOK); err != nil {
+			if err := runRequest(authClient, tc.method, tc.path, tc.body, tc.cookieHeader, http.StatusOK); err != nil {
 				t.Fatalf("request %s failed when authorized: %s", tc.path, err)
 			}
 		})
@@ -748,16 +757,16 @@ func TestGRPCAuthentication(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_ = stream.Send(&kvserver.RaftMessageRequestBatch{})
+			_ = stream.Send(&kvserverpb.RaftMessageRequestBatch{})
 			_, err = stream.Recv()
 			return err
 		}},
 		{"closedTimestamp", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := ctpb.NewClosedTimestampClient(conn).Get(ctx)
+			stream, err := ctpb.NewSideTransportClient(conn).PushUpdates(ctx)
 			if err != nil {
 				return err
 			}
-			_ = stream.Send(&ctpb.Reaction{})
+			_ = stream.Send(&ctpb.Update{})
 			_, err = stream.Recv()
 			return err
 		}},

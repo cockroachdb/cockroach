@@ -12,7 +12,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -132,14 +131,13 @@ func planBackup(
 	ctx context.Context, p sql.PlanHookState, backupStmt tree.Statement,
 ) (sql.PlanHookRowFn, error) {
 	fn, cols, _, _, err := backupPlanHook(ctx, backupStmt, p)
-
 	if err != nil {
 		return nil, errors.Wrapf(err, "backup eval: %q", tree.AsString(backupStmt))
 	}
 	if fn == nil {
 		return nil, errors.Newf("backup eval: %q", tree.AsString(backupStmt))
 	}
-	if len(cols) != len(utilccl.DetachedJobExecutionResultHeader) {
+	if len(cols) != len(jobs.DetachedJobExecutionResultHeader) {
 		return nil, errors.Newf("unexpected result columns")
 	}
 	return fn, nil
@@ -172,7 +170,11 @@ func (e *scheduledBackupExecutor) NotifyJobTermination(
 }
 
 func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
 	sj *jobs.ScheduledJob,
+	ex sqlutil.InternalExecutor,
 ) (string, error) {
 	backupNode, err := extractBackupStatement(sj)
 	if err != nil {
@@ -186,26 +188,75 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 
 	recurrence := sj.ScheduleExpr()
 	fullBackup := &tree.FullBackupClause{AlwaysFull: true}
-	// If there exists any dependent schedules (full, incremental) for this
-	// scheduled job, we need to include the crontab of the dependent schedule.
-	// For incremental BACKUPs, the full BACKUP's crontab needs to be included
-	// in the full backup clause. Otherwise, update the recurrence
-	// to be the incremental BACKUP's crontab.
-	if args.DependentScheduleCrontab != "" {
+
+	// Check if sj has a dependent full or incremental schedule associated with it.
+	var dependentSchedule *jobs.ScheduledJob
+	if args.DependentScheduleID != 0 {
+		dependentSchedule, err = jobs.LoadScheduledJob(ctx, env, args.DependentScheduleID, ex, txn)
+		if err != nil {
+			return "", err
+		}
+
 		fullBackup.AlwaysFull = false
+		// If sj refers to the incremental schedule, then the dependentSchedule
+		// refers to the full schedule that sj was created as a child of. In this
+		// case, we want to set the full backup recurrence to the dependent full
+		// schedules recurrence.
 		if backupNode.AppendToLatest {
-			fullBackup.Recurrence = tree.NewDString(args.DependentScheduleCrontab)
+			fullBackup.Recurrence = tree.NewDString(dependentSchedule.ScheduleExpr())
 		} else {
+			// If sj refers to the full schedule, then the dependentSchedule refers to
+			// the incremental schedule that was created as a child of sj. In this
+			// case, we want to set the incremental recurrence to the dependent
+			// incremental schedules recurrence.
 			fullBackup.Recurrence = tree.NewDString(recurrence)
-			recurrence = args.DependentScheduleCrontab
+			recurrence = dependentSchedule.ScheduleExpr()
+		}
+	} else {
+		// If sj does not have a dependent schedule and is an incremental backup
+		// schedule, this is only possible if the dependent full schedule has been
+		// dropped.
+		// In this case we set the recurrence to sj's ScheduleExpr() but we leave
+		// the full backup recurrence empty so that it is decided by the scheduler.
+		if backupNode.AppendToLatest {
+			fullBackup.AlwaysFull = false
+			fullBackup.Recurrence = nil
 		}
 	}
 
-	firstRun, err := tree.MakeDTimestampTZ(sj.ScheduledRunTime(), time.Microsecond)
+	// Pick first_run to be the sooner of the scheduled run time on sj and its
+	// dependent schedule. If both are null then set it to now().
+	//
+	// If a user were to execute the `CREATE SCHEDULE` query returned by this
+	// method, the statement would run a full backup at the time when the next
+	// backup was supposed to run, as part of the old schedule.
+	firstRunTime := sj.ScheduledRunTime()
+	if dependentSchedule != nil {
+		dependentScheduleFirstRun := dependentSchedule.ScheduledRunTime()
+		if firstRunTime.IsZero() {
+			firstRunTime = dependentScheduleFirstRun
+		}
+		if !dependentScheduleFirstRun.IsZero() && dependentScheduleFirstRun.Before(firstRunTime) {
+			firstRunTime = dependentScheduleFirstRun
+		}
+	}
+	if firstRunTime.IsZero() {
+		firstRunTime = env.Now()
+	}
+
+	firstRun, err := tree.MakeDTimestampTZ(firstRunTime, time.Microsecond)
 	if err != nil {
 		return "", err
 	}
 
+	wait, err := parseOnPreviousRunningOption(sj.ScheduleDetails().Wait)
+	if err != nil {
+		return "", err
+	}
+	onError, err := parseOnErrorOption(sj.ScheduleDetails().OnError)
+	if err != nil {
+		return "", err
+	}
 	scheduleOptions := tree.KVOptions{
 		tree.KVOption{
 			Key:   optFirstRun,
@@ -213,21 +264,53 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 		},
 		tree.KVOption{
 			Key:   optOnExecFailure,
-			Value: tree.NewDString(sj.ScheduleDetails().OnError.String()),
+			Value: tree.NewDString(onError),
 		},
 		tree.KVOption{
 			Key:   optOnPreviousRunning,
-			Value: tree.NewDString(sj.ScheduleDetails().Wait.String()),
+			Value: tree.NewDString(wait),
 		},
 	}
 
+	var destinations []string
+	for i := range backupNode.To {
+		dest, ok := backupNode.To[i].(*tree.StrVal)
+		if !ok {
+			return "", errors.Errorf("unexpected %T destination in backup statement", dest)
+		}
+		destinations = append(destinations, dest.RawString())
+	}
+
+	var kmsURIs []string
+	for i := range backupNode.Options.EncryptionKMSURI {
+		kmsURI, ok := backupNode.Options.EncryptionKMSURI[i].(*tree.StrVal)
+		if !ok {
+			return "", errors.Errorf("unexpected %T kmsURI in backup statement", kmsURI)
+		}
+		kmsURIs = append(kmsURIs, kmsURI.RawString())
+	}
+
+	redactedBackupNode, err := GetRedactedBackupNode(
+		backupNode.Backup,
+		destinations,
+		nil, /* incrementalFrom */
+		kmsURIs,
+		"",
+		nil,
+		false /* hasBeenPlanned */)
+	if err != nil {
+		return "", err
+	}
+
 	node := &tree.ScheduledBackup{
-		ScheduleLabel:   tree.NewDString(sj.ScheduleLabel()),
+		ScheduleLabelSpec: tree.ScheduleLabelSpec{
+			IfNotExists: false, Label: tree.NewDString(sj.ScheduleLabel()),
+		},
 		Recurrence:      tree.NewDString(recurrence),
 		FullBackup:      fullBackup,
-		Targets:         backupNode.Targets,
-		To:              backupNode.To,
-		BackupOptions:   backupNode.Options,
+		Targets:         redactedBackupNode.Targets,
+		To:              redactedBackupNode.To,
+		BackupOptions:   redactedBackupNode.Options,
 		ScheduleOptions: scheduleOptions,
 	}
 
@@ -259,6 +342,11 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 
 	s, err := jobs.LoadScheduledJob(ctx, env, args.UnpauseOnSuccess, ex, txn)
 	if err != nil {
+		if jobs.HasScheduledJobNotFoundError(err) {
+			log.Warningf(ctx, "cannot find schedule %d to unpause; it may have been dropped",
+				args.UnpauseOnSuccess)
+			return nil
+		}
 		return err
 	}
 	s.ClearScheduleStatus()
@@ -278,8 +366,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 		return errors.Wrap(err, "marshaling args")
 	}
 	schedule.SetExecutionDetails(
-		schedule.ExecutorType(),
-		jobspb.ExecutionArguments{Args: any},
+		schedule.ExecutorType(), jobspb.ExecutionArguments{Args: any},
 	)
 
 	return nil
@@ -313,6 +400,65 @@ func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, e
 	}
 
 	return nil, errors.Newf("unexpect node type %T", node)
+}
+
+var _ jobs.ScheduledJobController = &scheduledBackupExecutor{}
+
+func unlinkDependentSchedule(
+	ctx context.Context,
+	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	args *ScheduledBackupExecutionArgs,
+) error {
+	if args.DependentScheduleID == 0 {
+		return nil
+	}
+
+	// Load the dependent schedule.
+	dependentSj, dependentArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
+		scheduleControllerEnv.InternalExecutor().(*sql.InternalExecutor), args.DependentScheduleID)
+	if err != nil {
+		if jobs.HasScheduledJobNotFoundError(err) {
+			log.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+			return nil
+		}
+		return errors.Wrapf(err, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+	}
+
+	// Clear the DependentID field since we are dropping the record associated
+	// with it.
+	dependentArgs.DependentScheduleID = 0
+	any, err := pbtypes.MarshalAny(dependentArgs)
+	if err != nil {
+		return err
+	}
+	dependentSj.SetExecutionDetails(dependentSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
+	return dependentSj.Update(ctx, scheduleControllerEnv.InternalExecutor(), txn)
+}
+
+// OnDrop implements the ScheduledJobController interface.
+// The method is responsible for releasing the pts record stored on the schedule
+// if schedules.backup.gc_protection.enabled = true.
+// It is also responsible for unlinking the dependent schedule by clearing the
+// DependentID.
+func (e *scheduledBackupExecutor) OnDrop(
+	ctx context.Context,
+	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
+	env scheduledjobs.JobSchedulerEnv,
+	sj *jobs.ScheduledJob,
+	txn *kv.Txn,
+) error {
+	args := &ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
+		return errors.Wrap(err, "un-marshaling args")
+	}
+
+	if err := unlinkDependentSchedule(ctx, scheduleControllerEnv, env, txn, args); err != nil {
+		return errors.Wrap(err, "failed to unlink dependent schedule")
+	}
+	return releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
+		args.ProtectedTimestampRecord)
 }
 
 func init() {

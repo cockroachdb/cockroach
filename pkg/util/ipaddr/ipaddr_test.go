@@ -26,22 +26,22 @@ func TestIPAddrParseInet(t *testing.T) {
 		err string
 	}{
 		// Basic IPv4.
-		{"192.168.1.2", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.1.2")))), Mask: 32}, ""},
+		{"192.168.1.2", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.1.2")))), Mask: 32}, ""},
 		// Test we preserve masked bits.
-		{"192.168.1.2/16", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.1.2")))), Mask: 16}, ""},
+		{"192.168.1.2/16", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.1.2")))), Mask: 16}, ""},
 		// Test the ability to have following '.'.
-		{"192.168.1.2.", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.1.2")))), Mask: 32}, ""},
-		{"192.168.1.2./10", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.1.2")))), Mask: 10}, ""},
+		{"192.168.1.2.", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.1.2")))), Mask: 32}, ""},
+		{"192.168.1.2./10", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.1.2")))), Mask: 10}, ""},
 		// Basic IPv6.
-		{"2001:4f8:3:ba::/64", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("2001:4f8:3:ba::")))), Mask: 64}, ""},
-		{"2001:4f8:3:ba:2e0:81ff:fe22:d1f1/128", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("2001:4f8:3:ba:2e0:81ff:fe22:d1f1")))), Mask: 128}, ""},
-		{"::ffff:1.2.3.1/120", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("::ffff:1.2.3.1")))), Mask: 120}, ""},
-		{"::ffff:1.2.3.1/128", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("::ffff:1.2.3.1")))), Mask: 128}, ""},
-		{"::ffff:1.2.3.1/128", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("::ffff:1.2.3.1")))), Mask: 128}, ""},
-		{"::ffff:1.2.3.1/20", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("::ffff:1.2.3.1")))), Mask: 20}, ""},
-		{"::ffff:1.2.3.1/120", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("::ffff:1.2.3.1")))), Mask: 120}, ""},
-		{"::1", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("::1")))), Mask: 128}, ""},
-		{"9ec6:78fc:c3ae:a65a:9ac7:2081:ac81:e0aa/101", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("9ec6:78fc:c3ae:a65a:9ac7:2081:ac81:e0aa")))), Mask: 101}, ""},
+		{"2001:4f8:3:ba::/64", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("2001:4f8:3:ba::")))), Mask: 64}, ""},
+		{"2001:4f8:3:ba:2e0:81ff:fe22:d1f1/128", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("2001:4f8:3:ba:2e0:81ff:fe22:d1f1")))), Mask: 128}, ""},
+		{"::ffff:1.2.3.1/120", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("::ffff:1.2.3.1")))), Mask: 120}, ""},
+		{"::ffff:1.2.3.1/128", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("::ffff:1.2.3.1")))), Mask: 128}, ""},
+		{"::ffff:1.2.3.1/128", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("::ffff:1.2.3.1")))), Mask: 128}, ""},
+		{"::ffff:1.2.3.1/20", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("::ffff:1.2.3.1")))), Mask: 20}, ""},
+		{"::ffff:1.2.3.1/120", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("::ffff:1.2.3.1")))), Mask: 120}, ""},
+		{"::1", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("::1")))), Mask: 128}, ""},
+		{"9ec6:78fc:c3ae:a65a:9ac7:2081:ac81:e0aa/101", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("9ec6:78fc:c3ae:a65a:9ac7:2081:ac81:e0aa")))), Mask: 101}, ""},
 
 		// Test bad IPs.
 		{"abc", nil, "invalid IP"},
@@ -70,15 +70,18 @@ func TestIPAddrParseInet(t *testing.T) {
 		{"::0/0", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.IPv6zero))), Mask: 0}, ""},
 		{"::0/10", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.IPv6zero))), Mask: 10}, ""},
 
-		{"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")))), Mask: 128}, ""},
-		{"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/0", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")))), Mask: 0}, ""},
-		{"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/10", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")))), Mask: 10}, ""},
+		{"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")))), Mask: 128}, ""},
+		{"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/0", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")))), Mask: 0}, ""},
+		{"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/10", &IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")))), Mask: 10}, ""},
 
 		// Postgres compatibility edge cases: IPv4 missing octets.
 		{"192.168/24", nil, "mask is larger than provided octets"},
-		{"192/10", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.0.0.0")))), Mask: 10}, ""},
-		{"192.168/23", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.0.0")))), Mask: 23}, ""},
-		{"192.168./10", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.0.0")))), Mask: 10}, ""},
+		{"192/10", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.0.0.0")))), Mask: 10}, ""},
+		{"192.168/23", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.0.0")))), Mask: 23}, ""},
+		{"192.168./10", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.0.0")))), Mask: 10}, ""},
+
+		// Postgres allows leading 0s, '10.0.0.017'::INET parses as 10.0.0.17
+		{"10.0.0.017", &IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("10.0.0.17")))), Mask: 32}, ""},
 	}
 	for i, testCase := range testCases {
 		var actual IPAddr
@@ -102,18 +105,18 @@ func TestIPAddrBinaryMarshalling(t *testing.T) {
 	testCases := []struct {
 		input *IPAddr
 	}{
-		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.1.2")))), Mask: 32}},
-		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.1.2")))), Mask: 16}},
-		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.1.2")))), Mask: 32}},
-		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.1.2")))), Mask: 10}},
-		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("2001:4f8:3:ba::")))), Mask: 64}},
-		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("2001:4f8:3:ba:2e0:81ff:fe22:d1f1")))), Mask: 128}},
-		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("::ffff:1.2.3.1")))), Mask: 120}},
-		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("::ffff:1.2.3.1")))), Mask: 128}},
-		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("::ffff:1.2.3.1")))), Mask: 128}},
-		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("::1")))), Mask: 128}},
-		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.0.0")))), Mask: 23}},
-		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(net.ParseIP("192.168.0.0")))), Mask: 10}},
+		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.1.2")))), Mask: 32}},
+		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.1.2")))), Mask: 16}},
+		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.1.2")))), Mask: 32}},
+		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.1.2")))), Mask: 10}},
+		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("2001:4f8:3:ba::")))), Mask: 64}},
+		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("2001:4f8:3:ba:2e0:81ff:fe22:d1f1")))), Mask: 128}},
+		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("::ffff:1.2.3.1")))), Mask: 120}},
+		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("::ffff:1.2.3.1")))), Mask: 128}},
+		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("::ffff:1.2.3.1")))), Mask: 128}},
+		{&IPAddr{Family: IPv6family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("::1")))), Mask: 128}},
+		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.0.0")))), Mask: 23}},
+		{&IPAddr{Family: IPv4family, Addr: Addr(uint128.FromBytes([]byte(ParseIP("192.168.0.0")))), Mask: 10}},
 	}
 	for i, testCase := range testCases {
 		var data []byte

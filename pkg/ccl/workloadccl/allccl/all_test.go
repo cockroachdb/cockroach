@@ -263,14 +263,14 @@ func TestDeterministicInitialData(t *testing.T) {
 		`intro`:      0x81c6a8cfd9c3452a,
 		`json`:       0xcbf29ce484222325,
 		`ledger`:     0xebe27d872d980271,
-		`movr`:       0x4c0da49085e0bc5c,
+		`movr`:       0x79940f4ba5d5e6a3,
 		`queue`:      0xcbf29ce484222325,
 		`rand`:       0xcbf29ce484222325,
 		`roachmart`:  0xda5e73423dbdb2d9,
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
 		`tpcc`:       0xab32e4f5e899eb2f,
-		`tpch`:       0xdd952207e22aa577,
+		`tpch`:       0x65a1e18ddf4e59aa,
 		`ycsb`:       0x1244ea1c29ef67f6,
 	}
 

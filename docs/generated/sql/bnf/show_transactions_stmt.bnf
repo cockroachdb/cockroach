@@ -1,3 +1,5 @@
 show_transactions_stmt ::=
-	'SHOW' opt_cluster 'TRANSACTIONS'
-	| 'SHOW' 'ALL' opt_cluster 'TRANSACTIONS'
+	'SHOW' 'CLUSTER' 'TRANSACTIONS'
+	| 'SHOW' 'LOCAL' 'TRANSACTIONS'
+	| 'SHOW' 'ALL' 'CLUSTER' 'TRANSACTIONS'
+	| 'SHOW' 'ALL' 'LOCAL' 'TRANSACTIONS'

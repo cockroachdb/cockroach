@@ -40,10 +40,6 @@ type defaultOrderedAgg struct {
 
 var _ AggregateFunc = &defaultOrderedAgg{}
 
-func (a *defaultOrderedAgg) SetOutput(vec coldata.Vec) {
-	a.orderedAggregateFuncBase.SetOutput(vec)
-}
-
 func (a *defaultOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
@@ -241,9 +237,9 @@ func (a *defaultOrderedAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
-func (a *defaultOrderedAggAlloc) Close() error {
+func (a *defaultOrderedAggAlloc) Close(ctx context.Context) error {
 	for _, fn := range a.returnedFns {
-		fn.fn.Close(fn.ctx)
+		fn.fn.Close(ctx)
 	}
 	a.returnedFns = nil
 	return nil

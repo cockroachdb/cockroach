@@ -13,10 +13,9 @@ package colexecwindow
 import (
 	"context"
 	"fmt"
-	"math"
 	"testing"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
 )
@@ -62,6 +60,8 @@ func TestWindowFunctions(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
 	dec := func(val string) apd.Decimal {
 		res, _, err := apd.NewFromString(val)
@@ -88,8 +88,6 @@ func TestWindowFunctions(t *testing.T) {
 	avgFn := execinfrapb.AggregatorSpec_AVG
 	maxFn := execinfrapb.AggregatorSpec_MAX
 
-	accounts := make([]*mon.BoundAccount, 0)
-	monitors := make([]*mon.BytesMonitor, 0)
 	for _, spillForced := range []bool{true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, tc := range []windowFnTestCase{
@@ -291,7 +289,7 @@ func TestWindowFunctions(t *testing.T) {
 				expected: colexectestutils.Tuples{
 					{1, 7, dec("1.6666666666666666667")}, {1, 3, dec("1.6666666666666666667")},
 					{1, -5, dec("1.6666666666666666667")}, {2, nil, dec("0")},
-					{2, 0, dec("0")}, {3, 6, dec("6")},
+					{2, 0, dec("0")}, {3, 6, dec("6.0000000000000000000")},
 				},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
@@ -514,8 +512,8 @@ func TestWindowFunctions(t *testing.T) {
 			{
 				tuples: colexectestutils.Tuples{{nil, 4}, {nil, -6}, {1, 2}, {1, nil}, {2, -3}, {3, 1}, {3, 7}},
 				expected: colexectestutils.Tuples{
-					{nil, 4, dec("-1")}, {nil, -6, dec("-1")},
-					{1, 2, dec("0")}, {1, nil, dec("0")}, {2, -3, dec("-0.75")},
+					{nil, 4, dec("-1.0000000000000000000")}, {nil, -6, dec("-1.0000000000000000000")},
+					{1, 2, dec("0")}, {1, nil, dec("0")}, {2, -3, dec("-0.75000000000000000000")},
 					{3, 1, dec("0.83333333333333333333")}, {3, 7, dec("0.83333333333333333333")}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -783,10 +781,10 @@ func TestWindowFunctions(t *testing.T) {
 					{1, 2, 5}, {2, 1, nil}, {3, 1, 8}, {3, 2, 1},
 				},
 				expected: colexectestutils.Tuples{
-					{nil, nil, -10, dec("-3")}, {nil, nil, 4, dec("-3")},
-					{nil, 1, 6, dec("0")}, {1, nil, 2, dec("2")},
-					{1, 2, 5, dec("3.5")}, {2, 1, nil, nil},
-					{3, 1, 8, dec("8")}, {3, 2, 1, dec("4.5")},
+					{nil, nil, -10, dec("-3.0000000000000000000")}, {nil, nil, 4, dec("-3.0000000000000000000")},
+					{nil, 1, 6, dec("0")}, {1, nil, 2, dec("2.0000000000000000000")},
+					{1, 2, 5, dec("3.5000000000000000000")}, {2, 1, nil, nil},
+					{3, 1, 8, dec("8.0000000000000000000")}, {3, 2, 1, dec("4.5000000000000000000")},
 				},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
@@ -1005,8 +1003,9 @@ func TestWindowFunctions(t *testing.T) {
 			{
 				tuples: colexectestutils.Tuples{{1}, {2}, {nil}, {4}, {nil}, {6}},
 				expected: colexectestutils.Tuples{
-					{1, dec("3.25")}, {2, dec("3.25")}, {nil, dec("3.25")},
-					{4, dec("3.25")}, {nil, dec("3.25")}, {6, dec("3.25")},
+					{1, dec("3.2500000000000000000")}, {2, dec("3.2500000000000000000")},
+					{nil, dec("3.2500000000000000000")}, {4, dec("3.2500000000000000000")},
+					{nil, dec("3.2500000000000000000")}, {6, dec("3.2500000000000000000")},
 				},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -1033,6 +1032,7 @@ func TestWindowFunctions(t *testing.T) {
 			},
 		} {
 			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
+			var toClose []colexecop.Closers
 			var semsToCheck []semaphore.Semaphore
 			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 				tc.init()
@@ -1073,26 +1073,22 @@ func TestWindowFunctions(t *testing.T) {
 					StreamingMemAccount: testMemAcc,
 					DiskQueueCfg:        queueCfg,
 					FDSemaphore:         sem,
+					MonitorRegistry:     &monitorRegistry,
 				}
 				semsToCheck = append(semsToCheck, sem)
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-				accounts = append(accounts, result.OpAccounts...)
-				monitors = append(monitors, result.OpMonitors...)
+				toClose = append(toClose, result.ToClose)
 				return result.Root, err
 			})
+			// Close all closers manually (in production this is done on the
+			// flow cleanup).
+			for _, c := range toClose {
+				require.NoError(t, c.Close(ctx))
+			}
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
 		}
-	}
-
-	for _, acc := range accounts {
-		acc.Close(ctx)
-	}
-
-	for _, m := range monitors {
-		m.Stop(ctx)
 	}
 }
 
@@ -1190,7 +1186,15 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			}
 		} else if fun.AggregateFunc != nil {
 			var argIdxs []int
-			if *fun.AggregateFunc != execinfrapb.CountRows {
+			switch *fun.AggregateFunc {
+			case execinfrapb.CountRows:
+				// CountRows has a specialized implementation.
+				return NewCountRowsOperator(
+					args,
+					NormalizeWindowFrame(nil),
+					&execinfrapb.Ordering{Columns: orderingCols},
+				)
+			default:
 				// Supported aggregate functions other than CountRows take one argument.
 				argIdxs = []int{arg1ColIdx}
 			}
@@ -1215,8 +1219,9 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			)
 			require.NoError(b, err)
 			op = NewWindowAggregatorOperator(
-				args, NormalizeWindowFrame(nil), &execinfrapb.Ordering{Columns: orderingCols},
-				[]int{arg1ColIdx}, aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
+				args, *fun.AggregateFunc, NormalizeWindowFrame(nil),
+				&execinfrapb.Ordering{Columns: orderingCols}, []int{arg1ColIdx},
+				aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
 		} else {
 			require.Fail(b, "expected non-nil window function")
 		}
@@ -1224,30 +1229,26 @@ func BenchmarkWindowFunctions(b *testing.B) {
 		return op
 	}
 
-	var batch coldata.Batch
-	batchCreator := func(batchLength int) coldata.Batch {
+	inputCreator := func(length int) []coldata.Vec {
 		const arg1Offset, arg1Range = 5, 10
-		batch, _ = testAllocator.ResetMaybeReallocate(sourceTypes, batch, batchLength, math.MaxInt64)
-		argCol1 := batch.ColVec(arg1ColIdx).Int64()
-		argCol2 := batch.ColVec(arg2ColIdx).Int64()
-		partitionCol := batch.ColVec(partitionColIdx).Bool()
-		orderCol := batch.ColVec(orderColIdx).Int64()
-		peersCol := batch.ColVec(peersColIdx).Bool()
-		for i := 0; i < batchLength; i++ {
+		vecs := make([]coldata.Vec, len(sourceTypes))
+		for i := range vecs {
+			vecs[i] = testAllocator.NewMemColumn(sourceTypes[i], length)
+		}
+		argCol1 := vecs[arg1ColIdx].Int64()
+		argCol2 := vecs[arg2ColIdx].Int64()
+		partitionCol := vecs[partitionColIdx].Bool()
+		orderCol := vecs[orderColIdx].Int64()
+		peersCol := vecs[peersColIdx].Bool()
+		for i := 0; i < length; i++ {
 			argCol1[i] = int64(1 + (i+arg1Offset)%arg1Range)
 			argCol2[i] = 1
 			partitionCol[i] = i%partitionSize == 0
 			orderCol[i] = int64(i / peerGroupSize)
 			peersCol[i] = i%peerGroupSize == 0
 		}
-		batch.ColVec(arg1ColIdx).Nulls().UnsetNulls()
-		batch.ColVec(arg2ColIdx).Nulls().UnsetNulls()
-		batch.ColVec(arg3ColIdx).Nulls().SetNulls()
-		batch.ColVec(partitionColIdx).Nulls().UnsetNulls()
-		batch.ColVec(orderColIdx).Nulls().UnsetNulls()
-		batch.ColVec(peersColIdx).Nulls().UnsetNulls()
-		batch.SetLength(batchLength)
-		return batch
+		vecs[arg3ColIdx].Nulls().SetNulls()
+		return vecs
 	}
 
 	// The number of rows should be a multiple of coldata.BatchSize().
@@ -1259,14 +1260,12 @@ func BenchmarkWindowFunctions(b *testing.B) {
 	runBench := func(fun execinfrapb.WindowerSpec_Func, fnName string, numArgs int) {
 		b.Run(fnName, func(b *testing.B) {
 			for _, nRows := range rowsOptions {
-				if fun.AggregateFunc != nil && nRows == 32*coldata.BatchSize() {
-					// Aggregate functions are too slow until the sliding window approach
-					// is implemented.
+				if !isWindowFnLinear(fun) && nRows == 32*coldata.BatchSize() {
+					// Skip functions that scale poorly for the larger row size.
 					continue
 				}
 				b.Run(fmt.Sprintf("rows=%d", nRows), func(b *testing.B) {
-					nBatches := nRows / coldata.BatchSize()
-					batch := batchCreator(coldata.BatchSize())
+					vecs := inputCreator(nRows)
 					for _, partitionInput := range []bool{true, false} {
 						b.Run(fmt.Sprintf("partition=%v", partitionInput), func(b *testing.B) {
 							for _, orderInput := range []bool{true, false} {
@@ -1279,8 +1278,8 @@ func BenchmarkWindowFunctions(b *testing.B) {
 									b.SetBytes(int64(nRows * 8 * (numArgs + 1)))
 									b.ResetTimer()
 									for i := 0; i < b.N; i++ {
-										source := colexectestutils.NewFiniteChunksSource(
-											testAllocator, batch, sourceTypes, nBatches, 1,
+										source := colexectestutils.NewChunkingBatchSource(
+											testAllocator, sourceTypes, vecs, nRows,
 										)
 										s := getWindowFn(fun, source, partitionInput, orderInput)
 										s.Init(ctx)

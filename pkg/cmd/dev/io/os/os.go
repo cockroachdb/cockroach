@@ -12,12 +12,17 @@ package os
 
 import (
 	"fmt"
+	"io"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"os"
+	"os/user"
+	"path/filepath"
+	"strconv"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recorder"
-	"github.com/cockroachdb/errors/oserror"
+	"github.com/irfansharif/recorder"
 )
 
 // OS is a convenience wrapper around the stdlib os package. It lets us:
@@ -35,6 +40,10 @@ type OS struct {
 	dir    string
 	logger *log.Logger
 	*recorder.Recorder
+
+	knobs struct { // testing knobs
+		dryrun bool
+	}
 }
 
 // New constructs a new OS handle, configured with the provided options.
@@ -75,10 +84,17 @@ func WithRecorder(r *recorder.Recorder) func(o *OS) {
 	}
 }
 
-// WithWorkingDir configures Exec to use the provided working directory.
+// WithWorkingDir configures OS to use the provided working directory.
 func WithWorkingDir(dir string) func(o *OS) {
 	return func(o *OS) {
 		o.dir = dir
+	}
+}
+
+// WithDryrun configures OS to run in dryrun mode.
+func WithDryrun() func(e *OS) {
+	return func(e *OS) {
+		e.knobs.dryrun = true
 	}
 }
 
@@ -88,21 +104,9 @@ func (o *OS) MkdirAll(path string) error {
 	command := fmt.Sprintf("mkdir %s", path)
 	o.logger.Print(command)
 
-	if o.Recorder == nil || o.Recorder.Recording() {
-		// Do the real thing.
-		if err := os.MkdirAll(path, 0755); err != nil {
-			return err
-		}
-	}
-
-	if o.Recorder == nil {
-		return nil
-	}
-
-	if o.Recording() {
-		return o.record(command, "")
-	}
-	_, err := o.replay(command)
+	_, err := o.Next(command, func() (output string, err error) {
+		return "", os.MkdirAll(path, 0755)
+	})
 	return err
 }
 
@@ -111,21 +115,12 @@ func (o *OS) Remove(path string) error {
 	command := fmt.Sprintf("rm %s", path)
 	o.logger.Print(command)
 
-	if o.Recorder == nil || o.Recorder.Recording() {
-		// Do the real thing.
-		if err := os.Remove(path); err != nil && !oserror.IsNotExist(err) {
-			return err
+	_, err := o.Next(command, func() (output string, err error) {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return "", err
 		}
-	}
-
-	if o.Recorder == nil {
-		return nil
-	}
-
-	if o.Recording() {
-		return o.record(command, "")
-	}
-	_, err := o.replay(command)
+		return "", nil
+	})
 	return err
 }
 
@@ -135,21 +130,9 @@ func (o *OS) Symlink(to, from string) error {
 	command := fmt.Sprintf("ln -s %s %s", to, from)
 	o.logger.Print(command)
 
-	if o.Recorder == nil || o.Recorder.Recording() {
-		// Do the real thing.
-		if err := os.Symlink(to, from); err != nil {
-			return err
-		}
-	}
-
-	if o.Recorder == nil {
-		return nil
-	}
-
-	if o.Recording() {
-		return o.record(command, "")
-	}
-	_, err := o.replay(command)
+	_, err := o.Next(command, func() (output string, err error) {
+		return "", os.Symlink(to, from)
+	})
 	return err
 }
 
@@ -159,24 +142,13 @@ func (o OS) Getenv(key string) string {
 	command := fmt.Sprintf("getenv %s", key)
 	o.logger.Print(command)
 
-	var env string
-	if o.Recorder == nil || o.Recorder.Recording() {
-		env = os.Getenv(key)
+	output, err := o.Next(command, func() (output string, err error) {
+		return os.Getenv(key), nil
+	})
+	if err != nil {
+		log.Fatalf("%v", err)
 	}
-
-	if o.Recorder == nil {
-		return env
-	}
-
-	if o.Recording() {
-		err := o.record(command, env)
-		if err != nil {
-			return ""
-		}
-		return env
-	}
-	ret, _ := o.replay(command)
-	return ret
+	return output
 }
 
 // Setenv wraps around os.Setenv, which sets the value of the environment
@@ -185,21 +157,9 @@ func (o *OS) Setenv(key, value string) error {
 	command := fmt.Sprintf("export %s=%s", key, value)
 	o.logger.Print(command)
 
-	if o.Recorder == nil || o.Recorder.Recording() {
-		// Do the real thing.
-		if err := os.Setenv(key, value); err != nil {
-			return err
-		}
-	}
-
-	if o.Recorder == nil {
-		return nil
-	}
-
-	if o.Recording() {
-		return o.record(command, "")
-	}
-	_, err := o.replay(command)
+	_, err := o.Next(command, func() (output string, err error) {
+		return "", os.Setenv(key, value)
+	})
 	return err
 }
 
@@ -209,25 +169,30 @@ func (o *OS) Readlink(filename string) (string, error) {
 	command := fmt.Sprintf("readlink %s", filename)
 	o.logger.Print(command)
 
-	var resolved string
-	if o.Recorder == nil || o.Recorder.Recording() {
+	return o.Next(command, func() (output string, err error) {
+		return os.Readlink(filename)
+	})
+}
+
+// IsDir wraps around os.Stat, which returns the os.FileInfo of the named
+// directory. IsDir returns true if and only if it is an existing directory.
+// If there is an error, it will be of type *PathError.
+func (o *OS) IsDir(dirname string) (bool, error) {
+	command := fmt.Sprintf("find %s -type d", dirname)
+	o.logger.Print(command)
+
+	output, err := o.Next(command, func() (output string, err error) {
 		// Do the real thing.
-		var err error
-		resolved, err = os.Readlink(filename)
+		stat, err := os.Stat(dirname)
 		if err != nil {
 			return "", err
 		}
+		return strconv.FormatBool(stat.IsDir()), nil
+	})
+	if err != nil {
+		return false, err
 	}
-
-	if o.Recorder == nil {
-		return resolved, nil
-	}
-
-	if o.Recording() {
-		return resolved, o.record(command, resolved)
-	}
-	ret, err := o.replay(command)
-	return ret, err
+	return strconv.ParseBool(strings.TrimSpace(output))
 }
 
 // ReadFile wraps around ioutil.ReadFile, reading a file from disk and
@@ -236,52 +201,136 @@ func (o *OS) ReadFile(filename string) (string, error) {
 	command := fmt.Sprintf("cat %s", filename)
 	o.logger.Print(command)
 
-	var out string
-	if o.Recorder == nil || o.Recorder.Recording() {
-		// Do the real thing.
+	return o.Next(command, func() (output string, err error) {
 		buf, err := ioutil.ReadFile(filename)
 		if err != nil {
 			return "", err
 		}
-		out = string(buf)
-	}
-
-	if o.Recorder == nil {
-		return out, nil
-	}
-
-	if o.Recording() {
-		return out, o.record(command, out)
-	}
-	ret, err := o.replay(command)
-	return ret, err
+		return string(buf), nil
+	})
 }
 
-// replay replays the specified command, erroring out if it's mismatched with
-// what the recorder plays back next. It returns the recorded output.
-func (o *OS) replay(command string) (output string, err error) {
-	found, err := o.Recorder.Next(func(op recorder.Operation) error {
-		if op.Command != command {
-			return fmt.Errorf("expected %q, got %q", op.Command, command)
+// WriteFile wraps around ioutil.ReadFile, writing the given contents to
+// the given file on disk.
+func (o *OS) WriteFile(filename, contents string) error {
+	var command string
+	{
+		commandContents := contents
+		if len(commandContents) > 10 {
+			commandContents = commandContents[:10] // keeps the logging manageable
 		}
-		output = op.Output
-		return nil
+		command = fmt.Sprintf("echo %q > %s", strings.TrimSpace(commandContents), filename)
+	}
+	o.logger.Print(command)
+
+	_, err := o.Next(command, func() (output string, err error) {
+		return "", ioutil.WriteFile(filename, []byte(contents), 0666)
+	})
+	return err
+}
+
+// CopyFile copies a file from one location to another.
+// In practice we frequently use this function to copy `src` to `dst`
+// where `src` is a symlink to the already-existing file `dst`; a naive
+// implementation would wipe `dst` (and `src` accordingly).
+// Unlike a simple io.Copy, this function checks for that case and is a
+// no-op if `src` is already a symlink to `dst`.
+func (o *OS) CopyFile(src, dst string) error {
+	command := fmt.Sprintf("cp %s %s", src, dst)
+	o.logger.Print(command)
+
+	_, err := o.Next(command, func() (output string, err error) {
+		srcFile, err := os.Open(src)
+		if err != nil {
+			return "", err
+		}
+		defer func() { _ = srcFile.Close() }()
+		originalDstFile, err := os.Open(dst)
+		if err != nil && !os.IsNotExist(err) {
+			return "", err
+		} else if err == nil {
+			defer func() { _ = originalDstFile.Close() }()
+			srcInfo, err := srcFile.Stat()
+			if err != nil {
+				return "", err
+			}
+			dstInfo, err := originalDstFile.Stat()
+			if err != nil {
+				return "", err
+			}
+			// If src points to the same file as dst, there's
+			// nothing to be done.
+			if os.SameFile(srcInfo, dstInfo) {
+				return "", nil
+			}
+		}
+		dstFile, err := os.Create(dst)
+		if err != nil {
+			return "", err
+		}
+		defer func() { _ = dstFile.Close() }()
+		_, err = io.Copy(dstFile, srcFile)
+		return "", err
+	})
+	return err
+}
+
+// ListFilesWithSuffix lists all the files under a directory recursively that
+// end in the given suffix.
+func (o *OS) ListFilesWithSuffix(root, suffix string) ([]string, error) {
+	command := fmt.Sprintf("find %s -name *%s", root, suffix)
+	o.logger.Print(command)
+
+	output, err := o.Next(command, func() (output string, err error) {
+		var ret []string
+		if err := filepath.Walk(root, func(path string, info fs.FileInfo, err error) error {
+			// If there's an error walking the tree, throw it away -- there's
+			// nothing interesting we can do with it.
+			if err != nil || info.IsDir() {
+				//nolint:returnerrcheck
+				return nil
+			}
+			if strings.HasSuffix(path, suffix) {
+				ret = append(ret, path)
+			}
+			return nil
+		}); err != nil {
+			return "", err
+		}
+
+		return fmt.Sprintf("%s\n", strings.Join(ret, "\n")), nil
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if !found {
-		return "", fmt.Errorf("recording for %q not found", command)
-	}
-	return output, nil
+	return strings.Split(strings.TrimSpace(output), "\n"), nil
 }
 
-// record records the specified command.
-func (o *OS) record(command, output string) error {
-	op := recorder.Operation{
-		Command: command,
-		Output:  output,
+// CurrentUserAndGroup returns the user and effective group.
+func (o *OS) CurrentUserAndGroup() (uid string, gid string, err error) {
+	command := "id"
+	o.logger.Print(command)
+
+	output, err := o.Next(command, func() (output string, err error) {
+		current, err := user.Current()
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s:%s", current.Uid, current.Gid), nil
+	})
+	if err != nil {
+		return "", "", err
 	}
 
-	return o.Record(op)
+	ids := strings.Split(strings.TrimSpace(output), ":")
+	return ids[0], ids[1], nil
+}
+
+// Next is a thin interceptor for all os activity, running them through
+// testing knobs first.
+func (o *OS) Next(command string, f func() (output string, err error)) (string, error) {
+	if o.knobs.dryrun {
+		return "", nil
+	}
+	return o.Recorder.Next(command, f)
 }

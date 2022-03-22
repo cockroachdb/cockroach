@@ -36,7 +36,7 @@ for template in "${templates[@]}" ; do
     dst=${dst_prefix}_${template//_tmpl/}
     echo -e ${gen_header_comment} \
     | cat - ${internal_pkg}/${template} <(echo "$STRIPPED") \
-    | grep -v '// +build ignore' \
+    | grep -v '//go:build ignore\|// +build ignore' \
     | go_generics -i /dev/stdin -t T=${type} -p ${pkg} -o ${dst}
     crlfmt -w -diff=false ${dst}
 done

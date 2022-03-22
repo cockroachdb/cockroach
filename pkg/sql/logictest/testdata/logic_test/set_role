@@ -1,0 +1,378 @@
+statement ok
+CREATE TABLE priv_t (pk INT PRIMARY KEY);
+CREATE TABLE no_priv_t (pk INT PRIMARY KEY);
+GRANT SELECT ON priv_t TO testuser
+
+statement ok
+CREATE SCHEMA root;
+CREATE TABLE root.root_table ();
+CREATE SCHEMA testuser;
+GRANT ALL ON SCHEMA testuser TO testuser;
+CREATE TABLE testuser.testuser_table ();
+GRANT ALL ON TABLE testuser.testuser_table TO testuser
+
+# Cannot become node or public.
+statement error role name "public" is reserved
+CREATE ROLE public
+
+statement error pgcode 22023 role public does not exist
+SET ROLE public
+
+statement error role name "node" is reserved
+CREATE ROLE node
+
+statement error pgcode 22023 role node does not exist
+SET ROLE node
+
+# Check root can reset and become itself.
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+root  root  root  root
+
+query T
+SHOW ROLE
+----
+none
+
+statement ok
+RESET ROLE
+
+statement error pgcode 22023 role non_existent_user does not exist
+SET ROLE non_existent_user
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+root  root  root  root
+
+query T
+SHOW ROLE
+----
+root
+
+statement ok
+SET ROLE = root
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+root  root  root  root
+
+query T
+SHOW ROLE
+----
+root
+
+statement ok
+SELECT * FROM root_table
+
+statement error relation "testuser_table" does not exist
+SELECT * FROM testuser_table
+
+statement ok
+SET ROLE = 'testuser'
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  root  root
+
+query T
+SHOW is_superuser
+----
+off
+
+statement ok
+SELECT * FROM priv_t
+
+statement error user testuser does not have SELECT privilege on relation no_priv_t
+SELECT * FROM no_priv_t
+
+statement error relation "root_table" does not exist
+SELECT * FROM root_table
+
+statement ok
+SELECT * FROM testuser_table
+
+statement ok
+RESET ROLE
+
+statement ok
+SELECT * FROM root_table
+
+statement error relation "testuser_table" does not exist
+SELECT * FROM testuser_table
+
+# Check root can transition between testuser and testuser2.
+statement ok
+CREATE USER testuser2
+
+statement ok
+SET ROLE testuser2
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser2  testuser2  root  root
+
+query T
+SHOW is_superuser
+----
+off
+
+statement ok
+SET ROLE = 'NoNe'
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+root  root  root  root
+
+query T
+SHOW is_superuser
+----
+on
+
+# Check testuser cannot transition to other users as it has no privileges.
+user testuser
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  testuser  testuser
+
+query T
+SHOW ROLE
+----
+none
+
+statement ok
+SET ROLE testuser
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  testuser  testuser
+
+query T
+SHOW ROLE
+----
+testuser
+
+statement error pgcode 42501 only root can become root
+SET ROLE root
+
+statement error pgcode 42501 permission denied to set role "testuser2"
+SET ROLE testuser2
+
+# Grant admin to testuser.
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+# testuser can now transition to testuser2, but not root.
+
+user testuser
+
+statement error pgcode 42501 only root can become root
+SET ROLE root
+
+statement ok
+SET ROLE testuser2
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser2  testuser2  testuser  testuser
+
+query T
+SHOW is_superuser
+----
+off
+
+statement error pgcode 42501 user testuser2 does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_t
+
+statement error pgcode 42501 user testuser2 does not have SELECT privilege on relation no_priv_t
+SELECT * FROM no_priv_t
+
+statement ok
+RESET ROLE
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  testuser  testuser
+
+query T
+SHOW is_superuser
+----
+on
+
+# testuser2 cannot become anyone.
+
+user testuser2
+
+statement error pgcode 42501 only root can become root
+SET ROLE root
+
+statement error pgcode 42501 permission denied to set role "testuser"
+SET ROLE testuser
+
+statement ok
+SET ROLE testuser2
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser2  testuser2  testuser2  testuser2
+
+statement ok
+RESET ROLE
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser2  testuser2  testuser2  testuser2
+
+# Set testuser2 as admin, check testuser2 can become testuser
+user root
+
+statement ok
+GRANT admin TO testuser2
+
+user testuser2
+
+statement ok
+SET ROLE testuser
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  testuser2  testuser2
+
+statement ok
+RESET ROLE
+
+# Revoke admin but give testuser privileges for testuser2.
+# Make a testrole role.
+# Check testuser2 can become testuser and testrole as they are still
+# "admin" when impersonating testuser.
+user root
+
+statement ok
+CREATE ROLE testrole;
+REVOKE admin FROM testuser2;
+GRANT testuser TO testuser2
+
+statement ok
+RESET ROLE
+
+user testuser2
+
+statement ok
+SET ROLE testuser
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  testuser2  testuser2
+
+statement ok
+SET ROLE testrole
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testrole  testrole  testuser2  testuser2
+
+statement ok
+RESET ROLE
+
+# SET ROLE testuser to testuser2, then revoke admin.
+# Test permissions forbidden, but reset is allowed.
+
+user testuser
+
+statement ok
+SET ROLE testuser2
+
+user root
+
+statement ok
+REVOKE admin FROM testuser
+
+user testuser
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser2  testuser2  testuser  testuser
+
+statement error pgcode 42501 permission denied to set role "testuser2"
+SET ROLE testuser2
+
+statement ok
+SET ROLE 'none'
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  testuser  testuser
+
+
+# SET ROLE is specially cased in SET LOCAL as it uses SetWithPlanner,
+# so test it behaves as appropriate. Also ensure that the node_sessions
+# is correctly attributed to root instead of testuser.
+
+user root
+
+statement ok
+GRANT ADMIN TO testuser;
+
+statement ok
+BEGIN;
+SET LOCAL ROLE testuser
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  root  root
+
+query T
+SELECT user_name FROM crdb_internal.node_sessions
+WHERE active_queries LIKE 'SELECT user_name%'
+----
+root
+
+statement ok
+ROLLBACK
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+root  root  root  root
+
+statement ok
+SET ROLE testuser
+
+# Verify that RESET ALL does *not* affect role.
+statement ok
+RESET ALL
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  root  root
+
+query T
+SELECT user_name FROM crdb_internal.node_sessions
+WHERE active_queries LIKE 'SELECT user_name%'
+----
+root
+
+statement ok
+RESET ROLE

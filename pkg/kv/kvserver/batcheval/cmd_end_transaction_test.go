@@ -46,7 +46,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 
 	k, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts, ts2, ts3 := hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 3}
-	txn := roachpb.MakeTransaction("test", k, 0, ts, 0)
+	txn := roachpb.MakeTransaction("test", k, 0, ts, 0, 1)
 	writes := []roachpb.SequencedWrite{{Key: k, Sequence: 0}}
 	intents := []roachpb.Span{{Key: k2}}
 
@@ -61,6 +61,8 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 	restartedAndPushedHeaderTxn := txn.Clone()
 	restartedAndPushedHeaderTxn.Restart(-1, 0, ts2)
 	restartedAndPushedHeaderTxn.WriteTimestamp.Forward(ts3)
+	committedHeaderTxn := txn.Clone()
+	committedHeaderTxn.Status = roachpb.COMMITTED
 
 	pendingRecord := func() *roachpb.TransactionRecord {
 		record := txn.AsRecord()
@@ -609,15 +611,20 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		},
 		{
 			// Standard case where a transaction is rolled back. The record
-			// already exists because of a failed parallel commit attempt.
-			name: "record staging, try rollback",
+			// already exists because of a failed parallel commit attempt in
+			// the same epoch.
+			//
+			// The rollback is not considered an authoritative indication that the
+			// transaction is not implicitly committed, so an indeterminate commit
+			// error is returned to force transaction recovery to be performed.
+			name: "record staging, try rollback at same epoch",
 			// Replica state.
 			existingTxn: stagingRecord,
 			// Request state.
 			headerTxn: headerTxn,
 			commit:    false,
 			// Expected result.
-			expTxn: abortedRecord,
+			expError: "found txn in indeterminate STAGING state",
 		},
 		{
 			// Standard case where a transaction record is created during a
@@ -829,6 +836,16 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expError: "TransactionStatusError: already committed (REASON_TXN_COMMITTED)",
 		},
 		{
+			name: "record and header committed, try rollback",
+			// Replica state.
+			existingTxn: committedRecord,
+			// Request state.
+			headerTxn: committedHeaderTxn,
+			commit:    false,
+			// Expected result.
+			expError: "TransactionStatusError: cannot perform EndTxn with txn status COMMITTED (REASON_TXN_COMMITTED)",
+		},
+		{
 			name: "record committed, try stage",
 			// Replica state.
 			existingTxn: committedRecord,
@@ -848,6 +865,16 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:    true,
 			// Expected result.
 			expError: "TransactionStatusError: already committed (REASON_TXN_COMMITTED)",
+		},
+		{
+			name: "record and header committed, try commit",
+			// Replica state.
+			existingTxn: committedRecord,
+			// Request state.
+			headerTxn: committedHeaderTxn,
+			commit:    true,
+			// Expected result.
+			expError: "TransactionStatusError: cannot perform EndTxn with txn status COMMITTED (REASON_TXN_COMMITTED)",
 		},
 		{
 			name: "record aborted, try stage",
@@ -961,7 +988,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 	k := roachpb.Key("a")
 	ts := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
-	txn := roachpb.MakeTransaction("test", k, 0, ts, 0)
+	txn := roachpb.MakeTransaction("test", k, 0, ts, 0, 1)
 	endKey := roachpb.Key("z")
 	desc := roachpb.RangeDescriptor{
 		RangeID:  99,
@@ -1116,7 +1143,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 
 				now := clock.Now()
 				commitTS := cfg.commitTS(now)
-				txn := roachpb.MakeTransaction("test", desc.StartKey.AsRawKey(), 0, now, 0)
+				txn := roachpb.MakeTransaction("test", desc.StartKey.AsRawKey(), 0, now, 0, 1)
 				txn.ReadTimestamp = commitTS
 				txn.WriteTimestamp = commitTS
 

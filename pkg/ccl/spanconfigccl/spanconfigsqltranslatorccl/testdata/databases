@@ -1,0 +1,49 @@
+# Create a database with some tables, types, and schemas. Check that span
+# configurations are as we expect.
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TYPE db.typ AS ENUM();
+CREATE SCHEMA db.sc;
+CREATE TABLE db.t2();
+----
+
+query-sql
+SELECT id FROM system.namespace WHERE name='t1'
+----
+106
+
+query-sql
+SELECT id FROM system.namespace WHERE name='t2'
+----
+110
+
+# We only expect there to be span config entries for tables t1 and t2.
+translate database=db
+----
+/Table/10{6-7}                             range default
+/Table/11{0-1}                             range default
+
+# Alter zone config fields on the database and one of the tables to ensure
+# things are cascading.
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
+----
+
+translate database=db
+----
+/Table/10{6-7}                             num_replicas=7 num_voters=5
+/Table/11{0-1}                             num_replicas=7
+
+# Translating the tables in the database individually should result in the same
+# config as above.
+
+translate database=db table=t1
+----
+/Table/10{6-7}                             num_replicas=7 num_voters=5
+
+translate database=db table=t2
+----
+/Table/11{0-1}                             num_replicas=7

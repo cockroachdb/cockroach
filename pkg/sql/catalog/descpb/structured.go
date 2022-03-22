@@ -13,6 +13,8 @@ package descpb
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -36,13 +38,10 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 // another is expected.
 
 // ID is a custom type for {Database,Table}Descriptor IDs.
-type ID tree.ID
-
-// SafeValue implements the redact.SafeValue interface.
-func (ID) SafeValue() {}
+type ID = catid.DescID
 
 // InvalidID is the uninitialised descriptor id.
-const InvalidID ID = 0
+const InvalidID = catid.InvalidDescID
 
 // IDs is a sortable list of IDs.
 type IDs []ID
@@ -70,16 +69,13 @@ const (
 )
 
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
-type FamilyID uint32
-
-// SafeValue implements the redact.SafeValue interface.
-func (FamilyID) SafeValue() {}
+type FamilyID = catid.FamilyID
 
 // IndexID is a custom type for IndexDescriptor IDs.
-type IndexID tree.IndexID
+type IndexID = catid.IndexID
 
-// SafeValue implements the redact.SafeValue interface.
-func (IndexID) SafeValue() {}
+// ConstraintID is a custom type for TableDescriptor constraint IDs.
+type ConstraintID = catid.ConstraintID
 
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint64
@@ -122,10 +118,7 @@ const (
 )
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
-type ColumnID tree.ColumnID
-
-// SafeValue implements the redact.SafeValue interface.
-func (ColumnID) SafeValue() {}
+type ColumnID = catid.ColumnID
 
 // ColumnIDs is a slice of ColumnDescriptor IDs.
 type ColumnIDs []ColumnID
@@ -222,12 +215,12 @@ func (desc *TableDescriptor) Public() bool {
 	return desc.State == DescriptorState_PUBLIC
 }
 
-// Offline returns true if the table is importing.
+// Offline implements the Descriptor interface.
 func (desc *TableDescriptor) Offline() bool {
 	return desc.State == DescriptorState_OFFLINE
 }
 
-// Dropped returns true if the table is being dropped.
+// Dropped implements the Descriptor interface.
 func (desc *TableDescriptor) Dropped() bool {
 	return desc.State == DescriptorState_DROP
 }
@@ -237,49 +230,37 @@ func (desc *TableDescriptor) Adding() bool {
 	return desc.State == DescriptorState_ADD
 }
 
-// IsTable returns true if the TableDescriptor actually describes a
-// Table resource, as opposed to a different resource (like a View).
+// IsTable implements the TableDescriptor interface.
 func (desc *TableDescriptor) IsTable() bool {
 	return !desc.IsView() && !desc.IsSequence()
 }
 
-// IsView returns true if the TableDescriptor actually describes a
-// View resource rather than a Table.
+// IsView implements the TableDescriptor interface.
 func (desc *TableDescriptor) IsView() bool {
 	return desc.ViewQuery != ""
 }
 
-// MaterializedView returns whether or not this TableDescriptor is a
-// MaterializedView.
+// MaterializedView implements the TableDescriptor interface.
 func (desc *TableDescriptor) MaterializedView() bool {
 	return desc.IsMaterializedView
 }
 
-// IsPhysicalTable returns true if the TableDescriptor actually describes a
-// physical Table that needs to be stored in the kv layer, as opposed to a
-// different resource like a view or a virtual table. Physical tables have
-// primary keys, column families, and indexes (unlike virtual tables).
-// Sequences count as physical tables because their values are stored in
-// the KV layer.
+// IsPhysicalTable implements the TableDescriptor interface.
 func (desc *TableDescriptor) IsPhysicalTable() bool {
 	return desc.IsSequence() || (desc.IsTable() && !desc.IsVirtualTable()) || desc.MaterializedView()
 }
 
-// IsAs returns true if the TableDescriptor actually describes
-// a Table resource with an As source.
+// IsAs implements the TableDescriptor interface.
 func (desc *TableDescriptor) IsAs() bool {
 	return desc.CreateQuery != ""
 }
 
-// IsSequence returns true if the TableDescriptor actually describes a
-// Sequence resource rather than a Table.
+// IsSequence implements the TableDescriptor interface.
 func (desc *TableDescriptor) IsSequence() bool {
 	return desc.SequenceOpts != nil
 }
 
-// IsVirtualTable returns true if the TableDescriptor describes a
-// virtual Table (like the information_schema tables) and thus doesn't
-// need to be physically stored.
+// IsVirtualTable implements the TableDescriptor interface.
 func (desc *TableDescriptor) IsVirtualTable() bool {
 	return IsVirtualTable(desc.ID)
 }
@@ -302,11 +283,6 @@ func IsVirtualTable(id ID) bool {
 // IsSystemConfigID returns whether this ID is for a system config object.
 func IsSystemConfigID(id ID) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
-}
-
-// IsReservedID returns whether this ID is for any system object.
-func IsReservedID(id ID) bool {
-	return id > 0 && id <= keys.MaxReservedDescID
 }
 
 // AnonymousTable is the empty table name, used when a data source
@@ -395,4 +371,8 @@ func (ni NameInfo) GetParentSchemaID() ID {
 // GetName implements the catalog.NameKeyHaver interface.
 func (ni NameInfo) GetName() string {
 	return ni.Name
+}
+
+func init() {
+	protoreflect.RegisterShorthands((*Descriptor)(nil), "descriptor", "desc")
 }

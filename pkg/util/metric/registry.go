@@ -139,6 +139,8 @@ func (r *Registry) addMetricValue(
 // WriteMetricsMetadata writes metadata from all tracked metrics to the
 // parameter map.
 func (r *Registry) WriteMetricsMetadata(dest map[string]Metadata) {
+	r.Lock()
+	defer r.Unlock()
 	for _, v := range r.tracked {
 		dest[v.GetName()] = v.GetMetadata()
 	}
@@ -157,6 +159,8 @@ func (r *Registry) Each(f func(name string, val interface{})) {
 
 // MarshalJSON marshals to JSON.
 func (r *Registry) MarshalJSON() ([]byte, error) {
+	r.Lock()
+	defer r.Unlock()
 	m := make(map[string]interface{})
 	for _, metric := range r.tracked {
 		metric.Inspect(func(v interface{}) {

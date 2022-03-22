@@ -15,7 +15,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"path"
 	"sort"
@@ -24,17 +23,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -48,6 +51,7 @@ const (
 	// backupOldManifestName is an old name for the serialized BackupManifest
 	// proto. It is used by 20.1 nodes and earlier.
 	backupOldManifestName = "BACKUP"
+
 	// backupManifestChecksumSuffix indicates where the checksum for the manifest
 	// is stored if present. It can be found in the name of the backup manifest +
 	// this suffix.
@@ -71,16 +75,41 @@ const (
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
 
+	// backupProgressDirectory is the directory where all 22.1 and beyond
+	// CHECKPOINT files will be stored as we no longer want to overwrite
+	// them.
+	backupProgressDirectory = "progress"
+
 	// DateBasedIncFolderName is the date format used when creating sub-directories
 	// storing incremental backups for auto-appendable backups.
 	// It is exported for testing backup inspection tooling.
 	DateBasedIncFolderName = "/20060102/150405.00"
+
 	// DateBasedIntoFolderName is the date format used when creating sub-directories
 	// for storing backups in a collection.
 	// Also exported for testing backup inspection tooling.
 	DateBasedIntoFolderName = "/2006/01/02-150405.00"
-	latestFileName          = "LATEST"
+
+	// latestFileName is the name of a file in the collection which contains the
+	// path of the most recently taken full backup in the backup collection.
+	latestFileName = "LATEST"
+
+	// latestHistoryDirectory is the directory where all 22.1 and beyond
+	// LATEST files will be stored as we no longer want to overwrite it.
+	latestHistoryDirectory = backupMetadataDirectory + "latest"
+
+	// backupMetadataDirectory is the directory where metadata about a backup
+	// collection is stored. In v22.1 it contains the latest directory.
+	backupMetadataDirectory = "metadata"
 )
+
+var writeMetadataSST = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"kv.bulkio.write_metadata_sst.enabled",
+	"write experimental new format BACKUP metadata file",
+	true,
+)
+var errEncryptionInfoRead = errors.New(`ENCRYPTION-INFO not found`)
 
 // isGZipped detects whether the given bytes represent GZipped data. This check
 // is used rather than a standard implementation such as http.DetectContentType
@@ -117,41 +146,44 @@ func (m *BackupManifest) isIncremental() bool {
 // export storage.
 func ReadBackupManifestFromURI(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	uri string,
 	user security.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
-) (BackupManifest, error) {
+) (BackupManifest, int64, error) {
 	exportStore, err := makeExternalStorageFromURI(ctx, uri, user)
 
 	if err != nil {
-		return BackupManifest{}, err
+		return BackupManifest{}, 0, err
 	}
 	defer exportStore.Close()
-	return ReadBackupManifestFromStore(ctx, exportStore, encryption)
+	return ReadBackupManifestFromStore(ctx, mem, exportStore, encryption)
 }
 
-// ReadBackupManifestFromStore reads and unmarshalls a BackupManifest
-// from an export store.
+// ReadBackupManifestFromStore reads and unmarshalls a BackupManifest from the
+// store and returns it with the size it reserved for it from the boundAccount.
 func ReadBackupManifestFromStore(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
-) (BackupManifest, error) {
-	backupManifest, err := readBackupManifest(ctx, exportStore, backupManifestName,
+) (BackupManifest, int64, error) {
+	backupManifest, memSize, err := readBackupManifest(ctx, mem, exportStore, backupManifestName,
 		encryption)
 	if err != nil {
-		oldManifest, newErr := readBackupManifest(ctx, exportStore, backupOldManifestName,
+		oldManifest, newMemSize, newErr := readBackupManifest(ctx, mem, exportStore, backupOldManifestName,
 			encryption)
 		if newErr != nil {
-			return BackupManifest{}, err
+			return BackupManifest{}, 0, err
 		}
 		backupManifest = oldManifest
+		memSize = newMemSize
 	}
 	backupManifest.Dir = exportStore.Conf()
 	// TODO(dan): Sanity check this BackupManifest: non-empty EndTime,
 	// non-empty Paths, and non-overlapping Spans and keyranges in Files.
-	return backupManifest, nil
+	return backupManifest, memSize, nil
 }
 
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
@@ -162,7 +194,7 @@ func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (b
 		}
 		return false, err
 	}
-	r.Close()
+	r.Close(ctx)
 	return true, nil
 }
 
@@ -182,53 +214,76 @@ func compressData(descBuf []byte) ([]byte, error) {
 
 // decompressData decompresses gzip data buffer and
 // returns decompressed bytes.
-func decompressData(descBytes []byte) ([]byte, error) {
+func decompressData(ctx context.Context, mem *mon.BoundAccount, descBytes []byte) ([]byte, error) {
 	r, err := gzip.NewReader(bytes.NewBuffer(descBytes))
 	if err != nil {
 		return nil, err
 	}
 	defer r.Close()
-	return ioutil.ReadAll(r)
+	return mon.ReadAll(ctx, ioctx.ReaderAdapter(r), mem)
 }
 
 // readBackupManifest reads and unmarshals a BackupManifest from filename in
-// the provided export store.
+// the provided export store. If the passed bound account is not nil, the bytes
+// read are reserved from it as it is read and then the approximate in-memory
+// size (the total decompressed serialized byte size) is reserved as well before
+// deserialization and returned so that callers can then shrink the bound acct
+// by that amount when they release the returned manifest.
 func readBackupManifest(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
-) (BackupManifest, error) {
-	r, err := exportStore.ReadFile(ctx, filename)
-	if err != nil {
-		return BackupManifest{}, err
+) (BackupManifest, int64, error) {
+	// The backup manifest should only be found in the base directory,
+	// unlike the checkpoints which can be found in both the base and
+	// progress directory depending on the version.
+	var r ioctx.ReadCloserCtx
+	var err error
+	if filename != backupManifestName {
+		if r, err = readLatestCheckpointFile(ctx, exportStore, filename); err != nil {
+			return BackupManifest{}, 0, err
+		}
+	} else {
+		if r, err = exportStore.ReadFile(ctx, filename); err != nil {
+			return BackupManifest{}, 0, err
+		}
 	}
-	defer r.Close()
-	descBytes, err := ioutil.ReadAll(r)
+	defer r.Close(ctx)
+	descBytes, err := mon.ReadAll(ctx, r, mem)
 	if err != nil {
-		return BackupManifest{}, err
+		return BackupManifest{}, 0, err
 	}
+	defer func() {
+		mem.Shrink(ctx, int64(cap(descBytes)))
+	}()
 
-	checksumFile, err := exportStore.ReadFile(ctx, filename+backupManifestChecksumSuffix)
+	var checksumFile ioctx.ReadCloserCtx
+	if filename != backupManifestName {
+		checksumFile, err = readLatestCheckpointFile(ctx, exportStore, filename+backupManifestChecksumSuffix)
+	} else {
+		checksumFile, err = exportStore.ReadFile(ctx, filename+backupManifestChecksumSuffix)
+	}
 	if err == nil {
 		// If there is a checksum file present, check that it matches.
-		defer checksumFile.Close()
-		checksumFileData, err := ioutil.ReadAll(checksumFile)
+		defer checksumFile.Close(ctx)
+		checksumFileData, err := ioctx.ReadAll(ctx, checksumFile)
 		if err != nil {
-			return BackupManifest{}, errors.Wrap(err, "reading checksum file")
+			return BackupManifest{}, 0, errors.Wrap(err, "reading checksum file")
 		}
 		checksum, err := getChecksum(descBytes)
 		if err != nil {
-			return BackupManifest{}, errors.Wrap(err, "calculating checksum of manifest")
+			return BackupManifest{}, 0, errors.Wrap(err, "calculating checksum of manifest")
 		}
 		if !bytes.Equal(checksumFileData, checksum) {
-			return BackupManifest{}, errors.Newf("checksum mismatch; expected %s, got %s",
+			return BackupManifest{}, 0, errors.Newf("checksum mismatch; expected %s, got %s",
 				hex.EncodeToString(checksumFileData), hex.EncodeToString(checksum))
 		}
 	} else {
 		// If we don't have a checksum file, carry on. This might be an old version.
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return BackupManifest{}, err
+			return BackupManifest{}, 0, err
 		}
 	}
 
@@ -237,30 +292,41 @@ func readBackupManifest(
 		encryptionKey, err = getEncryptionKey(ctx, encryption, exportStore.Settings(),
 			exportStore.ExternalIOConf())
 		if err != nil {
-			return BackupManifest{}, err
+			return BackupManifest{}, 0, err
 		}
 		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
 		if err != nil {
-			return BackupManifest{}, err
+			return BackupManifest{}, 0, err
 		}
 	}
 
 	if isGZipped(descBytes) {
-		descBytes, err = decompressData(descBytes)
+		decompressedBytes, err := decompressData(ctx, mem, descBytes)
 		if err != nil {
-			return BackupManifest{}, errors.Wrap(
+			return BackupManifest{}, 0, errors.Wrap(
 				err, "decompressing backup manifest")
 		}
+		// Release the compressed bytes from the monitor before we switch descBytes
+		// to point at the decompressed bytes, since the deferred release will later
+		// release the latter.
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = decompressedBytes
+	}
+
+	approxMemSize := int64(len(descBytes))
+	if err := mem.Grow(ctx, approxMemSize); err != nil {
+		return BackupManifest{}, 0, err
 	}
 
 	var backupManifest BackupManifest
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
+		mem.Shrink(ctx, approxMemSize)
 		if encryption == nil && storageccl.AppearsEncrypted(descBytes) {
-			return BackupManifest{}, errors.Wrapf(
+			return BackupManifest{}, 0, errors.Wrapf(
 				err, "file appears encrypted -- try specifying one of \"%s\" or \"%s\"",
 				backupOptEncPassphrase, backupOptEncKMS)
 		}
-		return BackupManifest{}, err
+		return BackupManifest{}, 0, err
 	}
 	for _, d := range backupManifest.Descriptors {
 		// Calls to GetTable are generally frowned upon.
@@ -281,48 +347,65 @@ func readBackupManifest(
 			t.ModificationTime = hlc.Timestamp{WallTime: 1}
 		}
 	}
-	return backupManifest, nil
+
+	return backupManifest, approxMemSize, nil
 }
 
 func readBackupPartitionDescriptor(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	exportStore cloud.ExternalStorage,
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
-) (BackupPartitionDescriptor, error) {
+) (BackupPartitionDescriptor, int64, error) {
 	r, err := exportStore.ReadFile(ctx, filename)
 	if err != nil {
-		return BackupPartitionDescriptor{}, err
+		return BackupPartitionDescriptor{}, 0, err
 	}
-	defer r.Close()
-	descBytes, err := ioutil.ReadAll(r)
+	defer r.Close(ctx)
+	descBytes, err := mon.ReadAll(ctx, r, mem)
 	if err != nil {
-		return BackupPartitionDescriptor{}, err
+		return BackupPartitionDescriptor{}, 0, err
 	}
+	defer func() {
+		mem.Shrink(ctx, int64(cap(descBytes)))
+	}()
+
 	if encryption != nil {
 		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
 			exportStore.ExternalIOConf())
 		if err != nil {
-			return BackupPartitionDescriptor{}, err
+			return BackupPartitionDescriptor{}, 0, err
 		}
 		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
 		if err != nil {
-			return BackupPartitionDescriptor{}, err
+			return BackupPartitionDescriptor{}, 0, err
 		}
 	}
 
 	if isGZipped(descBytes) {
-		descBytes, err = decompressData(descBytes)
+		decompressedData, err := decompressData(ctx, mem, descBytes)
 		if err != nil {
-			return BackupPartitionDescriptor{}, errors.Wrap(
+			return BackupPartitionDescriptor{}, 0, errors.Wrap(
 				err, "decompressing backup partition descriptor")
 		}
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = decompressedData
 	}
+
+	memSize := int64(len(descBytes))
+
+	if err := mem.Grow(ctx, memSize); err != nil {
+		return BackupPartitionDescriptor{}, 0, err
+	}
+
 	var backupManifest BackupPartitionDescriptor
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
-		return BackupPartitionDescriptor{}, err
+		mem.Shrink(ctx, memSize)
+		return BackupPartitionDescriptor{}, 0, err
 	}
-	return backupManifest, err
+
+	return backupManifest, memSize, err
 }
 
 // readTableStatistics reads and unmarshals a StatsTable from filename in
@@ -337,8 +420,8 @@ func readTableStatistics(
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
-	statsBytes, err := ioutil.ReadAll(r)
+	defer r.Close(ctx)
+	statsBytes, err := ioctx.ReadAll(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -360,6 +443,8 @@ func readTableStatistics(
 	return &tableStats, err
 }
 
+// TODO (Aditya): Restructure manifest reading/writing so that checkpoint
+// manifest and actual manifests are no longer shared.
 func writeBackupManifest(
 	ctx context.Context,
 	settings *cluster.Settings,
@@ -391,8 +476,17 @@ func writeBackupManifest(
 		}
 	}
 
-	if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
-		return err
+	// The backup manifest should only be written to the base directory,
+	// unlike the checkpoints which can be written to both the base and
+	// progress directory depending on the version.
+	if filename != backupManifestName {
+		if err := writeNewCheckpointFile(ctx, settings, exportStore, filename, descBuf); err != nil {
+			return err
+		}
+	} else {
+		if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
+			return err
+		}
 	}
 
 	// Write the checksum file after we've successfully wrote the manifest.
@@ -400,8 +494,15 @@ func writeBackupManifest(
 	if err != nil {
 		return errors.Wrap(err, "calculating checksum")
 	}
-	if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
-		return errors.Wrap(err, "writing manifest checksum")
+
+	if filename != backupManifestName {
+		if err := writeNewCheckpointFile(ctx, settings, exportStore, filename+backupManifestChecksumSuffix, checksum); err != nil {
+			return errors.Wrap(err, "writing manifest checksum")
+		}
+	} else {
+		if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+			return errors.Wrap(err, "writing manifest checksum")
+		}
 	}
 
 	return nil
@@ -520,25 +621,35 @@ func writeTableStatistics(
 
 func loadBackupManifests(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	uris []string,
 	user security.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
-) ([]BackupManifest, error) {
+) ([]BackupManifest, int64, error) {
 	backupManifests := make([]BackupManifest, len(uris))
-
+	var reserved int64
+	defer func() {
+		if reserved != 0 {
+			mem.Shrink(ctx, reserved)
+		}
+	}()
 	for i, uri := range uris {
-		desc, err := ReadBackupManifestFromURI(ctx, uri, user, makeExternalStorageFromURI,
+		desc, memSize, err := ReadBackupManifestFromURI(ctx, mem, uri, user, makeExternalStorageFromURI,
 			encryption)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to read backup descriptor")
+			return nil, 0, errors.Wrapf(err, "failed to read backup descriptor")
 		}
+		reserved += memSize
 		backupManifests[i] = desc
 	}
 	if len(backupManifests) == 0 {
-		return nil, errors.Newf("no backups found")
+		return nil, 0, errors.Newf("no backups found")
 	}
-	return backupManifests, nil
+	memSize := reserved
+	reserved = 0
+
+	return backupManifests, memSize, nil
 }
 
 // getLocalityInfo takes a list of stores and their URIs, along with the main
@@ -562,7 +673,7 @@ func getLocalityInfo(
 		}
 		found := false
 		for i, store := range stores {
-			if desc, err := readBackupPartitionDescriptor(ctx, store, filename, encryption); err == nil {
+			if desc, _, err := readBackupPartitionDescriptor(ctx, nil /*mem*/, store, filename, encryption); err == nil {
 				if desc.BackupID != mainBackupManifest.ID {
 					return info, errors.Errorf(
 						"expected backup part to have backup ID %s, found %s",
@@ -591,13 +702,6 @@ func getLocalityInfo(
 	return info, nil
 }
 
-const incBackupSubdirGlob = "/[0-9]*/[0-9]*.[0-9][0-9]/"
-
-// listingDelimDataSlash is used when listing to find backups and groups all the
-// data sst files in each backup, which start with "data/", into a single result
-// that can be skipped over quickly.
-const listingDelimDataSlash = "data/"
-
 const (
 	// IncludeManifest is a named const that can be passed to FindPriorBackups.
 	IncludeManifest = true
@@ -605,49 +709,32 @@ const (
 	OmitManifest = false
 )
 
-// FindPriorBackups finds "appended" incremental backups by searching
-// for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
-// If includeManifest is true the returned paths are to the manifests for the
-// prior backup, otherwise it is just to the backup path.
-func FindPriorBackups(
-	ctx context.Context, store cloud.ExternalStorage, includeManifest bool,
-) ([]string, error) {
-	var prev []string
-	if err := store.List(ctx, "", listingDelimDataSlash, func(p string) error {
-		if ok, err := path.Match(incBackupSubdirGlob+backupManifestName, p); err != nil {
-			return err
-		} else if ok {
-			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupManifestName)
-			}
-			prev = append(prev, p)
-			return nil
+// checkForLatestFileInCollection checks whether the directory pointed by store contains the
+// latestFileName pointer directory.
+func checkForLatestFileInCollection(
+	ctx context.Context, store cloud.ExternalStorage,
+) (bool, error) {
+	r, err := findLatestFile(ctx, store)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, pgerror.WithCandidateCode(err, pgcode.Io)
 		}
-		if ok, err := path.Match(incBackupSubdirGlob+backupOldManifestName, p); err != nil {
-			return err
-		} else if ok {
-			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupOldManifestName)
-			}
-			prev = append(prev, p)
-		}
-		return nil
-	}); err != nil {
-		return nil, errors.Wrap(err, "reading previous backup layers")
+
+		r, err = store.ReadFile(ctx, latestFileName)
 	}
-	sort.Strings(prev)
-	return prev, nil
+	if err != nil {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, nil
+		}
+		return false, pgerror.WithCandidateCode(err, pgcode.Io)
+	}
+	r.Close(ctx)
+	return true, nil
 }
 
-// resolveBackupManifests resolves a list of list of URIs that point to the
-// incremental layers (each of which can be partitioned) of backups into the
-// actual backup manifests and metadata required to RESTORE. If only one layer
-// is explicitly provided, it is inspected to see if it contains "appended"
-// layers internally that are then expanded into the result layers returned,
-// similar to if those layers had been specified in `from` explicitly.
-func resolveBackupManifests(
+func resolveBackupManifestsExplicitIncrementals(
 	ctx context.Context,
-	baseStores []cloud.ExternalStorage,
+	mem *mon.BoundAccount,
 	mkStore cloud.ExternalStorageFromURIFactory,
 	from [][]string,
 	endTime hlc.Timestamp,
@@ -655,175 +742,245 @@ func resolveBackupManifests(
 	user security.SQLUsername,
 ) (
 	defaultURIs []string,
+	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
 	mainBackupManifests []BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	reservedMemSize int64,
 	_ error,
 ) {
-	baseManifest, err := ReadBackupManifestFromStore(ctx, baseStores[0], encryption)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
 	// If explicit incremental backups were are passed, we simply load them one
 	// by one as specified and return the results.
-	if len(from) > 1 {
-		defaultURIs = make([]string, len(from))
-		localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
-		mainBackupManifests = make([]BackupManifest, len(from))
+	var ownedMemSize int64
+	defer func() {
+		if ownedMemSize != 0 {
+			mem.Shrink(ctx, ownedMemSize)
+		}
+	}()
 
-		for i, uris := range from {
-			// The first URI in the list must contain the main BACKUP manifest.
-			defaultURIs[i] = uris[0]
+	defaultURIs = make([]string, len(from))
+	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
+	mainBackupManifests = make([]BackupManifest, len(from))
 
-			stores := make([]cloud.ExternalStorage, len(uris))
-			for j := range uris {
-				stores[j], err = mkStore(ctx, uris[j], user)
-				if err != nil {
-					return nil, nil, nil, errors.Wrapf(err, "export configuration")
-				}
-				defer stores[j].Close()
-			}
+	var err error
+	for i, uris := range from {
+		// The first URI in the list must contain the main BACKUP manifest.
+		defaultURIs[i] = uris[0]
 
-			mainBackupManifests[i], err = ReadBackupManifestFromStore(ctx, stores[0], encryption)
+		stores := make([]cloud.ExternalStorage, len(uris))
+		for j := range uris {
+			stores[j], err = mkStore(ctx, uris[j], user)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, 0, errors.Wrapf(err, "export configuration")
 			}
-			if len(uris) > 1 {
-				localityInfo[i], err = getLocalityInfo(
-					ctx, stores, uris, mainBackupManifests[i], encryption, "", /* prefix */
-				)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-			}
+			defer stores[j].Close()
 		}
-	} else {
-		// Since incremental layers were *not* explicitly specified, search for any
-		// automatically created incremental layers inside the base layer.
-		prev, err := FindPriorBackups(ctx, baseStores[0], IncludeManifest)
+
+		var memSize int64
+		mainBackupManifests[i], memSize, err = ReadBackupManifestFromStore(ctx, mem, stores[0], encryption)
 		if err != nil {
-			if errors.Is(err, cloud.ErrListingUnsupported) {
-				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", baseStores[0])
-				// If we do not support listing, we have to just assume there are none
-				// and restore the specified base.
-				prev = nil
-			} else {
-				return nil, nil, nil, err
-			}
+			return nil, nil, nil, 0, err
 		}
+		ownedMemSize += memSize
 
-		numLayers := len(prev) + 1
-
-		defaultURIs = make([]string, numLayers)
-		mainBackupManifests = make([]BackupManifest, numLayers)
-		localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, numLayers)
-
-		// Setup the base layer explicitly.
-		defaultURIs[0] = from[0][0]
-		mainBackupManifests[0] = baseManifest
-		localityInfo[0], err = getLocalityInfo(
-			ctx, baseStores, from[0], baseManifest, encryption, "", /* prefix */
-		)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		// If we discovered additional layers, handle them too.
-		if numLayers > 1 {
-			numPartitions := len(from[0])
-			// We need the parsed baseURI for each partition to calculate the URI to
-			// each layer in that partition below.
-			baseURIs := make([]*url.URL, numPartitions)
-			for i := range from[0] {
-				baseURIs[i], err = url.Parse(from[0][i])
-				if err != nil {
-					return nil, nil, nil, err
-				}
-			}
-
-			// For each layer, we need to load the base manifest then calculate the URI and the
-			// locality info for each partition.
-			for i := range prev {
-				defaultManifestForLayer, err := readBackupManifest(ctx, baseStores[0], prev[i], encryption)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-				mainBackupManifests[i+1] = defaultManifestForLayer
-
-				// prev[i] is the path to the manifest file itself for layer i -- the
-				// dirname piece of that path is the subdirectory in each of the
-				// partitions in which we'll also expect to find a partition manifest.
-				subDir := path.Dir(prev[i])
-				partitionURIs := make([]string, numPartitions)
-				for j := range baseURIs {
-					u := *baseURIs[j] // NB: makes a copy to avoid mutating the baseURI.
-					u.Path = path.Join(u.Path, subDir)
-					partitionURIs[j] = u.String()
-				}
-				defaultURIs[i+1] = partitionURIs[0]
-				localityInfo[i+1], err = getLocalityInfo(ctx, baseStores, partitionURIs, defaultManifestForLayer, encryption, subDir)
-				if err != nil {
-					return nil, nil, nil, err
-				}
+		if len(uris) > 1 {
+			localityInfo[i], err = getLocalityInfo(
+				ctx, stores, uris, mainBackupManifests[i], encryption, "", /* prefix */
+			)
+			if err != nil {
+				return nil, nil, nil, 0, err
 			}
 		}
 	}
 
+	totalMemSize := ownedMemSize
+	ownedMemSize = 0
+
+	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := validateEndTimeAndTruncate(
+		defaultURIs, mainBackupManifests, localityInfo, endTime)
+
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	return validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, totalMemSize, nil
+}
+
+// resolveBackupManifests resolves the URIs that point to the incremental layers
+// (each of which can be partitioned) of backups into the actual backup
+// manifests and metadata required to RESTORE. If only one layer is explicitly
+// provided, it is inspected to see if it contains "appended" layers internally
+// that are then expanded into the result layers returned, similar to if those
+// layers had been specified in `from` explicitly.
+func resolveBackupManifests(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	baseStores []cloud.ExternalStorage,
+	mkStore cloud.ExternalStorageFromURIFactory,
+	fullyResolvedBaseDirectory []string,
+	fullyResolvedIncrementalsDirectory []string,
+	endTime hlc.Timestamp,
+	encryption *jobspb.BackupEncryptionOptions,
+	user security.SQLUsername,
+) (
+	defaultURIs []string,
+	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
+	mainBackupManifests []BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	reservedMemSize int64,
+	_ error,
+) {
+	var ownedMemSize int64
+	defer func() {
+		if ownedMemSize != 0 {
+			mem.Shrink(ctx, ownedMemSize)
+		}
+	}()
+	baseManifest, memSize, err := ReadBackupManifestFromStore(ctx, mem, baseStores[0], encryption)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	ownedMemSize += memSize
+
+	incStores := make([]cloud.ExternalStorage, len(fullyResolvedIncrementalsDirectory))
+	for i := range fullyResolvedIncrementalsDirectory {
+		store, err := mkStore(ctx, fullyResolvedIncrementalsDirectory[i], user)
+		if err != nil {
+			return nil, nil, nil, 0, errors.Wrapf(err, "failed to open backup storage location")
+		}
+		defer store.Close()
+		incStores[i] = store
+	}
+
+	var prev []string
+	if len(incStores) > 0 {
+		prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+	}
+	numLayers := len(prev) + 1
+
+	defaultURIs = make([]string, numLayers)
+	mainBackupManifests = make([]BackupManifest, numLayers)
+	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, numLayers)
+
+	// Setup the full backup layer explicitly.
+	defaultURIs[0] = fullyResolvedBaseDirectory[0]
+	mainBackupManifests[0] = baseManifest
+	localityInfo[0], err = getLocalityInfo(
+		ctx, baseStores, fullyResolvedBaseDirectory, baseManifest, encryption, "", /* prefix */
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	// If we discovered additional layers, handle them too.
+	if numLayers > 1 {
+		numPartitions := len(fullyResolvedIncrementalsDirectory)
+		// We need the parsed base URI (<prefix>/<subdir>) for each partition to calculate the
+		// URI to each layer in that partition below.
+		baseURIs := make([]*url.URL, numPartitions)
+		for i := range fullyResolvedIncrementalsDirectory {
+			baseURIs[i], err = url.Parse(fullyResolvedIncrementalsDirectory[i])
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+		}
+
+		// For each layer, we need to load the default manifest then calculate the URI and the
+		// locality info for each partition.
+		for i := range prev {
+			defaultManifestForLayer, memSize, err := readBackupManifest(ctx, mem, incStores[0], prev[i], encryption)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+			ownedMemSize += memSize
+			mainBackupManifests[i+1] = defaultManifestForLayer
+
+			// prev[i] is the path to the manifest file itself for layer i -- the
+			// dirname piece of that path is the subdirectory in each of the
+			// partitions in which we'll also expect to find a partition manifest.
+			// Recall full inc URI is <prefix>/<subdir>/<incSubDir>
+			incSubDir := path.Dir(prev[i])
+			partitionURIs := make([]string, numPartitions)
+			for j := range baseURIs {
+				u := *baseURIs[j] // NB: makes a copy to avoid mutating the baseURI.
+				u.Path = JoinURLPath(u.Path, incSubDir)
+				partitionURIs[j] = u.String()
+			}
+			defaultURIs[i+1] = partitionURIs[0]
+			localityInfo[i+1], err = getLocalityInfo(ctx, incStores, partitionURIs, defaultManifestForLayer, encryption, incSubDir)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+		}
+	}
+
+	totalMemSize := ownedMemSize
+	ownedMemSize = 0
+
+	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := validateEndTimeAndTruncate(
+		defaultURIs, mainBackupManifests, localityInfo, endTime)
+
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	return validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, totalMemSize, nil
+}
+
+func validateEndTimeAndTruncate(
+	defaultURIs []string,
+	mainBackupManifests []BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	endTime hlc.Timestamp,
+) ([]string, []BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
 	// Check that the requested target time, if specified, is valid for the list
 	// of incremental backups resolved, truncating the results to the backup that
 	// contains the target time.
-	if !endTime.IsEmpty() {
-		ok := false
-		for i, b := range mainBackupManifests {
-			// Find the backup that covers the requested time.
-			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
-				ok = true
+	if endTime.IsEmpty() {
+		return defaultURIs, mainBackupManifests, localityInfo, nil
+	}
+	for i, b := range mainBackupManifests {
+		// Find the backup that covers the requested time.
+		if !(b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime)) {
+			continue
+		}
 
-				mainBackupManifests = mainBackupManifests[:i+1]
-				defaultURIs = defaultURIs[:i+1]
-				localityInfo = localityInfo[:i+1]
-
-				// Ensure that the backup actually has revision history.
-				if !endTime.Equal(b.EndTime) {
-					if b.MVCCFilter != MVCCFilter_All {
-						const errPrefix = "invalid RESTORE timestamp: restoring to arbitrary time requires that BACKUP for requested time be created with '%s' option."
-						if i == 0 {
-							return nil, nil, nil, errors.Errorf(
-								errPrefix+" nearest backup time is %s", backupOptRevisionHistory,
-								timeutil.Unix(0, b.EndTime.WallTime).UTC(),
-							)
-						}
-						return nil, nil, nil, errors.Errorf(
-							errPrefix+" nearest BACKUP times are %s or %s",
-							backupOptRevisionHistory,
-							timeutil.Unix(0, mainBackupManifests[i-1].EndTime.WallTime).UTC(),
-							timeutil.Unix(0, b.EndTime.WallTime).UTC(),
-						)
-					}
-					// Ensure that the revision history actually covers the requested time -
-					// while the BACKUP's start and end might contain the requested time for
-					// example if start time is 0 (full backup), the revision history was
-					// only captured since the GC window. Note that the RevisionStartTime is
-					// the latest for ranges backed up.
-					if endTime.LessEq(b.RevisionStartTime) {
-						return nil, nil, nil, errors.Errorf(
-							"invalid RESTORE timestamp: BACKUP for requested time only has revision history"+
-								" from %v", timeutil.Unix(0, b.RevisionStartTime.WallTime).UTC(),
-						)
-					}
+		// Ensure that the backup actually has revision history.
+		if !endTime.Equal(b.EndTime) {
+			if b.MVCCFilter != MVCCFilter_All {
+				const errPrefix = "invalid RESTORE timestamp: restoring to arbitrary time requires that BACKUP for requested time be created with '%s' option."
+				if i == 0 {
+					return nil, nil, nil, errors.Errorf(
+						errPrefix+" nearest backup time is %s", backupOptRevisionHistory,
+						timeutil.Unix(0, b.EndTime.WallTime).UTC(),
+					)
 				}
-				break
+				return nil, nil, nil, errors.Errorf(
+					errPrefix+" nearest BACKUP times are %s or %s",
+					backupOptRevisionHistory,
+					timeutil.Unix(0, mainBackupManifests[i-1].EndTime.WallTime).UTC(),
+					timeutil.Unix(0, b.EndTime.WallTime).UTC(),
+				)
+			}
+			// Ensure that the revision history actually covers the requested time -
+			// while the BACKUP's start and end might contain the requested time for
+			// example if start time is 0 (full backup), the revision history was
+			// only captured since the GC window. Note that the RevisionStartTime is
+			// the latest for ranges backed up.
+			if endTime.LessEq(b.RevisionStartTime) {
+				return nil, nil, nil, errors.Errorf(
+					"invalid RESTORE timestamp: BACKUP for requested time only has revision history"+
+						" from %v", timeutil.Unix(0, b.RevisionStartTime.WallTime).UTC(),
+				)
 			}
 		}
+		return defaultURIs[:i+1], mainBackupManifests[:i+1], localityInfo[:i+1], nil
 
-		if !ok {
-			return nil, nil, nil, errors.Errorf(
-				"invalid RESTORE timestamp: supplied backups do not cover requested time",
-			)
-		}
 	}
 
-	return defaultURIs, mainBackupManifests, localityInfo, nil
+	return nil, nil, nil, errors.Errorf(
+		"invalid RESTORE timestamp: supplied backups do not cover requested time",
+	)
 }
 
 // TODO(anzoteh96): benchmark the performance of different search algorithms,
@@ -853,12 +1010,20 @@ func loadSQLDescsFromBackupsAtTime(
 	unwrapDescriptors := func(raw []descpb.Descriptor) []catalog.Descriptor {
 		ret := make([]catalog.Descriptor, 0, len(raw))
 		for i := range raw {
-			ret = append(ret, catalogkv.NewBuilder(&raw[i]).BuildExistingMutable())
+			ret = append(ret, descbuilder.NewBuilder(&raw[i]).BuildExistingMutable())
 		}
 		return ret
 	}
 	if asOf.IsEmpty() {
-		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		if lastBackupManifest.DescriptorCoverage != tree.AllDescriptors {
+			return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		}
+
+		// Cluster backups with revision history may have included previous
+		// database versions of database descriptors in
+		// lastBackupManifest.Descriptors. Find the correct set of descriptors by
+		// going through their revisions. See #68541.
+		asOf = lastBackupManifest.EndTime
 	}
 
 	for _, b := range backupManifests {
@@ -887,10 +1052,16 @@ func loadSQLDescsFromBackupsAtTime(
 	for _, raw := range byID {
 		// A revision may have been captured before it was in a DB that is
 		// backed up -- if the DB is missing, filter the object.
-		desc := catalogkv.NewBuilder(raw).BuildExistingMutable()
+		desc := descbuilder.NewBuilder(raw).BuildExistingMutable()
 		var isObject bool
-		switch desc.(type) {
-		case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
+		switch d := desc.(type) {
+		case catalog.TableDescriptor:
+			// Filter out revisions in the dropped state.
+			if d.GetState() == descpb.DescriptorState_DROP {
+				continue
+			}
+			isObject = true
+		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
 			isObject = true
 		}
 		if isObject && byID[desc.GetParentID()] == nil {
@@ -917,23 +1088,64 @@ func sanitizeLocalityKV(kv string) string {
 	return string(sanitizedKV)
 }
 
+// readEncryptionOptions takes in a backup location and tries to find
+// and return all encryption option files in the backup. A backup
+// normally only creates one encryption option file, but if the user
+// uses ALTER BACKUP to add new keys, a new encryption option file
+// will be placed side by side with the old one. Since the old file
+// is still valid, as we never want to modify or delete an existing
+// backup, we return both new and old files.
 func readEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
-) (*jobspb.EncryptionInfo, error) {
-	r, err := src.ReadFile(ctx, backupEncryptionInfoFile)
+) ([]jobspb.EncryptionInfo, error) {
+	const encryptionReadErrorMsg = `could not find or read encryption information`
+
+	files, err := getEncryptionInfoFiles(ctx, src)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not find or read encryption information")
+		return nil, errors.Mark(errors.Wrap(err, encryptionReadErrorMsg), errEncryptionInfoRead)
 	}
-	defer r.Close()
-	encInfoBytes, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not find or read encryption information")
+	var encInfo []jobspb.EncryptionInfo
+	// The user is more likely to pass in a KMS URI that was used to
+	// encrypt the backup recently, so we iterate the ENCRYPTION-INFO
+	// files from latest to oldest.
+	for i := len(files) - 1; i >= 0; i-- {
+		r, err := src.ReadFile(ctx, files[i])
+		if err != nil {
+			return nil, errors.Wrap(err, encryptionReadErrorMsg)
+		}
+		defer r.Close(ctx)
+
+		encInfoBytes, err := ioctx.ReadAll(ctx, r)
+		if err != nil {
+			return nil, errors.Wrap(err, encryptionReadErrorMsg)
+		}
+		var currentEncInfo jobspb.EncryptionInfo
+		if err := protoutil.Unmarshal(encInfoBytes, &currentEncInfo); err != nil {
+			return nil, err
+		}
+		encInfo = append(encInfo, currentEncInfo)
 	}
-	var encInfo jobspb.EncryptionInfo
-	if err := protoutil.Unmarshal(encInfoBytes, &encInfo); err != nil {
-		return nil, err
+	return encInfo, nil
+}
+
+func getEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]string, error) {
+	var files []string
+	// Look for all files in dest that start with "/ENCRYPTION-INFO"
+	// and return them.
+	err := dest.List(ctx, "", "", func(p string) error {
+		paths := strings.Split(p, "/")
+		p = paths[len(paths)-1]
+		if match := strings.HasPrefix(p, backupEncryptionInfoFile); match {
+			files = append(files, p)
+		}
+
+		return nil
+	})
+	if len(files) < 1 {
+		return nil, errors.New("no ENCRYPTION-INFO files found")
 	}
-	return &encInfo, nil
+
+	return files, err
 }
 
 func writeEncryptionInfoIfNotExists(
@@ -941,7 +1153,7 @@ func writeEncryptionInfoIfNotExists(
 ) error {
 	r, err := dest.ReadFile(ctx, backupEncryptionInfoFile)
 	if err == nil {
-		r.Close()
+		r.Close(ctx)
 		// If the file already exists, then we don't need to create a new one.
 		return nil
 	}
@@ -982,7 +1194,7 @@ func checkForPreviousBackup(
 	redactedURI := RedactURIForErrorMessage(defaultURI)
 	r, err := exportStore.ReadFile(ctx, backupManifestName)
 	if err == nil {
-		r.Close()
+		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
 			redactedURI, backupManifestName)
@@ -994,9 +1206,9 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestName)
 	}
 
-	r, err = exportStore.ReadFile(ctx, backupManifestCheckpointName)
+	r, err = readLatestCheckpointFile(ctx, exportStore, backupManifestCheckpointName)
 	if err == nil {
-		r.Close()
+		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file (is another operation already in progress?)",
 			redactedURI, backupManifestCheckpointName)
@@ -1036,4 +1248,49 @@ func ListFullBackupsInCollection(
 		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupManifestName)
 	}
 	return backupPaths, nil
+}
+
+// readLatestCheckpointFile returns an ioctx.ReaderCloserCtx of the latest
+// checkpoint file.
+func readLatestCheckpointFile(
+	ctx context.Context, exportStore cloud.ExternalStorage, filename string,
+) (ioctx.ReadCloserCtx, error) {
+	filename = strings.TrimPrefix(filename, "/")
+	// First try reading from the progress directory. If the backup is from
+	// an older version, it may not exist there yet so try reading
+	// in the base directory if the first attempt fails.
+	r, err := exportStore.ReadFile(ctx, backupProgressDirectory+"/"+filename)
+	if err != nil {
+		r, err = exportStore.ReadFile(ctx, filename)
+		if err != nil {
+			return nil, errors.Wrapf(err, "%s could not be read in the base or progress directory", filename)
+		}
+	}
+	return r, nil
+}
+
+// writeNewCheckpointFile writes a new BACKUP-CHECKPOINT file to both the base
+// directory and latest-history directory, depending on cluster version.
+func writeNewCheckpointFile(
+	ctx context.Context,
+	settings *cluster.Settings,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	descBuf []byte,
+) error {
+	// Incremental backups pass in the filename with a / appended, where
+	// full backups do not. Depending on the storage file used, double slashes
+	// may throw an error, so we just always strip the / in case.
+	filename = strings.TrimPrefix(filename, "/")
+	// If the cluster is still running on a mixed version, we want to write
+	// to the base directory as well the progress directory. That way if
+	// an old node resumes a backup, it doesn't have to start over.
+	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
+		err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
+		if err != nil {
+			return err
+		}
+	}
+
+	return cloud.WriteFile(ctx, exportStore, backupProgressDirectory+"/"+filename, bytes.NewReader(descBuf))
 }

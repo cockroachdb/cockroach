@@ -239,7 +239,7 @@ scan. If we need to reduce this number later we can add a new setting just for `
 
 One issue that is not discussed in detail in the Postgres documentation is the order in which
 locks are acquired. Acquiring locks in a consistent order is an important tool to prevent deadlocks
-from occuring. For the CockroachDB implementation of `FOR UPDATE`, we will not implement the feature
+from occurring. For the CockroachDB implementation of `FOR UPDATE`, we will not implement the feature
 in DistSQL at this time (DistSQL does not currently support writes), so our implementation
 will most likely produce a consistent ordering of write intents (we currently have no evidence
 to the contrary). It is difficult to guarantee a particular ordering, however, since the implementation
@@ -320,7 +320,7 @@ the start of a transaction would effectively set intents on all of the rows in t
 The proposed solution is to "lock" rows by writing dummy write intents on each row as part
 of an update operation. However, there are a couple of alternative implementations worth
 considering, specifically row-level intents set as part of a scan operation,
-range-level intents, and isolation ugrade.
+range-level intents, and isolation upgrade.
 
 ### Row-level intents set during scan
 
@@ -421,11 +421,11 @@ it's possible that one of these other options would be a better choice for our c
 1. <b>Table Level Locks:</b>
    Postgres provides eight different types of table level locks: `ACCESS SHARE, ROW SHARE,`
    `ROW EXCLUSIVE, SHARE UPDATE EXCLUSIVE, SHARE, SHARE ROW EXCLUSIVE, EXCLUSIVE,` and `ACCESS EXCLUSIVE`.
-   These locks can be acquired explicity using the `LOCK` command, but they are also implicitly
+   These locks can be acquired explicitly using the `LOCK` command, but they are also implicitly
    acquired by different SQL statements. For example, a `SELECT` command (without `FOR UPDATE`)
    implicitly acquires the `ACCESS SHARE` lock on every table it accesses. This prevents concurrent
    calls to `DROP TABLE, TRUNCATE,` etc. on the same table, since those commands must acquire
-   an `ACCESS EXCLUSIVE` lock, wchich conflicts with `ACCESS SHARE`. See the
+   an `ACCESS EXCLUSIVE` lock, which conflicts with `ACCESS SHARE`. See the
    [PG docs](https://www.postgresql.org/docs/current/static/explicit-locking.html#locking-tables) 
    for the full list of conflicts.
 2. <b>Row Level Locks:</b>
@@ -449,8 +449,8 @@ it's possible that one of these other options would be a better choice for our c
 
 There are valid arguments for using each of these different lock types in different applications.
 However, I do not think that either table-level locks or advisory locks will be a good
-substitue for our customers that require explicit row-level locks.
-Table-level locks are not a good substitue for `FOR UPDATE` and the other row-level locks
+substitute for our customers that require explicit row-level locks.
+Table-level locks are not a good substitute for `FOR UPDATE` and the other row-level locks
 because they are too coarse-grained and will cause unnecessary performance degradation.
 Advisory locks place too much responsibility on the application developer(s) to ensure that the
 appropriate lock is always acquired before accessing a given row. This doesn't mean we

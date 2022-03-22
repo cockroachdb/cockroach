@@ -1,0 +1,229 @@
+@import "src/core/index.module";
+@import "src/sortedtable/table.module.scss";
+
+.base-heading {
+  padding: 12px 0;
+  font-size: 24px;
+  font-family: $font-family--base;
+}
+
+.plan-view-table {
+  @include table-base;
+
+  .plan-view-table__cell {
+    padding: 0;
+  }
+
+  .summary--card__title {
+    font-family: $font-family--base;
+    line-height: 1.6;
+    letter-spacing: -0.2px;
+    color: $popover-color;
+    font-size: 16px;
+    display: inline-block;
+    margin-bottom: 10px;
+    padding: 0;
+    text-transform: none;
+  }
+
+  &__row {
+    &--body {
+      background-color: $colors--neutral-10;
+      border-top: none;
+
+      &:hover {
+        background-color: $colors--neutral-10;
+      }
+    }
+  }
+
+  &__tooltip {
+    .hover-tooltip__text {
+      width: 520px;
+      margin-left: 15px;
+    }
+  }
+}
+
+.plan-view-table {
+  &__tooltip {
+    width: 36px;
+    height: 16px;
+    display: inline-block;
+
+    text-transform: none;
+    font-weight: normal;
+    white-space: normal;
+    letter-spacing: normal;
+    font-size: 14px;
+  }
+
+  &__tooltip-hover-area {
+    width: 100%;
+    padding: 0px 10px;
+  }
+
+  &__info-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid $tooltip-color;
+    font-size: 14px;
+    line-height: 14px;
+    text-align: center;
+    color: $tooltip-color;
+  }
+
+  .hover-tooltip--hovered &__info-icon {
+    border-color: $body-color;
+    color: $body-color;
+  }
+}
+
+.plan-view {
+  color: $body-color;
+  position: relative;
+
+  .plan-view-container {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    padding: 24px 32px;
+
+    span {
+      font-family: RobotoMono-Regular;
+      color: $colors--neutral-2;
+    }
+
+    .plan-view-container-scroll {
+      max-height: 400px;
+      overflow-y: scroll;
+    }
+
+    .plan-view-container-directions {
+      text-align: center;
+      cursor: pointer;
+      text-transform: uppercase;
+      color: $main-blue-color;
+      font-size: smaller;
+    }
+  }
+
+  .node-icon {
+    font-size: 14px;
+    margin: 0 4px 0 0;
+    color: $chip-grey;
+  }
+
+  .warn {
+    color: $colors--functional-orange-4;
+    text-transform: uppercase;
+  }
+
+  .underline-tooltip {
+    border-bottom: 1px dashed $adminui-white;
+
+    a {
+      text-decoration: underline;
+      font-size: inherit;
+      color: $chip-grey;
+    }
+  }
+
+  .node-attribute {
+    div {
+      display: inline-block;
+    }
+  }
+
+  .node-details {
+    position: relative;
+    padding: 6px 0;
+    border: 1px solid transparent;
+
+    b {
+      div {
+        display: inline-block;
+      }
+      font-family: $font-family--monospace;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.67;
+      letter-spacing: 0.3px;
+      color: $chip-grey;
+    }
+
+    &:only-child {
+      .node-attributes {
+        border-left: 1px solid transparent;
+      }
+    }
+  }
+
+  .node-attributes.global-attributes {
+    margin-bottom: 40px;
+    padding: 0 0 40px 0;
+    border-left: none;
+    border-bottom: 1px solid $colors--neutral-5;
+  }
+
+  .node-attributes {
+    color: $chip-grey;
+    padding: 3px 14px 12px 8px;
+    margin-left: 2px;
+    border-left: 1px solid $chip-grey;
+    font-family: $font-family--mono-regular;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.83;
+
+    .node-attribute-key {
+      div {
+        display: inline-block;
+      }
+      position: relative;
+      color: $colors--primary-blue-6;
+    }
+  }
+
+  ul {
+    padding: 0;
+    margin: 0;
+
+    li {
+      padding: 0 0 0 8px;
+      margin: 0;
+      position: relative;
+      list-style-type: none;
+
+      &:not(:last-child):before {
+        content: "";
+        width: 1px;
+        height: 100%;
+        background-color: $chip-grey;
+        position: absolute;
+        left: 3px;
+      }
+
+      ul {
+        padding-left: 32px;
+        position: relative;
+
+        &:before {
+          content: "";
+          width: 28px;
+          height: 29px;
+          position: absolute;
+          border-left: 1px solid $chip-grey;
+          border-bottom: 1px solid $chip-grey;
+          top: -10px;
+          left: -5px;
+        }
+
+        li:only-child:before {
+          content: none;
+        }
+      }
+    }
+  }
+}

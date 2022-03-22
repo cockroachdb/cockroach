@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -317,6 +318,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// coalesced requests timeout/cancel. p.cancelLocked (defined below) is the
 	// cancel function that must be called; calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
+
 	const opName = "request range lease"
 	tr := p.repl.AmbientContext.Tracer
 	tagsOpt := tracing.WithLogTags(logtags.FromContext(parentCtx))
@@ -328,7 +330,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		ctx, sp = tr.StartSpanCtx(
 			ctx,
 			opName,
-			tracing.WithParentAndAutoCollection(parentSp),
+			tracing.WithParent(parentSp),
 			tracing.WithFollowsFrom(),
 			tagsOpt,
 		)
@@ -346,8 +348,18 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		p.nextLease = roachpb.Lease{}
 	}
 
-	err := p.repl.store.Stopper().RunAsyncTask(
-		ctx, "storage.pendingLeaseRequest: requesting lease", func(ctx context.Context) {
+	err := p.repl.store.Stopper().RunAsyncTaskEx(
+		ctx,
+		stop.TaskOpts{
+			TaskName: "pendingLeaseRequest: requesting lease",
+			// Trace the lease acquisition as a child even though it might outlive the
+			// parent in case the parent's ctx is canceled. Other requests might
+			// later block on this lease acquisition too, and we can't include the
+			// acquisition's trace in all of them, but let's at least include it in
+			// the request that triggered it.
+			SpanOpt: stop.ChildSpan,
+		},
+		func(ctx context.Context) {
 			defer sp.Finish()
 
 			// If requesting an epoch-based lease & current state is expired,
@@ -370,8 +382,13 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 					// considered live at this time. If not, there's no sense in
 					// incrementing the expired leaseholder's epoch.
 					if live, liveErr := p.repl.store.cfg.NodeLiveness.IsLive(nextLeaseHolder.NodeID); !live || liveErr != nil {
-						err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live (err = %v)",
-							status.Liveness.NodeID, nextLeaseHolder.NodeID, liveErr)
+						if liveErr != nil {
+							err = errors.Wrapf(liveErr, "not incrementing epoch on n%d because next leaseholder (n%d) not live",
+								status.Liveness.NodeID, nextLeaseHolder.NodeID)
+						} else {
+							err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live (err = nil)",
+								status.Liveness.NodeID, nextLeaseHolder.NodeID)
+						}
 						log.VEventf(ctx, 1, "%v", err)
 					} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
 						// If we get ErrEpochAlreadyIncremented, someone else beat
@@ -420,9 +437,28 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// Send the RequestLeaseRequest or TransferLeaseRequest and wait for the new
 			// lease to be applied.
 			if pErr == nil {
+				// The Replica circuit breakers together with round-tripping a ProbeRequest
+				// here before asking for the lease could provide an alternative, simpler
+				// solution to the below issue:
+				//
+				// https://github.com/cockroachdb/cockroach/issues/37906
 				ba := roachpb.BatchRequest{}
 				ba.Timestamp = p.repl.store.Clock().Now()
 				ba.RangeID = p.repl.RangeID
+				// NB:
+				// RequestLease always bypasses the circuit breaker (i.e. will prefer to
+				// get stuck on an unavailable range rather than failing fast; see
+				// `(*RequestLeaseRequest).flags()`). This enables the caller to chose
+				// between either behavior for themselves: if they too want to bypass
+				// the circuit breaker, they simply don't check for the circuit breaker
+				// while waiting for their lease handle. If they want to fail-fast, they
+				// do. If the lease instead adopted the caller's preference, we'd have
+				// to handle the case of multiple preferences joining onto one lease
+				// request, which is more difficult.
+				//
+				// TransferLease will observe the circuit breaker, as transferring a
+				// lease when the range is unavailable results in, essentially, giving
+				// up on the lease and thus worsening the situation.
 				ba.Add(leaseReq)
 				_, pErr = p.repl.Send(ctx, ba)
 			}
@@ -744,6 +780,7 @@ func (r *Replica) requestLeaseLocked(
 			newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
 				"refusing to take the lease; node is draining")))
 	}
+
 	// Propose a Raft command to get a lease for this replica.
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
@@ -893,6 +930,7 @@ func newNotLeaseHolderError(
 ) *roachpb.NotLeaseHolderError {
 	err := &roachpb.NotLeaseHolderError{
 		RangeID:   rangeDesc.RangeID,
+		RangeDesc: *rangeDesc,
 		CustomMsg: msg,
 	}
 	if proposerStoreID != 0 {
@@ -976,15 +1014,24 @@ func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Time
 func (r *Replica) leaseGoodToGoRLocked(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
 ) (_ kvserverpb.LeaseStatus, shouldExtend bool, _ error) {
-	if err := r.checkRequestTimeRLocked(now, reqTS); err != nil {
-		// Case (1): invalid request.
+	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
+	shouldExtend, err := r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
+	if err != nil {
 		return kvserverpb.LeaseStatus{}, false, err
 	}
+	return st, shouldExtend, err
+}
 
-	st := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
+func (r *Replica) leaseGoodToGoForStatusRLocked(
+	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp, st kvserverpb.LeaseStatus,
+) (shouldExtend bool, _ error) {
+	if err := r.checkRequestTimeRLocked(now, reqTS); err != nil {
+		// Case (1): invalid request.
+		return false, err
+	}
 	if !st.IsValid() {
 		// Case (2): invalid lease.
-		return kvserverpb.LeaseStatus{}, false, &roachpb.InvalidLeaseError{}
+		return false, &roachpb.InvalidLeaseError{}
 	}
 	if !st.Lease.OwnedBy(r.store.StoreID()) {
 		// Case (3): not leaseholder.
@@ -1028,12 +1075,12 @@ func (r *Replica) leaseGoodToGoRLocked(
 		}
 		// Otherwise, if the lease is currently held by another replica, redirect
 		// to the holder.
-		return kvserverpb.LeaseStatus{}, false, newNotLeaseHolderError(
+		return false, newNotLeaseHolderError(
 			st.Lease, r.store.StoreID(), r.descRLocked(), "lease held by different store",
 		)
 	}
 	// Case (4): all good.
-	return st, r.shouldExtendLeaseRLocked(st), nil
+	return r.shouldExtendLeaseRLocked(st), nil
 }
 
 // leaseGoodToGo is like leaseGoodToGoRLocked, but will acquire the replica read
@@ -1064,7 +1111,7 @@ func (r *Replica) leaseGoodToGo(
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
-	return r.redirectOnOrAcquireLeaseForRequest(ctx, hlc.Timestamp{})
+	return r.redirectOnOrAcquireLeaseForRequest(ctx, hlc.Timestamp{}, r.breaker.Signal())
 }
 
 // TestingAcquireLease is redirectOnOrAcquireLease exposed for tests.
@@ -1079,17 +1126,23 @@ func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStat
 // but it accepts a specific request timestamp instead of assuming that
 // the request is operating at the current time.
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
-	ctx context.Context, reqTS hlc.Timestamp,
+	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
 	// Try fast-path.
 	now := r.store.Clock().NowAsClockTimestamp()
-	status, shouldExtend, err := r.leaseGoodToGo(ctx, now, reqTS)
-	if err == nil {
-		if shouldExtend {
-			r.maybeExtendLeaseAsync(ctx, status)
+	{
+		status, shouldExtend, err := r.leaseGoodToGo(ctx, now, reqTS)
+		if err == nil {
+			if shouldExtend {
+				r.maybeExtendLeaseAsync(ctx, status)
+			}
+			return status, nil
+		} else if !errors.HasType(err, (*roachpb.InvalidLeaseError)(nil)) {
+			return kvserverpb.LeaseStatus{}, roachpb.NewError(err)
 		}
-		return status, nil
-	} else if !errors.HasType(err, (*roachpb.InvalidLeaseError)(nil)) {
+	}
+
+	if err := brSig.Err(); err != nil {
 		return kvserverpb.LeaseStatus{}, roachpb.NewError(err)
 	}
 
@@ -1097,7 +1150,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	// holder. Returns also on context.Done() (timeout or cancellation).
 	for attempt := 1; ; attempt++ {
 		now = r.store.Clock().NowAsClockTimestamp()
-		llHandle, transfer, pErr := func() (*leaseRequestHandle, bool, *roachpb.Error) {
+		llHandle, status, transfer, pErr := func() (*leaseRequestHandle, kvserverpb.LeaseStatus, bool, *roachpb.Error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 
@@ -1108,13 +1161,13 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			// unsuccessfully before redirecting or retrying.
 			repDesc, err := r.getReplicaDescriptorRLocked()
 			if err != nil {
-				return nil, false, roachpb.NewError(err)
+				return nil, kvserverpb.LeaseStatus{}, false, roachpb.NewError(err)
 			}
 			if ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); ok {
-				return r.mu.pendingLeaseRequest.JoinRequest(), true /* transfer */, nil
+				return r.mu.pendingLeaseRequest.JoinRequest(), kvserverpb.LeaseStatus{}, true /* transfer */, nil
 			}
 
-			status = r.leaseStatusForRequestRLocked(ctx, now, reqTS)
+			status := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
 			switch status.State {
 			case kvserverpb.LeaseState_ERROR:
 				// Lease state couldn't be determined.
@@ -1123,7 +1176,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					msg = "lease state could not be determined"
 				}
 				log.VEventf(ctx, 2, "%s", msg)
-				return nil, false, roachpb.NewError(
+				return nil, kvserverpb.LeaseStatus{}, false, roachpb.NewError(
 					newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc, msg))
 
 			case kvserverpb.LeaseState_VALID, kvserverpb.LeaseState_UNUSABLE:
@@ -1136,7 +1189,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
-					return nil, false, roachpb.NewError(
+					return nil, kvserverpb.LeaseStatus{}, false, roachpb.NewError(
 						newNotLeaseHolderError(status.Lease, r.store.StoreID(), r.mu.state.Desc,
 							"lease held by different store"))
 				}
@@ -1144,16 +1197,16 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 				// If the lease is in stasis, we can't serve requests until we've
 				// renewed the lease, so we return the handle to block on renewal.
 				if status.State == kvserverpb.LeaseState_UNUSABLE {
-					return r.requestLeaseLocked(ctx, status), false, nil
+					return r.requestLeaseLocked(ctx, status), kvserverpb.LeaseStatus{}, false, nil
 				}
 
-				// Return a nil handle to signal that we have a valid lease.
-				return nil, false, nil
+				// Return a nil handle and status to signal that we have a valid lease.
+				return nil, status, false, nil
 
 			case kvserverpb.LeaseState_EXPIRED:
 				// No active lease: Request renewal if a renewal is not already pending.
 				log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
-				return r.requestLeaseLocked(ctx, status), false, nil
+				return r.requestLeaseLocked(ctx, status), kvserverpb.LeaseStatus{}, false, nil
 
 			case kvserverpb.LeaseState_PROSCRIBED:
 				// Lease proposed timestamp is earlier than the min proposed
@@ -1161,14 +1214,14 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 				// owns the lease, re-request. Otherwise, redirect.
 				if status.Lease.OwnedBy(r.store.StoreID()) {
 					log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
-					return r.requestLeaseLocked(ctx, status), false, nil
+					return r.requestLeaseLocked(ctx, status), kvserverpb.LeaseStatus{}, false, nil
 				}
 				// If lease is currently held by another, redirect to holder.
-				return nil, false, roachpb.NewError(
+				return nil, kvserverpb.LeaseStatus{}, false, roachpb.NewError(
 					newNotLeaseHolderError(status.Lease, r.store.StoreID(), r.mu.state.Desc, "lease proscribed"))
 
 			default:
-				return nil, false, roachpb.NewErrorf("unknown lease status state %v", status)
+				return nil, kvserverpb.LeaseStatus{}, false, roachpb.NewErrorf("unknown lease status state %v", status)
 			}
 		}()
 		if pErr != nil {
@@ -1176,6 +1229,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 		}
 		if llHandle == nil {
 			// We own a valid lease.
+			log.Eventf(ctx, "valid lease %+v", status)
 			return status, nil
 		}
 
@@ -1203,14 +1257,17 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					}
 
 					if pErr != nil {
-						switch tErr := pErr.GetDetail().(type) {
-						case *roachpb.AmbiguousResultError:
+						goErr := pErr.GoError()
+						switch {
+						case errors.HasType(goErr, (*roachpb.AmbiguousResultError)(nil)):
 							// This can happen if the RequestLease command we sent has been
 							// applied locally through a snapshot: the RequestLeaseRequest
 							// cannot be reproposed so we get this ambiguity.
 							// We'll just loop around.
 							return nil
-						case *roachpb.LeaseRejectedError:
+						case errors.HasType(goErr, (*roachpb.LeaseRejectedError)(nil)):
+							var tErr *roachpb.LeaseRejectedError
+							errors.As(goErr, &tErr)
 							if tErr.Existing.OwnedBy(r.store.StoreID()) {
 								// The RequestLease command we sent was rejected because another
 								// lease was applied in the meantime, but we own that other
@@ -1240,10 +1297,15 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					}
 					log.VEventf(ctx, 2, "lease acquisition succeeded: %+v", status.Lease)
 					return nil
+				case <-brSig.C():
+					llHandle.Cancel()
+					err := brSig.Err()
+					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", err)
+					return roachpb.NewError(err)
 				case <-slowTimer.C:
 					slowTimer.Read = true
-					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
-						base.SlowRequestThreshold)
+					log.Warningf(ctx, "have been waiting %s attempting to acquire lease (%d attempts)",
+						base.SlowRequestThreshold, attempt)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
 					defer func() {
 						r.store.metrics.SlowLeaseRequests.Dec(1)
@@ -1299,25 +1361,30 @@ func (r *Replica) maybeExtendLeaseAsync(ctx context.Context, st kvserverpb.Lease
 		log.Infof(ctx, "extending lease %s at %s", st.Lease, st.Now)
 	}
 	// We explicitly ignore the returned handle as we won't block on it.
+	//
+	// TODO(tbg): this ctx is likely cancelled very soon, which will in turn
+	// cancel the lease acquisition (unless joined by another more long-lived
+	// ctx). So this possibly isn't working as advertised (which only plays a role
+	// for expiration-based leases, at least).
 	_ = r.requestLeaseLocked(ctx, st)
 }
 
 // checkLeaseRespectsPreferences checks if current replica owns the lease and
-// if it respects the lease preferences defined in the zone config. If there are no
+// if it respects the lease preferences defined in the span config. If there are no
 // preferences defined then it will return true and consider that to be in-conformance.
 func (r *Replica) checkLeaseRespectsPreferences(ctx context.Context) (bool, error) {
 	if !r.OwnsValidLease(ctx, r.store.cfg.Clock.NowAsClockTimestamp()) {
 		return false, errors.Errorf("replica %s is not the leaseholder, cannot check lease preferences", r)
 	}
-	_, zone := r.DescAndZone()
-	if len(zone.LeasePreferences) == 0 {
+	conf := r.SpanConfig()
+	if len(conf.LeasePreferences) == 0 {
 		return true, nil
 	}
 	storeDesc, err := r.store.Descriptor(ctx, false /* useCached */)
 	if err != nil {
 		return false, err
 	}
-	for _, preference := range zone.LeasePreferences {
+	for _, preference := range conf.LeasePreferences {
 		if constraint.ConjunctionsCheck(*storeDesc, preference.Constraints) {
 			return true, nil
 		}

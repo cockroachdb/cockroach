@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-//go:generate stringer -type=Option
+//go:generate stringer -type=Option -linecomment
 
 // Option defines a role option. This is output by the parser
 type Option uint32
@@ -40,7 +40,7 @@ const (
 	PASSWORD
 	LOGIN
 	NOLOGIN
-	VALIDUNTIL
+	VALIDUNTIL // VALID UNTIL
 	CONTROLJOB
 	NOCONTROLJOB
 	CONTROLCHANGEFEED
@@ -56,6 +56,12 @@ const (
 	MODIFYCLUSTERSETTING
 	NOMODIFYCLUSTERSETTING
 	DEFAULTSETTINGS
+	VIEWACTIVITYREDACTED
+	NOVIEWACTIVITYREDACTED
+	SQLLOGIN
+	NOSQLLOGIN
+	VIEWCLUSTERSETTING
+	NOVIEWCLUSTERSETTING
 )
 
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
@@ -80,6 +86,12 @@ var toSQLStmts = map[Option]string{
 	NOCANCELQUERY:          `DELETE FROM system.role_options WHERE username = $1 AND option = 'CANCELQUERY'`,
 	MODIFYCLUSTERSETTING:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'MODIFYCLUSTERSETTING')`,
 	NOMODIFYCLUSTERSETTING: `DELETE FROM system.role_options WHERE username = $1 AND option = 'MODIFYCLUSTERSETTING'`,
+	SQLLOGIN:               `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOSQLLOGIN'`,
+	NOSQLLOGIN:             `UPSERT INTO system.role_options (username, option) VALUES ($1, 'NOSQLLOGIN')`,
+	VIEWACTIVITYREDACTED:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWACTIVITYREDACTED')`,
+	NOVIEWACTIVITYREDACTED: `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWACTIVITYREDACTED'`,
+	VIEWCLUSTERSETTING:     `UPSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWCLUSTERSETTING')`,
+	NOVIEWCLUSTERSETTING:   `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWCLUSTERSETTING'`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -94,7 +106,7 @@ var ByName = map[string]Option{
 	"PASSWORD":               PASSWORD,
 	"LOGIN":                  LOGIN,
 	"NOLOGIN":                NOLOGIN,
-	"VALID_UNTIL":            VALIDUNTIL,
+	"VALID UNTIL":            VALIDUNTIL,
 	"CONTROLJOB":             CONTROLJOB,
 	"NOCONTROLJOB":           NOCONTROLJOB,
 	"CONTROLCHANGEFEED":      CONTROLCHANGEFEED,
@@ -110,6 +122,12 @@ var ByName = map[string]Option{
 	"MODIFYCLUSTERSETTING":   MODIFYCLUSTERSETTING,
 	"NOMODIFYCLUSTERSETTING": NOMODIFYCLUSTERSETTING,
 	"DEFAULTSETTINGS":        DEFAULTSETTINGS,
+	"VIEWACTIVITYREDACTED":   VIEWACTIVITYREDACTED,
+	"NOVIEWACTIVITYREDACTED": NOVIEWACTIVITYREDACTED,
+	"SQLLOGIN":               SQLLOGIN,
+	"NOSQLLOGIN":             NOSQLLOGIN,
+	"VIEWCLUSTERSETTING":     VIEWCLUSTERSETTING,
+	"NOVIEWCLUSTERSETTING":   NOVIEWCLUSTERSETTING,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -213,7 +231,13 @@ func (rol List) CheckRoleOptionConflicts() error {
 		(roleOptionBits&CANCELQUERY.Mask() != 0 &&
 			roleOptionBits&NOCANCELQUERY.Mask() != 0) ||
 		(roleOptionBits&MODIFYCLUSTERSETTING.Mask() != 0 &&
-			roleOptionBits&NOMODIFYCLUSTERSETTING.Mask() != 0) {
+			roleOptionBits&NOMODIFYCLUSTERSETTING.Mask() != 0) ||
+		(roleOptionBits&VIEWACTIVITYREDACTED.Mask() != 0 &&
+			roleOptionBits&NOVIEWACTIVITYREDACTED.Mask() != 0) ||
+		(roleOptionBits&SQLLOGIN.Mask() != 0 &&
+			roleOptionBits&NOSQLLOGIN.Mask() != 0) ||
+		(roleOptionBits&VIEWCLUSTERSETTING.Mask() != 0 &&
+			roleOptionBits&NOVIEWCLUSTERSETTING.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil

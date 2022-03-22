@@ -1,0 +1,240 @@
+# Mix and match partitioning schemes.
+
+exec-sql
+CREATE DATABASE db;
+----
+
+# We should be able to mix and patch partitioning. Each value partition should
+# be further subdivided by range.
+exec-sql
+CREATE TABLE db.list_then_range_partitions (
+    C1 STRING,
+    N2 INT,
+    PRIMARY KEY (C1, N2)
+) PARTITION BY LIST (C1) (
+    PARTITION P1C1 VALUES IN ('A', 'C')
+        PARTITION BY RANGE (N2) (
+            PARTITION P1C1N2 VALUES FROM (MINVALUE) TO (10),
+            PARTITION P2C1N2 VALUES FROM (10) TO (MAXVALUE)
+        ),
+    PARTITION P2C1 VALUES IN ('B', 'D')
+        PARTITION BY RANGE (N2) (
+            PARTITION P3C1N2 VALUES FROM (MINVALUE) TO (42),
+            PARTITION P4C1N2 VALUES FROM (42) TO (MAXVALUE)
+        )
+);
+----
+
+splits database=db table=list_then_range_partitions
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 2  for 1st partition-by-list value
+    + 2  for 2nd partition-by-list value
+    + 2  for 3rd partition-by-list value
+    + 2  for 4th partition-by-list value
+    + 3  gap(s) between 4 partition-by-list value spans
+    + 1  between end of 4th partition-by-list value span and end of index
++ 13 for 1st index
++ 1  between end of 1st index and end of table
+= 15
+
+# Try the same thing on a secondary index.
+exec-sql
+CREATE INDEX idx ON db.list_then_range_partitions (C1, N2);
+----
+
+exec-sql
+ALTER INDEX db.list_then_range_partitions@idx PARTITION BY LIST (C1) (
+    PARTITION P1C1 VALUES IN ('A', 'C')
+        PARTITION BY RANGE (N2) (
+            PARTITION P1C1N2 VALUES FROM (MINVALUE) TO (10),
+            PARTITION P2C1N2 VALUES FROM (10) TO (MAXVALUE)
+        ),
+    PARTITION P2C1 VALUES IN ('B', 'D')
+        PARTITION BY RANGE (N2) (
+            PARTITION P3C1N2 VALUES FROM (MINVALUE) TO (42),
+            PARTITION P4C1N2 VALUES FROM (42) TO (MAXVALUE)
+        )
+);
+----
+
+splits database=db table=list_then_range_partitions
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 2  for 1st partition-by-list value
+    + 2  for 2nd partition-by-list value
+    + 2  for 3rd partition-by-list value
+    + 2  for 4th partition-by-list value
+    + 3  gap(s) between 4 partition-by-list value spans
+    + 1  between end of 4th partition-by-list value span and end of index
++ 13 for 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 2  for 1st partition-by-list value
+    + 2  for 2nd partition-by-list value
+    + 2  for 3rd partition-by-list value
+    + 2  for 4th partition-by-list value
+    + 3  gap(s) between 4 partition-by-list value spans
+    + 1  between end of 4th partition-by-list value span and end of index
++ 13 for 2nd index
++ 1  gap(s) between 2 indexes
++ 1  between end of 2nd index and end of table
+= 29
+
+# We should be able to go arbitrarily deep with our partitioning, and not all
+# partitions need to be deeply nested.
+exec-sql
+CREATE TABLE db.list_then_list_then_range_partitions_mixed (
+    C1 STRING,
+    C2 STRING,
+    N3 INT,
+    PRIMARY KEY (C1, C2, N3)
+) PARTITION BY LIST (C1) (
+    PARTITION P1C1 VALUES IN ('A', 'C'),
+    PARTITION P2C1 VALUES IN ('B', 'D')
+        PARTITION BY LIST (C2) (
+            PARTITION P1C1C2 VALUES IN ('G', 'J')
+                PARTITION BY RANGE (N3) (
+                    PARTITION P1C1C2N3 VALUES FROM (MINVALUE) TO (10),
+                    PARTITION P2C1C2N3 VALUES FROM (10) TO (MAXVALUE)
+                ),
+            PARTITION P2C1C2 VALUES IN ('I', 'K')
+        ),
+    PARTITION P3C1 VALUES IN ('E', 'F')
+);
+----
+
+splits database=db table=list_then_list_then_range_partitions_mixed
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  for 2nd partition-by-list value
+        + 1  between start of index and start of 1st partition-by-list value
+        + 2  for 1st partition-by-list value
+        + 2  for 2nd partition-by-list value
+        + 1  for 3rd partition-by-list value
+        + 1  for 4th partition-by-list value
+        + 3  gap(s) between 4 partition-by-list value spans
+        + 1  between end of 4th partition-by-list value span and end of index
+    + 11 for 3rd partition-by-list value
+        + 1  between start of index and start of 1st partition-by-list value
+        + 2  for 1st partition-by-list value
+        + 2  for 2nd partition-by-list value
+        + 1  for 3rd partition-by-list value
+        + 1  for 4th partition-by-list value
+        + 3  gap(s) between 4 partition-by-list value spans
+        + 1  between end of 4th partition-by-list value span and end of index
+    + 11 for 4th partition-by-list value
+    + 1  for 5th partition-by-list value
+    + 1  for 6th partition-by-list value
+    + 5  gap(s) between 6 partition-by-list value spans
+    + 1  between end of 6th partition-by-list value span and end of index
++ 33 for 1st index
++ 1  between end of 1st index and end of table
+= 35
+
+# Try the same thing on a secondary index.
+exec-sql
+CREATE INDEX idx ON db.list_then_list_then_range_partitions_mixed (C1, C2, N3);
+----
+
+exec-sql
+ALTER INDEX db.list_then_list_then_range_partitions_mixed@idx PARTITION BY LIST (C1) (
+    PARTITION P1C1 VALUES IN ('A', 'C'),
+    PARTITION P2C1 VALUES IN ('B', 'D')
+        PARTITION BY LIST (C2) (
+            PARTITION P1C1C2 VALUES IN ('G', 'J')
+                PARTITION BY RANGE (N3) (
+                    PARTITION P1C1C2N3 VALUES FROM (MINVALUE) TO (10),
+                    PARTITION P2C1C2N3 VALUES FROM (10) TO (MAXVALUE)
+                ),
+            PARTITION P2C1C2 VALUES IN ('I', 'K')
+        ),
+    PARTITION P3C1 VALUES IN ('E', 'F')
+);
+----
+
+splits database=db table=list_then_list_then_range_partitions_mixed
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  for 2nd partition-by-list value
+        + 1  between start of index and start of 1st partition-by-list value
+        + 2  for 1st partition-by-list value
+        + 2  for 2nd partition-by-list value
+        + 1  for 3rd partition-by-list value
+        + 1  for 4th partition-by-list value
+        + 3  gap(s) between 4 partition-by-list value spans
+        + 1  between end of 4th partition-by-list value span and end of index
+    + 11 for 3rd partition-by-list value
+        + 1  between start of index and start of 1st partition-by-list value
+        + 2  for 1st partition-by-list value
+        + 2  for 2nd partition-by-list value
+        + 1  for 3rd partition-by-list value
+        + 1  for 4th partition-by-list value
+        + 3  gap(s) between 4 partition-by-list value spans
+        + 1  between end of 4th partition-by-list value span and end of index
+    + 11 for 4th partition-by-list value
+    + 1  for 5th partition-by-list value
+    + 1  for 6th partition-by-list value
+    + 5  gap(s) between 6 partition-by-list value spans
+    + 1  between end of 6th partition-by-list value span and end of index
++ 33 for 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 1  for 1st partition-by-list value
+    + 1  for 2nd partition-by-list value
+        + 1  between start of index and start of 1st partition-by-list value
+        + 2  for 1st partition-by-list value
+        + 2  for 2nd partition-by-list value
+        + 1  for 3rd partition-by-list value
+        + 1  for 4th partition-by-list value
+        + 3  gap(s) between 4 partition-by-list value spans
+        + 1  between end of 4th partition-by-list value span and end of index
+    + 11 for 3rd partition-by-list value
+        + 1  between start of index and start of 1st partition-by-list value
+        + 2  for 1st partition-by-list value
+        + 2  for 2nd partition-by-list value
+        + 1  for 3rd partition-by-list value
+        + 1  for 4th partition-by-list value
+        + 3  gap(s) between 4 partition-by-list value spans
+        + 1  between end of 4th partition-by-list value span and end of index
+    + 11 for 4th partition-by-list value
+    + 1  for 5th partition-by-list value
+    + 1  for 6th partition-by-list value
+    + 5  gap(s) between 6 partition-by-list value spans
+    + 1  between end of 6th partition-by-list value span and end of index
++ 33 for 2nd index
++ 1  gap(s) between 2 indexes
++ 1  between end of 2nd index and end of table
+= 69
+
+
+# Try another variant with partitioning by default first and then by range. We
+# should observe subpartitions of the inner-most RANGE partition.
+exec-sql
+CREATE TABLE db.list_default_then_range (
+    N1 INT,
+    N2 INT,
+    PRIMARY KEY (N1, N2)
+) PARTITION BY LIST (N1) (
+    PARTITION P1N1 VALUES IN (DEFAULT)
+        PARTITION BY RANGE (N2) (
+            PARTITION P1N1N2 VALUES FROM (MINVALUE) TO (10),
+            PARTITION P2N1N2 VALUES FROM (10) TO (42),
+            PARTITION P3N1N2 VALUES FROM (42) TO (MAXVALUE)
+        )
+);
+----
+
+splits database=db table=list_default_then_range
+----
++ 1  between start of table and start of 1st index
+    + 1  between start of index and start of 1st partition-by-list value
+    + 3  for 1st partition-by-list value
+    + 1  between end of 1st partition-by-list value span and end of index
++ 5  for 1st index
++ 1  between end of 1st index and end of table
+= 7

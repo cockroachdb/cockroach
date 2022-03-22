@@ -11,12 +11,18 @@
 package cli
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble/vfs"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInitInsecure(t *testing.T) {
@@ -104,6 +110,13 @@ func TestStartArgChecking(t *testing.T) {
 		{[]string{`--store=size=-1231MB`}, `store size \(-1231MB\) must be larger than`},
 		{[]string{`--store=size=1231B`}, `store size \(1231B\) must be larger than`},
 		{[]string{`--store=size=1231BLA`}, `unhandled size name: bla`},
+		{[]string{`--store=ballast-size=60.0`}, `ballast size \(60.0\) must be between 0.000000% and 50.000000%`},
+		{[]string{`--store=ballast-size=1231BLA`}, `unhandled size name: bla`},
+		{[]string{`--store=ballast-size=0.5%,path=.`}, ``},
+		{[]string{`--store=ballast-size=.5,path=.`}, ``},
+		{[]string{`--store=ballast-size=50.%,path=.`}, ``},
+		{[]string{`--store=ballast-size=50%,path=.`}, ``},
+		{[]string{`--store=ballast-size=2GiB,path=.`}, ``},
 		{[]string{`--store=attrs=bli:bli`}, `duplicate attribute`},
 		{[]string{`--store=type=bli`}, `bli is not a valid store type`},
 		{[]string{`--store=bla=bli`}, `bla is not a valid store field`},
@@ -142,4 +155,29 @@ func TestAddrWithDefaultHost(t *testing.T) {
 			t.Errorf("expected %q, got %q", test.outAddr, addr)
 		}
 	}
+}
+
+func TestExitIfDiskFull(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	err := exitIfDiskFull(mockDiskSpaceFS{FS: vfs.NewMem()}, []base.StoreSpec{
+		{},
+	})
+	require.Error(t, err)
+	var cliErr *clierror.Error
+	require.True(t, errors.As(err, &cliErr))
+	require.Equal(t, exit.DiskFull(), cliErr.GetExitCode())
+}
+
+type mockDiskSpaceFS struct {
+	vfs.FS
+}
+
+func (fs mockDiskSpaceFS) GetDiskUsage(path string) (vfs.DiskUsage, error) {
+	return vfs.DiskUsage{
+		AvailBytes: 10 << 20,
+		TotalBytes: 100 << 30,
+		UsedBytes:  100<<30 - 10<<20,
+	}, nil
 }

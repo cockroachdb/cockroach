@@ -1,0 +1,120 @@
+# Walk through a full set of scenarios pertaining to system span configs.
+
+# Test with an empty slate.
+kvaccessor-get
+system-target {entire-keyspace}
+system-target {source=1,target=1}
+system-target {source=1,target=10}
+system-target {source=20,target=20}
+----
+
+# Try deleting a system span configuration that doesn't exist.
+kvaccessor-update
+delete {entire-keyspace}
+----
+err: expected to delete 1 row(s), deleted 0
+
+# Basic tests that set all possible combinations of system targets.
+kvaccessor-update
+upsert {entire-keyspace}:A
+upsert {source=1,target=1}:B
+upsert {source=1,target=10}:C
+upsert {source=20,target=20}:D
+----
+ok
+
+kvaccessor-get
+system-target {entire-keyspace}
+system-target {source=1,target=1}
+system-target {source=1,target=10}
+system-target {source=20,target=20}
+----
+{entire-keyspace}:A
+{source=1,target=1}:B
+{source=1,target=10}:C
+{source=20,target=20}:D
+
+# Update some of the span configurations that we added and ensure that works.
+kvaccessor-update
+upsert {entire-keyspace}:F
+upsert {source=1,target=1}:G
+upsert {source=1,target=10}:H
+upsert {source=20,target=20}:I
+----
+ok
+
+kvaccessor-get
+system-target {entire-keyspace}
+system-target {source=1,target=1}
+system-target {source=1,target=10}
+system-target {source=20,target=20}
+----
+{entire-keyspace}:F
+{source=1,target=1}:G
+{source=1,target=10}:H
+{source=20,target=20}:I
+
+kvaccessor-get
+system-target {source=1,all-tenant-keyspace-targets-set}
+----
+{source=1,target=1}:G
+{source=1,target=10}:H
+
+
+# Delete all the system span configurations that we just added and ensure
+# they take effect.
+kvaccessor-update
+delete {entire-keyspace}
+delete {source=1,target=1}
+delete {source=1,target=10}
+delete {source=20,target=20}
+----
+ok
+
+kvaccessor-get
+system-target {entire-keyspace}
+system-target {source=1,target=1}
+system-target {source=1,target=10}
+system-target {source=20,target=20}
+----
+
+kvaccessor-get
+system-target {source=1,all-tenant-keyspace-targets-set}
+----
+
+# Lastly, try adding multiple system targets set by the host tenant that apply
+# to distinct secondary tenants. We also add a system span configuration set by
+# one of these secondary tenant's on itself for kicks.
+kvaccessor-update
+upsert {entire-keyspace}:Z
+upsert {source=1,target=10}:A
+upsert {source=1,target=20}:B
+upsert {source=1,target=30}:C
+upsert {source=10,target=10}:G
+----
+ok
+
+kvaccessor-get
+system-target {entire-keyspace}
+system-target {source=1,target=10}
+system-target {source=1,target=20}
+system-target {source=1,target=30}
+system-target {source=10,target=10}
+----
+{entire-keyspace}:Z
+{source=1,target=10}:A
+{source=1,target=20}:B
+{source=1,target=30}:C
+{source=10,target=10}:G
+
+kvaccessor-get
+system-target {source=1,all-tenant-keyspace-targets-set}
+----
+{source=1,target=10}:A
+{source=1,target=20}:B
+{source=1,target=30}:C
+
+kvaccessor-get
+system-target {source=10,all-tenant-keyspace-targets-set}
+----
+{source=10,target=10}:G

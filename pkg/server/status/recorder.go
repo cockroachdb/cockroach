@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -45,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/codahale/hdrhistogram"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 )
@@ -87,9 +87,10 @@ type storeMetrics interface {
 	Registry() *metric.Registry
 }
 
-var childMetricsEnabled = settings.RegisterBoolSetting("server.child_metrics.enabled",
+var childMetricsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable, "server.child_metrics.enabled",
 	"enables the exporting of child metrics, additional prometheus time series with extra labels",
-	false)
+	false).WithPublic()
 
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
@@ -368,10 +369,8 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 	return metrics
 }
 
-// getNetworkActivity produces three maps detailing information about
-// network activity between this node and all other nodes. The maps
-// are incoming throughput, outgoing throughput, and average
-// latency. Throughputs are stored as bytes, and latencies as nanos.
+// getLatencies produces a map of network activity from this node to all other
+// nodes. Latencies are stored as nanos.
 func (mr *MetricsRecorder) getNetworkActivity(
 	ctx context.Context,
 ) map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity {
@@ -379,7 +378,6 @@ func (mr *MetricsRecorder) getNetworkActivity(
 	if mr.nodeLiveness != nil && mr.gossip != nil {
 		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
 
-		throughputMap := mr.rpcContext.GetStatsMap()
 		var currentAverages map[string]time.Duration
 		if mr.rpcContext.RemoteClocks != nil {
 			currentAverages = mr.rpcContext.RemoteClocks.AllLatencies()
@@ -394,11 +392,6 @@ func (mr *MetricsRecorder) getNetworkActivity(
 			}
 			na := statuspb.NodeStatus_NetworkActivity{}
 			key := address.String()
-			if tp, ok := throughputMap.Load(key); ok {
-				stats := tp.(*rpc.Stats)
-				na.Incoming = stats.Incoming()
-				na.Outgoing = stats.Outgoing()
-			}
 			if entry.IsLive {
 				if latency, ok := currentAverages[key]; ok {
 					na.Latency = latency.Nanoseconds()
@@ -512,7 +505,7 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 	// of the build info in the node status, writing one of these every 10s
 	// will generate more versions than will easily fit into a range over
 	// the course of a day.
-	if mustExist && mr.settings.Version.IsActive(ctx, clusterversion.CPutInline) {
+	if mustExist {
 		entry, err := db.Get(ctx, key)
 		if err != nil {
 			return err
@@ -520,7 +513,7 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 		if entry.Value == nil {
 			return errors.New("status entry not found, node may have been decommissioned")
 		}
-		err = db.CPutInline(kv.CtxForCPutInline(ctx), key, &nodeStatus, entry.Value.TagAndDataBytes())
+		err = db.CPutInline(ctx, key, &nodeStatus, entry.Value.TagAndDataBytes())
 		if detail := (*roachpb.ConditionFailedError)(nil); errors.As(err, &detail) {
 			if detail.ActualValue == nil {
 				return errors.New("status entry not found, node may have been decommissioned")
@@ -553,26 +546,50 @@ type registryRecorder struct {
 	timestampNanos int64
 }
 
-func extractValue(mtr interface{}) (float64, error) {
+func extractValue(name string, mtr interface{}, fn func(string, float64)) error {
 	// TODO(tschottdorf,ajwerner): consider moving this switch to a single
 	// interface implemented by the individual metric types.
 	type (
-		float64Valuer interface{ Value() float64 }
-		int64Valuer   interface{ Value() int64 }
-		int64Counter  interface{ Count() int64 }
+		float64Valuer   interface{ Value() float64 }
+		int64Valuer     interface{ Value() int64 }
+		int64Counter    interface{ Count() int64 }
+		histogramValuer interface {
+			Windowed() (*hdrhistogram.Histogram, time.Duration)
+		}
 	)
 	switch mtr := mtr.(type) {
 	case float64:
-		return mtr, nil
+		fn(name, mtr)
 	case float64Valuer:
-		return mtr.Value(), nil
+		fn(name, mtr.Value())
 	case int64Valuer:
-		return float64(mtr.Value()), nil
+		fn(name, float64(mtr.Value()))
 	case int64Counter:
-		return float64(mtr.Count()), nil
+		fn(name, float64(mtr.Count()))
+	case histogramValuer:
+		// TODO(mrtracy): Where should this comment go for better
+		// visibility?
+		//
+		// Proper support of Histograms for time series is difficult and
+		// likely not worth the trouble. Instead, we aggregate a windowed
+		// histogram at fixed quantiles. If the scraping window and the
+		// histogram's eviction duration are similar, this should give
+		// good results; if the two durations are very different, we either
+		// report stale results or report only the more recent data.
+		//
+		// Additionally, we can only aggregate max/min of the quantiles;
+		// roll-ups don't know that and so they will return mathematically
+		// nonsensical values, but that seems acceptable for the time
+		// being.
+		curr, _ := mtr.Windowed()
+		for _, pt := range recordHistogramQuantiles {
+			fn(name+pt.suffix, float64(curr.ValueAtQuantile(pt.quantile)))
+		}
+		fn(name+"-count", float64(curr.TotalCount()))
 	default:
-		return 0, errors.Errorf("cannot extract value for type %T", mtr)
+		return errors.Errorf("cannot extract value for type %T", mtr)
 	}
+	return nil
 }
 
 // eachRecordableValue visits each metric in the registry, calling the supplied
@@ -581,33 +598,9 @@ func extractValue(mtr interface{}) (float64, error) {
 // recordable values.
 func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 	reg.Each(func(name string, mtr interface{}) {
-		if histogram, ok := mtr.(*metric.Histogram); ok {
-			// TODO(mrtracy): Where should this comment go for better
-			// visibility?
-			//
-			// Proper support of Histograms for time series is difficult and
-			// likely not worth the trouble. Instead, we aggregate a windowed
-			// histogram at fixed quantiles. If the scraping window and the
-			// histogram's eviction duration are similar, this should give
-			// good results; if the two durations are very different, we either
-			// report stale results or report only the more recent data.
-			//
-			// Additionally, we can only aggregate max/min of the quantiles;
-			// roll-ups don't know that and so they will return mathematically
-			// nonsensical values, but that seems acceptable for the time
-			// being.
-			curr, _ := histogram.Windowed()
-			for _, pt := range recordHistogramQuantiles {
-				fn(name+pt.suffix, float64(curr.ValueAtQuantile(pt.quantile)))
-			}
-			fn(name+"-count", float64(curr.TotalCount()))
-		} else {
-			val, err := extractValue(mtr)
-			if err != nil {
-				log.Warningf(context.TODO(), "%v", err)
-				return
-			}
-			fn(name, val)
+		if err := extractValue(name, mtr, fn); err != nil {
+			log.Warningf(context.TODO(), "%v", err)
+			return
 		}
 	})
 }

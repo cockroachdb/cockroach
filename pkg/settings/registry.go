@@ -25,12 +25,16 @@ import (
 //
 // registry should never be mutated after creation (except in tests), as it is
 // read concurrently by different callers.
-var registry = make(map[string]extendedSetting)
+var registry = make(map[string]internalSetting)
+
+// slotTable stores the same settings as the registry, but accessible by the
+// slot index.
+var slotTable [MaxSettings]internalSetting
 
 // TestingSaveRegistry can be used in tests to save/restore the current
 // contents of the registry.
 func TestingSaveRegistry() func() {
-	var origRegistry = make(map[string]extendedSetting)
+	var origRegistry = make(map[string]internalSetting)
 	for k, v := range registry {
 		origRegistry[k] = v
 	}
@@ -95,16 +99,34 @@ var retiredSettings = map[string]struct{}{
 	"storage.sst_export.max_intents_per_error":                       {},
 	"jobs.registry.leniency":                                         {},
 	"sql.defaults.experimental_expression_based_indexes.enabled":     {},
-	"kv.tenant_rate_limiter.read_request_cost":                       {},
-	"kv.tenant_rate_limiter.read_cost_per_megabyte":                  {},
-	"kv.tenant_rate_limiter.write_request_cost":                      {},
-	"kv.tenant_rate_limiter.write_cost_per_megabyte":                 {},
 	"kv.transaction.write_pipelining_max_outstanding_size":           {},
 	"sql.defaults.optimizer_improve_disjunction_selectivity.enabled": {},
+	"bulkio.backup.proxy_file_writes.enabled":                        {},
+	"sql.distsql.prefer_local_execution.enabled":                     {},
+	"kv.follower_read.target_multiple":                               {},
+	"kv.closed_timestamp.close_fraction":                             {},
+	"sql.telemetry.query_sampling.qps_threshold":                     {},
+	"sql.telemetry.query_sampling.sample_rate":                       {},
+	"diagnostics.sql_stat_reset.interval":                            {},
+	"changefeed.mem.pushback_enabled":                                {},
+
+	// removed as of 22.1.
+	"sql.defaults.drop_enum_value.enabled":                             {},
+	"trace.lightstep.token":                                            {},
+	"trace.datadog.agent":                                              {},
+	"trace.datadog.project":                                            {},
+	"sql.defaults.interleaved_tables.enabled":                          {},
+	"sql.defaults.copy_partitioning_when_deinterleaving_table.enabled": {},
+	"server.declined_reservation_timeout":                              {},
+	"bulkio.backup.resolve_destination_in_job.enabled":                 {},
+	"sql.defaults.experimental_hash_sharded_indexes.enabled":           {},
+	"schemachanger.backfiller.max_sst_size":                            {},
+	"kv.bulk_ingest.buffer_increment":                                  {},
+	"schemachanger.backfiller.buffer_increment":                        {},
 }
 
 // register adds a setting to the registry.
-func register(key, desc string, s extendedSetting) {
+func register(class Class, key, desc string, s internalSetting) {
 	if _, ok := retiredSettings[key]; ok {
 		panic(fmt.Sprintf("cannot reuse previously defined setting name: %s", key))
 	}
@@ -129,19 +151,23 @@ func register(key, desc string, s extendedSetting) {
 			))
 		}
 	}
-	s.setDescription(desc)
+	slot := slotIdx(len(registry))
+	s.init(class, key, desc, slot)
 	registry[key] = s
-	s.setSlotIdx(len(registry))
+	slotTable[slot] = s
 }
 
 // NumRegisteredSettings returns the number of registered settings.
 func NumRegisteredSettings() int { return len(registry) }
 
 // Keys returns a sorted string array with all the known keys.
-func Keys() (res []string) {
+func Keys(forSystemTenant bool) (res []string) {
 	res = make([]string, 0, len(registry))
-	for k := range registry {
-		if registry[k].isRetired() {
+	for k, v := range registry {
+		if v.isRetired() {
+			continue
+		}
+		if !forSystemTenant && v.Class() == SystemOnly {
 			continue
 		}
 		res = append(res, k)
@@ -153,13 +179,18 @@ func Keys() (res []string) {
 // Lookup returns a Setting by name along with its description.
 // For non-reportable setting, it instantiates a MaskedSetting
 // to masquerade for the underlying setting.
-func Lookup(name string, purpose LookupPurpose) (Setting, bool) {
-	v, ok := registry[name]
-	var setting Setting = v
-	if ok && purpose == LookupForReporting && !v.isReportable() {
-		setting = &MaskedSetting{setting: v}
+func Lookup(name string, purpose LookupPurpose, forSystemTenant bool) (Setting, bool) {
+	s, ok := registry[name]
+	if !ok {
+		return nil, false
 	}
-	return setting, ok
+	if !forSystemTenant && s.Class() == SystemOnly {
+		return nil, false
+	}
+	if purpose == LookupForReporting && !s.isReportable() {
+		return &MaskedSetting{setting: s}, true
+	}
+	return s, true
 }
 
 // LookupPurpose indicates what is being done with the setting.
@@ -174,6 +205,10 @@ const (
 	// all values should be accessible
 	LookupForLocalAccess
 )
+
+// ForSystemTenant can be passed to Lookup for code that runs only on the system
+// tenant.
+const ForSystemTenant = true
 
 // ReadableTypes maps our short type identifiers to friendlier names.
 var ReadableTypes = map[string]string{
@@ -191,8 +226,8 @@ var ReadableTypes = map[string]string{
 // RedactedValue returns a string representation of the value for settings
 // types the are not considered sensitive (numbers, bools, etc) or
 // <redacted> for those with values could store sensitive things (i.e. strings).
-func RedactedValue(name string, values *Values) string {
-	if setting, ok := Lookup(name, LookupForReporting); ok {
+func RedactedValue(name string, values *Values, forSystemTenant bool) string {
+	if setting, ok := Lookup(name, LookupForReporting, forSystemTenant); ok {
 		return setting.String(values)
 	}
 	return "<unknown>"

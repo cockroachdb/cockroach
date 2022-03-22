@@ -31,10 +31,11 @@ import (
 func TestSplitQueueShouldQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
 	// Set zone configs.
 	config.TestingSetZoneConfig(2000, zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
@@ -69,11 +70,10 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(2001)), roachpb.RKeyMax, 32<<20 + 1, 64 << 20, true, 1},
 	}
 
-	cfg := tc.gossip.GetSystemConfig()
+	cfg := tc.gossip.DeprecatedGetSystemConfig()
 	if cfg == nil {
 		t.Fatal("config not set")
 	}
-	ctx := context.Background()
 	for i, test := range testCases {
 		// Create a replica for testing that is not hooked up to the store. This
 		// ensures that the store won't be mucking with our replica concurrently
@@ -89,9 +89,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		repl.mu.Lock()
 		repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: test.bytes}
 		repl.mu.Unlock()
-		zoneConfig := zonepb.DefaultZoneConfig()
-		zoneConfig.RangeMaxBytes = proto.Int64(test.maxBytes)
-		repl.SetZoneConfig(&zoneConfig)
+		conf := roachpb.TestingDefaultSpanConfig()
+		conf.RangeMaxBytes = test.maxBytes
+		repl.SetSpanConfig(conf)
 
 		// Testing using shouldSplitRange instead of shouldQueue to avoid using the splitFinder
 		// This tests the merge queue behavior too as a result. For splitFinder tests,

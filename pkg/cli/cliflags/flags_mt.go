@@ -34,6 +34,11 @@ var (
 		Description: "Listen address for incoming connections.",
 	}
 
+	ThrottleBaseDelay = FlagInfo{
+		Name:        "throttle-base-delay",
+		Description: "Initial value for the exponential backoff used to throttle connection attempts.",
+	}
+
 	ListenCert = FlagInfo{
 		Name:        "listen-cert",
 		Description: "File containing PEM-encoded x509 certificate for listen address.",
@@ -61,6 +66,8 @@ This rule must include the port of the SQL pod.`,
 		Description: "Directory address of the service doing resolution from backend id to IP.",
 	}
 
+	// TODO(chrisseto): Remove skip-verify as a CLI option. It should only be
+	// set internally for testing, rather than being exposed to consumers.
 	SkipVerify = FlagInfo{
 		Name:        "skip-verify",
 		Description: "If true, skip identity verification of backend. For testing only.",
@@ -94,5 +101,15 @@ This rule must include the port of the SQL pod.`,
 	TestDirectoryListenPort = FlagInfo{
 		Name:        "port",
 		Description: "Test directory server binds and listens on this port.",
+	}
+
+	TestDirectoryTenantCertsDir = FlagInfo{
+		Name:        "certs-dir",
+		Description: CertsDir.Description,
+	}
+
+	TestDirectoryTenantBaseDir = FlagInfo{
+		Name:        "base-dir",
+		Description: "If set, the tenant processes will use it as a store location.",
 	}
 )

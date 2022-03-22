@@ -15,8 +15,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -31,27 +34,31 @@ func (d *delegator) delegateShowGrants(n *tree.ShowGrants) (tree.Statement, erro
 	const dbPrivQuery = `
 SELECT database_name,
        grantee,
-       privilege_type
+       privilege_type,
+			 is_grantable::boolean
   FROM "".crdb_internal.cluster_database_privileges`
 	const schemaPrivQuery = `
 SELECT table_catalog AS database_name,
        table_schema AS schema_name,
        grantee,
-       privilege_type
+       privilege_type,
+       is_grantable::boolean
   FROM "".information_schema.schema_privileges`
 	const tablePrivQuery = `
 SELECT table_catalog AS database_name,
        table_schema AS schema_name,
        table_name,
        grantee,
-       privilege_type
+       privilege_type,
+       is_grantable::boolean
 FROM "".information_schema.table_privileges`
 	const typePrivQuery = `
 SELECT type_catalog AS database_name,
        type_schema AS schema_name,
        type_name,
        grantee,
-       privilege_type
+       privilege_type,
+       is_grantable::boolean
 FROM "".information_schema.type_privileges`
 
 	var source bytes.Buffer
@@ -87,7 +94,7 @@ FROM "".information_schema.type_privileges`
 			fmt.Fprintf(&cond, `WHERE database_name IN (%s)`, strings.Join(params, ","))
 		}
 	} else if n.Targets != nil && len(n.Targets.Schemas) > 0 {
-		currDB := d.evalCtx.SessionData.Database
+		currDB := d.evalCtx.SessionData().Database
 
 		for _, schema := range n.Targets.Schemas {
 			_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &schema)
@@ -144,7 +151,7 @@ FROM "".information_schema.type_privileges`
 		if len(params) == 0 {
 			dbNameClause := "true"
 			// If the current database is set, restrict the command to it.
-			if currDB := d.evalCtx.SessionData.Database; currDB != "" {
+			if currDB := d.evalCtx.SessionData().Database; currDB != "" {
 				dbNameClause = fmt.Sprintf("database_name = %s", lexbase.EscapeSQLString(currDB))
 			}
 			cond.WriteString(fmt.Sprintf(`WHERE %s`, dbNameClause))
@@ -215,7 +222,7 @@ FROM "".information_schema.type_privileges`
 			source.WriteString(typePrivQuery)
 			source.WriteByte(')')
 			// If the current database is set, restrict the command to it.
-			if currDB := d.evalCtx.SessionData.Database; currDB != "" {
+			if currDB := d.evalCtx.SessionData().Database; currDB != "" {
 				fmt.Fprintf(&cond, ` WHERE database_name = %s`, lexbase.EscapeSQLString(currDB))
 			} else {
 				cond.WriteString(`WHERE true`)
@@ -225,13 +232,34 @@ FROM "".information_schema.type_privileges`
 
 	if n.Grantees != nil {
 		params = params[:0]
-		for _, grantee := range n.Grantees.ToStrings() {
-			params = append(params, lexbase.EscapeSQLString(grantee))
+		grantees, err := n.Grantees.ToSQLUsernames(d.evalCtx.SessionData(), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		for _, grantee := range grantees {
+			params = append(params, lexbase.EscapeSQLString(grantee.Normalized()))
 		}
 		fmt.Fprintf(&cond, ` AND grantee IN (%s)`, strings.Join(params, ","))
 	}
 	query := fmt.Sprintf(`
 		SELECT * FROM (%s) %s ORDER BY %s
 	`, source.String(), cond.String(), orderBy)
+
+	// Terminate on invalid users.
+	for _, p := range n.Grantees {
+
+		user, err := p.ToSQLUsername(d.evalCtx.SessionData(), security.UsernameValidation)
+		if err != nil {
+			return nil, err
+		}
+		userExists, err := d.catalog.RoleExists(d.ctx, user)
+		if err != nil {
+			return nil, err
+		}
+		if !userExists {
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", user)
+		}
+	}
+
 	return parse(query)
 }

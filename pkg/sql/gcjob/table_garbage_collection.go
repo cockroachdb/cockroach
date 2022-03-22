@@ -19,9 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -43,9 +44,8 @@ func gcTables(
 		}
 
 		var table catalog.TableDescriptor
-		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			var err error
-			table, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, droppedTable.ID)
+		if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+			table, err = col.Direct().MustGetTableDescByID(ctx, txn, droppedTable.ID)
 			return err
 		}); err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
@@ -65,12 +65,16 @@ func gcTables(
 		}
 
 		// First, delete all the table data.
-		if err := ClearTableData(ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, table); err != nil {
+		if err := ClearTableData(
+			ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, &execCfg.Settings.SV, table,
+		); err != nil {
 			return errors.Wrapf(err, "clearing data for table %d", table.GetID())
 		}
 
 		// Finished deleting all the table data, now delete the table meta data.
-		if err := sql.DeleteTableDescAndZoneConfig(ctx, execCfg.DB, execCfg.Codec, table); err != nil {
+		if err := sql.DeleteTableDescAndZoneConfig(
+			ctx, execCfg.DB, execCfg.Settings, execCfg.Codec, table,
+		); err != nil {
 			return errors.Wrapf(err, "dropping table descriptor for table %d", table.GetID())
 		}
 
@@ -86,16 +90,14 @@ func ClearTableData(
 	db *kv.DB,
 	distSender *kvcoord.DistSender,
 	codec keys.SQLCodec,
+	sv *settings.Values,
 	table catalog.TableDescriptor,
 ) error {
 	// If DropTime isn't set, assume this drop request is from a version
 	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
-	// TODO(pbardea): Note that we never set the drop time for interleaved tables,
-	// but this check was added to be more explicit about it. This should get
-	// cleaned up.
-	if table.GetDropTime() == 0 || table.IsInterleaved() {
+	if table.GetDropTime() == 0 {
 		log.Infof(ctx, "clearing data in chunks for table %d", table.GetID())
-		return sql.ClearTableDataInChunks(ctx, db, codec, table, false /* traceKV */)
+		return sql.ClearTableDataInChunks(ctx, db, codec, sv, table, false /* traceKV */)
 	}
 	log.Infof(ctx, "clearing data for table %d", table.GetID())
 
@@ -133,7 +135,7 @@ func clearSpanData(
 
 	var n int
 	lastKey := span.Key
-	ri := kvcoord.NewRangeIterator(distSender)
+	ri := kvcoord.MakeRangeIterator(distSender)
 	timer := timeutil.NewTimer()
 	defer timer.Stop()
 

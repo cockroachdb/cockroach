@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -39,7 +38,7 @@ import (
 
 // TestCleanupTxnIntentsOnGCAsync exercises the code which is used to
 // asynchronously clean up transaction intents and then transaction records.
-// This method is invoked from the storage GC queue.
+// This method is invoked from the MVCC GC queue.
 func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -72,7 +71,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	// Txn1 is in the pending state but is expired.
 	txn1 := newTransaction("txn1", key, 1, clock)
 	txn1.ReadTimestamp.WallTime -= int64(100 * time.Second)
-	txn1.LastHeartbeat = txn1.ReadTimestamp.UnsafeToClockTimestamp().ToTimestamp()
+	txn1.LastHeartbeat = txn1.ReadTimestamp
 	// Txn2 is in the staging state and is not old enough to have expired so the
 	// code ought to send nothing.
 	txn2 := newTransaction("txn2", key, 1, clock)
@@ -765,7 +764,7 @@ func newTransaction(
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	txn := roachpb.MakeTransaction(name, baseKey, userPriority, now, offset)
+	txn := roachpb.MakeTransaction(name, baseKey, userPriority, now, offset, 1 /* coordinatorNodeID */)
 	return &txn
 }
 
@@ -796,9 +795,7 @@ func newIntentResolverWithSendFuncs(
 			f := sf.popLocked()
 			return f(ba)
 		})
-	db := kv.NewDB(log.AmbientContext{
-		Tracer: tracing.NewTracer(),
-	}, txnSenderFactory, c.Clock, stopper)
+	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), txnSenderFactory, c.Clock, stopper)
 	c.DB = db
 	c.MaxGCBatchWait = time.Nanosecond
 	return New(c)

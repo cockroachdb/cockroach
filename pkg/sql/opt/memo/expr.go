@@ -23,9 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // RelExpr is implemented by all operators tagged as Relational. Relational
@@ -201,10 +203,10 @@ func (n FiltersExpr) OuterCols() opt.ColSet {
 	return colSet
 }
 
-// Sort sorts the FilterItems in n by the IDs of the expression.
+// Sort sorts the FilterItems in n by the ranks of the expressions.
 func (n *FiltersExpr) Sort() {
 	sort.Slice(*n, func(i, j int) bool {
-		return (*n)[i].Condition.(opt.ScalarExpr).ID() < (*n)[j].Condition.(opt.ScalarExpr).ID()
+		return (*n)[i].Condition.Rank() < (*n)[j].Condition.Rank()
 	})
 }
 
@@ -352,16 +354,24 @@ type ScanFlags struct {
 	// NoZigzagJoin disallows use of a zigzag join for scanning this table.
 	NoZigzagJoin bool
 
+	// NoFullScan disallows use of a full scan for scanning this table.
+	NoFullScan bool
+
 	// ForceIndex forces the use of a specific index (specified in Index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
-	ForceIndex bool
-	Direction  tree.Direction
-	Index      int
+	ForceIndex  bool
+	ForceZigzag bool
+	Direction   tree.Direction
+	Index       int
+
+	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
+	// ForceZigzag must also be true.
+	ZigzagIndexes util.FastIntSet
 }
 
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {
-	return !sf.NoIndexJoin && !sf.NoZigzagJoin && !sf.ForceIndex
+	return *sf == ScanFlags{}
 }
 
 // JoinFlags stores restrictions on the join execution method, derived from
@@ -378,7 +388,7 @@ const (
 	// DisallowHashJoinStoreLeft corresponds to a hash join where the left side is
 	// stored into the hashtable. Note that execution can override the stored side
 	// if it finds that the other side is smaller (up to a certain size).
-	DisallowHashJoinStoreLeft JoinFlags = (1 << iota)
+	DisallowHashJoinStoreLeft JoinFlags = 1 << iota
 
 	// DisallowHashJoinStoreRight corresponds to a hash join where the right side
 	// is stored into the hashtable. Note that execution can override the stored
@@ -414,28 +424,28 @@ const (
 )
 
 const (
-	disallowAll JoinFlags = (DisallowHashJoinStoreLeft |
+	disallowAll = DisallowHashJoinStoreLeft |
 		DisallowHashJoinStoreRight |
 		DisallowMergeJoin |
 		DisallowLookupJoinIntoLeft |
 		DisallowLookupJoinIntoRight |
 		DisallowInvertedJoinIntoLeft |
-		DisallowInvertedJoinIntoRight)
+		DisallowInvertedJoinIntoRight
 
 	// AllowOnlyHashJoinStoreRight has all "disallow" flags set except
 	// DisallowHashJoinStoreRight.
-	AllowOnlyHashJoinStoreRight JoinFlags = disallowAll ^ DisallowHashJoinStoreRight
+	AllowOnlyHashJoinStoreRight = disallowAll ^ DisallowHashJoinStoreRight
 
 	// AllowOnlyLookupJoinIntoRight has all "disallow" flags set except
 	// DisallowLookupJoinIntoRight.
-	AllowOnlyLookupJoinIntoRight JoinFlags = disallowAll ^ DisallowLookupJoinIntoRight
+	AllowOnlyLookupJoinIntoRight = disallowAll ^ DisallowLookupJoinIntoRight
 
 	// AllowOnlyInvertedJoinIntoRight has all "disallow" flags set except
 	// DisallowInvertedJoinIntoRight.
-	AllowOnlyInvertedJoinIntoRight JoinFlags = disallowAll ^ DisallowInvertedJoinIntoRight
+	AllowOnlyInvertedJoinIntoRight = disallowAll ^ DisallowInvertedJoinIntoRight
 
 	// AllowOnlyMergeJoin has all "disallow" flags set except DisallowMergeJoin.
-	AllowOnlyMergeJoin JoinFlags = disallowAll ^ DisallowMergeJoin
+	AllowOnlyMergeJoin = disallowAll ^ DisallowMergeJoin
 )
 
 var joinFlagStr = map[JoinFlags]string{
@@ -584,10 +594,10 @@ func (sj *SemiJoinExpr) getMultiplicity() props.JoinMultiplicity {
 // WindowFrame denotes the definition of a window frame for an individual
 // window function, excluding the OFFSET expressions, if present.
 type WindowFrame struct {
-	Mode           tree.WindowFrameMode
-	StartBoundType tree.WindowFrameBoundType
-	EndBoundType   tree.WindowFrameBoundType
-	FrameExclusion tree.WindowFrameExclusion
+	Mode           treewindow.WindowFrameMode
+	StartBoundType treewindow.WindowFrameBoundType
+	EndBoundType   treewindow.WindowFrameBoundType
+	FrameExclusion treewindow.WindowFrameExclusion
 }
 
 // HasOffset returns true if the WindowFrame contains a specific offset.
@@ -598,21 +608,21 @@ func (f *WindowFrame) HasOffset() bool {
 func (f *WindowFrame) String() string {
 	var bld strings.Builder
 	switch f.Mode {
-	case tree.GROUPS:
+	case treewindow.GROUPS:
 		fmt.Fprintf(&bld, "groups")
-	case tree.ROWS:
+	case treewindow.ROWS:
 		fmt.Fprintf(&bld, "rows")
-	case tree.RANGE:
+	case treewindow.RANGE:
 		fmt.Fprintf(&bld, "range")
 	}
 
-	frameBoundName := func(b tree.WindowFrameBoundType) string {
+	frameBoundName := func(b treewindow.WindowFrameBoundType) string {
 		switch b {
-		case tree.UnboundedFollowing, tree.UnboundedPreceding:
+		case treewindow.UnboundedFollowing, treewindow.UnboundedPreceding:
 			return "unbounded"
-		case tree.CurrentRow:
+		case treewindow.CurrentRow:
 			return "current-row"
-		case tree.OffsetFollowing, tree.OffsetPreceding:
+		case treewindow.OffsetFollowing, treewindow.OffsetPreceding:
 			return "offset"
 		}
 		panic(errors.AssertionFailedf("unexpected bound"))
@@ -622,11 +632,11 @@ func (f *WindowFrame) String() string {
 		frameBoundName(f.EndBoundType),
 	)
 	switch f.FrameExclusion {
-	case tree.ExcludeCurrentRow:
+	case treewindow.ExcludeCurrentRow:
 		bld.WriteString(" exclude current row")
-	case tree.ExcludeGroup:
+	case treewindow.ExcludeGroup:
 		bld.WriteString(" exclude group")
-	case tree.ExcludeTies:
+	case treewindow.ExcludeTies:
 		bld.WriteString(" exclude ties")
 	}
 	return bld.String()
@@ -648,6 +658,14 @@ func (s *ScanPrivate) IsUnfiltered(md *opt.Metadata) bool {
 		s.InvertedConstraint == nil &&
 		s.HardLimit == 0 &&
 		s.PartialIndexPredicate(md) == nil
+}
+
+// IsFullIndexScan returns true if the ScanPrivate will produce all rows in the
+// index.
+func (s *ScanPrivate) IsFullIndexScan(md *opt.Metadata) bool {
+	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
+		s.InvertedConstraint == nil &&
+		s.HardLimit == 0
 }
 
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
@@ -732,7 +750,7 @@ func (m *MutationPrivate) MapToInputCols(cols opt.ColSet) opt.ColSet {
 	tabCols.ForEach(func(t opt.ColumnID) {
 		id := m.MapToInputID(t)
 		if id == 0 {
-			panic(errors.AssertionFailedf("could not find input column for %d", log.Safe(t)))
+			panic(errors.AssertionFailedf("could not find input column for %d", redact.Safe(t)))
 		}
 		inCols.Add(id)
 	})
@@ -871,7 +889,7 @@ func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 		}
 		return ExprIsNeverNull(t.Input, notNullCols) && ExprIsNeverNull(t.OrElse, notNullCols)
 
-	case *CastExpr, *NotExpr, *RangeExpr:
+	case *CastExpr, *AssignmentCastExpr, *NotExpr, *RangeExpr:
 		return ExprIsNeverNull(t.Child(0).(opt.ScalarExpr), notNullCols)
 
 	case *AndExpr, *OrExpr, *GeExpr, *GtExpr, *NeExpr, *EqExpr, *LeExpr, *LtExpr, *LikeExpr,
@@ -936,6 +954,23 @@ func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
 	return false
 }
 
+// CollectContiguousOrExprs finds all OrExprs in 'e' that are connected via
+// a parent-child relationship, and returns them in an array of ScalarExprs.
+func CollectContiguousOrExprs(e opt.ScalarExpr) []opt.ScalarExpr {
+	var disjunctions = make([]opt.ScalarExpr, 0, 2)
+	var collectDisjunctions func(e opt.ScalarExpr)
+	collectDisjunctions = func(e opt.ScalarExpr) {
+		if or, ok := e.(*OrExpr); ok {
+			collectDisjunctions(or.Left)
+			collectDisjunctions(or.Right)
+		} else {
+			disjunctions = append(disjunctions, e)
+		}
+	}
+	collectDisjunctions(e)
+	return disjunctions
+}
+
 // FKCascades stores metadata necessary for building cascading queries.
 type FKCascades []FKCascade
 
@@ -997,4 +1032,46 @@ type CascadeBuilder interface {
 		bindingProps *props.Relational,
 		oldValues, newValues opt.ColList,
 	) (RelExpr, error)
+}
+
+// GroupingOrderType is the grouping column order type for group by and distinct
+// operations in the memo.
+type GroupingOrderType int
+
+const (
+	// NoStreaming means that the grouping columns have no useful order, so a
+	// hash aggregator should be used.
+	NoStreaming GroupingOrderType = iota
+	// PartialStreaming means that the grouping columns are partially ordered, so
+	// some optimizations can be done during aggregation.
+	PartialStreaming
+	// Streaming means that the grouping columns are fully ordered.
+	Streaming
+)
+
+// GroupingOrderType calculates how many ordered columns that the grouping
+// and input columns have in common and returns NoStreaming if there are none, Streaming if
+// all columns match, and PartialStreaming if only some match. It is similar to
+// StreamingGroupingColOrdering, but does not build an ordering.
+func (g *GroupingPrivate) GroupingOrderType(required *props.OrderingChoice) GroupingOrderType {
+	inputOrdering := required.Intersection(&g.Ordering)
+	count := 0
+	for i := range inputOrdering.Columns {
+		// Get any grouping column from the set. Normally there would be at most one
+		// because we have rules that remove redundant grouping columns.
+		cols := inputOrdering.Group(i).Intersection(g.GroupingCols)
+		_, ok := cols.Next(0)
+		if !ok {
+			// This group refers to a column that is not a grouping column.
+			// The rest of the ordering is not useful.
+			break
+		}
+		count++
+	}
+	if count == g.GroupingCols.Len() || g.GroupingCols.Len() == 0 {
+		return Streaming
+	} else if count == 0 {
+		return NoStreaming
+	}
+	return PartialStreaming
 }

@@ -24,9 +24,15 @@ import (
 // TimeoutError is a wrapped ContextDeadlineExceeded error. It indicates that
 // an operation didn't complete within its designated timeout.
 type TimeoutError struct {
+	// The operation that timed out.
 	operation string
-	duration  time.Duration
-	cause     error
+	// The configured timeout.
+	timeout time.Duration
+	// The duration of the operation. This is usually expected to be the same as
+	// the timeout, but can be longer if the timeout was not observed expediently
+	// (because the ctx was not checked sufficiently often).
+	took  time.Duration
+	cause error
 }
 
 var _ error = (*TimeoutError)(nil)
@@ -49,7 +55,10 @@ func (t *TimeoutError) Format(s fmt.State, verb rune) { errors.FormatError(t, s,
 
 // FormatError implements errors.Formatter.
 func (t *TimeoutError) FormatError(p errors.Printer) error {
-	p.Printf("operation %q timed out after %s", t.operation, t.duration)
+	p.Printf("operation %q timed out after %s", t.operation, t.timeout)
+	if t.took != 0 {
+		p.Printf(" (took %s)", t.took.Round(time.Millisecond))
+	}
 	return t.cause
 }
 
@@ -73,9 +82,9 @@ func encodeTimeoutError(
 ) (msgPrefix string, safe []string, details proto.Message) {
 	t := err.(*TimeoutError)
 	details = &errorspb.StringsPayload{
-		Details: []string{t.operation, t.duration.String()},
+		Details: []string{t.operation, t.timeout.String(), t.took.String()},
 	}
-	msgPrefix = fmt.Sprintf("operation %q timed out after %s", t.operation, t.duration)
+	msgPrefix = fmt.Sprintf("operation %q timed out after %s", t.operation, t.timeout)
 	return msgPrefix, nil, details
 }
 
@@ -91,14 +100,23 @@ func decodeTimeoutError(
 		return nil
 	}
 	op := m.Details[0]
-	dur, decodeErr := time.ParseDuration(m.Details[1])
+	timeout, decodeErr := time.ParseDuration(m.Details[1])
 	if decodeErr != nil {
 		// Not encoded by our encode function. Bail out.
 		return nil //nolint:returnerrcheck
 	}
+	var took time.Duration
+	if len(m.Details) >= 3 {
+		took, decodeErr = time.ParseDuration(m.Details[2])
+		if decodeErr != nil {
+			// Not encoded by our encode function. Bail out.
+			return nil //nolint:returnerrcheck
+		}
+	}
 	return &TimeoutError{
 		operation: op,
-		duration:  dur,
+		timeout:   timeout,
+		took:      took,
 		cause:     cause,
 	}
 }

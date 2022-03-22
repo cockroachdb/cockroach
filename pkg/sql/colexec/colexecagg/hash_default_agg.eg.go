@@ -40,10 +40,6 @@ type defaultHashAgg struct {
 
 var _ AggregateFunc = &defaultHashAgg{}
 
-func (a *defaultHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-}
-
 func (a *defaultHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
@@ -176,9 +172,9 @@ func (a *defaultHashAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
-func (a *defaultHashAggAlloc) Close() error {
+func (a *defaultHashAggAlloc) Close(ctx context.Context) error {
 	for _, fn := range a.returnedFns {
-		fn.fn.Close(fn.ctx)
+		fn.fn.Close(ctx)
 	}
 	a.returnedFns = nil
 	return nil

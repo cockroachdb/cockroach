@@ -12,7 +12,7 @@ package batcheval
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -28,7 +28,11 @@ func init() {
 }
 
 func declareKeysRecoverTransaction(
-	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState,
+	_ *roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	rr := req.(*roachpb.RecoverTxnRequest)
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rr.Txn.Key, rr.Txn.ID)})
@@ -114,20 +118,20 @@ func RecoverTxn(
 			// harmless, but we now use the timestamp cache to avoid
 			// needing to ever do so. If this ever becomes possible again, we'll
 			// need to relax this check.
-			return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
+			return result.Result{}, errors.AssertionFailedf(
 				"programming error: found %s record for implicitly committed transaction: %v",
 				reply.RecoveredTxn.Status, reply.RecoveredTxn,
-			))
+			)
 		case roachpb.STAGING, roachpb.COMMITTED:
 			if was, is := args.Txn.Epoch, reply.RecoveredTxn.Epoch; was != is {
-				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
+				return result.Result{}, errors.AssertionFailedf(
 					"programming error: epoch change by implicitly committed transaction: %v->%v", was, is,
-				))
+				)
 			}
 			if was, is := args.Txn.WriteTimestamp, reply.RecoveredTxn.WriteTimestamp; was != is {
-				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
+				return result.Result{}, errors.AssertionFailedf(
 					"programming error: timestamp change by implicitly committed transaction: %v->%v", was, is,
-				))
+				)
 			}
 			if reply.RecoveredTxn.Status == roachpb.COMMITTED {
 				// The transaction commit was already made explicit.
@@ -135,9 +139,7 @@ func RecoverTxn(
 			}
 			// Continue with recovery.
 		default:
-			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("bad txn status: %s", reply.RecoveredTxn),
-			)
+			return result.Result{}, errors.AssertionFailedf("bad txn status: %s", reply.RecoveredTxn)
 		}
 	} else {
 		// Did the transaction change its epoch or timestamp in such a
@@ -177,9 +179,9 @@ func RecoverTxn(
 			// We should never hit this. The transaction recovery process will only
 			// ever be launched for a STAGING transaction and it is not possible for
 			// a transaction to move back to the PENDING status in the same epoch.
-			return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
+			return result.Result{}, errors.AssertionFailedf(
 				"programming error: cannot recover PENDING transaction in same epoch: %s", reply.RecoveredTxn,
-			))
+			)
 		case roachpb.STAGING:
 			if legalChange {
 				// Recovery not immediately needed because the transaction is
@@ -188,9 +190,7 @@ func RecoverTxn(
 			}
 			// Continue with recovery.
 		default:
-			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("bad txn status: %s", reply.RecoveredTxn),
-			)
+			return result.Result{}, errors.AssertionFailedf("bad txn status: %s", reply.RecoveredTxn)
 		}
 	}
 

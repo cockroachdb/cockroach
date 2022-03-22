@@ -24,15 +24,19 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/partition",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/util",
-        "//pkg/util/log",
+        "//pkg/util/buildutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
     ],
 )
@@ -76,6 +80,10 @@ genrule(
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ ops $(locations :ops)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 # Define the generator for the enumeration of rulenames.
@@ -92,6 +100,10 @@ genrule(
           $(locations :ops) $(locations //pkg/sql/opt/norm:rules) $(locations //pkg/sql/opt/xform:rules)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 # Define the generator for the stringification of rulenames.
@@ -116,11 +128,15 @@ genrule(
       GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
       # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
       env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
-      $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ \
+      $(location @com_github_cockroachdb_tools//cmd/stringer:stringer) -output=$@ \
       -type=RuleName `dirname $(location :gen-rulenames)`/rule_name.go $(location :gen-rulenames)
     """,
     exec_tools = [
         "@go_sdk//:bin/go",
-        "@org_golang_x_tools//cmd/stringer",
+        "@com_github_cockroachdb_tools//cmd/stringer",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )

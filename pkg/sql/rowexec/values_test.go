@@ -30,7 +30,7 @@ import (
 
 func TestValuesProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, numRows := range []int{0, 1, 10, 13, 15} {
 		for _, numCols := range []int{0, 1, 3} {
 			t.Run(fmt.Sprintf("%d-%d", numRows, numCols), func(t *testing.T) {
@@ -72,7 +72,7 @@ func TestValuesProcessor(t *testing.T) {
 					t.Fatalf("incorrect number of rows %d, expected %d", len(res), numRows)
 				}
 
-				var a rowenc.DatumAlloc
+				var a tree.DatumAlloc
 				for i := 0; i < numRows; i++ {
 					if len(res[i]) != numCols {
 						t.Fatalf("row %d incorrect length %d, expected %d", i, len(res[i]), numCols)

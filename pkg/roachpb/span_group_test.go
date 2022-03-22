@@ -61,6 +61,18 @@ func TestSpanGroup(t *testing.T) {
 			t.Fatalf("span b-e should not contain %q", k)
 		}
 	}
+	if !g.Encloses(makeSpan("b-d")) {
+		t.Fatalf("span b-e should enclose b-d")
+	}
+	if g.Encloses(makeSpan("b-d"), makeSpan("c-f")) {
+		t.Fatalf("span b-e should not enclose c-f")
+	}
+	if g.Encloses(makeSpan("b-d"), makeSpan("a-f")) {
+		t.Fatalf("span b-e should not enclose a-f")
+	}
+	if g.Encloses(makeSpan("b-d"), makeSpan("e-f")) {
+		t.Fatalf("span b-e should not enclose e-f")
+	}
 	if !g.Sub(makeSpan("d-e"), makeSpan("b-c")) {
 		t.Fatalf("removing b-c and d-e from b-e should expand it")
 	}

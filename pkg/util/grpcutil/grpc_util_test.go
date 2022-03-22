@@ -71,7 +71,7 @@ func TestRequestDidNotStart(t *testing.T) {
 	go func() {
 		_ = server.Serve(lis)
 	}()
-
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestRequestDidNotStart(t *testing.T) {
 		if err == nil {
 			return errors.New("did not get expected error")
 		} else if !grpcutil.RequestDidNotStart(err) {
-			return errors.Errorf("request should not have started, but got %s", err)
+			return errors.Wrap(err, "request should not have started, but got error")
 		}
 		return nil
 	})

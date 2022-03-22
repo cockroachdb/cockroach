@@ -19,7 +19,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -1489,7 +1489,7 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 	}
 
 	// Run a set of randomly generated test cases.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		// Generate two random JSONs and evaluate the result of `left @> right`.
 		left, err := Random(20, rng)
@@ -1668,7 +1668,7 @@ func TestEncodeContainedJSONInvertedIndexSpans(t *testing.T) {
 	}
 
 	// Run a set of randomly generated test cases.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		// Generate two random JSONs and evaluate the result of `left <@ right`.
 		left, err := Random(20, rng)

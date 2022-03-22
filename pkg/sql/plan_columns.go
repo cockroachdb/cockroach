@@ -108,6 +108,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.getColumns(mut, colinfo.ExplainPlanColumns)
 	case *relocateNode:
 		return n.getColumns(mut, colinfo.AlterTableRelocateColumns)
+	case *relocateRange:
+		return n.getColumns(mut, colinfo.AlterRangeRelocateColumns)
 	case *scatterNode:
 		return n.getColumns(mut, colinfo.AlterTableScatterColumns)
 	case *showFingerprintsNode:
@@ -136,6 +138,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return getPlanColumns(n.plan, mut)
 	case *distinctNode:
 		return getPlanColumns(n.plan, mut)
+	case *fetchNode:
+		return n.cursor.Types()
 	case *filterNode:
 		return getPlanColumns(n.source.plan, mut)
 	case *max1RowNode:
@@ -152,9 +156,15 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return getPlanColumns(n.buffer, mut)
 	case *sortNode:
 		return getPlanColumns(n.plan, mut)
+	case *topKNode:
+		return getPlanColumns(n.plan, mut)
 	case *recursiveCTENode:
 		return getPlanColumns(n.initial, mut)
 
+	case *showVarNode:
+		return colinfo.ResultColumns{
+			{Name: n.name, Typ: types.String},
+		}
 	case *rowSourceToPlanNode:
 		return n.planCols
 	}

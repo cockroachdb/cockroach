@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -301,7 +302,7 @@ func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
 			encs := encodeInvertedIndexHistogramUpperBounds(colType, upper)
 			encodedUpperBounds = append(encodedUpperBounds, encs...)
 		} else {
-			enc, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
+			enc, err := keyside.Encode(nil, upper, encoding.Ascending)
 			if err != nil {
 				panic(err)
 			}
@@ -361,18 +362,18 @@ func encodeInvertedIndexHistogramUpperBounds(colType *types.T, val tree.Datum) (
 	case types.GeographyFamily:
 		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, *geoindex.DefaultGeographyIndexConfig())
 	default:
-		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.StrictIndexColumnIDGuaranteesVersion)
+		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.PrimaryIndexWithStoredColumnsVersion)
 	}
 
 	if err != nil {
 		panic(err)
 	}
 
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	for i := range keys {
 		// Each key much be a byte-encoded datum so that it can be
 		// decoded in JSONStatistic.SetHistogram.
-		enc, err := rowenc.EncodeTableKey(nil, da.NewDBytes(tree.DBytes(keys[i])), encoding.Ascending)
+		enc, err := keyside.Encode(nil, da.NewDBytes(tree.DBytes(keys[i])), encoding.Ascending)
 		if err != nil {
 			panic(err)
 		}
@@ -640,13 +641,9 @@ func postgresMutator(rng *rand.Rand, q string) string {
 var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool) {
 	for _, stmt := range stmts {
 		switch stmt := stmt.(type) {
-		case *tree.SetClusterSetting, *tree.SetVar:
+		case *tree.SetClusterSetting, *tree.SetVar, *tree.AlterTenantSetClusterSetting:
 			continue
 		case *tree.CreateTable:
-			if stmt.Interleave != nil {
-				stmt.Interleave = nil
-				changed = true
-			}
 			if stmt.PartitionByTable != nil {
 				stmt.PartitionByTable = nil
 				changed = true
@@ -674,10 +671,6 @@ var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts
 						changed = true
 					}
 				case *tree.UniqueConstraintTableDef:
-					if def.Interleave != nil {
-						def.Interleave = nil
-						changed = true
-					}
 					if def.PartitionByIndex != nil {
 						def.PartitionByIndex = nil
 						changed = true
@@ -714,10 +707,6 @@ func postgresCreateTableMutator(
 		mutated = append(mutated, stmt)
 		switch stmt := stmt.(type) {
 		case *tree.CreateTable:
-			if stmt.Interleave != nil {
-				stmt.Interleave = nil
-				changed = true
-			}
 			// Get all the column types first.
 			colTypes := make(map[string]*types.T)
 			for _, def := range stmt.Defs {
@@ -735,9 +724,16 @@ func postgresCreateTableMutator(
 					// to their own statement.
 					var newCols tree.IndexElemList
 					for _, col := range def.Columns {
-						// Postgres doesn't support box2d as a btree index key.
-						colTypeFamily := colTypes[string(col.Column)].Family()
-						if colTypeFamily == types.Box2DFamily {
+						isBox2d := false
+						// NB: col.Column is empty for expression-based indexes.
+						if col.Expr == nil {
+							// Postgres doesn't support box2d as a btree index key.
+							colTypeFamily := colTypes[string(col.Column)].Family()
+							if colTypeFamily == types.Box2DFamily {
+								isBox2d = true
+							}
+						}
+						if isBox2d {
 							changed = true
 						} else {
 							newCols = append(newCols, col)
@@ -764,9 +760,16 @@ func postgresCreateTableMutator(
 				case *tree.UniqueConstraintTableDef:
 					var newCols tree.IndexElemList
 					for _, col := range def.Columns {
-						// Postgres doesn't support box2d as a btree index key.
-						colTypeFamily := colTypes[string(col.Column)].Family()
-						if colTypeFamily == types.Box2DFamily {
+						isBox2d := false
+						// NB: col.Column is empty for expression-based indexes.
+						if col.Expr == nil {
+							// Postgres doesn't support box2d as a btree index key.
+							colTypeFamily := colTypes[string(col.Column)].Family()
+							if colTypeFamily == types.Box2DFamily {
+								isBox2d = true
+							}
+						}
+						if isBox2d {
 							changed = true
 						} else {
 							newCols = append(newCols, col)
@@ -803,38 +806,6 @@ func postgresCreateTableMutator(
 						Storing:  def.Storing,
 					})
 					changed = true
-				case *tree.ColumnTableDef:
-					if def.IsComputed() {
-						// Postgres has different cast volatility for timestamps and OID
-						// types. The substitution here is specific to the output of
-						// testutils.randComputedColumnTableDef.
-						if funcExpr, ok := def.Computed.Expr.(*tree.FuncExpr); ok {
-							if len(funcExpr.Exprs) == 1 {
-								if castExpr, ok := funcExpr.Exprs[0].(*tree.CastExpr); ok {
-									referencedType := colTypes[castExpr.Expr.(*tree.UnresolvedName).String()]
-									isContextDependentType := referencedType.Family() == types.TimestampFamily ||
-										referencedType.Family() == types.OidFamily ||
-										referencedType.Family() == types.DateFamily
-									if isContextDependentType &&
-										tree.MustBeStaticallyKnownType(castExpr.Type) == types.String {
-										def.Computed.Expr = &tree.CaseExpr{
-											Whens: []*tree.When{
-												{
-													Cond: &tree.IsNullExpr{
-														Expr: castExpr.Expr,
-													},
-													Val: RandDatum(rng, types.String, true /* nullOK */),
-												},
-											},
-											Else: RandDatum(rng, types.String, true /* nullOK */),
-										}
-										changed = true
-									}
-								}
-							}
-						}
-					}
-					newdefs = append(newdefs, def)
 				default:
 					newdefs = append(newdefs, def)
 				}

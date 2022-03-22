@@ -72,16 +72,11 @@ func NewPGTest(ctx context.Context, addr, user string) (*PGTest, error) {
 			foundCrdb = true
 		}
 		if d, ok := msg.(*pgproto3.BackendKeyData); ok {
-			// We inspect the BackendKeyData outside of the loop since we only
-			// want to do the assertions if foundCrdb==true.
 			backendKeyData = d
 		}
 	}
 	if backendKeyData == nil {
 		return nil, errors.Errorf("did not receive BackendKeyData")
-	}
-	if foundCrdb && (backendKeyData.ProcessID != 0 || backendKeyData.SecretKey != 0) {
-		return nil, errors.Errorf("unexpected BackendKeyData: %+v", d)
 	}
 	p.isCockroachDB = foundCrdb
 	success = err == nil
@@ -103,11 +98,18 @@ func (p *PGTest) SendOneLine(line string) error {
 		msgBytes := []byte(sp[1])
 		switch msg := msg.(type) {
 		case *pgproto3.CopyData:
-			var data struct{ Data string }
+			var data struct {
+				Data       string
+				BinaryData []byte
+			}
 			if err := json.Unmarshal(msgBytes, &data); err != nil {
 				return err
 			}
-			msg.Data = []byte(data.Data)
+			if data.BinaryData != nil {
+				msg.Data = data.BinaryData
+			} else {
+				msg.Data = []byte(data.Data)
+			}
 		default:
 			if err := json.Unmarshal(msgBytes, msg); err != nil {
 				return err

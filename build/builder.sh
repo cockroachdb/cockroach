@@ -3,7 +3,7 @@
 set -euo pipefail
 
 image=cockroachdb/builder
-version=20210714-130445
+version=20220110-162741
 
 function init() {
   docker build --tag="${image}" "$(dirname "${0}")/builder"
@@ -200,7 +200,7 @@ docker run --init --privileged -i ${tty-} --rm \
 res=$?
 set -e
 
-if test $res -ne 0 -a \( ${1-x} = "make" -o ${1-x} = "xmkrelease" \) ; then
+if test $res -ne 0 -a \( ${1-x} = "make" -o ${1-x} = "mkrelease" \) ; then
    ram=$(docker run -i --rm \
          -u "$uid:$gid" \
          "${image}:${version}" awk '/MemTotal/{print $2}' /proc/meminfo)

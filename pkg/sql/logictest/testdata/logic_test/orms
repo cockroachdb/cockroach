@@ -73,7 +73,7 @@ ORDER BY i.relname
 ----
 name              primary  unique  indkey  column_indexes  column_names  definition
 customers_id_idx  false    false   2       {1,2}           {name,id}     CREATE INDEX customers_id_idx ON test.public.customers USING btree (id ASC)
-primary           true     true    1       {1,2}           {name,id}     CREATE UNIQUE INDEX "primary" ON test.public.customers USING btree (name ASC)
+customers_pkey    true     true    1       {1,2}           {name,id}     CREATE UNIQUE INDEX customers_pkey ON test.public.customers USING btree (name ASC)
 
 
 query TT colnames
@@ -105,7 +105,7 @@ AND t1.relname ='b'
 AND t3.nspname = ANY (current_schemas(false))
 ORDER BY c.conname
 ----
-a  a_id  id  fk_a_id_ref_a  a  a
+a  a_id  id  b_a_id_fkey  a  a
 
 # Default value columns in Rails produce these kinds of queries:
 query O
@@ -246,7 +246,7 @@ WHERE
     )
     AND attname = 'a';
 ----
-a  57  true  false  false
+a  110  true  false  false
 
 # Hibernate query.
 
@@ -358,7 +358,7 @@ SELECT
   typdefaultbin
 FROM pg_type WHERE typname = 'regression_66576'
 ----
-regression_66576  3426283741  c  C  false  0  -1  0  -1  NULL
+regression_66576  4101115737  c  C  false  0  -1  0  -1  NULL
 
 query T
 SELECT reltype FROM pg_class WHERE relname = 'regression_65576'

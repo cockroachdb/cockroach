@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// CheckAndMaybeLog reports the error, if non-nil, to the givven
+// CheckAndMaybeLog reports the error, if non-nil, to the given
 // logger.
 func CheckAndMaybeLog(
 	err error, logger func(context.Context, logpb.Severity, string, ...interface{}),

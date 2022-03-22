@@ -93,7 +93,7 @@ We can them compute rebalance scores by considering the percentiles of a
 replica and under/over-fullness of stores amongst all the considered dimensions.
 We will prefer moving away replicas at high percentiles from stores that are
 overfull for that dimension toward stores that are less full for the dimension
-(and vice versa for low percentiles and underful stores under the expectation
+(and vice versa for low percentiles and underfull stores under the expectation
 that the removed replicas can be replaced by higher percentile replicas). The
 extremeness of a given percentile and under/over-fullness will increase the
 weight we give to that dimension. These heuristics will allow us to combine
@@ -252,7 +252,7 @@ split.
 
 Finally, the simplest alternative of all (proposed by bdarnell on #16296) is
 to not do load-based splitting at all, and instead just split more eagerly for
-tables with a small number of ranges (where "small" could reasonabl be defined
+tables with a small number of ranges (where "small" could reasonable be defined
 as "less than the number of nodes in the cluster"). This wouldn't help with
 steady state load at all, but it would help with the arguably more common
 scenario of a "big bang" of data growth when a service launches or during a

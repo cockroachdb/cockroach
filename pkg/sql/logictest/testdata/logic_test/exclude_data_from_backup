@@ -1,0 +1,75 @@
+statement ok
+CREATE TABLE t(x INT PRIMARY KEY)
+
+query I
+SELECT id FROM system.namespace WHERE name='t';
+----
+106
+
+# Ensure we can set and reset the exclude_data_from_backup bit on a table.
+statement ok
+ALTER TABLE t SET (exclude_data_from_backup = true);
+
+query TT
+SHOW CREATE TABLE t
+----
+t                                         CREATE TABLE public.t (
+                                          x INT8 NOT NULL,
+                                          CONSTRAINT t_pkey PRIMARY KEY (x ASC)
+) WITH (exclude_data_from_backup = true)
+
+statement ok
+ALTER TABLE t SET (exclude_data_from_backup = false);
+
+query TT
+SHOW CREATE TABLE t
+----
+t  CREATE TABLE public.t (
+   x INT8 NOT NULL,
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC)
+)
+
+# Ensure we cannot set schema to a temporary schema.
+statement ok
+SET experimental_enable_temp_tables = 'on'
+
+statement ok
+CREATE TEMPORARY TABLE temp1()
+
+statement error pq: cannot set data in a temporary table to be excluded from backup
+ALTER TABLE temp1 SET (exclude_data_from_backup = true)
+
+# Add an inbound foreign key to t and try to set to exclude_data_from_backup.
+statement ok
+CREATE TABLE t2(x INT REFERENCES t(x) ON DELETE CASCADE);
+
+statement error pq: cannot set data in a table with inbound foreign key constraints to be excluded from backup
+ALTER TABLE t SET (exclude_data_from_backup = 'on');
+
+# Check that we can still set exclude_data_from_backup on a table with outbound fk.
+statement ok
+ALTER TABLE t2 SET (exclude_data_from_backup = 'true');
+
+query TT
+SHOW CREATE TABLE t2
+----
+t2                                        CREATE TABLE public.t2 (
+                                          x INT8 NULL,
+                                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                          CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+                                          CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
+) WITH (exclude_data_from_backup = true)
+
+# Check that we can reset exclude_data_from_backup on a table.
+statement ok
+ALTER TABLE t2 RESET (exclude_data_from_backup);
+
+query TT
+SHOW CREATE TABLE t2
+----
+t2  CREATE TABLE public.t2 (
+    x INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
+)

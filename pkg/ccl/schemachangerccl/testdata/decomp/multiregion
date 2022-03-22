@@ -1,0 +1,523 @@
+setup
+CREATE DATABASE multi_region_test_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multi_region_test_db.public.table_regional_by_row (
+  k INT PRIMARY KEY,
+  v STRING
+) LOCALITY REGIONAL BY ROW;
+CREATE TABLE multi_region_test_db.public.table_regional_by_table (
+  a INT
+) LOCALITY REGIONAL BY TABLE IN "us-east2";
+CREATE TABLE multi_region_test_db.public.table_global (b INT) LOCALITY GLOBAL;
+----
+
+decompose
+multi_region_test_db
+----
+BackReferencedIDs:
+  - 106
+ElementState:
+- Database:
+    databaseId: 104
+  Status: PUBLIC
+- Namespace:
+    descriptorId: 104
+    name: multi_region_test_db
+  Status: PUBLIC
+- Owner:
+    descriptorId: 104
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2048
+    userName: public
+  Status: PUBLIC
+- DatabaseRegionConfig:
+    databaseId: 104
+    regionEnumTypeId: 105
+  Status: PUBLIC
+- DatabaseRoleSetting:
+    databaseId: 104
+    roleName: __placeholder_role_name__
+  Status: PUBLIC
+- DatabaseComment:
+    comment: __placeholder_comment__
+    databaseId: 104
+  Status: PUBLIC
+
+decompose
+table_global
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 110
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 110
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    tableId: 110
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    isHidden: true
+    tableId: 110
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      storingColumnIds:
+      - 1
+      tableId: 110
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 110
+  Status: PUBLIC
+- TableLocalityGlobal:
+    tableId: 110
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: b
+    tableId: 110
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: rowid
+    tableId: 110
+  Status: PUBLIC
+- ColumnType:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 110
+  Status: PUBLIC
+- ColumnType:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 110
+  Status: PUBLIC
+- ColumnDefaultExpression:
+    columnId: 2
+    embeddedExpr:
+      expr: unique_rowid()
+    tableId: 110
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 110
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 110
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: table_global_pkey
+    tableId: 110
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 1
+    tableId: 110
+  Status: PUBLIC
+- Namespace:
+    databaseId: 104
+    descriptorId: 110
+    name: table_global
+    schemaId: 106
+  Status: PUBLIC
+- Owner:
+    descriptorId: 110
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 110
+    parentSchemaId: 106
+  Status: PUBLIC
+
+decompose
+table_regional_by_table
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 109
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 109
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    tableId: 109
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    isHidden: true
+    tableId: 109
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      storingColumnIds:
+      - 1
+      tableId: 109
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 109
+  Status: PUBLIC
+- TableLocalitySecondaryRegion:
+    regionEnumTypeId: 105
+    regionName: us-east2
+    tableId: 109
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: a
+    tableId: 109
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: rowid
+    tableId: 109
+  Status: PUBLIC
+- ColumnType:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 109
+  Status: PUBLIC
+- ColumnType:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 109
+  Status: PUBLIC
+- ColumnDefaultExpression:
+    columnId: 2
+    embeddedExpr:
+      expr: unique_rowid()
+    tableId: 109
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 109
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 109
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: table_regional_by_table_pkey
+    tableId: 109
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 1
+    tableId: 109
+  Status: PUBLIC
+- Namespace:
+    databaseId: 104
+    descriptorId: 109
+    name: table_regional_by_table
+    schemaId: 106
+  Status: PUBLIC
+- Owner:
+    descriptorId: 109
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 109
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 109
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 109
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 109
+    parentSchemaId: 106
+  Status: PUBLIC
+
+decompose
+table_regional_by_row
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 108
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 108
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    tableId: 108
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    tableId: 108
+  Status: PUBLIC
+- Column:
+    columnId: 3
+    isHidden: true
+    tableId: 108
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 3
+      - 1
+      storingColumnIds:
+      - 2
+      tableId: 108
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- TableLocalityRegionalByRow:
+    tableId: 108
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: k
+    tableId: 108
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: v
+    tableId: 108
+  Status: PUBLIC
+- ColumnName:
+    columnId: 3
+    name: crdb_region
+    tableId: 108
+  Status: PUBLIC
+- ColumnType:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 108
+  Status: PUBLIC
+- ColumnType:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 25
+    isNullable: true
+    tableId: 108
+  Status: PUBLIC
+- ColumnType:
+    columnId: 3
+    embeddedTypeT:
+      closedTypeIds:
+      - 105
+      - 107
+      type:
+        family: EnumFamily
+        oid: 100105
+        udtMetadata:
+          arrayTypeOid: 100107
+    tableId: 108
+  Status: PUBLIC
+- ColumnDefaultExpression:
+    columnId: 3
+    embeddedExpr:
+      expr: default_to_database_primary_region(gateway_region())::@100105
+      usesTypeIds:
+      - 105
+      - 107
+    tableId: 108
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 3
+    comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: table_regional_by_row_pkey
+    tableId: 108
+  Status: PUBLIC
+- IndexPartitioning:
+    indexId: 1
+    partitioning:
+      list:
+      - name: us-east1
+        subpartitioning: {}
+        values:
+        - BgFA
+      - name: us-east2
+        subpartitioning: {}
+        values:
+        - BgGA
+      - name: us-east3
+        subpartitioning: {}
+        values:
+        - BgHA
+      numColumns: 1
+      numImplicitColumns: 1
+    tableId: 108
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 1
+    tableId: 108
+  Status: PUBLIC
+- Namespace:
+    databaseId: 104
+    descriptorId: 108
+    name: table_regional_by_row
+    schemaId: 106
+  Status: PUBLIC
+- Owner:
+    descriptorId: 108
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 108
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 108
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 108
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 108
+    parentSchemaId: 106
+  Status: PUBLIC
+
+decompose
+crdb_internal_region
+----
+BackReferencedIDs:
+  - 108
+  - 109
+ElementState:
+- EnumType:
+    arrayTypeId: 107
+    isMultiRegion: true
+    typeId: 105
+  Status: PUBLIC
+- Namespace:
+    databaseId: 104
+    descriptorId: 105
+    name: crdb_internal_region
+    schemaId: 106
+  Status: PUBLIC
+- Owner:
+    descriptorId: 105
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 512
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 105
+    parentSchemaId: 106
+  Status: PUBLIC

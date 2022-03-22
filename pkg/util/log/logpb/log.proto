@@ -184,6 +184,10 @@ enum Channel {
   // feature usage within CockroachDB and anonymizes any application-
   // specific data.
   TELEMETRY = 12;
+
+  // CHANNEL_MAX is the maximum allocated channel number so far.
+  // This should be increased every time a new channel is added.
+  CHANNEL_MAX = 13;
 }
 
 // Entry represents a cockroach log entry in the following two cases:
@@ -257,8 +261,27 @@ message Entry {
 // A FileDetails holds all of the particulars that can be parsed by the name of
 // a log file.
 message FileDetails {
+  // program contains the combination of program name and log file
+  // group name, separated by a hyphen. The program name part is
+  // guaranteed to not contain hyphens itself; if there had been any
+  // in the executable file name, they would be escaped to
+  // underscores. The first hyphen separates the program name from the
+  // file group name. The file group itself can contain hyphens.
+  //
+  // For example, if the field is set to "mybinary-my-log-group",
+  // the program name is "mybinary" and the file group is "my-log-group".
+  //
+  // The field is also guaranteed not to contain periods. If there had
+  // been periods in the executable file name, they would be replaced
+  // by underscores.
   string program = 1;
+  // host is the hostname part of the file name.
+  // The field is guaranteed not to contain periods. If there had
+  // been periods in the hostname, they would be replaced by underscores.
   string host = 2;
+  // user_name is the unix username part of the file name.
+  // The field is guaranteed not to contain periods. If there had
+  // been periods in the username, they would be replaced by underscores.
   string user_name = 3;
   reserved 4;
   int64 time = 5;
@@ -270,4 +293,5 @@ message FileInfo {
   int64 size_bytes = 2;
   int64 mod_time_nanos = 3;
   FileDetails details = 4 [(gogoproto.nullable) = false];
+  uint32 file_mode = 5;
 }

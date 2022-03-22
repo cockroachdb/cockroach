@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -54,10 +55,53 @@ func TestSampledStatsCollection(t *testing.T) {
 				Database:    database,
 				Failed:      false,
 			}
-			stats, err := server.SQLServer().(*Server).sqlStats.GetStatementStats(&key)
-			require.NoError(t, err)
+			var stats *roachpb.CollectedStatementStatistics
+			require.NoError(t, server.SQLServer().(*Server).sqlStats.
+				GetLocalMemProvider().
+				IterateStatementStats(
+					ctx,
+					&sqlstats.IteratorOptions{},
+					func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+						if statistics.Key.Query == key.Query &&
+							statistics.Key.ImplicitTxn == key.ImplicitTxn &&
+							statistics.Key.Database == key.Database &&
+							statistics.Key.Failed == key.Failed {
+							stats = statistics
+						}
+
+						return nil
+					},
+				))
+			require.NotNil(t, stats)
+			require.NotZero(t, stats.Key.PlanHash)
 			return stats
 		}
+
+	getTxnStats := func(
+		t *testing.T,
+		server serverutils.TestServerInterface,
+		key roachpb.TransactionFingerprintID,
+	) *roachpb.CollectedTransactionStatistics {
+		t.Helper()
+		var stats *roachpb.CollectedTransactionStatistics
+
+		require.NoError(t, server.SQLServer().(*Server).sqlStats.
+			GetLocalMemProvider().
+			IterateTransactionStats(
+				ctx,
+				&sqlstats.IteratorOptions{},
+				func(ctx context.Context, statistics *roachpb.CollectedTransactionStatistics) error {
+					if statistics.TransactionFingerprintID == key {
+						stats = statistics
+					}
+
+					return nil
+				},
+			))
+
+		require.NotNil(t, stats)
+		return stats
+	}
 
 	toggleSampling := func(enable bool) {
 		var v float64
@@ -125,8 +169,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		key := util.MakeFNV64()
 		key.Add(uint64(aggStats.ID))
 		key.Add(uint64(selectStats.ID))
-		txStats, err := s.SQLServer().(*Server).sqlStats.GetTransactionStats("", roachpb.TransactionFingerprintID(key.Sum()))
-		require.NoError(t, err)
+		txStats := getTxnStats(t, s, roachpb.TransactionFingerprintID(key.Sum()))
 
 		require.Equal(t, int64(2), txStats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(1), txStats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")
@@ -137,5 +180,27 @@ func TestSampledStatsCollection(t *testing.T) {
 			"expected txn to report having read the sum of rows read in both its statements",
 		)
 		require.Greater(t, txStats.Stats.ExecStats.MaxMemUsage.Mean, float64(0), "expected MaxMemUsage to be set on the txn")
+	})
+
+	t.Run("deallocate", func(t *testing.T) {
+		toggleSampling(false)
+		queryDB(t, db, "PREPARE abc AS SELECT 1")
+		queryDB(t, db, "PREPARE xyz AS SELECT 2 ORDER BY 1")
+		queryDB(t, db, "DEALLOCATE xyz")
+		queryDB(t, db, "DEALLOCATE abc")
+
+		// Make sure DEALLOCATE statements are grouped together rather than having
+		// one key per prepared statement name.
+		stats := getStmtStats(t, s, "DEALLOCATE _", true /* implicitTxn */, "defaultdb")
+
+		require.Equal(t, int64(2), stats.Stats.Count, "expected to have collected two sets of general stats")
+		require.Equal(t, int64(0), stats.Stats.ExecStats.Count, "expected to have collected zero execution stats")
+		require.Equal(t, stats.Stats.RowsRead.Mean, float64(0), "expected statement to have read zero rows")
+
+		// TODO(sql-observability): The PREPARE statements do not appear in the
+		// statement stats because tree.Prepare has a special case in the
+		// (*connExecutor).execStmtInOpenState function that short-circuits before
+		// stats are collected. Should we make DEALLOCATE similar to that, or
+		// should we change PREPARE so that stats are collected?
 	})
 }

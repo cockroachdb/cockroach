@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 )
 
 // addToTSCacheChecked adds the specified timestamp to the timestamp cache
@@ -300,7 +301,7 @@ func (r *Replica) applyTimestampCache(
 
 	for _, union := range ba.Requests {
 		args := union.GetInner()
-		if roachpb.IsIntentWrite(args) {
+		if roachpb.AppliesTimestampCache(args) {
 			header := args.Header()
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
@@ -346,7 +347,7 @@ func (r *Replica) applyTimestampCache(
 			if conflictingTxn != uuid.Nil {
 				conflictMsg = "conflicting txn: " + conflictingTxn.Short()
 			}
-			log.VEventf(ctx, 2, "bumped write timestamp to %s; %s", bumpedTS, log.Safe(conflictMsg))
+			log.VEventf(ctx, 2, "bumped write timestamp to %s; %s", bumpedTS, redact.Safe(conflictMsg))
 		}
 	}
 	return bumped
@@ -577,7 +578,7 @@ func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	// Forward the read summary by the range's closed timestamp, because any
 	// replica could have served reads below this time. We also return the
 	// closed timestamp separately, in case callers want it split out.
-	closedTS := r.GetClosedTimestampV2(ctx)
+	closedTS := r.GetClosedTimestamp(ctx)
 	sum.Merge(rspb.FromTimestamp(closedTS))
 	return sum
 }

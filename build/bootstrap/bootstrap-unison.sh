@@ -4,15 +4,15 @@
 
 set -euxo pipefail
 
-sudo apt-get install -y --no-install-recommends ocaml-nox
 
-# Ubuntu's "unison" package does not ship unison-fsmonitor, which is needed for
-# the "-repeat watch" option to function properly.
-git clone --branch=v2.51.2 https://github.com/bcpierce00/unison
-(cd unison && make)
+extract_to=$(mktemp -d)
+curl -L https://github.com/bcpierce00/unison/releases/download/v2.51.4/unison-v2.51.4+ocaml-4.12.0+x86_64.linux.tar.gz | tar -C "$extract_to" -xz
+
 for bin in unison unison-fsmonitor; do
-  sudo install -m 755 "unison/src/$bin" "/usr/local/bin/$bin"
+  sudo install -m 755 "$extract_to/bin/$bin" "/usr/local/bin/$bin"
 done
+
+rm -rf "$extract_to"
 
 echo fs.inotify.max_user_watches=524288 | sudo tee /etc/sysctl.d/60-max-user-watches.conf
 sudo service procps restart

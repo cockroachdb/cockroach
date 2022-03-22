@@ -57,7 +57,7 @@ func genValues(w io.Writer, firstRow, lastRow int, fn GenRowFn, shouldPrint bool
 func CreateTable(
 	tb testing.TB, sqlDB *gosql.DB, tableName, schema string, numRows int, fn GenRowFn,
 ) {
-	CreateTableInterleaved(tb, sqlDB, tableName, schema, "" /*interleaveSchema*/, numRows, fn)
+	CreateTableDebug(tb, sqlDB, tableName, schema, numRows, fn, false /* print */)
 }
 
 // CreateTableDebug is identical to debug, but allows for the added option of
@@ -70,38 +70,9 @@ func CreateTableDebug(
 	fn GenRowFn,
 	shouldPrint bool,
 ) {
-	CreateTableInterleavedDebug(tb, sqlDB, tableName, schema, "" /*interleaveSchema*/, numRows, fn, shouldPrint)
-}
-
-// CreateTableInterleaved is identical to CreateTable with the added option
-// of specifying an interleave schema for interleaving the table.
-func CreateTableInterleaved(
-	tb testing.TB,
-	sqlDB *gosql.DB,
-	tableName, schema, interleaveSchema string,
-	numRows int,
-	fn GenRowFn,
-) {
-	CreateTableInterleavedDebug(tb, sqlDB, tableName, schema, interleaveSchema, numRows, fn, false /* print */)
-}
-
-// CreateTableInterleavedDebug is identical to CreateTableInterleaved with the
-// option of printing the table being created.
-func CreateTableInterleavedDebug(
-	tb testing.TB,
-	sqlDB *gosql.DB,
-	tableName, schema, interleaveSchema string,
-	numRows int,
-	fn GenRowFn,
-	shouldPrint bool,
-) {
-	if interleaveSchema != "" {
-		interleaveSchema = fmt.Sprintf(`INTERLEAVE IN PARENT %s.%s`, TestDB, interleaveSchema)
-	}
-
 	r := MakeSQLRunner(sqlDB)
 	stmt := fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s;`, TestDB)
-	stmt += fmt.Sprintf(`CREATE TABLE %s.%s (%s) %s;`, TestDB, tableName, schema, interleaveSchema)
+	stmt += fmt.Sprintf(`CREATE TABLE %s.%s (%s);`, TestDB, tableName, schema)
 	r.Exec(tb, stmt)
 	if shouldPrint {
 		fmt.Printf("Creating table: %s\n%s\n", tableName, schema)
@@ -120,66 +91,6 @@ func CreateTableInterleavedDebug(
 	}
 }
 
-// CreateTestInterleavedHierarchy generates the following interleaved hierarchy
-// for testing:
-//   <table>		  <primary index/interleave prefix>   <nrows>
-//   parent1		  (pid1)			      100
-//     child1		  (pid1, cid1, cid2)		      250
-//       grandchild1	  (pid1, cid1, cid2, gcid1)	      1000
-//     child2		  (pid1, cid3, cid4)		      50
-//   parent2		  (pid1)			      20
-func CreateTestInterleavedHierarchy(t *testing.T, sqlDB *gosql.DB) {
-	vMod := 42
-	CreateTable(t, sqlDB, "parent1",
-		"pid1 INT PRIMARY KEY, v INT",
-		100,
-		ToRowFn(RowIdxFn, RowModuloFn(vMod)),
-	)
-
-	CreateTableInterleaved(t, sqlDB, "child1",
-		"pid1 INT, cid1 INT, cid2 INT, v INT, PRIMARY KEY (pid1, cid1, cid2)",
-		"parent1 (pid1)",
-		250,
-		ToRowFn(
-			RowModuloShiftedFn(100),
-			RowIdxFn,
-			RowIdxFn,
-			RowModuloFn(vMod),
-		),
-	)
-
-	CreateTableInterleaved(t, sqlDB, "grandchild1",
-		"pid1 INT, cid1 INT, cid2 INT, gcid1 INT, v INT, PRIMARY KEY (pid1, cid1, cid2, gcid1)",
-		"child1 (pid1, cid1, cid2)",
-		1000,
-		ToRowFn(
-			RowModuloShiftedFn(250, 100),
-			RowModuloShiftedFn(250),
-			RowModuloShiftedFn(250),
-			RowIdxFn,
-			RowModuloFn(vMod),
-		),
-	)
-
-	CreateTableInterleaved(t, sqlDB, "child2",
-		"pid1 INT, cid3 INT, cid4 INT, v INT, PRIMARY KEY (pid1, cid3, cid4)",
-		"parent1 (pid1)",
-		50,
-		ToRowFn(
-			RowModuloShiftedFn(100),
-			RowIdxFn,
-			RowIdxFn,
-			RowModuloFn(vMod),
-		),
-	)
-
-	CreateTable(t, sqlDB, "parent2",
-		"pid1 INT PRIMARY KEY, v INT",
-		20,
-		ToRowFn(RowIdxFn, RowModuloFn(vMod)),
-	)
-}
-
 // GenValueFn is a function that takes a (1-based) row index and returns a Datum
 // which will be converted to a string to form part of an INSERT statement.
 type GenValueFn func(row int) tree.Datum
@@ -195,24 +106,6 @@ func RowModuloFn(modulo int) GenValueFn {
 	return func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row % modulo))
 	}
-}
-
-// RowModuloShiftedFn creates a GenValueFn that uses the following recursive
-// function definition F(row, modulo), where modulo is []int
-//    F(row, [])      = row
-//    F(row, modulo)  = F((row - 1) % modulo[0] + 1, modulo[1:])
-// and returns the result as a DInt.
-func RowModuloShiftedFn(modulo ...int) GenValueFn {
-	return func(row int) tree.Datum {
-		return tree.NewDInt(tree.DInt(moduloShiftedRecursive(row, modulo)))
-	}
-}
-
-func moduloShiftedRecursive(row int, modulo []int) int {
-	if len(modulo) == 0 {
-		return row
-	}
-	return moduloShiftedRecursive(((row-1)%modulo[0])+1, modulo[1:])
 }
 
 // IntToEnglish returns an English (pilot style) string for the given integer,

@@ -2,6 +2,11 @@ package(default_visibility = ["//visibility:public"])
 
 load(":cc_toolchain_config.bzl", "cc_toolchain_config")
 
+exports_files([
+    "bin/x86_64-apple-darwin19-install_name_tool",
+    "bin/x86_64-apple-darwin19-otool",
+])
+
 cc_toolchain_suite(
     name = "suite",
     toolchains = {

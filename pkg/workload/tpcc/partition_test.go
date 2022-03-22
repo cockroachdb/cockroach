@@ -151,6 +151,121 @@ func TestPartitioner(t *testing.T) {
 	}
 }
 
+func TestMRPartitioner(t *testing.T) {
+	tests := []struct {
+		total  int
+		active int
+		parts  int
+
+		expPartElems    [][]int
+		expPartElemsMap map[int]int
+		expTotalElems   []int
+	}{
+		{
+			total:           10,
+			active:          10,
+			parts:           1,
+			expPartElems:    [][]int{{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}},
+			expPartElemsMap: map[int]int{0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0},
+			expTotalElems:   []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+		},
+		{
+			total:           10,
+			active:          7,
+			parts:           1,
+			expPartElems:    [][]int{{0, 1, 2, 3, 4, 5, 6}},
+			expPartElemsMap: map[int]int{0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
+			expTotalElems:   []int{0, 1, 2, 3, 4, 5, 6},
+		},
+		{
+			total:           10,
+			active:          10,
+			parts:           2,
+			expPartElems:    [][]int{{0, 2, 4, 6, 8}, {1, 3, 5, 7, 9}},
+			expPartElemsMap: map[int]int{0: 0, 2: 0, 4: 0, 6: 0, 8: 0, 1: 1, 3: 1, 5: 1, 7: 1, 9: 1},
+			expTotalElems:   []int{0, 2, 4, 6, 8, 1, 3, 5, 7, 9},
+		},
+		{
+			total:           10,
+			active:          3,
+			parts:           2,
+			expPartElems:    [][]int{{0, 2}, {1}},
+			expPartElemsMap: map[int]int{0: 0, 2: 0, 1: 1},
+			expTotalElems:   []int{0, 2, 1},
+		},
+		{
+			total:           10,
+			active:          10,
+			parts:           3,
+			expPartElems:    [][]int{{0, 3, 6, 9}, {1, 4, 7}, {2, 5, 8}},
+			expPartElemsMap: map[int]int{0: 0, 3: 0, 6: 0, 9: 0, 1: 1, 4: 1, 7: 1, 2: 2, 5: 2, 8: 2},
+			expTotalElems:   []int{0, 3, 6, 9, 1, 4, 7, 2, 5, 8},
+		},
+		{
+			total:           10,
+			active:          5,
+			parts:           3,
+			expPartElems:    [][]int{{0, 3}, {1, 4}, {2}},
+			expPartElemsMap: map[int]int{0: 0, 3: 0, 1: 1, 4: 1, 2: 2},
+			expTotalElems:   []int{0, 3, 1, 4, 2},
+		},
+		{
+			total:           10,
+			active:          10,
+			parts:           10,
+			expPartElems:    [][]int{{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}},
+			expPartElemsMap: map[int]int{0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9},
+			expTotalElems:   []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+		},
+		{
+			total:           10,
+			active:          6,
+			parts:           10,
+			expPartElems:    [][]int{{0}, {1}, {2}, {3}, {4}, {5}, nil, nil, nil, nil},
+			expPartElemsMap: map[int]int{0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5},
+			expTotalElems:   []int{0, 1, 2, 3, 4, 5},
+		},
+		{
+			total:           10,
+			active:          1,
+			parts:           10,
+			expPartElems:    [][]int{{0}, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+			expPartElemsMap: map[int]int{0: 0},
+			expTotalElems:   []int{0},
+		},
+		{
+			total:        20,
+			active:       20,
+			parts:        3,
+			expPartElems: [][]int{{0, 3, 6, 9, 12, 15, 18}, {1, 4, 7, 10, 13, 16, 19}, {2, 5, 8, 11, 14, 17}},
+			expPartElemsMap: map[int]int{
+				0: 0, 3: 0, 6: 0, 9: 0, 12: 0, 15: 0, 18: 0,
+				1: 1, 4: 1, 7: 1, 10: 1, 13: 1, 16: 1, 19: 1,
+				2: 2, 5: 2, 8: 2, 11: 2, 14: 2, 17: 2,
+			},
+			expTotalElems: []int{0, 3, 6, 9, 12, 15, 18, 1, 4, 7, 10, 13, 16, 19, 2, 5, 8, 11, 14, 17},
+		},
+	}
+	for _, tc := range tests {
+		name := partitionerTestName(tc.total, tc.active, tc.parts)
+		t.Run(name, func(t *testing.T) {
+			p, err := makeMRPartitioner(tc.total, tc.active, tc.parts)
+			if err != nil {
+				t.Errorf("got error %v", err)
+			}
+			if !reflect.DeepEqual(p.partElems, tc.expPartElems) {
+				t.Errorf("expected partition elements %v, got %v", tc.expPartElems, p.partElems)
+			}
+			if !reflect.DeepEqual(p.partElemsMap, tc.expPartElemsMap) {
+				t.Errorf("expected partition element reverse mapping %v, got %v", tc.expPartElemsMap, p.partElemsMap)
+			}
+			if !reflect.DeepEqual(p.totalElems, tc.expTotalElems) {
+				t.Errorf("expected total elements %v, got %v", tc.expTotalElems, p.totalElems)
+			}
+		})
+	}
+}
+
 func TestPartitionerError(t *testing.T) {
 	tests := []struct {
 		total  int

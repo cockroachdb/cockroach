@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/physicalplan",

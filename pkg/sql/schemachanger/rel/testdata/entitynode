@@ -1,0 +1,239 @@
+name: entitynode
+data:
+    a: {i8: 1, i16: 1, pi8: 1}
+    b: {i8: 2, i16: 2}
+    c: {i8: 2, i16: 1}
+    na: {value: a}
+    nb: {value: b, left: na}
+    nc: {value: c, right: nb}
+attributes:
+    a: {i16: 1, i8: 1, pi8: 1}
+    b: {i16: 2, i8: 2}
+    c: {i16: 1, i8: 2}
+    na: {value: a}
+    nb: {left: na, value: b}
+    nc: {right: nb, value: c}
+queries:
+    - indexes:
+        - []
+        - [[value], [pi8], [i8, i16]]
+        - [[Type], [Self]]
+        - [[Self]]
+      data: [a, b, c, na, nb, nc]
+      queries:
+        a fields:
+            query:
+                - $a[i16] = 1
+                - $a[i8] = $ai8
+                - $a[pi8] = $api8
+            entities: [$a]
+            result-vars: [$a, $ai8, $api8]
+            results:
+                - [a, 1, 1]
+        a-c-b join:
+            query:
+                - $a[i8] = 1
+                - $b[i16] = 2
+                - $b[i8] = 2
+                - $c[i16] = 1
+                - $c[i8] = 2
+            entities: [$a, $b, $c]
+            result-vars: [$a, $b, $c]
+            results:
+                - [a, b, c]
+        nil values don't show up:
+            query:
+                - $value[pi8] = 1
+            entities: [$value]
+            result-vars: [$value]
+            results:
+                - [a]
+        nil values don't show up, scalar pointers same as pointers:
+            query:
+                - $value[pi8] = 1
+            entities: [$value]
+            result-vars: [$value]
+            results:
+                - [a]
+        list all the values:
+            query:
+                - $value[i8] = $i8
+            entities: [$value]
+            result-vars: [$value, $i8]
+            results:
+                - [a, 1]
+                - [b, 2]
+                - [c, 2]
+        nodes with elements where i8=2:
+            query:
+                - $i8 = 2
+                - $value[i8] = $i8
+                - $n[value] = $value
+            entities: [$value, $n]
+            result-vars: [$n, $value]
+            results:
+                - [nb, b]
+                - [nc, c]
+        list all the i8 values:
+            query:
+                - $value[i8] = $i8
+            entities: [$value]
+            result-vars: [$i8]
+            results:
+                - [1]
+                - [2]
+                - [2]
+        use a filter:
+            query:
+                - $value[Self] = $_
+                - i8eq1(*entitynodetest.entity)($value)
+            entities: [$value]
+            result-vars: [$value]
+            results:
+                - [a]
+        types of all the entities:
+            query:
+                - $value[Type] = $typ
+            entities: [$value]
+            result-vars: [$value, $typ]
+            results:
+                - [a, '*entitynodetest.entity']
+                - [b, '*entitynodetest.entity']
+                - [c, '*entitynodetest.entity']
+                - [na, '*entitynodetest.node']
+                - [nb, '*entitynodetest.node']
+                - [nc, '*entitynodetest.node']
+        nodes by type:
+            query:
+                - $na[Type] = '*entitynodetest.node'
+                - $na[value] = $a
+                - $nb[left] = $na
+                - $nc[right] = $nb
+            entities: [$na, $nb, $nc]
+            result-vars: [$na, $nb, $nc, $a]
+            results:
+                - [na, nb, nc, a]
+        nodes by type:
+            query:
+                - $n[Type] = '*entitynodetest.node'
+            entities: [$n]
+            result-vars: [$n]
+            results:
+                - [na]
+                - [nb]
+                - [nc]
+        basic any:
+            query:
+                - $entity[Type] IN ['*entitynodetest.node', '*entitynodetest.entity']
+            entities: [$entity]
+            result-vars: [$entity]
+            results:
+                - [a]
+                - [b]
+                - [c]
+                - [na]
+                - [nb]
+                - [nc]
+        self eq value:
+            query:
+                - '$entity[Self] = {i8: 2, pi8: null, i16: 1}'
+            entities: [$entity]
+            result-vars: [$entity]
+            results:
+                - [c]
+        contradiction due to missing attribute:
+            query:
+                - '$entity[Self] = {i8: 2, pi8: null, i16: 1}'
+                - $entity[pi8] = $pi8
+            entities: [$entity]
+            result-vars: [$entity, $pi8]
+            results: []
+        self eq self:
+            query:
+                - $entity[Self] = $entity
+            entities: [$entity]
+            result-vars: [$entity]
+            results:
+                - [a]
+                - [b]
+                - [c]
+                - [na]
+                - [nb]
+                - [nc]
+        variable type mismatch:
+            query:
+                - $entity[pi8] = 0
+            error: 'failed to construct query: failed to process invalid clause \$entity\[pi8\] = 0: int64 is not int8'
+        entity bound via variable:
+            query:
+                - $n1[value] = $e1
+                - $e1[pi8] = 1
+                - $n2[value] = $e2
+                - $e1[i16] = $i16
+                - $e2[i16] = $i16
+            entities: [$n1, $e1, $n2, $e2]
+            result-vars: [$n1, $e1, $n2, $e2]
+            results:
+                - [na, a, na, a]
+                - [na, a, nc, c]
+        entity bound via variable with ne filter:
+            query:
+                - $n1[value] = $e1
+                - $e1[pi8] = 1
+                - $n2[value] = $e2
+                - $e1[i16] = $i16
+                - $e2[i16] = $i16
+                - neq(interface {}, interface {})($e1, $e2)
+            entities: [$n1, $e1, $n2, $e2]
+            result-vars: [$n1, $e1, $n2, $e2]
+            results:
+                - [na, a, nc, c]
+        any value type mismatch:
+            query:
+                - $value[i8] IN [1, 2, 1]
+            error: 'failed to process invalid clause \$value\[i8\] IN \[1, 2, 1\]: int16 is not int8'
+        any clause no match on variable eq with type mismatch:
+            query:
+                - $e[i8] = $i8
+                - $i8 IN [1, 2]
+            entities: [$e]
+            result-vars: [$e, $i8]
+            results: []
+        pointer scalar values any:
+            query:
+                - $e[i8] IN [1, 2]
+            entities: [$e]
+            result-vars: [$e]
+            results:
+                - [a]
+                - [b]
+                - [c]
+        pointer scalar values:
+            query:
+                - $e[i8] = 1
+            entities: [$e]
+            result-vars: [$e]
+            results:
+                - [a]
+        nil pointer scalar values any:
+            query:
+                - $e[i8] IN [1, 1, null]
+            error: 'failed to process invalid clause \$e\[i8\] IN \[1, 1, null\]: invalid nil \*int8'
+        nil pointer scalar:
+            query:
+                - $e[i8] = null
+            error: 'failed to process invalid clause \$e\[i8\] = null: invalid nil \*int8'
+        no match in any expr:
+            query:
+                - $e[i8] IN [4, 5]
+            entities: [$e]
+            result-vars: [$e]
+            results: []
+        any clause no match on variable eq:
+            query:
+                - $e[i8] = $i8
+                - $i8 IN [3, 4]
+            entities: [$e]
+            result-vars: [$e, $i8]
+            results: []
+comparisons: []

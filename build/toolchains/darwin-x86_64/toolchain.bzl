@@ -9,15 +9,19 @@ def _impl(rctx):
 
     repo_path = str(rctx.path(""))
 
-    rctx.template("BUILD",
-                  Label("@cockroach//build:toolchains/darwin-x86_64/BUILD.tmpl"),
-                  executable = False)
-    rctx.template("cc_toolchain_config.bzl",
-                  Label("@cockroach//build:toolchains/darwin-x86_64/cc_toolchain_config.bzl.tmpl"),
-                  substitutions = {
-                      "%{repo_path}": repo_path,
-                  },
-                  executable = False)
+    rctx.template(
+        "BUILD",
+        Label("@cockroach//build:toolchains/darwin-x86_64/BUILD.tmpl"),
+        executable = False,
+    )
+    rctx.template(
+        "cc_toolchain_config.bzl",
+        Label("@cockroach//build:toolchains/darwin-x86_64/cc_toolchain_config.bzl.tmpl"),
+        substitutions = {
+            "%{repo_path}": repo_path,
+        },
+        executable = False,
+    )
 
 macos_toolchain_repo = repository_rule(
     implementation = _impl,

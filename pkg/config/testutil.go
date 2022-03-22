@@ -44,7 +44,7 @@ func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
 		testingLock.Lock()
 		defer testingLock.Unlock()
 		for id := range testingZoneConfig {
-			if maxID > 0 && id > maxID {
+			if maxID != 0 && maxID < id {
 				continue
 			}
 			if id > max {

@@ -138,6 +138,12 @@ type Builder struct {
 	// isCorrelated is set to true if we already reported to telemetry that the
 	// query contains a correlated subquery.
 	isCorrelated bool
+
+	// areAllTableMutationsSimpleInserts maps from each table mutated by the
+	// statement to true if all mutations of that table are simple inserts
+	// (without ON CONFLICT) or false otherwise. All mutated tables will have an
+	// entry in the map.
+	areAllTableMutationsSimpleInserts map[cat.StableID]bool
 }
 
 // New creates a new Builder structure initialized with the given
@@ -262,7 +268,7 @@ func (b *Builder) buildStmt(
 		// A blocklist of statements that can't be used from inside a view.
 		switch stmt := stmt.(type) {
 		case *tree.Delete, *tree.Insert, *tree.Update, *tree.CreateTable, *tree.CreateView,
-			*tree.Split, *tree.Unsplit, *tree.Relocate,
+			*tree.Split, *tree.Unsplit, *tree.Relocate, *tree.RelocateRange,
 			*tree.ControlJobs, *tree.ControlSchedules, *tree.CancelQueries, *tree.CancelSessions:
 			panic(pgerror.Newf(
 				pgcode.Syntax, "%s cannot be used inside a view definition", stmt.StatementTag(),
@@ -317,6 +323,9 @@ func (b *Builder) buildStmt(
 	case *tree.Relocate:
 		return b.buildAlterTableRelocate(stmt, inScope)
 
+	case *tree.RelocateRange:
+		return b.buildAlterRangeRelocate(stmt, inScope)
+
 	case *tree.ControlJobs:
 		return b.buildControlJobs(stmt, inScope)
 
@@ -333,8 +342,18 @@ func (b *Builder) buildStmt(
 		return b.buildCreateStatistics(stmt, inScope)
 
 	case *tree.Analyze:
-		// ANALYZE is syntactic sugar for CREATE STATISTICS.
-		return b.buildCreateStatistics(&tree.CreateStats{Table: stmt.Table}, inScope)
+		// ANALYZE is syntactic sugar for CREATE STATISTICS. We add AS OF SYSTEM
+		// TIME '-0.001ms' to trigger use of inconsistent scans. This prevents
+		// GC TTL errors during ANALYZE. See the sql.stats.max_timestamp_age
+		// setting.
+		return b.buildCreateStatistics(&tree.CreateStats{
+			Table: stmt.Table,
+			Options: tree.CreateStatsOptions{
+				AsOf: tree.AsOfClause{
+					Expr: tree.NewStrVal("-0.001ms"),
+				},
+			},
+		}, inScope)
 
 	case *tree.Export:
 		return b.buildExport(stmt, inScope)

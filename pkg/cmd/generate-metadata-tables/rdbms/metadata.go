@@ -15,7 +15,7 @@
 package rdbms
 
 import (
-	"io"
+	"context"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -49,9 +49,9 @@ type ColumnMetadataList struct {
 // DBMetadataConnection structs can describe a schema like pg_catalog or
 // information_schema.
 type DBMetadataConnection interface {
-	io.Closer
-	DescribeSchema() (*ColumnMetadataList, error)
-	DatabaseVersion() (string, error)
+	Close(ctx context.Context) error
+	DescribeSchema(ctx context.Context) (*ColumnMetadataList, error)
+	DatabaseVersion(ctx context.Context) (string, error)
 }
 
 // ForEachRow iterates over the rows gotten from DescribeSchema() call.

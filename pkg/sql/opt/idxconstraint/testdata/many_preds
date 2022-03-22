@@ -1,0 +1,74 @@
+index-constraints vars=(id INT, book_id INT, book2_id INT, citation_id INT) index=(id)
+  id = 0
+  AND book2_id = 0
+  OR id = 1 AND book2_id = 1
+  OR id = 3 AND book2_id = 4
+  OR id = 3 AND book2_id = 9
+  OR id = 5 AND book2_id = 16
+  OR id = 5 AND book2_id = 25
+  OR id = 6 AND book2_id = 36
+  OR id = 7 AND book2_id = 49
+  OR id = 8 AND book2_id = 64
+  OR id = 9 AND book2_id = 81
+  OR id = 10 AND book2_id = 100
+  OR id = 11 AND book2_id = 121
+  OR id = 12 AND book2_id = 144
+  OR id = 13 AND book2_id = 169
+  OR id = 14 AND book2_id = 196
+  OR id = 15 AND book2_id = 225
+  OR id = 16 AND book2_id = 256
+  OR id = 17 AND book2_id = 289
+  OR id = 18 AND book2_id = 324
+  OR id = 19 AND book2_id = 361
+  OR id = 20 AND book2_id = 400
+----
+[/0 - /1]
+[/3 - /3]
+[/5 - /20]
+Remaining filter: (((((((((((((((((((((id = 0) AND (book2_id = 0)) OR ((id = 1) AND (book2_id = 1))) OR ((id = 3) AND (book2_id = 4))) OR ((id = 3) AND (book2_id = 9))) OR ((id = 5) AND (book2_id = 16))) OR ((id = 5) AND (book2_id = 25))) OR ((id = 6) AND (book2_id = 36))) OR ((id = 7) AND (book2_id = 49))) OR ((id = 8) AND (book2_id = 64))) OR ((id = 9) AND (book2_id = 81))) OR ((id = 10) AND (book2_id = 100))) OR ((id = 11) AND (book2_id = 121))) OR ((id = 12) AND (book2_id = 144))) OR ((id = 13) AND (book2_id = 169))) OR ((id = 14) AND (book2_id = 196))) OR ((id = 15) AND (book2_id = 225))) OR ((id = 16) AND (book2_id = 256))) OR ((id = 17) AND (book2_id = 289))) OR ((id = 18) AND (book2_id = 324))) OR ((id = 19) AND (book2_id = 361))) OR ((id = 20) AND (book2_id = 400))
+
+index-constraints vars=(id INT, book_id INT, book2_id INT, citation_id INT) index=(id,book2_id)
+  id = 0
+  AND book2_id = 0
+  OR id = 1 AND book2_id = 1
+  OR id = 3 AND book2_id = 4
+  OR id = 3 AND book2_id = 9
+  OR id = 5 AND book2_id = 16
+  OR id = 5 AND book2_id = 25
+  OR id = 6 AND book2_id = 36
+  OR id = 7 AND book2_id = 49
+  OR id = 8 AND book2_id = 64
+  OR id = 9 AND book2_id = 81
+  OR id = 10 AND book2_id = 100
+  OR id = 11 AND book2_id = 121
+  OR id = 12 AND book2_id = 144
+  OR id = 13 AND book2_id = 169
+  OR id = 14 AND book2_id = 196
+  OR id = 15 AND book2_id = 225
+  OR id = 16 AND book2_id = 256
+  OR id = 17 AND book2_id = 289
+  OR id = 18 AND book2_id = 324
+  OR id = 19 AND book2_id = 361
+  OR id = 20 AND book2_id = 400
+----
+[/0/0 - /0/0]
+[/1/1 - /1/1]
+[/3/4 - /3/4]
+[/3/9 - /3/9]
+[/5/16 - /5/16]
+[/5/25 - /5/25]
+[/6/36 - /6/36]
+[/7/49 - /7/49]
+[/8/64 - /8/64]
+[/9/81 - /9/81]
+[/10/100 - /10/100]
+[/11/121 - /11/121]
+[/12/144 - /12/144]
+[/13/169 - /13/169]
+[/14/196 - /14/196]
+[/15/225 - /15/225]
+[/16/256 - /16/256]
+[/17/289 - /17/289]
+[/18/324 - /18/324]
+[/19/361 - /19/361]
+[/20/400 - /20/400]

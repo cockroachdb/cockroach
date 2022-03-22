@@ -58,7 +58,7 @@ eexpect root@
 system "grep -q 'sensitive_table_access.*ALTER TABLE.*helloworld.*SET OFF.*AccessMode\":\"rw\"' $logfile"
 end_test
 
-interrupt
+send_eof
 eexpect eof
 
 stop_server $argv
@@ -81,7 +81,7 @@ eexpect "ALTER TABLE"
 eexpect root@
 send "select x from d.helloworld;\r"
 eexpect root@
-interrupt
+send_eof
 eexpect eof
 
 # Check the file was created and populated properly.

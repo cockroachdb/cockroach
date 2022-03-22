@@ -56,7 +56,7 @@ const (
 		fulfilled BOOL,
 		PRIMARY KEY (user_zone, user_email, id),
 		FOREIGN KEY (user_zone, user_email) REFERENCES users
-	) INTERLEAVE IN PARENT users (user_zone, user_email)`
+	)`
 
 	defaultUsers  = 10000
 	defaultOrders = 100000
@@ -127,13 +127,6 @@ func (m *roachmart) Hooks() workload.Hooks {
 			}
 			if !found {
 				return fmt.Errorf("unknown zone %q (options: %s)", m.localZone, zones)
-			}
-			return nil
-		},
-
-		PreCreate: func(db *gosql.DB) error {
-			if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
-				return err
 			}
 			return nil
 		},

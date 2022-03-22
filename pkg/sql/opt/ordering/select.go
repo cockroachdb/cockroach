@@ -27,6 +27,10 @@ func selectBuildChildReqOrdering(
 	if childIdx != 0 {
 		return props.OrderingChoice{}
 	}
+	if required.Any() {
+		return *required
+	}
+
 	child := parent.(*memo.SelectExpr).Input
 
 	// Use interesting orderings from the child to "guide" the required ordering

@@ -5,282 +5,267 @@ CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
-- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "j"}
-  state: ABSENT
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
-    column:
-      id: 2
-      name: j
-      nullable: true
+    columnId: 2
+    tableId: 104
+- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    name: j
+    tableId: 104
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedTypeT:
       type:
         family: IntFamily
         oid: 20
         width: 64
-    familyName: primary
-    tableId: 52
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
-  state: ABSENT
+    isNullable: true
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 2
-      interleave: {}
+    indexId: 1
+    name: foo_pkey
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    indexId: 2
+    name: foo_pkey
+    tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
       keyColumnDirections:
       - ASC
       keyColumnIds:
       - 1
-      keyColumnNames:
-      - i
-      name: new_primary_key
-      partitioning: {}
-      sharded: {}
-      storeColumnIds:
+      tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
       - 2
-      storeColumnNames:
-      - j
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 1
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
-  state: PUBLIC
-  details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 1
-      interleave: {}
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      keyColumnNames:
-      - i
-      name: primary
-      partitioning: {}
-      sharded: {}
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 2
-    tableId: 52
+      tableId: 104
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
-- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "j"}
-  state: ABSENT
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
-    column:
-      defaultExpr: 123:::INT8
-      id: 2
-      name: j
-      nullable: true
+    columnId: 2
+    tableId: 104
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedExpr:
+      expr: 123:::INT8
+    tableId: 104
+- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    name: j
+    tableId: 104
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedTypeT:
       type:
         family: IntFamily
         oid: 20
         width: 64
-    familyName: primary
-    tableId: 52
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
-  state: ABSENT
+    isNullable: true
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 2
-      interleave: {}
+    indexId: 1
+    name: foo_pkey
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    indexId: 2
+    name: foo_pkey
+    tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
       keyColumnDirections:
       - ASC
       keyColumnIds:
       - 1
-      keyColumnNames:
-      - i
-      name: new_primary_key
-      partitioning: {}
-      sharded: {}
-      storeColumnIds:
+      tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
       - 2
-      storeColumnNames:
-      - j
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 1
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
-  state: PUBLIC
-  details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 1
-      interleave: {}
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      keyColumnNames:
-      - i
-      name: primary
-      partitioning: {}
-      sharded: {}
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 2
-    tableId: 52
+      tableId: 104
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
-- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "j"}
-  state: ABSENT
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
-    column:
-      defaultExpr: 123:::INT8
-      id: 2
-      name: j
-      nullable: true
+    columnId: 2
+    tableId: 104
+- [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    tableId: 104
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedExpr:
+      expr: 123:::INT8
+    tableId: 104
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    embeddedExpr:
+      expr: 456:::INT8
+    tableId: 104
+- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    name: j
+    tableId: 104
+- [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    name: k
+    tableId: 104
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedTypeT:
       type:
         family: IntFamily
         oid: 20
         width: 64
-    familyName: primary
-    tableId: 52
-- ADD Column:{DescID: 52, ColumnID: 3, ElementName: "k"}
-  state: ABSENT
+    isNullable: true
+    tableId: 104
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT]
   details:
-    column:
-      defaultExpr: 456:::INT8
-      id: 3
-      name: k
-      nullable: true
+    columnId: 3
+    embeddedTypeT:
       type:
         family: IntFamily
         oid: 20
         width: 64
-    familyName: primary
-    tableId: 52
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
-  state: ABSENT
+    isNullable: true
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 2
-      interleave: {}
+    indexId: 1
+    name: foo_pkey
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    indexId: 2
+    name: foo_pkey
+    tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
       keyColumnDirections:
       - ASC
       keyColumnIds:
       - 1
-      keyColumnNames:
-      - i
-      name: new_primary_key
-      partitioning: {}
-      sharded: {}
-      storeColumnIds:
+      tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
       - 2
       - 3
-      storeColumnNames:
-      - j
-      - k
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 1
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
-  state: PUBLIC
-  details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 1
-      interleave: {}
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      keyColumnNames:
-      - i
-      name: primary
-      partitioning: {}
-      sharded: {}
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 2
-    tableId: 52
+      tableId: 104
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "a"}
-  state: ABSENT
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
-    column:
-      computeExpr: i + 1:::INT8
-      id: 2
-      name: a
-      nullable: true
+    columnId: 2
+    tableId: 104
+- [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    name: a
+    tableId: 104
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    computeExpr:
+      expr: i + 1:::INT8
+    embeddedTypeT:
       type:
         family: IntFamily
         oid: 20
         width: 64
-    familyName: primary
-    tableId: 52
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
-  state: ABSENT
+    isNullable: true
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 2
-      interleave: {}
+    indexId: 1
+    name: foo_pkey
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    indexId: 2
+    name: foo_pkey
+    tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
       keyColumnDirections:
       - ASC
       keyColumnIds:
       - 1
-      keyColumnNames:
-      - i
-      name: new_primary_key
-      partitioning: {}
-      sharded: {}
-      storeColumnIds:
+      tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
       - 2
-      storeColumnNames:
-      - a
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 1
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
-  state: PUBLIC
-  details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 1
-      interleave: {}
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      keyColumnNames:
-      - i
-      name: primary
-      partitioning: {}
-      sharded: {}
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 2
-    tableId: 52
+      tableId: 104
 
 create-table
 CREATE TABLE defaultdb.bar (j INT);
@@ -290,131 +275,110 @@ build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
-- ADD Column:{DescID: 52, ColumnID: 2, ElementName: "a"}
-  state: ABSENT
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
-    column:
-      id: 2
-      name: a
-      nullable: true
+    columnId: 2
+    tableId: 104
+- [[Column:{DescID: 105, ColumnID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    tableId: 105
+- [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    name: a
+    tableId: 104
+- [[ColumnName:{DescID: 105, Name: b, ColumnID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    name: b
+    tableId: 105
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedTypeT:
       type:
         family: IntFamily
         oid: 20
         width: 64
-    familyName: primary
-    tableId: 52
-- ADD Column:{DescID: 53, ColumnID: 3, ElementName: "b"}
-  state: ABSENT
+    isNullable: true
+    tableId: 104
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT]
   details:
-    column:
-      id: 3
-      name: b
-      nullable: true
+    columnId: 3
+    embeddedTypeT:
       type:
         family: IntFamily
         oid: 20
         width: 64
-    familyName: primary
-    tableId: 53
-- ADD PrimaryIndex:{DescID: 52, ElementName: "new_primary_key", IndexID: 2}
-  state: ABSENT
+    isNullable: true
+    tableId: 105
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 2
-      interleave: {}
+    indexId: 1
+    name: foo_pkey
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    indexId: 2
+    name: foo_pkey
+    tableId: 104
+- [[IndexName:{DescID: 105, Name: bar_pkey, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    indexId: 1
+    name: bar_pkey
+    tableId: 105
+- [[IndexName:{DescID: 105, Name: bar_pkey, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    indexId: 2
+    name: bar_pkey
+    tableId: 105
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
       keyColumnDirections:
       - ASC
       keyColumnIds:
       - 1
-      keyColumnNames:
-      - i
-      name: new_primary_key
-      partitioning: {}
-      sharded: {}
-      storeColumnIds:
-      - 2
-      storeColumnNames:
-      - a
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 1
-    tableId: 52
-- ADD PrimaryIndex:{DescID: 53, ElementName: "new_primary_key", IndexID: 2}
-  state: ABSENT
+      tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 2
-      interleave: {}
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
+      - 2
+      tableId: 104
+- [[PrimaryIndex:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
       keyColumnDirections:
       - ASC
       keyColumnIds:
       - 2
-      keyColumnNames:
-      - rowid
-      name: new_primary_key
-      partitioning: {}
-      sharded: {}
-      storeColumnIds:
+      storingColumnIds:
+      - 1
+      tableId: 105
+- [[PrimaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      sourceIndexId: 1
+      storingColumnIds:
       - 1
       - 3
-      storeColumnNames:
-      - j
-      - b
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 1
-    tableId: 53
-- DROP PrimaryIndex:{DescID: 52, ElementName: "primary", IndexID: 1}
-  state: PUBLIC
-  details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 1
-      interleave: {}
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      keyColumnNames:
-      - i
-      name: primary
-      partitioning: {}
-      sharded: {}
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 2
-    tableId: 52
-- DROP PrimaryIndex:{DescID: 53, ElementName: "primary", IndexID: 1}
-  state: PUBLIC
-  details:
-    index:
-      encodingType: 1
-      foreignKey: {}
-      geoConfig: {}
-      id: 1
-      interleave: {}
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 2
-      keyColumnNames:
-      - rowid
-      name: primary
-      partitioning: {}
-      sharded: {}
-      storeColumnIds:
-      - 1
-      storeColumnNames:
-      - j
-      unique: true
-      version: 4
-    otherPrimaryIndexId: 2
-    tableId: 53
+      tableId: 105

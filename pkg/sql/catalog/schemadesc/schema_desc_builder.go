@@ -11,9 +11,8 @@
 package schemadesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -29,9 +28,10 @@ type SchemaDescriptorBuilder interface {
 }
 
 type schemaDescriptorBuilder struct {
-	original      *descpb.SchemaDescriptor
-	maybeModified *descpb.SchemaDescriptor
-	changed       bool
+	original             *descpb.SchemaDescriptor
+	maybeModified        *descpb.SchemaDescriptor
+	isUncommittedVersion bool
+	changes              catalog.PostDeserializationChanges
 }
 
 var _ SchemaDescriptorBuilder = &schemaDescriptorBuilder{}
@@ -39,8 +39,19 @@ var _ SchemaDescriptorBuilder = &schemaDescriptorBuilder{}
 // NewBuilder creates a new catalog.DescriptorBuilder object for building
 // schema descriptors.
 func NewBuilder(desc *descpb.SchemaDescriptor) SchemaDescriptorBuilder {
+	return newBuilder(desc, false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{})
+}
+
+func newBuilder(
+	desc *descpb.SchemaDescriptor,
+	isUncommittedVersion bool,
+	changes catalog.PostDeserializationChanges,
+) SchemaDescriptorBuilder {
 	return &schemaDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.SchemaDescriptor),
+		original:             protoutil.Clone(desc).(*descpb.SchemaDescriptor),
+		isUncommittedVersion: isUncommittedVersion,
+		changes:              changes,
 	}
 }
 
@@ -51,12 +62,26 @@ func (sdb *schemaDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges(
-	_ context.Context, _ catalog.DescGetter,
-) error {
+func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() error {
 	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
-	sdb.changed = descpb.MaybeFixPrivileges(sdb.maybeModified.GetID(), sdb.maybeModified.GetParentID(),
-		&sdb.maybeModified.Privileges, privilege.Schema)
+	privsChanged := catprivilege.MaybeFixPrivileges(
+		&sdb.maybeModified.Privileges,
+		sdb.maybeModified.GetParentID(),
+		descpb.InvalidID,
+		privilege.Schema,
+		sdb.maybeModified.GetName(),
+	)
+	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(sdb.maybeModified.Privileges)
+	if privsChanged || addedGrantOptions {
+		sdb.changes.Add(catalog.UpgradedPrivileges)
+	}
+	return nil
+}
+
+// RunRestoreChanges implements the catalog.DescriptorBuilder interface.
+func (sdb *schemaDescriptorBuilder) RunRestoreChanges(
+	_ func(id descpb.ID) catalog.Descriptor,
+) error {
 	return nil
 }
 
@@ -71,7 +96,11 @@ func (sdb *schemaDescriptorBuilder) BuildImmutableSchema() catalog.SchemaDescrip
 	if desc == nil {
 		desc = sdb.original
 	}
-	return &immutable{SchemaDescriptor: *desc}
+	return &immutable{
+		SchemaDescriptor:     *desc,
+		changes:              sdb.changes,
+		isUncommittedVersion: sdb.isUncommittedVersion,
+	}
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
@@ -86,9 +115,12 @@ func (sdb *schemaDescriptorBuilder) BuildExistingMutableSchema() *Mutable {
 		sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
 	}
 	return &Mutable{
-		immutable:      immutable{SchemaDescriptor: *sdb.maybeModified},
+		immutable: immutable{
+			SchemaDescriptor:     *sdb.maybeModified,
+			changes:              sdb.changes,
+			isUncommittedVersion: sdb.isUncommittedVersion,
+		},
 		ClusterVersion: &immutable{SchemaDescriptor: *sdb.original},
-		changed:        sdb.changed,
 	}
 }
 
@@ -101,7 +133,9 @@ func (sdb *schemaDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescrip
 // which is in the process of being created.
 func (sdb *schemaDescriptorBuilder) BuildCreatedMutableSchema() *Mutable {
 	return &Mutable{
-		immutable: immutable{SchemaDescriptor: *sdb.original},
-		changed:   sdb.changed,
+		immutable: immutable{
+			SchemaDescriptor: *sdb.original,
+			changes:          sdb.changes,
+		},
 	}
 }

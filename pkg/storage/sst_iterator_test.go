@@ -11,11 +11,13 @@
 package storage
 
 import (
+	"context"
 	"io/ioutil"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -75,8 +77,10 @@ func TestSSTIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	sstFile := &MemFile{}
-	sst := MakeIngestionSSTWriter(sstFile)
+	sst := MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer sst.Close()
 	var allKVs []MVCCKeyValue
 	for i := 0; i < 10; i++ {
@@ -125,35 +129,4 @@ func TestSSTIterator(t *testing.T) {
 		defer iter.Close()
 		runTestSSTIterator(t, iter, allKVs)
 	})
-}
-
-func TestCockroachComparer(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	keyAMetadata := MVCCKey{
-		Key: []byte("a"),
-	}
-	keyA2 := MVCCKey{
-		Key:       []byte("a"),
-		Timestamp: hlc.Timestamp{WallTime: 2},
-	}
-	keyA1 := MVCCKey{
-		Key:       []byte("a"),
-		Timestamp: hlc.Timestamp{WallTime: 1},
-	}
-	keyB2 := MVCCKey{
-		Key:       []byte("b"),
-		Timestamp: hlc.Timestamp{WallTime: 2},
-	}
-
-	if x := EngineComparer.Compare(EncodeKey(keyAMetadata), EncodeKey(keyA1)); x != -1 {
-		t.Errorf("expected key metadata to sort first got: %d", x)
-	}
-	if x := EngineComparer.Compare(EncodeKey(keyA2), EncodeKey(keyA1)); x != -1 {
-		t.Errorf("expected higher timestamp to sort first got: %d", x)
-	}
-	if x := EngineComparer.Compare(EncodeKey(keyA2), EncodeKey(keyB2)); x != -1 {
-		t.Errorf("expected lower key to sort first got: %d", x)
-	}
 }

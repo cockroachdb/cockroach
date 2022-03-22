@@ -195,7 +195,7 @@ ORDER BY
 
 func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Constraints)
-	const getConstraintsQuery = `
+	getConstraintsQuery := `
     SELECT
         t.relname AS table_name,
         c.conname AS constraint_name,
@@ -207,8 +207,14 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
            ELSE c.contype::TEXT
         END AS constraint_type,
         c.condef AS details,
-        c.convalidated AS validated
-    FROM
+        c.convalidated AS validated`
+
+	if n.WithComment {
+		getConstraintsQuery += `,
+	obj_description(c.oid) AS comment`
+	}
+	getConstraintsQuery += `
+FROM
        %[4]s.pg_catalog.pg_class t,
        %[4]s.pg_catalog.pg_namespace n,
        %[4]s.pg_catalog.pg_constraint c
@@ -226,7 +232,7 @@ func (d *delegator) delegateShowCreateAllTables() (tree.Statement, error) {
 	const showCreateAllTablesQuery = `
 	SELECT crdb_internal.show_create_all_tables(%[1]s) AS create_statement;
 `
-	databaseLiteral := d.evalCtx.SessionData.Database
+	databaseLiteral := d.evalCtx.SessionData().Database
 
 	query := fmt.Sprintf(showCreateAllTablesQuery,
 		lexbase.EscapeSQLString(databaseLiteral),

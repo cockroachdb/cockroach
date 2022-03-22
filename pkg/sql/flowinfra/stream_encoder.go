@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -54,7 +55,7 @@ type StreamEncoder struct {
 	// typingSent is set after the first message that contains any rows has been
 	// sent.
 	typingSent bool
-	alloc      rowenc.DatumAlloc
+	alloc      tree.DatumAlloc
 
 	// Preallocated structures to avoid allocations.
 	msg    execinfrapb.ProducerMessage
@@ -109,7 +110,7 @@ func (se *StreamEncoder) AddRow(row rowenc.EncDatumRow) error {
 			}
 			sType := se.infos[i].Type
 			if enc != descpb.DatumEncoding_VALUE &&
-				(colinfo.HasCompositeKeyEncoding(sType) || colinfo.MustBeValueEncoded(sType)) {
+				(colinfo.CanHaveCompositeKeyEncoding(sType) || colinfo.MustBeValueEncoded(sType)) {
 				// Force VALUE encoding for composite types (key encodings may lose data).
 				enc = descpb.DatumEncoding_VALUE
 			}

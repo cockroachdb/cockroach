@@ -95,7 +95,7 @@ eexpect "8"
 eexpect "(1 row)"
 eexpect "movr>"
 
-interrupt
+send_eof
 eexpect $prompt
 end_test
 
@@ -119,7 +119,7 @@ eexpect "  survival_goal"
 eexpect "zone"
 eexpect "movr>"
 
-interrupt
+send_eof
 eexpect $prompt
 
 send "$argv demo movr --geo-partitioned-replicas --multi-region --survive=region\r"
@@ -131,7 +131,7 @@ eexpect "  survival_goal"
 eexpect "region"
 eexpect "movr>"
 
-interrupt
+send_eof
 eexpect $prompt
 
 end_test

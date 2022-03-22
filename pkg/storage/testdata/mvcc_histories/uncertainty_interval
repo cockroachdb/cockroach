@@ -26,7 +26,7 @@ with k=k2
 txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 data: "k1"/20.000000000,0 -> /BYTES/v2
 data: "k1"/10.000000000,0 -> /BYTES/v
-meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=7
+meta: "k2"/0,0 -> txn={id=00000000 key="k2" pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k2"/20.000000000,0 -> /BYTES/v4
 data: "k2"/10.000000000,0 -> /BYTES/v3
 

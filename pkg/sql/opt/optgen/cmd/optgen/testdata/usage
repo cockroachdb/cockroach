@@ -15,12 +15,15 @@ Usage:
 
 The commands are:
 
-	compile    generate the optgen compiled format
-	explorer   generate expression tree exploration rules
-	exprs      generate expression definitions and functions
-	factory    generate expression tree creation and normalization functions
-	ops        generate operator definitions and functions
-	rulenames  generate enumeration of rule names
+	compile      generate the optgen compiled format
+	explorer     generate expression tree exploration rules
+	exprs        generate expression definitions and functions
+	factory      generate expression tree creation and normalization functions
+	ops          generate operator definitions and functions
+	rulenames    generate enumeration of rule names
+	execfactory  generate exec.Factory interface
+	execexplain  generate explain factory
+	execplangist generate plan gist factory
 
 The sources can be file names and/or filepath.Glob patterns.
 
@@ -47,12 +50,15 @@ Usage:
 
 The commands are:
 
-	compile    generate the optgen compiled format
-	explorer   generate expression tree exploration rules
-	exprs      generate expression definitions and functions
-	factory    generate expression tree creation and normalization functions
-	ops        generate operator definitions and functions
-	rulenames  generate enumeration of rule names
+	compile      generate the optgen compiled format
+	explorer     generate expression tree exploration rules
+	exprs        generate expression definitions and functions
+	factory      generate expression tree creation and normalization functions
+	ops          generate operator definitions and functions
+	rulenames    generate enumeration of rule names
+	execfactory  generate exec.Factory interface
+	execexplain  generate explain factory
+	execplangist generate plan gist factory
 
 The sources can be file names and/or filepath.Glob patterns.
 
@@ -80,12 +86,15 @@ Usage:
 
 The commands are:
 
-	compile    generate the optgen compiled format
-	explorer   generate expression tree exploration rules
-	exprs      generate expression definitions and functions
-	factory    generate expression tree creation and normalization functions
-	ops        generate operator definitions and functions
-	rulenames  generate enumeration of rule names
+	compile      generate the optgen compiled format
+	explorer     generate expression tree exploration rules
+	exprs        generate expression definitions and functions
+	factory      generate expression tree creation and normalization functions
+	ops          generate operator definitions and functions
+	rulenames    generate enumeration of rule names
+	execfactory  generate exec.Factory interface
+	execexplain  generate explain factory
+	execplangist generate plan gist factory
 
 The sources can be file names and/or filepath.Glob patterns.
 

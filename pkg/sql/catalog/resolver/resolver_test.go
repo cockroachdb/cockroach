@@ -129,6 +129,8 @@ func (f *fakeMetadata) LookupObject(
 				if !hasDb {
 					return false, prefix, nil, nil
 				}
+				prefix.Database = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{Name: dbName}).
+					BuildImmutableDatabase()
 			}
 			// Db valid, check the table name.
 			for tbIdx, tb := range v.tables {
@@ -148,6 +150,8 @@ func (f *fakeMetadata) LookupObject(
 	for i := range f.knownCatalogs {
 		c := &f.knownCatalogs[i]
 		if dbName == string(c.ctName) {
+			prefix.Database = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{Name: dbName}).
+				BuildImmutableDatabase()
 			for j := range c.schemas {
 				s := &c.schemas[j]
 				if scName == string(s.scName) {

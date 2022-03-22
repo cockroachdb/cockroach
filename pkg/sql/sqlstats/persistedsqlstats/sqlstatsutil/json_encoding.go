@@ -54,7 +54,6 @@ func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
 //        "db":                   { "type": "string" },
 //        "distsql":              { "type": "boolean" },
 //        "failed":               { "type": "boolean" },
-//        "opt":                  { "type": "boolean" },
 //        "implicitTxn":          { "type": "boolean" },
 //        "vec":                  { "type": "boolean" },
 //        "fullScan":             { "type": "boolean" },
@@ -82,6 +81,12 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //          },
 //          "required": ["mean", "sqDiff"]
 //        },
+//        "node_ids": {
+//          "type": "array",
+//          "items": {
+//            "type": "int",
+//          },
+//        },
 //        "statistics": {
 //          "type": "object",
 //          "properties": {
@@ -97,6 +102,7 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //            "rowsRead":          { "$ref": "#/definitions/numeric_stats" }
 //            "firstExecAt":       { "type": "string" },
 //            "lastExecAt":        { "type": "string" },
+//            "nodes":             { "type": "node_ids" },
 //          },
 //          "required": [
 //            "firstAttemptCnt",
@@ -108,7 +114,8 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //            "svcLat",
 //            "ovhLat",
 //            "bytesRead",
-//            "rowsRead"
+//            "rowsRead",
+//            "nodes"
 //          ]
 //        },
 //        "execution_statistics": {
@@ -238,6 +245,38 @@ func BuildTxnMetadataJSON(statistics *roachpb.CollectedTransactionStatistics) (j
 // }
 func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) (json.JSON, error) {
 	return (*txnStats)(&statistics.Stats).encodeJSON()
+}
+
+// BuildStmtDetailsMetadataJSON returns a json.JSON object for the aggregated metadata
+// roachpb.AggregatedStatementMetadata.
+// JSON Schema for statement aggregated metadata:
+//   {
+//     "$schema": "https://json-schema.org/draft/2020-12/schema",
+//     "title": "system.statement_statistics.aggregated_metadata",
+//     "type": "object",
+//
+//     "properties": {
+//       "stmtType":             { "type": "string" },
+//       "query":                { "type": "string" },
+//       "querySummary":         { "type": "string" },
+//       "implicitTxn":          { "type": "boolean" },
+//       "distSQLCount":         { "type": "number" },
+//       "failedCount":          { "type": "number" },
+//       "vecCount":             { "type": "number" },
+//       "fullScanCount":        { "type": "number" },
+//       "totalCount":           { "type": "number" },
+//       "db":                   {
+//      		"type": "array",
+//      		"items": {
+//      		  "type": "string"
+//      		}
+//     	},
+//     }
+//   }
+func BuildStmtDetailsMetadataJSON(
+	metadata *roachpb.AggregatedStatementMetadata,
+) (json.JSON, error) {
+	return (*aggregatedMetadata)(metadata).jsonFields().encodeJSON()
 }
 
 // EncodeUint64ToBytes returns the []byte representation of an uint64 value.

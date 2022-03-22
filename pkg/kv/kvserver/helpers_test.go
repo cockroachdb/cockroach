@@ -21,10 +21,8 @@ import (
 	"math/rand"
 	"testing"
 	"time"
-	"unsafe"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -34,9 +32,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	circuit2 "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -51,10 +51,10 @@ func (s *Store) Transport() *RaftTransport {
 }
 
 func (s *Store) FindTargetAndTransferLease(
-	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, zone *zonepb.ZoneConfig,
+	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
 ) (bool, error) {
 	transferStatus, err := s.replicateQueue.shedLease(
-		ctx, repl, desc, zone, transferLeaseOptions{},
+		ctx, repl, desc, conf, transferLeaseOptions{},
 	)
 	return transferStatus == transferOK, err
 }
@@ -171,7 +171,7 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 func manualQueue(s *Store, q queueImpl, repl *Replica) error {
-	cfg := s.Gossip().GetSystemConfig()
+	cfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 	if cfg == nil {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
@@ -180,9 +180,9 @@ func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 	return err
 }
 
-// ManualGC processes the specified replica using the store's GC queue.
-func (s *Store) ManualGC(repl *Replica) error {
-	return manualQueue(s, s.gcQueue, repl)
+// ManualMVCCGC processes the specified replica using the store's MVCC GC queue.
+func (s *Store) ManualMVCCGC(repl *Replica) error {
+	return manualQueue(s, s.mvccGCQueue, repl)
 }
 
 // ManualReplicaGC processes the specified replica using the store's replica
@@ -205,18 +205,6 @@ func (s *Store) RaftSchedulerPriorityID() roachpb.RangeID {
 	return s.scheduler.PriorityID()
 }
 
-// ClearClosedTimestampStorage clears the closed timestamp storage of all
-// knowledge about closed timestamps.
-func (s *Store) ClearClosedTimestampStorage() {
-	s.cfg.ClosedTimestamp.Storage.Clear()
-}
-
-// RequestClosedTimestamp instructs the closed timestamp client to request the
-// relevant node to publish its MLAI for the provided range.
-func (s *Store) RequestClosedTimestamp(nodeID roachpb.NodeID, rangeID roachpb.RangeID) {
-	s.cfg.ClosedTimestamp.Clients.Request(nodeID, rangeID)
-}
-
 func NewTestStorePool(cfg StoreConfig) *StorePool {
 	TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, TestTimeUntilStoreDeadOff)
 	return NewStorePool(
@@ -233,6 +221,10 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		},
 		/* deterministic */ false,
 	)
+}
+
+func (r *Replica) Breaker() *circuit2.Breaker {
+	return r.breaker.wrapped
 }
 
 func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
@@ -259,15 +251,17 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	return r.raftLastIndexLocked()
 }
 
+// LastAssignedLeaseIndexRLocked returns the last assigned lease index.
 func (r *Replica) LastAssignedLeaseIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
 }
 
-// MaxClosed returns the maximum closed timestamp known to the Replica.
-func (r *Replica) MaxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
-	return r.maxClosed(ctx)
+// LastAssignedLeaseIndexRLocked is like LastAssignedLeaseIndex, but requires
+// b.mu to be held in read mode.
+func (b *propBuf) LastAssignedLeaseIndexRLocked() uint64 {
+	return b.assignedLAI
 }
 
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
@@ -397,9 +391,11 @@ func (r *Replica) LoadBasedSplitter() *split.Decider {
 	return &r.loadBasedSplitter
 }
 
-func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, storage.MVCCKeyValue) {
+func MakeSSTable(
+	ctx context.Context, key, value string, ts hlc.Timestamp,
+) ([]byte, storage.MVCCKeyValue) {
 	sstFile := &storage.MemFile{}
-	sst := storage.MakeIngestionSSTWriter(sstFile)
+	sst := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), sstFile)
 	defer sst.Close()
 
 	v := roachpb.MakeValueFromBytes([]byte(value))
@@ -427,7 +423,7 @@ func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, s
 	ba.RangeID = store.LookupReplica(roachpb.RKey(key)).RangeID
 
 	var addReq roachpb.AddSSTableRequest
-	addReq.Data, _ = MakeSSTable(key, val, ts)
+	addReq.Data, _ = MakeSSTable(ctx, key, val, ts)
 	addReq.Key = roachpb.Key(key)
 	addReq.EndKey = addReq.Key.Next()
 	ba.Add(&addReq)
@@ -474,18 +470,20 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	return r.getQueueLastProcessed(ctx, queue)
 }
 
-func (r *Replica) UnquiesceAndWakeLeader() {
+func (r *Replica) MaybeUnquiesceAndWakeLeader() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.unquiesceAndWakeLeaderLocked()
+	return r.maybeUnquiesceAndWakeLeaderLocked()
 }
 
-func (r *Replica) ReadProtectedTimestamps(ctx context.Context) {
+func (r *Replica) ReadProtectedTimestamps(ctx context.Context) error {
 	var ts cachedProtectedTimestampState
 	defer r.maybeUpdateCachedProtectedTS(&ts)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ts = r.readProtectedTimestampsRLocked(ctx, nil /* f */)
+	var err error
+	ts, err = r.readProtectedTimestampsRLocked(ctx)
+	return err
 }
 
 // ClosedTimestampPolicy returns the closed timestamp policy of the range, which
@@ -494,6 +492,11 @@ func (r *Replica) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.closedTimestampPolicyRLocked()
+}
+
+// TripBreaker synchronously trips the breaker.
+func (r *Replica) TripBreaker() {
+	r.breaker.tripSync(errors.New("injected error"))
 }
 
 // GetCircuitBreaker returns the circuit breaker controlling
@@ -526,7 +529,7 @@ func WriteRandomDataToRange(
 }
 
 func WatchForDisappearingReplicas(t testing.TB, store *Store) {
-	m := make(map[int64]struct{})
+	m := make(map[roachpb.RangeID]struct{})
 	for {
 		select {
 		case <-store.Stopper().ShouldQuiesce():
@@ -534,13 +537,12 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 		default:
 		}
 
-		store.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-			m[k] = struct{}{}
-			return true
+		store.mu.replicasByRangeID.Range(func(repl *Replica) {
+			m[repl.RangeID] = struct{}{}
 		})
 
 		for k := range m {
-			if _, ok := store.mu.replicas.Load(k); !ok {
+			if _, ok := store.mu.replicasByRangeID.Load(k); !ok {
 				t.Fatalf("r%d disappeared from Store.mu.replicas map", k)
 			}
 		}

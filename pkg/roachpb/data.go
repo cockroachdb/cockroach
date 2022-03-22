@@ -22,13 +22,13 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/keysbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -58,7 +58,7 @@ var (
 	// KeyMin is a minimum key value which sorts before all other keys.
 	KeyMin = Key(RKeyMin)
 	// RKeyMax is a maximum key value which sorts after all other keys.
-	RKeyMax = RKey{0xff, 0xff}
+	RKeyMax = RKey(keysbase.KeyMax)
 	// KeyMax is a maximum key value which sorts after all other keys.
 	KeyMax = Key(RKeyMax)
 
@@ -124,10 +124,7 @@ func (rk RKey) Next() RKey {
 // is added to the final byte and the carry propagated. The special
 // cases of nil and KeyMin always returns KeyMax.
 func (rk RKey) PrefixEnd() RKey {
-	if len(rk) == 0 {
-		return RKeyMax
-	}
-	return RKey(bytesPrefixEnd(rk))
+	return RKey(keysbase.PrefixEnd(rk))
 }
 
 func (rk RKey) String() string {
@@ -160,19 +157,14 @@ func BytesNext(b []byte) []byte {
 	return bn
 }
 
-func bytesPrefixEnd(b []byte) []byte {
-	// Switched to "make and copy" pattern in #4963 for performance.
-	end := make([]byte, len(b))
-	copy(end, b)
-	for i := len(end) - 1; i >= 0; i-- {
-		end[i] = end[i] + 1
-		if end[i] != 0 {
-			return end[:i+1]
-		}
+// Clone returns a copy of the key.
+func (k Key) Clone() Key {
+	if k == nil {
+		return nil
 	}
-	// This statement will only be reached if the key is already a
-	// maximal byte string (i.e. already \xff...).
-	return b
+	c := make(Key, len(k))
+	copy(c, k)
+	return c
 }
 
 // Next returns the next key in lexicographic sort order. The method may only
@@ -193,10 +185,7 @@ func (k Key) IsPrev(m Key) bool {
 // is added to the final byte and the carry propagated. The special
 // cases of nil and KeyMin always returns KeyMax.
 func (k Key) PrefixEnd() Key {
-	if len(k) == 0 {
-		return Key(RKeyMax)
-	}
-	return Key(bytesPrefixEnd(k))
+	return Key(keysbase.PrefixEnd(k))
 }
 
 // Equal returns whether two keys are identical.
@@ -904,7 +893,8 @@ func (ts TransactionStatus) IsFinalized() bool {
 	return ts == COMMITTED || ts == ABORTED
 }
 
-var _ errors.SafeMessager = Transaction{}
+// SafeValue implements the redact.SafeValue interface.
+func (TransactionStatus) SafeValue() {}
 
 // MakeTransaction creates a new transaction. The transaction key is
 // composed using the specified baseKey (for locality with data
@@ -914,10 +904,20 @@ var _ errors.SafeMessager = Transaction{}
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
 //
+// coordinatorNodeID is provided to track the SQL (or possibly KV) node
+// that created this transaction, in order to be used (as
+// of this writing) to enable observability on contention events
+// between different transactions.
+//
 // baseKey can be nil, in which case it will be set when sending the first
 // write.
 func MakeTransaction(
-	name string, baseKey Key, userPriority UserPriority, now hlc.Timestamp, maxOffsetNs int64,
+	name string,
+	baseKey Key,
+	userPriority UserPriority,
+	now hlc.Timestamp,
+	maxOffsetNs int64,
+	coordinatorNodeID int32,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
@@ -927,12 +927,13 @@ func MakeTransaction(
 
 	return Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			Key:            baseKey,
-			ID:             u,
-			WriteTimestamp: now,
-			MinTimestamp:   now,
-			Priority:       MakePriority(userPriority),
-			Sequence:       0, // 1-indexed, incremented before each Request
+			Key:               baseKey,
+			ID:                u,
+			WriteTimestamp:    now,
+			MinTimestamp:      now,
+			Priority:          MakePriority(userPriority),
+			Sequence:          0, // 1-indexed, incremented before each Request
+			CoordinatorNodeID: coordinatorNodeID,
 		},
 		Name:                   name,
 		LastHeartbeat:          now,
@@ -1267,48 +1268,26 @@ func (t *Transaction) LocksAsLockUpdates() []LockUpdate {
 }
 
 // String formats transaction into human readable string.
-//
-// NOTE: When updating String(), you probably want to also update SafeMessage().
 func (t Transaction) String() string {
-	var buf strings.Builder
-	if len(t.Name) > 0 {
-		fmt.Fprintf(&buf, "%q ", t.Name)
-	}
-	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
-		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
-	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
-		fmt.Fprintf(&buf, " int=%d", ni)
-	}
-	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
-		fmt.Fprintf(&buf, " ifw=%d", nw)
-	}
-	if ni := len(t.IgnoredSeqNums); ni > 0 {
-		fmt.Fprintf(&buf, " isn=%d", ni)
-	}
-	return buf.String()
+	return redact.StringWithoutMarkers(t)
 }
 
-// SafeMessage implements the SafeMessager interface.
-//
-// This method should be kept largely synchronized with String(), except that it
-// can't include sensitive info (e.g. the transaction key).
-func (t Transaction) SafeMessage() string {
-	var buf strings.Builder
+// SafeFormat implements the redact.SafeFormatter interface.
+func (t Transaction) SafeFormat(w redact.SafePrinter, _ rune) {
 	if len(t.Name) > 0 {
-		fmt.Fprintf(&buf, "%q ", t.Name)
+		w.Printf("%q ", redact.SafeString(t.Name))
 	}
-	fmt.Fprintf(&buf, "meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
-		t.TxnMeta.SafeMessage(), t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
+	w.Printf("meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
+		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
 	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
-		fmt.Fprintf(&buf, " int=%d", ni)
+		w.Printf(" int=%d", ni)
 	}
 	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
-		fmt.Fprintf(&buf, " ifw=%d", nw)
+		w.Printf(" ifw=%d", nw)
 	}
 	if ni := len(t.IgnoredSeqNums); ni > 0 {
-		fmt.Fprintf(&buf, " isn=%d", ni)
+		w.Printf(" isn=%d", ni)
 	}
-	return buf.String()
 }
 
 // ResetObservedTimestamps clears out all timestamps recorded from individual
@@ -1468,23 +1447,43 @@ func PrepareTransactionForRetry(
 			NormalUserPriority,
 			now.ToTimestamp(),
 			clock.MaxOffset().Nanoseconds(),
+			txn.CoordinatorNodeID,
 		)
 		// Use the priority communicated back by the server.
 		txn.Priority = errTxnPri
 	case *ReadWithinUncertaintyIntervalError:
-		txn.WriteTimestamp.Forward(readWithinUncertaintyIntervalRetryTimestamp(tErr))
+		txn.WriteTimestamp.Forward(tErr.RetryTimestamp())
 	case *TransactionPushError:
 		// Increase timestamp if applicable, ensuring that we're just ahead of
 		// the pushee.
 		txn.WriteTimestamp.Forward(tErr.PusheeTxn.WriteTimestamp)
 		txn.UpgradePriority(tErr.PusheeTxn.Priority - 1)
 	case *TransactionRetryError:
-		// Nothing to do. Transaction.Timestamp has already been forwarded to be
-		// ahead of any timestamp cache entries or newer versions which caused
-		// the restart.
+		// Transaction.Timestamp has already been forwarded to be ahead of any
+		// timestamp cache entries or newer versions which caused the restart.
+		if tErr.Reason == RETRY_SERIALIZABLE {
+			// For RETRY_SERIALIZABLE case, we want to bump timestamp further than
+			// timestamp cache.
+			// This helps transactions that had their commit timestamp fixed (See
+			// roachpb.Transaction.CommitTimestampFixed for details on when it happens)
+			// or transactions that hit read-write contention and can't bump
+			// read timestamp because of later writes.
+			// Upon retry, we want those transactions to restart on now() instead of
+			// closed ts to give them some time to complete without a need to refresh
+			// read spans yet again and possibly fail.
+			// The tradeoff here is that transactions that failed because they were
+			// waiting on locks or were slowed down in their first epoch for any other
+			// reason (e.g. lease transfers, network congestion, node failure, etc.)
+			// would have a chance to retry and succeed, but transactions that are
+			// just slow would still retry indefinitely and delay transactions that
+			// try to write to the keys this transaction reads because reads are not
+			// in the past anymore.
+			now := clock.Now()
+			txn.WriteTimestamp.Forward(now)
+		}
 	case *WriteTooOldError:
 		// Increase the timestamp to the ts at which we've actually written.
-		txn.WriteTimestamp.Forward(writeTooOldRetryTimestamp(tErr))
+		txn.WriteTimestamp.Forward(tErr.RetryTimestamp())
 	default:
 		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
 	}
@@ -1497,33 +1496,20 @@ func PrepareTransactionForRetry(
 	return txn
 }
 
-// PrepareTransactionForRefresh returns whether the transaction can be refreshed
-// to the specified timestamp to avoid a client-side transaction restart. If
-// true, returns a cloned, updated Transaction object with the provisional
-// commit timestamp and read timestamp set appropriately.
-func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bool, *Transaction) {
-	if txn.CommitTimestampFixed {
-		return false, nil
-	}
-	newTxn := txn.Clone()
-	newTxn.Refresh(timestamp)
-	return true, newTxn
-}
-
-// CanTransactionRefresh returns whether the transaction specified in the
-// supplied error can be retried at a refreshed timestamp to avoid a client-side
-// transaction restart. If true, returns a cloned, updated Transaction object
-// with the provisional commit timestamp and read timestamp set appropriately.
-func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction) {
+// TransactionRefreshTimestamp returns whether the supplied error is a retry
+// error that can be discarded if the transaction in the error is refreshed. If
+// true, the function returns the timestamp that the Transaction object should
+// be refreshed at in order to discard the error and avoid a restart.
+func TransactionRefreshTimestamp(pErr *Error) (bool, hlc.Timestamp) {
 	txn := pErr.GetTxn()
 	if txn == nil {
-		return false, nil
+		return false, hlc.Timestamp{}
 	}
 	timestamp := txn.WriteTimestamp
 	switch err := pErr.GetDetail().(type) {
 	case *TransactionRetryError:
 		if err.Reason != RETRY_SERIALIZABLE && err.Reason != RETRY_WRITE_TOO_OLD {
-			return false, nil
+			return false, hlc.Timestamp{}
 		}
 	case *WriteTooOldError:
 		// TODO(andrei): Chances of success for on write-too-old conditions might be
@@ -1531,67 +1517,24 @@ func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction
 		// error, obviously the refresh will fail. It might be worth trying to
 		// detect these cases and save the futile attempt; we'd need to have access
 		// to the key that generated the error.
-		timestamp.Forward(writeTooOldRetryTimestamp(err))
+		timestamp.Forward(err.RetryTimestamp())
 	case *ReadWithinUncertaintyIntervalError:
-		timestamp.Forward(readWithinUncertaintyIntervalRetryTimestamp(err))
+		timestamp.Forward(err.RetryTimestamp())
 	default:
-		return false, nil
+		return false, hlc.Timestamp{}
 	}
-	return PrepareTransactionForRefresh(txn, timestamp)
-}
-
-func readWithinUncertaintyIntervalRetryTimestamp(
-	err *ReadWithinUncertaintyIntervalError,
-) hlc.Timestamp {
-	// If the reader encountered a newer write within the uncertainty interval,
-	// we advance the txn's timestamp just past the uncertain value's timestamp.
-	// This ensures that we read above the uncertain value on a retry.
-	ts := err.ExistingTimestamp.Next()
-	// In addition to advancing past the uncertainty value's timestamp, we also
-	// advance the txn's timestamp up to the local uncertainty limit on the node
-	// which hit the error. This ensures that no future read after the retry on
-	// this node (ignoring lease complications in ComputeLocalUncertaintyLimit
-	// and values with synthetic timestamps) will throw an uncertainty error,
-	// even when reading other keys.
-	//
-	// Note that if the request was not able to establish a local uncertainty
-	// limit due to a missing observed timestamp (for instance, if the request
-	// was evaluated on a follower replica and the txn had never visited the
-	// leaseholder), then LocalUncertaintyLimit will be empty and the Forward
-	// will be a no-op. In this case, we could advance all the way past the
-	// global uncertainty limit, but this time would likely be in the future, so
-	// this would necessitate a commit-wait period after committing.
-	//
-	// In general, we expect the local uncertainty limit, if set, to be above
-	// the uncertainty value's timestamp. So we expect this Forward to advance
-	// ts. However, this is not always the case. The one exception is if the
-	// uncertain value had a synthetic timestamp, so it was compared against the
-	// global uncertainty limit to determine uncertainty (see IsUncertain). In
-	// such cases, we're ok advancing just past the value's timestamp. Either
-	// way, we won't see the same value in our uncertainty interval on a retry.
-	ts.Forward(err.LocalUncertaintyLimit)
-	return ts
-}
-
-func writeTooOldRetryTimestamp(err *WriteTooOldError) hlc.Timestamp {
-	return err.ActualTimestamp
+	return true, timestamp
 }
 
 // Replicas returns all of the replicas present in the descriptor after this
 // trigger applies.
 func (crt ChangeReplicasTrigger) Replicas() []ReplicaDescriptor {
-	if crt.Desc != nil {
-		return crt.Desc.Replicas().Descriptors()
-	}
-	return crt.DeprecatedUpdatedReplicas
+	return crt.Desc.Replicas().Descriptors()
 }
 
 // NextReplicaID returns the next replica id to use after this trigger applies.
 func (crt ChangeReplicasTrigger) NextReplicaID() ReplicaID {
-	if crt.Desc != nil {
-		return crt.Desc.NextReplicaID
-	}
-	return crt.DeprecatedNextReplicaID
+	return crt.Desc.NextReplicaID
 }
 
 // ConfChange returns the configuration change described by the trigger.
@@ -1794,17 +1737,12 @@ func (crt ChangeReplicasTrigger) SafeFormat(w redact.SafePrinter, _ rune) {
 	var nextReplicaID ReplicaID
 	var afterReplicas []ReplicaDescriptor
 	added, removed := crt.Added(), crt.Removed()
-	if crt.Desc != nil {
-		nextReplicaID = crt.Desc.NextReplicaID
-		// NB: we don't want to mutate InternalReplicas, so we don't call
-		// .Replicas()
-		//
-		// TODO(tbg): revisit after #39489 is merged.
-		afterReplicas = crt.Desc.InternalReplicas
-	} else {
-		nextReplicaID = crt.DeprecatedNextReplicaID
-		afterReplicas = crt.DeprecatedUpdatedReplicas
-	}
+	nextReplicaID = crt.Desc.NextReplicaID
+	// NB: we don't want to mutate InternalReplicas, so we don't call
+	// .Replicas()
+	//
+	// TODO(tbg): revisit after #39489 is merged.
+	afterReplicas = crt.Desc.InternalReplicas
 	cc, err := crt.ConfChange(nil)
 	if err != nil {
 		w.Printf("<malformed ChangeReplicasTrigger: %s>", err)
@@ -1859,18 +1797,8 @@ func confChangesToRedactableString(ccs []raftpb.ConfChangeSingle) redact.Redacta
 	})
 }
 
-func (crt ChangeReplicasTrigger) legacy() (ReplicaDescriptor, bool) {
-	if len(crt.InternalAddedReplicas)+len(crt.InternalRemovedReplicas) == 0 && crt.DeprecatedReplica.ReplicaID != 0 {
-		return crt.DeprecatedReplica, true
-	}
-	return ReplicaDescriptor{}, false
-}
-
 // Added returns the replicas added by this change (if there are any).
 func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
-	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == ADD_VOTER {
-		return []ReplicaDescriptor{rDesc}
-	}
 	return crt.InternalAddedReplicas
 }
 
@@ -1879,9 +1807,6 @@ func (crt ChangeReplicasTrigger) Added() []ReplicaDescriptor {
 // transitioning to VOTER_{OUTGOING,DEMOTING} (from VOTER_FULL). The subsequent trigger
 // leaving the joint configuration has an empty Removed().
 func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
-	if rDesc, ok := crt.legacy(); ok && crt.DeprecatedChangeType == REMOVE_VOTER {
-		return []ReplicaDescriptor{rDesc}
-	}
 	return crt.InternalRemovedReplicas
 }
 
@@ -1915,7 +1840,7 @@ func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // Empty returns true for the Lease zero-value.
 func (l *Lease) Empty() bool {
-	return *l == (Lease{})
+	return l == nil || *l == (Lease{})
 }
 
 // OwnedBy returns whether the given store is the lease owner.
@@ -2126,6 +2051,38 @@ func (u *LockUpdate) SetTxn(txn *Transaction) {
 	u.Txn = txn.TxnMeta
 	u.Status = txn.Status
 	u.IgnoredSeqNums = txn.IgnoredSeqNums
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (ls LockStateInfo) SafeFormat(w redact.SafePrinter, r rune) {
+	expand := w.Flag('+')
+	w.Printf("range_id=%d key=%s ", ls.RangeID, ls.Key)
+	redactableLockHolder := redact.Sprint(nil)
+	if ls.LockHolder != nil {
+		if expand {
+			redactableLockHolder = redact.Sprint(ls.LockHolder.ID)
+		} else {
+			redactableLockHolder = redact.Sprint(ls.LockHolder.Short())
+		}
+	}
+	w.Printf("holder=%s ", redactableLockHolder)
+	w.Printf("durability=%s ", ls.Durability)
+	w.Printf("duration=%s", ls.HoldDuration)
+	if len(ls.Waiters) > 0 {
+		w.Printf("\n waiters:")
+
+		for _, lw := range ls.Waiters {
+			if expand {
+				w.Printf("\n  %+v", lw)
+			} else {
+				w.Printf("\n  %s", lw)
+			}
+		}
+	}
+}
+
+func (ls LockStateInfo) String() string {
+	return redact.StringWithoutMarkers(ls)
 }
 
 // EqualValue is Equal.
@@ -2361,6 +2318,17 @@ func (a Spans) MemUsage() int64 {
 	return size
 }
 
+func (a Spans) String() string {
+	var buf bytes.Buffer
+	for i, span := range a {
+		if i != 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(span.String())
+	}
+	return buf.String()
+}
+
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.
 type RSpan struct {
 	Key, EndKey RKey
@@ -2546,4 +2514,11 @@ func (ReplicaChangeType) SafeValue() {}
 func (ri RangeInfo) String() string {
 	return fmt.Sprintf("desc: %s, lease: %s, closed_timestamp_policy: %s",
 		ri.Desc, ri.Lease, ri.ClosedTimestampPolicy)
+}
+
+// Add adds another RowCount to the receiver.
+func (r *RowCount) Add(other RowCount) {
+	r.DataSize += other.DataSize
+	r.Rows += other.Rows
+	r.IndexEntries += other.IndexEntries
 }

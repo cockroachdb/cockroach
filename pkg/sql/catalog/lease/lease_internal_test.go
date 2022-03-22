@@ -15,6 +15,7 @@ package lease
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -24,15 +25,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTableSet(t *testing.T) {
@@ -157,7 +161,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	var tables []catalog.TableDescriptor
 	var expiration hlc.Timestamp
@@ -275,7 +279,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	futureTime := s.Clock().Now().Add(500*time.Millisecond.Nanoseconds(), 0).WithSynthetic(true)
 
 	getLatestDesc := func() catalog.TableDescriptor {
@@ -380,11 +384,11 @@ CREATE TEMP TABLE t2 (temp int);
 	}
 
 	for _, tableName := range []string{"t", "t2"} {
-		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
 		lease := leaseManager.names.get(
 			context.Background(),
 			tableDesc.GetParentID(),
-			descpb.ID(keys.PublicSchemaID),
+			tableDesc.GetParentSchemaID(),
 			tableName,
 			s.Clock().Now(),
 		)
@@ -414,7 +418,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Rename.
 	if _, err := db.Exec("ALTER TABLE t.test RENAME TO t.test2;"); err != nil {
@@ -435,43 +439,6 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	lease := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
-		tableDesc.GetParentSchemaID(),
-		"test2",
-		s.Clock().Now(),
-	)
-	if lease == nil {
-		t.Fatalf("new name not found in cache")
-	}
-	if lease.GetID() != tableDesc.GetID() {
-		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.GetID())
-	}
-	lease.Release(context.Background())
-
-	// Rename to a different database.
-	if _, err := db.Exec("ALTER TABLE t.test2 RENAME TO t1.test2;"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Re-read the descriptor, to get the new ParentID.
-	newTableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t1", "test2")
-	if tableDesc.GetParentID() == newTableDesc.GetParentID() {
-		t.Fatalf("database didn't change")
-	}
-
-	// Check that the cache has been updated.
-	if leaseManager.names.get(
-		context.Background(),
-		tableDesc.GetParentID(),
-		tableDesc.GetParentSchemaID(),
-		"test2",
-		s.Clock().Now(),
-	) != nil {
-		t.Fatalf("old name still in cache")
-	}
-
-	lease = leaseManager.names.get(
-		context.Background(),
-		newTableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
 		"test2",
 		s.Clock().Now(),
@@ -506,7 +473,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
@@ -561,7 +528,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
 
 	// Populate the name cache.
 	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
@@ -626,7 +593,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Check that we cannot get the table by a different name.
 	if leaseManager.names.get(
@@ -668,7 +635,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Populate the name cache.
 	ctx := context.Background()
@@ -774,7 +741,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	var wg sync.WaitGroup
 	numRoutines := 10
@@ -824,7 +791,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	var wg sync.WaitGroup
 	numRoutines := 10
@@ -945,7 +912,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 					LeaseStoreTestingKnobs: StorageTestingKnobs{
 						RemoveOnceDereferenced: true,
 						LeaseReleasedEvent:     removalTracker.LeaseRemovedNotification,
-						LeaseAcquireResultBlockEvent: func(leaseBlockType AcquireBlockType) {
+						LeaseAcquireResultBlockEvent: func(leaseBlockType AcquireBlockType, _ descpb.ID) {
 							if leaseBlockType == AcquireBlock {
 								if count := atomic.LoadInt32(&acquireArrivals); (count < 1 && test.isSecondCallAcquireFreshest) ||
 									(count < 2 && !test.isSecondCallAcquireFreshest) {
@@ -1048,6 +1015,438 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			if count := atomic.LoadInt32(&leasesAcquiredCount); count != 2 {
 				t.Fatalf("Expected to acquire 2 leases, instead got %d", count)
 			}
+		})
+	}
+}
+
+// Tests retrieving older versions within a given start and end timestamp of a
+// table descriptor from store through an ExportRequest.
+func TestReadOlderVersionForTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	serverParams := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &ManagerTestingKnobs{
+				TestingDescriptorUpdateEvent: func(_ *descpb.Descriptor) error {
+					return errors.New("Caught race between resetting state and refreshing leases")
+				},
+			},
+		},
+	}
+	var stopper *stop.Stopper
+	s, sqlDB, _ := serverutils.StartServer(t, serverParams)
+	stopper = s.Stopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	// Prevent non-explicit Acquire to leases for testing purposes.
+	tdb.Exec(t, "SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 0")
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	var tableID descpb.ID
+	tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'foo'").Scan(&tableID)
+
+	manager := s.LeaseManager().(*Manager)
+	const numHistoricalVersions = 5
+	const maxVersion = numHistoricalVersions + 1
+	descs := make([]catalog.Descriptor, maxVersion)
+
+	// Create numHistoricalVersions versions of table descriptor
+	for i := 0; i < numHistoricalVersions; i++ {
+		_, err := manager.Publish(ctx, tableID, func(desc catalog.MutableDescriptor) error {
+			descs[i] = desc.ImmutableCopy()
+			return nil
+		}, nil)
+		require.NoError(t, err)
+	}
+	{
+		last, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
+		require.NoError(t, err)
+		descs[numHistoricalVersions] = last.Underlying()
+		last.Release(ctx)
+	}
+
+	type version int
+	type testCase struct {
+		before   []version
+		ts       hlc.Timestamp
+		tsStr    string
+		expected []version
+	}
+	versionTS := func(v version) hlc.Timestamp {
+		return descs[v-1].GetModificationTime()
+	}
+	versionDesc := func(v version) catalog.Descriptor {
+		return descs[v-1]
+	}
+	resetDescriptorState := func(
+		manager *Manager, tableID descpb.ID, tc testCase,
+	) {
+		manager.mu.Lock()
+		defer manager.mu.Unlock()
+		descStates := manager.mu.descriptors
+		descStates[tableID] = &descriptorState{m: manager, id: tableID}
+		for _, v := range tc.before {
+			addedDescVState := &descriptorVersionState{
+				t:          descStates[tableID],
+				Descriptor: versionDesc(v),
+			}
+			addedDescVState.mu.Lock()
+			if v < maxVersion {
+				addedDescVState.mu.expiration = versionTS(v + 1)
+			} else {
+				addedDescVState.mu.expiration = hlc.MaxTimestamp
+			}
+			addedDescVState.mu.Unlock()
+			descStates[tableID].mu.active.insert(addedDescVState)
+		}
+	}
+
+	// Test historical read for descriptors as of specific timestamps and confirm
+	// expected data.
+	// [v1 ---)[v2 --)[v3 ---)[v4 ----)[v5 -----)[v6 ------)
+	for _, tc := range []testCase{
+
+		// The following cases represent having no existing descriptor state, or
+		// as importantly, having some descriptor state but searching for a
+		// timestamp after the known state. The code, as stands, assumes that
+		// when this happens, we'll rely on an existing lease to provide the end
+		// timestamp, and when no such lease exists, we'll go get one. If the
+		// attempt to get a lease fails, then we'll propagate that error up. This
+		// fact is the source of the known limitation described on
+		// Acquire and AcquireByName.
+		{
+			before:   []version{},
+			ts:       versionTS(1),
+			tsStr:    "ts1",
+			expected: []version{},
+		},
+		{
+			before:   []version{},
+			ts:       versionTS(4),
+			tsStr:    "ts4",
+			expected: []version{},
+		},
+		{
+			before:   []version{},
+			ts:       versionTS(6),
+			tsStr:    "ts6",
+			expected: []version{},
+		},
+		{
+			before:   []version{1, 2, 3},
+			ts:       versionTS(4).Next(),
+			tsStr:    "ts4.Next",
+			expected: []version{},
+		},
+		{
+			before:   []version{},
+			ts:       versionTS(6).Prev(),
+			tsStr:    "ts6.Prev",
+			expected: []version{},
+		},
+
+		{
+			before:   []version{6},
+			ts:       versionTS(4).Prev(),
+			tsStr:    "ts4.Prev",
+			expected: []version{3, 4, 5},
+		},
+		{
+			before:   []version{6},
+			ts:       versionTS(5),
+			tsStr:    "ts5",
+			expected: []version{5},
+		},
+		{
+			before:   []version{5, 6},
+			ts:       versionTS(3).Prev(),
+			tsStr:    "ts3.Prev",
+			expected: []version{2, 3, 4},
+		},
+		{
+			before:   []version{1, 2, 3, 4, 5, 6},
+			ts:       versionTS(4),
+			tsStr:    "ts4",
+			expected: []version{},
+		},
+		{
+			before:   []version{1, 4, 5, 6},
+			ts:       versionTS(4).Prev(),
+			tsStr:    "ts4.Prev",
+			expected: []version{3},
+		},
+		{
+			before:   []version{1, 4, 5, 6},
+			ts:       versionTS(3).Prev(),
+			tsStr:    "ts3.Prev",
+			expected: []version{2, 3},
+		},
+		{
+			before:   []version{1, 4, 5, 6},
+			ts:       versionTS(2),
+			tsStr:    "ts2",
+			expected: []version{2, 3},
+		},
+		{
+			before:   []version{1, 4, 5, 6},
+			ts:       versionTS(2).Prev(),
+			tsStr:    "ts2.Prev",
+			expected: []version{},
+		},
+	} {
+		t.Run(fmt.Sprintf("%v@%v->%v", tc.before, tc.tsStr, tc.expected), func(t *testing.T) {
+			// Reset the descriptor state to before versions.
+			resetDescriptorState(manager, tableID, tc)
+
+			// Retrieve historicalDescriptors modification times.
+			retrieved, err := manager.readOlderVersionForTimestamp(ctx, tableID, tc.ts)
+			require.NoError(t, err)
+
+			// Validate retrieved descriptors match expected versions.
+			retrievedVersions := make([]version, 0)
+			for _, desc := range retrieved {
+				ver := version(desc.desc.GetVersion())
+				retrievedVersions = append([]version{ver}, retrievedVersions...)
+			}
+			require.Equal(t, tc.expected, retrievedVersions)
+		})
+	}
+}
+
+// TestDescriptorByteSizeOrder inserts different amount of data in each
+// descriptor and guarantees the relative order of the Descriptor sizes are
+// correct.
+func TestDescriptorByteSizeOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	manager := s.LeaseManager().(*Manager)
+	for _, tc := range []struct {
+		sqlExprs map[string]string
+		expOrder []string
+		name     string
+	}{
+		// Confirm order of TableDescriptors with varying name.
+		{
+			sqlExprs: map[string]string{
+				"s":             "CREATE TABLE s (col1 INT)",
+				"medxx":         "CREATE TABLE medxx (col1 INT)",
+				"largexxxx":     "CREATE TABLE largexxxx (col1 INT)",
+				"largestxxxxxx": "CREATE TABLE largestxxxxxx (col1 INT)",
+			},
+			expOrder: []string{
+				"s",
+				"medxx",
+				"largexxxx",
+				"largestxxxxxx",
+			},
+			name: "tables with varying name",
+		},
+		// Confirm order of TableDescriptors with varying col count.
+		{
+			sqlExprs: map[string]string{
+				"smallxxcol": "CREATE TABLE smallxxcol (col1 INT)",
+				"mediumxcol": "CREATE TABLE mediumxcol (col1 INT, col2 INT)",
+				"largexxcol": "CREATE TABLE largexxcol (col1 INT, col2 INT, col3 UUID)",
+				"largestcol": "CREATE TABLE largestcol (col1 INT, col2 INT, col3 UUID, col4 UUID)",
+			},
+			expOrder: []string{
+				"smallxxcol",
+				"mediumxcol",
+				"largexxcol",
+				"largestcol",
+			},
+			name: "tables with varying col",
+		},
+		// Confirm order of TableDescriptors with varying idx count.
+		{
+			sqlExprs: map[string]string{
+				"smallxx": "CREATE TABLE smallxx (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1))",
+				"mediumx": "CREATE TABLE mediumx (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2))",
+				"largexx": "CREATE TABLE largexx (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2, col3))",
+				"largest": "CREATE TABLE largest (col1 INT, col2 INT, col3 STRING, col4 BOOL, INDEX (col1, col2, col3, col4))",
+			},
+			expOrder: []string{
+				"smallxx",
+				"mediumx",
+				"largexx",
+				"largest",
+			},
+			name: "tables with varying idx",
+		},
+		// Confirm order of DatabaseDescriptors with varying name.
+		{
+			sqlExprs: map[string]string{
+				"sdb":          "CREATE DATABASE sdb",
+				"meddbx":       "CREATE DATABASE meddbx",
+				"largedbxx":    "CREATE DATABASE largedbxx",
+				"largestdbxxx": "CREATE DATABASE largestdbxxx",
+			},
+			expOrder: []string{
+				"sdb",
+				"meddbx",
+				"largedbxx",
+				"largestdbxxx",
+			},
+			name: "databases with varying name",
+		},
+		// Confirm order of SchemaDescriptors with varying name.
+		{
+			sqlExprs: map[string]string{
+				"sschema":          "CREATE SCHEMA sschema",
+				"medschemax":       "CREATE SCHEMA medschemax",
+				"largeschemaxx":    "CREATE SCHEMA largeschemaxx",
+				"largestschemaxxx": "CREATE SCHEMA largestschemaxxx",
+			},
+			expOrder: []string{
+				"sschema",
+				"medschemax",
+				"largeschemaxx",
+				"largestschemaxxx",
+			},
+			name: "schemas with varying name",
+		},
+		// Confirm order of TypeDescriptors with varying name.
+		{
+			sqlExprs: map[string]string{
+				"stype":       "CREATE TYPE stype AS ENUM ('open', 'closed')",
+				"medtype":     "CREATE TYPE medtype AS ENUM ('open', 'closed', 'inactive')",
+				"largetype":   "CREATE TYPE largetype AS ENUM ('open', 'closed', 'inactive', 'active')",
+				"largesttype": "CREATE TYPE largesttype AS ENUM ('open', 'closed', 'inactive', 'active', 'starting')",
+			},
+			expOrder: []string{
+				"stype",
+				"medtype",
+				"largetype",
+				"largesttype",
+			},
+			name: "types with varying name",
+		},
+	} {
+		t.Run(fmt.Sprint(tc.name), func(t *testing.T) {
+			// Create tables and retrieve TableDescriptors.
+			descs := make([]LeasedDescriptor, 0, len(tc.sqlExprs))
+			for size, expr := range tc.sqlExprs {
+				tdb.Exec(t, expr)
+				var tableID descpb.ID
+				tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = "+"'"+size+"'").Scan(&tableID)
+				desc, err := manager.Acquire(ctx, s.Clock().Now(), tableID)
+				require.NoError(t, err)
+				descs = append(descs, desc)
+			}
+
+			// Sort the descriptors and confirm is same as expected.
+			sort.Slice(descs, func(i, j int) bool {
+				return descs[i].Underlying().ByteSize() < descs[j].Underlying().ByteSize()
+			})
+			actual := make([]string, len(descs))
+			for i, desc := range descs {
+				actual[i] = desc.GetName()
+			}
+			require.Equalf(t, tc.expOrder, actual, "expected: %v, got: %v", tc.expOrder, actual)
+		})
+	}
+}
+
+// TestLeasedDescriptorByteSizeBaseline ensures each descriptor type has a byte
+// size of at least the baseline approximation, which is the number of bytes
+// from the binary encoded in the descriptor table.
+func TestLeasedDescriptorByteSizeBaseline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+	manager := s.LeaseManager().(*Manager)
+
+	getApproxByteSize := func(t *testing.T, descID descpb.ID) int64 {
+		var descBytes *[]byte
+		rows := tdb.Query(t, "SELECT descriptor FROM system.descriptor WHERE id = $1", descID)
+		if rows.Next() {
+			err := rows.Scan(&descBytes)
+			require.NoError(t, err, "error retrieving descriptor from system table")
+		}
+		return int64(len(*descBytes))
+	}
+
+	for _, tc := range []struct {
+		sqlExpr  []string
+		descType string
+		name     string
+	}{
+		{
+			sqlExpr: []string{
+				"CREATE TABLE s (col1 INT)",
+			},
+			descType: "table",
+			name:     "s",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE TABLE ss (col1 INT)",
+				"INSERT INTO s VALUES (1)",
+				"INSERT INTO s VALUES (10)",
+			},
+			descType: "table",
+			name:     "ss",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE DATABASE randomDB",
+			},
+			descType: "db",
+			name:     "randomdb",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE SCHEMA schema_one",
+			},
+			descType: "schema",
+			name:     "schema_one",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE USER max WITH PASSWORD 'roach'",
+				"CREATE SCHEMA schema_two AUTHORIZATION max",
+			},
+			descType: "schema",
+			name:     "schema_two",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE TYPE type_one AS ENUM ('open', 'closed')",
+			},
+			descType: "type",
+			name:     "type_one",
+		},
+		{
+			sqlExpr: []string{
+				"CREATE TYPE type_two AS ENUM ('open', 'closed', 'inactive', 'active', 'starting')",
+			},
+			descType: "type",
+			name:     "type_two",
+		},
+	} {
+		t.Run(fmt.Sprintf("%s descriptor %s", tc.descType, tc.name), func(t *testing.T) {
+			// Execute SQL commands and acquire leases on descriptors.
+			for _, expr := range tc.sqlExpr {
+				tdb.Exec(t, expr)
+			}
+			var descID descpb.ID
+			tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name ="+
+				"'"+tc.name+"'").Scan(&descID)
+			desc, err := manager.Acquire(ctx, s.Clock().Now(), descID)
+			require.NoError(t, err)
+
+			// Confirm each descriptor byte size is at least the baseline's.
+			approx := getApproxByteSize(t, descID)
+			require.Greaterf(t, desc.Underlying().ByteSize(), approx, "ByteSize of desc "+
+				"%d does not exceed the baseline", desc.GetID())
 		})
 	}
 }

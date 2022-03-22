@@ -155,7 +155,7 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 			entry := log.MakeLegacyEntry(
 				ctx, severity.WARNING, channel.DEV,
 				0 /* depth */, true, /* redactable */
-				"%d messages were dropped", log.Safe(dropped))
+				"%d messages were dropped", redact.Safe(dropped))
 			err = errors.CombineErrors(err, interceptor.outputEntry(w, entry))
 		}
 	}()

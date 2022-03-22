@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -55,6 +57,19 @@ func DisableGCTTLStrictEnforcement(t *testing.T, db *gosql.DB) (cleanup func()) 
 	}
 }
 
+// SetShortRangeFeedIntervals is a helper to set the cluster settings
+// pertaining to rangefeeds to short durations. This is helps tests which
+// rely on zone/span configuration changes to propagate.
+func SetShortRangeFeedIntervals(t *testing.T, db sqlutils.DBHandle) {
+	tdb := sqlutils.MakeSQLRunner(db)
+	short := "'20ms'"
+	if util.RaceEnabled {
+		short = "'200ms'"
+	}
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = `+short)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = `+short)
+}
+
 // AddDefaultZoneConfig adds an entry for the given id into system.zones.
 func AddDefaultZoneConfig(sqlDB *gosql.DB, id descpb.ID) (zonepb.ZoneConfig, error) {
 	cfg := zonepb.DefaultZoneConfig()
@@ -78,7 +93,7 @@ func BulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 
 // GetTableKeyCount returns the number of keys in t.test.
 func GetTableKeyCount(ctx context.Context, kvDB *kv.DB) (int, error) {
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
 	tableEnd := tablePrefix.PrefixEnd()
 	kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0)

@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -36,16 +35,21 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			Closer:         s.stopper.ShouldQuiesce(),
 		}
 
-		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-			// Check if auto upgrade is disabled for test purposes.
-			if k := s.cfg.TestingKnobs.Server; k != nil {
-				upgradeTestingKnobs := k.(*TestingKnobs)
-				if disable := atomic.LoadInt32(&upgradeTestingKnobs.DisableAutomaticVersionUpgrade); disable == 1 {
-					log.Infof(ctx, "auto upgrade disabled by testing")
-					continue
+		// Check if auto upgrade is disabled for test purposes.
+		if k := s.cfg.TestingKnobs.Server; k != nil {
+			upgradeTestingKnobs := k.(*TestingKnobs)
+			if disableCh := upgradeTestingKnobs.DisableAutomaticVersionUpgrade; disableCh != nil {
+				log.Infof(ctx, "auto upgrade disabled by testing")
+				select {
+				case <-disableCh:
+					log.Infof(ctx, "auto upgrade no longer disabled by testing")
+				case <-s.stopper.ShouldQuiesce():
+					return
 				}
 			}
+		}
 
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 			// Check if we should upgrade cluster version, keep checking upgrade
 			// status, or stop attempting upgrade.
 			if quit, err := s.upgradeStatus(ctx); err != nil {

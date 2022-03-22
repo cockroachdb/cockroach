@@ -1,0 +1,40 @@
+init
+rate: 1000
+----
+Current RUs: 0
+
+update
+1s
+----
+Current RUs: 1000
+
+update
+0s
+----
+Current RUs: 1000
+
+update
+-5s
+----
+Current RUs: 1000
+
+update
+10s
+----
+Current RUs: 11000
+
+update
+72h
+----
+Current RUs: 259211000
+
+init
+initial: 1234
+rate: 10
+----
+Current RUs: 1234
+
+update
+10s
+----
+Current RUs: 1334

@@ -43,7 +43,7 @@ SELECT 'a' FROM t@{FORCE_INDEX=[123]}
 ----
 SELECT 'a' FROM t@[123] -- normalized!
 SELECT ('a') FROM t@[123] -- fully parenthesized
-SELECT _ FROM t@[123] -- literals removed
+SELECT '_' FROM t@[123] -- literals removed
 SELECT 'a' FROM _@[123] -- identifiers removed
 
 parse
@@ -51,7 +51,7 @@ SELECT 'a' FROM [123 AS t]@{FORCE_INDEX=[456]}
 ----
 SELECT 'a' FROM [123 AS t]@[456] -- normalized!
 SELECT ('a') FROM [123 AS t]@[456] -- fully parenthesized
-SELECT _ FROM [123 AS t]@[456] -- literals removed
+SELECT '_' FROM [123 AS t]@[456] -- literals removed
 SELECT 'a' FROM [123 AS _]@[456] -- identifiers removed
 
 

@@ -10,14 +10,15 @@ package backupresolver
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,6 +39,29 @@ type DescriptorsMatched struct {
 
 	// Explicitly requested DBs (e.g. DATABASE a).
 	RequestedDBs []catalog.DatabaseDescriptor
+}
+
+// MissingTableErr is a custom error type for Missing Table when resolver.ResolveExisting()
+// is called in DescriptorsMatchingTargets
+type MissingTableErr struct {
+	wrapped   error
+	tableName string
+}
+
+// Error() implements the erorr interface for MissingTableErr and outputs an error string
+func (e *MissingTableErr) Error() string {
+	return fmt.Sprintf("table %q does not exist, or invalid RESTORE timestamp: %v", e.GetTableName(), e.wrapped.Error())
+}
+
+// Unwrap() implements the erorr interface for MissingTableErr and outputs wrapped error
+// implemented so that errors.As can be used with MissingTableErr
+func (e *MissingTableErr) Unwrap() error {
+	return e.wrapped
+}
+
+// GetTableName is an accessor function for the member variable tableName
+func (e *MissingTableErr) GetTableName() string {
+	return e.tableName
 }
 
 // CheckExpansions determines if matched targets are covered by the specified
@@ -85,7 +109,11 @@ func (r *DescriptorResolver) LookupSchema(
 	if scID, ok := schemas[scName]; ok {
 		dbDesc, dbOk := r.DescByID[dbID].(catalog.DatabaseDescriptor)
 		scDesc, scOk := r.DescByID[scID].(catalog.SchemaDescriptor)
-		if !scOk && scID == keys.PublicSchemaID {
+		// TODO(richardjcai): We should remove the check for keys.PublicSchemaID
+		// in 22.2, when we're guaranteed to not have synthesized public schemas
+		// for the non-system databases.
+		if !scOk && scID == keys.SystemPublicSchemaID ||
+			!scOk && scID == keys.PublicSchemaIDForBackup {
 			scDesc, scOk = schemadesc.GetPublicSchema(), true
 		}
 		if dbOk && scOk {
@@ -102,35 +130,38 @@ func (r *DescriptorResolver) LookupSchema(
 func (r *DescriptorResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (bool, catalog.ResolvedObjectPrefix, catalog.Descriptor, error) {
+	// LookupObject guarantees that the ResolvedObjectPrefix is always
+	// populated, even if the object itself cannot be found. This information
+	// is used to generate the appropriate error at higher level layers.
+	resolvedPrefix := catalog.ResolvedObjectPrefix{}
 	if flags.RequireMutable {
 		panic("did not expect request for mutable descriptor")
 	}
 	dbID, ok := r.DbsByName[dbName]
 	if !ok {
-		return false, catalog.ResolvedObjectPrefix{}, nil, nil
+		return false, resolvedPrefix, nil, nil
+	}
+	resolvedPrefix.Database, ok = r.DescByID[dbID].(catalog.DatabaseDescriptor)
+	if !ok {
+		return false, resolvedPrefix, nil, nil
 	}
 	scID, ok := r.SchemasByName[dbID][scName]
 	if !ok {
-		return false, catalog.ResolvedObjectPrefix{}, nil, nil
+		return false, resolvedPrefix, nil, nil
 	}
 	if scMap, ok := r.ObjsByName[dbID]; ok {
 		if objMap, ok := scMap[scName]; ok {
 			if objID, ok := objMap[obName]; ok {
-				var sc catalog.SchemaDescriptor
 				if scID == keys.PublicSchemaID {
-					sc = schemadesc.GetPublicSchema()
+					resolvedPrefix.Schema = schemadesc.GetPublicSchema()
 				} else {
-					sc, ok = r.DescByID[scID].(catalog.SchemaDescriptor)
+					resolvedPrefix.Schema, ok = r.DescByID[scID].(catalog.SchemaDescriptor)
 					if !ok {
-						return false, catalog.ResolvedObjectPrefix{}, nil, errors.AssertionFailedf(
+						return false, resolvedPrefix, nil, errors.AssertionFailedf(
 							"expected schema for ID %d, got %T", scID, r.DescByID[scID])
 					}
 				}
-
-				return true, catalog.ResolvedObjectPrefix{
-					Database: r.DescByID[dbID].(catalog.DatabaseDescriptor),
-					Schema:   sc,
-				}, r.DescByID[objID], nil
+				return true, resolvedPrefix, r.DescByID[objID], nil
 			}
 		}
 	}
@@ -151,6 +182,9 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 	// check the ParentID for tables, and all the valid parents must be
 	// known before we start to check that.
 	for _, desc := range descs {
+		if desc.Dropped() {
+			continue
+		}
 		if _, isDB := desc.(catalog.DatabaseDescriptor); isDB {
 			if _, ok := r.DbsByName[desc.GetName()]; ok {
 				return nil, errors.Errorf("duplicate database name: %q used for ID %d and %d",
@@ -159,9 +193,11 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 			r.DbsByName[desc.GetName()] = desc.GetID()
 			r.ObjsByName[desc.GetID()] = make(map[string]map[string]descpb.ID)
 			r.SchemasByName[desc.GetID()] = make(map[string]descpb.ID)
-			// Always add an entry for the public schema.
-			r.ObjsByName[desc.GetID()][tree.PublicSchema] = make(map[string]descpb.ID)
-			r.SchemasByName[desc.GetID()][tree.PublicSchema] = keys.PublicSchemaID
+
+			if !desc.(catalog.DatabaseDescriptor).HasPublicSchemaWithDescriptor() {
+				r.ObjsByName[desc.GetID()][tree.PublicSchema] = make(map[string]descpb.ID)
+				r.SchemasByName[desc.GetID()][tree.PublicSchema] = keys.PublicSchemaIDForBackup
+			}
 		}
 
 		// Incidentally, also remember all the descriptors by ID.
@@ -174,6 +210,9 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 
 	// Add all schemas to the resolver.
 	for _, desc := range descs {
+		if desc.Dropped() {
+			continue
+		}
 		if sc, ok := desc.(catalog.SchemaDescriptor); ok {
 			schemaMap := r.ObjsByName[sc.GetParentID()]
 			if schemaMap == nil {
@@ -207,7 +246,9 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 		schemaMap := r.ObjsByName[parentDesc.GetID()]
 		scID := desc.GetParentSchemaID()
 		var scName string
-		if scID == keys.PublicSchemaID {
+		// TODO(richardjcai): We can remove this in 22.2, still have to handle
+		// this case in the mixed version cluster.
+		if scID == keys.PublicSchemaIDForBackup {
 			scName = tree.PublicSchema
 		} else {
 			scDescI, ok := r.DescByID[scID]
@@ -297,6 +338,14 @@ func DescriptorsMatchingTargets(
 		}
 		if _, ok := alreadyRequestedDBs[dbID]; !ok {
 			desc := r.DescByID[dbID]
+			// Verify that the database is in the correct state.
+			doesNotExistErr := errors.Errorf(`database %q does not exist`, d)
+			if err := catalog.FilterDescriptorState(
+				desc, tree.CommonLookupFlags{},
+			); err != nil {
+				// Return a does not exist error if explicitly asking for this database.
+				return ret, doesNotExistErr
+			}
 			ret.Descs = append(ret.Descs, desc)
 			ret.RequestedDBs = append(ret.RequestedDBs,
 				desc.(catalog.DatabaseDescriptor))
@@ -309,7 +358,7 @@ func DescriptorsMatchingTargets(
 	alreadyRequestedSchemas := make(map[descpb.ID]struct{})
 	maybeAddSchemaDesc := func(id descpb.ID, requirePublic bool) error {
 		// Only add user defined schemas.
-		if id == keys.PublicSchemaID {
+		if id == keys.PublicSchemaIDForBackup {
 			return nil
 		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
@@ -393,7 +442,7 @@ func DescriptorsMatchingTargets(
 				if asOf.IsEmpty() {
 					return ret, doesNotExistErr
 				}
-				return ret, errors.Wrapf(invalidRestoreTsErr, `table %q does not exist, or invalid RESTORE timestamp`, tree.ErrString(p))
+				return ret, &MissingTableErr{invalidRestoreTsErr, tree.ErrString(p)}
 			}
 			tableDesc, isTable := descI.(catalog.TableDescriptor)
 			// If the type assertion didn't work, then we resolved a type instead, so
@@ -430,7 +479,7 @@ func DescriptorsMatchingTargets(
 			// Get all the types used by this table.
 			desc := r.DescByID[tableDesc.GetParentID()]
 			dbDesc := desc.(catalog.DatabaseDescriptor)
-			typeIDs, err := tableDesc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
+			typeIDs, _, err := tableDesc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
 			if err != nil {
 				return ret, err
 			}
@@ -511,7 +560,7 @@ func DescriptorsMatchingTargets(
 				}
 				// If this table is a member of a user defined schema, then request the
 				// user defined schema.
-				if desc.GetParentSchemaID() != keys.PublicSchemaID {
+				if desc.GetParentSchemaID() != keys.PublicSchemaIDForBackup {
 					// Note, that although we're processing the database expansions,
 					// since the table is in a PUBLIC state, we also expect the schema
 					// to be in a similar state.
@@ -522,7 +571,7 @@ func DescriptorsMatchingTargets(
 				// Get all the types used by this table.
 				dbRaw := r.DescByID[desc.GetParentID()]
 				dbDesc := dbRaw.(catalog.DatabaseDescriptor)
-				typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
+				typeIDs, _, err := desc.GetAllReferencedTypeIDs(dbDesc, getTypeByID)
 				if err != nil {
 					return err
 				}
@@ -566,21 +615,17 @@ func DescriptorsMatchingTargets(
 
 // LoadAllDescs returns all of the descriptors in the cluster.
 func LoadAllDescs(
-	ctx context.Context, codec keys.SQLCodec, db *kv.DB, asOf hlc.Timestamp,
-) ([]catalog.Descriptor, error) {
-	var allDescs []catalog.Descriptor
-	if err := db.Txn(
-		ctx,
-		func(ctx context.Context, txn *kv.Txn) error {
-			err := txn.SetFixedTimestamp(ctx, asOf)
-			if err != nil {
-				return err
-			}
-			allDescs, err = catalogkv.GetAllDescriptors(
-				ctx, txn, codec, true, /* shouldRunPostDeserializationChanges */
-			)
+	ctx context.Context, execCfg *sql.ExecutorConfig, asOf hlc.Timestamp,
+) (allDescs []catalog.Descriptor, _ error) {
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		err := txn.SetFixedTimestamp(ctx, asOf)
+		if err != nil {
 			return err
-		}); err != nil {
+		}
+		all, err := col.GetAllDescriptors(ctx, txn)
+		allDescs = all.OrderedDescriptors()
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	return allDescs, nil
@@ -593,7 +638,7 @@ func LoadAllDescs(
 func ResolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.TargetList,
 ) ([]catalog.Descriptor, []descpb.ID, error) {
-	allDescs, err := LoadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
+	allDescs, err := LoadAllDescs(ctx, p.ExecCfg(), endTime)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -604,8 +649,11 @@ func ResolveTargetsToDescriptors(
 		return nil, nil, err
 	}
 
-	// Ensure interleaved tables appear after their parent. Since parents must be
-	// created before their children, simply sorting by ID accomplishes this.
+	// This sorting was originally required to support interleaves.
+	// Now that these have been removed, sorting is not strictly-speaking
+	// necessary but has been preserved to maintain the output of SHOW BACKUPS
+	// that certain tests rely on.
 	sort.Slice(matched.Descs, func(i, j int) bool { return matched.Descs[i].GetID() < matched.Descs[j].GetID() })
+
 	return matched.Descs, matched.ExpandedDB, nil
 }

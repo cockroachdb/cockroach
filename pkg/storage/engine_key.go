@@ -38,6 +38,10 @@ type EngineKey struct {
 	Version []byte
 }
 
+// There are multiple decoding functions in the storage package, optimized for
+// their particular use case, that demultiplex on the various lengths below.
+// If adding another length to this list, remember to search for code
+// referencing these lengths and fix it.
 const (
 	engineKeyNoVersion                             = 0
 	engineKeyVersionWallTimeLen                    = 8
@@ -60,6 +64,7 @@ func (k EngineKey) Format(f fmt.State, c rune) {
 // look like an encoded EngineKey. By splitting, at Key + \x00, the Key looks
 // like an EngineKey with no Version.
 const (
+	sentinel               = '\x00'
 	sentinelLen            = 1
 	suffixEncodedLengthLen = 1
 )
@@ -180,6 +185,16 @@ func (k EngineKey) ToLockTableKey() (LockTableKey, error) {
 	return key, nil
 }
 
+// Validate checks if the EngineKey is a valid MVCCKey or LockTableKey.
+func (k EngineKey) Validate() error {
+	_, errMVCC := k.ToMVCCKey()
+	_, errLock := k.ToLockTableKey()
+	if errMVCC != nil && errLock != nil {
+		return errors.Newf("key %s is neither an MVCCKey or LockTableKey", k)
+	}
+	return nil
+}
+
 // DecodeEngineKey decodes the given bytes as an EngineKey. This function is
 // similar to enginepb.SplitMVCCKey.
 // TODO(sumeer): consider removing SplitMVCCKey.
@@ -195,7 +210,6 @@ func DecodeEngineKey(b []byte) (key EngineKey, ok bool) {
 	if keyPartEnd < 0 {
 		return EngineKey{}, false
 	}
-
 	// Key excludes the sentinel byte.
 	key.Key = b[:keyPartEnd]
 	if versionLen > 0 {

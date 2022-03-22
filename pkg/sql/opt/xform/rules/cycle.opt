@@ -1,0 +1,12 @@
+# =============================================================================
+# cycle.opt contains exploration rules for creating memo cycles.
+# =============================================================================
+
+# MemoCycleTestRelRule creates a cycle in the memo, where a path exists from a
+# group member's children back to the group member's group. This rule is used to
+# test that a memo cycle can be detected and a stack overflow does not occur.
+# See the cycle test file.
+[MemoCycleTestRelRule, Explore]
+(MemoCycleTestRel $input:* $filters:*)
+=>
+(MemoCycleTestRel (MemoCycleTestRel $input $filters) $filters)

@@ -11,6 +11,8 @@ go_library(
     deps = [
         "//pkg/build/bazel",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/envutil",
+        "//pkg/util/syncutil",
     ],
 )

@@ -1,0 +1,103 @@
+
+start
+----
+
+update
+upsert [a,c):A
+upsert [d,f):D
+----
+
+updates
+----
+[/Min,/Max)
+[a,c)
+[d,f)
+
+store-reader key=a
+----
+conf=A
+
+store-reader key=e
+----
+conf=D
+
+store-reader key=g
+----
+conf=FALLBACK
+
+update
+upsert {entire-keyspace}:X
+----
+
+updates
+----
+[/Min,/Max)
+
+store-reader key=a
+----
+conf=A+X
+
+store-reader key=e
+----
+conf=D+X
+
+# The system span config we set should still apply.
+store-reader key=g
+----
+conf=FALLBACK+X
+
+# Update span configs that target system tenant's keyspaces and ensure the
+# handler is invoked correctly.
+update
+upsert {source=1, target=1}:Y
+----
+
+# [/Min,/Tenant/2] corresponds to the system tenant targeting itself.
+updates
+----
+[/Min,/Tenant/2)
+
+# Ensure configs are correctly hydrated when we read them.
+store-reader key=a
+----
+conf=A+X+Y
+
+store-reader key=e
+----
+conf=D+X+Y
+
+# Delete the system span config over the entire keyspace and ensure handlers are
+# invoked correctly + configs for various keys are correctly hydrated.
+update
+delete {entire-keyspace}
+----
+
+updates
+----
+[/Min,/Max)
+
+store-reader key=a
+----
+conf=A+Y
+
+store-reader key=e
+----
+conf=D+Y
+
+# Update system span config, ensure handlers are correctly invoked, and configs
+# are hydrated correctly.
+update
+upsert {source=1, target=1}:V
+----
+
+updates
+----
+[/Min,/Tenant/2)
+
+store-reader key=a
+----
+conf=A+V
+
+store-reader key=e
+----
+conf=D+V

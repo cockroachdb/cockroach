@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "reltest",
+    srcs = [
+        "attribute.go",
+        "compare.go",
+        "database.go",
+        "registry.go",
+        "reltest.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel/reltest",
+    visibility = ["//pkg/sql/schemachanger/rel:__subpackages__"],
+    deps = [
+        "//pkg/sql/schemachanger/rel",
+        "//pkg/testutils",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)

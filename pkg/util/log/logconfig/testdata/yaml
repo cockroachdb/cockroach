@@ -1,3 +1,5 @@
+### Used in pkg/util/log/logconfig/config_test.go
+
 # Check how the empty config pretty-prints itself.
 yaml
 ----
@@ -120,6 +122,14 @@ sinks:
     channels: [OPS, HEALTH, STORAGE, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS,
       SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY]
 
+# Verify that channels can be filtered separately.
+yaml
+sinks: {stderr: {channels: {INFO: 'DEV,HEALTH', WARNING: TELEMETRY}}}
+----
+sinks:
+  stderr:
+    channels: {INFO: [DEV, HEALTH], WARNING: [TELEMETRY]}
+
 # Try populating all the fields.
 yaml
 file-defaults:
@@ -146,6 +156,7 @@ sinks:
     default:
       address: 127.0.0.1:5170
     other:
+      channels: {WARNING: HEALTH}
       net: udp
       address: 127.0.0.1:5111
 
@@ -177,6 +188,7 @@ sinks:
     default:
       address: 127.0.0.1:5170
     other:
+      channels: {WARNING: [HEALTH]}
       net: udp
       address: 127.0.0.1:5111
   stderr:
@@ -191,3 +203,51 @@ sinks:
       channels: DEV,DEV
 ----
 ERROR: duplicate channel name: "DEV"
+
+# Check that supported permission formats are accepted.
+yaml
+sinks:
+  file-groups:
+    decimal:
+      file-permissions: 222
+    leadingzero:
+      file-permissions: 0222
+    prefix:
+      file-permissions: 0o222
+    quoted:
+      file-permissions: "0222"
+----
+sinks:
+  file-groups:
+    decimal:
+      file-permissions: "0222"
+    leadingzero:
+      file-permissions: "0222"
+    prefix:
+      file-permissions: "0222"
+    quoted:
+      file-permissions: "0222"
+
+yaml
+file-defaults:
+  file-permissions: foobar
+----
+ERROR: file-permissions unparsable: foobar
+
+yaml
+file-defaults:
+  file-permissions: 02222
+----
+ERROR: file-permissions out-of-range: 02222
+
+yaml
+file-defaults:
+  file-permissions: -222
+----
+ERROR: file-permissions out-of-range: -222
+
+yaml
+file-defaults:
+  file-permissions: 0454
+----
+ERROR: file-permissions must not be executable: 0454

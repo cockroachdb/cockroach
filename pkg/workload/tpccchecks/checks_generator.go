@@ -55,7 +55,7 @@ foreground TPC-C workload`,
 		g.flags.StringSliceVar(&g.checks, "checks", checkNames,
 			"Name of checks to be run.")
 		g.connFlags = workload.NewConnFlags(&g.flags)
-		{ // Set the dbOveride to default to "tpcc".
+		{ // Set the dbOverride to default to "tpcc".
 			dbOverrideFlag := g.flags.Lookup(`db`)
 			dbOverrideFlag.DefValue = `tpcc`
 			if err := dbOverrideFlag.Value.Set(`tpcc`); err != nil {
@@ -98,7 +98,7 @@ func (w *tpccChecks) Ops(
 ) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.flags.Lookup("db").Value.String(), urls)
 	if err != nil {
-		return workload.QueryLoad{}, fmt.Errorf("%v", err)
+		return workload.QueryLoad{}, errors.Wrapf(err, "could not sanitize urls %v", urls)
 	}
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {

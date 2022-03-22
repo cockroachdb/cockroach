@@ -68,7 +68,7 @@ From a user's perspective, the feature would work as follows:
 - when enabled, the log files on disk at the running cluster would
   still contain all the details, sensitive and all.
 
-- however, the parts of the error messages that contain sensitve
+- however, the parts of the error messages that contain sensitive
   information would be annotated with special markers, for example:
   `advertising CockroachDB node at ‹kenax:26258›` the
   sensitive string `kenax:26258` is enclosed.
@@ -361,7 +361,7 @@ var myData = safeFunc()
 log.Infof("hello %s", log.Safe(myData))
 ```
 
-Later, it's possible to modifify the initial assignment to `var myData
+Later, it's possible to modify the initial assignment to `var myData
 = unsafeFunc()` and neither the author of that change nor the reviewer
 will be reminded to switch the `log.Safe` call 100 lines later.
 
@@ -390,7 +390,7 @@ Experience revealed two more problems with this interface however:
   as hex value (`Infof(ctx, "%x", myInt)`, or zero-padded `Infof(ctx,
   "%08d" myInt)` and `SafeMessager` does not support this.
 
-The proposed evolution to this sytem is inspired by Go's standard
+The proposed evolution to this system is inspired by Go's standard
 `fmt.Formatter` interface:
 
 ```go
@@ -412,7 +412,7 @@ type SafePrinter interface {
    SafeString(string)  // forced by linter to only take literals
    Safe(SafeFormatter)
 
-   // The following methods dynamicall check for the SafeFormatter
+   // The following methods dynamically check for the SafeFormatter
    // interface and either use that, or mark the argument
    // payload as unsafe.
    Print(args ...interface{})
@@ -542,7 +542,7 @@ The following areas in CockroachDB need to be worked on soon
 after the basic infrastructure is in place:
 
 - Pebble and RocksDB logging: this code is interfacing with the rest
-  of CockroachDB via Go's basic `log` interaace and pre-formats log
+  of CockroachDB via Go's basic `log` interface and pre-formats log
   entries, so that CockroachDB's `log` package considers all
   Pebble/RocksDB log entries as "unsafe"; for example:
 
@@ -998,7 +998,7 @@ Pros:
 
 Cons:
 
-- insivible characters may cause surprise
+- invisible characters may cause surprise
 - copy-paste with external tools could mis-behave
 
 ### Using other markers
@@ -1028,7 +1028,7 @@ Discussion "‹" and "›" vs other markers:
 
 - Invisible unicode markers e.g. INVISIBLE SEPARATOR' (U+2063) / ZERO WIDTH JOINER (U+200D)
 
-  Pros/cons: same as in [Using invisible markers](#using-invisble-markers) above,
+  Pros/cons: same as in [Using invisible markers](#using-invisible-markers) above,
   except that the markers are multibyte.
 
 - Other rarely-used ASCII characters: for example, using the `~`

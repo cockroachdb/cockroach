@@ -19,6 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -81,15 +83,16 @@ type ProjInfo struct {
 }
 
 // ErrProjectionNotFound indicates a project was not found.
-var ErrProjectionNotFound error = errors.New("projection not found")
+var ErrProjectionNotFound error = errors.Newf("projection not found")
 
 // Projection returns the ProjInfo for the given SRID, as well as an
 // error if the projection does not exist.
 func Projection(srid geopb.SRID) (ProjInfo, error) {
+	projections := getProjections()
 	p, exists := projections[srid]
 	if !exists {
 		return ProjInfo{}, errors.Mark(
-			errors.Newf("projection for SRID %d does not exist", srid),
+			pgerror.Newf(pgcode.InvalidParameterValue, "projection for SRID %d does not exist", srid),
 			ErrProjectionNotFound,
 		)
 	}
@@ -108,6 +111,7 @@ func MustProjection(srid geopb.SRID) ProjInfo {
 
 // AllProjections returns a sorted list of all projections.
 func AllProjections() []ProjInfo {
+	projections := getProjections()
 	ret := make([]ProjInfo, 0, len(projections))
 	for _, p := range projections {
 		ret = append(ret, p)

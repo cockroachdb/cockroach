@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for cast.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
@@ -24,17 +26,15 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -323,7 +323,7 @@ type castNativeToDatumOp struct {
 	castOpBase
 
 	scratch []tree.Datum
-	da      rowenc.DatumAlloc
+	da      tree.DatumAlloc
 }
 
 var _ colexecop.ClosableOperator = &castNativeToDatumOp{}
@@ -417,14 +417,6 @@ func setNativeToDatumCast(
 
 type cast_NAMEOp struct {
 	castOpBase
-
-	// {{if and (eq $fromFamily "types.DecimalFamily") (eq $toFamily "types.IntFamily")}}
-	// {{/*
-	// overloadHelper is used only when we perform the cast from decimals to
-	// ints. In all other cases we don't want to wastefully allocate the helper.
-	// */}}
-	overloadHelper execgen.OverloadHelper
-	// {{end}}
 }
 
 var _ colexecop.ResettableOperator = &cast_NAMEOp{}
@@ -436,11 +428,6 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 	if n == 0 {
 		return coldata.ZeroBatch
 	}
-	// {{if and (eq $fromFamily "types.DecimalFamily") (eq $toFamily "types.IntFamily")}}
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "execgen.OverloadHelper".
-	_overloadHelper := c.overloadHelper
-	// {{end}}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
@@ -473,12 +460,6 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, false, false)
 				}
 			}
-			// {{/*
-			// Although we didn't change the length of the batch, it is
-			// necessary to set the length anyway (this helps maintaining the
-			// invariant of flat bytes).
-			// */}}
-			batch.SetLength(n)
 		},
 	)
 	return batch

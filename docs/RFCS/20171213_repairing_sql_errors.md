@@ -15,7 +15,7 @@ may not have been possible in some situations prior to this RFC.
 
 This RFC discusses the command for running repair, all of the errors
 that will be repairable, the possible cause of errors along with how
-each scenario would fixed, and the stategy for how repairing is done.
+each scenario would fixed, and the strategy for how repairing is done.
 
 In short, the strategy discussed for how repairing is done is to first
 attempt to do a non-destructive fix, otherwise delete the bad data from
@@ -35,7 +35,7 @@ database. While rare, are bound to happen. Many of these errors are
 mentioned in the
 [scrub command RFC motivation section][scrub_command_rfc#motivation].
 
-It's not sufficent to only find errors; we also need to resolve them.
+It's not sufficient to only find errors; we also need to resolve them.
 This is crucial for disaster recovery where errors may cause data to
 become inaccessible. Correctness issues may also surface as a result of
 errors.

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/errors"
@@ -94,11 +95,26 @@ func (s SQLUsername) IsAdminRole() bool { return s.u == AdminRole }
 // It can be granted privileges, implicitly granting them to all users (current and future).
 const PublicRole = "public"
 
+// NoneRole is a special role.
+// It is primarily used in SET ROLE, where "none" symbolizes a reset.
+const NoneRole = "none"
+
+// IsNoneRole is true iff the username designates the none role.
+func (s SQLUsername) IsNoneRole() bool { return s.u == NoneRole }
+
 // PublicRoleName is the SQLUsername for PublicRole.
 func PublicRoleName() SQLUsername { return SQLUsername{PublicRole} }
 
 // IsPublicRole is true iff the username designates the public role.
 func (s SQLUsername) IsPublicRole() bool { return s.u == PublicRole }
+
+// IsReserved is true if the given username is reserved.
+// Matches Postgres and also includes crdb_internal_.
+func (s SQLUsername) IsReserved() bool {
+	return s.IsPublicRole() || s.u == NoneRole || s.IsNodeUser() ||
+		strings.HasPrefix(s.u, "pg_") ||
+		strings.HasPrefix(s.u, "crdb_internal_")
+}
 
 // Undefined is true iff the username is an empty string.
 func (s SQLUsername) Undefined() bool { return len(s.u) == 0 }
@@ -139,7 +155,7 @@ const (
 	// UsernameValidation indicates that the SQLUsername is
 	// being input for the purpose of looking up an existing
 	// user, or to compare with an existing username.
-	// This skips the stuctural restrictions imposed
+	// This skips the structural restrictions imposed
 	// for the purpose UsernameCreation.
 	UsernameValidation UsernamePurpose = true
 )

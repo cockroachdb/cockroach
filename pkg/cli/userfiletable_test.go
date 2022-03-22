@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -366,7 +367,7 @@ func checkUserFileContent(
 	require.NoError(t, err)
 	reader, err := store.ReadFile(ctx, "")
 	require.NoError(t, err)
-	got, err := ioutil.ReadAll(reader)
+	got, err := ioctx.ReadAll(ctx, reader)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(got, expectedContent))
 }
@@ -815,11 +816,11 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 			},
 		} {
 			createUserQuery := fmt.Sprintf(`CREATE USER "%s" WITH PASSWORD 'a'`, tc.username)
-			err = conn.Exec(createUserQuery, nil)
+			err = conn.Exec(ctx, createUserQuery)
 			require.NoError(t, err)
 
 			privsUserQuery := fmt.Sprintf(`GRANT CREATE ON DATABASE defaultdb TO "%s"`, tc.username)
-			err = conn.Exec(privsUserQuery, nil)
+			err = conn.Exec(ctx, privsUserQuery)
 			require.NoError(t, err)
 
 			userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t, c.ServingSQLAddr(), t.Name(),

@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -101,12 +100,6 @@ func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() uint64 {
 	return rec.i.GetLeaseAppliedIndex()
 }
 
-// GetTracker returns the min prop tracker that keeps tabs over ongoing command
-// evaluations for the closed timestamp subsystem.
-func (rec *SpanSetReplicaEvalContext) GetTracker() closedts.TrackerI {
-	return rec.i.GetTracker()
-}
-
 // IsFirstRange returns true iff the replica belongs to the first range.
 func (rec *SpanSetReplicaEvalContext) IsFirstRange() bool {
 	return rec.i.IsFirstRange()
@@ -172,6 +165,12 @@ func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 	return rec.i.GetGCThreshold()
 }
 
+// ExcludeDataFromBackup returns whether the replica is to be excluded from a
+// backup.
+func (rec SpanSetReplicaEvalContext) ExcludeDataFromBackup() bool {
+	return rec.i.ExcludeDataFromBackup()
+}
+
 // String implements Stringer.
 func (rec SpanSetReplicaEvalContext) String() string {
 	return rec.i.String()
@@ -223,9 +222,9 @@ func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(ctx context.Context)
 	return rec.i.GetCurrentReadSummary(ctx)
 }
 
-// GetClosedTimestampV2 is part of the EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetClosedTimestampV2(ctx context.Context) hlc.Timestamp {
-	return rec.i.GetClosedTimestampV2(ctx)
+// GetClosedTimestamp is part of the EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
+	return rec.i.GetClosedTimestamp(ctx)
 }
 
 // GetExternalStorage returns an ExternalStorage object, based on

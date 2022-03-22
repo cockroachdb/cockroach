@@ -1,0 +1,70 @@
+# This file contains basic tests for session_migration.
+
+exec
+CREATE DATABASE d; USE d
+----
+
+exec
+SET extra_float_digits = -1;
+SET enable_zigzag_join = false;
+SET search_path = public;
+SET custom_option.custom_option = 'test'
+----
+
+let $x
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+----
+
+dump_vars
+old_state
+----
+
+reset
+----
+
+query
+SHOW database
+----
+defaultdb
+
+exec
+SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
+----
+
+query
+SHOW database
+----
+d
+
+dump_vars
+new_state
+----
+
+compare_vars
+old_state
+new_state
+----
+
+reset
+----
+
+# Test serializing prepared statements.
+exec
+PREPARE stmt AS SELECT 1
+----
+
+let $x
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+----
+
+reset
+----
+
+exec
+SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
+----
+
+query
+EXECUTE stmt
+----
+1

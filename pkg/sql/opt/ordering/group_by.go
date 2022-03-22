@@ -99,7 +99,7 @@ func distinctOnBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) 
 
 // StreamingGroupingColOrdering returns an ordering on grouping columns that is
 // guaranteed on the input of an aggregation operator. This ordering can be used
-// perform a streaming aggregation.
+// to perform a streaming aggregation.
 func StreamingGroupingColOrdering(
 	g *memo.GroupingPrivate, required *props.OrderingChoice,
 ) opt.Ordering {
@@ -108,7 +108,7 @@ func StreamingGroupingColOrdering(
 	for i := range inputOrdering.Columns {
 		// Get any grouping column from the set. Normally there would be at most one
 		// because we have rules that remove redundant grouping columns.
-		cols := inputOrdering.Columns[i].Group.Intersection(g.GroupingCols)
+		cols := inputOrdering.Group(i).Intersection(g.GroupingCols)
 		colID, ok := cols.Next(0)
 		if !ok {
 			// This group refers to a column that is not a grouping column.

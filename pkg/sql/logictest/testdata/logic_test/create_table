@@ -60,9 +60,9 @@ rowid_2
 query TT
 SELECT index_name, column_name FROM [SHOW INDEXES FROM t]
 ----
-primary  rowid_2
-primary  rowid
-primary  rowid_1
+t_pkey  rowid_2
+t_pkey  rowid
+t_pkey  rowid_1
 
 query TT
 SHOW CREATE t
@@ -71,7 +71,7 @@ t  CREATE TABLE public.t (
    rowid INT8 NULL,
    rowid_1 INT8 NULL,
    rowid_2 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid_2 ASC),
+   CONSTRAINT t_pkey PRIMARY KEY (rowid_2 ASC),
    FAMILY fam_0_rowid_rowid_1_rowid_2 (rowid, rowid_1, rowid_2)
 )
 
@@ -96,13 +96,12 @@ statement ok
 DROP TABLE telemetry_test
 
 statement ok
-SET experimental_enable_hash_sharded_indexes = true;
 CREATE TABLE telemetry (
   x INT PRIMARY KEY,
   y INT,
   z JSONB,
   INVERTED INDEX (z),
-  INDEX (y) USING HASH WITH BUCKET_COUNT = 4
+  INDEX (y) USING HASH WITH (bucket_count=4)
 )
 
 query T rowsort
@@ -130,6 +129,7 @@ CREATE TABLE like_table (
   h INT,
   j JSON,
   k INT UNIQUE WITHOUT INDEX,
+  t TIMESTAMPTZ DEFAULT current_timestamp() - '5s'::interval ON UPDATE current_timestamp(),
   PRIMARY KEY (a, b),
   UNIQUE INDEX foo (b DESC, c),
   INDEX (c) STORING (j),
@@ -151,9 +151,9 @@ like_none  CREATE TABLE public.like_none (
            h INT8 NULL,
            j JSONB NULL,
            k INT8 NULL,
+           t TIMESTAMPTZ NULL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-           FAMILY "primary" (a, b, c, h, j, k, rowid)
+           CONSTRAINT like_none_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -169,9 +169,9 @@ like_constraints  CREATE TABLE public.like_constraints (
                   h INT8 NULL,
                   j JSONB NULL,
                   k INT8 NULL,
+                  t TIMESTAMPTZ NULL,
                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-                  FAMILY "primary" (a, b, c, h, j, k, rowid),
+                  CONSTRAINT like_constraints_pkey PRIMARY KEY (rowid ASC),
                   CONSTRAINT check_a CHECK (a > 3:::INT8),
                   CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
                   CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
@@ -191,11 +191,11 @@ like_indexes  CREATE TABLE public.like_indexes (
               h INT8 NULL,
               j JSONB NULL,
               k INT8 NULL,
-              CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+              t TIMESTAMPTZ NULL,
+              CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
               UNIQUE INDEX foo (b DESC, c ASC),
               INDEX like_table_c_idx (c ASC) STORING (j),
-              INVERTED INDEX like_table_j_idx (j),
-              FAMILY "primary" (a, b, c, h, j, k)
+              INVERTED INDEX like_table_j_idx (j)
 )
 
 # INCLUDING GENERATED adds "generated columns", aka stored columns.
@@ -212,9 +212,9 @@ like_generated  CREATE TABLE public.like_generated (
                 h INT8 NULL,
                 j JSONB NULL,
                 k INT8 NULL,
+                t TIMESTAMPTZ NULL,
                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-                FAMILY "primary" (a, b, c, h, j, k, rowid)
+                CONSTRAINT like_generated_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -230,9 +230,9 @@ like_defaults  CREATE TABLE public.like_defaults (
                h INT8 NULL,
                j JSONB NULL,
                k INT8 NULL,
+               t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-               FAMILY "primary" (a, b, c, h, j, k, rowid)
+               CONSTRAINT like_defaults_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -248,11 +248,11 @@ like_all  CREATE TABLE public.like_all (
           h INT8 NULL,
           j JSONB NULL,
           k INT8 NULL,
-          CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+          t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
+          CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
           UNIQUE INDEX foo (b DESC, c ASC),
           INDEX like_table_c_idx (c ASC) STORING (j),
           INVERTED INDEX like_table_j_idx (j),
-          FAMILY "primary" (a, b, c, h, j, k),
           CONSTRAINT check_a CHECK (a > 3:::INT8),
           CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
           CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
@@ -274,11 +274,11 @@ like_mixed  CREATE TABLE public.like_mixed (
             h INT8 NULL,
             j JSONB NULL,
             k INT8 NULL,
-            CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+            t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
+            CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
             UNIQUE INDEX foo (b DESC, c ASC),
             INDEX like_table_c_idx (c ASC) STORING (j),
-            INVERTED INDEX like_table_j_idx (j),
-            FAMILY "primary" (a, b, c, h, j, k)
+            INVERTED INDEX like_table_j_idx (j)
 )
 
 statement ok
@@ -296,8 +296,7 @@ like_no_pk_rowid_hidden  CREATE TABLE public.like_no_pk_rowid_hidden (
                          a INT8 NULL,
                          b INT8 NULL,
                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                         CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-                         FAMILY "primary" (a, b, rowid)
+                         CONSTRAINT like_no_pk_table_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement error duplicate column name
@@ -321,17 +320,17 @@ like_more_specifiers  CREATE TABLE public.like_more_specifiers (
                       h INT8 NULL,
                       j JSONB NULL,
                       k INT8 NULL,
+                      t TIMESTAMPTZ NULL,
                       z DECIMAL NULL,
                       blah INT8 NULL,
                       rowid INT8 NOT VISIBLE NOT NULL,
                       rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                      CONSTRAINT "primary" PRIMARY KEY (rowid_1 ASC),
-                      INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC),
-                      FAMILY "primary" (a, b, c, h, j, k, z, blah, rowid, rowid_1)
+                      CONSTRAINT like_more_specifiers_pkey PRIMARY KEY (rowid_1 ASC),
+                      INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC)
 )
 
 statement ok
-CREATE TABLE like_hash_base (a INT, INDEX (a) USING HASH WITH BUCKET_COUNT=4)
+CREATE TABLE like_hash_base (a INT, INDEX (a) USING HASH WITH (bucket_count=4))
 
 statement ok
 CREATE TABLE like_hash (LIKE like_hash_base INCLUDING INDEXES)
@@ -341,30 +340,33 @@ SHOW CREATE TABLE like_hash
 ----
 like_hash  CREATE TABLE public.like_hash (
            a INT8 NULL,
-           crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL,
+           crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-           INDEX like_hash_base_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
-           FAMILY "primary" (a, crdb_internal_a_shard_4, rowid)
+           CONSTRAINT like_hash_base_pkey PRIMARY KEY (rowid ASC),
+           INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
 )
 
 statement ok
-DROP TABLE like_hash; CREATE TABLE like_hash (LIKE like_hash_base INCLUDING ALL)
+DROP TABLE like_hash;
+
+statement ok
+CREATE TABLE like_hash (LIKE like_hash_base INCLUDING ALL)
 
 query TT
 SHOW CREATE TABLE like_hash
 ----
 like_hash  CREATE TABLE public.like_hash (
            a INT8 NULL,
-           crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(a AS STRING), '':::STRING)), 4:::INT8)) STORED,
+           crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-           INDEX like_hash_base_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
-           FAMILY "primary" (a, crdb_internal_a_shard_4, rowid)
+           CONSTRAINT like_hash_base_pkey PRIMARY KEY (rowid ASC),
+           INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
 )
 
 statement ok
 CREATE TABLE regression_67196 (pk INT PRIMARY KEY, hidden INT NOT VISIBLE);
+
+statement ok
 CREATE TABLE regression_67196_like (LIKE regression_67196)
 
 query TT
@@ -374,8 +376,7 @@ regression_67196_like  CREATE TABLE public.regression_67196_like (
                        pk INT8 NOT NULL,
                        hidden INT8 NOT VISIBLE NULL,
                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-                       FAMILY "primary" (pk, hidden, rowid)
+                       CONSTRAINT regression_67196_like_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement error unimplemented
@@ -431,9 +432,6 @@ CREATE TABLE error (a INT CHECK (a > 5), CONSTRAINT check_a CHECK (a > 5))
 statement error pgcode 0A000 unique constraints without an index cannot store columns
 CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) STORING (b))
 
-statement error pgcode 0A000 interleaved unique constraints without an index are not supported
-CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) INTERLEAVE IN PARENT foo (b))
-
 statement error pgcode 0A000 partitioned unique constraints without an index are not supported
 CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) PARTITION BY LIST (b) (
   PARTITION p1 VALUES IN (1)
@@ -475,3 +473,402 @@ CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_transaction_statistics);
 
 query error crdb_internal.node_txn_stats cannot be used in this context
 CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_txn_stats);
+
+subtest generated_as_identity
+statement ok
+CREATE TABLE generated_always_t (
+  a INT UNIQUE,
+  b INT GENERATED ALWAYS AS IDENTITY,
+  FAMILY f1 (a, b)
+)
+
+query TT
+SHOW CREATE TABLE generated_always_t
+----
+generated_always_t  CREATE TABLE public.generated_always_t (
+                    a INT8 NULL,
+                    b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
+                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                    CONSTRAINT generated_always_t_pkey PRIMARY KEY (rowid ASC),
+                    UNIQUE INDEX generated_always_t_a_key (a ASC),
+                    FAMILY f1 (a, b, rowid)
+)
+
+statement ok
+CREATE TABLE generated_by_default_t (
+  a INT UNIQUE,
+  b INT GENERATED BY DEFAULT AS IDENTITY,
+  FAMILY f1 (a, b)
+)
+
+query TT
+SHOW CREATE TABLE generated_by_default_t
+----
+generated_by_default_t  CREATE TABLE public.generated_by_default_t (
+                        a INT8 NULL,
+                        b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                        CONSTRAINT generated_by_default_t_pkey PRIMARY KEY (rowid ASC),
+                        UNIQUE INDEX generated_by_default_t_a_key (a ASC),
+                        FAMILY f1 (a, b, rowid)
+)
+
+statement ok
+CREATE TABLE generated_always_t_notnull (a INT UNIQUE, b INT NOT NULL GENERATED ALWAYS AS IDENTITY)
+
+statement ok
+CREATE TABLE generated_by_default_t_notnull (a INT UNIQUE, b INT NOT NULL GENERATED BY DEFAULT AS IDENTITY)
+
+statement ok
+CREATE TYPE regression_72804_enum AS ENUM ()
+
+statement error pgcode 22023 identity column type must be an INT
+CREATE TABLE regression_72804 (
+  a INT,
+  b regression_72804_enum GENERATED ALWAYS AS IDENTITY
+)
+
+statement error pgcode 22023 identity column type must be an INT
+CREATE TABLE regression_72804 (
+  a INT,
+  c regression_72804_enum GENERATED BY DEFAULT AS IDENTITY,
+)
+
+subtest generated_as_identity_with_seq_option
+statement ok
+CREATE TABLE gen_always_as_id_seqopt (
+  a INT UNIQUE,
+  b INT GENERATED ALWAYS AS IDENTITY (START 2 INCREMENT 3),
+  FAMILY f1 (a, b)
+)
+
+query TT
+SHOW CREATE TABLE gen_always_as_id_seqopt
+----
+gen_always_as_id_seqopt  CREATE TABLE public.gen_always_as_id_seqopt (
+                         a INT8 NULL,
+                         b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY (START 2 INCREMENT 3),
+                         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                         CONSTRAINT gen_always_as_id_seqopt_pkey PRIMARY KEY (rowid ASC),
+                         UNIQUE INDEX gen_always_as_id_seqopt_a_key (a ASC),
+                         FAMILY f1 (a, b, rowid)
+)
+
+statement ok
+CREATE TABLE gen_always_as_id_seqopt_cache (
+  a INT UNIQUE,
+  b INT GENERATED ALWAYS AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+  FAMILY f1 (a, b)
+)
+
+query TT
+SHOW CREATE TABLE gen_always_as_id_seqopt_cache
+----
+gen_always_as_id_seqopt_cache  CREATE TABLE public.gen_always_as_id_seqopt_cache (
+                               a INT8 NULL,
+                               b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+                               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                               CONSTRAINT gen_always_as_id_seqopt_cache_pkey PRIMARY KEY (rowid ASC),
+                               UNIQUE INDEX gen_always_as_id_seqopt_cache_a_key (a ASC),
+                               FAMILY f1 (a, b, rowid)
+)
+
+statement ok
+CREATE TABLE gen_by_default_as_id_seqopt (
+  a INT UNIQUE,
+  b INT GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3),
+  FAMILY f1 (a, b)
+)
+
+query TT
+SHOW CREATE TABLE gen_by_default_as_id_seqopt
+----
+gen_by_default_as_id_seqopt  CREATE TABLE public.gen_by_default_as_id_seqopt (
+                             a INT8 NULL,
+                             b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3),
+                             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                             CONSTRAINT gen_by_default_as_id_seqopt_pkey PRIMARY KEY (rowid ASC),
+                             UNIQUE INDEX gen_by_default_as_id_seqopt_a_key (a ASC),
+                             FAMILY f1 (a, b, rowid)
+)
+
+statement ok
+CREATE TABLE gen_by_default_as_id_seqopt_cache (
+  a INT UNIQUE,
+  b INT GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+  FAMILY f1 (a, b)
+)
+
+query TT
+SHOW CREATE TABLE gen_by_default_as_id_seqopt_cache
+----
+gen_by_default_as_id_seqopt_cache  CREATE TABLE public.gen_by_default_as_id_seqopt_cache (
+                                   a INT8 NULL,
+                                   b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
+                                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                   CONSTRAINT gen_by_default_as_id_seqopt_cache_pkey PRIMARY KEY (rowid ASC),
+                                   UNIQUE INDEX gen_by_default_as_id_seqopt_cache_a_key (a ASC),
+                                   FAMILY f1 (a, b, rowid)
+)
+
+statement ok
+CREATE SEQUENCE serial_test_sequence start 1 increment 1
+
+statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+CREATE TABLE serial_test1 (id INT PRIMARY KEY DEFAULT nextval('serial_test_sequence'), temp string)
+
+statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+CREATE TABLE serial_test2 (id SERIAL PRIMARY KEY, temp string)
+
+statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+CREATE TABLE serial_test3 (id SERIAL, temp string, PRIMARY KEY (id))
+
+statement notice NOTICE: upgrading the column id to INT8 to utilize the session serial_normalization setting\nHINT: change the serial_normalization to sql_sequence or sql_sequence_cached if you wish to use a smaller sized serial column at the cost of performance. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+CREATE TABLE serial_test4 (id SERIAL4, temp string)
+
+statement ok
+CREATE TABLE regression_73648 AS select * from [SHOW CLUSTER QUERIES]
+
+# Test sequence is drop when a owner table/column is dropped
+subtest test_serial_ownership_create_table
+
+statement ok
+SET serial_normalization = sql_sequence;
+
+statement error "fillfactor" must be between 0 and 100
+CREATE TABLE test_ownership_invalid_fillfactor (
+        a INT PRIMARY KEY,
+        b SERIAL
+) with (fillfactor = 70000)
+
+statement ok
+CREATE TABLE test_serial (
+	a INT PRIMARY KEY,
+	b SERIAL
+);
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name               state   refobjid
+176       test_serial_b_seq  PUBLIC  175
+175       test_serial        PUBLIC  NULL
+
+statement ok
+DROP TABLE test_serial;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name  state  refobjid
+
+statement ok
+CREATE TABLE test_serial (
+	a INT PRIMARY KEY,
+	b SERIAL
+);
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name               state   refobjid
+178       test_serial_b_seq  PUBLIC  177
+177       test_serial        PUBLIC  NULL
+
+statement ok
+ALTER TABLE test_serial DROP COLUMN b;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name         state   refobjid
+177       test_serial  PUBLIC  NULL
+
+statement ok
+DROP TABLE test_serial;
+
+subtest test_storage_params_validation
+
+statement error pq: invalid storage param "s2_max_level" on primary key
+CREATE TABLE t_bad_param (
+  a INT PRIMARY KEY WITH (s2_max_level=20)
+);
+
+statement error pq: invalid storage param "s2_max_level" on primary key
+CREATE TABLE t_bad_param (
+  a INT PRIMARY KEY USING HASH WITH (s2_max_level=20)
+);
+
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+CREATE TABLE t_bad_param (
+  a INT PRIMARY KEY WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+CREATE TABLE t_bad_param (
+  a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
+);
+
+
+statement error pq: invalid storage param "s2_max_level" on primary key
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  PRIMARY KEY (a) WITH (s2_max_level=20)
+);
+
+statement error pq: invalid storage param "s2_max_level" on primary key
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  PRIMARY KEY (a) USING HASH WITH (s2_max_level=20)
+);
+
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  PRIMARY KEY (a) WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  PRIMARY KEY (a) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
+);
+
+statement error pq: invalid storage param "s2_max_level" on primary key
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) WITH (s2_max_level=20)
+);
+
+statement error pq: invalid storage param "s2_max_level" on primary key
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) USING HASH WITH (s2_max_level=20)
+);
+
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
+);
+
+statement error pq: invalid storage param "s2_max_level" on unique index
+CREATE TABLE t_bad_param (
+  a INT,
+  UNIQUE INDEX (a) WITH (s2_max_level=20)
+);
+
+statement error pq: invalid storage param "s2_max_level" on unique index
+CREATE TABLE t_bad_param (
+  a INT,
+  UNIQUE INDEX (a) USING HASH WITH (s2_max_level=20)
+);
+
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+CREATE TABLE t_bad_param (
+  a INT,
+  UNIQUE INDEX (a) WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+CREATE TABLE t_bad_param (
+  a INT,
+  UNIQUE INDEX (a) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+CREATE TABLE t_bad_param (
+  a INT,
+  INDEX (a) WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+CREATE TABLE t_bad_param (
+  a INT,
+  INDEX (a) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
+);
+
+statement ok
+CREATE TABLE t_source (
+  a INT PRIMARY KEY
+);
+
+statement error pq: storage parameters are not supported on primary key for CREATE TABLE...AS... statement
+CREATE TABLE t_bad_param (
+  a PRIMARY KEY WITH (s2_max_level=20)
+) AS SELECT * FROM t_source;
+
+statement error pq: storage parameters are not supported on primary key for CREATE TABLE...AS... statement
+CREATE TABLE t_bad_param (
+  a,
+  PRIMARY KEY (a) WITH (s2_max_level=20)
+) AS SELECT * FROM t_source;
+
+subtest test_old_bucket_count_syntax
+
+statement ok
+CREATE TABLE t_good_hash_indexes_1 (
+ a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 5,
+ b INT,
+ c INT,
+ INDEX (b) USING HASH WITH BUCKET_COUNT = 5,
+ FAMILY "primary" (a, b, c)
+);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_good_hash_indexes_1];
+----
+CREATE TABLE public.t_good_hash_indexes_1 (
+   crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
+   a INT8 NOT NULL,
+   b INT8 NULL,
+   c INT8 NULL,
+   crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
+   CONSTRAINT t_good_hash_indexes_1_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5),
+   INDEX t_good_hash_indexes_1_b_idx (b ASC) USING HASH WITH (bucket_count=5)
+)
+
+statement ok
+CREATE TABLE t_good_hash_indexes_2 (
+ a INT,
+ PRIMARY KEY (a) USING HASH WITH BUCKET_COUNT = 5
+);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_good_hash_indexes_2];
+----
+CREATE TABLE public.t_good_hash_indexes_2 (
+   a INT8 NOT NULL,
+   crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
+   CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5)
+)

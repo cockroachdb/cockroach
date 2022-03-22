@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This is used through bazel when generating sql.go. Look at BUILD.bazel for
 # usage.

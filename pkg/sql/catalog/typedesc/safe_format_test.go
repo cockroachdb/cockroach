@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/redact"
@@ -29,17 +30,10 @@ func TestSafeMessage(t *testing.T) {
 	}{
 		{
 			desc: typedesc.NewBuilder(&descpb.TypeDescriptor{
-				Name:    "foo",
-				ID:      21,
-				Version: 3,
-				DrainingNames: []descpb.NameInfo{
-					{
-						ParentID:       2,
-						ParentSchemaID: 29,
-						Name:           "bar",
-					},
-				},
-				Privileges:               descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Name:                     "foo",
+				ID:                       21,
+				Version:                  3,
+				Privileges:               catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 				ParentID:                 2,
 				ParentSchemaID:           29,
 				ArrayTypeID:              117,
@@ -48,22 +42,15 @@ func TestSafeMessage(t *testing.T) {
 				ReferencingDescriptorIDs: []descpb.ID{73, 37},
 			}).BuildImmutableType(),
 			exp: `typedesc.immutable: {ID: 21, Version: 3, ModificationTime: "0,0", ` +
-				`ParentID: 2, ParentSchemaID: 29, State: PUBLIC, NumDrainingNames: 1, ` +
+				`ParentID: 2, ParentSchemaID: 29, State: PUBLIC, ` +
 				`Kind: ALIAS, ArrayTypeID: 117, ReferencingDescriptorIDs: [73, 37]}`,
 		},
 		{
 			desc: typedesc.NewBuilder(&descpb.TypeDescriptor{
-				Name:    "foo",
-				ID:      21,
-				Version: 3,
-				DrainingNames: []descpb.NameInfo{
-					{
-						ParentID:       2,
-						ParentSchemaID: 29,
-						Name:           "bar",
-					},
-				},
-				Privileges:               descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Name:                     "foo",
+				ID:                       21,
+				Version:                  3,
+				Privileges:               catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 				ParentID:                 2,
 				ParentSchemaID:           29,
 				ArrayTypeID:              117,
@@ -75,7 +62,7 @@ func TestSafeMessage(t *testing.T) {
 				},
 			}).BuildImmutableType(),
 			exp: `typedesc.immutable: {ID: 21, Version: 3, ModificationTime: "0,0", ` +
-				`ParentID: 2, ParentSchemaID: 29, State: PUBLIC, NumDrainingNames: 1, ` +
+				`ParentID: 2, ParentSchemaID: 29, State: PUBLIC, ` +
 				`Kind: ENUM, NumEnumMembers: 1, ArrayTypeID: 117, ReferencingDescriptorIDs: [73, 37]}`,
 		},
 	} {

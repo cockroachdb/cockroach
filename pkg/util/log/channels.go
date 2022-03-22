@@ -53,7 +53,9 @@ func logfDepth(
 		ctx, sev, ch,
 		depth+1, true /* redactable */, format, args...)
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
-		eventInternal(sp, el, (sev >= severity.ERROR), entry.convertToLegacy())
+		// Prevent `entry` from moving to the heap if this branch isn't taken.
+		heapEntry := entry
+		eventInternal(sp, el, sev >= severity.ERROR, &heapEntry)
 	}
 	logger.outputLogEntry(entry)
 }
@@ -76,7 +78,7 @@ func shoutfDepth(
 		// it here.
 		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(),
 			strings.Replace(
-				FormatWithContextTags(ctx, format, args...),
+				formatOnlyArgs(format, args...),
 				"\n", "\n* ", -1))
 	}
 	logfDepth(ctx, depth+1, sev, ch, format, args...)
@@ -99,13 +101,13 @@ func (l *loggingT) getLogger(ch Channel) *loggerT {
 }
 
 // LoggingToStderr returns true if log messages of the given severity
-// sent to the channel's logger are also visible on the process'
+// sent to the DEV channel are also visible on the process'
 // external stderr. This is used e.g. by the startup code to announce
 // server details both on the external stderr and to the log file.
 //
 // This is also the logic used by Shout calls.
 func LoggingToStderr(s Severity) bool {
-	return s >= logging.stderrSinkInfoTemplate.threshold.Get()
+	return s >= logging.stderrSinkInfoTemplate.threshold.get(channel.DEV)
 }
 
 // MaybeSendCrashReport is injected by package logcrash

@@ -11,6 +11,7 @@
 package contention_test
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -20,9 +21,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -67,10 +70,11 @@ func TestRegistry(t *testing.T) {
 		}
 		return stringRepresentation
 	}
+	st := cluster.MakeTestingClusterSettings()
 	registryMap := make(map[string]*contention.Registry)
 	// registry is the current registry.
 	var registry *contention.Registry
-	datadriven.RunTest(t, "testdata/contention_registry", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "contention_registry"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "use":
 			var registryKey string
@@ -78,7 +82,8 @@ func TestRegistry(t *testing.T) {
 			var ok bool
 			registry, ok = registryMap[registryKey]
 			if !ok {
-				registry = contention.NewRegistry()
+				m := contention.NewMetrics()
+				registry = contention.NewRegistry(st, nil /* status */, &m)
 				registryMap[registryKey] = registry
 			}
 			return d.Expected
@@ -143,10 +148,11 @@ func TestRegistry(t *testing.T) {
 				return fmt.Sprintf("could not parse duration %s as int: %v", duration, err)
 			}
 			keyBytes = encoding.EncodeStringAscending(keyBytes, key)
-			registry.AddContentionEvent(roachpb.ContentionEvent{
+			addContentionEvent(registry, roachpb.ContentionEvent{
 				Key: keyBytes,
 				TxnMeta: enginepb.TxnMeta{
-					ID: contendingTxnID,
+					ID:                contendingTxnID,
+					CoordinatorNodeID: 6,
 				},
 				Duration: time.Duration(contentionDuration),
 			})
@@ -168,11 +174,15 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 	const numGoroutines = 10
 	var wg sync.WaitGroup
 	wg.Add(numGoroutines)
-	registry := contention.NewRegistry()
+	st := cluster.MakeTestingClusterSettings()
+	// Disable the event store.
+	contention.TxnIDResolutionInterval.Override(context.Background(), &st.SV, 0)
+	m := contention.NewMetrics()
+	registry := contention.NewRegistry(st, nil /* status */, &m)
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
-			registry.AddContentionEvent(roachpb.ContentionEvent{
+			addContentionEvent(registry, roachpb.ContentionEvent{
 				Key: keys.MakeTableIDIndexID(nil /* key */, 1 /* tableID */, 1 /* indexID */),
 			})
 		}()
@@ -189,7 +199,7 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 // - all three levels of objects satisfy the respective ordering
 //   requirements.
 func TestSerializedRegistryInvariants(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	const nonSQLKeyProbability = 0.1
 	const sizeLimit = 5
 	const keySpaceSize = sizeLimit * sizeLimit
@@ -219,19 +229,23 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 	populateRegistry := func(r *contention.Registry) {
 		numContentionEvents := rng.Intn(maxNumContentionEvents)
 		for i := 0; i < numContentionEvents; i++ {
-			var key []byte
+			// Always append a tenant ID at the start of the key so that in case
+			// we choose to generate a non-SQL key, it doesn't have the first
+			// byte randomly equal to tenantPrefixByte.
+			key := keys.MakeTenantPrefix(roachpb.MakeTenantID(1 + uint64(rng.Uint32())))
 			if rng.Float64() > nonSQLKeyProbability {
 				// Create a key with a valid SQL prefix.
 				tableID := uint32(1 + rng.Intn(testIndexMapMaxSize+1))
 				indexID := uint32(1 + rng.Intn(testIndexMapMaxSize+1))
-				key = keys.MakeTableIDIndexID(nil /* key */, tableID, indexID)
+				key = keys.MakeTableIDIndexID(key, tableID, indexID)
 			}
 			key = append(key, getKey()...)
-			r.AddContentionEvent(roachpb.ContentionEvent{
+			addContentionEvent(r, roachpb.ContentionEvent{
 				Key: key,
 				TxnMeta: enginepb.TxnMeta{
-					ID:  uuid.MakeV4(),
-					Key: getKey(),
+					ID:                uuid.MakeV4(),
+					Key:               getKey(),
+					CoordinatorNodeID: 6,
 				},
 				Duration: time.Duration(int64(rng.Uint64())),
 			})
@@ -295,8 +309,12 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 		}
 	}
 
+	st := cluster.MakeTestingClusterSettings()
+	// Disable the event store.
+	contention.TxnIDResolutionInterval.Override(context.Background(), &st.SV, 0)
 	createNewSerializedRegistry := func() contentionpb.SerializedRegistry {
-		r := contention.NewRegistry()
+		m := contention.NewMetrics()
+		r := contention.NewRegistry(st, nil /* status */, &m)
 		populateRegistry(r)
 		s := r.Serialize()
 		checkSerializedRegistryInvariants(s)
@@ -311,4 +329,10 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 		m = contention.MergeSerializedRegistries(m, s)
 		checkSerializedRegistryInvariants(m)
 	}
+}
+
+func addContentionEvent(r *contention.Registry, ev roachpb.ContentionEvent) {
+	r.AddContentionEvent(contentionpb.ExtendedContentionEvent{
+		BlockingEvent: ev,
+	})
 }

@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -133,7 +133,7 @@ type orderedAggregator struct {
 	// seenNonEmptyBatch indicates whether a non-empty input batch has been
 	// observed.
 	seenNonEmptyBatch bool
-	datumAlloc        rowenc.DatumAlloc
+	datumAlloc        tree.DatumAlloc
 	toClose           colexecop.Closers
 }
 
@@ -141,20 +141,15 @@ var _ colexecop.ResettableOperator = &orderedAggregator{}
 var _ colexecop.ClosableOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator.
-func NewOrderedAggregator(
-	args *colexecagg.NewAggregatorArgs,
-) (colexecop.ResettableOperator, error) {
+func NewOrderedAggregator(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 	for _, aggFn := range args.Spec.Aggregations {
 		if aggFn.FilterColIdx != nil {
-			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
+			colexecerror.InternalError(errors.AssertionFailedf("filtering ordered aggregation is not supported"))
 		}
 	}
-	op, groupCol, err := colexecbase.OrderedDistinctColsToOperators(
+	op, groupCol := colexecbase.OrderedDistinctColsToOperators(
 		args.Input, args.Spec.GroupCols, args.InputTypes, false, /* nullsAreDistinct */
 	)
-	if err != nil {
-		return nil, err
-	}
 
 	// We will be reusing the same aggregate functions, so we use 1 as the
 	// allocation size.
@@ -162,9 +157,7 @@ func NewOrderedAggregator(
 		args, args.Spec.Aggregations, 1 /* allocSize */, colexecagg.OrderedAggKind,
 	)
 	if err != nil {
-		return nil, errors.AssertionFailedf(
-			"this error should have been checked in isAggregateSupported\n%+v", err,
-		)
+		colexecerror.InternalError(err)
 	}
 
 	a := &orderedAggregator{
@@ -178,7 +171,7 @@ func NewOrderedAggregator(
 		toClose:            toClose,
 	}
 	a.aggHelper = newAggregatorHelper(args, &a.datumAlloc, false /* isHashAgg */, coldata.BatchSize())
-	return a, nil
+	return a
 }
 
 func (a *orderedAggregator) Init(ctx context.Context) {
@@ -288,7 +281,8 @@ func (a *orderedAggregator) Next() coldata.Batch {
 				// capacity, so we choose to instantiate the batch with fixed
 				// maximal capacity that can be needed by the aggregator.
 				a.allocator.ReleaseMemory(colmem.GetBatchMemSize(a.scratch.Batch))
-				a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, 2*coldata.BatchSize())
+				newMinCapacity = 2 * coldata.BatchSize()
+				a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, newMinCapacity)
 			} else {
 				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocate(
 					a.outputTypes, a.scratch.Batch, newMinCapacity, maxBatchMemSize,
@@ -405,6 +399,6 @@ func (a *orderedAggregator) Reset(ctx context.Context) {
 	}
 }
 
-func (a *orderedAggregator) Close() error {
-	return a.toClose.Close()
+func (a *orderedAggregator) Close(ctx context.Context) error {
+	return a.toClose.Close(ctx)
 }

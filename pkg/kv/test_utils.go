@@ -51,6 +51,7 @@ func IsExpectedRelocateError(err error) bool {
 		"descriptor changed",
 		"unable to remove replica .* which is not present",
 		"unable to add replica .* which is already present",
+		"none of the remaining voters .* are legal additions", // https://github.com/cockroachdb/cockroach/issues/74902
 		"received invalid ChangeReplicasTrigger .* to remove self",
 		"raft group deleted",
 		"snapshot failed",
@@ -59,6 +60,8 @@ func IsExpectedRelocateError(err error) bool {
 		"cannot up-replicate to .*; missing gossiped StoreDescriptor",
 		"remote couldn't accept .* snapshot",
 		"cannot add placeholder",
+		"removing leaseholder not allowed since it isn't the Raft leader",
+		"could not find a better lease transfer target for",
 	}
 	pattern := "(" + strings.Join(allowlist, "|") + ")"
 	return testutils.IsError(err, pattern)

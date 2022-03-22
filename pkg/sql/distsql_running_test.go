@@ -106,7 +106,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 	// Make a db with a short heartbeat interval, so that the aborted txn finds
 	// out quickly.
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ambient := s.AmbientCtx()
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
@@ -122,9 +122,9 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
-	tr := s.Tracer().(*tracing.Tracer)
-	runningCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test")
-	defer cancel()
+	tr := s.TracerI().(*tracing.Tracer)
+	runningCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test")
+	defer getRecAndFinish()
 	err = shortDB.Txn(runningCtx, func(ctx context.Context, txn *kv.Txn) error {
 		iter++
 		if iter == 1 {
@@ -148,7 +148,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		}
 
 		// Create and run a DistSQL plan.
-		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
 		recv := MakeDistSQLReceiver(
@@ -175,7 +175,8 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		// We need distribute = true so that executing the plan involves marshaling
 		// the root txn meta to leaf txns. Local flows can start in aborted txns
 		// because they just use the root txn.
-		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, nil /* txn */, true /* distribute */)
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, nil,
+			DistributionTypeSystemTenantOnly)
 		planCtx.stmtType = recv.stmtType
 
 		execCfg.DistSQLPlanner.PlanAndRun(
@@ -189,7 +190,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	if iter != 2 {
 		t.Fatalf("expected two iterations, but txn took %d to succeed", iter)
 	}
-	if tracing.FindMsgInRecording(getRec(), clientRejectedMsg) == -1 {
+	if tracing.FindMsgInRecording(getRecAndFinish(), clientRejectedMsg) == -1 {
 		t.Fatalf("didn't find expected message in trace: %s", clientRejectedMsg)
 	}
 }
@@ -296,6 +297,9 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 			t, db, "test", "x INT PRIMARY KEY", 1, sqlutils.ToRowFn(sqlutils.RowIdxFn),
 		)
 
+		tableID := sqlutils.QueryTableID(t, db, sqlutils.TestDB, "public", "test")
+		contentionEventSubstring := fmt.Sprintf("tableID=%d indexID=1", tableID)
+
 		if contention {
 			// Begin a contending transaction.
 			conn, err := db.Conn(ctx)
@@ -326,7 +330,6 @@ COMMIT;
 SET TRACING=off;
 `)
 		require.NoError(t, err)
-		const contentionEventSubstring = "tableID=53 indexID=1"
 		if contention {
 			// Soft check to protect against flakiness where an internal query
 			// causes the contention metric to increment.
@@ -462,9 +465,9 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 
 	var c cancelFlowsCoordinator
 
-	globalRng, _ := randutil.NewPseudoRand()
+	globalRng, _ := randutil.NewTestRand()
 	numNodes := globalRng.Intn(16) + 2
-	gatewayNodeID := roachpb.NodeID(1)
+	gatewaySQLInstanceID := base.SQLInstanceID(1)
 
 	assertInvariants := func() {
 		c.mu.Lock()
@@ -472,29 +475,29 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 		// Check that the coordinator hasn't created duplicate entries for some
 		// nodes.
 		require.GreaterOrEqual(t, numNodes-1, c.mu.deadFlowsByNode.Len())
-		seen := make(map[roachpb.NodeID]struct{})
+		seen := make(map[base.SQLInstanceID]struct{})
 		for i := 0; i < c.mu.deadFlowsByNode.Len(); i++ {
 			deadFlows := c.mu.deadFlowsByNode.Get(i).(*deadFlowsOnNode)
-			require.NotEqual(t, gatewayNodeID, deadFlows.nodeID)
-			_, ok := seen[deadFlows.nodeID]
+			require.NotEqual(t, gatewaySQLInstanceID, deadFlows.sqlInstanceID)
+			_, ok := seen[deadFlows.sqlInstanceID]
 			require.False(t, ok)
-			seen[deadFlows.nodeID] = struct{}{}
+			seen[deadFlows.sqlInstanceID] = struct{}{}
 		}
 	}
 
 	// makeFlowsToCancel returns a fake flows map where each node in the cluster
 	// has 67% probability of participating in the plan.
-	makeFlowsToCancel := func(rng *rand.Rand) map[roachpb.NodeID]*execinfrapb.FlowSpec {
-		res := make(map[roachpb.NodeID]*execinfrapb.FlowSpec)
+	makeFlowsToCancel := func(rng *rand.Rand) map[base.SQLInstanceID]*execinfrapb.FlowSpec {
+		res := make(map[base.SQLInstanceID]*execinfrapb.FlowSpec)
 		flowID := execinfrapb.FlowID{UUID: uuid.FastMakeV4()}
 		for id := 1; id <= numNodes; id++ {
 			if rng.Float64() < 0.33 {
 				// This node wasn't a part of the current plan.
 				continue
 			}
-			res[roachpb.NodeID(id)] = &execinfrapb.FlowSpec{
+			res[base.SQLInstanceID(id)] = &execinfrapb.FlowSpec{
 				FlowID:  flowID,
-				Gateway: gatewayNodeID,
+				Gateway: gatewaySQLInstanceID,
 			}
 		}
 		return res
@@ -511,7 +514,7 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 	for i := 0; i < numQueryRunners; i++ {
 		go func() {
 			defer wg.Done()
-			rng, _ := randutil.NewPseudoRand()
+			rng, _ := randutil.NewTestRand()
 			for i := 0; i < numRunsPerRunner; i++ {
 				c.addFlowsToCancel(makeFlowsToCancel(rng))
 				time.Sleep(time.Duration(rng.Int63n(int64(maxSleepTime))))
@@ -525,7 +528,7 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 		done := time.After(2 * time.Second)
 		for {
 			select {

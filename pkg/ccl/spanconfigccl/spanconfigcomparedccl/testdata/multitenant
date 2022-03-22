@@ -1,0 +1,123 @@
+# Setup secondary tenants and show how the current infrastructure enriches
+# the state with tenant configs while the gossip-backed system sticks only to
+# the tenant-wide span config.
+
+reconcile
+----
+
+initialize tenant=10
+----
+
+initialize tenant=11
+----
+
+# Before kicking starting off tenant reconciliation, we should find seed
+# configs for the newly initialized tenants. As yet, there are no (unexpected)
+# differences between the subsystems.
+
+configs version=current offset=43
+----
+...
+/Table/50                                  database system (host)
+/Tenant/10                                 database system (tenant)
+/Tenant/11                                 database system (tenant)
+
+diff offset=50
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+
+reconcile tenant=11
+----
+
+# As soon as tenant-11 starts reconciling, we should observe more fine-grained
+# span configs within its keyspan. This isn't true for the legacy system.
+
+configs version=current offset=43 limit=5
+----
+...
+/Table/50                                  database system (host)
+/Tenant/10                                 database system (tenant)
+/Tenant/11                                 database system (tenant)
+/Tenant/11/Table/4                         database system (tenant)
+/Tenant/11/Table/5                         database system (tenant)
+...
+
+configs version=legacy offset=43
+----
+...
+/Table/50                                  range system
+/Tenant/10                                 database system (tenant)
+/Tenant/11                                 database system (tenant)
+
+diff offset=48 limit=10
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+ /Tenant/10                                 database system (tenant)
+ /Tenant/11                                 database system (tenant)
++/Tenant/11/Table/4                         database system (tenant)
++/Tenant/11/Table/5                         database system (tenant)
++/Tenant/11/Table/6                         database system (tenant)
++/Tenant/11/Table/7                         database system (tenant)
++/Tenant/11/Table/11                        database system (tenant)
++/Tenant/11/Table/12                        database system (tenant)
++/Tenant/11/Table/13                        database system (tenant)
++/Tenant/11/Table/14                        database system (tenant)
+ ...
+
+# Sanity check that new tenant tables show up correctly.
+
+exec-sql tenant=11
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+ALTER TABLE db.t1 CONFIGURE ZONE using num_replicas = 42, gc.ttlseconds = 1000;
+----
+
+diff offset=48
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+ /Tenant/10                                 database system (tenant)
+ /Tenant/11                                 database system (tenant)
++/Tenant/11/Table/4                         database system (tenant)
++/Tenant/11/Table/5                         database system (tenant)
++/Tenant/11/Table/6                         database system (tenant)
++/Tenant/11/Table/7                         database system (tenant)
++/Tenant/11/Table/11                        database system (tenant)
++/Tenant/11/Table/12                        database system (tenant)
++/Tenant/11/Table/13                        database system (tenant)
++/Tenant/11/Table/14                        database system (tenant)
++/Tenant/11/Table/15                        database system (tenant)
++/Tenant/11/Table/19                        database system (tenant)
++/Tenant/11/Table/20                        database system (tenant)
++/Tenant/11/Table/21                        database system (tenant)
++/Tenant/11/Table/23                        database system (tenant)
++/Tenant/11/Table/24                        database system (tenant)
++/Tenant/11/Table/25                        database system (tenant)
++/Tenant/11/Table/26                        database system (tenant)
++/Tenant/11/Table/27                        database system (tenant)
++/Tenant/11/Table/28                        database system (tenant)
++/Tenant/11/NamespaceTable/30               database system (tenant)
++/Tenant/11/NamespaceTable/Max              database system (tenant)
++/Tenant/11/Table/32                        database system (tenant)
++/Tenant/11/Table/33                        database system (tenant)
++/Tenant/11/Table/34                        database system (tenant)
++/Tenant/11/Table/35                        database system (tenant)
++/Tenant/11/Table/36                        database system (tenant)
++/Tenant/11/Table/37                        database system (tenant)
++/Tenant/11/Table/39                        database system (tenant)
++/Tenant/11/Table/40                        database system (tenant)
++/Tenant/11/Table/41                        database system (tenant)
++/Tenant/11/Table/42                        database system (tenant)
++/Tenant/11/Table/43                        database system (tenant)
++/Tenant/11/Table/44                        database system (tenant)
++/Tenant/11/Table/46                        database system (tenant)
++/Tenant/11/Table/106                       ttl_seconds=1000 num_replicas=42
++/Tenant/11/Table/107                       range default
+
+# vim:ft=diff

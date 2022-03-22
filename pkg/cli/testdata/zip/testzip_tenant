@@ -1,0 +1,118 @@
+zip
+----
+debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
+[cluster] establishing RPC connection to ...
+[cluster] retrieving the node status to get the SQL address... done
+[cluster] using SQL address: ...
+[cluster] creating output file /dev/null... done
+[cluster] requesting data for debug/events... received response...
+[cluster] requesting data for debug/events: last request failed: rpc error: ...
+[cluster] requesting data for debug/events: creating error output: debug/events.json.err.txt... done
+[cluster] requesting data for debug/rangelog... received response...
+[cluster] requesting data for debug/rangelog: last request failed: rpc error: ...
+[cluster] requesting data for debug/rangelog: creating error output: debug/rangelog.json.err.txt... done
+[cluster] requesting data for debug/settings... received response...
+[cluster] requesting data for debug/settings: last request failed: rpc error: ...
+[cluster] requesting data for debug/settings: creating error output: debug/settings.json.err.txt... done
+[cluster] requesting data for debug/reports/problemranges... received response...
+[cluster] requesting data for debug/reports/problemranges: last request failed: rpc error: ...
+[cluster] requesting data for debug/reports/problemranges: creating error output: debug/reports/problemranges.json.err.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/crdb_internal.cluster_contention_events.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/crdb_internal.cluster_distsql_flows.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_queries... writing output: debug/crdb_internal.cluster_queries.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_sessions... writing output: debug/crdb_internal.cluster_sessions.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_settings... writing output: debug/crdb_internal.cluster_settings.txt... done
+[cluster] retrieving SQL data for crdb_internal.cluster_transactions... writing output: debug/crdb_internal.cluster_transactions.txt... done
+[cluster] retrieving SQL data for crdb_internal.default_privileges... writing output: debug/crdb_internal.default_privileges.txt... done
+[cluster] retrieving SQL data for crdb_internal.jobs... writing output: debug/crdb_internal.jobs.txt... done
+[cluster] retrieving SQL data for system.jobs... writing output: debug/system.jobs.txt... done
+[cluster] retrieving SQL data for system.descriptor... writing output: debug/system.descriptor.txt... done
+[cluster] retrieving SQL data for system.namespace... writing output: debug/system.namespace.txt... done
+[cluster] retrieving SQL data for system.scheduled_jobs... writing output: debug/system.scheduled_jobs.txt... done
+[cluster] retrieving SQL data for system.settings... writing output: debug/system.settings.txt... done
+[cluster] retrieving SQL data for system.replication_stats... writing output: debug/system.replication_stats.txt... done
+[cluster] retrieving SQL data for system.replication_critical_localities... writing output: debug/system.replication_critical_localities.txt... done
+[cluster] retrieving SQL data for system.replication_constraint_stats... writing output: debug/system.replication_constraint_stats.txt... done
+[cluster] retrieving SQL data for "".crdb_internal.create_schema_statements... writing output: debug/crdb_internal.create_schema_statements.txt... done
+[cluster] retrieving SQL data for "".crdb_internal.create_statements... writing output: debug/crdb_internal.create_statements.txt... done
+[cluster] retrieving SQL data for "".crdb_internal.create_type_statements... writing output: debug/crdb_internal.create_type_statements.txt... done
+[cluster] retrieving SQL data for crdb_internal.kv_node_liveness... writing output: debug/crdb_internal.kv_node_liveness.txt...
+[cluster] retrieving SQL data for crdb_internal.kv_node_liveness: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[cluster] retrieving SQL data for crdb_internal.kv_node_liveness: creating error output: debug/crdb_internal.kv_node_liveness.txt.err.txt... done
+[cluster] retrieving SQL data for crdb_internal.kv_node_status... writing output: debug/crdb_internal.kv_node_status.txt...
+[cluster] retrieving SQL data for crdb_internal.kv_node_status: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[cluster] retrieving SQL data for crdb_internal.kv_node_status: creating error output: debug/crdb_internal.kv_node_status.txt.err.txt... done
+[cluster] retrieving SQL data for crdb_internal.kv_store_status... writing output: debug/crdb_internal.kv_store_status.txt...
+[cluster] retrieving SQL data for crdb_internal.kv_store_status: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[cluster] retrieving SQL data for crdb_internal.kv_store_status: creating error output: debug/crdb_internal.kv_store_status.txt.err.txt... done
+[cluster] retrieving SQL data for crdb_internal.regions... writing output: debug/crdb_internal.regions.txt... done
+[cluster] retrieving SQL data for crdb_internal.schema_changes... writing output: debug/crdb_internal.schema_changes.txt... done
+[cluster] retrieving SQL data for crdb_internal.partitions... writing output: debug/crdb_internal.partitions.txt... done
+[cluster] retrieving SQL data for crdb_internal.zones... writing output: debug/crdb_internal.zones.txt... done
+[cluster] retrieving SQL data for crdb_internal.invalid_objects... writing output: debug/crdb_internal.invalid_objects.txt... done
+[cluster] retrieving SQL data for crdb_internal.index_usage_statistics... writing output: debug/crdb_internal.index_usage_statistics.txt... done
+[cluster] retrieving SQL data for crdb_internal.table_indexes... writing output: debug/crdb_internal.table_indexes.txt... done
+[cluster] retrieving SQL data for crdb_internal.transaction_contention_events... writing output: debug/crdb_internal.transaction_contention_events.txt... done
+[cluster] requesting nodes... received response... converting to JSON... writing binary output: debug/nodes.json... done
+[cluster] requesting liveness... received response...
+[cluster] requesting liveness: last request failed: rpc error: ...
+[cluster] requesting liveness: creating error output: debug/liveness.json.err.txt... done
+[cluster] requesting tenant ranges... received response...
+[cluster] requesting tenant ranges: last request failed: rpc error: ...
+[cluster] requesting tenant ranges: creating error output: debug/tenant_ranges.err.txt... done
+[cluster] requesting CPU profiles
+[cluster] profiles generated
+[cluster] profile for node 1... writing binary output: debug/nodes/1/cpu.pprof... done
+[node 1] node status... converting to JSON... writing binary output: debug/nodes/1/status.json... done
+[node 1] using SQL connection URL: postgresql://...
+[node 1] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/1/crdb_internal.feature_usage.txt... done
+[node 1] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/1/crdb_internal.gossip_alerts.txt...
+[node 1] retrieving SQL data for crdb_internal.gossip_alerts: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[node 1] retrieving SQL data for crdb_internal.gossip_alerts: creating error output: debug/nodes/1/crdb_internal.gossip_alerts.txt.err.txt... done
+[node 1] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/1/crdb_internal.gossip_liveness.txt...
+[node 1] retrieving SQL data for crdb_internal.gossip_liveness: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[node 1] retrieving SQL data for crdb_internal.gossip_liveness: creating error output: debug/nodes/1/crdb_internal.gossip_liveness.txt.err.txt... done
+[node 1] retrieving SQL data for crdb_internal.gossip_network... writing output: debug/nodes/1/crdb_internal.gossip_network.txt...
+[node 1] retrieving SQL data for crdb_internal.gossip_network: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[node 1] retrieving SQL data for crdb_internal.gossip_network: creating error output: debug/nodes/1/crdb_internal.gossip_network.txt.err.txt... done
+[node 1] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/1/crdb_internal.gossip_nodes.txt...
+[node 1] retrieving SQL data for crdb_internal.gossip_nodes: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[node 1] retrieving SQL data for crdb_internal.gossip_nodes: creating error output: debug/nodes/1/crdb_internal.gossip_nodes.txt.err.txt... done
+[node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/1/crdb_internal.node_contention_events.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_distsql_flows... writing output: debug/nodes/1/crdb_internal.node_distsql_flows.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing output: debug/nodes/1/crdb_internal.node_inflight_trace_spans.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_metrics... writing output: debug/nodes/1/crdb_internal.node_metrics.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_queries... writing output: debug/nodes/1/crdb_internal.node_queries.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_runtime_info... writing output: debug/nodes/1/crdb_internal.node_runtime_info.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_sessions... writing output: debug/nodes/1/crdb_internal.node_sessions.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_statement_statistics... writing output: debug/nodes/1/crdb_internal.node_statement_statistics.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_transaction_statistics... writing output: debug/nodes/1/crdb_internal.node_transaction_statistics.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/1/crdb_internal.node_transactions.txt... done
+[node 1] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/1/crdb_internal.node_txn_stats.txt... done
+[node 1] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/1/crdb_internal.active_range_feeds.txt... done
+[node 1] requesting data for debug/nodes/1/details... received response... converting to JSON... writing binary output: debug/nodes/1/details.json... done
+[node 1] requesting data for debug/nodes/1/gossip... received response...
+[node 1] requesting data for debug/nodes/1/gossip: last request failed: rpc error: ...
+[node 1] requesting data for debug/nodes/1/gossip: creating error output: debug/nodes/1/gossip.json.err.txt... done
+[node 1] requesting data for debug/nodes/1/enginestats... received response...
+[node 1] requesting data for debug/nodes/1/enginestats: last request failed: rpc error: ...
+[node 1] requesting data for debug/nodes/1/enginestats: creating error output: debug/nodes/1/enginestats.json.err.txt... done
+[node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
+[node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
+[node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
+[node 1] requesting heap file list... received response... done
+[node ?] ? heap profiles found
+[node 1] requesting goroutine dump list... received response... done
+[node 1] 0 goroutine dumps found
+[node 1] requesting log file ...
+[node 1] requesting log file ...
+[node 1] requesting log file ...
+[node 1] requesting ranges... received response...
+[node 1] requesting ranges: last request failed: rpc error: ...
+[node 1] requesting ranges: creating error output: debug/nodes/1/ranges.err.txt... done
+[cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
+[cluster] hot range summary script... writing binary output: debug/hot-ranges.sh... done
+[cluster] tenant hot range summary script... writing binary output: debug/hot-ranges-tenant.sh... done

@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -137,11 +138,55 @@ type CaptureFd2Config struct {
 	MaxGroupSize *ByteSize `yaml:"max-group-size,omitempty"`
 }
 
+// CommonBufferSinkConfig represents the common buffering configuration for sinks.
+//
+// User-facing documentation follows.
+// TITLE: Common buffering configuration
+// Buffering may be configured with the following fields. It may also be explicitly
+// set to "NONE" to disable buffering. Example configuration:
+//
+//     file-defaults:
+//        dir: logs
+//        buffering:
+//           max-staleness: 20s
+//           flush-trigger-size: 25KB
+//     sinks:
+//        file-groups:
+//           health:
+//              channels: HEALTH
+//              buffering:
+//                 max-staleness: 5s  # Override max-staleness for this sink.
+//           ops:
+//              channels: OPS
+//              buffering: NONE  # Disable buffering for this sink.
+type CommonBufferSinkConfig struct {
+	// MaxStaleness is the maximum time a log message will sit in the buffer
+	// before a flush is triggered.
+	MaxStaleness *time.Duration `yaml:"max-staleness,omitempty"`
+
+	// FlushTriggerSize is the number of bytes that will trigger the buffer
+	// to flush.
+	FlushTriggerSize *ByteSize `yaml:"flush-trigger-size,omitempty"`
+
+	// MaxInFlight is the maximum number of buffered flushes before messages
+	// start being dropped.
+	MaxInFlight *int `yaml:"max-in-flight,omitempty"`
+}
+
+// CommonBufferSinkConfigWrapper is a BufferSinkConfig with a special value represented in YAML by
+// the string "NONE", which actively disables buffering (in the sense that it overrides
+// buffering that is enabled by default).
+// This is a separate type so that marshaling and unmarshaling of the inner BufferSinkConfig
+// can be handled by the library without causing infinite recursion.
+type CommonBufferSinkConfigWrapper struct {
+	CommonBufferSinkConfig
+}
+
 // CommonSinkConfig represents the common configuration shared across all sinks.
 type CommonSinkConfig struct {
-	// Filter indicates the minimum severity for log events to be
-	// emitted to this sink. This can be set to NONE to disable the
-	// sink.
+	// Filter specifies the default minimum severity for log events to
+	// be emitted to this sink, when not otherwise specified by the
+	// 'channels' sink attribute.
 	Filter logpb.Severity `yaml:",omitempty"`
 
 	// Format indicates the entry format to use.
@@ -166,6 +211,9 @@ type CommonSinkConfig struct {
 	// it enables `exit-on-error` and changes the format of files
 	// from `crdb-v1` to `crdb-v1-count`.
 	Auditable *bool `yaml:",omitempty"`
+
+	// Buffering configures buffering for this log sink, or NONE to explicitly disable.
+	Buffering CommonBufferSinkConfigWrapper `yaml:",omitempty"`
 }
 
 // SinkConfig represents the sink configurations.
@@ -219,7 +267,7 @@ type SinkConfig struct {
 //
 type StderrSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
-	Channels ChannelList `yaml:",omitempty,flow"`
+	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	// NoColor forces the omission of VT color codes in the output even
 	// when stderr is a terminal.
@@ -298,7 +346,7 @@ type FluentDefaults struct {
 //
 type FluentSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
-	Channels ChannelList `yaml:",omitempty,flow"`
+	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	// Net is the protocol for the fluent server. Can be "tcp", "udp",
 	// "tcp4", etc.
@@ -331,6 +379,11 @@ type FileDefaults struct {
 	// removes files that cause the file set to grow beyond this specified
 	// size. If zero, old files are not removed.
 	MaxGroupSize *ByteSize `yaml:"max-group-size,omitempty"`
+
+	// FilePermissions is the "chmod-style" permissions the log files are
+	// created with as a 3-digit octal number. The executable bit must not
+	// be set. Defaults to 644 (readable by all, writable by owner).
+	FilePermissions *FilePermissions `yaml:"file-permissions,omitempty"`
 
 	// BufferedWrites specifies whether to buffer log entries.
 	// Setting this to false flushes log writes upon every entry.
@@ -398,7 +451,7 @@ type FileDefaults struct {
 //
 type FileSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
-	Channels ChannelList `yaml:",omitempty,flow"`
+	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	// FileDefaults contains the defaultable fields of the config.
 	FileDefaults `yaml:",inline"`
@@ -476,7 +529,7 @@ type HTTPDefaults struct {
 //
 type HTTPSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
-	Channels ChannelList `yaml:",omitempty,flow"`
+	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	HTTPDefaults `yaml:",inline"`
 
@@ -507,9 +560,11 @@ func (c *Config) IterateDirectories(fn func(d string) error) error {
 var _ yaml.Marshaler = (*logpb.Severity)(nil)
 var _ yaml.Marshaler = (*ByteSize)(nil)
 var _ yaml.Marshaler = (*ChannelList)(nil)
+var _ yaml.Marshaler = (*ChannelFilters)(nil)
 var _ yaml.Unmarshaler = (*logpb.Severity)(nil)
 var _ yaml.Unmarshaler = (*ByteSize)(nil)
 var _ yaml.Unmarshaler = (*ChannelList)(nil)
+var _ yaml.Unmarshaler = (*ChannelFilters)(nil)
 
 // ChannelList represents a list of channels.
 type ChannelList struct {
@@ -571,13 +626,18 @@ func (c *ChannelList) UnmarshalYAML(fn func(interface{}) error) error {
 	// We recognize two formats here: YAML arrays,
 	// and a simple string-based format.
 	var a []string
-	if err := fn(&a); err == nil /* no error: it's an array */ {
+	err := fn(&a)
+	if err == nil /* no error: it's an array */ {
 		ch, err := selectChannels(false /* invert */, a)
 		if err != nil {
 			return err
 		}
 		c.Channels = ch
 		return nil
+	} else if !errors.HasType(err, (*yaml.TypeError)(nil)) {
+		// Another error than a structural error which we can cover
+		// below. Abort early.
+		return err
 	}
 
 	// It was not an array. Is it a string?
@@ -614,7 +674,7 @@ func parseChannelList(s string) ([]logpb.Channel, error) {
 
 	// Special case: "ALL" selects all channels.
 	if s == "ALL" {
-		return SelectAllChannels(), nil
+		return AllChannels(), nil
 	}
 
 	// If channels starts with "all except", we invert the selection.
@@ -647,12 +707,12 @@ func selectChannels(invert bool, parts []string) ([]logpb.Channel, error) {
 			if len(parts) != 1 {
 				return nil, errors.New("cannot use ALL if there are other channel names present in the list")
 			}
-			return SelectAllChannels(), nil
+			return AllChannels(), nil
 		}
 
 		// Verify the channel name is known.
 		c, ok := logpb.Channel_value[p]
-		if !ok {
+		if !ok || c >= int32(logpb.Channel_CHANNEL_MAX) {
 			return nil, errors.Newf("unknown channel name: %q", p)
 		}
 		// Reject duplicates.
@@ -686,9 +746,9 @@ func selectChannels(invert bool, parts []string) ([]logpb.Channel, error) {
 	return selected, nil
 }
 
-// SelectAllChannels returns a copy of channelValues,
+// AllChannels returns a copy of channelValues,
 // for use in the ALL configuration.
-func SelectAllChannels() []logpb.Channel {
+func AllChannels() []logpb.Channel {
 	// Copy the default in case the code that uses a Config overwrites
 	// its channel list in-place.
 	chans := make([]logpb.Channel, 0, len(channelValues))
@@ -699,8 +759,11 @@ func SelectAllChannels() []logpb.Channel {
 // use a sorted list to ensure that reference log configurations are
 // deterministic.
 var channelValues = func() []logpb.Channel {
-	is := make([]int, 0, len(logpb.Channel_name))
+	is := make([]int, 0, len(logpb.Channel_name)-1)
 	for c := range logpb.Channel_name {
+		if c == int32(logpb.Channel_CHANNEL_MAX) {
+			continue
+		}
 		is = append(is, int(c))
 	}
 	sort.Ints(is)
@@ -710,6 +773,172 @@ var channelValues = func() []logpb.Channel {
 	}
 	return ns
 }()
+
+// ChannelFilters represents a map of severities to channels.
+type ChannelFilters struct {
+	// Filters represents the input configuration.
+	Filters map[logpb.Severity]ChannelList
+
+	// AllChannels lists all the channels listed in the configuration.
+	// Populated/overwritten by Update().
+	AllChannels ChannelList
+	// ChannelFilters inverts the configured filters, for
+	// use internally when instantiating the configuration.
+	// Populated/overwritten by Update().
+	ChannelFilters map[logpb.Channel]logpb.Severity
+}
+
+// SelectChannels is a constructor for ChannelFilters that
+// helps in tests.
+func SelectChannels(chs ...logpb.Channel) ChannelFilters {
+	return ChannelFilters{
+		Filters: map[logpb.Severity]ChannelList{
+			logpb.Severity_UNKNOWN: {Channels: chs}}}
+}
+
+// AddChannel adds the given channel at the specified severity.
+func (c *ChannelFilters) AddChannel(ch logpb.Channel, sev logpb.Severity) {
+	if c.Filters == nil {
+		c.Filters = make(map[logpb.Severity]ChannelList)
+	}
+	list := c.Filters[sev]
+	list.Channels = append(list.Channels, ch)
+	c.Filters[sev] = list
+}
+
+// MarshalYAML implements the yaml.Marshaler interface.
+func (c ChannelFilters) MarshalYAML() (interface{}, error) {
+	// If there is just one filter at unknown severity, this means we
+	// are observing the result of a config read from a simple string.
+	// Simplify to the same on the way out.
+	if cfg, ok := c.Filters[logpb.Severity_UNKNOWN]; ok && len(c.Filters) == 1 {
+		return &cfg, nil
+	}
+	// General form: produce a map.
+	return c.Filters, nil
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (c *ChannelFilters) UnmarshalYAML(fn func(interface{}) error) error {
+	// We recognize two formats here: either a map of
+	// severity to channel lists, or a single channel list.
+	var a ChannelList
+	err := fn(&a)
+	if err == nil /* no error: it's a simple channel list */ {
+		c.Filters = map[logpb.Severity]ChannelList{
+			logpb.Severity_UNKNOWN: a,
+		}
+		return nil
+	} else if !errors.HasType(err, (*yaml.TypeError)(nil)) {
+		// Not a structural error which we handle with the fallback
+		// below. Return early.
+		return err
+	}
+
+	// It was not a simple channel list. Assume a map.
+	return fn(&c.Filters)
+}
+
+// fillDefaultSeverityAndPrune replaces instances of severity UNKNOWN
+// by the specified default (typically coming from the separate
+// Filter field on the sink). It also deletes any entry at severity
+// NONE. This also ensures the Filter map exists if it was not created
+// yet.
+func (c *ChannelFilters) fillDefaultSeverityAndPrune(defSev logpb.Severity) {
+	// We're going to modify c.Filters below. Create the map
+	// if it does not exist yet.
+	if c.Filters == nil {
+		c.Filters = make(map[logpb.Severity]ChannelList)
+	}
+	// Fill in the default into the user-supplied configuration.
+	if cfg, ok := c.Filters[logpb.Severity_UNKNOWN]; ok {
+		// If there is already a config at the default severity,
+		// add the unknown channels to it. This is needed
+		// for the special case of adding leftover channels
+		// to the DEV sink in Validate().
+		defCfg := c.Filters[defSev]
+		for _, ch := range cfg.Channels {
+			if defCfg.HasChannel(ch) {
+				// Channel already in default config. Skip it to avoid
+				// duplicates.
+				continue
+			}
+			defCfg.Channels = append(defCfg.Channels, ch)
+		}
+		c.Filters[defSev] = defCfg
+		delete(c.Filters, logpb.Severity_UNKNOWN)
+	}
+
+	// If anything was specified at severity NONE, remove it.  This
+	// means "no channel connected". This also takes care of removing
+	// all entries after the check above if there were multiple channels
+	// at severity UNKNOWN initially and defSev is NONE.
+	delete(c.Filters, logpb.Severity_NONE)
+}
+
+// propagateFilters translates the specification in Filters into
+// the helper fields AllChannels and ChannelFilters.
+func (c *ChannelFilters) propagateFilters() error {
+	c.ChannelFilters = map[logpb.Channel]logpb.Severity{}
+
+	// We use a sorted array of severities, to ensure that the list is
+	// traversed deterministically. This ensures that tests that check
+	// the error condition above have a stable output.
+	allUsedSeverities := make([]int, 0, len(c.Filters))
+	for sev := range c.Filters {
+		allUsedSeverities = append(allUsedSeverities, int(sev))
+	}
+	sort.Ints(allUsedSeverities)
+
+	// Translate the Filters to ChannelFilters.
+	for _, iSev := range allUsedSeverities {
+		sev := logpb.Severity(iSev)
+		cl := c.Filters[sev]
+		for _, ch := range cl.Channels {
+			if prevSev, ok := c.ChannelFilters[ch]; ok {
+				return errors.Newf("cannot use channel %s at severity %s: already listed at severity %s", ch, sev, prevSev)
+			}
+			c.ChannelFilters[ch] = sev
+		}
+	}
+
+	// Extract a sorted list of all channels from ChannelFilters into AllChannels.
+	c.AllChannels.Channels = make([]logpb.Channel, 0, len(c.ChannelFilters))
+	for ch := range c.ChannelFilters {
+		c.AllChannels.Channels = append(c.AllChannels.Channels, ch)
+	}
+	c.AllChannels.Sort()
+
+	return nil
+}
+
+// Validate changes the expressed filters to substitute the UNKNOWN
+// severity by the proposed default; it also propagates the user
+// configuration into the other accessor fields.
+func (c *ChannelFilters) Validate(defSev logpb.Severity) error {
+	c.fillDefaultSeverityAndPrune(defSev)
+
+	// Ensure the configurations are stable to make tests deterministic.
+	for sev, cfg := range c.Filters {
+		cfg.Sort()
+		c.Filters[sev] = cfg
+	}
+
+	return c.propagateFilters()
+}
+
+// noChannelsSelected returns true if there are no channels listed or
+// all of them are filtered at level NONE.
+func (c ChannelFilters) noChannelsSelected() bool {
+	filtered := true
+	for sev := range c.Filters {
+		if sev != logpb.Severity_NONE {
+			filtered = false
+			break
+		}
+	}
+	return filtered
+}
 
 // ByteSize represents a size in bytes.
 type ByteSize uint64
@@ -738,6 +967,48 @@ func (x *ByteSize) UnmarshalYAML(fn func(interface{}) error) error {
 		return err
 	}
 	*x = ByteSize(i)
+	return nil
+}
+
+// FilePermissions is a 9-bit number corresponding to the fs.FileMode
+// a logfile is created with. It's written and read from the YAML as
+// an octal string, regardless of leading zero or "0o" prefix.
+type FilePermissions uint
+
+// IsZero implements the yaml.IsZeroer interface.
+func (x FilePermissions) IsZero() bool { return x == 0 }
+
+// MarshalYAML implements the yaml.Marshaler interface.
+func (x FilePermissions) MarshalYAML() (r interface{}, err error) {
+	return fmt.Sprintf("%04o", x), nil
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (x *FilePermissions) UnmarshalYAML(fn func(interface{}) error) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.WithHint(err, "This value should consist of three even digits.")
+		}
+	}()
+
+	var in string
+	if err = fn(&in); err != nil {
+		return err
+	}
+
+	in = strings.TrimPrefix(in, "0o")
+	val, err := strconv.ParseInt(in, 8, 0)
+	if err != nil {
+		return errors.Errorf("file-permissions unparsable: %v", in)
+	}
+	if val > 0o777 || val < 0 {
+		return errors.Errorf("file-permissions out-of-range: %v", in)
+	}
+	if val&0o111 != 0 {
+		return errors.Errorf("file-permissions must not be executable: %v", in)
+	}
+
+	*x = FilePermissions(val)
 	return nil
 }
 
@@ -772,6 +1043,39 @@ func (*Holder) Type() string { return "yaml" }
 // Set implements the pflag.Value interface.
 func (h *Holder) Set(value string) error {
 	return yaml.UnmarshalStrict([]byte(value), &h.Config)
+}
+
+// MarshalYAML implements yaml.Marshaler interface.
+func (w CommonBufferSinkConfigWrapper) MarshalYAML() (interface{}, error) {
+	if w.IsNone() {
+		return "NONE", nil
+	}
+	return w.CommonBufferSinkConfig, nil
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error) error {
+	var v string
+	if err := fn(&v); err == nil {
+		if strings.ToUpper(v) == "NONE" {
+			d := time.Duration(0)
+			s := ByteSize(0)
+			w.CommonBufferSinkConfig = CommonBufferSinkConfig{
+				MaxStaleness:     &d,
+				FlushTriggerSize: &s,
+			}
+			return nil
+		}
+	}
+	return fn(&w.CommonBufferSinkConfig)
+}
+
+// IsNone before default propagation indicates that the config explicitly disables
+// buffering, such that no propagated defaults can actiate them.
+// After default propagation, buffering is disabled iff IsNone().
+func (w CommonBufferSinkConfigWrapper) IsNone() bool {
+	return (w.MaxStaleness != nil && *w.MaxStaleness == 0) &&
+		(w.FlushTriggerSize != nil && *w.FlushTriggerSize == 0)
 }
 
 // HTTPSinkMethod is a string restricted to "POST" and "GET"

@@ -1,3 +1,1 @@
-*.pb.* -diff
-*.eg.go -diff
 pkg/BUILD.bazel -diff

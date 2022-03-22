@@ -62,7 +62,7 @@ type sqlEncoder struct {
 	buf *roachpb.Key
 }
 
-// sqlEncoder implements the decoding logic for SQL keys.
+// sqlDecoder implements the decoding logic for SQL keys.
 //
 // The type is expressed as a pointer to a slice instead of a slice directly so
 // that its zero value is not usable. Any attempt to use the methods on the zero
@@ -153,18 +153,12 @@ func (e sqlEncoder) DescIDSequenceKey() roachpb.Key {
 
 // ZoneKeyPrefix returns the key prefix for id's row in the system.zones table.
 func (e sqlEncoder) ZoneKeyPrefix(id uint32) roachpb.Key {
-	if !e.ForSystemTenant() {
-		panic("zone keys only exist in the system tenant's keyspace")
-	}
 	k := e.IndexPrefix(ZonesTableID, ZonesTablePrimaryIndexID)
 	return encoding.EncodeUvarintAscending(k, uint64(id))
 }
 
 // ZoneKey returns the key for id's entry in the system.zones table.
 func (e sqlEncoder) ZoneKey(id uint32) roachpb.Key {
-	if !e.ForSystemTenant() {
-		panic("zone keys only exist in the system tenant's keyspace")
-	}
 	k := e.ZoneKeyPrefix(id)
 	return MakeFamilyKey(k, uint32(ZonesTableConfigColumnID))
 }
@@ -264,4 +258,39 @@ func (d sqlDecoder) DecodeTenantMetadataID(key roachpb.Key) (roachpb.TenantID, e
 		return roachpb.TenantID{}, err
 	}
 	return roachpb.MakeTenantID(id), nil
+}
+
+// RewriteSpanToTenantPrefix updates the passed Span, potentially in-place, to
+// ensure the Key and EndKey have the passed tenant prefix, regardless of what
+// prior tenant prefix, if any, they had before, and returns the updated Span.
+func RewriteSpanToTenantPrefix(sp roachpb.Span, prefix roachpb.Key) (roachpb.Span, error) {
+	var err error
+	sp.Key, err = rewriteKeyToTenantPrefix(sp.Key, prefix)
+	if err != nil {
+		return sp, err
+	}
+	sp.EndKey, err = rewriteKeyToTenantPrefix(sp.EndKey, prefix)
+	return sp, err
+}
+
+func rewriteKeyToTenantPrefix(key roachpb.Key, prefix roachpb.Key) (roachpb.Key, error) {
+	// If the new prefix is empty (system key), and this is a tenant key, or if
+	// the new prefix is non-empty but this key does not have it, we need to fix
+	// this key, by removing any prefix it has and then adding the new one.
+	if len(prefix) == 0 && bytes.HasPrefix(key, TenantPrefix) || !bytes.HasPrefix(key, prefix) {
+		suffix, _, err := DecodeTenantPrefix(key)
+		if err != nil {
+			return nil, err
+		}
+
+		if extra := len(key) - len(prefix) - len(suffix); extra >= 0 {
+			key = key[extra:]
+			copy(key, prefix)
+		} else {
+			key = make(roachpb.Key, len(prefix)+len(suffix))
+			n := copy(key, prefix)
+			copy(key[n:], suffix)
+		}
+	}
+	return key, nil
 }

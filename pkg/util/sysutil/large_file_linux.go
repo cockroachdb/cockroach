@@ -8,12 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build linux
 // +build linux
 
 package sysutil
 
 import (
 	"os"
+	"syscall"
 
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sys/unix"
@@ -38,7 +40,15 @@ func ResizeLargeFile(path string, bytes int64) error {
 	// file already existed, the disk blocks may not have been allocated even
 	// if the file size is greater than length.
 	if bytes > 0 {
-		if err := unix.Fallocate(int(f.Fd()), 0, 0, bytes); err != nil {
+		err := unix.Fallocate(int(f.Fd()), 0, 0, bytes)
+
+		// Some linux filesystems, like older versions of ZFS, do not
+		// support fallocate. If an error indicates it's not supported,
+		// fallback to the naive implementation.
+		var errno syscall.Errno
+		if err != nil && errors.As(err, &errno) && (errno == syscall.ENOTSUP || errno == syscall.EOPNOTSUPP) {
+			return resizeLargeFileNaive(path, bytes)
+		} else if err != nil {
 			return errors.Wrap(err, "fallocate")
 		}
 	}

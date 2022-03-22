@@ -8,7 +8,7 @@
 def eg_go_filegroup(name, targets):
     native.filegroup(
         name = name,
-        srcs = [':{}'.format(rule_name_for(target)) for target, _ in targets],
+        srcs = [":{}".format(rule_name_for(target)) for target, _ in targets],
     )
 
 # Define gen rules for individual eg.go files.
@@ -41,14 +41,16 @@ def gen_eg_go_rules(targets):
             # [2]: https://docs.bazel.build/versions/3.7.0/be/general.html#general-advice
             # [3]: https://github.com/cockroachdb/cockroach/pull/57027
             cmd = """
+              export COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true
               ln -s external/cockroach/pkg pkg
               $(location :execgen) -template $(SRCS) \
                   -fmt=false pkg/sql/colexec/$@ > $@
               $(location :goimports) -w $@
               """,
             tools = [":execgen", ":goimports"],
+            visibility = [":__pkg__", "//pkg/gen:__pkg__"],
         )
 
 def rule_name_for(target):
     # e.g. 'vec_comparators.eg.go' -> 'gen-vec-comparators'
-    return 'gen-{}'.format(target.replace('.eg.go', '').replace('_', '-'))
+    return "gen-{}".format(target.replace(".eg.go", "").replace("_", "-"))

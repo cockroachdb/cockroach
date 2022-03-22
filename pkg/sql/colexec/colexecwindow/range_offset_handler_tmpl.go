@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for range_offset_handler.eg.go. It's
 // formatted in a special way, so it's both valid Go and a valid text/template
@@ -22,17 +24,16 @@ package colexecwindow
 import (
 	"context"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -94,7 +95,7 @@ type rangeOffsetHandler interface {
 
 func newRangeOffsetHandler(
 	evalCtx *tree.EvalContext,
-	datumAlloc *rowenc.DatumAlloc,
+	datumAlloc *tree.DatumAlloc,
 	bound *execinfrapb.WindowerSpec_Frame_Bound,
 	ordColType *types.T,
 	ordColAsc, isStart bool,
@@ -117,6 +118,7 @@ func newRangeOffsetHandler(
 						op := &_OP_STRING{
 							offset: decodeOffset(datumAlloc, ordColType, bound.TypedOffset).(_OFFSET_GOTYPE),
 						}
+						// {{if eq .VecMethod "Datum"}}
 						// {{if .BinOpIsPlus}}
 						binOp, _, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
@@ -124,7 +126,8 @@ func newRangeOffsetHandler(
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
 						// {{end}}
-						op.overloadHelper = execgen.OverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						// {{end}}
 						return op
 						// {{end}}
 					}
@@ -143,10 +146,9 @@ func newRangeOffsetHandler(
 // rangeOffsetHandlerBase extracts common fields and methods of the
 // rangeOffsetHandler utility operators.
 type rangeOffsetHandlerBase struct {
-	storedCols     *colexecutils.SpillingBuffer
-	ordColIdx      int
-	peersColIdx    int
-	overloadHelper execgen.OverloadHelper
+	storedCols  *colexecutils.SpillingBuffer
+	ordColIdx   int
+	peersColIdx int
 }
 
 // {{range .}}
@@ -159,6 +161,9 @@ type rangeOffsetHandlerBase struct {
 // the start or end bound for each row when in RANGE mode with an offset.
 type _OP_STRING struct {
 	rangeOffsetHandlerBase
+	// {{if eq .VecMethod "Datum"}}
+	overloadHelper colexecbase.BinaryOverloadHelper
+	// {{end}}
 	offset _OFFSET_GOTYPE
 }
 
@@ -186,11 +191,16 @@ var _ rangeOffsetHandler = &_OP_STRING{}
 // the partition, whichever comes first. In this case, the returned index would
 // be '4' to indicate that the end index is the end of the partition.
 func (h *_OP_STRING) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper". This is
-	// necessary when dealing with Datum columns.
+	// {{if eq .VecMethod "Datum"}}
+	// {{/*
+	//     In order to inline the templated code of the binary overloads
+	//     operating on datums, we need to have a `_overloadHelper` local
+	//     variable of type `colexecbase.BinaryOverloadHelper`. This is
+	//     necessary when dealing with Time and TimeTZ columns since they aren't
+	//     yet handled natively.
+	// */}}
 	_overloadHelper := h.overloadHelper
-	_ = _overloadHelper // Avoid unused variable warnings.
+	// {{end}}
 
 	if lastIdx >= h.storedCols.Length() {
 		return lastIdx
@@ -358,7 +368,7 @@ func (b *rangeOffsetHandlerBase) startPartition(
 
 // decodeOffset decodes the given encoded offset into the given type.
 func decodeOffset(
-	datumAlloc *rowenc.DatumAlloc, orderColType *types.T, typedOffset []byte,
+	datumAlloc *tree.DatumAlloc, orderColType *types.T, typedOffset []byte,
 ) interface{} {
 	offsetType := getOffsetType(orderColType)
 	datum, err := execinfra.DecodeDatum(datumAlloc, offsetType, typedOffset)

@@ -81,9 +81,9 @@ users       bar         false       2             username     ASC        false 
 users       foo         true        1             username     ASC        false    false
 users       foo         true        2             species      N/A        true     false
 users       foo         true        3             id           ASC        false    true
-users       primary     false       1             id           ASC        false    false
-users       primary     false       2             username     N/A        true     false
-users       primary     false       3             species      N/A        true     false
+users       users_pkey  false       1             id           ASC        false    false
+users       users_pkey  false       2             username     N/A        true     false
+users       users_pkey  false       3             species      N/A        true     false
 
 statement ok
 CREATE VIEW v1 AS SELECT id FROM users WHERE username = 'tom'

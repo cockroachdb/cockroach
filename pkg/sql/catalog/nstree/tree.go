@@ -13,6 +13,8 @@
 package nstree
 
 import (
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/google/btree"
 )
@@ -21,6 +23,15 @@ type item interface {
 	btree.Item
 	put()
 	value() interface{}
+}
+
+// degree is totally arbitrary, used for the btree.
+const degree = 8
+
+var btreeSyncPool = sync.Pool{
+	New: func() interface{} {
+		return btree.New(degree)
+	},
 }
 
 func upsert(t *btree.BTree, toUpsert item) interface{} {

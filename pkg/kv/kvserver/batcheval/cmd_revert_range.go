@@ -12,9 +12,11 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -28,11 +30,12 @@ func init() {
 
 func declareKeysRevertRange(
 	rs ImmutableRangeState,
-	header roachpb.Header,
+	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
+	maxOffset time.Duration,
 ) {
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
+	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
@@ -75,7 +78,13 @@ func RevertRange(
 
 	args := cArgs.Args.(*roachpb.RevertRangeRequest)
 	reply := resp.(*roachpb.RevertRangeResponse)
-	var pd result.Result
+	pd := result.Result{
+		Replicated: kvserverpb.ReplicatedEvalResult{
+			MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+				Spans: []roachpb.Span{{Key: args.Key, EndKey: args.EndKey}},
+			},
+		},
+	}
 
 	if empty, err := isEmptyKeyTimeRange(
 		readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,

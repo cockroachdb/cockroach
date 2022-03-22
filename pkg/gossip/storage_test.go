@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -153,7 +152,7 @@ func TestGossipStorage(t *testing.T) {
 		p.Unlock()
 	}
 
-	// Create an unaffiliated gossip node with only itself as a resolver,
+	// Create an unaffiliated gossip node with only itself as an address,
 	// leaving it no way to reach the gossip network.
 	node, err := network.CreateNode(defaultZoneConfig)
 	if err != nil {
@@ -161,11 +160,7 @@ func TestGossipStorage(t *testing.T) {
 	}
 	node.Gossip.SetBootstrapInterval(1 * time.Millisecond)
 
-	r, err := resolver.NewResolverFromAddress(node.Addr())
-	if err != nil {
-		t.Fatal(err)
-	}
-	node.Resolvers = []resolver.Resolver{r}
+	node.Addresses = []util.UnresolvedAddr{util.MakeUnresolvedAddr("tcp", node.Addr().String())}
 	if err := network.StartNode(node); err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +203,7 @@ func TestGossipStorage(t *testing.T) {
 	})
 }
 
-// TestGossipStorageCleanup verifies that bad resolvers are purged
+// TestGossipStorageCleanup verifies that bad addresses are purged
 // from the bootstrap info after gossip has successfully connected.
 func TestGossipStorageCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()

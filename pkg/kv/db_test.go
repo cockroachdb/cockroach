@@ -13,6 +13,7 @@ package kv_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -67,6 +69,17 @@ func checkRows(t *testing.T, expected map[string][]byte, rows []kv.KeyValue) {
 				expected[string(row.Key)],
 				row.Key,
 				row.ValueBytes())
+		}
+	}
+}
+
+func checkKeys(t *testing.T, expected []string, keys []roachpb.Key) {
+	for i, key := range keys {
+		if !bytes.Equal([]byte(expected[i]), key) {
+			t.Errorf("expected %d: %s, got %s",
+				i,
+				key,
+				expected[i])
 		}
 	}
 }
@@ -170,9 +183,9 @@ func TestDB_CPut(t *testing.T) {
 func TestDB_CPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.Background())
-	ctx := kv.CtxForCPutInline(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	if err := db.PutInline(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)
@@ -292,6 +305,15 @@ func TestBatch(t *testing.T) {
 		"bb": []byte("2"),
 	}
 	checkResults(t, expected, b.Results)
+
+	b2 := &kv.Batch{}
+	b2.Put(42, "the answer")
+	if err := db.Run(context.Background(), b2); !testutils.IsError(err, "unable to marshal key") {
+		t.Fatal("expected marshaling error from running bad put")
+	}
+	if err := b2.MustPErr(); !testutils.IsPError(err, "unable to marshal key") {
+		t.Fatal("expected marshaling error from MustPErr")
+	}
 }
 
 func TestDB_Scan(t *testing.T) {
@@ -472,6 +494,59 @@ func TestDB_Del(t *testing.T) {
 	checkLen(t, len(expected), len(rows))
 }
 
+func TestDB_DelRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	b := &kv.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("ac", "3")
+	b.Put("ad", "4")
+	if err := db.Run(context.Background(), b); err != nil {
+		t.Fatal(err)
+	}
+	deletedKeys, err := db.DelRange(context.Background(), "aa", "ac", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedKeys := []string{"aa", "ab"}
+	checkKeys(t, expectedKeys, deletedKeys)
+	checkLen(t, len(expectedKeys), len(deletedKeys))
+
+	rows, err := db.Scan(context.Background(), "a", "b", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string][]byte{
+		"ac": []byte("3"),
+		"ad": []byte("4"),
+	}
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+
+	deletedKeys, err = db.DelRange(context.Background(), "aa", "ad", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deletedKeys != nil {
+		t.Errorf("expected deletedKeys to be nil when returnKeys set to false, got %v", deletedKeys)
+	}
+
+	rows, err = db.Scan(context.Background(), "a", "b", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected = map[string][]byte{
+		"ad": []byte("4"),
+	}
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+}
+
 func TestTxn_Commit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -528,9 +603,9 @@ func TestDB_QueryResolvedTimestamp(t *testing.T) {
 	err := db.Put(context.Background(), "a", "val")
 	require.NoError(t, err)
 
-	// One node cluster, so "local" should not make a difference. Test both.
-	testutils.RunTrueAndFalse(t, "local", func(t *testing.T, local bool) {
-		resTS, err := db.QueryResolvedTimestamp(context.Background(), "a", "c", local)
+	// One node cluster, so "nearest" should not make a difference. Test both.
+	testutils.RunTrueAndFalse(t, "nearest", func(t *testing.T, nearest bool) {
+		resTS, err := db.QueryResolvedTimestamp(context.Background(), "a", "c", nearest)
 		require.NoError(t, err)
 		require.NotEmpty(t, resTS)
 	})
@@ -580,7 +655,8 @@ func TestDBDecommissionedOperations(t *testing.T) {
 			return db.Del(ctx, key)
 		}},
 		{"DelRange", func() error {
-			return db.DelRange(ctx, key, keyEnd)
+			_, err := db.DelRange(ctx, key, keyEnd, false)
+			return err
 		}},
 		{"Get", func() error {
 			_, err := db.Get(ctx, key)
@@ -624,4 +700,152 @@ func TestDBDecommissionedOperations(t *testing.T) {
 			}, 10*time.Second, 100*time.Millisecond, "timed out waiting for gRPC error, got %v", err)
 		})
 	}
+}
+
+// TestGenerateForcedRetryableError verifies that GenerateForcedRetryableError
+// returns an error with a transaction that had the epoch bumped (and not epoch 0).
+func TestGenerateForcedRetryableError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+	txn := db.NewTxn(ctx, "test: TestGenerateForcedRetryableError")
+	require.Equal(t, 0, int(txn.Epoch()))
+	err := txn.GenerateForcedRetryableError(ctx, "testing TestGenerateForcedRetryableError")
+	var retryErr *roachpb.TransactionRetryWithProtoRefreshError
+	require.True(t, errors.As(err, &retryErr))
+	require.Equal(t, 1, int(retryErr.Transaction.Epoch))
+}
+
+// Get a retryable error within a db.Txn transaction and verify the retry
+// succeeds. We are verifying the behavior is the same whether the retryable
+// callback returns the retryable error or returns nil. Both implementations are
+// legal - returning early (with either nil or the error) after a retryable
+// error is optional.
+func TestDB_TxnRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	testutils.RunTrueAndFalse(t, "returnNil", func(t *testing.T, returnNil bool) {
+		keyA := fmt.Sprintf("a_return_nil_%t", returnNil)
+		keyB := fmt.Sprintf("b_return_nil_%t", returnNil)
+		runNumber := 0
+		err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			require.NoError(t, txn.Put(ctx, keyA, "1"))
+			require.NoError(t, txn.Put(ctx, keyB, "1"))
+
+			{
+				// High priority txn - will abort the other txn.
+				hpTxn := kv.NewTxn(ctx, db, 0)
+				require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
+				// Only write if we have not written before, because otherwise we will keep aborting
+				// the other txn forever.
+				r, err := hpTxn.Get(ctx, keyA)
+				require.NoError(t, err)
+				if !r.Exists() {
+					require.Zero(t, runNumber)
+					require.NoError(t, hpTxn.Put(ctx, keyA, "hp txn"))
+					require.NoError(t, hpTxn.Commit(ctx))
+				} else {
+					// We already wrote to keyA, meaning this is a retry, no need to write again.
+					require.Equal(t, 1, runNumber)
+					require.NoError(t, hpTxn.Rollback(ctx))
+				}
+			}
+
+			// Read, so that we'll get a retryable error.
+			r, err := txn.Get(ctx, keyA)
+			if runNumber == 0 {
+				// First run, we should get a retryable error.
+				require.Zero(t, runNumber)
+				require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+				require.Equal(t, []byte(nil), r.ValueBytes())
+
+				// At this point txn is poisoned, and any op returns the same (poisoning) error.
+				r, err = txn.Get(ctx, keyB)
+				require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+				require.Equal(t, []byte(nil), r.ValueBytes())
+			} else {
+				// The retry should succeed.
+				require.Equal(t, 1, runNumber)
+				require.NoError(t, err)
+				require.Equal(t, []byte("1"), r.ValueBytes())
+			}
+			runNumber++
+
+			if returnNil {
+				return nil
+			}
+			// Return the retryable error.
+			return err
+		})
+		require.NoError(t, err)
+		require.Equal(t, 2, runNumber)
+
+		err1 := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			// The high priority txn was overwritten by the successful retry.
+			kv, e1 := txn.Get(ctx, keyA)
+			require.NoError(t, e1)
+			require.Equal(t, []byte("1"), kv.ValueBytes())
+			kv, e2 := txn.Get(ctx, keyB)
+			require.NoError(t, e2)
+			require.Equal(t, []byte("1"), kv.ValueBytes())
+			return nil
+		})
+		require.NoError(t, err1)
+	})
+}
+
+func TestPreservingSteppingOnSenderReplacement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	testutils.RunTrueAndFalse(t, "stepping", func(t *testing.T, stepping bool) {
+		// Create a txn which will be aborted by a high priority txn, with stepping
+		// enabled and disabled.
+		var txn *kv.Txn
+		var expectedStepping kv.SteppingMode
+		if stepping {
+			txn = kv.NewTxnWithSteppingEnabled(ctx, db, 0, sessiondatapb.Normal)
+			expectedStepping = kv.SteppingEnabled
+		} else {
+			txn = kv.NewTxn(ctx, db, 0)
+			expectedStepping = kv.SteppingDisabled
+		}
+		keyA := fmt.Sprintf("a_%t", stepping)
+		require.NoError(t, txn.Put(ctx, keyA, "1"))
+
+		{
+			// High priority txn - will abort the other txn.
+			hpTxn := kv.NewTxn(ctx, db, 0)
+			require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
+			require.NoError(t, hpTxn.Put(ctx, keyA, "hp txn"))
+			require.NoError(t, hpTxn.Commit(ctx))
+		}
+
+		_, err := txn.Get(ctx, keyA)
+		require.NotNil(t, err)
+		require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+		pErr := (*roachpb.TransactionRetryWithProtoRefreshError)(nil)
+		require.ErrorAs(t, err, &pErr)
+		require.Equal(t, txn.ID(), pErr.TxnID)
+
+		// The transaction was aborted, therefore we should have a new transaction ID.
+		require.NotEqual(t, pErr.TxnID, pErr.Transaction.ID)
+
+		// Reset the handle in order to get a new sender.
+		txn.PrepareForRetry(ctx)
+
+		// Make sure we have a new txn ID.
+		require.NotEqual(t, pErr.TxnID, txn.ID())
+
+		// Using ConfigureStepping() to read the current state.
+		require.Equal(t, expectedStepping, txn.ConfigureStepping(ctx, expectedStepping))
+	})
 }

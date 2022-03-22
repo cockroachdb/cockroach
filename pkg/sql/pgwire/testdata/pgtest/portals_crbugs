@@ -243,7 +243,9 @@ ReadyForQuery
 # an UPDATE twice and will confirm that it was executed only once.
 
 send
-Query {"String": "DROP TABLE IF EXISTS foo; CREATE TABLE foo (id INT8); INSERT INTO foo (id) VALUES (1), (2), (3)"}
+Query {"String": "DROP TABLE IF EXISTS foo"}
+Query {"String": "CREATE TABLE foo (id INT8)"}
+Query {"String": "INSERT INTO foo (id) VALUES (1), (2), (3)"}
 Query {"String": "BEGIN"}
 Parse {"Name": "rows_affected_stmt", "Query": "UPDATE foo SET id = id * 10 WHERE true"}
 Bind {"DestinationPortal": "rows_affected_portal", "PreparedStatement": "rows_affected_stmt"}
@@ -255,9 +257,13 @@ until
 ReadyForQuery
 ReadyForQuery
 ReadyForQuery
+ReadyForQuery
+ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CommandComplete","CommandTag":"BEGIN"}

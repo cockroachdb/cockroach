@@ -12,7 +12,8 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -38,7 +39,7 @@ func AddMeasure(geometry geo.Geometry, start float64, end float64) (geo.Geometry
 		return geo.MakeGeometryFromGeomT(newMultiLineString)
 	default:
 		// Ideally we should return NULL here, but following PostGIS on this.
-		return geometry, errors.Newf("input geometry must be LINESTRING or MULTILINESTRING")
+		return geometry, pgerror.Newf(pgcode.InvalidParameterValue, "input geometry must be LINESTRING or MULTILINESTRING")
 	}
 }
 

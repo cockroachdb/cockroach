@@ -288,7 +288,7 @@ As of v2.1, Cockroach also includes a separate control loop on each store called
 the `StoreRebalancer`. The `StoreRebalancer` exists because we found in [#26059]
 that an uneven balance of load on each node was causing serious performance
 problems when attempting to run TPC-C at large scale without using partitioning.
-Ensuring that each laod had a more even balance of work to do was experimentally
+Ensuring that each load had a more even balance of work to do was experimentally
 found to allow significantly higher and smoother performance.
 
 The `StoreRebalancer` takes a somewhat different approach to rebalancing,

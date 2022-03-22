@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -34,10 +35,12 @@ var (
 	resolution10sDefaultRollupThreshold          = 10 * 24 * time.Hour
 	resolution30mDefaultPruneThreshold           = 90 * 24 * time.Hour
 	resolution50nsDefaultPruneThreshold          = 1 * time.Millisecond
+	storeDataTimeout                             = 1 * time.Minute
 )
 
 // TimeseriesStorageEnabled controls whether to store timeseries data to disk.
 var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"timeseries.storage.enabled",
 	"if set, periodic timeseries data is stored within the cluster; disabling is not recommended "+
 		"unless you are storing the data elsewhere",
@@ -48,6 +51,7 @@ var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
 // at he 10 second resolution. Data older than this is subject to being "rolled
 // up" into the 30 minute resolution and then deleted.
 var Resolution10sStorageTTL = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"timeseries.storage.resolution_10s.ttl",
 	"the maximum age of time series data stored at the 10 second resolution. Data older than this "+
 		"is subject to rollup and deletion.",
@@ -57,6 +61,7 @@ var Resolution10sStorageTTL = settings.RegisterDurationSetting(
 // deprecatedResolution30StoreDuration is retained for backward compatibility during a version upgrade.
 var deprecatedResolution30StoreDuration = func() *settings.DurationSetting {
 	s := settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		"timeseries.storage.30m_resolution_ttl", "replaced by timeseries.storage.resolution_30m.ttl",
 		resolution30mDefaultPruneThreshold,
 	)
@@ -75,6 +80,7 @@ func init() {
 // retained at he 30 minute resolution. Data older than this is subject to
 // deletion.
 var Resolution30mStorageTTL = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"timeseries.storage.resolution_30m.ttl",
 	"the maximum age of time series data stored at the 30 minute resolution. Data older than this "+
 		"is subject to deletion.",
@@ -116,7 +122,7 @@ func NewDB(db *kv.DB, settings *cluster.Settings) *DB {
 	}
 }
 
-// A DataSource can be queryied for a slice of time series data.
+// A DataSource can be queried for a slice of time series data.
 type DataSource interface {
 	GetTimeSeriesData() []tspb.TimeSeriesData
 }
@@ -159,7 +165,8 @@ func (db *DB) PollSource(
 func (p *poller) start() {
 	// Poll once immediately and synchronously.
 	p.poll()
-	_ = p.stopper.RunAsyncTask(context.TODO(), "ts-poller", func(context.Context) {
+	bgCtx := p.AnnotateCtx(context.Background())
+	_ = p.stopper.RunAsyncTask(bgCtx, "ts-poller", func(context.Context) {
 		ticker := time.NewTicker(p.frequency)
 		defer ticker.Stop()
 		for {
@@ -180,21 +187,25 @@ func (p *poller) poll() {
 		return
 	}
 
-	bgCtx := p.AnnotateCtx(context.Background())
-	if err := p.stopper.RunTask(bgCtx, "ts.poller: poll", func(bgCtx context.Context) {
+	ctx := p.AnnotateCtx(context.Background())
+	if err := p.stopper.RunTask(ctx, "ts.poller: poll", func(ctx context.Context) {
 		data := p.source.GetTimeSeriesData()
 		if len(data) == 0 {
 			return
 		}
 
-		ctx, span := p.AnnotateCtxWithSpan(bgCtx, "ts-poll")
+		const opName = "ts-poll"
+		ctx, span := p.AnnotateCtxWithSpan(ctx, opName)
 		defer span.Finish()
-
-		if err := p.db.StoreData(ctx, p.r, data); err != nil {
+		if err := contextutil.RunWithTimeout(ctx, opName, storeDataTimeout,
+			func(ctx context.Context) error {
+				return p.db.StoreData(ctx, p.r, data)
+			},
+		); err != nil {
 			log.Warningf(ctx, "error writing time series data: %s", err)
 		}
 	}); err != nil {
-		log.Warningf(bgCtx, "%v", err)
+		log.Warningf(ctx, "%v", err)
 	}
 }
 

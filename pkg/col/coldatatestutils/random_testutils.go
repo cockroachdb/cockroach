@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,10 +92,14 @@ func RandomVec(args RandomVecArgs) {
 		}
 	case types.BytesFamily:
 		bytes := args.Vec.Bytes()
+		isUUID := args.Vec.Type().Family() == types.UuidFamily
 		for i := 0; i < args.N; i++ {
 			bytesLen := args.BytesFixedLength
 			if bytesLen <= 0 {
 				bytesLen = args.Rand.Intn(maxVarLen)
+			}
+			if isUUID {
+				bytesLen = uuid.Size
 			}
 			randBytes := make([]byte, bytesLen)
 			// Read always returns len(bytes[i]) and nil.
@@ -211,7 +216,7 @@ func setNull(rng *rand.Rand, vec coldata.Vec, i int) {
 	case types.DecimalFamily:
 		_, err := vec.Decimal()[i].SetFloat64(rng.Float64())
 		if err != nil {
-			colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+			colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "could not set decimal"))
 		}
 	case types.IntervalFamily:
 		vec.Interval()[i] = duration.MakeDuration(rng.Int63(), rng.Int63(), rng.Int63())

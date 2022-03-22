@@ -55,4 +55,8 @@ message HistogramData {
   // Histogram buckets. Note that NULL values are excluded from the
   // histogram.
   repeated Bucket buckets = 1 [(gogoproto.nullable) = false];
+
+  // Version of the logic used to construct this histogram. See histogram.go
+  // for more details.
+  uint32 version = 3 [(gogoproto.casttype) = "HistogramVersion"];
 }

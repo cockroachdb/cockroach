@@ -12,8 +12,6 @@ package colbuilder
 
 import (
 	"context"
-	"fmt"
-	"math"
 	"reflect"
 	"strings"
 
@@ -21,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
@@ -39,11 +36,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -173,8 +171,11 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.TableReader != nil:
-		if spec.Core.TableReader.IsCheck {
-			return errors.Newf("scrub table reader is unsupported in vectorized")
+		return nil
+
+	case spec.Core.JoinReader != nil:
+		if !spec.Core.JoinReader.IsIndexJoin() {
+			return errLookupJoinUnsupported
 		}
 		return nil
 
@@ -244,11 +245,12 @@ var (
 	errReadImportWrap                 = errors.New("core.ReadImport is not supported")
 	errBackupDataWrap                 = errors.New("core.BackupData is not supported")
 	errBackfillerWrap                 = errors.New("core.Backfiller is not supported (not an execinfra.RowSource)")
-	errCSVWriterWrap                  = errors.New("core.CSVWriter is not supported (not an execinfra.RowSource)")
+	errExporterWrap                   = errors.New("core.Exporter is not supported (not an execinfra.RowSource)")
 	errSamplerWrap                    = errors.New("core.Sampler is not supported (not an execinfra.RowSource)")
 	errSampleAggregatorWrap           = errors.New("core.SampleAggregator is not supported (not an execinfra.RowSource)")
 	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader and non-LocalPlanNode cores is prohibited in vectorize=experimental_always")
 	errWrappedCast                    = errors.New("mismatched types in NewColOperator and unsupported casts")
+	errLookupJoinUnsupported          = errors.New("lookup join reader is unsupported in vectorized")
 )
 
 func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
@@ -269,8 +271,8 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 		return errBackfillerWrap
 	case spec.Core.ReadImport != nil:
 		return errReadImportWrap
-	case spec.Core.CSVWriter != nil:
-		return errCSVWriterWrap
+	case spec.Core.Exporter != nil:
+		return errExporterWrap
 	case spec.Core.Sampler != nil:
 		return errSamplerWrap
 	case spec.Core.SampleAggregator != nil:
@@ -333,91 +335,69 @@ func (r opResult) createDiskBackedSort(
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	ordering execinfrapb.Ordering,
+	limit int64,
 	matchLen uint32,
 	maxNumberPartitions int,
 	processorID int32,
-	post *execinfrapb.PostProcessSpec,
 	opNamePrefix string,
 	factory coldata.ColumnFactory,
-) (colexecop.Operator, error) {
-	streamingMemAccount := args.StreamingMemAccount
-	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
+) colexecop.Operator {
 	var (
 		sorterMemMonitorName string
 		inMemorySorter       colexecop.Operator
-		err                  error
-		topK                 uint64
 	)
 	if len(ordering.Columns) == int(matchLen) {
 		// The input is already fully ordered, so there is nothing to sort.
-		return input, nil
+		return input
 	}
 	totalMemLimit := execinfra.GetWorkMemLimit(flowCtx)
 	spoolMemLimit := totalMemLimit * 4 / 5
 	maxOutputBatchMemSize := totalMemLimit - spoolMemLimit
-	if matchLen > 0 {
+	if totalMemLimit == 1 {
+		// If total memory limit is 1, we're likely in a "force disk spill"
+		// scenario, so we'll set all internal limits to 1 too (if we don't,
+		// they will end up as 0 which is treated as "no limit").
+		spoolMemLimit = 1
+		maxOutputBatchMemSize = 1
+	}
+	if limit != 0 {
+		// There is a limit specified, so we know exactly how many rows the
+		// sorter should output. Use a top K sorter, which uses a heap to avoid
+		// storing more rows than necessary.
+		var topKSorterMemAccount *mon.BoundAccount
+		topKSorterMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
+			ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
+		)
+		inMemorySorter = colexec.NewTopKSorter(
+			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
+			inputTypes, ordering.Columns, int(matchLen), uint64(limit), maxOutputBatchMemSize,
+		)
+	} else if matchLen > 0 {
 		// The input is already partially ordered. Use a chunks sorter to avoid
 		// loading all the rows into memory.
 		var sortChunksMemAccount *mon.BoundAccount
-		if useStreamingMemAccountForBuffering {
-			sortChunksMemAccount = streamingMemAccount
-		} else {
-			sortChunksMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
-				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
-			)
-		}
-		inMemorySorter, err = colexec.NewSortChunks(
+		sortChunksMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
+			ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-chunks", processorID,
+		)
+		inMemorySorter = colexec.NewSortChunks(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
 			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
-		)
-	} else if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
-		// There is a limit specified, so we know exactly how many rows the
-		// sorter should output. The last part of the condition is making sure
-		// there is no overflow.
-		//
-		// Choose a top K sorter, which uses a heap to avoid storing more rows
-		// than necessary.
-		//
-		// TODO(radu): we should not choose this processor when K is very large
-		// - it is slower unless we get significantly more rows than the limit.
-		var topKSorterMemAccount *mon.BoundAccount
-		if useStreamingMemAccountForBuffering {
-			topKSorterMemAccount = streamingMemAccount
-		} else {
-			topKSorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
-				ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
-			)
-		}
-		topK = post.Limit + post.Offset
-		inMemorySorter = colexec.NewTopKSorter(
-			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
-			inputTypes, ordering.Columns, topK, maxOutputBatchMemSize,
 		)
 	} else {
 		// No optimizations possible. Default to the standard sort operator.
 		var sorterMemAccount *mon.BoundAccount
-		if useStreamingMemAccountForBuffering {
-			sorterMemAccount = streamingMemAccount
-		} else {
-			sorterMemAccount, sorterMemMonitorName = r.createMemAccountForSpillStrategyWithLimit(
-				ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-all", processorID,
-			)
-		}
-		inMemorySorter, err = colexec.NewSorter(
+		sorterMemAccount, sorterMemMonitorName = args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
+			ctx, flowCtx, spoolMemLimit, opNamePrefix+"sort-all", processorID,
+		)
+		inMemorySorter = colexec.NewSorter(
 			colmem.NewAllocator(ctx, sorterMemAccount, factory), input,
 			inputTypes, ordering.Columns, maxOutputBatchMemSize,
 		)
 	}
-	if err != nil {
-		return nil, err
-	}
-	if inMemorySorter == nil {
-		return nil, errors.AssertionFailedf("unexpectedly inMemorySorter is nil")
-	}
-	if useStreamingMemAccountForBuffering || args.TestingKnobs.DiskSpillingDisabled {
+	if args.TestingKnobs.DiskSpillingDisabled {
 		// In some testing scenarios we actually don't want to create a
 		// disk-backed sort.
-		return inMemorySorter, nil
+		return inMemorySorter
 	}
 	// NOTE: when spilling to disk, we're using the same general external
 	// sorter regardless of which sorter variant we have instantiated (i.e.
@@ -432,23 +412,24 @@ func (r opResult) createDiskBackedSort(
 			// sort itself is responsible for making sure that we stay within
 			// the memory limit.
 			sortUnlimitedAllocator := colmem.NewAllocator(
-				ctx, r.createUnlimitedMemAccount(
+				ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
 					ctx, flowCtx, opName+"-sort", processorID,
 				), factory)
 			mergeUnlimitedAllocator := colmem.NewAllocator(
-				ctx, r.createUnlimitedMemAccount(
+				ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
 					ctx, flowCtx, opName+"-merge", processorID,
 				), factory)
 			outputUnlimitedAllocator := colmem.NewAllocator(
-				ctx, r.createUnlimitedMemAccount(
+				ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
 					ctx, flowCtx, opName+"-output", processorID,
 				), factory)
-			diskAccount := r.createDiskAccount(ctx, flowCtx, opName, processorID)
+			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
 			es := colexec.NewExternalSorter(
 				sortUnlimitedAllocator,
 				mergeUnlimitedAllocator,
 				outputUnlimitedAllocator,
-				input, inputTypes, ordering, topK,
+				input, inputTypes, ordering, uint64(limit),
+				int(matchLen),
 				execinfra.GetWorkMemLimit(flowCtx),
 				maxNumberPartitions,
 				args.TestingKnobs.NumForcedRepartitions,
@@ -461,7 +442,7 @@ func (r opResult) createDiskBackedSort(
 			return es
 		},
 		args.TestingKnobs.SpillingCallbackFn,
-	), nil
+	)
 }
 
 // makeDiskBackedSorterConstructor creates a colexec.DiskBackedSorterConstructor
@@ -488,16 +469,12 @@ func (r opResult) makeDiskBackedSorterConstructor(
 			// acquired. The hash-based partitioner will do this up front.
 			sortArgs.FDSemaphore = nil
 		}
-		sorter, err := r.createDiskBackedSort(
+		return r.createDiskBackedSort(
 			ctx, flowCtx, &sortArgs, input, inputTypes,
-			execinfrapb.Ordering{Columns: orderingCols},
+			execinfrapb.Ordering{Columns: orderingCols}, 0, /* limit */
 			0 /* matchLen */, maxNumberPartitions, args.Spec.ProcessorID,
-			&execinfrapb.PostProcessSpec{}, opNamePrefix+"-", factory,
+			opNamePrefix+"-", factory,
 		)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-		return sorter
 	}
 }
 
@@ -539,9 +516,9 @@ func (r opResult) createAndWrapRowSource(
 	if args.ProcessorConstructor == nil {
 		return errors.New("processorConstructor is nil")
 	}
-	log.VEventf(ctx, 1, "planning a row-execution processor in the vectorized flow because %v", causeToWrap)
-	if err := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
-		log.VEventf(ctx, 1, "planning a wrapped processor failed because %v", err)
+	log.VEventf(ctx, 1, "planning a row-execution processor in the vectorized flow: %v", causeToWrap)
+	if err := canWrap(flowCtx.EvalCtx.SessionData().VectorizeMode, spec); err != nil {
+		log.VEventf(ctx, 1, "planning a wrapped processor failed: %v", err)
 		// Return the original error for why we don't support this spec
 		// natively since it is more interesting.
 		return causeToWrap
@@ -597,7 +574,7 @@ func (r opResult) createAndWrapRowSource(
 	}
 	r.Root = c
 	r.Columnarizer = c
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		r.Root = colexec.NewInvariantsChecker(r.Root)
 	}
 	takeOverMetaInfo(&r.OpWithMetaInfo, inputs)
@@ -614,12 +591,10 @@ func (r opResult) createAndWrapRowSource(
 // nil is returned.
 func MaybeRemoveRootColumnarizer(r colexecargs.OpWithMetaInfo) execinfra.RowSource {
 	root := r.Root
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		// We might have an invariants checker as the root right now, we gotta
 		// peek inside of it if so.
-		if i, ok := root.(*colexec.InvariantsChecker); ok {
-			root = i.Input
-		}
+		root = colexec.MaybeUnwrapInvariantsChecker(root)
 	}
 	c, isColumnarizer := root.(*colexec.Columnarizer)
 	if !isColumnarizer {
@@ -634,6 +609,12 @@ func MaybeRemoveRootColumnarizer(r colexecargs.OpWithMetaInfo) execinfra.RowSour
 	}
 	c.MarkAsRemovedFromFlow()
 	return c.Input()
+}
+
+func getStreamingAllocator(
+	ctx context.Context, args *colexecargs.NewColOperatorArgs,
+) *colmem.Allocator {
+	return colmem.NewAllocator(ctx, args.StreamingMemAccount, args.Factory)
 }
 
 // NOTE: throughout this file we do not append an output type of a projecting
@@ -667,40 +648,19 @@ func NewColOperator(
 ) (_ *colexecargs.NewColOperatorResult, err error) {
 	result := opResult{NewColOperatorResult: colexecargs.GetNewColOperatorResult()}
 	r := result.NewColOperatorResult
-	// Make sure that we clean up memory monitoring infrastructure in case of an
-	// error or a panic.
-	defer func() {
-		returnedErr := err
-		panicErr := recover()
-		if returnedErr != nil || panicErr != nil {
-			for _, acc := range result.OpAccounts {
-				acc.Close(ctx)
-			}
-			result.OpAccounts = result.OpAccounts[:0]
-			for _, mon := range result.OpMonitors {
-				mon.Stop(ctx)
-			}
-			result.OpMonitors = result.OpMonitors[:0]
-			if returnedErr != nil {
-				log.VEventf(ctx, 1, "vectorized planning failed with %v", returnedErr)
-			}
-		}
-		if panicErr != nil {
-			colexecerror.InternalError(logcrash.PanicAsError(0, panicErr))
-		}
-	}()
 	spec := args.Spec
 	inputs := args.Inputs
-	evalCtx := flowCtx.NewEvalCtx()
-	factory := args.Factory
-	if factory == nil {
-		factory = coldataext.NewExtendedColumnFactory(evalCtx)
+	if args.Factory == nil {
+		// This code path is only used in tests.
+		args.Factory = coldataext.NewExtendedColumnFactory(flowCtx.EvalCtx)
 	}
-	streamingMemAccount := args.StreamingMemAccount
-	streamingAllocator := colmem.NewAllocator(ctx, streamingMemAccount, factory)
-	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
+	factory := args.Factory
 	if args.ExprHelper == nil {
 		args.ExprHelper = colexecargs.NewExprHelper()
+		args.ExprHelper.SemaCtx = flowCtx.NewSemaContext(flowCtx.Txn)
+	}
+	if args.MonitorRegistry == nil {
+		args.MonitorRegistry = &colexecargs.MonitorRegistry{}
 	}
 
 	core := &spec.Core
@@ -736,9 +696,11 @@ func NewColOperator(
 			if core.Values.NumRows == 0 || len(core.Values.Columns) == 0 {
 				// To simplify valuesOp we handle some special cases with
 				// fixedNumTuplesNoInputOp.
-				result.Root = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, int(core.Values.NumRows), nil /* opToInitialize */)
+				result.Root = colexecutils.NewFixedNumTuplesNoInputOp(
+					getStreamingAllocator(ctx, args), int(core.Values.NumRows), nil, /* opToInitialize */
+				)
 			} else {
-				result.Root = colexec.NewValuesOp(streamingAllocator, core.Values)
+				result.Root = colexec.NewValuesOp(getStreamingAllocator(ctx, args), core.Values)
 			}
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
@@ -753,34 +715,59 @@ func NewColOperator(
 			// be able to precisely track the size of its output batch. This
 			// memory account is "streaming" in its nature, so we create an
 			// unlimited one.
-			cFetcherMemAcc := result.createUnlimitedMemAccount(
+			cFetcherMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
 				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID,
+			)
+			kvFetcherMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
 			)
 			estimatedRowCount := spec.EstimatedRowCount
 			scanOp, err := colfetcher.NewColBatchScan(
-				ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), flowCtx,
-				evalCtx, core.TableReader, post, estimatedRowCount,
+				ctx, colmem.NewAllocator(ctx, cFetcherMemAcc, factory), kvFetcherMemAcc,
+				flowCtx, core.TableReader, post, estimatedRowCount,
 			)
 			if err != nil {
 				return r, err
 			}
-			result.Root = scanOp
-			if util.CrdbTestBuild {
-				result.Root = colexec.NewInvariantsChecker(result.Root)
-			}
-			result.KVReader = scanOp
-			result.MetadataSources = append(result.MetadataSources, result.Root.(colexecop.MetadataSource))
-			result.Releasables = append(result.Releasables, scanOp)
+			result.finishScanPlanning(scanOp, scanOp.ResultTypes)
 
-			// We want to check for cancellation once per input batch, and
-			// wrapping only colBatchScan with a CancelChecker allows us to do
-			// just that. It's sufficient for most of the operators since they
-			// are extremely fast. However, some of the long-running operators
-			// (for example, sorter) are still responsible for doing the
-			// cancellation check on their own while performing long operations.
-			result.Root = colexecutils.NewCancelChecker(result.Root)
-			result.ColumnTypes = scanOp.ResultTypes
-			result.ToClose = append(result.ToClose, scanOp)
+		case core.JoinReader != nil:
+			if err := checkNumIn(inputs, 1); err != nil {
+				return r, err
+			}
+			if !core.JoinReader.IsIndexJoin() {
+				return r, errors.AssertionFailedf("lookup join reader is unsupported in vectorized")
+			}
+			// We have to create a separate account in order for the cFetcher to
+			// be able to precisely track the size of its output batch. This
+			// memory account is "streaming" in its nature, so we create an
+			// unlimited one.
+			cFetcherMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID,
+			)
+			kvFetcherMemAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+				ctx, flowCtx, "kvfetcher" /* opName */, spec.ProcessorID,
+			)
+			// We might use the Streamer API which requires a separate memory
+			// account that is bound to an unlimited memory monitor.
+			streamerBudgetAcc := args.MonitorRegistry.CreateUnlimitedMemAccount(
+				ctx, flowCtx, "streamer" /* opName */, spec.ProcessorID,
+			)
+			streamerDiskMonitor := args.MonitorRegistry.CreateDiskMonitor(
+				ctx, flowCtx, "streamer" /* opName */, spec.ProcessorID,
+			)
+			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
+			copy(inputTypes, spec.Input[0].ColumnTypes)
+			indexJoinOp, err := colfetcher.NewColIndexJoin(
+				ctx, getStreamingAllocator(ctx, args),
+				colmem.NewAllocator(ctx, cFetcherMemAcc, factory),
+				kvFetcherMemAcc, streamerBudgetAcc, flowCtx,
+				inputs[0].Root, core.JoinReader, inputTypes, streamerDiskMonitor,
+			)
+			if err != nil {
+				return r, err
+			}
+			result.finishScanPlanning(indexJoinOp, indexJoinOp.ResultTypes)
 
 		case core.Filterer != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -791,7 +778,7 @@ func NewColOperator(
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			result.Root = inputs[0].Root
 			if err := result.planAndMaybeWrapFilter(
-				ctx, flowCtx, evalCtx, args, spec.ProcessorID, core.Filterer.Filter, factory,
+				ctx, flowCtx, args, spec.ProcessorID, core.Filterer.Filter, factory,
 			); err != nil {
 				return r, err
 			}
@@ -812,14 +799,16 @@ func NewColOperator(
 				// TableReader, so we end up creating an orphaned colBatchScan.
 				// We should avoid that. Ideally the optimizer would not plan a
 				// scan in this unusual case.
-				result.Root, err = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, 1 /* numTuples */, inputs[0].Root), nil
+				result.Root, err = colexecutils.NewFixedNumTuplesNoInputOp(
+					getStreamingAllocator(ctx, args), 1 /* numTuples */, inputs[0].Root,
+				), nil
 				// We make ColumnTypes non-nil so that sanity check doesn't
 				// panic.
 				result.ColumnTypes = []*types.T{}
 				break
 			}
 			if aggSpec.IsRowCount() {
-				result.Root, err = colexec.NewCountOp(streamingAllocator, inputs[0].Root), nil
+				result.Root, err = colexec.NewCountOp(getStreamingAllocator(ctx, args), inputs[0].Root), nil
 				result.ColumnTypes = []*types.T{types.Int}
 				break
 			}
@@ -831,15 +820,16 @@ func NewColOperator(
 			}
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(inputTypes, spec.Input[0].ColumnTypes)
+			// Make a copy of the evalCtx since we're modifying it below.
+			evalCtx := flowCtx.NewEvalCtx()
 			newAggArgs := &colexecagg.NewAggregatorArgs{
 				Input:      inputs[0].Root,
 				InputTypes: inputTypes,
 				Spec:       aggSpec,
 				EvalCtx:    evalCtx,
 			}
-			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 			newAggArgs.Constructors, newAggArgs.ConstArguments, newAggArgs.OutputTypes, err = colexecagg.ProcessAggregations(
-				evalCtx, semaCtx, aggSpec.Aggregations, inputTypes,
+				evalCtx, args.ExprHelper.SemaCtx, aggSpec.Aggregations, inputTypes,
 			)
 			if err != nil {
 				return r, err
@@ -850,7 +840,7 @@ func NewColOperator(
 				opName := "hash-aggregator"
 				outputUnlimitedAllocator := colmem.NewAllocator(
 					ctx,
-					result.createUnlimitedMemAccount(ctx, flowCtx, opName+"-output", spec.ProcessorID),
+					args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName+"-output", spec.ProcessorID),
 					factory,
 				)
 				// We have separate unit tests that instantiate the in-memory
@@ -862,7 +852,7 @@ func NewColOperator(
 					// The disk spilling is disabled by the cluster setting, so
 					// we give an unlimited memory account to the in-memory
 					// hash aggregator and don't set up the disk spiller.
-					hashAggregatorUnlimitedMemAccount := result.createUnlimitedMemAccount(
+					hashAggregatorUnlimitedMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(
 						ctx, flowCtx, opName, spec.ProcessorID,
 					)
 					newAggArgs.Allocator = colmem.NewAllocator(
@@ -873,7 +863,7 @@ func NewColOperator(
 					maxOutputBatchMemSize := execinfra.GetWorkMemLimit(flowCtx)
 					// The second argument is nil because we disable the
 					// tracking of the input tuples.
-					result.Root, err = colexec.NewHashAggregator(
+					result.Root = colexec.NewHashAggregator(
 						newAggArgs, nil, /* newSpillingQueueArgs */
 						outputUnlimitedAllocator, maxOutputBatchMemSize,
 					)
@@ -885,40 +875,44 @@ func NewColOperator(
 					// We will give 20% of the hash aggregation budget to the
 					// output batch.
 					maxOutputBatchMemSize := totalMemLimit / 10
-					hashAggregatorMemAccount, hashAggregatorMemMonitorName := result.createMemAccountForSpillStrategyWithLimit(
-						ctx, flowCtx, totalMemLimit/2-maxOutputBatchMemSize, opName, spec.ProcessorID,
+					hashAggregationMemLimit := totalMemLimit/2 - maxOutputBatchMemSize
+					inputTuplesTrackingMemLimit := totalMemLimit / 2
+					if totalMemLimit == 1 {
+						// If total memory limit is 1, we're likely in a "force
+						// disk spill" scenario, so we'll set all internal
+						// limits to 1 too (if we don't, they will end up as 0
+						// which is treated as "no limit").
+						maxOutputBatchMemSize = 1
+						hashAggregationMemLimit = 1
+						inputTuplesTrackingMemLimit = 1
+					}
+					hashAggregatorMemAccount, hashAggregatorMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategyWithLimit(
+						ctx, flowCtx, hashAggregationMemLimit, opName, spec.ProcessorID,
 					)
 					spillingQueueMemMonitorName := hashAggregatorMemMonitorName + "-spilling-queue"
 					// We need to create a separate memory account for the
 					// spilling queue because it looks at how much memory it has
 					// already used in order to decide when to spill to disk.
-					spillingQueueMemAccount := result.createUnlimitedMemAccount(
+					spillingQueueMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(
 						ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID,
 					)
-					spillingQueueCfg := args.DiskQueueCfg
-					spillingQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-					spillingQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 					newAggArgs.Allocator = colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory)
 					newAggArgs.MemAccount = hashAggregatorMemAccount
-					var inMemoryHashAggregator colexecop.Operator
-					inMemoryHashAggregator, err = colexec.NewHashAggregator(
+					inMemoryHashAggregator := colexec.NewHashAggregator(
 						newAggArgs,
 						&colexecutils.NewSpillingQueueArgs{
 							UnlimitedAllocator: colmem.NewAllocator(ctx, spillingQueueMemAccount, factory),
 							Types:              inputTypes,
-							MemoryLimit:        totalMemLimit / 2,
-							DiskQueueCfg:       spillingQueueCfg,
+							MemoryLimit:        inputTuplesTrackingMemLimit,
+							DiskQueueCfg:       args.DiskQueueCfg,
 							FDSemaphore:        args.FDSemaphore,
-							DiskAcc:            result.createDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID),
+							DiskAcc:            args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName, spec.ProcessorID),
 						},
 						outputUnlimitedAllocator,
 						maxOutputBatchMemSize,
 					)
-					if err != nil {
-						return r, err
-					}
 					ehaOpName := "external-hash-aggregator"
-					ehaMemAccount := result.createUnlimitedMemAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID)
+					ehaMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID)
 					// Note that we will use an unlimited memory account here
 					// even for the in-memory hash aggregator since it is easier
 					// to do so than to try to replace the memory account if the
@@ -943,7 +937,7 @@ func NewColOperator(
 								args,
 								&newAggArgs,
 								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaOpName, factory),
-								result.createDiskAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID),
+								args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID),
 								// Note that here we can use the same allocator
 								// object as we passed to the in-memory hash
 								// aggregator because only one (either in-memory
@@ -957,10 +951,10 @@ func NewColOperator(
 					)
 				}
 			} else {
-				evalCtx.SingleDatumAggMemAccount = streamingMemAccount
-				newAggArgs.Allocator = streamingAllocator
-				newAggArgs.MemAccount = streamingMemAccount
-				result.Root, err = colexec.NewOrderedAggregator(newAggArgs)
+				evalCtx.SingleDatumAggMemAccount = args.StreamingMemAccount
+				newAggArgs.Allocator = getStreamingAllocator(ctx, args)
+				newAggArgs.MemAccount = args.StreamingMemAccount
+				result.Root = colexec.NewOrderedAggregator(newAggArgs)
 			}
 			result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 
@@ -971,7 +965,7 @@ func NewColOperator(
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
-				result.Root, err = colexecbase.NewOrderedDistinct(
+				result.Root = colexecbase.NewOrderedDistinct(
 					inputs[0].Root, core.Distinct.OrderedColumns, result.ColumnTypes,
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
@@ -980,7 +974,7 @@ func NewColOperator(
 				// distinct operators, so we don't need to look at
 				// args.TestingKnobs.DiskSpillingDisabled and always instantiate
 				// a disk-backed one here.
-				distinctMemAccount, distinctMemMonitorName := result.createMemAccountForSpillStrategy(
+				distinctMemAccount, distinctMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategy(
 					ctx, flowCtx, "distinct" /* opName */, spec.ProcessorID,
 				)
 				// TODO(yuzefovich): we have an implementation of partially
@@ -993,13 +987,13 @@ func NewColOperator(
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
 				edOpName := "external-distinct"
-				diskAccount := result.createDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
+				diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
 				result.Root = colexec.NewOneInputDiskSpiller(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
 					distinctMemMonitorName,
 					func(input colexecop.Operator) colexecop.Operator {
 						unlimitedAllocator := colmem.NewAllocator(
-							ctx, result.createUnlimitedMemAccount(ctx, flowCtx, edOpName, spec.ProcessorID), factory,
+							ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, edOpName, spec.ProcessorID), factory,
 						)
 						return colexec.NewExternalDistinct(
 							unlimitedAllocator,
@@ -1022,7 +1016,9 @@ func NewColOperator(
 				return r, err
 			}
 			outputIdx := len(spec.Input[0].ColumnTypes)
-			result.Root = colexecbase.NewOrdinalityOp(streamingAllocator, inputs[0].Root, outputIdx)
+			result.Root = colexecbase.NewOrdinalityOp(
+				getStreamingAllocator(ctx, args), inputs[0].Root, outputIdx,
+			)
 			result.ColumnTypes = appendOneType(spec.Input[0].ColumnTypes, types.Int)
 
 		case core.HashJoiner != nil:
@@ -1039,8 +1035,8 @@ func NewColOperator(
 				// We are performing a cross-join, so we need to plan a
 				// specialized operator.
 				opName := "cross-joiner"
-				crossJoinerMemAccount := result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID)
-				crossJoinerDiskAcc := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
+				crossJoinerMemAccount := args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID)
+				crossJoinerDiskAcc := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 				unlimitedAllocator := colmem.NewAllocator(ctx, crossJoinerMemAccount, factory)
 				result.Root = colexecjoin.NewCrossJoiner(
 					unlimitedAllocator,
@@ -1054,21 +1050,13 @@ func NewColOperator(
 				)
 				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 			} else {
-				var hashJoinerMemMonitorName string
-				var hashJoinerMemAccount *mon.BoundAccount
-				var hashJoinerUnlimitedAllocator *colmem.Allocator
-				if useStreamingMemAccountForBuffering {
-					hashJoinerMemAccount = streamingMemAccount
-					hashJoinerUnlimitedAllocator = streamingAllocator
-				} else {
-					opName := "hash-joiner"
-					hashJoinerMemAccount, hashJoinerMemMonitorName = result.createMemAccountForSpillStrategy(
-						ctx, flowCtx, opName, spec.ProcessorID,
-					)
-					hashJoinerUnlimitedAllocator = colmem.NewAllocator(
-						ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
-					)
-				}
+				opName := "hash-joiner"
+				hashJoinerMemAccount, hashJoinerMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategy(
+					ctx, flowCtx, opName, spec.ProcessorID,
+				)
+				hashJoinerUnlimitedAllocator := colmem.NewAllocator(
+					ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+				)
 				hjSpec := colexecjoin.MakeHashJoinerSpec(
 					core.HashJoiner.Type,
 					core.HashJoiner.LeftEqColumns,
@@ -1083,20 +1071,20 @@ func NewColOperator(
 					hashJoinerUnlimitedAllocator, hjSpec, inputs[0].Root, inputs[1].Root,
 					colexecjoin.HashJoinerInitialNumBuckets,
 				)
-				if useStreamingMemAccountForBuffering || args.TestingKnobs.DiskSpillingDisabled {
+				if args.TestingKnobs.DiskSpillingDisabled {
 					// We will not be creating a disk-backed hash joiner because
 					// we're running a test that explicitly asked for only
 					// in-memory hash joiner.
 					result.Root = inMemoryHashJoiner
 				} else {
 					opName := "external-hash-joiner"
-					diskAccount := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
+					diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 					result.Root = colexec.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
 						hashJoinerMemMonitorName,
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 							unlimitedAllocator := colmem.NewAllocator(
-								ctx, result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+								ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
 							)
 							ehj := colexec.NewExternalHashJoiner(
 								unlimitedAllocator,
@@ -1119,7 +1107,7 @@ func NewColOperator(
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == descpb.InnerJoin {
 				if err = result.planAndMaybeWrapFilter(
-					ctx, flowCtx, evalCtx, args, spec.ProcessorID, core.HashJoiner.OnExpr, factory,
+					ctx, flowCtx, args, spec.ProcessorID, core.HashJoiner.OnExpr, factory,
 				); err != nil {
 					return r, err
 				}
@@ -1152,20 +1140,17 @@ func NewColOperator(
 			// joiner itself is responsible for making sure that we stay within
 			// the memory limit, and it will fall back to disk if necessary.
 			unlimitedAllocator := colmem.NewAllocator(
-				ctx, result.createUnlimitedMemAccount(
+				ctx, args.MonitorRegistry.CreateUnlimitedMemAccount(
 					ctx, flowCtx, opName, spec.ProcessorID,
 				), factory)
-			diskAccount := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
-			mj, err := colexecjoin.NewMergeJoinOp(
+			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
+			mj := colexecjoin.NewMergeJoinOp(
 				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx),
 				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0].Root, inputs[1].Root, leftTypes, rightTypes,
 				core.MergeJoiner.LeftOrdering.Columns, core.MergeJoiner.RightOrdering.Columns,
-				diskAccount, evalCtx,
+				diskAccount, flowCtx.EvalCtx,
 			)
-			if err != nil {
-				return r, err
-			}
 
 			result.Root = mj
 			result.ToClose = append(result.ToClose, mj.(colexecop.Closer))
@@ -1173,7 +1158,7 @@ func NewColOperator(
 
 			if onExpr != nil {
 				if err = result.planAndMaybeWrapFilter(
-					ctx, flowCtx, evalCtx, args, spec.ProcessorID, *onExpr, factory,
+					ctx, flowCtx, args, spec.ProcessorID, *onExpr, factory,
 				); err != nil {
 					return r, err
 				}
@@ -1188,9 +1173,10 @@ func NewColOperator(
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			ordering := core.Sorter.OutputOrdering
 			matchLen := core.Sorter.OrderingMatchLen
-			result.Root, err = result.createDiskBackedSort(
-				ctx, flowCtx, args, input, result.ColumnTypes, ordering, matchLen, 0, /* maxNumberPartitions */
-				spec.ProcessorID, post, "" /* opNamePrefix */, factory,
+			limit := core.Sorter.Limit
+			result.Root = result.createDiskBackedSort(
+				ctx, flowCtx, args, input, result.ColumnTypes, ordering, limit, matchLen, 0, /* maxNumberPartitions */
+				spec.ProcessorID, "" /* opNamePrefix */, factory,
 			)
 
 		case core.Windower != nil:
@@ -1221,7 +1207,8 @@ func NewColOperator(
 						// We must cast to the expected argument type.
 						castIdx := len(typs)
 						input, err = colexecbase.GetCastOperator(
-							streamingAllocator, input, int(idx), castIdx, typs[idx], expectedType, evalCtx,
+							getStreamingAllocator(ctx, args), input, int(idx),
+							castIdx, typs[idx], expectedType, flowCtx.EvalCtx,
 						)
 						if err != nil {
 							colexecerror.InternalError(errors.AssertionFailedf(
@@ -1243,15 +1230,15 @@ func NewColOperator(
 					// distribute). The decision about which kind of partitioner
 					// to use should come from the optimizer.
 					partitionColIdx = int(wf.OutputColIdx + tempColOffset)
-					input, err = colexecwindow.NewWindowSortingPartitioner(
-						streamingAllocator, input, typs,
+					input = colexecwindow.NewWindowSortingPartitioner(
+						getStreamingAllocator(ctx, args), input, typs,
 						core.Windower.PartitionBy, wf.Ordering.Columns, partitionColIdx,
-						func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecop.Operator, error) {
+						func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) colexecop.Operator {
 							return result.createDiskBackedSort(
 								ctx, flowCtx, args, input, inputTypes,
-								execinfrapb.Ordering{Columns: orderingCols}, 0, /* matchLen */
+								execinfrapb.Ordering{Columns: orderingCols}, 0 /*limit */, 0, /* matchLen */
 								0 /* maxNumberPartitions */, spec.ProcessorID,
-								&execinfrapb.PostProcessSpec{}, opNamePrefix, factory)
+								opNamePrefix, factory)
 						},
 					)
 					// Window partitioner will append a boolean column.
@@ -1260,21 +1247,18 @@ func NewColOperator(
 					typs[len(typs)-1] = types.Bool
 				} else {
 					if len(wf.Ordering.Columns) > 0 {
-						input, err = result.createDiskBackedSort(
+						input = result.createDiskBackedSort(
 							ctx, flowCtx, args, input, typs,
-							wf.Ordering, 0 /* matchLen */, 0, /* maxNumberPartitions */
-							spec.ProcessorID, &execinfrapb.PostProcessSpec{}, opNamePrefix, factory,
+							wf.Ordering, 0 /* limit */, 0 /* matchLen */, 0, /* maxNumberPartitions */
+							spec.ProcessorID, opNamePrefix, factory,
 						)
 					}
 				}
-				if err != nil {
-					return r, err
-				}
 				if colexecwindow.WindowFnNeedsPeersInfo(&wf) {
 					peersColIdx = int(wf.OutputColIdx + tempColOffset)
-					input, err = colexecwindow.NewWindowPeerGrouper(
-						streamingAllocator, input, typs, wf.Ordering.Columns,
-						partitionColIdx, peersColIdx,
+					input = colexecwindow.NewWindowPeerGrouper(
+						getStreamingAllocator(ctx, args), input, typs,
+						wf.Ordering.Columns, partitionColIdx, peersColIdx,
 					)
 					// Window peer grouper will append a boolean column.
 					tempColOffset++
@@ -1284,7 +1268,7 @@ func NewColOperator(
 				outputIdx := int(wf.OutputColIdx + tempColOffset)
 
 				windowArgs := &colexecwindow.WindowArgs{
-					EvalCtx:         evalCtx,
+					EvalCtx:         flowCtx.EvalCtx,
 					MemoryLimit:     execinfra.GetWorkMemLimit(flowCtx),
 					QueueCfg:        args.DiskQueueCfg,
 					FdSemaphore:     args.FDSemaphore,
@@ -1295,6 +1279,11 @@ func NewColOperator(
 					PeersColIdx:     peersColIdx,
 				}
 
+				// Some window functions always return an INT result, so we use
+				// it as default and will update whenever necessary. We cannot
+				// use execinfrapb.GetWindowFunctionInfo because that function
+				// doesn't distinguish integers with different widths.
+				returnType := types.Int
 				if wf.Func.WindowFunc != nil {
 					// This is a 'pure' window function (e.g. not an aggregation).
 					windowFn := *wf.Func.WindowFunc
@@ -1304,52 +1293,72 @@ func NewColOperator(
 					// will fall back to disk if necessary.
 					switch windowFn {
 					case execinfrapb.WindowerSpec_ROW_NUMBER:
-						windowArgs.MainAllocator = streamingAllocator
+						windowArgs.MainAllocator = getStreamingAllocator(ctx, args)
 						result.Root = colexecwindow.NewRowNumberOperator(windowArgs)
 					case execinfrapb.WindowerSpec_RANK, execinfrapb.WindowerSpec_DENSE_RANK:
-						windowArgs.MainAllocator = streamingAllocator
+						windowArgs.MainAllocator = getStreamingAllocator(ctx, args)
 						result.Root, err = colexecwindow.NewRankOperator(windowArgs, windowFn, wf.Ordering.Columns)
 					case execinfrapb.WindowerSpec_PERCENT_RANK, execinfrapb.WindowerSpec_CUME_DIST:
 						opName := opNamePrefix + "relative-rank"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, false /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, false, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewRelativeRankOperator(
 							windowArgs, windowFn, wf.Ordering.Columns)
+						returnType = types.Float
 					case execinfrapb.WindowerSpec_NTILE:
 						opName := opNamePrefix + "ntile"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, false /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, false, /* needsBuffer */
+						)
 						result.Root = colexecwindow.NewNTileOperator(windowArgs, argIdxs[0])
 					case execinfrapb.WindowerSpec_LAG:
 						opName := opNamePrefix + "lag"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, true, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewLagOperator(
 							windowArgs, argIdxs[0], argIdxs[1], argIdxs[2])
+						returnType = typs[argIdxs[0]]
 					case execinfrapb.WindowerSpec_LEAD:
 						opName := opNamePrefix + "lead"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, true, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewLeadOperator(
 							windowArgs, argIdxs[0], argIdxs[1], argIdxs[2])
+						returnType = typs[argIdxs[0]]
 					case execinfrapb.WindowerSpec_FIRST_VALUE:
 						opName := opNamePrefix + "first_value"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, true, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewFirstValueOperator(
 							windowArgs, wf.Frame, &wf.Ordering, argIdxs)
+						returnType = typs[argIdxs[0]]
 					case execinfrapb.WindowerSpec_LAST_VALUE:
 						opName := opNamePrefix + "last_value"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, true, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewLastValueOperator(
 							windowArgs, wf.Frame, &wf.Ordering, argIdxs)
+						returnType = typs[argIdxs[0]]
 					case execinfrapb.WindowerSpec_NTH_VALUE:
 						opName := opNamePrefix + "nth_value"
 						result.finishBufferedWindowerArgs(
-							ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
+							ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+							spec.ProcessorID, factory, true, /* needsBuffer */
+						)
 						result.Root, err = colexecwindow.NewNthValueOperator(
 							windowArgs, wf.Frame, &wf.Ordering, argIdxs)
+						returnType = typs[argIdxs[0]]
 					default:
 						return r, errors.AssertionFailedf("window function %s is not supported", wf.String())
 					}
@@ -1357,35 +1366,51 @@ func NewColOperator(
 					// This is an aggregate window function.
 					opName := opNamePrefix + strings.ToLower(wf.Func.AggregateFunc.String())
 					result.finishBufferedWindowerArgs(
-						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
-					aggArgs := colexecagg.NewAggregatorArgs{
-						Allocator:  windowArgs.MainAllocator,
-						InputTypes: argTypes,
-						EvalCtx:    evalCtx,
-					}
-					// The aggregate function will be presented with a ColVec slice
-					// containing only the argument columns.
-					colIdx := make([]uint32, len(argTypes))
-					for i := range argIdxs {
-						colIdx[i] = uint32(i)
-					}
-					aggregations := []execinfrapb.AggregatorSpec_Aggregation{{
-						Func:   *wf.Func.AggregateFunc,
-						ColIdx: colIdx,
-					}}
-					semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
-					aggArgs.Constructors, aggArgs.ConstArguments, aggArgs.OutputTypes, err =
-						colexecagg.ProcessAggregations(evalCtx, semaCtx, aggregations, argTypes)
-					// Window functions reuse the hash aggregate function implementation.
-					aggFnsAlloc, _, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-						&aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
+						ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
+						spec.ProcessorID, factory, true, /* needsBuffer */
 					)
-					if err != nil {
-						colexecerror.InternalError(err)
+					aggType := *wf.Func.AggregateFunc
+					switch *wf.Func.AggregateFunc {
+					case execinfrapb.CountRows:
+						// count_rows has a specialized implementation.
+						result.Root = colexecwindow.NewCountRowsOperator(windowArgs, wf.Frame, &wf.Ordering)
+					default:
+						aggArgs := colexecagg.NewAggregatorArgs{
+							Allocator:  windowArgs.MainAllocator,
+							InputTypes: argTypes,
+							EvalCtx:    flowCtx.EvalCtx,
+						}
+						// The aggregate function will be presented with a ColVec slice
+						// containing only the argument columns.
+						colIdx := make([]uint32, len(argTypes))
+						for i := range argIdxs {
+							colIdx[i] = uint32(i)
+						}
+						aggregations := []execinfrapb.AggregatorSpec_Aggregation{{
+							Func:   aggType,
+							ColIdx: colIdx,
+						}}
+						aggArgs.Constructors, aggArgs.ConstArguments, aggArgs.OutputTypes, err =
+							colexecagg.ProcessAggregations(flowCtx.EvalCtx, args.ExprHelper.SemaCtx, aggregations, argTypes)
+						var toClose colexecop.Closers
+						var aggFnsAlloc *colexecagg.AggregateFuncsAlloc
+						if (aggType != execinfrapb.Min && aggType != execinfrapb.Max) ||
+							wf.Frame.Exclusion != execinfrapb.WindowerSpec_Frame_NO_EXCLUSION ||
+							!colexecwindow.WindowFrameCanShrink(wf.Frame, &wf.Ordering) {
+							// Min and max window functions have specialized implementations
+							// when the frame can shrink and has a default exclusion clause.
+							aggFnsAlloc, _, toClose, err = colexecagg.NewAggregateFuncsAlloc(
+								&aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
+							)
+							if err != nil {
+								colexecerror.InternalError(err)
+							}
+						}
+						result.Root = colexecwindow.NewWindowAggregatorOperator(
+							windowArgs, aggType, wf.Frame, &wf.Ordering, argIdxs,
+							aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
+						returnType = aggArgs.OutputTypes[0]
 					}
-					result.Root = colexecwindow.NewWindowAggregatorOperator(
-						windowArgs, wf.Frame, &wf.Ordering, argIdxs,
-						aggArgs.OutputTypes[0], aggFnsAlloc, toClose)
 				} else {
 					colexecerror.InternalError(errors.AssertionFailedf("window function spec is nil"))
 				}
@@ -1405,10 +1430,6 @@ func NewColOperator(
 					result.Root = colexecbase.NewSimpleProjectOp(result.Root, int(wf.OutputColIdx+tempColOffset), projection)
 				}
 
-				_, returnType, err := execinfrapb.GetWindowFunctionInfo(wf.Func, argTypes...)
-				if err != nil {
-					return r, err
-				}
 				result.ColumnTypes = appendOneType(result.ColumnTypes, returnType)
 				input = result.Root
 			}
@@ -1429,7 +1450,7 @@ func NewColOperator(
 		Op:          result.Root,
 		ColumnTypes: result.ColumnTypes,
 	}
-	err = ppr.planPostProcessSpec(ctx, flowCtx, evalCtx, args, post, factory, &r.Releasables)
+	err = ppr.planPostProcessSpec(ctx, flowCtx, args, post, factory, &r.Releasables)
 	if err != nil {
 		err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, args.Spec.ResultTypes, factory, err)
 	} else {
@@ -1494,10 +1515,11 @@ func NewColOperator(
 			if !actual.Identical(expected) {
 				castedIdx := len(typesWithCasts)
 				r.Root, err = colexecbase.GetCastOperator(
-					streamingAllocator, r.Root, i, castedIdx, actual, expected, evalCtx,
+					getStreamingAllocator(ctx, args), r.Root, i, castedIdx,
+					actual, expected, flowCtx.EvalCtx,
 				)
 				if err != nil {
-					return r, errors.AssertionFailedf("unexpectedly couldn't plan a cast although IsCastSupported returned true: %v", err)
+					return r, errors.NewAssertionErrorWithWrappedErrf(err, "unexpectedly couldn't plan a cast although IsCastSupported returned true")
 				}
 				projection[i] = uint32(castedIdx)
 				typesWithCasts = append(typesWithCasts, expected)
@@ -1509,17 +1531,14 @@ func NewColOperator(
 	}
 
 	takeOverMetaInfo(&result.OpWithMetaInfo, inputs)
-	if util.CrdbTestBuild {
-		// TODO(yuzefovich): remove the testing knob.
-		if args.TestingKnobs.PlanInvariantsCheckers {
-			// Plan an invariants checker if it isn't already the root of the
-			// tree.
-			if _, isInvariantsChecker := r.Root.(*colexec.InvariantsChecker); !isInvariantsChecker {
-				r.Root = colexec.NewInvariantsChecker(r.Root)
-			}
+	if buildutil.CrdbTestBuild {
+		// Plan an invariants checker if it isn't already the root of the
+		// tree.
+		if i := colexec.MaybeUnwrapInvariantsChecker(r.Root); i == r.Root {
+			r.Root = colexec.NewInvariantsChecker(r.Root)
 		}
 		// Also verify planning assumptions.
-		r.AssertInvariants()
+		args.MonitorRegistry.AssertInvariants()
 	}
 	return r, err
 }
@@ -1529,14 +1548,13 @@ func NewColOperator(
 func (r opResult) planAndMaybeWrapFilter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	evalCtx *tree.EvalContext,
 	args *colexecargs.NewColOperatorArgs,
 	processorID int32,
 	filter execinfrapb.Expression,
 	factory coldata.ColumnFactory,
 ) error {
 	op, err := planFilterExpr(
-		ctx, flowCtx, evalCtx, r.Root, r.ColumnTypes, filter, args.StreamingMemAccount, factory, args.ExprHelper, &r.Releasables,
+		ctx, flowCtx, r.Root, r.ColumnTypes, filter, args.StreamingMemAccount, factory, args.ExprHelper, &r.Releasables,
 	)
 	if err != nil {
 		// Filter expression planning failed. Fall back to planning the filter
@@ -1596,7 +1614,6 @@ func (r opResult) wrapPostProcessSpec(
 func (r *postProcessResult) planPostProcessSpec(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	evalCtx *tree.EvalContext,
 	args *colexecargs.NewColOperatorArgs,
 	post *execinfrapb.PostProcessSpec,
 	factory coldata.ColumnFactory,
@@ -1605,16 +1622,15 @@ func (r *postProcessResult) planPostProcessSpec(
 	if post.Projection {
 		r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, post.OutputColumns)
 	} else if post.RenderExprs != nil {
-		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
 		var renderedCols []uint32
 		for _, renderExpr := range post.RenderExprs {
-			expr, err := args.ExprHelper.ProcessExpr(renderExpr, semaCtx, evalCtx, r.ColumnTypes)
+			expr, err := args.ExprHelper.ProcessExpr(renderExpr, flowCtx.EvalCtx, r.ColumnTypes)
 			if err != nil {
 				return err
 			}
 			var outputIdx int
 			r.Op, outputIdx, r.ColumnTypes, err = planProjectionOperators(
-				ctx, evalCtx, expr, r.ColumnTypes, r.Op, args.StreamingMemAccount, factory, releasables,
+				ctx, flowCtx.EvalCtx, expr, r.ColumnTypes, r.Op, args.StreamingMemAccount, factory, releasables,
 			)
 			if err != nil {
 				return errors.Wrapf(err, "unable to columnarize render expression %q", expr)
@@ -1640,89 +1656,6 @@ func (r *postProcessResult) planPostProcessSpec(
 	return nil
 }
 
-// getMemMonitorName returns a unique (for this opResult) memory monitor name.
-func (r opResult) getMemMonitorName(opName string, processorID int32, suffix string) string {
-	return fmt.Sprintf("%s-%d-%s-%d", opName, processorID, suffix, len(r.OpMonitors))
-}
-
-// createMemAccountForSpillStrategy instantiates a memory monitor and a memory
-// account to be used with a buffering Operator that can fall back to disk.
-// The default memory limit is used, if flowCtx.Cfg.ForceDiskSpill is used, this
-// will be 1. The receiver is updated to have references to both objects. Memory
-// monitor name is also returned.
-func (r opResult) createMemAccountForSpillStrategy(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
-) (*mon.BoundAccount, string) {
-	monitorName := r.getMemMonitorName(opName, processorID, "limited" /* suffix */)
-	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
-		ctx, flowCtx.EvalCtx.Mon, flowCtx, monitorName,
-	)
-	r.OpMonitors = append(r.OpMonitors, bufferingOpMemMonitor)
-	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
-	r.OpAccounts = append(r.OpAccounts, &bufferingMemAccount)
-	return &bufferingMemAccount, monitorName
-}
-
-// createMemAccountForSpillStrategyWithLimit is the same as
-// createMemAccountForSpillStrategy except that it takes in a custom limit
-// instead of using the number obtained via execinfra.GetWorkMemLimit. Memory
-// monitor name is also returned.
-func (r opResult) createMemAccountForSpillStrategyWithLimit(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, limit int64, opName string, processorID int32,
-) (*mon.BoundAccount, string) {
-	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
-		limit = 1
-	}
-	monitorName := r.getMemMonitorName(opName, processorID, "limited" /* suffix */)
-	bufferingOpMemMonitor := mon.NewMonitorInheritWithLimit(monitorName, limit, flowCtx.EvalCtx.Mon)
-	bufferingOpMemMonitor.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-	r.OpMonitors = append(r.OpMonitors, bufferingOpMemMonitor)
-	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
-	r.OpAccounts = append(r.OpAccounts, &bufferingMemAccount)
-	return &bufferingMemAccount, monitorName
-}
-
-// createUnlimitedMemAccount instantiates an unlimited memory monitor
-// and a memory account to be used with a buffering disk-backed Operator (or in
-// special circumstances in place of a streaming account when the precise memory
-// usage is needed by an operator). The receiver is updated to have references
-// to both objects. Note that the returned account is only "unlimited" in that
-// it does not have a hard limit that it enforces, but a limit might be enforced
-// by a root monitor.
-//
-// Note that the memory monitor name is not returned (unlike above) because no
-// caller actually needs it.
-func (r opResult) createUnlimitedMemAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
-) *mon.BoundAccount {
-	monitorName := r.getMemMonitorName(opName, processorID, "unlimited" /* suffix */)
-	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
-		ctx, flowCtx.EvalCtx.Mon, monitorName,
-	)
-	r.OpMonitors = append(r.OpMonitors, bufferingOpUnlimitedMemMonitor)
-	bufferingMemAccount := bufferingOpUnlimitedMemMonitor.MakeBoundAccount()
-	r.OpAccounts = append(r.OpAccounts, &bufferingMemAccount)
-	return &bufferingMemAccount
-}
-
-// createDiskAccount instantiates an unlimited disk monitor and a disk account
-// to be used for disk spilling infrastructure in vectorized engine.
-// TODO(azhng): consolidates all allocation monitors/account manage into one
-// place after branch cut for 20.1.
-//
-// Note that the memory monitor name is not returned (unlike above) because no
-// caller actually needs it.
-func (r opResult) createDiskAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
-) *mon.BoundAccount {
-	monitorName := r.getMemMonitorName(opName, processorID, "disk" /* suffix */)
-	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, monitorName)
-	r.OpMonitors = append(r.OpMonitors, opDiskMonitor)
-	opDiskAccount := opDiskMonitor.MakeBoundAccount()
-	r.OpAccounts = append(r.OpAccounts, &opDiskAccount)
-	return &opDiskAccount
-}
-
 type postProcessResult struct {
 	Op          colexecop.Operator
 	ColumnTypes []*types.T
@@ -1737,26 +1670,46 @@ func (r opResult) updateWithPostProcessResult(ppr postProcessResult) {
 func (r opResult) finishBufferedWindowerArgs(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	monitorRegistry *colexecargs.MonitorRegistry,
 	args *colexecwindow.WindowArgs,
 	opName string,
 	processorID int32,
 	factory coldata.ColumnFactory,
 	needsBuffer bool,
 ) {
-	args.DiskAcc = r.createDiskAccount(ctx, flowCtx, opName, processorID)
-	mainAcc := r.createUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
+	args.DiskAcc = monitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
+	mainAcc := monitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
 	args.MainAllocator = colmem.NewAllocator(ctx, mainAcc, factory)
 	if needsBuffer {
-		bufferAcc := r.createUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
+		bufferAcc := monitorRegistry.CreateUnlimitedMemAccount(ctx, flowCtx, opName, processorID)
 		args.BufferAllocator = colmem.NewAllocator(ctx, bufferAcc, factory)
 	}
+}
+
+func (r opResult) finishScanPlanning(op colfetcher.ScanOperator, resultTypes []*types.T) {
+	r.Root = op
+	if buildutil.CrdbTestBuild {
+		r.Root = colexec.NewInvariantsChecker(r.Root)
+	}
+	r.KVReader = op
+	r.MetadataSources = append(r.MetadataSources, r.Root.(colexecop.MetadataSource))
+	r.Releasables = append(r.Releasables, op)
+
+	// We want to check for cancellation once per input batch, and
+	// wrapping only colBatchScan with a CancelChecker allows us to do
+	// just that. It's sufficient for most of the operators since they
+	// are extremely fast. However, some of the long-running operators
+	// (for example, sorter) are still responsible for doing the
+	// cancellation check on their own while performing long operations.
+	r.Root = colexecutils.NewCancelChecker(r.Root)
+	r.ColumnTypes = resultTypes
+	r.ToClose = append(r.ToClose, op)
 }
 
 // planFilterExpr creates all operators to implement filter expression.
 func planFilterExpr(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	evalCtx *tree.EvalContext,
 	input colexecop.Operator,
 	columnTypes []*types.T,
 	filter execinfrapb.Expression,
@@ -1765,8 +1718,7 @@ func planFilterExpr(
 	helper *colexecargs.ExprHelper,
 	releasables *[]execinfra.Releasable,
 ) (colexecop.Operator, error) {
-	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
-	expr, err := helper.ProcessExpr(filter, semaCtx, evalCtx, columnTypes)
+	expr, err := helper.ProcessExpr(filter, flowCtx.EvalCtx, columnTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -1776,7 +1728,7 @@ func planFilterExpr(
 		return colexecutils.NewZeroOp(input), nil
 	}
 	op, _, filterColumnTypes, err := planSelectionOperators(
-		ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
+		ctx, flowCtx.EvalCtx, expr, columnTypes, input, acc, factory, releasables,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to columnarize filter expression %q", filter)
@@ -1816,9 +1768,6 @@ func planSelectionOperators(
 	releasables *[]execinfra.Releasable,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	switch t := expr.(type) {
-	case *tree.IndexedVar:
-		op, err = colexecutils.BoolOrUnknownToSelOp(input, columnTypes, t.Idx)
-		return op, -1, columnTypes, err
 	case *tree.AndExpr:
 		// AND expressions are handled by an implicit AND'ing of selection
 		// vectors. First we select out the tuples that are true on the left
@@ -1835,6 +1784,111 @@ func planSelectionOperators(
 			ctx, evalCtx, t.TypedRight(), typs, leftOp, acc, factory, releasables,
 		)
 		return rightOp, resultIdx, typs, err
+	case *tree.CaseExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
+		return op, resultIdx, typs, err
+	case *tree.ComparisonExpr:
+		cmpOp := t.Operator
+		leftOp, leftIdx, ct, err := planProjectionOperators(
+			ctx, evalCtx, t.TypedLeft(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return nil, resultIdx, ct, err
+		}
+		lTyp := ct[leftIdx]
+		if constArg, ok := t.Right.(tree.Datum); ok {
+			switch cmpOp.Symbol {
+			case treecmp.Like, treecmp.NotLike:
+				negate := cmpOp.Symbol == treecmp.NotLike
+				op, err = colexecsel.GetLikeOperator(
+					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate,
+				)
+			case treecmp.In, treecmp.NotIn:
+				negate := cmpOp.Symbol == treecmp.NotIn
+				datumTuple, ok := tree.AsDTuple(constArg)
+				if !ok || useDefaultCmpOpForIn(datumTuple) {
+					break
+				}
+				op, err = colexec.GetInOperator(evalCtx, lTyp, leftOp, leftIdx, datumTuple, negate)
+			case treecmp.IsDistinctFrom, treecmp.IsNotDistinctFrom:
+				if constArg != tree.DNull {
+					// Optimized IsDistinctFrom and IsNotDistinctFrom are
+					// supported only with NULL argument, so we fallback to the
+					// default comparison operator.
+					break
+				}
+				// IS NOT DISTINCT FROM NULL is synonymous with IS NULL and IS
+				// DISTINCT FROM NULL is synonymous with IS NOT NULL (except for
+				// tuples). Therefore, negate when the operator is IS DISTINCT
+				// FROM NULL.
+				negate := cmpOp.Symbol == treecmp.IsDistinctFrom
+				op = colexec.NewIsNullSelOp(leftOp, leftIdx, negate, false /* isTupleNull */)
+			}
+			if op == nil || err != nil {
+				// op hasn't been created yet, so let's try the constructor for
+				// all other selection operators.
+				op, err = colexecsel.GetSelectionConstOperator(
+					cmpOp, leftOp, ct, leftIdx, constArg, evalCtx, t,
+				)
+				if r, ok := op.(execinfra.Releasable); ok {
+					*releasables = append(*releasables, r)
+				}
+			}
+			return op, resultIdx, ct, err
+		}
+		rightOp, rightIdx, ct, err := planProjectionOperators(
+			ctx, evalCtx, t.TypedRight(), ct, leftOp, acc, factory, releasables,
+		)
+		if err != nil {
+			return nil, resultIdx, ct, err
+		}
+		op, err = colexecsel.GetSelectionOperator(
+			cmpOp, rightOp, ct, leftIdx, rightIdx, evalCtx, t,
+		)
+		if r, ok := op.(execinfra.Releasable); ok {
+			*releasables = append(*releasables, r)
+		}
+		return op, resultIdx, ct, err
+	case *tree.IndexedVar:
+		op, err = colexecutils.BoolOrUnknownToSelOp(input, columnTypes, t.Idx)
+		return op, -1, columnTypes, err
+	case *tree.IsNotNullExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		op = colexec.NewIsNullSelOp(
+			op, resultIdx, true /* negate */, typs[resultIdx].Family() == types.TupleFamily,
+		)
+		return op, resultIdx, typs, err
+	case *tree.IsNullExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		op = colexec.NewIsNullSelOp(
+			op, resultIdx, false /* negate */, typs[resultIdx].Family() == types.TupleFamily,
+		)
+		return op, resultIdx, typs, err
+	case *tree.NotExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		op, err = colexec.NewNotExprSelOp(t.TypedInnerExpr().ResolvedType().Family(), op, resultIdx)
+		return op, resultIdx, typs, err
 	case *tree.OrExpr:
 		// OR expressions are handled by converting them to an equivalent CASE
 		// statement. Since CASE statements don't have a selection form, plan a
@@ -1864,99 +1918,6 @@ func planSelectionOperators(
 		}
 		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
 		return op, resultIdx, typs, err
-	case *tree.CaseExpr:
-		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return op, resultIdx, typs, err
-		}
-		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
-		return op, resultIdx, typs, err
-	case *tree.IsNullExpr:
-		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return op, resultIdx, typs, err
-		}
-		op = colexec.NewIsNullSelOp(
-			op, resultIdx, false /* negate */, typs[resultIdx].Family() == types.TupleFamily,
-		)
-		return op, resultIdx, typs, err
-	case *tree.IsNotNullExpr:
-		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return op, resultIdx, typs, err
-		}
-		op = colexec.NewIsNullSelOp(
-			op, resultIdx, true /* negate */, typs[resultIdx].Family() == types.TupleFamily,
-		)
-		return op, resultIdx, typs, err
-	case *tree.ComparisonExpr:
-		cmpOp := t.Operator
-		leftOp, leftIdx, ct, err := planProjectionOperators(
-			ctx, evalCtx, t.TypedLeft(), columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return nil, resultIdx, ct, err
-		}
-		lTyp := ct[leftIdx]
-		if constArg, ok := t.Right.(tree.Datum); ok {
-			switch cmpOp.Symbol {
-			case tree.Like, tree.NotLike:
-				negate := cmpOp.Symbol == tree.NotLike
-				op, err = colexecsel.GetLikeOperator(
-					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate,
-				)
-			case tree.In, tree.NotIn:
-				negate := cmpOp.Symbol == tree.NotIn
-				datumTuple, ok := tree.AsDTuple(constArg)
-				if !ok || useDefaultCmpOpForIn(datumTuple) {
-					break
-				}
-				op, err = colexec.GetInOperator(lTyp, leftOp, leftIdx, datumTuple, negate)
-			case tree.IsDistinctFrom, tree.IsNotDistinctFrom:
-				if constArg != tree.DNull {
-					// Optimized IsDistinctFrom and IsNotDistinctFrom are
-					// supported only with NULL argument, so we fallback to the
-					// default comparison operator.
-					break
-				}
-				// IS NOT DISTINCT FROM NULL is synonymous with IS NULL and IS
-				// DISTINCT FROM NULL is synonymous with IS NOT NULL (except for
-				// tuples). Therefore, negate when the operator is IS DISTINCT
-				// FROM NULL.
-				negate := cmpOp.Symbol == tree.IsDistinctFrom
-				op = colexec.NewIsNullSelOp(leftOp, leftIdx, negate, false /* isTupleNull */)
-			}
-			if op == nil || err != nil {
-				// op hasn't been created yet, so let's try the constructor for
-				// all other selection operators.
-				op, err = colexecsel.GetSelectionConstOperator(
-					cmpOp, leftOp, ct, leftIdx, constArg, evalCtx, t,
-				)
-				if r, ok := op.(execinfra.Releasable); ok {
-					*releasables = append(*releasables, r)
-				}
-			}
-			return op, resultIdx, ct, err
-		}
-		rightOp, rightIdx, ct, err := planProjectionOperators(
-			ctx, evalCtx, t.TypedRight(), ct, leftOp, acc, factory, releasables,
-		)
-		if err != nil {
-			return nil, resultIdx, ct, err
-		}
-		op, err = colexecsel.GetSelectionOperator(
-			cmpOp, rightOp, ct, leftIdx, rightIdx, evalCtx, t,
-		)
-		if r, ok := op.(execinfra.Releasable); ok {
-			*releasables = append(*releasables, r)
-		}
-		return op, resultIdx, ct, err
 	default:
 		return nil, resultIdx, nil, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
 	}
@@ -2012,13 +1973,8 @@ func planProjectionOperators(
 	}
 	resultIdx = -1
 	switch t := expr.(type) {
-	case *tree.IndexedVar:
-		return input, t.Idx, columnTypes, nil
-	case *tree.ComparisonExpr:
-		return planProjectionExpr(
-			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, acc, factory, nil /* binFn */, t, releasables,
-		)
+	case *tree.AndExpr:
+		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables)
 	case *tree.BinaryExpr:
 		if err = checkSupportedBinaryExpr(t.TypedLeft(), t.TypedRight(), t.ResolvedType()); err != nil {
 			return op, resultIdx, typs, err
@@ -2027,87 +1983,6 @@ func planProjectionOperators(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
 			columnTypes, input, acc, factory, t.Fn.Fn, nil /* cmpExpr */, releasables,
 		)
-	case *tree.IsNullExpr:
-		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false /* negate */, factory, releasables)
-	case *tree.IsNotNullExpr:
-		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, true /* negate */, factory, releasables)
-	case *tree.CastExpr:
-		expr := t.Expr.(tree.TypedExpr)
-		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
-		)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		op, resultIdx, typs, err = planCastOperator(ctx, acc, typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), factory, evalCtx)
-		return op, resultIdx, typs, err
-	case *tree.FuncExpr:
-		var inputCols []int
-		typs = make([]*types.T, len(columnTypes))
-		copy(typs, columnTypes)
-		op = input
-		for _, e := range t.Exprs {
-			var err error
-			// TODO(rohany): This could be done better, especially in the case
-			// of constant arguments, because the vectorized engine right now
-			// creates a new column full of the constant value.
-			op, resultIdx, typs, err = planProjectionOperators(
-				ctx, evalCtx, e.(tree.TypedExpr), typs, op, acc, factory, releasables,
-			)
-			if err != nil {
-				return nil, resultIdx, nil, err
-			}
-			inputCols = append(inputCols, resultIdx)
-		}
-		resultIdx = len(typs)
-		op, err = colexec.NewBuiltinFunctionOperator(
-			colmem.NewAllocator(ctx, acc, factory), evalCtx, t, typs, inputCols, resultIdx, op,
-		)
-		if r, ok := op.(execinfra.Releasable); ok {
-			*releasables = append(*releasables, r)
-		}
-		typs = appendOneType(typs, t.ResolvedType())
-		return op, resultIdx, typs, err
-	case tree.Datum:
-		op, err = projectDatum(t)
-		return op, resultIdx, typs, err
-	case *tree.Tuple:
-		isConstTuple := true
-		for _, expr := range t.Exprs {
-			if _, isDatum := expr.(tree.Datum); !isDatum {
-				isConstTuple = false
-				break
-			}
-		}
-		if isConstTuple {
-			// Tuple expression is a constant, so we can evaluate it and
-			// project the resulting datum.
-			tuple, err := t.Eval(evalCtx)
-			if err != nil {
-				return nil, resultIdx, typs, err
-			}
-			op, err = projectDatum(tuple)
-			return op, resultIdx, typs, err
-		}
-		outputType := t.ResolvedType()
-		typs = make([]*types.T, len(columnTypes))
-		copy(typs, columnTypes)
-		tupleContentsIdxs := make([]int, len(t.Exprs))
-		for i, expr := range t.Exprs {
-			input, tupleContentsIdxs[i], typs, err = planProjectionOperators(
-				ctx, evalCtx, expr.(tree.TypedExpr), typs, input, acc, factory, releasables,
-			)
-			if err != nil {
-				return nil, resultIdx, typs, err
-			}
-		}
-		resultIdx = len(typs)
-		op = colexec.NewTupleProjOp(
-			colmem.NewAllocator(ctx, acc, factory), typs, tupleContentsIdxs, outputType, input, resultIdx,
-		)
-		*releasables = append(*releasables, op.(execinfra.Releasable))
-		typs = appendOneType(typs, outputType)
-		return op, resultIdx, typs, err
 	case *tree.CaseExpr:
 		allocator := colmem.NewAllocator(ctx, acc, factory)
 		caseOutputType := t.ResolvedType()
@@ -2154,7 +2029,7 @@ func planProjectionOperators(
 				// resultIdx, so we simply create an ordinal referencing that
 				// column.
 				right := tree.NewTypedOrdinalReference(resultIdx, whenTyped.ResolvedType())
-				cmpExpr := tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(tree.EQ), left, right)
+				cmpExpr := tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(treecmp.EQ), left, right)
 				caseOps[i], resultIdx, typs, err = planProjectionOperators(
 					ctx, evalCtx, cmpExpr, typs, caseOps[i], acc, factory, releasables,
 				)
@@ -2214,10 +2089,167 @@ func planProjectionOperators(
 		}
 
 		schemaEnforcer.SetTypes(typs)
-		op := colexec.NewCaseOp(allocator, buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
+		op = colexec.NewCaseOp(allocator, buffer, caseOps, elseOp, thenIdxs, caseOutputIdx, caseOutputType)
 		return op, caseOutputIdx, typs, err
-	case *tree.AndExpr, *tree.OrExpr:
+	case *tree.CastExpr:
+		expr := t.Expr.(tree.TypedExpr)
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		op, resultIdx, typs, err = planCastOperator(ctx, acc, typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), factory, evalCtx)
+		return op, resultIdx, typs, err
+	case *tree.CoalesceExpr:
+		// We handle CoalesceExpr by planning the equivalent CASE expression,
+		// namely
+		//   CASE
+		//     WHEN CoalesceExpr.Exprs[0] IS DISTINCT FROM NULL THEN CoalesceExpr.Exprs[0]
+		//     WHEN CoalesceExpr.Exprs[1] IS DISTINCT FROM NULL THEN CoalesceExpr.Exprs[1]
+		//     ...
+		//   END
+		whens := make([]*tree.When, len(t.Exprs))
+		for i := range whens {
+			whens[i] = &tree.When{
+				Cond: tree.NewTypedComparisonExpr(
+					treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom),
+					t.Exprs[i].(tree.TypedExpr),
+					tree.DNull,
+				),
+				Val: t.Exprs[i],
+			}
+		}
+		caseExpr, err := tree.NewTypedCaseExpr(
+			nil, /* expr */
+			whens,
+			nil, /* elseStmt */
+			t.ResolvedType(),
+		)
+		if err != nil {
+			return nil, resultIdx, typs, err
+		}
+		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, acc, factory, releasables)
+	case *tree.ComparisonExpr:
+		return planProjectionExpr(
+			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
+			columnTypes, input, acc, factory, nil /* binFn */, t, releasables,
+		)
+	case tree.Datum:
+		op, err = projectDatum(t)
+		return op, resultIdx, typs, err
+	case *tree.FuncExpr:
+		var inputCols []int
+		typs = make([]*types.T, len(columnTypes))
+		copy(typs, columnTypes)
+		op = input
+		for _, e := range t.Exprs {
+			var err error
+			// TODO(rohany): This could be done better, especially in the case
+			// of constant arguments, because the vectorized engine right now
+			// creates a new column full of the constant value.
+			op, resultIdx, typs, err = planProjectionOperators(
+				ctx, evalCtx, e.(tree.TypedExpr), typs, op, acc, factory, releasables,
+			)
+			if err != nil {
+				return nil, resultIdx, nil, err
+			}
+			inputCols = append(inputCols, resultIdx)
+		}
+		resultIdx = len(typs)
+		op, err = colexec.NewBuiltinFunctionOperator(
+			colmem.NewAllocator(ctx, acc, factory), evalCtx, t, typs, inputCols, resultIdx, op,
+		)
+		if r, ok := op.(execinfra.Releasable); ok {
+			*releasables = append(*releasables, r)
+		}
+		typs = appendOneType(typs, t.ResolvedType())
+		return op, resultIdx, typs, err
+	case *tree.IfExpr:
+		// We handle IfExpr by planning the equivalent CASE expression, namely
+		//   CASE WHEN IfExpr.Cond THEN IfExpr.True ELSE IfExpr.Else END.
+		caseExpr, err := tree.NewTypedCaseExpr(
+			nil, /* expr */
+			[]*tree.When{{Cond: t.Cond, Val: t.True}},
+			t.TypedElseExpr(),
+			t.ResolvedType(),
+		)
+		if err != nil {
+			return nil, resultIdx, typs, err
+		}
+		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, acc, factory, releasables)
+	case *tree.IndexedVar:
+		return input, t.Idx, columnTypes, nil
+	case *tree.IsNotNullExpr:
+		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, true /* negate */, factory, releasables)
+	case *tree.IsNullExpr:
+		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, acc, false /* negate */, factory, releasables)
+	case *tree.NotExpr:
+		op, resultIdx, typs, err = planProjectionOperators(
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, acc, factory, releasables,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		outputIdx, allocator := len(typs), colmem.NewAllocator(ctx, acc, factory)
+		op, err = colexec.NewNotExprProjOp(
+			t.TypedInnerExpr().ResolvedType().Family(), allocator, op, resultIdx, outputIdx,
+		)
+		if err != nil {
+			return op, resultIdx, typs, err
+		}
+		typs = appendOneType(typs, t.ResolvedType())
+		return op, outputIdx, typs, nil
+	case *tree.NullIfExpr:
+		// We handle NullIfExpr by planning the equivalent CASE expression,
+		// namely
+		//   CASE WHEN Expr1 == Expr2 THEN NULL ELSE Expr1 END.
+		caseExpr, err := tree.NewTypedCaseExpr(
+			nil, /* expr */
+			[]*tree.When{{
+				Cond: tree.NewTypedComparisonExpr(
+					treecmp.MakeComparisonOperator(treecmp.EQ),
+					t.Expr1.(tree.TypedExpr),
+					t.Expr2.(tree.TypedExpr),
+				),
+				Val: tree.DNull,
+			}},
+			t.Expr1.(tree.TypedExpr),
+			t.ResolvedType(),
+		)
+		if err != nil {
+			return nil, resultIdx, typs, err
+		}
+		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, acc, factory, releasables)
+	case *tree.OrExpr:
 		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables)
+	case *tree.Tuple:
+		tuple, isConstTuple := evalTupleIfConst(evalCtx, t)
+		if isConstTuple {
+			// Tuple expression is a constant, so we can just project the
+			// resulting datum.
+			op, err = projectDatum(tuple)
+			return op, resultIdx, typs, err
+		}
+		outputType := t.ResolvedType()
+		typs = make([]*types.T, len(columnTypes))
+		copy(typs, columnTypes)
+		tupleContentsIdxs := make([]int, len(t.Exprs))
+		for i, expr := range t.Exprs {
+			input, tupleContentsIdxs[i], typs, err = planProjectionOperators(
+				ctx, evalCtx, expr.(tree.TypedExpr), typs, input, acc, factory, releasables,
+			)
+			if err != nil {
+				return nil, resultIdx, typs, err
+			}
+		}
+		resultIdx = len(typs)
+		op = colexec.NewTupleProjOp(
+			colmem.NewAllocator(ctx, acc, factory), typs, tupleContentsIdxs, outputType, input, resultIdx,
+		)
+		*releasables = append(*releasables, op.(execinfra.Releasable))
+		typs = appendOneType(typs, outputType)
+		return op, resultIdx, typs, err
 	default:
 		return nil, resultIdx, nil, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
@@ -2226,7 +2258,10 @@ func planProjectionOperators(
 func checkSupportedProjectionExpr(left, right tree.TypedExpr) error {
 	leftTyp := left.ResolvedType()
 	rightTyp := right.ResolvedType()
-	if leftTyp.Equivalent(rightTyp) {
+	if leftTyp.Equivalent(rightTyp) || leftTyp.Family() == types.UnknownFamily || rightTyp.Family() == types.UnknownFamily {
+		// If either type is of an Unknown family, then the corresponding vector
+		// will only contain NULL values, so we won't run into the mixed-type
+		// issues.
 		return nil
 	}
 
@@ -2272,11 +2307,11 @@ func planProjectionExpr(
 	allocator := colmem.NewAllocator(ctx, acc, factory)
 	resultIdx = -1
 
-	cmpProjOp, isCmpProjOp := projOp.(tree.ComparisonOperator)
+	cmpProjOp, isCmpProjOp := projOp.(treecmp.ComparisonOperator)
 	var hasOptimizedOp bool
 	if isCmpProjOp {
 		switch cmpProjOp.Symbol {
-		case tree.Like, tree.NotLike, tree.In, tree.NotIn, tree.IsDistinctFrom, tree.IsNotDistinctFrom:
+		case treecmp.Like, treecmp.NotLike, treecmp.In, treecmp.NotIn, treecmp.IsDistinctFrom, treecmp.IsNotDistinctFrom:
 			hasOptimizedOp = true
 		}
 	}
@@ -2311,17 +2346,14 @@ func planProjectionExpr(
 		if err != nil {
 			return nil, resultIdx, typs, err
 		}
-		// Note that this check exists only for testing purposes. On the
-		// regular workloads, we expect that tree.Tuples have already been
-		// pre-evaluated. We also don't need fully-fledged planning as we have
-		// for tree.Tuple in planProjectionOperators because the tests only
-		// use constant tuples.
+
 		if tuple, ok := right.(*tree.Tuple); ok {
-			tupleDatum, err := tuple.Eval(evalCtx)
-			if err != nil {
-				return nil, resultIdx, typs, err
+			// If we have a tuple on the right, try to pre-evaluate it in case
+			// it consists only of constant expressions.
+			tupleDatum, ok := evalTupleIfConst(evalCtx, tuple)
+			if ok {
+				right = tupleDatum
 			}
-			right = tupleDatum
 		}
 
 		// We have a special case behavior for Is{Not}DistinctFrom before
@@ -2332,7 +2364,7 @@ func planProjectionExpr(
 		// creates a cast expression from tree.DNull to the desired type in
 		// order to propagate the type of the null. We need to extract the
 		// constant NULL so that the optimized operator was planned below.
-		if isCmpProjOp && (cmpProjOp.Symbol == tree.IsDistinctFrom || cmpProjOp.Symbol == tree.IsNotDistinctFrom) {
+		if isCmpProjOp && (cmpProjOp.Symbol == treecmp.IsDistinctFrom || cmpProjOp.Symbol == treecmp.IsNotDistinctFrom) {
 			if cast, ok := right.(*tree.CastExpr); ok {
 				if cast.Expr == tree.DNull {
 					right = tree.DNull
@@ -2346,22 +2378,22 @@ func planProjectionExpr(
 			resultIdx = len(typs)
 			if isCmpProjOp {
 				switch cmpProjOp.Symbol {
-				case tree.Like, tree.NotLike:
-					negate := cmpProjOp.Symbol == tree.NotLike
+				case treecmp.Like, treecmp.NotLike:
+					negate := cmpProjOp.Symbol == treecmp.NotLike
 					op, err = colexecproj.GetLikeProjectionOperator(
 						allocator, evalCtx, input, leftIdx, resultIdx,
 						string(tree.MustBeDString(rConstArg)), negate,
 					)
-				case tree.In, tree.NotIn:
-					negate := cmpProjOp.Symbol == tree.NotIn
+				case treecmp.In, treecmp.NotIn:
+					negate := cmpProjOp.Symbol == treecmp.NotIn
 					datumTuple, ok := tree.AsDTuple(rConstArg)
 					if !ok || useDefaultCmpOpForIn(datumTuple) {
 						break
 					}
 					op, err = colexec.GetInProjectionOperator(
-						allocator, typs[leftIdx], input, leftIdx, resultIdx, datumTuple, negate,
+						evalCtx, allocator, typs[leftIdx], input, leftIdx, resultIdx, datumTuple, negate,
 					)
-				case tree.IsDistinctFrom, tree.IsNotDistinctFrom:
+				case treecmp.IsDistinctFrom, treecmp.IsNotDistinctFrom:
 					if right != tree.DNull {
 						// Optimized IsDistinctFrom and IsNotDistinctFrom are
 						// supported only with NULL argument, so we fallback to the
@@ -2370,7 +2402,7 @@ func planProjectionExpr(
 					}
 					// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we
 					// want to negate when IS DISTINCT FROM is used.
-					negate := cmpProjOp.Symbol == tree.IsDistinctFrom
+					negate := cmpProjOp.Symbol == treecmp.IsDistinctFrom
 					op = colexec.NewIsNullProjOp(
 						allocator, input, leftIdx, resultIdx, negate, false, /* isTupleNull */
 					)
@@ -2532,4 +2564,20 @@ func useDefaultCmpOpForIn(tuple *tree.DTuple) bool {
 		}
 	}
 	return false
+}
+
+// evalTupleIfConst checks whether t contains only constant (i.e. tree.Datum)
+// expressions and evaluates the tuple if so.
+func evalTupleIfConst(evalCtx *tree.EvalContext, t *tree.Tuple) (_ tree.Datum, ok bool) {
+	for _, expr := range t.Exprs {
+		if _, isDatum := expr.(tree.Datum); !isDatum {
+			// Not a constant expression.
+			return nil, false
+		}
+	}
+	tuple, err := t.Eval(evalCtx)
+	if err != nil {
+		return nil, false
+	}
+	return tuple, true
 }

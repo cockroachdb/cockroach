@@ -14,17 +14,19 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -38,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 )
 
@@ -104,7 +105,10 @@ func (n *createViewNode) startExec(params runParams) error {
 	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable, len(n.planDeps))
 	hasTempBackref := false
 	for id, updated := range n.planDeps {
-		backRefMutable := params.p.Descriptors().GetUncommittedTableByID(id)
+		backRefMutable, err := params.p.Descriptors().GetUncommittedMutableTableByID(id)
+		if err != nil {
+			return err
+		}
 		if backRefMutable == nil {
 			backRefMutable = tabledesc.NewBuilder(updated.desc.TableDesc()).BuildExistingMutableTable()
 		}
@@ -128,7 +132,6 @@ func (n *createViewNode) startExec(params runParams) error {
 	if err != nil && !sqlerrors.IsRelationAlreadyExistsError(err) {
 		return err
 	}
-	nameKey := catalogkeys.NewNameKeyComponents(n.dbDesc.GetID(), schema.GetID(), n.viewName.Table())
 	if err != nil {
 		switch {
 		case n.ifNotExists:
@@ -136,7 +139,13 @@ func (n *createViewNode) startExec(params runParams) error {
 		case n.replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
-			id, err := catalogkv.GetDescriptorID(params.ctx, params.p.txn, params.ExecCfg().Codec, nameKey)
+			id, err := params.p.Descriptors().Direct().LookupObjectID(
+				params.ctx,
+				params.p.txn,
+				n.dbDesc.GetID(),
+				schema.GetID(),
+				n.viewName.Table(),
+			)
 			if err != nil {
 				return err
 			}
@@ -160,9 +169,13 @@ func (n *createViewNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
 
-	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
-		n.dbDesc.GetID(), n.dbDesc.GetDefaultPrivileges(),
-		params.SessionData().User(), tree.Tables, n.dbDesc.GetPrivileges(),
+	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		n.dbDesc.GetDefaultPrivilegeDescriptor(),
+		schema.GetDefaultPrivilegeDescriptor(),
+		n.dbDesc.GetID(),
+		params.SessionData().User(),
+		tree.Tables,
+		n.dbDesc.GetPrivileges(),
 	)
 
 	var newDesc *tabledesc.Mutable
@@ -184,7 +197,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	} else {
 		// If we aren't replacing anything, make a new table descriptor.
-		id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
+		id, err := descidgen.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
 		if err != nil {
 			return err
 		}
@@ -196,7 +209,6 @@ func (n *createViewNode) startExec(params runParams) error {
 		var creationTime hlc.Timestamp
 		desc, err := makeViewTableDesc(
 			params.ctx,
-			params.p.ExecCfg().Settings,
 			viewName,
 			n.viewQuery,
 			n.dbDesc.GetID(),
@@ -207,10 +219,10 @@ func (n *createViewNode) startExec(params runParams) error {
 			privs,
 			&params.p.semaCtx,
 			params.p.EvalContext(),
+			params.p.EvalContext().Settings,
 			n.persistence,
 			n.dbDesc.IsMultiRegion(),
-			params.p,
-		)
+			params.p)
 		if err != nil {
 			return err
 		}
@@ -225,7 +237,8 @@ func (n *createViewNode) startExec(params runParams) error {
 			desc.IsMaterializedView = true
 			desc.State = descpb.DescriptorState_ADD
 			desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
-			if err := desc.AllocateIDs(params.ctx); err != nil {
+			version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+			if err := desc.AllocateIDs(params.ctx, version); err != nil {
 				return err
 			}
 			// For multi-region databases, we want this descriptor to be GLOBAL instead.
@@ -236,23 +249,26 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 
 		// Collect all the tables/views this view depends on.
+		orderedDependsOn := catalog.DescriptorIDSet{}
 		for backrefID := range n.planDeps {
-			desc.DependsOn = append(desc.DependsOn, backrefID)
+			orderedDependsOn.Add(backrefID)
 		}
+		desc.DependsOn = append(desc.DependsOn, orderedDependsOn.Ordered()...)
 
 		// Collect all types this view depends on.
+		orderedTypeDeps := catalog.DescriptorIDSet{}
 		for backrefID := range n.typeDeps {
-			desc.DependsOnTypes = append(desc.DependsOnTypes, backrefID)
+			orderedTypeDeps.Add(backrefID)
 		}
+		desc.DependsOnTypes = append(desc.DependsOnTypes, orderedTypeDeps.Ordered()...)
 
 		// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
 		// do some basic string formatting (not accurate in the general case).
 		if err = params.p.createDescriptorWithID(
 			params.ctx,
-			catalogkeys.EncodeNameKey(params.ExecCfg().Codec, nameKey),
+			catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schema.GetID(), n.viewName.Table()),
 			id,
 			&desc,
-			params.EvalContext().Settings,
 			fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),
 		); err != nil {
 			return err
@@ -346,7 +362,6 @@ func (n *createViewNode) Close(ctx context.Context)  {}
 // include the back-references.
 func makeViewTableDesc(
 	ctx context.Context,
-	st *cluster.Settings,
 	viewName string,
 	viewQuery string,
 	parentID descpb.ID,
@@ -354,9 +369,10 @@ func makeViewTableDesc(
 	id descpb.ID,
 	resultColumns []colinfo.ResultColumn,
 	creationTime hlc.Timestamp,
-	privileges *descpb.PrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
+	st *cluster.Settings,
 	persistence tree.Persistence,
 	isMultiRegion bool,
 	sc resolver.SchemaResolver,
@@ -375,9 +391,6 @@ func makeViewTableDesc(
 		desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 	}
 
-	// If we're in 21.1, then sequences in views should be referenced
-	// by IDs, so walk the tree and replace sequence names with IDs.
-	version := st.Version.ActiveVersionOrEmpty(ctx)
 	if sc != nil {
 		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery)
 		if err != nil {
@@ -386,16 +399,13 @@ func makeViewTableDesc(
 		desc.ViewQuery = sequenceReplacedQuery
 	}
 
-	// Serialize user defined types used in the view if in 21.2.
-	if version != (clusterversion.ClusterVersion{}) && version.IsActive(clusterversion.SerializeViewUDTs) {
-		typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery)
-		if err != nil {
-			return tabledesc.Mutable{}, err
-		}
-		desc.ViewQuery = typeReplacedQuery
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery)
+	if err != nil {
+		return tabledesc.Mutable{}, err
 	}
+	desc.ViewQuery = typeReplacedQuery
 
-	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {
+	if err := addResultColumns(ctx, semaCtx, evalCtx, st, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err
 	}
 
@@ -409,7 +419,7 @@ func replaceSeqNamesWithIDs(
 	ctx context.Context, sc resolver.SchemaResolver, viewQuery string,
 ) (string, error) {
 	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		seqIdentifiers, err := sequence.GetUsedSequences(expr)
+		seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
 		if err != nil {
 			return false, expr, err
 		}
@@ -421,7 +431,7 @@ func replaceSeqNamesWithIDs(
 			}
 			seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
 		}
-		newExpr, err = sequence.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
+		newExpr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
 		if err != nil {
 			return false, expr, err
 		}
@@ -505,7 +515,7 @@ func (p *planner) replaceViewDesc(
 	// Reset the columns to add the new result columns onto.
 	toReplace.Columns = make([]descpb.ColumnDescriptor, 0, len(n.columns))
 	toReplace.NextColumnID = 0
-	if err := addResultColumns(ctx, &p.semaCtx, p.EvalContext(), toReplace, n.columns); err != nil {
+	if err := addResultColumns(ctx, &p.semaCtx, p.EvalContext(), p.EvalContext().Settings, toReplace, n.columns); err != nil {
 		return nil, err
 	}
 
@@ -587,6 +597,7 @@ func addResultColumns(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
+	st *cluster.Settings,
 	desc *tabledesc.Mutable,
 	resultColumns colinfo.ResultColumns,
 ) error {
@@ -597,13 +608,14 @@ func addResultColumns(
 		columnTableDef.Nullable.Nullability = tree.SilentNull
 		// The new types in the CREATE VIEW column specs never use
 		// SERIAL so we need not process SERIAL types here.
-		col, _, _, err := tabledesc.MakeColumnDefDescs(ctx, &columnTableDef, semaCtx, evalCtx)
+		cdd, err := tabledesc.MakeColumnDefDescs(ctx, &columnTableDef, semaCtx, evalCtx)
 		if err != nil {
 			return err
 		}
-		desc.AddColumn(col)
+		desc.AddColumn(cdd.ColumnDescriptor)
 	}
-	if err := desc.AllocateIDs(ctx); err != nil {
+	version := st.Version.ActiveVersionOrEmpty(ctx)
+	if err := desc.AllocateIDs(ctx, version); err != nil {
 		return err
 	}
 	return nil

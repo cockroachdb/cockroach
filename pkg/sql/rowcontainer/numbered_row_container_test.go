@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,6 +33,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
+
+func newTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
+	diskMonitor := mon.NewMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	return diskMonitor
+}
 
 // Tests the de-duping functionality of DiskBackedNumberedRowContainer.
 func TestNumberedRowContainerDeDuping(t *testing.T) {
@@ -51,7 +64,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	numRows := 20
 	const numCols = 2
 	const smallMemoryBudget = 40
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	memoryMonitor := mon.NewMonitor(
 		"test-mem",
@@ -62,7 +75,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	memoryBudget := math.MaxInt64
@@ -148,7 +161,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	numRows := 200
@@ -160,7 +173,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	defer memoryMonitor.Stop(ctx)
 
 	// Use random types and random rows.
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	types := randgen.RandSortingTypes(rng, numCols)
 	ordering := colinfo.ColumnOrdering{
@@ -226,7 +239,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -237,7 +250,7 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	numRows := 200
@@ -546,7 +559,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
 	// Each row is 10 string columns. Each string has a mean length of 5, and the
@@ -556,7 +569,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	for i := 0; i < 10; i++ {
 		typs = append(typs, types.String)
 	}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rows := make([]rowenc.EncDatumRow, numRows)
 	for i := 0; i < numRows; i++ {
 		rows[i] = make([]rowenc.EncDatum, len(typs))

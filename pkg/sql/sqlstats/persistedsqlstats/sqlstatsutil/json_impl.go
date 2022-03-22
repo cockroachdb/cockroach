@@ -14,7 +14,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -49,6 +49,7 @@ var (
 	_ jsonMarshaler = (*jsonBool)(nil)
 	_ jsonMarshaler = (*jsonInt)(nil)
 	_ jsonMarshaler = (*stmtFingerprintID)(nil)
+	_ jsonMarshaler = (*int64Array)(nil)
 )
 
 type txnStats roachpb.TransactionStatistics
@@ -91,14 +92,99 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 	return jsonFields{
 		{"stmtTyp", (*jsonString)(&s.Stats.SQLType)},
 		{"query", (*jsonString)(&s.Key.Query)},
+		{"querySummary", (*jsonString)(&s.Key.QuerySummary)},
 		{"db", (*jsonString)(&s.Key.Database)},
 		{"distsql", (*jsonBool)(&s.Key.DistSQL)},
 		{"failed", (*jsonBool)(&s.Key.Failed)},
-		{"opt", (*jsonBool)(&s.Key.Opt)},
 		{"implicitTxn", (*jsonBool)(&s.Key.ImplicitTxn)},
 		{"vec", (*jsonBool)(&s.Key.Vec)},
 		{"fullScan", (*jsonBool)(&s.Key.FullScan)},
 	}
+}
+
+type aggregatedMetadata roachpb.AggregatedStatementMetadata
+
+func (s *aggregatedMetadata) jsonFields() jsonFields {
+	return jsonFields{
+		{"db", (*stringArray)(&s.Databases)},
+		{"appNames", (*stringArray)(&s.AppNames)},
+		{"distSQLCount", (*jsonInt)(&s.DistSQLCount)},
+		{"failedCount", (*jsonInt)(&s.FailedCount)},
+		{"fullScanCount", (*jsonInt)(&s.FullScanCount)},
+		{"implicitTxn", (*jsonBool)(&s.ImplicitTxn)},
+		{"query", (*jsonString)(&s.Query)},
+		{"formattedQuery", (*jsonString)(&s.FormattedQuery)},
+		{"querySummary", (*jsonString)(&s.QuerySummary)},
+		{"stmtType", (*jsonString)(&s.StmtType)},
+		{"vecCount", (*jsonInt)(&s.VecCount)},
+		{"totalCount", (*jsonInt)(&s.TotalCount)},
+	}
+}
+
+type int64Array []int64
+
+func (a *int64Array) decodeJSON(js json.JSON) error {
+	arrLen := js.Len()
+	for i := 0; i < arrLen; i++ {
+		var value jsonInt
+		valJSON, err := js.FetchValIdx(i)
+		if err != nil {
+			return err
+		}
+		if err := value.decodeJSON(valJSON); err != nil {
+			return err
+		}
+		*a = append(*a, int64(value))
+	}
+
+	return nil
+}
+
+func (a *int64Array) encodeJSON() (json.JSON, error) {
+	builder := json.NewArrayBuilder(len(*a))
+
+	for _, value := range *a {
+		jsVal, err := (*jsonInt)(&value).encodeJSON()
+		if err != nil {
+			return nil, err
+		}
+		builder.Add(jsVal)
+	}
+
+	return builder.Build(), nil
+}
+
+type stringArray []string
+
+func (a *stringArray) decodeJSON(js json.JSON) error {
+	arrLen := js.Len()
+	for i := 0; i < arrLen; i++ {
+		var value jsonString
+		valJSON, err := js.FetchValIdx(i)
+		if err != nil {
+			return err
+		}
+		if err := value.decodeJSON(valJSON); err != nil {
+			return err
+		}
+		*a = append(*a, string(value))
+	}
+
+	return nil
+}
+
+func (a *stringArray) encodeJSON() (json.JSON, error) {
+	builder := json.NewArrayBuilder(len(*a))
+
+	for _, value := range *a {
+		jsVal, err := (*jsonString)(&value).encodeJSON()
+		if err != nil {
+			return nil, err
+		}
+		builder.Add(jsVal)
+	}
+
+	return builder.Build(), nil
 }
 
 type stmtFingerprintIDArray []roachpb.StmtFingerprintID
@@ -173,6 +259,7 @@ func (t *innerTxnStats) jsonFields() jsonFields {
 		{"commitLat", (*numericStats)(&t.CommitLat)},
 		{"bytesRead", (*numericStats)(&t.BytesRead)},
 		{"rowsRead", (*numericStats)(&t.RowsRead)},
+		{"rowsWritten", (*numericStats)(&t.RowsWritten)},
 	}
 }
 
@@ -200,6 +287,9 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"ovhLat", (*numericStats)(&s.OverheadLat)},
 		{"bytesRead", (*numericStats)(&s.BytesRead)},
 		{"rowsRead", (*numericStats)(&s.RowsRead)},
+		{"rowsWritten", (*numericStats)(&s.RowsWritten)},
+		{"nodes", (*int64Array)(&s.Nodes)},
+		{"planGists", (*stringArray)(&s.PlanGists)},
 	}
 }
 
@@ -261,13 +351,15 @@ func (jf jsonFields) decodeJSON(js json.JSON) (err error) {
 
 	for i := range jf {
 		fieldName = jf[i].field
-		field, err := safeFetchVal(js, fieldName)
+		field, err := js.FetchValKey(fieldName)
 		if err != nil {
 			return err
 		}
-		err = jf[i].val.decodeJSON(field)
-		if err != nil {
-			return err
+		if field != nil {
+			err = jf[i].val.decodeJSON(field)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -299,7 +391,7 @@ func (t *jsonTime) decodeJSON(js json.JSON) error {
 		return err
 	}
 
-	tm := (time.Time)(*t)
+	tm := (*time.Time)(t)
 	if err := tm.UnmarshalText([]byte(s)); err != nil {
 		return err
 	}
@@ -401,15 +493,4 @@ func (d *decimal) decodeJSON(js json.JSON) error {
 
 func (d *decimal) encodeJSON() (json.JSON, error) {
 	return json.FromDecimal(*(*apd.Decimal)(d)), nil
-}
-
-func safeFetchVal(jsonVal json.JSON, key string) (json.JSON, error) {
-	field, err := jsonVal.FetchValKey(key)
-	if err != nil {
-		return nil, err
-	}
-	if field == nil {
-		return nil, errors.Errorf("%s field is not found in the JSON payload", key)
-	}
-	return field, nil
 }

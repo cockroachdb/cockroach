@@ -19,11 +19,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/datadriven"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSetupLogging checks the behavior of logging flags.
@@ -39,8 +41,8 @@ func TestSetupLogging(t *testing.T) {
 		`filter: INFO, ` +
 		`format: json-fluent-compact, ` +
 		`redactable: true, ` +
-		`exit-on-error: false` +
-		`}`
+		`exit-on-error: false, ` +
+		`buffering: NONE}`
 	const defaultHTTPConfig = `http-defaults: {` +
 		`method: POST, ` +
 		`unsafe-tls: false, ` +
@@ -49,20 +51,73 @@ func TestSetupLogging(t *testing.T) {
 		`filter: INFO, ` +
 		`format: json-compact, ` +
 		`redactable: true, ` +
-		`exit-on-error: false}`
+		`exit-on-error: false, ` +
+		`buffering: NONE}`
 	stdFileDefaultsRe := regexp.MustCompile(
-		`file-defaults: \{dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: true, filter: INFO, format: crdb-v2, redactable: true\}`)
+		`file-defaults: \{` +
+			`dir: (?P<path>[^,]+), ` +
+			`max-file-size: 10MiB, ` +
+			`file-permissions: "0644", ` +
+			`buffered-writes: true, ` +
+			`filter: INFO, ` +
+			`format: crdb-v2, ` +
+			`redactable: true, ` +
+			`buffering: NONE\}`)
 	fileDefaultsNoMaxSizeRe := regexp.MustCompile(
-		`file-defaults: \{dir: (?P<path>[^,]+), buffered-writes: true, filter: INFO, format: crdb-v2, redactable: true\}`)
-	const fileDefaultsNoDir = `file-defaults: {buffered-writes: true, filter: INFO, format: crdb-v2, redactable: true}`
+		`file-defaults: \{` +
+			`dir: (?P<path>[^,]+), ` +
+			`file-permissions: "0644", ` +
+			`buffered-writes: true, ` +
+			`filter: INFO, ` +
+			`format: crdb-v2, ` +
+			`redactable: true, ` +
+			`buffering: NONE\}`)
+	const fileDefaultsNoDir = `file-defaults: {` +
+		`file-permissions: "0644", ` +
+		`buffered-writes: true, ` +
+		`filter: INFO, ` +
+		`format: crdb-v2, ` +
+		`redactable: true, ` +
+		`buffering: NONE}`
 	const defaultLogDir = `PWD/cockroach-data/logs`
 	stdCaptureFd2Re := regexp.MustCompile(
-		`capture-stray-errors: \{enable: true, dir: (?P<path>[^}]+)\}`)
+		`capture-stray-errors: \{` +
+			`enable: true, ` +
+			`dir: (?P<path>[^}]+)\}`)
 	fileCfgRe := regexp.MustCompile(
-		`\{channels: (?P<chans>all|\[[^]]*\]), dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: (?P<buf>[^,]+), filter: INFO, format: (?P<format>[^,]+), redactable: true\}`)
+		`\{channels: \{(?P<chans>[^}]*)\}, ` +
+			`dir: (?P<path>[^,]+), ` +
+			`max-file-size: 10MiB, ` +
+			`file-permissions: "0644", ` +
+			`buffered-writes: (?P<buf>[^,]+), ` +
+			`filter: INFO, ` +
+			`format: (?P<format>[^,]+), ` +
+			`redactable: true, ` +
+			`buffering: NONE\}`)
+	telemetryFileCfgRe := regexp.MustCompile(
+		`\{channels: \{INFO: \[TELEMETRY\]\}, ` +
+			`dir: (?P<path>[^,]+), ` +
+			`max-file-size: 100KiB, ` +
+			`max-group-size: 1.0MiB, ` +
+			`file-permissions: "0644", ` +
+			`buffered-writes: true, ` +
+			`filter: INFO, ` +
+			`format: crdb-v2, ` +
+			`redactable: true, ` +
+			`buffering: NONE\}`)
 
 	stderrCfgRe := regexp.MustCompile(
-		`stderr: {channels: all, filter: (?P<level>[^,]+), format: crdb-v2-tty, redactable: (?P<redactable>[^}]+)}`)
+		`stderr: {channels: \{(?P<level>[^:]+): all\}, ` +
+			`filter: [^,]+, ` +
+			`format: crdb-v2-tty, ` +
+			`redactable: (?P<redactable>[^}]+), ` +
+			`buffering: NONE}`)
+
+	stderrCfgNoneRe := regexp.MustCompile(
+		`stderr: {filter: NONE, ` +
+			`format: crdb-v2-tty, ` +
+			`redactable: (?P<redactable>[^}]+), ` +
+			`buffering: NONE}`)
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -75,7 +130,7 @@ func TestSetupLogging(t *testing.T) {
 
 	ctx := context.Background()
 
-	datadriven.RunTest(t, "testdata/logflags", func(t *testing.T, td *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "logflags"), func(t *testing.T, td *datadriven.TestData) string {
 		args := strings.Split(td.Input, "\n")
 
 		initCLIDefaults()
@@ -87,6 +142,14 @@ func TestSetupLogging(t *testing.T) {
 			t.Fatal(err)
 		}
 		log.TestingResetActive()
+		if isServerCmd(cmd) {
+			// Since server commands copy store options into server configs in PersistentPreRunE,
+			// we need to invoke those functions manually because logging relies on paths for the
+			// first declared store.
+			// The expectation here is that extraStoreFlagInit will be called in PersistentPreRunE
+			// which is called before PreRunE where logging is normally initialized.
+			require.NoError(t, extraStoreFlagInit(cmd))
+		}
 		if err := setupLogging(ctx, cmd, isServerCmd(cmd), false /* applyConfig */); err != nil {
 			return "error: " + err.Error()
 		}
@@ -122,7 +185,9 @@ func TestSetupLogging(t *testing.T) {
 		actual = strings.ReplaceAll(actual, fileDefaultsNoDir, "<fileDefaultsNoDir>")
 		actual = stdCaptureFd2Re.ReplaceAllString(actual, "<stdCaptureFd2($path)>")
 		actual = fileCfgRe.ReplaceAllString(actual, "<fileCfg($chans,$path,$buf,$format)>")
+		actual = telemetryFileCfgRe.ReplaceAllString(actual, "<telemetryCfg($path)>")
 		actual = stderrCfgRe.ReplaceAllString(actual, "<stderrCfg($level,$redactable)>")
+		actual = stderrCfgNoneRe.ReplaceAllString(actual, "<stderrCfg(NONE,$redactable)>")
 		actual = strings.ReplaceAll(actual, `<stderrCfg(NONE,true)>`, `<stderrDisabled>`)
 		actual = strings.ReplaceAll(actual, `<stderrCfg(INFO,false)>`, `<stderrEnabledInfoNoRedaction>`)
 		actual = strings.ReplaceAll(actual, `<stderrCfg(WARNING,false)>`, `<stderrEnabledWarningNoRedaction>`)

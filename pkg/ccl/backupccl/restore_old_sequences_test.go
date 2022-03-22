@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -41,8 +42,8 @@ import (
 func TestRestoreOldSequences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	const (
-		testdataBase = "testdata/restore_old_sequences"
+	var (
+		testdataBase = testutils.TestDataPath(t, "restore_old_sequences")
 		exportDirs   = testdataBase + "/exports"
 	)
 
@@ -62,7 +63,7 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}
 		const numAccounts = 1000
-		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
@@ -70,7 +71,7 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		var unused string
 		var importedRows int
-		sqlDB.QueryRow(t, `RESTORE test.* FROM $1`, LocalFoo).Scan(
+		sqlDB.QueryRow(t, `RESTORE test.* FROM $1`, localFoo).Scan(
 			&unused, &unused, &unused, &importedRows, &unused, &unused,
 		)
 		const totalRows = 4
@@ -106,7 +107,7 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 			`pq: cannot rename relation "s2" because view "v" depends on it`,
 			`ALTER SEQUENCE s2 RENAME TO s3`)
 		sqlDB.CheckQueryResults(t, `SET database = test; SHOW CREATE VIEW test.v`, [][]string{{
-			"test.public.v", `CREATE VIEW public.v (nextval) AS (SELECT nextval('s2':::STRING))`,
+			"test.public.v", "CREATE VIEW public.v (\n\tnextval\n) AS (SELECT nextval('s2':::STRING))",
 		}})
 	}
 }

@@ -19,10 +19,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
@@ -38,7 +39,7 @@ func registerRebalanceLoad(r registry.Registry) {
 	// kv.allocator.stat_based_rebalancing.enabled is set to true, we'd expect
 	// load-based rebalancing to distribute the load evenly across the nodes in
 	// the cluster. Without that setting, the fact that the kv table has so few
-	// ranges means that they probablistically won't have their leases evenly
+	// ranges means that they probabilistically won't have their leases evenly
 	// spread across all the nodes (they'll often just end up staying on n1).
 	//
 	// In other words, this test should always pass with
@@ -57,9 +58,9 @@ func registerRebalanceLoad(r registry.Registry) {
 		splits := len(roachNodes) - 1 // n-1 splits => n ranges => 1 lease per node
 
 		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-		args := option.StartArgs(
-			"--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
-		c.Start(ctx, roachNodes, args)
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), roachNodes)
 
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
 		c.Run(ctx, appNode, fmt.Sprintf("./workload init kv --drop --splits=%d {pgurl:1}", splits))
@@ -91,7 +92,7 @@ func registerRebalanceLoad(r registry.Registry) {
 		m.Go(func() error {
 			t.Status("checking for lease balance")
 
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
 			t.Status("disable load based splitting")

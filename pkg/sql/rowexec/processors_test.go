@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -415,15 +415,17 @@ func TestProcessorBaseContext(t *testing.T) {
 	})
 }
 
-func getPGXConnAndCleanupFunc(t *testing.T, servingSQLAddr string) (*pgx.Conn, func()) {
+func getPGXConnAndCleanupFunc(
+	ctx context.Context, t *testing.T, servingSQLAddr string,
+) (*pgx.Conn, func()) {
 	t.Helper()
 	pgURL, cleanup := sqlutils.PGUrl(t, servingSQLAddr, t.Name(), url.User(security.RootUser))
 	pgURL.Path = "test"
-	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
-	defaultConn, err := pgx.Connect(pgxConfig)
+	defaultConn, err := pgx.ConnectConfig(ctx, pgxConfig)
 	require.NoError(t, err)
-	_, err = defaultConn.Exec("set distsql='always'")
+	_, err = defaultConn.Exec(ctx, "set distsql='always'")
 	require.NoError(t, err)
 	return defaultConn, cleanup
 }
@@ -493,7 +495,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 								}
 								key := req.(*roachpb.ScanRequest).Key.String()
 								endKey := req.(*roachpb.ScanRequest).EndKey.String()
-								if strings.Contains(key, "/1") && strings.Contains(endKey, "5/") {
+								if strings.Contains(key, "/1") && strings.Contains(endKey, "/6") {
 									blockedRead.Lock()
 									for !blockedRead.shouldUnblock {
 										blockedRead.unblockCond.Wait()
@@ -514,7 +516,8 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				},
 			},
 		})
-	defer tc.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
 
 	origDB0 := tc.ServerConn(0)
 	sqlutils.CreateTable(t, origDB0, "t",
@@ -536,7 +539,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	}
 
 	populateRangeCacheAndDisableBuffering(t, origDB0, "t")
-	defaultConn, cleanup := getPGXConnAndCleanupFunc(t, tc.Server(0).ServingSQLAddr())
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
 	defer cleanup()
 
 	atomic.StoreInt64(&trapRead, 1)
@@ -554,7 +557,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			blockedRead.Unlock()
 			// Force DistSQL to distribute the query. Otherwise, as of Nov 2018, it's hard
 			// to convince it to distribute a query that uses an index.
-			if _, err := defaultConn.Exec("set distsql='always'"); err != nil {
+			if _, err := defaultConn.Exec(ctx, "set distsql='always'"); err != nil {
 				t.Fatal(err)
 			}
 			vectorizeMode := "off"
@@ -562,7 +565,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				vectorizeMode = "on"
 			}
 
-			if _, err := defaultConn.Exec(fmt.Sprintf("set vectorize='%s'", vectorizeMode)); err != nil {
+			if _, err := defaultConn.Exec(ctx, fmt.Sprintf("set vectorize='%s'", vectorizeMode)); err != nil {
 				t.Fatal(err)
 			}
 
@@ -573,7 +576,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			query := fmt.Sprintf(
 				"select x from t where x <= 5 union all select x from t where x > 5 limit %d",
 				limit)
-			rows, err := defaultConn.Query(query)
+			rows, err := defaultConn.Query(ctx, query)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -638,7 +641,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 				UseDatabase: "test",
 			},
 		}
-		rng, _ = randutil.NewPseudoRand()
+		rng, _ = randutil.NewTestRand()
 	)
 
 	filters := make([]struct {
@@ -699,8 +702,9 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		}(nodeIdx)
 	}
 
+	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, numNodes, testClusterArgs)
-	defer tc.Stopper().Stop(context.Background())
+	defer tc.Stopper().Stop(ctx)
 
 	// Create a 30-row table, split and scatter evenly across the numNodes nodes.
 	dbConn := tc.ServerConn(0)
@@ -719,7 +723,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	))
 	require.NoError(t, err)
 	populateRangeCacheAndDisableBuffering(t, dbConn, "t")
-	defaultConn, cleanup := getPGXConnAndCleanupFunc(t, tc.Server(0).ServingSQLAddr())
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).ServingSQLAddr())
 	defer cleanup()
 
 	// errorOriginSpec is a way for test cases to enable a request filter on the
@@ -742,17 +746,17 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	}{
 		{
 			query:           "SELECT * FROM t AS t1 JOIN t AS t2 ON t1.x = t2.x",
-			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lOFr4jAYxr_fXxFeOLYdcW1S52Zh0HHrse483engDkY_dDbTgmt6SQSH-L8fbQWvoolesd-MeX9vnifP2yxB_pmBCyO_5399Rkn6xtG34eAHevF_P_Xugj46vw9Gz6OfvQu0rvlSFih0N0KKoMdB0F8vKBr0kSKXC3SLFL1chOjXgz_0y6694LuPzu6TaCKid_fzGWBIecz60TuT4L4AAQwUMDgQYsgEHzMpuci3lkVhEC_AtTEkaTZX-d8hhjEXDNwlqETNGLjwHL3O2JBFMROWDRhipqJkVrRXXiaS90h8AIZRFqXSRS2L5EWDuXKRR7BHIVxh4HO1PmDT9_UDTSM5rXb0CISrEINU0YSBS1b4_4Q6DQule4Vu-sxTLmImWFzpFOakqWSH24dITh95kjJhdarSZuxNnXvk4lYkk2nxq-ITew722ltuN06cGk52yOzzFs-s7rblnUe3K0eTw9MmxrQtYrcserLJPEJru3mtdK_WBobz-nTDSQ-_dWq-dWq3TjUeRwi9algo3Su0gdm4aebh2iFiyGTGU8kOepfs3AaLJ6y8FsnnYsyeBB8Xx5TLQcEVX1fMpCp3abkI0nIrF3g43KkDd_UwOUI2PQ7u1IG7ephuw_a_sKP37GhhYldoe5tu1wlaDxuC1sOGoK_qBK2HDUHrYUPQnTpBX9eJSg8botLDhqhu6kSlhw1R6WFDVN2jogpXn_4GAAD__4WsRD0=",
+			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElGFr2zwQx98_n0IcPLQdSm3JadoYCi6tR91lSZcUNihmuLGamDmWJ8mQEvLdh-1AlpDI8dxl73LR_e7-p_9ZC5A_Y7Bh5Pbc2ycUJa8cfRwOPqNn99tj78bro9M7b_Q0-tI7Q6ucD2WCQjcjpAh6GHj9VUDRoI8UOZ-ja6To-dxHX-_doVtW7XmfXHRyFwUTEczs_08AQ8JD1g9mTIL9DAQwUMBggY8hFXzMpOQiP1oUiV44B9vEECVppvK_fQxjLhjYC1CRihnY8BS8xGzIgpAJwwQMIVNBFBfllaO-pz_YG2C45XE2S6SN5hjl8SgN8qhlEBP8JQaeqVWLdeWXNzQN5HSzpkPAX_oYpAomDGyyxH8m1Tq6VLpX6rpOlnARMsHCjUp-Tlal7Jj3PpDTBx4lTBidTWkxe1WnDjm7FtFkWvwCDINM2cgh2KHYsbDT3pp2PYnVYJIdMvu8xVOjuz3yztbtjdbkcL9JXb8NYrYM-p7bWUNt-1-opXvVHmFBL__egtLD753Wvndqtt5xRWpIvTi6VLpX6hH24-o4D9gOEUMmU55IdtD7ZOZjsHDCymuRPBNj9ij4uGhThoOCK76wkElVntIy8JLyKBd4ONxpAnf1MKkhm9aDO03grh6m27D5O2zpZ7a0MDE3aHObbjcxWg9XGK2HK4y-aGK0Hq4wWg9XGN1pYvRlE6v0cIVVerjCqqsmVunhCqv0cIVV3VpW-cv_fgUAAP__x69Mdw==",
 		},
 		{
 			query:           "SELECT * FROM t AS t1 INNER LOOKUP JOIN t AS t2 ON t1.x = t2.y",
-			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lGGL2kAQhr_3VwwD5dqyntmNehoo5OilNHdpYtXSwhGO1GwlrWbTzQYU8b-XGOHU6pp64Mdk5vF93JnNEvM_U7Rw6HjOhxEk6U8BHwfBZ3h0vve9W9eHN3fucDT84r2FTc-7qkHB7RAUBdf3nQF4QfDwtQ_3getvKgwCHxS9nsN7UOx6EcK3T87AqSI898GBq7skmshoZr2-QoKpiLkfzXiO1iNSJMiQoIkhwUyKMc9zIcvSct3oxnO0DIJJmhWqfB0SHAvJ0VqiStSUo4Wj6MeUD3gUc9k0kGDMVZRM1z-v7Ewms0gukOAwi9LcgkaTlk1BoSywKbEZhiuColDPAbmKJhwtuiL1Je5Fkm4czH0H9bR4SuI5EvSE-F1k8EskKYi0FNhRIXaL2O2jQuxMoc7xQ_lHqLUn1Ca2eVTIPCr07FGkQsZc8nhHIlwdUPZFQ2TN3l7j4ejWTjStvyH05IY0qdFosrOW5ITH1kxal1mS-kI3l1kSVn9S7PSkmNE4Z0wnJLZOpX2ZMdUX6l7-Lh8QGvA8E2nOa11Vo7zrPJ7w6sOQi0KOeV-K8TqmegzW3PpFzHNVVWn14KZVqRTchqkWZnqYaWFzB6b7sKnXNvTRLS3d1sNtLdzRw52X_OkbLdzVJ3e1cE8P9_5LO1y9-hsAAP__cuHbAw==",
+			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElHFr2kAUwP_fp3g8GN3GWXMXtRoYWNqMpc0Sp44NSiiZuUlWzWW5C1PE7z6SCNVWr3ED9-fLez_fz3vvboXy1wwtHNmufTWGOPkh4MPQ_wR39reBe-l48ObaGY1Hn923sKl5VxUouByBouB4nj0E1_dvvwzgxne8TYaB74Gi5wt4D4qdLwP4-tEe2lUL17m14ew6DqdZOLdenyHBRETcC-dconWHFAkyJGhiQDDNxIRLKbIitSoLnWiBlkEwTtJcFZ8DghORcbRWqGI142jhOPw-40MeRjxrGkgw4iqMZ-XPq766Tx_4EgleiVk-T6QFCwJFPErDImo0qYHBmqDI1WMLqcIpR4uuSX2NGxEnGwvzucXyPo4WSNAV4iFP4aeIExCJBX267bYkkInfcXTQiP2lUefguTwTau0cFhL0c1V4kj4j_TbpmwflzINyj055IrKIZzzaEQrWe_Q90RBps_ekcH_r1k5rWn9h6LEL06RGo8nq7swLJlsTap1oZ-obXZx-Z1j9wbGjB8eMRs2pvaCxdUbtE02tvlH3_970PXJDLlORSF7rIhvFS8CjKa-eDSnybMIHmZiUbarQL7nyQ8SlqrK0CpykShWC2zDVwkwPMy1s7sD0KWzqtQ1965aWbuvhthbu6OHOv_zpCy3c1XfuauGeHu4dpR2sX_0JAAD__8XU8Oo=",
 		},
 		{
 			// This test reproduces 51458 and should be enabled once that issue is
 			// fixed.
 			query:           "SELECT * FROM t JOIN onerow ON t.x = onerow.x",
-			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lOFr2kAYxr_vrzheGG3H2eROW0egkLFmNJ3TToUNSj5czVsNaC67O5lF_N9HEsFF0kQJ-s3z3t97z_O8uVuD_jMHB0Zez_s6JlH8Ksm34eAHefZ-P_W--H1yee-PxqOfvSuyrfmUFxjyOPD7RMao5F8y6BNzvSJ32_X1KiC_Hryhl3fs-d89cnEfiakSC-fjBVCIZYh9sUANzjMwoMCBQhsCComSE9RaqnRrnRX64Qocm0IUJ0uT_h1QmEiF4KzBRGaO4MBYvMxxiCJEZdlAIUQjonnW3riJihZCvQGFUSJi7ZCWxdKiwdI4xGXU5RBsKMil2R6w6_vyRmZCz4odXQbBJqCgjZgiOGxD3xG667OMpQpRYVjoFKRkXUmJ2wehZ48yilFZnaK0Ob6aS5dd3aloOst-FXxSt71ndWej3cBGica-bMnE6u77LT26UziaHT5qVjtqi9kti59s2uy807450bT54ZHz-si53TpV3kcIbRfb5k9TyVuwk9pIJ39X5xm-i9szvAIlCoaoExlrPOiS26kHDKeYZ6LlUk3wSclJdky-HGRcdq1C1Cbf3S78ON9KBR4Od5rA3WqY7cP2_zCvhnkl_LkA2_twu0lg1XBNYNVwTWCdJoHdNPFcDdd4roZrPN8eIZsfB3eawN1quHvUqILNh38BAAD___TFXIc=",
+			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lPFr2kAUx3_fX3E8GG3H2eSirSNQyGgzms5pp8IGJYyredWwmMvuLswi_u8jiWDjbDSk8yd93n3efb_f590S1O8IbBi5Pfd6TML4SZDPw8FX8uD-uO998vrk9MYbjUffemdkvedDsUGTu4HXJyJGKf6QQZ_o8wW5WtfnC598v3WHbtGx531xyclNyKeSz-33J0AhFgH2-RwV2A_AgIIFFNrgU0ikmKBSQmZLy3yjFyzANimEcZLq7GefwkRIBHsJOtQRgg1j_hjhEHmA0jCBQoCah1HeXjv6Z_ILn4HCtYjSeaxssqAkq0cJz6qWwUzwVxREqtdHbDo_PpMZV7NyT4eBv_IpKM2nCDZb0VekbvqksZABSgxKnfyM3Ldlh99brmZ3IoxRGp2ytAif9KnDzq5kOJ3l34DCINU2cRh1LOq0t6xubLQb2NihsS9aIjG62353Ht0pHc0OHzarO2yDmS3Dest5s-PO--I_zds6PHSrduiW2XrDxGtIbZfbFg-UU3z8K_rFm9BIrvWq3CP8QS6P8CDsUDBElYhY4UH33cw8YDDFIhMlUjnBeykm-TFFOci5_H4FqHSxui68uFjKBB4Od5rA3WqYbcPmS9iqhq1K-GMJNrfhdpPAquE9gVXDewLrNAnsoonnaniP52p4j-fLGrKtenCnCdythru1RuWv3v0NAAD__2MQZAI=",
 			overrideErrorOrigin: []errorOriginSpec{
 				{
 					nodeIdx:    0,
@@ -764,8 +768,8 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 
 	// runQueryAndExhaust is a helper function to get an error that happens during
 	// the execution of a query.
-	runQueryAndExhaust := func(tx *pgx.Tx, query string) error {
-		res, err := tx.Query(query)
+	runQueryAndExhaust := func(tx pgx.Tx, query string) error {
+		res, err := tx.Query(ctx, query)
 		if err != nil {
 			return err
 		}
@@ -786,11 +790,14 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 					skip.IgnoreLint(t, testCase.skip)
 				}
 				func() {
-					_, err := defaultConn.Exec(fmt.Sprintf("set vectorize=%s", vectorizeOpt))
+					_, err := defaultConn.Exec(ctx, fmt.Sprintf("set vectorize=%s", vectorizeOpt))
 					require.NoError(t, err)
 					func() {
 						// Check distsql plan.
-						rows, err := defaultConn.Query(fmt.Sprintf("SELECT info FROM [EXPLAIN (DISTSQL) %s] WHERE info LIKE 'Diagram:%%'", testCase.query))
+						rows, err := defaultConn.Query(
+							ctx,
+							fmt.Sprintf("SELECT info FROM [EXPLAIN (DISTSQL) %s] WHERE info LIKE 'Diagram:%%'", testCase.query),
+						)
 						require.NoError(t, err)
 						defer rows.Close()
 						rows.Next()
@@ -810,7 +817,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 						for _, tableName := range errorOriginSpec.tableNames {
 							filters[nodeIdx].tableIDsToFilter = append(
 								filters[nodeIdx].tableIDsToFilter,
-								int(catalogkv.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", tableName).GetID()),
+								int(desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", tableName).GetID()),
 							)
 						}
 						filters[nodeIdx].Unlock()
@@ -827,9 +834,9 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 					// Begin a transaction to issue multiple statements. The first dummy
 					// statement is issued so that some results are returned and auto
 					// retries are therefore disabled for the rest of the transaction.
-					tx, err := defaultConn.Begin()
+					tx, err := defaultConn.Begin(ctx)
 					defer func() {
-						require.Error(t, tx.Commit())
+						require.Error(t, tx.Commit(ctx))
 					}()
 					require.NoError(t, err)
 					require.NoError(t, runQueryAndExhaust(tx, "SELECT count(*) FROM t"))

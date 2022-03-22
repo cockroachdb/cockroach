@@ -13,6 +13,7 @@ package tests
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,6 +22,9 @@ import (
 
 // CheckEndTxnTrigger verifies that an EndTxnRequest that includes intents for
 // the SystemDB keys sets the proper trigger.
+//
+// TODO(ajwerner): Remove this in 22.2. It only applies to the mixed-version
+// state.
 func CheckEndTxnTrigger(args kvserverbase.FilterArgs) *roachpb.Error {
 	req, ok := args.Req.(*roachpb.EndTxnRequest)
 	if !ok {
@@ -52,7 +56,10 @@ func CheckEndTxnTrigger(args kvserverbase.FilterArgs) *roachpb.Error {
 	// on the current state.
 	// For more information, see the related comment at the beginning of
 	// planner.makePlan().
-	if hasSystemKey && !modifiedSystemConfigSpan {
+	if hasSystemKey &&
+		!(clusterversion.ClusterVersion{Version: args.Version}).
+			IsActive(clusterversion.DisableSystemConfigGossipTrigger) &&
+		!modifiedSystemConfigSpan {
 		return roachpb.NewError(errors.Errorf("EndTxn hasSystemKey=%t, but hasSystemConfigTrigger=%t",
 			hasSystemKey, modifiedSystemConfigSpan))
 	}

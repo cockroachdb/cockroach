@@ -58,7 +58,7 @@ func TestReplicaUpdateLastReplicaAdded(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+	tc.Start(ctx, t, stopper)
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			var r Replica

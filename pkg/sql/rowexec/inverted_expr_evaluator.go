@@ -609,6 +609,18 @@ func (b *batchedInvertedExprEvaluator) reset() {
 	b.nonInvertedPrefixes = b.nonInvertedPrefixes[:0]
 }
 
+// appendNonInvertedPrefix appends a copy of prefixKey to nonInvertedPrefixes.
+func (b *batchedInvertedExprEvaluator) appendNonInvertedPrefix(prefixKey roachpb.Key) {
+	// Optimization: if the key is the same as the last one, reuse the copy.
+	if l := len(b.nonInvertedPrefixes); l > 0 {
+		if last := b.nonInvertedPrefixes[l-1]; last.Equal(prefixKey) {
+			b.nonInvertedPrefixes = append(b.nonInvertedPrefixes, last)
+			return
+		}
+	}
+	b.nonInvertedPrefixes = append(b.nonInvertedPrefixes, prefixKey.Clone())
+}
+
 // prefixInvertedSpan returns a new invertedSpan with prefix prepended to the
 // input span's Start and End keys. This is similar to the internals of
 // rowenc.appendEncDatumsToKey.

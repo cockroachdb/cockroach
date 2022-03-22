@@ -104,6 +104,15 @@ type FunctionProperties struct {
 	// should take RegClass as the arg type for the sequence name instead of
 	// string, we will add a dependency on all RegClass types used in a view.
 	HasSequenceArguments bool
+
+	// CompositeInsensitive indicates that this function returns equal results
+	// when evaluated on equal inputs. This is a non-trivial property for
+	// composite types which can be equal but not identical
+	// (e.g. decimals 1.0 and 1.00). For example, converting a decimal to string
+	// is not CompositeInsensitive.
+	//
+	// See memo.CanBeCompositeSensitive.
+	CompositeInsensitive bool
 }
 
 // ShouldDocument returns whether the built-in function should be included in

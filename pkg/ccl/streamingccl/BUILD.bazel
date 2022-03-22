@@ -4,12 +4,17 @@ go_library(
     name = "streamingccl",
     srcs = [
         "addresses.go",
+        "errors.go",
         "event.go",
+        "settings.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/ccl/streamingccl/streampb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/streaming",
         "//pkg/util/hlc",
     ],
 )

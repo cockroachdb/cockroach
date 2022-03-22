@@ -16,7 +16,7 @@ import "gogoproto/gogo.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 
 message GetSpanRecordingsRequest {
-  uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
+  uint64 trace_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
 }
 
 message GetSpanRecordingsResponse {

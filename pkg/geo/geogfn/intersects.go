@@ -11,9 +11,9 @@
 package geogfn
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/s2"
 )
 
@@ -63,7 +63,7 @@ func singleRegionIntersects(aRegion s2.Region, bRegion s2.Region) (bool, error) 
 		case *s2.Polygon:
 			return bRegion.IntersectsCell(s2.CellFromPoint(aRegion)), nil
 		default:
-			return false, fmt.Errorf("unknown s2 type of b: %#v", bRegion)
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown s2 type of b: %#v", bRegion)
 		}
 	case *s2.Polyline:
 		switch bRegion := bRegion.(type) {
@@ -74,7 +74,7 @@ func singleRegionIntersects(aRegion s2.Region, bRegion s2.Region) (bool, error) 
 		case *s2.Polygon:
 			return polygonIntersectsPolyline(bRegion, aRegion), nil
 		default:
-			return false, fmt.Errorf("unknown s2 type of b: %#v", bRegion)
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown s2 type of b: %#v", bRegion)
 		}
 	case *s2.Polygon:
 		switch bRegion := bRegion.(type) {
@@ -85,10 +85,10 @@ func singleRegionIntersects(aRegion s2.Region, bRegion s2.Region) (bool, error) 
 		case *s2.Polygon:
 			return aRegion.Intersects(bRegion), nil
 		default:
-			return false, fmt.Errorf("unknown s2 type of b: %#v", bRegion)
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown s2 type of b: %#v", bRegion)
 		}
 	}
-	return false, fmt.Errorf("unknown s2 type of a: %#v", aRegion)
+	return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown s2 type of a: %#v", aRegion)
 }
 
 // polylineIntersectsPolyline returns whether polyline a intersects with

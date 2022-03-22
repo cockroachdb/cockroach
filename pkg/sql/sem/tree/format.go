@@ -13,9 +13,9 @@ package tree
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -141,13 +141,44 @@ const (
 	fmtFormatByteLiterals
 
 	// FmtMarkRedactionNode instructs the pretty printer to redact datums,
-	// constants, and simples names (i.e. Name, UnrestrictedName) from statements.
+	// constants, and simple names (i.e. Name, UnrestrictedName) from statements.
 	FmtMarkRedactionNode
+
+	// FmtSummary instructs the pretty printer to produced a summarized version
+	// of the query, to pass to the frontend.
+	//
+	// Here are the following formats we support:
+	// SELECT: SELECT {columns} FROM {tables}
+	// - Show columns up to 15 characters.
+	// - Show tables up to 30 characters.
+	// - Hide column names in nested select queries.
+	// INSERT/UPSERT: INSERT/UPSERT INTO {table} {columns}
+	// - Show table up to 30 characters.
+	// - Show columns up to 15 characters.
+	// INSERT SELECT: INSERT INTO {table} SELECT {columns} FROM {table}
+	// - Show table up to 30 characters.
+	// - Show columns up to 15 characters.
+	// UPDATE: UPDATE {table} SET {columns} WHERE {condition}
+	// - Show table up to 30 characters.
+	// - Show columns up to 15 characters.
+	// - Show condition up to 15 characters.
+	FmtSummary
+
+	// FmtOmitNameRedaction instructs the pretty printer to omit redaction
+	// for simple names (i.e. Name, UnrestrictedName) from statements.
+	// This flag *overrides* `FmtMarkRedactionNode` above.
+	FmtOmitNameRedaction
 )
 
 // PasswordSubstitution is the string that replaces
 // passwords unless FmtShowPasswords is specified.
 const PasswordSubstitution = "'*****'"
+
+// ColumnLimit is the max character limit for columns in summarized queries
+const ColumnLimit = 15
+
+// TableLimit is the max character limit for tables in summarized queries
+const TableLimit = 30
 
 // Composite/derived flag definitions follow.
 const (
@@ -205,9 +236,6 @@ const (
 	// because the behavior of array_to_string() is fixed for compatibility
 	// with PostgreSQL, whereas EXPORT may evolve over time to support
 	// other things (eg. fixing #33429).
-	//
-	// TODO(mjibson): Note that this is currently not suitable for
-	// emitting arrays or tuples. See: #33429
 	FmtExport FmtFlags = FmtBareStrings | fmtRawStrings
 )
 
@@ -311,13 +339,14 @@ func NewFmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
 	return ctx
 }
 
-// WithDataConversionConfig modifies FmtCtx to substitute the DataConversionConfig,
-// calls fn, then restore the original session data.
-func (ctx *FmtCtx) WithDataConversionConfig(dcc sessiondatapb.DataConversionConfig, fn func()) {
+// SetDataConversionConfig sets the DataConversionConfig on ctx and returns the
+// old one.
+func (ctx *FmtCtx) SetDataConversionConfig(
+	dcc sessiondatapb.DataConversionConfig,
+) sessiondatapb.DataConversionConfig {
 	old := ctx.dataConversionConfig
-	FmtDataConversionConfig(dcc)(ctx)
-	defer func() { ctx.dataConversionConfig = old }()
-	fn()
+	ctx.dataConversionConfig = dcc
+	return old
 }
 
 // WithReformatTableNames modifies FmtCtx to to substitute the printing of table
@@ -378,11 +407,6 @@ func (ctx *FmtCtx) FormatName(s string) {
 // FormatNameP formats a string reference as a name.
 func (ctx *FmtCtx) FormatNameP(s *string) {
 	ctx.FormatNode((*Name)(s))
-}
-
-// FormatUsername formats a username safely.
-func (ctx *FmtCtx) FormatUsername(s security.SQLUsername) {
-	ctx.FormatName(s.Normalized())
 }
 
 // FormatNode recurses into a node for pretty-printing.
@@ -454,11 +478,114 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 	}
 }
 
+// formatLimitLength recurses into a node for pretty-printing, but limits the
+// number of characters to be printed.
+func (ctx *FmtCtx) formatLimitLength(n NodeFormatter, maxLength int) {
+	temp := NewFmtCtx(ctx.flags)
+	temp.FormatNodeSummary(n)
+	s := temp.CloseAndGetString()
+	if len(s) > maxLength {
+		truncated := s[:maxLength] + "..."
+		// close all open parentheses.
+		if strings.Count(truncated, "(") > strings.Count(truncated, ")") {
+			remaining := s[maxLength:]
+			for i, c := range remaining {
+				if c == ')' {
+					truncated += ")"
+					// add ellipses if there was more text after the parenthesis in
+					// the original string.
+					if i < len(remaining)-1 && string(remaining[i+1]) != ")" {
+						truncated += "..."
+					}
+					if strings.Count(truncated, "(") <= strings.Count(truncated, ")") {
+						break
+					}
+				}
+			}
+		}
+		s = truncated
+	}
+	ctx.WriteString(s)
+}
+
+// formatSummarySelect pretty-prints a summarized select statement.
+// See FmtSummary for supported formats.
+func (ctx *FmtCtx) formatSummarySelect(node *Select) {
+	if node.With == nil {
+		s := node.Select
+		if s, ok := s.(*SelectClause); ok {
+			ctx.WriteString("SELECT ")
+			ctx.formatLimitLength(&s.Exprs, ColumnLimit)
+			if len(s.From.Tables) > 0 {
+				ctx.WriteByte(' ')
+				ctx.formatLimitLength(&s.From, TableLimit+len("FROM "))
+			}
+		}
+	}
+}
+
+// formatSummaryInsert pretty-prints a summarized insert/upsert statement.
+// See FmtSummary for supported formats.
+func (ctx *FmtCtx) formatSummaryInsert(node *Insert) {
+	if node.OnConflict.IsUpsertAlias() {
+		ctx.WriteString("UPSERT")
+	} else {
+		ctx.WriteString("INSERT")
+	}
+	ctx.WriteString(" INTO ")
+	ctx.formatLimitLength(node.Table, TableLimit)
+	rows := node.Rows
+	expr := rows.Select
+	if _, ok := expr.(*SelectClause); ok {
+		ctx.WriteByte(' ')
+		ctx.FormatNodeSummary(rows)
+	} else if node.Columns != nil {
+		ctx.WriteByte('(')
+		ctx.formatLimitLength(&node.Columns, ColumnLimit)
+		ctx.WriteByte(')')
+	}
+}
+
+// formatSummaryUpdate pretty-prints a summarized update statement.
+// See FmtSummary for supported formats.
+func (ctx *FmtCtx) formatSummaryUpdate(node *Update) {
+	if node.With == nil {
+		ctx.WriteString("UPDATE ")
+		ctx.formatLimitLength(node.Table, TableLimit)
+		ctx.WriteString(" SET ")
+		ctx.formatLimitLength(&node.Exprs, ColumnLimit)
+		if node.Where != nil {
+			ctx.WriteByte(' ')
+			ctx.formatLimitLength(node.Where, ColumnLimit+len("WHERE "))
+		}
+	}
+}
+
+// FormatNodeSummary recurses into a node for pretty-printing a summarized version.
+func (ctx *FmtCtx) FormatNodeSummary(n NodeFormatter) {
+	switch node := n.(type) {
+	case *Insert:
+		ctx.formatSummaryInsert(node)
+		return
+	case *Select:
+		ctx.formatSummarySelect(node)
+		return
+	case *Update:
+		ctx.formatSummaryUpdate(node)
+		return
+	}
+	ctx.FormatNode(n)
+}
+
 // AsStringWithFlags pretty prints a node to a string given specific flags; only
 // flags that don't require Annotations can be used.
 func AsStringWithFlags(n NodeFormatter, fl FmtFlags, opts ...FmtCtxOption) string {
 	ctx := NewFmtCtx(fl, opts...)
-	ctx.FormatNode(n)
+	if fl.HasFlags(FmtSummary) {
+		ctx.FormatNodeSummary(n)
+	} else {
+		ctx.FormatNode(n)
+	}
 	return ctx.CloseAndGetString()
 }
 
@@ -503,12 +630,9 @@ var fmtCtxPool = sync.Pool{
 // recommended for performance-sensitive paths.
 func (ctx *FmtCtx) Close() {
 	ctx.Buffer.Reset()
-	ctx.flags = 0
-	ctx.ann = nil
-	ctx.indexedVarFormat = nil
-	ctx.tableNameFormatter = nil
-	ctx.placeholderFormat = nil
-	ctx.dataConversionConfig = sessiondatapb.DataConversionConfig{}
+	*ctx = FmtCtx{
+		Buffer: ctx.Buffer,
+	}
 	fmtCtxPool.Put(ctx)
 }
 
@@ -532,7 +656,15 @@ func (ctx *FmtCtx) formatNodeMaybeMarkRedaction(n NodeFormatter) {
 		case *Placeholder:
 			// Placeholders should be printed as placeholder markers.
 			// Deliberately empty so we format as normal.
-		case Datum, Constant, *Name, *UnrestrictedName:
+		case *Name, *UnrestrictedName:
+			if ctx.flags.HasFlags(FmtOmitNameRedaction) {
+				break
+			}
+			ctx.WriteString(string(redact.StartMarker()))
+			v.Format(ctx)
+			ctx.WriteString(string(redact.EndMarker()))
+			return
+		case Datum, Constant:
 			ctx.WriteString(string(redact.StartMarker()))
 			v.Format(ctx)
 			ctx.WriteString(string(redact.EndMarker()))

@@ -13,11 +13,12 @@ package execinfrapb
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -81,7 +82,7 @@ func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
 			func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
 				d, err := p.Eval(evalCtx)
 				if err != nil {
-					panic(errors.AssertionFailedf("failed to serialize placeholder: %s", err))
+					panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
 				}
 				d.Format(fmtCtx)
 			},
@@ -316,8 +317,18 @@ func LocalMetaToRemoteProducerMeta(
 		rpm.Value = &RemoteProducerMetadata_Error{
 			Error: NewError(ctx, meta.Err),
 		}
-	} else if util.CrdbTestBuild {
+	} else if buildutil.CrdbTestBuild {
 		panic("unhandled field in local meta or all fields are nil")
 	}
 	return rpm
+}
+
+// DistSQLRemoteFlowInfo contains some information about a single DistSQL remote
+// flow.
+type DistSQLRemoteFlowInfo struct {
+	FlowID FlowID
+	// Timestamp must be in the UTC timezone.
+	Timestamp time.Time
+	// StatementSQL is the SQL statement for which this flow is executing.
+	StatementSQL string
 }

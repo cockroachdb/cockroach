@@ -30,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -57,14 +59,14 @@ func TestConformanceReport(t *testing.T) {
 		{
 			name: "simple no violations",
 			baseReportTestCase: baseReportTestCase{
-				defaultZone: zone{replicas: 3},
+				defaultZone: zone{voters: 3},
 				schema: []database{
 					{
 						name:   "db1",
 						tables: []table{{name: "t1"}, {name: "t2"}},
 						// The database has a zone requesting everything to be on SSDs.
 						zone: &zone{
-							replicas:    3,
+							voters:      3,
 							constraints: "[+ssd]",
 						},
 					},
@@ -104,27 +106,27 @@ func TestConformanceReport(t *testing.T) {
 			name: "violations at multiple levels",
 			// Test zone constraints inheritance at all levels.
 			baseReportTestCase: baseReportTestCase{
-				defaultZone: zone{replicas: 3, constraints: "[+default]"},
+				defaultZone: zone{voters: 3, constraints: "[+default]"},
 				schema: []database{
 					{
 						name: "db1",
 						// All the objects will have zones asking for different tags.
 						zone: &zone{
-							replicas:    3,
+							voters:      3,
 							constraints: "[+db1]",
 						},
 						tables: []table{
 							{
 								name: "t1",
 								zone: &zone{
-									replicas:    3,
+									voters:      3,
 									constraints: "[+t1]",
 								},
 							},
 							{
 								name: "t2",
 								zone: &zone{
-									replicas:    3,
+									voters:      3,
 									constraints: "[+t2]",
 								},
 							},
@@ -223,14 +225,14 @@ func TestConformanceReport(t *testing.T) {
 			// violation, and another entry for "dc1" with one violation.
 			name: "constraint conjunctions",
 			baseReportTestCase: baseReportTestCase{
-				defaultZone: zone{replicas: 3},
+				defaultZone: zone{voters: 3},
 				schema: []database{
 					{
 						name:   "db1",
 						tables: []table{{name: "t1"}, {name: "t2"}},
 						// The database has a zone requesting everything to be on SSDs.
 						zone: &zone{
-							replicas: 2,
+							voters: 2,
 							// The first conjunction will be satisfied; the second won't.
 							constraints: `{"+region=us,+dc=dc1":1,"+region=us,+dc=dc2":1}`,
 						},
@@ -306,16 +308,21 @@ func runConformanceReportTest(t *testing.T, tc conformanceConstraintTestCase) {
 }
 
 type zone struct {
-	// 0 means unset.
-	replicas int32
+	// indicates the number of replicas that
+	// are voters. 0 means unset.
+	voters int32
+	// indicates the number of replicas that
+	// are non-voting.
+	nonVoters int32
 	// "" means unset. "[]" means empty.
 	constraints string
 }
 
 func (z zone) toZoneConfig() zonepb.ZoneConfig {
 	cfg := zonepb.NewZoneConfig()
-	if z.replicas != 0 {
-		cfg.NumReplicas = proto.Int32(z.replicas)
+	cfg.NumReplicas = proto.Int32(z.voters + z.nonVoters)
+	if z.nonVoters != 0 && z.voters != 0 {
+		cfg.NumVoters = proto.Int32(z.voters)
 	}
 	if z.constraints != "" {
 		var constraintsList zonepb.ConstraintsList
@@ -339,7 +346,7 @@ type partition struct {
 	zone *zone
 }
 
-func (p partition) toPartitionDescriptor() descpb.PartitioningDescriptor_Range {
+func (p partition) toPartitionDescriptor() catpb.PartitioningDescriptor_Range {
 	var startKey roachpb.Key
 	for _, val := range p.start {
 		startKey = encoding.EncodeIntValue(startKey, encoding.NoColumnID, int64(val))
@@ -348,7 +355,7 @@ func (p partition) toPartitionDescriptor() descpb.PartitioningDescriptor_Range {
 	for _, val := range p.end {
 		endKey = encoding.EncodeIntValue(endKey, encoding.NoColumnID, int64(val))
 	}
-	return descpb.PartitioningDescriptor_Range{
+	return catpb.PartitioningDescriptor_Range{
 		Name:          p.name,
 		FromInclusive: startKey,
 		ToExclusive:   endKey,
@@ -760,7 +767,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 	// Databases and tables share the id space, so we'll use a common counter for them.
 	// And we're going to use keys in user space, otherwise there's special cases
 	// in the zone config lookup that we bump into.
-	objectCounter := keys.MinUserDescID
+	objectCounter := int(bootstrap.TestingUserDescID(0))
 	sysCfgBuilder := makeSystemConfigBuilder()
 	if err := sysCfgBuilder.setDefaultZoneConfig(tc.defaultZone.toZoneConfig()); err != nil {
 		return compiledTestCase{}, err
@@ -1104,7 +1111,7 @@ func (b *systemConfigBuilder) setDefaultZoneConfig(cfg zonepb.ZoneConfig) error 
 }
 
 func (b *systemConfigBuilder) addZoneInner(objectName string, id int, cfg zonepb.ZoneConfig) error {
-	k := config.MakeZoneKey(config.SystemTenantObjectID(id))
+	k := config.MakeZoneKey(keys.SystemSQLCodec, descpb.ID(id))
 	var v roachpb.Value
 	if err := v.SetProto(&cfg); err != nil {
 		panic(err)

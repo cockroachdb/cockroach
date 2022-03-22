@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -46,7 +46,7 @@ func TestKVFeed(t *testing.T) {
 
 	mkKey := func(tableID uint32, k string) roachpb.Key {
 		vDatum := tree.DString(k)
-		key, err := rowenc.EncodeTableKey(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
+		key, err := keyside.Encode(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
 		require.NoError(t, err)
 		return key
 	}
@@ -95,6 +95,7 @@ func TestKVFeed(t *testing.T) {
 		expEvents int
 		expErrRE  string
 	}
+	st := cluster.MakeTestingClusterSettings()
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
 		buf := kvevent.MakeChanBuffer()
@@ -104,7 +105,7 @@ func TestKVFeed(t *testing.T) {
 		)
 		metrics := kvevent.MakeMetrics(time.Minute)
 		bufferFactory := func() kvevent.Buffer {
-			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), &metrics)
+			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), &st.SV, &metrics)
 		}
 		scans := make(chan physicalConfig)
 		sf := scannerFunc(func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
@@ -386,7 +387,7 @@ type rawEventFeed []roachpb.RangeFeedEvent
 
 func (f rawEventFeed) run(
 	ctx context.Context,
-	span roachpb.Span,
+	spans []roachpb.Span,
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,

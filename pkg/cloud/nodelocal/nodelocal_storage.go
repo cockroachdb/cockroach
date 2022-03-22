@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"google.golang.org/grpc/codes"
@@ -129,14 +130,16 @@ func (l *localFileStorage) Writer(ctx context.Context, basename string) (io.Writ
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
-func (l *localFileStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (l *localFileStorage) ReadFile(
+	ctx context.Context, basename string,
+) (ioctx.ReadCloserCtx, error) {
 	body, _, err := l.ReadFileAt(ctx, basename, 0)
 	return body, err
 }
 
 func (l *localFileStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	reader, size, err := l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename), offset)
 	if err != nil {
 		// The format of the error returned by the above ReadFile call differs based
@@ -144,7 +147,12 @@ func (l *localFileStorage) ReadFileAt(
 		// The local store returns a golang native ErrNotFound, whereas the remote
 		// store returns a gRPC native NotFound error.
 		if oserror.IsNotExist(err) || status.Code(err) == codes.NotFound {
-			return nil, 0, errors.Wrapf(cloud.ErrFileDoesNotExist, "nodelocal storage file does not exist: %s", err.Error())
+			// nolint:errwrap
+			return nil, 0, errors.WithMessagef(
+				errors.Wrap(cloud.ErrFileDoesNotExist, "nodelocal storage file does not exist"),
+				"%s",
+				err.Error(),
+			)
 		}
 		return nil, 0, err
 	}

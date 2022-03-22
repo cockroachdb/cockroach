@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -38,7 +37,6 @@ type Settings struct {
 	// overwriting the default of a single setting.
 	Manual atomic.Value // bool
 
-	Tracer        *tracing.Tracer
 	ExternalIODir string
 
 	// Tracks whether a CPU profile is going on and if so, which kind. See
@@ -47,15 +45,28 @@ type Settings struct {
 	// is useful.
 	cpuProfiling int32 // atomic
 
-	// Version provides the interface through which which callers read/write to
-	// the active cluster version, and access this binary's version details.
-	// Setting the active cluster version has a very specific, intended usage
-	// pattern. Look towards the interface itself for more commentary.
+	// Version provides the interface through which callers read/write to the
+	// active cluster version, and access this binary's version details. Setting
+	// the active cluster version has a very specific, intended usage pattern.
+	// Look towards the interface itself for more commentary.
 	Version clusterversion.Handle
 
 	// Cache can be used for arbitrary caching, e.g. to cache decoded
 	// enterprises licenses for utilccl.CheckEnterpriseEnabled().
 	Cache sync.Map
+
+	// OverridesInformer can be nil.
+	OverridesInformer OverridesInformer
+}
+
+// OverridesInformer is an interface that can be used to figure out if a setting
+// is currently being overridden by the host cluster (only possible for
+// secondary tenants).
+//
+// TODO(radu): move this functionality into settings.Values, provide a way to
+// obtain it along with the current value consistently.
+type OverridesInformer interface {
+	IsOverridden(settingName string) bool
 }
 
 // TelemetryOptOut is a place for controlling whether to opt out of telemetry or not.
@@ -124,24 +135,6 @@ func MakeClusterSettings() *Settings {
 	sv := &s.SV
 	s.Version = clusterversion.MakeVersionHandle(&s.SV)
 	sv.Init(context.TODO(), s.Version)
-
-	s.Tracer = tracing.NewTracer()
-	isActive := int32(0) // atomic
-	s.Tracer.TracingVerbosityIndependentSemanticsIsActive = func() bool {
-		// IsActive is mildly expensive for the hot path this function
-		// is in, so cache a return value of true.
-		if atomic.LoadInt32(&isActive) != 0 {
-			return true
-		}
-		if s.Version.IsActive(context.Background(),
-			clusterversion.TracingVerbosityIndependentSemantics) {
-			atomic.StoreInt32(&isActive, 1)
-			return true
-		}
-		return false
-	}
-	s.Tracer.Configure(context.TODO(), sv)
-
 	return s
 }
 
@@ -172,9 +165,6 @@ func MakeTestingClusterSettingsWithVersions(
 	s.Version = clusterversion.MakeVersionHandleWithOverride(
 		&s.SV, binaryVersion, binaryMinSupportedVersion)
 	sv.Init(context.TODO(), s.Version)
-
-	s.Tracer = tracing.NewTracer()
-	s.Tracer.Configure(context.TODO(), sv)
 
 	if initializeVersion {
 		// Initialize cluster version to specified binaryVersion.

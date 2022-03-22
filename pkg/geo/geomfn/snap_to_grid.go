@@ -14,7 +14,8 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -23,10 +24,10 @@ import (
 // If the resulting geometry is invalid, it will be converted to it's EMPTY form.
 func SnapToGrid(g geo.Geometry, origin geom.Coord, gridSize geom.Coord) (geo.Geometry, error) {
 	if len(origin) != 4 {
-		return geo.Geometry{}, errors.Newf("origin must be 4D")
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "origin must be 4D")
 	}
 	if len(gridSize) != 4 {
-		return geo.Geometry{}, errors.Newf("gridSize must be 4D")
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "gridSize must be 4D")
 	}
 	if g.Empty() {
 		return g, nil

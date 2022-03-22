@@ -190,7 +190,6 @@ func (r *percentRankNoPartitionOp) Init(ctx context.Context) {
 			DiskAcc:            r.diskAcc,
 		},
 	)
-	r.scratch = r.allocator.NewMemBatchWithFixedCapacity(r.inputTypes, coldata.BatchSize())
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
@@ -242,22 +241,8 @@ func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 			// All tuples belong to the same partition, so we need to fully consume
 			// the input before we can proceed.
 
-			sel := batch.Selection()
 			// First, we buffer up all of the tuples.
-			r.scratch.ResetInternalBatch()
-			r.allocator.PerformOperation(r.scratch.ColVecs(), func() {
-				for colIdx, vec := range r.scratch.ColVecs() {
-					vec.Copy(
-						coldata.SliceArgs{
-							Src:       batch.ColVec(colIdx),
-							Sel:       sel,
-							SrcEndIdx: n,
-						},
-					)
-				}
-				r.scratch.SetLength(n)
-			})
-			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, batch)
 
 			// Then, we need to update the sizes of the partitions.
 			// There is a single partition in the whole input.
@@ -325,7 +310,7 @@ func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(); err != nil {
+			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -338,14 +323,14 @@ func (r *percentRankNoPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *percentRankNoPartitionOp) Close() error {
+func (r *percentRankNoPartitionOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() || r.Ctx == nil {
 		// Either Close() has already been called or Init() was never called. In
 		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
+	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -401,7 +386,6 @@ func (r *percentRankWithPartitionOp) Init(ctx context.Context) {
 			DiskAcc:            r.diskAcc,
 		},
 	)
-	r.scratch = r.allocator.NewMemBatchWithFixedCapacity(r.inputTypes, coldata.BatchSize())
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
@@ -463,22 +447,10 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 			// TODO(yuzefovich): we could be emitting output once we see that a new
 			// partition has begun.
 
-			sel := batch.Selection()
 			// First, we buffer up all of the tuples.
-			r.scratch.ResetInternalBatch()
-			r.allocator.PerformOperation(r.scratch.ColVecs(), func() {
-				for colIdx, vec := range r.scratch.ColVecs() {
-					vec.Copy(
-						coldata.SliceArgs{
-							Src:       batch.ColVec(colIdx),
-							Sel:       sel,
-							SrcEndIdx: n,
-						},
-					)
-				}
-				r.scratch.SetLength(n)
-			})
-			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, batch)
+
+			sel := batch.Selection()
 
 			// Then, we need to update the sizes of the partitions.
 			partitionCol := batch.ColVec(r.partitionColIdx).Bool()
@@ -617,7 +589,7 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(); err != nil {
+			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -630,17 +602,17 @@ func (r *percentRankWithPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *percentRankWithPartitionOp) Close() error {
+func (r *percentRankWithPartitionOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() || r.Ctx == nil {
 		// Either Close() has already been called or Init() was never called. In
 		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
+	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.partitionsState.Close(r.Ctx); err != nil {
+	if err := r.partitionsState.Close(ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -697,7 +669,6 @@ func (r *cumeDistNoPartitionOp) Init(ctx context.Context) {
 			DiskAcc:            r.diskAcc,
 		},
 	)
-	r.scratch = r.allocator.NewMemBatchWithFixedCapacity(r.inputTypes, coldata.BatchSize())
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 }
 
@@ -752,22 +723,10 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 			// All tuples belong to the same partition, so we need to fully consume
 			// the input before we can proceed.
 
-			sel := batch.Selection()
 			// First, we buffer up all of the tuples.
-			r.scratch.ResetInternalBatch()
-			r.allocator.PerformOperation(r.scratch.ColVecs(), func() {
-				for colIdx, vec := range r.scratch.ColVecs() {
-					vec.Copy(
-						coldata.SliceArgs{
-							Src:       batch.ColVec(colIdx),
-							Sel:       sel,
-							SrcEndIdx: n,
-						},
-					)
-				}
-				r.scratch.SetLength(n)
-			})
-			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, batch)
+
+			sel := batch.Selection()
 
 			// Then, we need to update the sizes of the partitions.
 			// There is a single partition in the whole input.
@@ -897,7 +856,7 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(); err != nil {
+			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -910,17 +869,17 @@ func (r *cumeDistNoPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *cumeDistNoPartitionOp) Close() error {
+func (r *cumeDistNoPartitionOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() || r.Ctx == nil {
 		// Either Close() has already been called or Init() was never called. In
 		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
+	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
+	if err := r.peerGroupsState.Close(ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr
@@ -990,7 +949,6 @@ func (r *cumeDistWithPartitionOp) Init(ctx context.Context) {
 			DiskAcc:            r.diskAcc,
 		},
 	)
-	r.scratch = r.allocator.NewMemBatchWithFixedCapacity(r.inputTypes, coldata.BatchSize())
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 }
 
@@ -1055,22 +1013,10 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 			// TODO(yuzefovich): we could be emitting output once we see that a new
 			// partition has begun.
 
-			sel := batch.Selection()
 			// First, we buffer up all of the tuples.
-			r.scratch.ResetInternalBatch()
-			r.allocator.PerformOperation(r.scratch.ColVecs(), func() {
-				for colIdx, vec := range r.scratch.ColVecs() {
-					vec.Copy(
-						coldata.SliceArgs{
-							Src:       batch.ColVec(colIdx),
-							Sel:       sel,
-							SrcEndIdx: n,
-						},
-					)
-				}
-				r.scratch.SetLength(n)
-			})
-			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, batch)
+
+			sel := batch.Selection()
 
 			// Then, we need to update the sizes of the partitions.
 			partitionCol := batch.ColVec(r.partitionColIdx).Bool()
@@ -1271,7 +1217,7 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(); err != nil {
+			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -1284,20 +1230,20 @@ func (r *cumeDistWithPartitionOp) Next() coldata.Batch {
 	}
 }
 
-func (r *cumeDistWithPartitionOp) Close() error {
+func (r *cumeDistWithPartitionOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() || r.Ctx == nil {
 		// Either Close() has already been called or Init() was never called. In
 		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
+	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.partitionsState.Close(r.Ctx); err != nil {
+	if err := r.partitionsState.Close(ctx); err != nil {
 		lastErr = err
 	}
-	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
+	if err := r.peerGroupsState.Close(ctx); err != nil {
 		lastErr = err
 	}
 	return lastErr

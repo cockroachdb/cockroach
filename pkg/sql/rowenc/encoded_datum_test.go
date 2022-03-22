@@ -16,12 +16,13 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -32,7 +33,7 @@ import (
 func TestEncDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	v := rowenc.EncDatum{}
@@ -126,8 +127,8 @@ func TestEncDatumNull(t *testing.T) {
 		t.Error("DNull not null")
 	}
 
-	var alloc rowenc.DatumAlloc
-	rng, _ := randutil.NewPseudoRand()
+	var alloc tree.DatumAlloc
+	rng, _ := randutil.NewTestRand()
 
 	// Generate random EncDatums (some of which are null), and verify that a datum
 	// created from its encoding has the same IsNull() value.
@@ -156,7 +157,7 @@ func TestEncDatumNull(t *testing.T) {
 // those encodings. It also checks if the Compare resulted in decoding or not.
 func checkEncDatumCmp(
 	t *testing.T,
-	a *rowenc.DatumAlloc,
+	a *tree.DatumAlloc,
 	typ *types.T,
 	v1, v2 *rowenc.EncDatum,
 	enc1, enc2 descpb.DatumEncoding,
@@ -205,14 +206,14 @@ func checkEncDatumCmp(
 func TestEncDatumCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	for _, typ := range types.OidToType {
 		switch typ.Family() {
-		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily, types.JsonFamily, types.TupleFamily:
+		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily, types.JsonFamily, types.TupleFamily, types.VoidFamily:
 			continue
 		case types.CollatedStringFamily:
 			typ = types.MakeCollatedString(types.String, *randgen.RandCollationLocale(rng))
@@ -252,7 +253,7 @@ func TestEncDatumCompare(t *testing.T) {
 
 		// These cases require decoding. Data with a composite key encoding cannot
 		// be decoded from their key part alone.
-		if !colinfo.HasCompositeKeyEncoding(typ) {
+		if !colinfo.CanHaveCompositeKeyEncoding(typ) {
 			checkEncDatumCmp(t, a, typ, &v1, &v2, noncmp, noncmp, -1, true)
 			checkEncDatumCmp(t, a, typ, &v2, &v1, desc, noncmp, +1, true)
 			checkEncDatumCmp(t, a, typ, &v1, &v1, asc, desc, 0, true)
@@ -264,10 +265,10 @@ func TestEncDatumCompare(t *testing.T) {
 func TestEncDatumFromBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var alloc rowenc.DatumAlloc
+	var alloc tree.DatumAlloc
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for test := 0; test < 20; test++ {
 		var err error
 		// Generate a set of random datums.
@@ -281,7 +282,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		var buf []byte
 		enc := make([]descpb.DatumEncoding, len(ed))
 		for i := range ed {
-			if colinfo.HasCompositeKeyEncoding(typs[i]) {
+			if colinfo.CanHaveCompositeKeyEncoding(typs[i]) {
 				// There's no way to reconstruct data from the key part of a composite
 				// encoding.
 				enc[i] = descpb.DatumEncoding_VALUE
@@ -445,7 +446,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 		},
 	}
 
-	a := &rowenc.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for _, c := range testCases {
@@ -470,7 +471,7 @@ func TestEncDatumRowAlloc(t *testing.T) {
 
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {
 		for _, rows := range []int{1, 2, 3, 5, 10, 20} {
 			colTypes := randgen.RandColumnTypes(rng, cols)
@@ -509,7 +510,7 @@ func TestEncDatumRowAlloc(t *testing.T) {
 }
 
 func TestValueEncodeDecodeTuple(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	tests := make([]tree.Datum, 1000)
 	colTypes := make([]*types.T, 1000)
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -529,7 +530,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 		switch typedTest := test.(type) {
 		case *tree.DTuple:
 
-			buf, err := rowenc.EncodeTableValue(nil, descpb.ColumnID(encoding.NoColumnID), typedTest, nil)
+			buf, err := valueside.Encode(nil, valueside.NoColumnID, typedTest, nil)
 			if err != nil {
 				t.Fatalf("seed %d: encoding tuple %v with types %v failed with error: %v",
 					seed, test, colTypes[i], err)
@@ -537,7 +538,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 			var decodedTuple tree.Datum
 			testTyp := test.ResolvedType()
 
-			decodedTuple, buf, err = rowenc.DecodeTableValue(&rowenc.DatumAlloc{}, testTyp, buf)
+			decodedTuple, buf, err = valueside.Decode(&tree.DatumAlloc{}, testTyp, buf)
 			if err != nil {
 				t.Fatalf("seed %d: decoding tuple %v with type (%+v, %+v) failed with error: %v",
 					seed, test, colTypes[i], testTyp, err)
@@ -735,7 +736,7 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	memAcc := evalCtx.Mon.MakeBoundAccount()
 	defer memAcc.Close(ctx)
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	for _, c := range testCases {
 		memAcc.Clear(ctx)
 		_, err := c.encDatum.Fingerprint(ctx, c.typ, &da, nil /* appendTo */, &memAcc)

@@ -21,6 +21,7 @@ import (
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -453,7 +454,7 @@ func (s *Smither) extractIndexes(
 
 type operator struct {
 	*tree.BinOp
-	Operator tree.BinaryOperator
+	Operator treebin.BinaryOperator
 }
 
 var operators = func() map[oid.Oid][]operator {
@@ -463,7 +464,7 @@ var operators = func() map[oid.Oid][]operator {
 			bo := ov.(*tree.BinOp)
 			m[bo.ReturnType.Oid()] = append(m[bo.ReturnType.Oid()], operator{
 				BinOp:    bo,
-				Operator: tree.MakeBinaryOperator(BinaryOperator),
+				Operator: treebin.MakeBinaryOperator(BinaryOperator),
 			})
 		}
 	}
@@ -482,15 +483,24 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 		case "pg_sleep":
 			continue
 		}
-		if strings.Contains(def.Name, "stream_ingestion") {
-			// crdb_internal.complete_stream_ingestion_job is a stateful function that
-			// requires a running stream ingestion job. Invoking this against random
-			// parameters is likely to fail and so we skip it.
-			continue
+		skip := false
+		for _, substr := range []string{
+			// crdb_internal.complete_stream_ingestion_job is a stateful
+			// function that requires a running stream ingestion job. Invoking
+			// this against random parameters is likely to fail and so we skip
+			// it.
+			"stream_ingestion",
+			"crdb_internal.force_",
+			"crdb_internal.unsafe_",
+			"crdb_internal.create_join_token",
+			"crdb_internal.reset_multi_region_zone_configs_for_database",
+			"crdb_internal.reset_index_usage_stats",
+			"crdb_internal.start_replication_stream",
+			"crdb_internal.replication_stream_progress",
+		} {
+			skip = skip || strings.Contains(def.Name, substr)
 		}
-		if strings.Contains(def.Name, "crdb_internal.force_") ||
-			strings.Contains(def.Name, "crdb_internal.unsafe_") ||
-			strings.Contains(def.Name, "crdb_internal.create_join_token") {
+		if skip {
 			continue
 		}
 		if _, ok := m[def.Class]; !ok {

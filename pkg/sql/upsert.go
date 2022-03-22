@@ -37,6 +37,8 @@ type upsertNode struct {
 	run upsertRun
 }
 
+var _ mutationPlanNode = &upsertNode{}
+
 // upsertRun contains the run-time state of upsertNode during local execution.
 type upsertRun struct {
 	tw        optTableUpserter
@@ -57,7 +59,7 @@ func (n *upsertNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	return n.run.tw.init(params.ctx, params.p.txn, params.EvalContext())
+	return n.run.tw.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
@@ -118,6 +120,7 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
+		n.run.tw.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 		if err := n.run.tw.finalize(params.ctx); err != nil {
 			return false, err
 		}
@@ -126,10 +129,7 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(
-		n.run.tw.tableDesc().GetID(),
-		n.run.tw.lastBatchSize,
-	)
+	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.tw.tableDesc(), n.run.tw.lastBatchSize)
 
 	return n.run.tw.lastBatchSize > 0, nil
 }
@@ -170,7 +170,9 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 			ord++
 		}
 		checkVals := rowVals[ord:]
-		if err := checkMutationInput(params.ctx, &params.p.semaCtx, n.run.tw.tableDesc(), n.run.checkOrds, checkVals); err != nil {
+		if err := checkMutationInput(
+			params.ctx, &params.p.semaCtx, params.p.SessionData(), n.run.tw.tableDesc(), n.run.checkOrds, checkVals,
+		); err != nil {
 			return err
 		}
 		rowVals = rowVals[:ord]
@@ -192,6 +194,10 @@ func (n *upsertNode) Close(ctx context.Context) {
 	n.run.tw.close(ctx)
 	*n = upsertNode{}
 	upsertNodePool.Put(n)
+}
+
+func (n *upsertNode) rowsWritten() int64 {
+	return n.run.tw.rowsWritten
 }
 
 func (n *upsertNode) enableAutoCommit() {

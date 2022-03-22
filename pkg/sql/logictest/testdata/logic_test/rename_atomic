@@ -1,0 +1,142 @@
+subtest databases
+
+statement ok
+CREATE DATABASE db;
+CREATE DATABASE db_new
+
+statement ok
+BEGIN;
+ALTER DATABASE db RENAME TO db_old;
+ALTER DATABASE db_new RENAME TO db
+
+statement error pgcode 3D000 database "db_new" does not exist
+CREATE SCHEMA db_new.sc
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+ALTER DATABASE db RENAME TO db_old;
+ALTER DATABASE db_new RENAME TO db;
+CREATE SCHEMA db.sc;
+COMMIT
+
+statement ok
+BEGIN;
+DROP DATABASE db CASCADE;
+ALTER DATABASE db_old RENAME TO db;
+COMMIT
+
+statement ok
+BEGIN;
+ALTER DATABASE db RENAME TO db_old;
+CREATE DATABASE db;
+COMMIT
+
+statement ok
+BEGIN;
+DROP DATABASE db;
+CREATE DATABASE db;
+COMMIT
+
+subtest schemas
+
+statement ok
+CREATE SCHEMA sc;
+CREATE SCHEMA sc_new
+
+statement ok
+BEGIN;
+ALTER SCHEMA sc RENAME TO sc_old;
+ALTER SCHEMA sc_new RENAME TO sc
+
+statement error pgcode 3F000 cannot create "sc_new.v" because the target database or schema does not exist
+CREATE VIEW sc_new.v AS SELECT 1
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+ALTER SCHEMA sc RENAME TO sc_old;
+ALTER SCHEMA sc_new RENAME TO sc;
+CREATE VIEW sc.v AS SELECT 1;
+COMMIT
+
+statement ok
+BEGIN;
+DROP SCHEMA sc CASCADE;
+ALTER SCHEMA sc_old RENAME TO sc;
+COMMIT
+
+statement ok
+BEGIN;
+ALTER SCHEMA sc RENAME TO sc_old;
+CREATE SCHEMA sc;
+COMMIT
+
+statement ok
+BEGIN;
+DROP SCHEMA sc;
+CREATE SCHEMA sc;
+COMMIT
+
+subtest objects
+
+statement ok
+CREATE VIEW v AS SELECT 1;
+CREATE VIEW v_new AS SELECT 2
+
+query I
+SELECT * FROM v
+----
+1
+
+statement ok
+BEGIN;
+ALTER VIEW v RENAME TO v_old;
+ALTER VIEW v_new RENAME TO v
+
+query I
+SELECT * FROM v
+----
+2
+
+statement ok
+COMMIT;
+
+query I
+SELECT * FROM v
+----
+2
+
+statement ok
+BEGIN;
+DROP VIEW v;
+ALTER VIEW v_old RENAME TO v
+
+query I
+SELECT * FROM v
+----
+1
+
+statement ok
+COMMIT
+
+query I
+SELECT * FROM v
+----
+1
+
+statement ok
+BEGIN;
+ALTER VIEW v RENAME TO v_old;
+CREATE VIEW v AS SELECT 1;
+COMMIT
+
+statement ok
+BEGIN;
+DROP VIEW v;
+CREATE VIEW v AS SELECT 1;
+COMMIT

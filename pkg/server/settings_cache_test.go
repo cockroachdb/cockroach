@@ -14,9 +14,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -44,7 +46,7 @@ func TestCachedSettingsStoreAndLoad(t *testing.T) {
 	ctx := context.Background()
 	engine, err := storage.Open(ctx, storage.InMemory(),
 		storage.MaxSize(512<<20 /* 512 MiB */),
-		storage.SettingsForTesting())
+		storage.ForTesting)
 	require.NoError(t, err)
 	defer engine.Close()
 
@@ -59,6 +61,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	stickyEngineRegistry := NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 
@@ -72,9 +75,10 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 			},
 		},
 	}
-
 	var settingsCache []roachpb.KeyValue
 	testServer, _, _ := serverutils.StartServer(t, serverArgs)
+	closedts.TargetDuration.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(ctx, &testServer.ClusterSettings().SV, 10*time.Millisecond)
 	testutils.SucceedsSoon(t, func() error {
 		store, err := testServer.GetStores().(*kvserver.Stores).GetStore(1)
 		if err != nil {
@@ -105,7 +109,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		dialOpts, err := s.rpcContext.GRPCDialOptions()
 		require.NoError(t, err)
 
-		initConfig := newInitServerConfig(s.cfg, dialOpts)
+		initConfig := newInitServerConfig(ctx, s.cfg, dialOpts)
 		inspectState, err := inspectEngines(
 			context.Background(),
 			s.engines,

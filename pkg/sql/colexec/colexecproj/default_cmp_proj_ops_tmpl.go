@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for default_cmp_proj_ops.eg.go. It's
 // formatted in a special way, so it's both valid Go and a valid text/template
@@ -97,9 +99,6 @@ func (d *defaultCmp_KINDProjOp) Next() coldata.Batch {
 			}
 		}
 	})
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 

@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -221,8 +220,6 @@ func newSenderWithConnFactory(
 // This is not know at construction time.
 func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 	s.nodeID = nodeID
-	waitForUpgrade := !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport)
-
 	confCh := make(chan struct{}, 1)
 	confChanged := func(ctx context.Context) {
 		select {
@@ -253,12 +250,6 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 				select {
 				case <-timer.C:
 					timer.Read = true
-					if waitForUpgrade && !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
-						continue
-					} else if waitForUpgrade {
-						waitForUpgrade = false
-						log.Infof(ctx, "closed-timestamps v2 mechanism enabled by cluster version upgrade")
-					}
 					s.publish(ctx)
 				case <-confCh:
 					// Loop around to use the updated timer.

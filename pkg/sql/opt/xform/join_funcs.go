@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -63,7 +64,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		mustGenerateMergeJoin = true
 	}
 
-	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
+	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData().ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
 		rightOrders := ordering.DeriveInterestingOrderings(right).Copy()
@@ -158,10 +159,12 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //      Input  Scan(t)                   Input
 //
 //
-//  2. The index is not covering. We have to generate an index join above the
-//     lookup join. Note that this index join is also implemented as a
-//     LookupJoin, because an IndexJoin can only output columns from one table,
-//     whereas we also need to output columns from Input.
+//  2. The index is not covering, but we can fully evaluate the ON condition
+//     using the index, or we are doing an InnerJoin. We have to generate
+//     an index join above the lookup join. Note that this index join is also
+//     implemented as a LookupJoin, because an IndexJoin can only output
+//     columns from one table, whereas we also need to output columns from
+//     Input.
 //
 //         Join                       LookupJoin(t@primary)
 //         /   \                           |
@@ -178,12 +181,30 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //
 //     We want to first join abc with the index on y (which provides columns y, x)
 //     and then use a lookup join to retrieve column z. The "index join" (top
-//     LookupJoin) will produce columns a,b,c,x,y; the lookup columns are just z
-//     (the original index join produced x,y,z).
+//     LookupJoin) will produce columns a,b,c,x,y,z; the lookup columns are just z
+//     (the original lookup join produced a,b,c,x,y).
 //
 //     Note that the top LookupJoin "sees" column IDs from the table on both
 //     "sides" (in this example x,y on the left and z on the right) but there is
 //     no overlap.
+//
+//  3. The index is not covering and we cannot fully evaluate the ON condition
+//     using the index, and we are doing a LeftJoin/SemiJoin/AntiJoin. This is
+//     handled using a lower-upper pair of joins that are further specialized
+//     as paired-joins. The first (lower) join outputs a continuation column
+//     that is used by the second (upper) join. Like case 2, both are lookup
+//     joins, but paired-joins explicitly know their role in the pair and
+//     behave accordingly.
+//
+//     For example, using the same tables in the example for case 2:
+//      SELECT * FROM abc LEFT JOIN xyz ON a=y AND b=z
+//
+//     The first join will evaluate a=y and produce columns a,b,c,x,y,cont
+//     where cont is the continuation column used to group together rows that
+//     correspond to the same original a,b,c. The second join will fetch z from
+//     the primary index, evaluate b=z, and produce columns a,b,c,x,y,z. A
+//     similar approach works for anti-joins and semi-joins.
+//
 //
 // A lookup join can be created when the ON condition or implicit filters from
 // CHECK constraints and computed columns constrain a prefix of the index
@@ -296,7 +317,11 @@ func (c *CustomFuncs) GenerateLookupJoinsWithVirtualCols(
 }
 
 // generateLookupJoinsImpl is the general implementation for generating lookup
-// joins. See GenerateLookupJoins and GenerateLookupJoinsWithVirtualCols for
+// joins. The rightCols argument must be the columns output by the right side of
+// matched join expression. projectedVirtualCols is the set of virtual columns
+// projected on the right side of the matched join expression.
+//
+// See GenerateLookupJoins and GenerateLookupJoinsWithVirtualCols for
 // more details.
 func (c *CustomFuncs) generateLookupJoinsImpl(
 	grp memo.RelExpr,
@@ -316,10 +341,10 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	inputProps := input.Relational()
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, rightCols, on)
-	n := len(leftEq)
-	if n == 0 {
+	if len(leftEq) == 0 {
 		return
 	}
+	rightEqSet := rightEq.ToSet()
 
 	// Generate implicit filters from CHECK constraints and computed columns as
 	// optional filters to help generate lookup join keys.
@@ -328,6 +353,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	optionalFilters = append(optionalFilters, computedColFilters...)
 
 	var pkCols opt.ColList
+	var eqColMap opt.ColMap
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
@@ -349,14 +375,21 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		var constFilters memo.FiltersExpr
 		allFilters := append(onFilters, optionalFilters...)
 
-		// Check if the first column in the index has an equality constraint, or if
-		// it is constrained to a constant value. This check doesn't guarantee that
-		// we will find lookup join key columns, but it avoids the unnecessary work
-		// in most cases.
+		// Check if the first column in the index either:
+		//
+		//   1. Has an equality constraint.
+		//   2. Is a computed column for which an equality constraint can be
+		//      generated.
+		//   3. Is constrained to a constant value or values.
+		//
+		// This check doesn't guarantee that we will find lookup join key
+		// columns, but it avoids unnecessary work in most cases.
 		firstIdxCol := scanPrivate.Table.IndexColumnID(index, 0)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
-			if _, _, ok := c.findJoinFilterConstants(allFilters, firstIdxCol); !ok {
-				return
+			if _, ok := c.findComputedColJoinEquality(scanPrivate.Table, firstIdxCol, rightEqSet); !ok {
+				if _, _, ok := c.findJoinFilterConstants(allFilters, firstIdxCol); !ok {
+					return
+				}
 			}
 		}
 
@@ -368,6 +401,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 
 		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
 		rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
+		var inputProjections memo.ProjectionsExpr
 
 		shouldBuildMultiSpanLookupJoin := false
 
@@ -377,6 +411,32 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			idxCol := scanPrivate.Table.IndexColumnID(index, j)
 			if eqIdx, ok := rightEq.Find(idxCol); ok {
 				lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
+				rightSideCols = append(rightSideCols, idxCol)
+				continue
+			}
+
+			// If the column is computed and an equality constraint can be
+			// synthesized for it, we can project a column from the join's input
+			// that can be used as a key column. We create the projection here,
+			// and construct a Project expression that wraps the join's input
+			// below. See findComputedColJoinEquality for the requirements to
+			// synthesize a computed column equality constraint.
+			if expr, ok := c.findComputedColJoinEquality(scanPrivate.Table, idxCol, rightEqSet); ok {
+				colMeta := md.ColumnMeta(idxCol)
+				compEqCol := md.AddColumn(fmt.Sprintf("%s_eq", colMeta.Alias), colMeta.Type)
+
+				// Lazily initialize eqColMap.
+				if eqColMap.Empty() {
+					for i := range rightEq {
+						eqColMap.Set(int(rightEq[i]), int(leftEq[i]))
+					}
+				}
+
+				// Project the computed column expression, mapping all columns
+				// in rightEq to corresponding columns in leftEq.
+				projection := c.e.f.ConstructProjectionsItem(c.RemapCols(expr, eqColMap), compEqCol)
+				inputProjections = append(inputProjections, projection)
+				lookupJoin.KeyCols = append(lookupJoin.KeyCols, compEqCol)
 				rightSideCols = append(rightSideCols, idxCol)
 				continue
 			}
@@ -480,6 +540,16 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			return
 		}
 
+		// Wrap the input in a Project if any projections are required. The
+		// lookup join will project away these synthesized columns.
+		if len(inputProjections) > 0 {
+			lookupJoin.Input = c.e.f.ConstructProject(
+				lookupJoin.Input,
+				inputProjections,
+				lookupJoin.Input.Relational().OutputCols,
+			)
+		}
+
 		tableFDs := memo.MakeTableFuncDep(md, scanPrivate.Table)
 		// A lookup join will drop any input row which contains NULLs, so a lax key
 		// is sufficient.
@@ -499,6 +569,25 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		// needed for all join types and cases.
 		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols()
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
+
+		// At this point the filter may have been reduced by partial index
+		// predicate implication and by removing parts of the filter that are
+		// represented by the key columns. If there are any outer columns of the
+		// filter that are not output columns of the right side of the join, we
+		// skip this index.
+		//
+		// This is possible when GenerateLookupJoinsWithVirtualColsAndFilter
+		// matches an expression on the right side of the join in the form
+		// (Project (Select (Scan))). The Select's filters may reference columns
+		// that are not passed through in the Project.
+		//
+		// TODO(mgartner): We could handle this by wrapping the lookup join in
+		// an index join to fetch these columns and filter by them, then
+		// wrapping the index join in a project that removes the columns.
+		filterColsFromRight := lookupJoin.On.OuterCols().Difference(inputProps.OutputCols)
+		if !filterColsFromRight.SubsetOf(rightCols) {
+			return
+		}
 
 		isCovering := rightCols.SubsetOf(indexCols)
 		if isCovering {
@@ -528,7 +617,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 
 		_, isPartial := index.Predicate()
 		if isPartial && (joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp) {
-			// Typically, the index must cover all columns in the scanPrivate in
+			// Typically, the index must cover all columns from the right in
 			// order to generate a lookup join without an additional index join
 			// (case 1, see function comment). However, if the index is a
 			// partial index, the filters remaining after proving
@@ -562,21 +651,27 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			}
 		}
 
-		// All code that follows is for case 2 (see function comment).
+		// All code that follows is for cases 2 and 3 (see function comment).
+		// We need to generate two joins: a lower join followed by an upper join.
+		// In case 3, this lower-upper pair of joins is further specialized into
+		// paired-joins where we refer to the lower as first and upper as second.
 
 		if scanPrivate.Flags.NoIndexJoin {
 			return
 		}
-		if joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
-			// We cannot use a non-covering index for semi and anti join. Note that
-			// since the semi/anti join doesn't pass through any columns, "non
-			// covering" here means that not all columns in the ON condition are
-			// available.
-			//
-			// TODO(radu): We could create a semi/anti join on top of an inner join if
-			// the lookup columns form a key (to guarantee that input rows are not
-			// duplicated by the inner join).
-			return
+		pairedJoins := false
+		continuationCol := opt.ColumnID(0)
+		lowerJoinType := joinType
+		if joinType == opt.SemiJoinOp {
+			// Case 3: Semi joins are converted to a pair consisting of an inner
+			// lookup join and semi lookup join.
+			pairedJoins = true
+			lowerJoinType = opt.InnerJoinOp
+		} else if joinType == opt.AntiJoinOp {
+			// Case 3: Anti joins are converted to a pair consisting of a left
+			// lookup join and anti lookup join.
+			pairedJoins = true
+			lowerJoinType = opt.LeftJoinOp
 		}
 
 		if pkCols == nil {
@@ -596,6 +691,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		// can refer to: input columns, or columns available in the index.
 		onCols := indexCols.Union(inputProps.OutputCols)
 		if c.FiltersBoundBy(lookupJoin.On, onCols) {
+			// Case 2.
 			// The ON condition refers only to the columns available in the index.
 			//
 			// For LeftJoin, both LookupJoins perform a LeftJoin. A null-extended row
@@ -609,20 +705,32 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			// conditions that refer to other columns. We can put the former in the
 			// lower LookupJoin and the latter in the index join.
 			//
-			// This works for InnerJoin but not for LeftJoin because of a
-			// technicality: if an input (left) row has matches in the lower
-			// LookupJoin but has no matches in the index join, only the columns
-			// looked up by the top index join get NULL-extended.
+			// This works in a straightforward manner for InnerJoin but not for
+			// LeftJoin because of a technicality: if an input (left) row has
+			// matches in the lower LookupJoin but has no matches in the index join,
+			// only the columns looked up by the top index join get NULL-extended.
+			// Additionally if none of the lower matches are matches in the index
+			// join, we want to output only one NULL-extended row. To accomplish
+			// this, we need to use paired-joins.
 			if joinType == opt.LeftJoinOp {
-				// TODO(radu): support LeftJoin, perhaps by looking up all columns and
-				// discarding columns that are already available from the lower
-				// LookupJoin. This requires a projection to avoid having the same
-				// ColumnIDs on both sides of the index join.
-				return
+				// Case 3.
+				pairedJoins = true
+				// The lowerJoinType continues to be LeftJoinOp.
 			}
+			// We have already set pairedJoins=true for SemiJoin, AntiJoin earlier,
+			// and we don't need to do that for InnerJoin. The following sets up the
+			// ON conditions for both Case 2 and Case 3, when doing 2 joins that
+			// will each evaluate part of the ON condition.
 			conditions := lookupJoin.On
 			lookupJoin.On = c.ExtractBoundConditions(conditions, onCols)
 			indexJoin.On = c.ExtractUnboundConditions(conditions, onCols)
+		}
+		if pairedJoins {
+			lookupJoin.JoinType = lowerJoinType
+			continuationCol = c.constructContinuationColumnForPairedJoin()
+			lookupJoin.IsFirstJoinInPairedJoiner = true
+			lookupJoin.ContinuationCol = continuationCol
+			lookupJoin.Cols.Add(continuationCol)
 		}
 
 		indexJoin.Input = c.e.f.ConstructLookupJoin(
@@ -636,6 +744,15 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = rightCols.Union(inputProps.OutputCols)
 		indexJoin.LookupColsAreTableKey = true
+		if pairedJoins {
+			indexJoin.IsSecondJoinInPairedJoiner = true
+		}
+
+		// If this is a semi- or anti-join, ensure the columns do not include any
+		// unneeded right-side columns.
+		if joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
+			indexJoin.Cols = inputProps.OutputCols.Union(indexJoin.On.OuterCols())
+		}
 
 		// Create the LookupJoin for the index join in the same group.
 		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
@@ -1098,21 +1215,97 @@ func (c *CustomFuncs) mapInvertedJoin(
 		newIndexCols.Add(prefixCol)
 	}
 
-	// Get the source and destination ColSets, including the inverted source
-	// columns, which will be used in the invertedExpr.
-	srcCols := indexCols.Copy()
-	dstCols := newIndexCols.Copy()
+	// Create a map from the source columns to the destination columns,
+	// including the inverted source columns which will be used in the
+	// invertedExpr.
+	var srcColsToDstCols opt.ColMap
+	for srcCol, ok := indexCols.Next(0); ok; srcCol, ok = indexCols.Next(srcCol + 1) {
+		ord := tabID.ColumnOrdinal(srcCol)
+		dstCol := newTabID.ColumnID(ord)
+		srcColsToDstCols.Set(int(srcCol), int(dstCol))
+	}
 	ord := index.InvertedColumn().InvertedSourceColumnOrdinal()
 	invertedSourceCol := tabID.ColumnID(ord)
 	newInvertedSourceCol := newTabID.ColumnID(ord)
-	srcCols.Add(invertedSourceCol)
-	dstCols.Add(newInvertedSourceCol)
+	srcColsToDstCols.Set(int(invertedSourceCol), int(newInvertedSourceCol))
 
 	invertedJoin.Table = newTabID
-	invertedJoin.InvertedExpr = c.mapScalarExprCols(invertedJoin.InvertedExpr, srcCols, dstCols)
+	invertedJoin.InvertedExpr = c.RemapCols(invertedJoin.InvertedExpr, srcColsToDstCols)
 	invertedJoin.Cols = invertedJoin.Cols.Difference(indexCols).Union(newIndexCols)
-	invertedJoin.ConstFilters = c.MapFilterCols(invertedJoin.ConstFilters, srcCols, dstCols)
-	invertedJoin.On = c.MapFilterCols(invertedJoin.On, srcCols, dstCols)
+	constFilters := c.RemapCols(&invertedJoin.ConstFilters, srcColsToDstCols).(*memo.FiltersExpr)
+	invertedJoin.ConstFilters = *constFilters
+	on := c.RemapCols(&invertedJoin.On, srcColsToDstCols).(*memo.FiltersExpr)
+	invertedJoin.On = *on
+}
+
+// findComputedColJoinEquality returns the computed column expression of col and
+// ok=true when a join equality constraint can be generated for the column. This
+// is possible when:
+//
+//   1. col is non-nullable.
+//   2. col is a computed column.
+//   3. Columns referenced in the computed expression are a subset of columns
+//      that already have equality constraints.
+//
+// For example, consider the table and query:
+//
+//   CREATE TABLE a (
+//     a INT
+//   )
+//
+//   CREATE TABLE bc (
+//     b INT,
+//     c INT NOT NULL AS (b + 1) STORED
+//   )
+//
+//   SELECT * FROM a JOIN b ON a = b
+//
+// We can add an equality constraint for c because c is a function of b and b
+// has an equality constraint in the join predicate:
+//
+//   SELECT * FROM a JOIN b ON a = b AND a + 1 = c
+//
+// Condition (1) is required to prevent generating invalid equality constraints
+// for computed column expressions that can evaluate to NULL even when the
+// columns referenced in the expression are non-NULL. For example, consider the
+// table and query:
+//
+//   CREATE TABLE a (
+//     a INT
+//   )
+//
+//   CREATE TABLE bc (
+//     b INT,
+//     c INT AS (CASE WHEN b > 0 THEN NULL ELSE -1 END) STORED
+//   )
+//
+//   SELECT a, b FROM a JOIN b ON a = b
+//
+// The following is an invalid transformation: a row such as (a=1, b=1) would no
+// longer be returned because NULL=NULL is false.
+//
+//   SELECT a, b FROM a JOIN b ON a = b AND (CASE WHEN a > 0 THEN NULL ELSE -1 END) = c
+//
+// TODO(mgartner): We can relax condition (1) to allow nullable columns if it
+// can be proven that the expression will never evaluate to NULL. We can use
+// memo.ExprIsNeverNull to determine this, passing both NOT NULL and equality
+// columns as notNullCols.
+func (c *CustomFuncs) findComputedColJoinEquality(
+	tabID opt.TableID, col opt.ColumnID, eqCols opt.ColSet,
+) (_ opt.ScalarExpr, ok bool) {
+	tabMeta := c.e.mem.Metadata().TableMeta(tabID)
+	tab := c.e.mem.Metadata().Table(tabID)
+	if tab.Column(tabID.ColumnOrdinal(col)).IsNullable() {
+		return nil, false
+	}
+	expr, ok := tabMeta.ComputedColExpr(col)
+	if !ok {
+		return nil, false
+	}
+	if !c.OuterCols(expr).SubsetOf(eqCols) {
+		return nil, false
+	}
+	return expr, true
 }
 
 // findJoinFilterConstants tries to find a filter that is exactly equivalent to
@@ -1158,7 +1351,7 @@ func (c *CustomFuncs) findJoinFilterRange(
 ) (filterIdx int, ok bool) {
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
-		if props.TightConstraints && !props.Constraints.IsUnconstrained() {
+		if props.TightConstraints && props.Constraints.Length() > 0 {
 			constraint := props.Constraints.Constraint(0)
 			constraintCol := constraint.Columns.Get(0).ID()
 			// See comment in findFiltersForIndexLookup for why we check filter here.
@@ -1390,14 +1583,14 @@ func (c *CustomFuncs) CreateLocalityOptimizedLookupJoinPrivate(
 
 // GetLocalityOptimizedLookupJoinExprs returns the local and remote lookup
 // expressions needed to build a locality optimized lookup join from the given
-// lookup join private, if possible. Otherwise, it returns ok=false. See the
-// comments above the GenerateLocalityOptimizedAntiJoin and
+// ON conditions and lookup join private, if possible. Otherwise, it returns
+// ok=false. See the comments above the GenerateLocalityOptimizedAntiJoin and
 // GenerateLocalityOptimizedLookupJoin rules for more details.
 func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
-	input memo.RelExpr, private *memo.LookupJoinPrivate,
+	on memo.FiltersExpr, private *memo.LookupJoinPrivate,
 ) (localExpr memo.FiltersExpr, remoteExpr memo.FiltersExpr, ok bool) {
 	// Respect the session setting LocalityOptimizedSearch.
-	if !c.e.evalCtx.SessionData.LocalityOptimizedSearch {
+	if !c.e.evalCtx.SessionData().LocalityOptimizedSearch {
 		return nil, nil, false
 	}
 
@@ -1419,39 +1612,32 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	}
 
 	// We can only generate a locality optimized lookup join if we know there is
-	// at most one row produced for each lookup. This is always true for semi and
-	// anti joins, but only true for inner and left joins if
-	// private.LookupColsAreTableKey is true.
-	if private.JoinType != opt.SemiJoinOp && private.JoinType != opt.AntiJoinOp &&
-		!private.LookupColsAreTableKey {
-		return
-	}
-
-	// The local region must be set, or we won't be able to determine which
-	// partitions are local.
-	localRegion, found := c.e.evalCtx.Locality.Find(regionKey)
-	if !found {
-		return nil, nil, false
-	}
-
-	// There should be at least two partitions, or we won't be able to
-	// differentiate between local and remote partitions.
-	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
-	index := tabMeta.Table.Index(private.Index)
-	if index.PartitionCount() < 2 {
-		return nil, nil, false
-	}
-
-	// Determine whether the index has both local and remote partitions.
-	var localPartitions util.FastIntSet
-	for i, n := 0, index.PartitionCount(); i < n; i++ {
-		part := index.Partition(i)
-		if isZoneLocal(part.Zone(), localRegion) {
-			localPartitions.Add(i)
+	// at most one row produced for each lookup. This is always true for semi
+	// joins if the ON condition is empty, but only true for inner and left joins
+	// (and for semi joins with an ON condition) if private.LookupColsAreTableKey
+	// is true.
+	//
+	// Locality optimized anti joins are implemented differently (see the
+	// GenerateLocalityOptimizedAntiJoin rule), and therefore we can always
+	// generate a locality optimized anti join regardless of the ON conditions or
+	// value of private.LookupColsAreTableKey.
+	if private.JoinType != opt.AntiJoinOp {
+		if (private.JoinType != opt.SemiJoinOp || len(on) > 0) && !private.LookupColsAreTableKey {
+			return nil, nil, false
 		}
 	}
-	if localPartitions.Len() == 0 || localPartitions.Len() == index.PartitionCount() {
-		// The partitions are either all local or all remote.
+	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
+	index := tabMeta.Table.Index(private.Index)
+
+	// The PrefixSorter has collected all the prefixes from all the different
+	// partitions (remembering which ones came from local partitions), and has
+	// sorted them so that longer prefixes come before shorter prefixes. For each
+	// span in the scanConstraint, we will iterate through the list of prefixes
+	// until we find a match, so ordering them with longer prefixes first ensures
+	// that the correct match is found. The PrefixSorter is only non-nil when this
+	// index has at least one local and one remote partition.
+	var ps *partition.PrefixSorter
+	if ps, ok = tabMeta.IndexPartitionLocality(private.Index, index, c.e.evalCtx); !ok {
 		return nil, nil, false
 	}
 
@@ -1471,7 +1657,7 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	}
 
 	// Determine whether the values target both local and remote partitions.
-	localValOrds := c.getLocalValues(index, localPartitions, vals)
+	localValOrds := c.getLocalValues(vals, ps)
 	if localValOrds.Len() == 0 || localValOrds.Len() == len(vals) {
 		// The values target all local or all remote partitions.
 		return nil, nil, false
@@ -1521,31 +1707,19 @@ func (c CustomFuncs) getConstPrefixFilter(
 // getLocalValues returns the indexes of the values in the given Datums slice
 // that target local partitions.
 func (c *CustomFuncs) getLocalValues(
-	index cat.Index, localPartitions util.FastIntSet, values tree.Datums,
+	values tree.Datums, ps *partition.PrefixSorter,
 ) util.FastIntSet {
-	// Collect all the prefixes from all the different partitions (remembering
-	// which ones came from local partitions), and sort them so that longer
-	// prefixes come before shorter prefixes. For each value in the given Datums,
-	// we will iterate through the list of prefixes until we find a match, so
-	// ordering them with longer prefixes first ensures that the correct match is
-	// found.
-	allPrefixes := getSortedPrefixes(index, localPartitions)
-
-	// TODO(rytaft): Sort the prefixes by key in addition to length, and use
-	// binary search here.
+	// The PrefixSorter has collected all the prefixes from all the different
+	// partitions (remembering which ones came from local partitions), and has
+	// sorted them so that longer prefixes come before shorter prefixes. For each
+	// span in the scanConstraint, we will iterate through the list of prefixes
+	// until we find a match, so ordering them with longer prefixes first ensures
+	// that the correct match is found.
 	var localVals util.FastIntSet
 	for i, val := range values {
-		for j := range allPrefixes {
-			prefix := allPrefixes[j].prefix
-			isLocal := allPrefixes[j].isLocal
-			if len(prefix) > 1 {
-				continue
-			}
-			if val.Compare(c.e.evalCtx, prefix[0]) == 0 {
-				if isLocal {
-					localVals.Add(i)
-				}
-				break
+		if match, ok := constraint.FindMatchOnSingleColumn(val, ps); ok {
+			if match.IsLocal {
+				localVals.Add(i)
 			}
 		}
 	}

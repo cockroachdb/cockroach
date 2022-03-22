@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -41,32 +43,39 @@ type Connector interface {
 	// Start starts the connector.
 	Start(context.Context) error
 
-	// Connector is capable of providing information on each of the KV nodes in
-	// the cluster in the form of NodeDescriptors. This obviates the need for
-	// SQL-only tenant processes to join the cluster-wide gossip network.
+	// NodeDescStore provides information on each of the KV nodes in the cluster
+	// in the form of NodeDescriptors. This obviates the need for SQL-only
+	// tenant processes to join the cluster-wide gossip network.
 	kvcoord.NodeDescStore
 
-	// Connector is capable of providing Range addressing information in the
-	// form of RangeDescriptors through delegated RangeLookup requests. This is
+	// RangeDescriptorDB provides range addressing information in the form of
+	// RangeDescriptors through delegated RangeLookup requests. This is
 	// necessary because SQL-only tenants are restricted from reading Range
 	// Metadata keys directly. Instead, the RangeLookup requests are proxied
 	// through existing KV nodes while being subject to additional validation
 	// (e.g. is the Range being requested owned by the requesting tenant?).
 	rangecache.RangeDescriptorDB
 
-	// Connector is capable of providing a filtered view of the SystemConfig
-	// containing only information applicable to secondary tenants. This
-	// obviates the need for SQL-only tenant processes to join the cluster-wide
-	// gossip network.
-	config.SystemConfigProvider
-
-	// Connector is capable of knowing every region in the cluster.
-	// This is necessary for region validation for zone configurations and
-	// multi-region primitives.
+	// RegionsServer provides access to a tenant's available regions. This is
+	// necessary for region validation for zone configurations and multi-region
+	// primitives.
 	serverpb.RegionsServer
 
-	// Connector is capable of providing an endpoint for the TokenBucket API.
+	// TenantStatusServer is the subset of the serverpb.StatusInterface that is
+	// used by the SQL system to query for debug information, such as tenant-specific
+	// range reports.
+	serverpb.TenantStatusServer
+
+	// TokenBucketProvider provides access to the tenant cost control token
+	// bucket.
 	TokenBucketProvider
+
+	// KVAccessor provides access to the subset of the cluster's span configs
+	// applicable to secondary tenants.
+	spanconfig.KVAccessor
+
+	// OverridesMonitor provides access to tenant cluster setting overrides.
+	settingswatcher.OverridesMonitor
 }
 
 // TokenBucketProvider supplies an endpoint (to tenants) for the TokenBucket API
@@ -80,13 +89,14 @@ type TokenBucketProvider interface {
 
 // ConnectorConfig encompasses the configuration required to create a Connector.
 type ConnectorConfig struct {
+	TenantID          roachpb.TenantID
 	AmbientCtx        log.AmbientContext
 	RPCContext        *rpc.Context
 	RPCRetryOptions   retry.Options
 	DefaultZoneConfig *zonepb.ZoneConfig
 }
 
-// ConnectorFactory constructs a new tenant Connector from the provide network
+// ConnectorFactory constructs a new tenant Connector from the provided network
 // addresses pointing to KV nodes.
 type ConnectorFactory interface {
 	NewConnector(cfg ConnectorConfig, addrs []string) (Connector, error)
@@ -102,12 +112,12 @@ func (requiresCCLBinaryFactory) NewConnector(_ ConnectorConfig, _ []string) (Con
 	return nil, errors.Errorf(`tenant connector requires a CCL binary`)
 }
 
-// AddressResolver wraps a Connector in an adapter that allows it be used as a
-// nodedialer.AddressResolver. Addresses are resolved to a node's KV
+// AddressResolver wraps a NodeDescStore interface in an adapter that allows it
+// be used as a nodedialer.AddressResolver. Addresses are resolved to a node's
 // address.
-func AddressResolver(c Connector) nodedialer.AddressResolver {
+func AddressResolver(s kvcoord.NodeDescStore) nodedialer.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, error) {
-		nd, err := c.GetNodeDescriptor(nodeID)
+		nd, err := s.GetNodeDescriptor(nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -121,6 +131,6 @@ func AddressResolver(c Connector) nodedialer.AddressResolver {
 var GossipSubscriptionSystemConfigMask = config.MakeSystemConfigMask(
 	// Tenant SQL processes need just enough of the zone hierarchy to understand
 	// which zone configurations apply to their keyspace.
-	config.MakeZoneKey(keys.RootNamespaceID),
-	config.MakeZoneKey(keys.TenantsRangesID),
+	config.MakeZoneKey(keys.SystemSQLCodec, keys.RootNamespaceID),
+	config.MakeZoneKey(keys.SystemSQLCodec, keys.TenantsRangesID),
 )

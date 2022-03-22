@@ -1,0 +1,66 @@
+# LogicTest: 3node-tenant
+# Zone config logic tests that are only meant to work for secondary tenants.
+
+statement ok
+CREATE TABLE t();
+
+statement ok
+SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = false
+
+statement error pq: unimplemented: operation is unsupported in multi-tenancy mode
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
+
+statement ok
+SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
+
+query IT
+SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
+----
+0    RANGE default
+106  TABLE test.public.t
+
+# The tests below test semantics around named zone for tenants. Tenants aren't
+# allowed to alter any named zones other than RANGE DEFAULT. RANGE DEFAULT
+# can't be deleted.
+subtest named_zones_tenants
+
+statement error pq: non-system tenants cannot configure zone for liveness range
+ALTER RANGE liveness CONFIGURE ZONE USING num_replicas=3;
+
+statement error pq: non-system tenants cannot configure zone for liveness range
+ALTER RANGE liveness CONFIGURE ZONE DISCARD
+
+statement error pq: non-system tenants cannot configure zone for meta range
+ALTER RANGE meta CONFIGURE ZONE USING num_replicas=3
+
+statement error pq: non-system tenants cannot configure zone for meta range
+ALTER RANGE meta CONFIGURE ZONE DISCARD
+
+statement error pq: non-system tenants cannot configure zone for timeseries range
+ALTER RANGE timeseries CONFIGURE ZONE USING num_replicas=3
+
+statement error pq: non-system tenants cannot configure zone for timeseries range
+ALTER RANGE timeseries CONFIGURE ZONE DISCARD
+
+statement error pq: non-system tenants cannot configure zone for system range
+ALTER RANGE system CONFIGURE ZONE USING num_replicas=3
+
+statement error pq: non-system tenants cannot configure zone for system range
+ALTER RANGE system CONFIGURE ZONE DISCARD
+
+statement error pq: non-system tenants cannot configure zone for tenants range
+ALTER RANGE tenants CONFIGURE ZONE USING num_replicas=3
+
+statement error pq: non-system tenants cannot configure zone for tenants range
+ALTER RANGE tenants CONFIGURE ZONE DISCARD
+
+# Tenants are allowed to alter RANGE DEFAULT
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING num_replicas=3
+
+# Removing RANGE DEFAULT is not allowed (for both host and secondary tenants)
+statement error pq: cannot remove default zone
+ALTER RANGE default CONFIGURE ZONE DISCARD

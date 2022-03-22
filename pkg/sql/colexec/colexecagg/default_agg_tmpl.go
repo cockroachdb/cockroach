@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for default_agg.eg.go. It's formatted
 // in a special way, so it's both valid Go and a valid text/template input.
@@ -53,14 +55,6 @@ type default_AGGKINDAgg struct {
 }
 
 var _ AggregateFunc = &default_AGGKINDAgg{}
-
-func (a *default_AGGKINDAgg) SetOutput(vec coldata.Vec) {
-	// {{if eq "_AGGKIND" "Ordered"}}
-	a.orderedAggregateFuncBase.SetOutput(vec)
-	// {{else}}
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	// {{end}}
-}
 
 func (a *default_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -207,9 +201,9 @@ func (a *default_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
-func (a *default_AGGKINDAggAlloc) Close() error {
+func (a *default_AGGKINDAggAlloc) Close(ctx context.Context) error {
 	for _, fn := range a.returnedFns {
-		fn.fn.Close(fn.ctx)
+		fn.fn.Close(ctx)
 	}
 	a.returnedFns = nil
 	return nil

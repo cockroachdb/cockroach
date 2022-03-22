@@ -67,9 +67,9 @@ var UnitTestFormatter = IssueFormatter{
 			r.CodeBlock("", data.CondensedMessage.Digest(50))
 		}
 
-		r.Collapsed("Reproduce", func() {
-			if data.ReproductionCommand != nil {
-				data.ReproductionCommand(r)
+		r.Collapsed("Help", func() {
+			if data.HelpCommand != nil {
+				data.HelpCommand(r)
 			}
 
 			if len(data.Parameters) != 0 {
@@ -104,9 +104,9 @@ var UnitTestFormatter = IssueFormatter{
 			r.Escaped("\n")
 		}
 
-		if len(data.Mention) > 0 {
+		if len(data.MentionOnCreate) > 0 {
 			r.Escaped("/cc")
-			for _, handle := range data.Mention {
+			for _, handle := range data.MentionOnCreate {
 				r.Escaped(" ")
 				r.Escaped(handle)
 			}
@@ -129,4 +129,16 @@ var UnitTestFormatter = IssueFormatter{
 		})
 		return nil
 	},
+}
+
+// UnitTestHelpCommand is a HelpCommand for use with UnitTestFormatter. It
+// renders a reproduction command and helpful links.
+func UnitTestHelpCommand(repro string) func(r *Renderer) {
+	return func(r *Renderer) {
+		ReproductionCommandFromString(repro)
+		r.Escaped("\n") // need this newline or link won't render
+		r.Escaped("See also: ")
+		r.A("How To Investigate a Go Test Failure (internal)", "https://cockroachlabs.atlassian.net/l/c/HgfXfJgM")
+		r.Escaped("\n")
+	}
 }

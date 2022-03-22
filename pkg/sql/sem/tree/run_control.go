@@ -14,6 +14,7 @@ package tree
 type ControlJobs struct {
 	Jobs    *Select
 	Command JobCommand
+	Reason  Expr
 }
 
 // JobCommand determines which type of action to effect on the selected job(s).
@@ -38,6 +39,10 @@ func (n *ControlJobs) Format(ctx *FmtCtx) {
 	ctx.WriteString(JobCommandToStatement[n.Command])
 	ctx.WriteString(" JOBS ")
 	ctx.FormatNode(n.Jobs)
+	if n.Reason != nil {
+		ctx.WriteString(" WITH REASON = ")
+		ctx.FormatNode(n.Reason)
+	}
 }
 
 // CancelQueries represents a CANCEL QUERIES statement.
@@ -115,6 +120,21 @@ type ControlJobsForSchedules struct {
 	Command   JobCommand
 }
 
+// ControlJobsOfType represents PAUSE/RESUME/CANCEL clause which
+// applies the job command to the job matching a specified type
+type ControlJobsOfType struct {
+	Type    string
+	Command JobCommand
+}
+
+// Format implements the NodeFormatter interface.
+func (n *ControlJobsOfType) Format(ctx *FmtCtx) {
+	ctx.WriteString(JobCommandToStatement[n.Command])
+	ctx.WriteString(" ALL ")
+	ctx.WriteString(n.Type)
+	ctx.WriteString(" JOBS")
+}
+
 // Format implements NodeFormatter interface.
 func (n *ControlJobsForSchedules) Format(ctx *FmtCtx) {
 	ctx.WriteString(JobCommandToStatement[n.Command])
@@ -123,3 +143,4 @@ func (n *ControlJobsForSchedules) Format(ctx *FmtCtx) {
 }
 
 var _ Statement = &ControlJobsForSchedules{}
+var _ Statement = &ControlJobsOfType{}

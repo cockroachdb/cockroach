@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+genrule(
+    name = "genassets",
+    srcs = select({
+        "//pkg/ui:cockroach_with_ui": ["//pkg/ui/workspaces/db-console:db-console-ccl"],
+        "//conditions:default": ["//pkg/ui:gen-empty-index.html"],
+    }),
+    outs = ["assets.tar.gz"],
+    cmd = """
+if [ -d $< ]
+then
+  $(location //pkg/util/targz/gen) $</assets $@
+else
+  $(location //pkg/util/targz/gen) $< $@
+fi
+""",
+    exec_tools = ["//pkg/util/targz/gen"],
+)
+
+go_library(
+    name = "distccl",
+    srcs = ["distccl.go"],
+    embedsrcs = [":genassets"],  # keep
+    importpath = "github.com/cockroachdb/cockroach/pkg/ui/distccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ui",
+        "//pkg/util/targz",
+    ],
+)

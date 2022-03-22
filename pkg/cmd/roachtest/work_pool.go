@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -157,6 +157,7 @@ func (p *workPool) selectTestForCluster(
 	}
 
 	p.decTestLocked(ctx, candidate.spec.Name)
+
 	runNum := p.count - candidate.count + 1
 	return testToRunRes{
 		spec:            candidate.spec,
@@ -172,6 +173,9 @@ func (p *workPool) selectTestForCluster(
 // If multiple tests are eligible to run, one with the most runs left is chosen.
 // TODO(andrei): We could be smarter in guessing what kind of cluster is best to
 // allocate.
+//
+// ensures:  !testToRunRes.noWork || error == nil
+//
 func (p *workPool) selectTest(ctx context.Context, qp *quotapool.IntPool) (testToRunRes, error) {
 	var ttr testToRunRes
 	alloc, err := qp.AcquireFunc(ctx, func(ctx context.Context, pi quotapool.PoolInfo) (uint64, error) {

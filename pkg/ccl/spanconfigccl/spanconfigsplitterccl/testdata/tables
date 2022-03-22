@@ -1,0 +1,41 @@
+# Run the most basic split tests -- we should observe splits for non-dropped
+# tables at table start and index start + end boundaries.
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+----
+
+query-sql
+SELECT id FROM system.namespace WHERE name='t1'
+----
+106
+
+query-sql
+SELECT id FROM system.namespace WHERE name='t2'
+----
+107
+
+splits database=db table=t1
+----
++ 1  between start of table and start of 1st index
++ 1  for 1st index
++ 1  between end of 1st index and end of table
+= 3
+
+splits database=db table=t2
+----
++ 1  between start of table and start of 1st index
++ 1  for 1st index
++ 1  between end of 1st index and end of table
+= 3
+
+exec-sql
+DROP TABLE db.t2;
+----
+
+# Dropped tables should not observe any splits.
+splits id=107
+----
+= 0

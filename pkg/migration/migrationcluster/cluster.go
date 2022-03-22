@@ -94,6 +94,15 @@ func (c *Cluster) UntilClusterStable(ctx context.Context, fn func() error) error
 	return nil
 }
 
+// NumNodes is part of the migration.Cluster interface.
+func (c *Cluster) NumNodes(ctx context.Context) (int, error) {
+	ns, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
+	if err != nil {
+		return 0, err
+	}
+	return len(ns), nil
+}
+
 // ForEveryNode is part of the migration.Cluster interface.
 func (c *Cluster) ForEveryNode(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
@@ -134,7 +143,7 @@ func (c *Cluster) ForEveryNode(
 func (c *Cluster) IterateRangeDescriptors(
 	ctx context.Context, blockSize int, init func(), fn func(...roachpb.RangeDescriptor) error,
 ) error {
-	return c.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return c.c.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Inform the caller that we're starting a fresh attempt to page in
 		// range descriptors.
 		init()
@@ -180,9 +189,4 @@ func (c *Cluster) IterateRangeDescriptors(
 				return fn(descriptors...)
 			})
 	})
-}
-
-// DB provides exposes the underlying *kv.DB instance.
-func (c *Cluster) DB() *kv.DB {
-	return c.c.DB
 }

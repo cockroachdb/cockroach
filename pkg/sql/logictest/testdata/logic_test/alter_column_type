@@ -22,12 +22,12 @@ ALTER TABLE t ALTER s TYPE STRING, ALTER sl TYPE STRING(6), ALTER ts TYPE TIMEST
 query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type    is_nullable  column_default  generation_expression  indices    is_hidden
-s            STRING       true         NULL            ·                      {primary}  false
-sl           STRING(6)    true         NULL            ·                      {primary}  false
-t            TIME         true         NULL            ·                      {primary}  false
-ts           TIMESTAMPTZ  true         NULL            ·                      {primary}  false
-rowid        INT8         false        unique_rowid()  ·                      {primary}  true
+column_name  data_type    is_nullable  column_default  generation_expression  indices   is_hidden
+s            STRING       true         NULL            ·                      {t_pkey}  false
+sl           STRING(6)    true         NULL            ·                      {t_pkey}  false
+t            TIME         true         NULL            ·                      {t_pkey}  false
+ts           TIMESTAMPTZ  true         NULL            ·                      {t_pkey}  false
+rowid        INT8         false        unique_rowid()  ·                      {t_pkey}  true
 
 query TTTT
 SELECT * FROM t
@@ -74,9 +74,8 @@ table_name  create_statement
 t           CREATE TABLE public.t (
             a INT8 NOT NULL,
             i INT8 NULL,
-            CONSTRAINT "primary" PRIMARY KEY (a ASC),
-            INDEX idx2 (i ASC),
-            FAMILY "primary" (a, i)
+            CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+            INDEX idx2 (i ASC)
 )
 
 statement ok
@@ -106,9 +105,9 @@ CREATE TABLE t (a INT)
 query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT8       true         NULL            ·                      {primary}  false
-rowid        INT8       false        unique_rowid()  ·                      {primary}  true
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+a            INT8       true         NULL            ·                      {t_pkey}  false
+rowid        INT8       false        unique_rowid()  ·                      {t_pkey}  true
 
 statement ok
 ALTER TABLE t ALTER a TYPE INTEGER
@@ -116,9 +115,9 @@ ALTER TABLE t ALTER a TYPE INTEGER
 query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT8       true         NULL            ·                      {primary}  false
-rowid        INT8       false        unique_rowid()  ·                      {primary}  true
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+a            INT8       true         NULL            ·                      {t_pkey}  false
+rowid        INT8       false        unique_rowid()  ·                      {t_pkey}  true
 
 statement ok
 DROP TABLE t
@@ -194,14 +193,11 @@ ALTER TABLE t2 ALTER COLUMN id TYPE STRING
 query TTBTTTB
 SHOW COLUMNS FROM t2
 ----
-id     STRING  true   NULL            ·  {primary}  false
-rowid  INT8    false  unique_rowid()  ·  {primary}  true
+id     STRING  true   NULL            ·  {t2_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {t2_pkey}  true
 
 statement ok
 INSERT INTO t2 VALUES ('5')
-
-statement error pq: value type int doesn't match type string of column "id"
-INSERT INTO t2 VALUES (6)
 
 # Verify ALTER COLUMN TYPE from INT to STRING works correctly.
 # Column order should stay the same.
@@ -217,10 +213,10 @@ ALTER TABLE t3 ALTER COLUMN id2 TYPE string
 query TTBTTTB
 SHOW COLUMNS FROM t3
 ----
-id     INT8    true   NULL            ·  {primary}  false
-id2    STRING  true   NULL            ·  {primary}  false
-id3    INT8    true   NULL            ·  {primary}  false
-rowid  INT8    false  unique_rowid()  ·  {primary}  true
+id     INT8    true   NULL            ·  {t3_pkey}  false
+id2    STRING  true   NULL            ·  {t3_pkey}  false
+id3    INT8    true   NULL            ·  {t3_pkey}  false
+rowid  INT8    false  unique_rowid()  ·  {t3_pkey}  true
 
 statement ok
 INSERT INTO t3 VALUES (4,'4',4)
@@ -236,9 +232,17 @@ SELECT * FROM t3 ORDER BY id
 # Ensure ALTER COLUMN TYPE correctly changes the precision of TIMESTAMPTZ.
 statement ok
 CREATE TABLE t5 (x TIMESTAMPTZ(6));
+
+statement ok
 INSERT INTO t5 VALUES ('2016-01-25 10:10:10.555555-05:00');
+
+statement ok
 INSERT INTO t5 VALUES ('2016-01-26 10:10:10.555555-05:00');
+
+statement ok
 ALTER TABLE t5 ALTER COLUMN x TYPE TIMESTAMPTZ(3);
+
+statement ok
 INSERT INTO t5 VALUES ('2016-01-26 10:10:10.55-05:00');
 
 query T
@@ -251,7 +255,11 @@ SELECT * FROM t5 ORDER BY x
 # Ensure column families stay the same.
 statement ok
 CREATE TABLE t6(id INT, id2 INT, FAMILY f1 (id), FAMILY f2 (id2));
+
+statement ok
 INSERT INTO t6 VALUES (1), (2), (3);
+
+statement ok
 ALTER TABLE t6 ALTER COLUMN id2 TYPE STRING;
 
 query TT
@@ -261,25 +269,20 @@ t6  CREATE TABLE public.t6 (
     id INT8 NULL,
     id2 STRING NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
     FAMILY f1 (id, rowid),
     FAMILY f2 (id2)
 )
 
-# Ensure default expressions are casted correctly.
+# Ensure the type of the default column is checked
 statement ok
 CREATE TABLE t7 (x INT DEFAULT 1, y INT);
-INSERT INTO t7 (y) VALUES (1), (2), (3);
-ALTER TABLE t7 ALTER COLUMN x TYPE DATE;
-INSERT INTO t7 (y) VALUES (4);
 
-query TI
-SELECT * FROM t7 ORDER BY y
-----
-1970-01-02 00:00:00 +0000 +0000  1
-1970-01-02 00:00:00 +0000 +0000  2
-1970-01-02 00:00:00 +0000 +0000  3
-1970-01-02 00:00:00 +0000 +0000  4
+statement ok
+INSERT INTO t7 (y) VALUES (1), (2), (3);
+
+statement error default for column "x" cannot be cast automatically to type DATE
+ALTER TABLE t7 ALTER COLUMN x TYPE DATE;
 
 # Ensure a runtime error correctly rolls back and the table is unchanged.
 statement ok
@@ -297,8 +300,7 @@ SHOW CREATE TABLE t8
 t8  CREATE TABLE public.t8 (
     x STRING NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (x, rowid)
+    CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Ensure ALTER COLUMN TYPE is disallowed if column is part of primary key.
@@ -333,53 +335,24 @@ CREATE TABLE uniq (x INT, y INT, UNIQUE WITHOUT INDEX (x, y))
 statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
 ALTER TABLE uniq ALTER COLUMN x TYPE STRING
 
-# Ensure ALTER COLUMN TYPE works correctly for interleaved tables.
-statement ok
-CREATE TABLE t13 (x INT PRIMARY KEY, y INT);
-INSERT INTO t13 VALUES (1, 1), (2, 2);
-CREATE TABLE t14 (x INT, y INT, z STRING, PRIMARY KEY(y, x)) INTERLEAVE IN PARENT t13 (y);
-INSERT INTO t14 VALUES (1, 1, '1'), (2, 2, '2')
-
-# Ensure we can change the column type of an interleaved child if the
-# column is not part of the primary key.
-statement ok
-ALTER TABLE t14 ALTER COLUMN z TYPE INT
-
-query III
-SELECT x, y, z FROM t14 ORDER BY x
-----
-1  1  1
-2  2  2
-
-# Ensure we can change the column type of an interleaved parent if the
-# column is not part of the primary key.
-statement ok
-ALTER TABLE t13 ALTER COLUMN y TYPE STRING
-
-query IT
-SELECT x, y FROM t13 ORDER BY x
-----
-1  1
-2  2
-
-# Ensure we can change the column type of a column stored in a secondary index.
+# Ensure we cannot change the column type of a column stored in a secondary index.
 statement ok
 CREATE TABLE t15 (x INT, y INT);
-CREATE INDEX ON t15 (x) STORING (y);
-INSERT INTO t15 VALUES (1, 1), (2, 2)
 
 statement ok
-ALTER TABLE t15 ALTER COLUMN y TYPE STRING;
+CREATE INDEX ON t15 (x) STORING (y);
 
-query IT
-SELECT x, y FROM t15 ORDER BY x
-----
-1  1
-2  2
+statement ok
+INSERT INTO t15 VALUES (1, 1), (2, 2)
+
+statement error pq: unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not supported for columns that are part of an index
+ALTER TABLE t15 ALTER COLUMN y TYPE STRING;
 
 # Ensure ALTER COLUMN TYPE works for collated strings.
 statement ok
 CREATE TABLE t16 (x STRING);
+
+statement ok
 INSERT INTO t16 VALUES ('Backhaus'), ('Bär'), ('Baz');
 
 query T
@@ -401,10 +374,13 @@ Baz
 
 # Ensure ALTER COLUMN TYPE fails if the DEFAULT EXPR cannot be casted to the new type.
 statement ok
-CREATE TABLE t17 (x STRING DEFAULT 'HELLO');
+CREATE TABLE t17 (x STRING DEFAULT 'HELLO', y STRING ON UPDATE 'HELLO', FAMILY f1 (x,y));
 
-statement error pq: could not parse "HELLO" as type int: strconv.ParseInt: parsing "HELLO": invalid syntax
+statement error default for column "x" cannot be cast automatically to type INT8
 ALTER TABLE t17 ALTER COLUMN x TYPE INT
+
+statement error on update for column "y" cannot be cast automatically to type INT8
+ALTER TABLE t17 ALTER COLUMN y TYPE INT
 
 query TT colnames
 show create table t17
@@ -412,14 +388,18 @@ show create table t17
 table_name  create_statement
 t17         CREATE TABLE public.t17 (
             x STRING NULL DEFAULT 'HELLO':::STRING,
+            y STRING NULL ON UPDATE 'HELLO':::STRING,
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-            FAMILY "primary" (x, rowid)
+            CONSTRAINT t17_pkey PRIMARY KEY (rowid ASC),
+            FAMILY f1 (x, y, rowid)
 )
+
 
 # Ensure ALTER COLUMN TYPE fails if the column is part of an FK relationship.
 statement ok
 CREATE TABLE t18 (x INT NOT NULL PRIMARY KEY);
+
+statement ok
 CREATE TABLE t19 (y INT NOT NULL REFERENCES t18 (x), INDEX(y));
 
 statement error pq: unimplemented: ALTER COLUMN TYPE requiring rewrite of on-disk data is currently not supported for columns that are part of an index
@@ -431,6 +411,8 @@ ALTER TABLE t19 ALTER COLUMN y TYPE STRING
 # Ensure ALTER COLUMN TYPE does not work inside a transaction.
 statement ok
 CREATE TABLE t20 (x INT);
+
+statement ok
 BEGIN
 
 statement error pq: unimplemented: ALTER COLUMN TYPE is not supported inside a transaction
@@ -474,6 +456,8 @@ true
 # Ensure ALTER COLUMN TYPE rolls back if is not applicable to value in the column.
 statement ok
 CREATE TABLE t24 (x STRING);
+
+statement ok
 INSERT INTO t24 VALUES ('1'), ('hello');
 
 statement error pq: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
@@ -486,8 +470,7 @@ table_name  create_statement
 t24         CREATE TABLE public.t24 (
             x STRING NULL,
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-            FAMILY "primary" (x, rowid)
+            CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Ensure USING EXPRESSION rolls back if the USING EXPRESSION does not conform
@@ -501,6 +484,8 @@ ALTER TABLE t25 ALTER COLUMN x TYPE STRING USING (x);
 
 statement ok
 CREATE TABLE t26 (x INT);
+
+statement ok
 CREATE TABLE t27 (x INT);
 
 # Ensure USING EXPRESSION cannot reference columns that do not exist in the
@@ -528,7 +513,11 @@ ALTER TABLE t27 ALTER COLUMN x TYPE STRING USING (x::STRING)
 # converting to the same type.
 statement ok
 CREATE TABLE t28(x INT);
+
+statement ok
 INSERT INTO t28 VALUES (1), (2), (3);
+
+statement ok
 ALTER TABLE t28 ALTER COLUMN x TYPE INT USING (x * 5)
 
 query I
@@ -542,7 +531,11 @@ SELECT x FROM t28 ORDER BY x
 # error before running the online schema change.
 statement ok
 CREATE TABLE t29 (x INT8);
+
+statement ok
 INSERT INTO t29 VALUES (1), (2), (3);
+
+statement ok
 ALTER TABLE t29 ALTER COLUMN x TYPE INT4;
 
 query I
@@ -552,11 +545,24 @@ SELECT x FROM t29 ORDER BY x
 2
 3
 
+# Regression 71089, check that foreign key references are checked properly.
+
+statement ok
+CREATE TABLE parent_71089 (id INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE child_71089 (a INT, b INT REFERENCES parent_71089 (id) NOT NULL)
+
+statement ok
+ALTER TABLE child_71089 ALTER COLUMN a TYPE FLOAT;
+
 # ColumnConversionValidate should error out if the conversion is not valid.
 # STRING -> BYTES is a ColumnConversionValidate type conversion, it should
 # try the conversion and error out if the cast cannot be applied.
 statement ok
 CREATE TABLE t30 (x STRING);
+
+statement ok
 INSERT INTO t30 VALUES (e'a\\01');
 
 statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
@@ -581,6 +587,8 @@ ALTER TABLE t29 ALTER COLUMN x TYPE INT2
 
 statement ok
 CREATE TABLE regression_54844 (i int8);
+
+statement ok
 INSERT INTO regression_54844 VALUES (-9223372036854775807)
 
 statement error integer out of range for type int2

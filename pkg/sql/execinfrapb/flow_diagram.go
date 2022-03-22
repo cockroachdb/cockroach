@@ -21,9 +21,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
@@ -134,26 +134,54 @@ func (a *AggregatorSpec) summary() (string, []string) {
 }
 
 func indexDetail(desc *descpb.TableDescriptor, indexIdx uint32) string {
-	index := "primary"
+	var index string
 	if indexIdx > 0 {
 		index = desc.Indexes[indexIdx-1].Name
+	} else {
+		index = desc.PrimaryIndex.Name
 	}
 	return fmt.Sprintf("%s@%s", desc.Name, index)
 }
 
+func appendColumns(details []string, columns []descpb.IndexFetchSpec_Column) []string {
+	var b strings.Builder
+	b.WriteString("Columns:")
+	const wrapAt = 100
+	for i := range columns {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		name := columns[i].Name
+		if b.Len()+len(name)+1 > wrapAt {
+			details = append(details, b.String())
+			b.Reset()
+		}
+		b.WriteByte(' ')
+		b.WriteString(name)
+	}
+	details = append(details, b.String())
+	return details
+}
+
 // summary implements the diagramCellType interface.
 func (tr *TableReaderSpec) summary() (string, []string) {
-	details := []string{indexDetail(&tr.Table, tr.IndexIdx)}
+	details := make([]string, 0, 3)
+	details = append(details, fmt.Sprintf("%s@%s", tr.FetchSpec.TableName, tr.FetchSpec.IndexName))
+	details = appendColumns(details, tr.FetchSpec.FetchedColumns)
 
 	if len(tr.Spans) > 0 {
-		tbl := tr.BuildTableDescriptor()
 		// only show the first span
-		idx := tbl.ActiveIndexes()[int(tr.IndexIdx)]
-		valDirs := catalogkeys.IndexKeyValDirs(idx)
+		keyDirs := make([]encoding.Direction, len(tr.FetchSpec.KeyAndSuffixColumns))
+		for i := range keyDirs {
+			keyDirs[i] = encoding.Ascending
+			if tr.FetchSpec.KeyAndSuffixColumns[i].Direction == descpb.IndexDescriptor_DESC {
+				keyDirs[i] = encoding.Descending
+			}
+		}
 
 		var spanStr strings.Builder
 		spanStr.WriteString("Spans: ")
-		spanStr.WriteString(catalogkeys.PrettySpan(valDirs, tr.Spans[0].Span, 2))
+		spanStr.WriteString(catalogkeys.PrettySpan(keyDirs, tr.Spans[0], 2))
 
 		if len(tr.Spans) > 1 {
 			spanStr.WriteString(fmt.Sprintf(" and %d other", len(tr.Spans)-1))
@@ -175,7 +203,7 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	if jr.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(jr.Type))
 	}
-	details = append(details, indexDetail(&jr.Table, jr.IndexIdx))
+	details = append(details, fmt.Sprintf("%s@%s", jr.FetchSpec.TableName, jr.FetchSpec.IndexName))
 	if len(jr.LookupColumns) > 0 {
 		details = append(details, fmt.Sprintf("Lookup join on: %s", colListStr(jr.LookupColumns)))
 	}
@@ -191,6 +219,10 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	if jr.LeftJoinWithPairedJoiner {
 		details = append(details, "second join in paired-join")
 	}
+	if jr.OutputGroupContinuationForLeftRow {
+		details = append(details, "first join in paired-join")
+	}
+	details = appendColumns(details, jr.FetchSpec.FetchedColumns)
 	return "JoinReader", details
 }
 
@@ -294,7 +326,7 @@ func (ij *InvertedJoinerSpec) summary() (string, []string) {
 	if ij.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(ij.Type))
 	}
-	details = append(details, indexDetail(&ij.Table, ij.IndexIdx))
+	details = append(details, fmt.Sprintf("%s@%s", ij.FetchSpec.TableName, ij.FetchSpec.IndexName))
 	details = append(details, fmt.Sprintf("InvertedExpr %s", ij.InvertedExpr))
 	if !ij.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", ij.OnExpr))
@@ -302,6 +334,7 @@ func (ij *InvertedJoinerSpec) summary() (string, []string) {
 	if ij.OutputGroupContinuationForLeftRow {
 		details = append(details, "first join in paired-join")
 	}
+	details = appendColumns(details, ij.FetchSpec.FetchedColumns)
 	return "InvertedJoiner", details
 }
 
@@ -310,6 +343,9 @@ func (s *SorterSpec) summary() (string, []string) {
 	details := []string{s.OutputOrdering.diagramString()}
 	if s.OrderingMatchLen != 0 {
 		details = append(details, fmt.Sprintf("match len: %d", s.OrderingMatchLen))
+	}
+	if s.Limit > 0 {
+		details = append(details, fmt.Sprintf("TopK: %d", s.Limit))
 	}
 	return "Sorter", details
 }
@@ -439,24 +475,26 @@ func (r *OutputRouterSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (post *PostProcessSpec) summary() []string {
-	return post.summaryWithPrefix("")
-}
-
-// prefix is prepended to every line outputted to disambiguate processors
-// (namely InterleavedReaderJoiner) that have multiple PostProcessors.
-func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 	var res []string
 	if post.Projection {
 		outputColumns := "None"
-		if len(post.OutputColumns) > 0 {
-			outputColumns = colListStr(post.OutputColumns)
+		outputCols := post.OutputColumns
+		if post.OriginalOutputColumns != nil {
+			outputCols = post.OriginalOutputColumns
 		}
-		res = append(res, fmt.Sprintf("%sOut: %s", prefix, outputColumns))
+		if len(outputCols) > 0 {
+			outputColumns = colListStr(outputCols)
+		}
+		res = append(res, fmt.Sprintf("Out: %s", outputColumns))
 	}
-	if len(post.RenderExprs) > 0 {
+	renderExprs := post.RenderExprs
+	if post.OriginalRenderExprs != nil {
+		renderExprs = post.OriginalRenderExprs
+	}
+	if len(renderExprs) > 0 {
 		var buf bytes.Buffer
-		buf.WriteString(fmt.Sprintf("%sRender: ", prefix))
-		for i, expr := range post.RenderExprs {
+		buf.WriteString("Render: ")
+		for i, expr := range renderExprs {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
@@ -469,17 +507,28 @@ func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 	if post.Limit != 0 || post.Offset != 0 {
 		var buf bytes.Buffer
 		if post.Limit != 0 {
-			fmt.Fprintf(&buf, "%sLimit %d", prefix, post.Limit)
+			fmt.Fprintf(&buf, "Limit %d", post.Limit)
 		}
 		if post.Offset != 0 {
 			if buf.Len() != 0 {
 				buf.WriteByte(' ')
 			}
-			fmt.Fprintf(&buf, "%sOffset %d", prefix, post.Offset)
+			fmt.Fprintf(&buf, "Offset %d", post.Offset)
 		}
 		res = append(res, buf.String())
 	}
 	return res
+}
+
+// summary implements the diagramCellType interface.
+func (c *RestoreDataSpec) summary() (string, []string) {
+	return "RestoreDataSpec", []string{}
+}
+
+// summary implements the diagramCellType interface.
+func (c *SplitAndScatterSpec) summary() (string, []string) {
+	detail := fmt.Sprintf("%d chunks", len(c.Chunks))
+	return "SplitAndScatterSpec", []string{detail}
 }
 
 // summary implements the diagramCellType interface.
@@ -492,8 +541,23 @@ func (c *ReadImportDataSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
-func (s *CSVWriterSpec) summary() (string, []string) {
-	return "CSVWriter", []string{s.Destination}
+func (s *StreamIngestionDataSpec) summary() (string, []string) {
+	return "StreamIngestionData", []string{}
+}
+
+// summary implements the diagramCellType interface.
+func (s *StreamIngestionFrontierSpec) summary() (string, []string) {
+	return "StreamIngestionFrontier", []string{}
+}
+
+// summary implements the diagramCellType interface.
+func (s *IndexBackfillMergerSpec) summary() (string, []string) {
+	return "IndexBackfillMerger", []string{}
+}
+
+// summary implements the diagramCellType interface.
+func (s *ExportSpec) summary() (string, []string) {
+	return "Exporter", []string{s.Destination}
 }
 
 // summary implements the diagramCellType interface.
@@ -583,9 +647,9 @@ type diagramData struct {
 	Processors []diagramProcessor `json:"processors"`
 	Edges      []diagramEdge      `json:"edges"`
 
-	flags   DiagramFlags
-	flowID  FlowID
-	nodeIDs []roachpb.NodeID
+	flags          DiagramFlags
+	flowID         FlowID
+	sqlInstanceIDs []base.SQLInstanceID
 }
 
 var _ FlowDiagram = &diagramData{}
@@ -604,15 +668,15 @@ func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
 	statsMap := ExtractStatsFromSpans(spans, d.flags.MakeDeterministic)
 	for i := range d.Processors {
 		p := &d.Processors[i]
-		nodeID := d.nodeIDs[p.NodeIdx]
-		component := ProcessorComponentID(base.SQLInstanceID(nodeID), d.flowID, p.processorID)
+		sqlInstanceID := d.sqlInstanceIDs[p.NodeIdx]
+		component := ProcessorComponentID(sqlInstanceID, d.flowID, p.processorID)
 		if compStats := statsMap[component]; compStats != nil {
 			p.Core.Details = append(p.Core.Details, compStats.StatsForQueryPlan()...)
 		}
 	}
 	for i := range d.Edges {
-		originNodeID := d.nodeIDs[d.Processors[d.Edges[i].SourceProc].NodeIdx]
-		component := StreamComponentID(base.SQLInstanceID(originNodeID), d.flowID, d.Edges[i].streamID)
+		originSQLInstanceID := d.sqlInstanceIDs[d.Processors[d.Edges[i].SourceProc].NodeIdx]
+		component := StreamComponentID(originSQLInstanceID, d.flowID, d.Edges[i].streamID)
 		if compStats := statsMap[component]; compStats != nil {
 			d.Edges[i].Stats = compStats.StatsForQueryPlan()
 		}
@@ -620,18 +684,18 @@ func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
 }
 
 // generateDiagramData generates the diagram data, given a list of flows (one
-// per node). The nodeIDs list corresponds 1-1 to the flows list.
+// per node). The sqlInstanceIDs list corresponds 1-1 to the flows list.
 func generateDiagramData(
-	sql string, flows []FlowSpec, nodeIDs []roachpb.NodeID, flags DiagramFlags,
+	sql string, flows []FlowSpec, sqlInstanceIDs []base.SQLInstanceID, flags DiagramFlags,
 ) (FlowDiagram, error) {
 	d := &diagramData{
-		SQL:     sql,
-		nodeIDs: nodeIDs,
-		flags:   flags,
+		SQL:            sql,
+		sqlInstanceIDs: sqlInstanceIDs,
+		flags:          flags,
 	}
-	d.NodeNames = make([]string, len(nodeIDs))
+	d.NodeNames = make([]string, len(sqlInstanceIDs))
 	for i := range d.NodeNames {
-		d.NodeNames[i] = nodeIDs[i].String()
+		d.NodeNames[i] = sqlInstanceIDs[i].String()
 	}
 
 	if len(flows) > 0 {
@@ -760,31 +824,31 @@ func generateDiagramData(
 // one FlowSpec per node. The function assumes that StreamIDs are unique across
 // all flows.
 func GeneratePlanDiagram(
-	sql string, flows map[roachpb.NodeID]*FlowSpec, flags DiagramFlags,
+	sql string, flows map[base.SQLInstanceID]*FlowSpec, flags DiagramFlags,
 ) (FlowDiagram, error) {
 	// We sort the flows by node because we want the diagram data to be
 	// deterministic.
-	nodeIDs := make([]roachpb.NodeID, 0, len(flows))
+	sqlInstanceIDs := make([]base.SQLInstanceID, 0, len(flows))
 	for n := range flows {
-		nodeIDs = append(nodeIDs, n)
+		sqlInstanceIDs = append(sqlInstanceIDs, n)
 	}
-	sort.Slice(nodeIDs, func(i, j int) bool {
-		return nodeIDs[i] < nodeIDs[j]
+	sort.Slice(sqlInstanceIDs, func(i, j int) bool {
+		return sqlInstanceIDs[i] < sqlInstanceIDs[j]
 	})
 
-	flowSlice := make([]FlowSpec, len(nodeIDs))
-	for i, n := range nodeIDs {
+	flowSlice := make([]FlowSpec, len(sqlInstanceIDs))
+	for i, n := range sqlInstanceIDs {
 		flowSlice[i] = *flows[n]
 	}
 
-	return generateDiagramData(sql, flowSlice, nodeIDs, flags)
+	return generateDiagramData(sql, flowSlice, sqlInstanceIDs, flags)
 }
 
 // GeneratePlanDiagramURL generates the json data for a flow diagram and a
 // URL which encodes the diagram. There should be one FlowSpec per node. The
 // function assumes that StreamIDs are unique across all flows.
 func GeneratePlanDiagramURL(
-	sql string, flows map[roachpb.NodeID]*FlowSpec, flags DiagramFlags,
+	sql string, flows map[base.SQLInstanceID]*FlowSpec, flags DiagramFlags,
 ) (string, url.URL, error) {
 	d, err := GeneratePlanDiagram(sql, flows, flags)
 	if err != nil {

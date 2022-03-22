@@ -8,9 +8,11 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts",
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlutil",
+        "//pkg/util/hlc",
         "//pkg/util/timeutil",
     ],
 )

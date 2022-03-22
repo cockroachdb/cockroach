@@ -62,7 +62,7 @@ one of the category lists.  If the keyword can ever appear in an identifier
 position, it has to be reserved (which requires that other uses of it, for
 instance as a column name, must be quoted).  Since our new keyword must start
 the statement, it can't be confused for an identifier, so we can safely add it
-to the unreserved keywords list. Search `unreserved_keyword:` at `pkg/sql/parser/sql.y`, and add `| FROBONICATE` as follows:
+to the unreserved keywords list. Search `unreserved_keyword:` at `pkg/sql/parser/sql.y`, and add `| FROBNICATE` as follows:
 
 ```text
 unreserved_keyword:

@@ -1,0 +1,491 @@
+create-replica id=1 trunc-index=20 last-log-entry=29
+----
+
+# The replica hs log entries [21,29] since we have truncated up to 20.
+print-engine-state id=1
+----
+truncated index: 20
+log entries: 21, 22, 23, 24, 25, 26, 27, 28, 29
+durable applied index: 0
+
+# Try to add a pending truncation that will not advance the truncated index.
+# It is not queued.
+add-pending-truncation id=1 first-index=10 trunc-index=20 delta-bytes=-20 sideloaded-bytes=10
+----
+r1.getPendingTruncs
+r1.getTruncatedState
+truncator ranges:
+
+# Pending is empty.
+print-replica-state id=1
+----
+truncIndex: 20
+pending:
+
+# Add a pending truncation that overlaps with the truncated index, but will
+# advance the truncated state. It is queued.
+add-pending-truncation id=1 first-index=16 trunc-index=22 delta-bytes=-20 sideloaded-bytes=10
+----
+r1.getPendingTruncs
+r1.getTruncatedState
+r1.sideloadedBytesIfTruncatedFromTo(21, 23)
+truncator ranges: 1
+
+print-replica-state id=1
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:16 logDeltaBytes:-30 isDeltaTrusted:true}
+
+# The durability advanced, but we haven't updated the RaftAppliedIndex, so the
+# pending truncation cannot be enacted.
+durability-advanced
+----
+acquireReplica(1)
+r1.getTruncatedState
+r1.getPendingTruncs
+r1.getStateLoader
+releaseReplica(1)
+truncator ranges: 1
+
+print-replica-state id=1
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:16 logDeltaBytes:-30 isDeltaTrusted:true}
+
+# Queue another non-existent replica, to be annoying.
+add-replica-to-truncator id=13
+----
+truncator ranges: 1, 13
+
+# Create replica 2 that is similar to replica 1.
+create-replica id=2 trunc-index=20 last-log-entry=34
+----
+
+# Add a pending truncation for replica 2 that does not overlap with the
+# truncated index.
+add-pending-truncation id=2 first-index=21 trunc-index=22 delta-bytes=-20 sideloaded-bytes=10
+----
+r2.getPendingTruncs
+r2.getTruncatedState
+r2.sideloadedBytesIfTruncatedFromTo(21, 23)
+truncator ranges: 1, 2, 13
+
+print-replica-state id=2
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:21 logDeltaBytes:-30 isDeltaTrusted:true}
+
+# Update the RaftAppliedIndex of replica 1 to equal the index of the pending
+# truncation.
+write-raft-applied-index id=1 raft-applied-index=22
+----
+
+# Inform the truncator that durability advanced, which will cause replica 1's
+# pending truncation to be enacted.
+durability-advanced
+----
+acquireReplica(1)
+r1.getTruncatedState
+r1.getPendingTruncs
+r1.getStateLoader
+r1.setTruncatedStateAndSideEffects(..., expectedFirstIndex:16) => trusted:false
+r1.setTruncationDeltaAndTrusted(delta:-30, trusted:false)
+releaseReplica(1)
+acquireReplica(2)
+r2.getTruncatedState
+r2.getPendingTruncs
+r2.getStateLoader
+releaseReplica(2)
+acquireReplica(13)
+truncator ranges: 2
+
+# Replica 1 is truncated.
+print-replica-state id=1
+----
+truncIndex: 22
+pending:
+
+print-engine-state id=1
+----
+truncated index: 22
+log entries: 23, 24, 25, 26, 27, 28, 29
+durable applied index: 22
+
+# Replica 2 is still pending truncation.
+print-replica-state id=2
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:21 logDeltaBytes:-30 isDeltaTrusted:true}
+
+print-engine-state id=2
+----
+truncated index: 20
+log entries: 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34
+durable applied index: 0
+
+# Update the RaftAppliedIndex of replica 2 to below the index of the pending
+# truncation.
+write-raft-applied-index id=2 raft-applied-index=21
+----
+
+# No truncation.
+durability-advanced
+----
+acquireReplica(2)
+r2.getTruncatedState
+r2.getPendingTruncs
+r2.getStateLoader
+releaseReplica(2)
+truncator ranges: 2
+
+print-replica-state id=2
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:21 logDeltaBytes:-30 isDeltaTrusted:true}
+
+print-engine-state id=2
+----
+truncated index: 20
+log entries: 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34
+durable applied index: 21
+
+# Update the RaftAppliedIndex of replica 2 to above the index of the pending
+# truncation.
+write-raft-applied-index id=2 raft-applied-index=24
+----
+
+# Truncation happens, but only up to the pending truncation and not the
+# RaftAppliedIndex.
+durability-advanced
+----
+acquireReplica(2)
+r2.getTruncatedState
+r2.getPendingTruncs
+r2.getStateLoader
+r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:21) => trusted:true
+r2.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
+releaseReplica(2)
+truncator ranges:
+
+print-replica-state id=2
+----
+truncIndex: 22
+pending:
+
+print-engine-state id=2
+----
+truncated index: 22
+log entries: 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34
+durable applied index: 24
+
+# Add a pending truncation for replica 2 that overlaps with the truncated
+# index.
+add-pending-truncation id=2 first-index=21 trunc-index=24 delta-bytes=-20 sideloaded-bytes=10
+----
+r2.getPendingTruncs
+r2.getTruncatedState
+r2.sideloadedBytesIfTruncatedFromTo(23, 25)
+truncator ranges: 2
+
+print-replica-state id=2
+----
+truncIndex: 22
+pending:
+ {RaftTruncatedState:{Index:24 Term:0} expectedFirstIndex:21 logDeltaBytes:-30 isDeltaTrusted:true}
+
+# Enact the truncation. Note the isDeltaTrusted is false.
+durability-advanced
+----
+acquireReplica(2)
+r2.getTruncatedState
+r2.getPendingTruncs
+r2.getStateLoader
+r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:21) => trusted:false
+r2.setTruncationDeltaAndTrusted(delta:-30, trusted:false)
+releaseReplica(2)
+truncator ranges:
+
+print-replica-state id=2
+----
+truncIndex: 24
+pending:
+
+print-engine-state id=2
+----
+truncated index: 24
+log entries: 25, 26, 27, 28, 29, 30, 31, 32, 33, 34
+durable applied index: 24
+
+# Enqueue multiple truncations.
+add-pending-truncation id=2 first-index=25 trunc-index=26 delta-bytes=-20 sideloaded-bytes=10
+----
+r2.getPendingTruncs
+r2.getTruncatedState
+r2.sideloadedBytesIfTruncatedFromTo(25, 27)
+truncator ranges: 2
+
+add-pending-truncation id=2 first-index=27 trunc-index=28 delta-bytes=-20 sideloaded-bytes=10
+----
+r2.getPendingTruncs
+r2.getTruncatedState
+r2.sideloadedBytesIfTruncatedFromTo(27, 29)
+truncator ranges: 2
+
+print-replica-state id=2
+----
+truncIndex: 24
+pending:
+ {RaftTruncatedState:{Index:26 Term:0} expectedFirstIndex:25 logDeltaBytes:-30 isDeltaTrusted:true}
+ {RaftTruncatedState:{Index:28 Term:0} expectedFirstIndex:27 logDeltaBytes:-30 isDeltaTrusted:true}
+
+add-pending-truncation id=2 first-index=28 trunc-index=29 delta-bytes=-20 sideloaded-bytes=10
+----
+r2.getPendingTruncs
+r2.getTruncatedState
+r2.sideloadedBytesIfTruncatedFromTo(29, 30)
+truncator ranges: 2
+
+# The last two pending truncations are merged and since they overlap,
+# isDeltaTrusted=false.
+print-replica-state id=2
+----
+truncIndex: 24
+pending:
+ {RaftTruncatedState:{Index:26 Term:0} expectedFirstIndex:25 logDeltaBytes:-30 isDeltaTrusted:true}
+ {RaftTruncatedState:{Index:29 Term:0} expectedFirstIndex:27 logDeltaBytes:-60 isDeltaTrusted:false}
+
+# Advance RaftAppliedIndex enough to enact the first but not the second.
+write-raft-applied-index id=2 raft-applied-index=27
+----
+
+durability-advanced
+----
+acquireReplica(2)
+r2.getTruncatedState
+r2.getPendingTruncs
+r2.getStateLoader
+r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:25) => trusted:true
+r2.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
+releaseReplica(2)
+truncator ranges: 2
+
+print-replica-state id=2
+----
+truncIndex: 26
+pending:
+ {RaftTruncatedState:{Index:29 Term:0} expectedFirstIndex:27 logDeltaBytes:-60 isDeltaTrusted:false}
+
+print-engine-state id=2
+----
+truncated index: 26
+log entries: 27, 28, 29, 30, 31, 32, 33, 34
+durable applied index: 27
+
+# Enqueue another truncation.
+add-pending-truncation id=2 first-index=30 trunc-index=31 delta-bytes=-20 sideloaded-bytes=10
+----
+r2.getPendingTruncs
+r2.getTruncatedState
+r2.sideloadedBytesIfTruncatedFromTo(30, 32)
+truncator ranges: 2
+
+print-replica-state id=2
+----
+truncIndex: 26
+pending:
+ {RaftTruncatedState:{Index:29 Term:0} expectedFirstIndex:27 logDeltaBytes:-60 isDeltaTrusted:false}
+ {RaftTruncatedState:{Index:31 Term:0} expectedFirstIndex:30 logDeltaBytes:-30 isDeltaTrusted:true}
+
+# Advance RaftAppliedIndex enough to enact both.
+write-raft-applied-index id=2 raft-applied-index=31
+----
+
+# Note that even though the first indices are properly aligned, one of the
+# pending truncations was a merge of two pending truncations which overlapped.
+# So even though the calls to setTruncatedStateAndSideEffects return true, The
+# isDeltaTrusted in one of the calls to setTruncationDeltaAndTrustedLocked is
+# false.
+durability-advanced
+----
+acquireReplica(2)
+r2.getTruncatedState
+r2.getPendingTruncs
+r2.getStateLoader
+r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:27) => trusted:true
+r2.setTruncationDeltaAndTrusted(delta:-60, trusted:false)
+r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:30) => trusted:true
+r2.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
+releaseReplica(2)
+truncator ranges:
+
+print-replica-state id=2
+----
+truncIndex: 31
+pending:
+
+print-engine-state id=2
+----
+truncated index: 31
+log entries: 32, 33, 34
+durable applied index: 31
+
+# Enqueue truncations such that when merging the second and third truncation,
+# there is an error in computing side-loaded bytes.
+add-pending-truncation id=2 first-index=32 trunc-index=32 delta-bytes=-20 sideloaded-bytes=10
+----
+r2.getPendingTruncs
+r2.getTruncatedState
+r2.sideloadedBytesIfTruncatedFromTo(32, 33)
+truncator ranges: 2
+
+add-pending-truncation id=2 first-index=33 trunc-index=33 delta-bytes=-20 sideloaded-bytes=10
+----
+r2.getPendingTruncs
+r2.getTruncatedState
+r2.sideloadedBytesIfTruncatedFromTo(33, 34)
+truncator ranges: 2
+
+print-replica-state id=2
+----
+truncIndex: 31
+pending:
+ {RaftTruncatedState:{Index:32 Term:0} expectedFirstIndex:32 logDeltaBytes:-30 isDeltaTrusted:true}
+ {RaftTruncatedState:{Index:33 Term:0} expectedFirstIndex:33 logDeltaBytes:-30 isDeltaTrusted:true}
+
+add-pending-truncation id=2 first-index=34 trunc-index=34 delta-bytes=-20 sideloaded-bytes=10 sideloaded-err=true
+----
+r2.getPendingTruncs
+r2.getTruncatedState
+r2.sideloadedBytesIfTruncatedFromTo(34, 35)
+truncator ranges: 2
+
+# Because of the error, the delta for the merged truncation is not trusted.
+print-replica-state id=2
+----
+truncIndex: 31
+pending:
+ {RaftTruncatedState:{Index:32 Term:0} expectedFirstIndex:32 logDeltaBytes:-30 isDeltaTrusted:true}
+ {RaftTruncatedState:{Index:34 Term:0} expectedFirstIndex:33 logDeltaBytes:-60 isDeltaTrusted:false}
+
+# Advance RaftAppliedIndex enough to enact all.
+write-raft-applied-index id=2 raft-applied-index=34
+----
+
+durability-advanced
+----
+acquireReplica(2)
+r2.getTruncatedState
+r2.getPendingTruncs
+r2.getStateLoader
+r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:32) => trusted:true
+r2.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
+r2.setTruncatedStateAndSideEffects(..., expectedFirstIndex:33) => trusted:true
+r2.setTruncationDeltaAndTrusted(delta:-60, trusted:false)
+releaseReplica(2)
+truncator ranges:
+
+print-replica-state id=2
+----
+truncIndex: 34
+pending:
+
+print-engine-state id=2
+----
+truncated index: 34
+log entries:
+durable applied index: 34
+
+# Test case to ensure that truncator is reading only flushed engine state when
+# deciding to enact truncations.
+create-replica id=3 trunc-index=20 last-log-entry=29
+----
+
+print-engine-state id=3
+----
+truncated index: 20
+log entries: 21, 22, 23, 24, 25, 26, 27, 28, 29
+durable applied index: 0
+
+# Add two pending truncations.
+add-pending-truncation id=3 first-index=21 trunc-index=22 delta-bytes=-20 sideloaded-bytes=10
+----
+r3.getPendingTruncs
+r3.getTruncatedState
+r3.sideloadedBytesIfTruncatedFromTo(21, 23)
+truncator ranges: 3
+
+add-pending-truncation id=3 first-index=23 trunc-index=24 delta-bytes=-20 sideloaded-bytes=10
+----
+r3.getPendingTruncs
+r3.getTruncatedState
+r3.sideloadedBytesIfTruncatedFromTo(23, 25)
+truncator ranges: 3
+
+print-replica-state id=3
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:21 logDeltaBytes:-30 isDeltaTrusted:true}
+ {RaftTruncatedState:{Index:24 Term:0} expectedFirstIndex:23 logDeltaBytes:-30 isDeltaTrusted:true}
+
+# Move RaftAppliedState enough to allow first truncation, but don't flush that
+# change.
+write-raft-applied-index id=3 raft-applied-index=22 no-flush=true
+----
+
+durability-advanced
+----
+acquireReplica(3)
+r3.getTruncatedState
+r3.getPendingTruncs
+r3.getStateLoader
+releaseReplica(3)
+truncator ranges: 3
+
+# Both truncations are still pending.
+print-replica-state id=3
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:21 logDeltaBytes:-30 isDeltaTrusted:true}
+ {RaftTruncatedState:{Index:24 Term:0} expectedFirstIndex:23 logDeltaBytes:-30 isDeltaTrusted:true}
+
+print-engine-state id=3
+----
+truncated index: 20
+log entries: 21, 22, 23, 24, 25, 26, 27, 28, 29
+durable applied index: 22
+
+# Do the same change to RaftAppliedState, but flush this time (we didn't need
+# to rewrite and flushing would have been sufficient).
+write-raft-applied-index id=3 raft-applied-index=22
+----
+
+durability-advanced
+----
+acquireReplica(3)
+r3.getTruncatedState
+r3.getPendingTruncs
+r3.getStateLoader
+r3.setTruncatedStateAndSideEffects(..., expectedFirstIndex:21) => trusted:true
+r3.setTruncationDeltaAndTrusted(delta:-30, trusted:true)
+releaseReplica(3)
+truncator ranges: 3
+
+# First truncation is enacted.
+print-replica-state id=3
+----
+truncIndex: 22
+pending:
+ {RaftTruncatedState:{Index:24 Term:0} expectedFirstIndex:23 logDeltaBytes:-30 isDeltaTrusted:true}
+
+print-engine-state id=3
+----
+truncated index: 22
+log entries: 23, 24, 25, 26, 27, 28, 29
+durable applied index: 22

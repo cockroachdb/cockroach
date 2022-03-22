@@ -39,6 +39,7 @@ func CountLeases(
 	stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE `,
 		at.AsOfSystemTime()) +
 		strings.Join(whereClauses, " OR ")
+
 	values, err := executor.QueryRowEx(
 		ctx, "count-leases", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},

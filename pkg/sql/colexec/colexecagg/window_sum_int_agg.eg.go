@@ -12,7 +12,7 @@ package colexecagg
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -54,19 +54,12 @@ type sumIntInt16WindowAgg struct {
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg int64
-	// col points to the output vector we are updating.
-	col []int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumIntInt16WindowAgg{}
-
-func (a *sumIntInt16WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *sumIntInt16WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -95,7 +88,7 @@ func (a *sumIntInt16WindowAgg) Compute(
 					a.curAgg = result
 				}
 
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -115,7 +108,7 @@ func (a *sumIntInt16WindowAgg) Compute(
 					a.curAgg = result
 				}
 
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	}
@@ -129,16 +122,17 @@ func (a *sumIntInt16WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
-	if !a.foundNonNullForCurrentGroup {
+	col := a.vec.Int64()
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *sumIntInt16WindowAgg) Reset() {
 	a.curAgg = zeroInt64Value
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type sumIntInt16WindowAggAlloc struct {
@@ -162,24 +156,73 @@ func (a *sumIntInt16WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *sumIntInt16WindowAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	var oldCurAggSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Int16(), vec.Nulls()
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+					result := int64(a.curAgg) - int64(v)
+					if (result < int64(a.curAgg)) != (int64(v) > 0) {
+						colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+					}
+					a.curAgg = result
+				}
+
+				a.numNonNull--
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+					result := int64(a.curAgg) - int64(v)
+					if (result < int64(a.curAgg)) != (int64(v) > 0) {
+						colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+					}
+					a.curAgg = result
+				}
+
+				a.numNonNull--
+			}
+		}
+	}
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
 type sumIntInt32WindowAgg struct {
 	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg int64
-	// col points to the output vector we are updating.
-	col []int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumIntInt32WindowAgg{}
-
-func (a *sumIntInt32WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *sumIntInt32WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -208,7 +251,7 @@ func (a *sumIntInt32WindowAgg) Compute(
 					a.curAgg = result
 				}
 
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -228,7 +271,7 @@ func (a *sumIntInt32WindowAgg) Compute(
 					a.curAgg = result
 				}
 
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	}
@@ -242,16 +285,17 @@ func (a *sumIntInt32WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
-	if !a.foundNonNullForCurrentGroup {
+	col := a.vec.Int64()
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *sumIntInt32WindowAgg) Reset() {
 	a.curAgg = zeroInt64Value
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type sumIntInt32WindowAggAlloc struct {
@@ -275,24 +319,73 @@ func (a *sumIntInt32WindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *sumIntInt32WindowAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	var oldCurAggSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Int32(), vec.Nulls()
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+					result := int64(a.curAgg) - int64(v)
+					if (result < int64(a.curAgg)) != (int64(v) > 0) {
+						colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+					}
+					a.curAgg = result
+				}
+
+				a.numNonNull--
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+					result := int64(a.curAgg) - int64(v)
+					if (result < int64(a.curAgg)) != (int64(v) > 0) {
+						colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+					}
+					a.curAgg = result
+				}
+
+				a.numNonNull--
+			}
+		}
+	}
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
 type sumIntInt64WindowAgg struct {
 	unorderedAggregateFuncBase
 	// curAgg holds the running total, so we can index into the slice once per
 	// group, instead of on each iteration.
 	curAgg int64
-	// col points to the output vector we are updating.
-	col []int64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
+	// numNonNull tracks the number of non-null values we have seen for the group
+	// that is currently being aggregated.
+	numNonNull uint64
 }
 
 var _ AggregateFunc = &sumIntInt64WindowAgg{}
-
-func (a *sumIntInt64WindowAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
 
 func (a *sumIntInt64WindowAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -321,7 +414,7 @@ func (a *sumIntInt64WindowAgg) Compute(
 					a.curAgg = result
 				}
 
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	} else {
@@ -341,7 +434,7 @@ func (a *sumIntInt64WindowAgg) Compute(
 					a.curAgg = result
 				}
 
-				a.foundNonNullForCurrentGroup = true
+				a.numNonNull++
 			}
 		}
 	}
@@ -355,16 +448,17 @@ func (a *sumIntInt64WindowAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should be
 	// null.
-	if !a.foundNonNullForCurrentGroup {
+	col := a.vec.Int64()
+	if a.numNonNull == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col.Set(outputIdx, a.curAgg)
 	}
 }
 
 func (a *sumIntInt64WindowAgg) Reset() {
 	a.curAgg = zeroInt64Value
-	a.foundNonNullForCurrentGroup = false
+	a.numNonNull = 0
 }
 
 type sumIntInt64WindowAggAlloc struct {
@@ -386,4 +480,60 @@ func (a *sumIntInt64WindowAggAlloc) newAggFunc() AggregateFunc {
 	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
+}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go).
+func (a *sumIntInt64WindowAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	var oldCurAggSize uintptr
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.Int64(), vec.Nulls()
+	_, _ = col.Get(endIdx-1), col.Get(startIdx)
+	if nulls.MaybeHasNulls() {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = nulls.NullAt(i)
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+					result := int64(a.curAgg) - int64(v)
+					if (result < int64(a.curAgg)) != (int64(v) > 0) {
+						colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+					}
+					a.curAgg = result
+				}
+
+				a.numNonNull--
+			}
+		}
+	} else {
+		for i := startIdx; i < endIdx; i++ {
+
+			var isNull bool
+			isNull = false
+			if !isNull {
+				//gcassert:bce
+				v := col.Get(i)
+
+				{
+					result := int64(a.curAgg) - int64(v)
+					if (result < int64(a.curAgg)) != (int64(v) > 0) {
+						colexecerror.ExpectedError(tree.ErrIntOutOfRange)
+					}
+					a.curAgg = result
+				}
+
+				a.numNonNull--
+			}
+		}
+	}
+	var newCurAggSize uintptr
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }

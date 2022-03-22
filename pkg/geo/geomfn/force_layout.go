@@ -12,7 +12,8 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -115,7 +116,7 @@ func forceLayout(t geom.T, layout geom.Layout, defaultZ float64, defaultM float6
 			endss,
 		).SetSRID(t.SRID()), nil
 	default:
-		return nil, errors.Newf("unknown geom.T type: %T", t)
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unknown geom.T type: %T", t)
 	}
 }
 

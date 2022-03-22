@@ -197,8 +197,8 @@ func TestLatencies(t *testing.T) {
 	for i := 0; i < 11; i++ {
 		monitor.UpdateOffset(context.Background(), emptyKey, RemoteOffset{}, 0)
 	}
-	if l, ok := monitor.mu.latenciesNanos[emptyKey]; ok {
-		t.Errorf("expected no latency measurement for %q, got %v", emptyKey, l.Value())
+	if l, ok := monitor.mu.latencyInfos[emptyKey]; ok {
+		t.Errorf("expected no latency measurement for %q, got %v", emptyKey, l.avgNanos.Value())
 	}
 
 	testCases := []struct {
@@ -222,6 +222,32 @@ func TestLatencies(t *testing.T) {
 		}
 		if val, ok := monitor.Latency(key); !ok || val != tc.expectedAvg {
 			t.Errorf("%q: expected latency %d, got %d", key, tc.expectedAvg, val)
+		}
+	}
+}
+
+func TestResettingMaxTrigger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var tr resettingMaxTrigger
+	testdata := []struct {
+		expected         bool
+		value            float64
+		resetThreshold   float64
+		triggerThreshold float64
+	}{
+		{false, 5, 10, 20},
+		{false, 15, 10, 20},
+		{true, 25, 10, 20},
+		{false, 25, 10, 20},
+		{false, 15, 10, 20},
+		{false, 25, 10, 20},
+		{false, 5, 10, 20},
+		{true, 25, 10, 20},
+	}
+	for i, td := range testdata {
+		if tr.triggers(td.value, td.resetThreshold, td.triggerThreshold) != td.expected {
+			t.Errorf("Failed in iteration %v: %v", i, td)
 		}
 	}
 }

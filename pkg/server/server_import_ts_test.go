@@ -12,6 +12,7 @@ package server_test
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,6 +41,9 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 	ctx := context.Background()
 
 	path := filepath.Join(t.TempDir(), "dump.raw")
+	require.NoError(t,
+		ioutil.WriteFile(path+".yaml", []byte("1: 1"), 0644),
+	)
 
 	var bytesDumped int64
 	func() {
@@ -58,7 +62,8 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 	args.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
 	ts.TimeseriesStorageEnabled.Override(ctx, &args.ServerArgs.Settings.SV, false)
 	args.ServerArgs.Knobs.Server = &server.TestingKnobs{
-		ImportTimeseriesFile: path,
+		ImportTimeseriesFile:        path,
+		ImportTimeseriesMappingFile: path + ".yaml",
 	}
 	srv := testcluster.StartTestCluster(t, 1, args)
 	defer srv.Stopper().Stop(ctx)

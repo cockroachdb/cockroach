@@ -254,24 +254,34 @@ reliably that no counter was present.
 
 Example single-line unstructured entry:
 
-     I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23  started with engine type ‹2›
+~~~
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
+~~~
 
 Example multi-line unstructured entry:
 
-     I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40  node startup completed:
-     I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40 +CockroachDB node starting at 2021-01-16 21:49 (took 0.0s)
+~~~
+I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40  node startup completed:
+I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [-] 40 +CockroachDB node starting at 2021-01-16 21:49 (took 0.0s)
+~~~
 
 Example structured entry:
 
-     I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
+~~~
+I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [-] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
+~~~
 
 Example long entries broken up into multiple lines:
 
-     I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa....
-     I210116 21:49:17.073282 14 server/node.go:464 ⋮ [] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+~~~
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa....
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+~~~
 
-     I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 ={"Timestamp":1610833757080706620,"EventTy...
-     I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [] 32 |pe":"node_restart"}
+~~~
+I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [-] 32 ={"Timestamp":1610833757080706620,"EventTy...
+I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [-] 32 |pe":"node_restart"}
+~~~
 
 ### Backward-compatibility notes
 
@@ -322,6 +332,7 @@ Each entry contains at least the following fields:
 | `line` | The line number where the event was emitted in the source. |
 | `redactable` | Whether the payload is redactable (see below for details). |
 | `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+| `version` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
@@ -379,6 +390,7 @@ Each entry contains at least the following fields:
 | `l` | The line number where the event was emitted in the source. |
 | `r` | Whether the payload is redactable (see below for details). |
 | `t` | The timestamp at which the event was emitted on the logging channel. |
+| `v` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
@@ -437,6 +449,7 @@ Each entry contains at least the following fields:
 | `line` | The line number where the event was emitted in the source. |
 | `redactable` | Whether the payload is redactable (see below for details). |
 | `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+| `version` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
@@ -495,6 +508,7 @@ Each entry contains at least the following fields:
 | `l` | The line number where the event was emitted in the source. |
 | `r` | Whether the payload is redactable (see below for details). |
 | `t` | The timestamp at which the event was emitted on the logging channel. |
+| `v` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,

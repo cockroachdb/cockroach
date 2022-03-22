@@ -52,6 +52,11 @@ const (
 type hashJoiner struct {
 	joinerBase
 
+	// eqCols contains the indices of the columns that are constrained to be
+	// equal. Specifically column eqCols[0][i] on the left side must match the
+	// column eqCols[1][i] on the right side.
+	eqCols [2][]uint32
+
 	runningState hashJoinerState
 
 	diskMonitor *mon.BytesMonitor
@@ -82,7 +87,7 @@ type hashJoiner struct {
 	}
 
 	// Context cancellation checker.
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 }
 
 var _ execinfra.Processor = &hashJoiner{}
@@ -105,6 +110,10 @@ func newHashJoiner(
 		leftSource:   leftSource,
 		rightSource:  rightSource,
 		nullEquality: spec.Type.IsSetOpJoin(),
+		eqCols: [2][]uint32{
+			leftSide:  spec.LeftEqColumns,
+			rightSide: spec.RightEqColumns,
+		},
 	}
 
 	if err := h.joinerBase.init(
@@ -115,8 +124,6 @@ func newHashJoiner(
 		rightSource.OutputTypes(),
 		spec.Type,
 		spec.OnExpr,
-		spec.LeftEqColumns,
-		spec.RightEqColumns,
 		false, /* outputContinuationColumn */
 		post,
 		output,
@@ -161,7 +168,7 @@ func (h *hashJoiner) Start(ctx context.Context) {
 	ctx = h.StartInternal(ctx, hashJoinerProcName)
 	h.leftSource.Start(ctx)
 	h.rightSource.Start(ctx)
-	h.cancelChecker = cancelchecker.NewCancelChecker(ctx)
+	h.cancelChecker.Reset(ctx)
 	h.runningState = hjBuilding
 }
 

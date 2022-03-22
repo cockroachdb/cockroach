@@ -431,7 +431,7 @@ func makeNullTestDatum(count int) []tree.Datum {
 }
 
 func makeIntTestDatum(count int) []tree.Datum {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]tree.Datum, count)
 	for i := range vals {
@@ -441,7 +441,7 @@ func makeIntTestDatum(count int) []tree.Datum {
 }
 
 func makeBitTestDatum(count int) []tree.Datum {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	// Compute randWidth outside the loop so that all bit arrays are the same
 	// length. Generate widths in the range [0, 64].
@@ -459,7 +459,7 @@ func makeBitTestDatum(count int) []tree.Datum {
 // returned. Use this to ensure proper partial null
 // handling of aggregations.
 func makeTestWithNullDatum(count int, maker func(count int) []tree.Datum) []tree.Datum {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	values := maker(count)
 	values[rng.Int()%count] = tree.DNull
 	return values
@@ -471,7 +471,7 @@ func makeTestWithNullDatum(count int, maker func(count int) []tree.Datum) []tree
 // test the implementation of aggregates that can use an int64 to
 // optimize computations small decimal values.
 func makeSmallIntTestDatum(count int) []tree.Datum {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]tree.Datum, count)
 	for i := range vals {
@@ -485,7 +485,7 @@ func makeSmallIntTestDatum(count int) []tree.Datum {
 }
 
 func makeFloatTestDatum(count int) []tree.Datum {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]tree.Datum, count)
 	for i := range vals {
@@ -495,7 +495,7 @@ func makeFloatTestDatum(count int) []tree.Datum {
 }
 
 func makeDecimalTestDatum(count int) []tree.Datum {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]tree.Datum, count)
 	for i := range vals {
@@ -509,7 +509,7 @@ func makeDecimalTestDatum(count int) []tree.Datum {
 }
 
 func makeBoolTestDatum(count int) []tree.Datum {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]tree.Datum, count)
 	for i := range vals {
@@ -519,7 +519,7 @@ func makeBoolTestDatum(count int) []tree.Datum {
 }
 
 func makeIntervalTestDatum(count int) []tree.Datum {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]tree.Datum, count)
 	for i := range vals {

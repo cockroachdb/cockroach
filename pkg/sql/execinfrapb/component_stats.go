@@ -151,6 +151,20 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.KV.BytesRead.HasValue() {
 		fn("KV bytes read", humanize.IBytes(s.KV.BytesRead.Value()))
 	}
+	if s.KV.NumInterfaceSteps.HasValue() {
+		fn("MVCC step count (ext/int)",
+			fmt.Sprintf("%s/%s",
+				humanizeutil.Count(s.KV.NumInterfaceSteps.Value()),
+				humanizeutil.Count(s.KV.NumInternalSteps.Value())),
+		)
+	}
+	if s.KV.NumInterfaceSeeks.HasValue() {
+		fn("MVCC seek count (ext/int)",
+			fmt.Sprintf("%s/%s",
+				humanizeutil.Count(s.KV.NumInterfaceSeeks.Value()),
+				humanizeutil.Count(s.KV.NumInternalSeeks.Value())),
+		)
+	}
 
 	// Exec stats.
 	if s.Exec.ExecTime.HasValue() {
@@ -216,6 +230,18 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	}
 	if !result.KV.ContentionTime.HasValue() {
 		result.KV.ContentionTime = other.KV.ContentionTime
+	}
+	if !result.KV.NumInterfaceSteps.HasValue() {
+		result.KV.NumInterfaceSteps = other.KV.NumInterfaceSteps
+	}
+	if !result.KV.NumInternalSteps.HasValue() {
+		result.KV.NumInternalSteps = other.KV.NumInternalSteps
+	}
+	if !result.KV.NumInterfaceSeeks.HasValue() {
+		result.KV.NumInterfaceSeeks = other.KV.NumInterfaceSeeks
+	}
+	if !result.KV.NumInternalSeeks.HasValue() {
+		result.KV.NumInternalSeeks = other.KV.NumInternalSeeks
 	}
 	if !result.KV.TuplesRead.HasValue() {
 		result.KV.TuplesRead = other.KV.TuplesRead
@@ -306,6 +332,10 @@ func (s *ComponentStats) MakeDeterministic() {
 	// KV.
 	timeVal(&s.KV.KVTime)
 	timeVal(&s.KV.ContentionTime)
+	resetUint(&s.KV.NumInterfaceSteps)
+	resetUint(&s.KV.NumInternalSteps)
+	resetUint(&s.KV.NumInterfaceSeeks)
+	resetUint(&s.KV.NumInternalSeeks)
 	if s.KV.BytesRead.HasValue() {
 		// BytesRead is overridden to a useful value for tests.
 		s.KV.BytesRead.Set(8 * s.KV.TuplesRead.Value())

@@ -43,7 +43,7 @@ type vecToDatumWidthTmplInfo struct {
 
 // AssignConverted returns a string that performs a conversion of the element
 // sourceElem and assigns the result to the newly declared targetElem.
-// datumAlloc is the name of *rowenc.DatumAlloc struct that can be used to
+// datumAlloc is the name of *tree.DatumAlloc struct that can be used to
 // allocate new datums.
 func (i vecToDatumWidthTmplInfo) AssignConverted(targetElem, sourceElem, datumAlloc string) string {
 	return fmt.Sprintf(i.ConversionTmpl, targetElem, sourceElem, datumAlloc)
@@ -67,17 +67,16 @@ var vecToDatumConversionTmpls = map[types.Family]string{
 	types.BoolFamily: `%[1]s := tree.MakeDBool(tree.DBool(%[2]s))`,
 	// Note that currently, regardless of the integer's width, we always return
 	// INT8, so there is a single conversion template for IntFamily.
-	types.IntFamily:   `%[1]s := %[3]s.NewDInt(tree.DInt(%[2]s))`,
-	types.FloatFamily: `%[1]s := %[3]s.NewDFloat(tree.DFloat(%[2]s))`,
-	types.DecimalFamily: `  %[1]s := %[3]s.NewDDecimal(tree.DDecimal{Decimal: %[2]s})
-							// Clear the Coeff so that the Set below allocates a new slice for the
-							// Coeff.abs field.
-							%[1]s.Coeff = big.Int{}
-							%[1]s.Coeff.Set(&%[2]s.Coeff)`,
-	types.DateFamily: `%[1]s := %[3]s.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(%[2]s)})`,
+	types.IntFamily:     `%[1]s := %[3]s.NewDInt(tree.DInt(%[2]s))`,
+	types.FloatFamily:   `%[1]s := %[3]s.NewDFloat(tree.DFloat(%[2]s))`,
+	types.DecimalFamily: `%[1]s := %[3]s.NewDDecimal(tree.DDecimal{Decimal: %[2]s})`,
+	types.DateFamily:    `%[1]s := %[3]s.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(%[2]s)})`,
 	types.BytesFamily: `// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
 						%[1]s := %[3]s.NewDBytes(tree.DBytes(%[2]s))`,
+	types.EncodedKeyFamily: `// Note that there is no need for a copy since DEncodedKey uses a string
+						// as underlying storage, which will perform the copy for us.
+						%[1]s := %[3]s.NewDEncodedKey(tree.DEncodedKey(%[2]s))`,
 	types.JsonFamily: `
             // The following operation deliberately copies the input JSON
             // bytes, since FromEncoding is lazy and keeps a handle on the bytes
@@ -128,8 +127,8 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 	// the template explicitly, so it is omitted from this slice.
 	optimizedTypeFamilies := []types.Family{
 		types.BoolFamily, types.IntFamily, types.FloatFamily, types.DecimalFamily,
-		types.DateFamily, types.BytesFamily, types.JsonFamily, types.UuidFamily,
-		types.TimestampFamily, types.TimestampTZFamily, types.IntervalFamily,
+		types.DateFamily, types.BytesFamily, types.EncodedKeyFamily, types.JsonFamily,
+		types.UuidFamily, types.TimestampFamily, types.TimestampTZFamily, types.IntervalFamily,
 	}
 	for _, typeFamily := range optimizedTypeFamilies {
 		canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)

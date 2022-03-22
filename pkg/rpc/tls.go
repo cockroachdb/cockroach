@@ -73,6 +73,9 @@ type SecurityContext struct {
 func MakeSecurityContext(
 	cfg *base.Config, tlsSettings security.TLSSettings, tenID roachpb.TenantID,
 ) SecurityContext {
+	if tenID.ToUint64() == 0 {
+		panic(errors.AssertionFailedf("programming error: tenant ID not defined"))
+	}
 	return SecurityContext{
 		CertsLocator: security.MakeCertsLocator(cfg.SSLCertsDir),
 		TLSSettings:  tlsSettings,
@@ -101,12 +104,14 @@ func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManage
 				// If we know there should be certificates (we're in secure mode)
 				// but there aren't any, this likely indicates that the certs dir
 				// was misconfigured.
-				ctx.lazy.certificateManager.err = errors.New("no certificates found; does certs dir exist?")
+				ctx.lazy.certificateManager.err = errNoCertificatesFound
 			}
 		}
 	})
 	return ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err
 }
+
+var errNoCertificatesFound = errors.New("no certificates found; does certs dir exist?")
 
 // GetServerTLSConfig returns the server TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
@@ -151,13 +156,13 @@ func (ctx *SecurityContext) GetClientTLSConfig() (*tls.Config, error) {
 	return tlsCfg, nil
 }
 
-// GetTenantClientTLSConfig returns the client TLS config for the tenant, provided
+// GetTenantTLSConfig returns the client TLS config for the tenant, provided
 // the SecurityContext operates on behalf of a secondary tenant (i.e. not the
 // system tenant).
 //
 // If Insecure is true, return a nil config, otherwise retrieves the client
 // certificate for the configured tenant from the cert manager.
-func (ctx *SecurityContext) GetTenantClientTLSConfig() (*tls.Config, error) {
+func (ctx *SecurityContext) GetTenantTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.config.Insecure {
 		return nil, nil
@@ -168,7 +173,7 @@ func (ctx *SecurityContext) GetTenantClientTLSConfig() (*tls.Config, error) {
 		return nil, wrapError(err)
 	}
 
-	tlsCfg, err := cm.GetTenantClientTLSConfig()
+	tlsCfg, err := cm.GetTenantTLSConfig()
 	if err != nil {
 		return nil, wrapError(err)
 	}
@@ -232,15 +237,6 @@ func (ctx *SecurityContext) GetHTTPClient() (http.Client, error) {
 	})
 
 	return ctx.lazy.httpClient.httpClient, ctx.lazy.httpClient.err
-}
-
-// getClientCertPaths returns the paths to the client cert and key. This uses
-// the node certs for the NodeUser, and the actual client certs for all others.
-func (ctx *SecurityContext) getClientCertPaths(user security.SQLUsername) (string, string) {
-	if user.IsNodeUser() {
-		return ctx.NodeCertPath(), ctx.NodeKeyPath()
-	}
-	return ctx.ClientCertPath(user), ctx.ClientKeyPath(user)
 }
 
 // CheckCertificateAddrs validates the addresses inside the configured

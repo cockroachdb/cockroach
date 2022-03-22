@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build !windows
-// +build !plan9
+//go:build !windows && !plan9
+// +build !windows,!plan9
 
 package sysutil
 
@@ -23,15 +23,7 @@ import (
 )
 
 func TestGetFileACLInfo(t *testing.T) {
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	exampleData := []byte("example")
 

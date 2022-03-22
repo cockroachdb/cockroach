@@ -1,5 +1,14 @@
+exports_files(["nogo_config.json"])
+
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load(":lint.bzl", "lint_binary")
+
+genrule(
+    name = "test_stamping",
+    outs = ["test_stamping.txt"],
+    cmd = """cat bazel-out/stable-status.txt | grep STABLE_BUILD > $@""",
+    stamp = True,
+)
 
 lint_binary(
     name = "lint",

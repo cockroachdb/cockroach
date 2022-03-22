@@ -1,0 +1,7 @@
+create-type
+CREATE TYPE defaultdb.greeting AS ENUM('hello', 'hi')
+----
+
+unimplemented
+DROP TYPE defaultdb.greeting CASCADE
+----

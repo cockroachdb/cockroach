@@ -36,7 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/pkg/browser"
 )
@@ -174,11 +175,11 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if match := connRE.FindStringSubmatch(line); match != nil {
-			config, err := pgx.ParseURI(match[1])
+			config, err := pgx.ParseConfig(match[1])
 			if err != nil {
 				return errors.Wrap(err, "parse uri")
 			}
-			pgdb, err = pgx.Connect(config)
+			pgdb, err = pgx.ConnectConfig(ctx, config)
 			if err != nil {
 				return errors.Wrap(err, "connect")
 			}
@@ -203,8 +204,10 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 	fmt.Println("worker started")
 
 	initSQL := sqlsmith.Setups[sqlsmith.RandSetup(rnd)](rnd)
-	if _, err := pgdb.ExecEx(ctx, initSQL, nil); err != nil {
-		return errors.Wrap(err, "init")
+	for _, stmt := range initSQL {
+		if _, err := pgdb.Exec(ctx, stmt); err != nil {
+			return errors.Wrap(err, "init")
+		}
 	}
 
 	setting := sqlsmith.Settings[sqlsmith.RandSetting(rnd)](rnd)
@@ -226,7 +229,7 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 		stmt := smither.Generate()
 		done := make(chan struct{}, 1)
 		go func() {
-			_, err = pgdb.ExecEx(ctx, stmt, nil)
+			_, err = pgdb.Exec(ctx, stmt)
 			done <- struct{}{}
 		}()
 		// Timeout slow statements by returning, which will cancel the
@@ -287,9 +290,9 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 // failure de-duplicates, reduces, and files errors. It generally returns nil
 // indicating that this was successfully filed and we should continue looking
 // for errors.
-func (s WorkerSetup) failure(ctx context.Context, initSQL, stmt string, err error) error {
+func (s WorkerSetup) failure(ctx context.Context, initSQL []string, stmt string, err error) error {
 	var message, stack string
-	var pqerr pgx.PgError
+	var pqerr pgconn.PgError
 	if errors.As(err, &pqerr) {
 		stack = pqerr.Detail
 		message = pqerr.Message
@@ -314,7 +317,7 @@ func (s WorkerSetup) failure(ctx context.Context, initSQL, stmt string, err erro
 		return nil
 	}
 	fmt.Println("found", message)
-	input := fmt.Sprintf("%s\n\n%s;", initSQL, stmt)
+	input := fmt.Sprintf("%s\n\n%s;", strings.Join(initSQL, "\n"), stmt)
 	fmt.Printf("SQL:\n%s\n\n", input)
 
 	// Run reducer.

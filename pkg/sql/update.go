@@ -41,6 +41,8 @@ type updateNode struct {
 	run updateRun
 }
 
+var _ mutationPlanNode = &updateNode{}
+
 // updateRun contains the run-time state of updateNode during local execution.
 type updateRun struct {
 	tu         tableUpdater
@@ -128,7 +130,7 @@ func (u *updateNode) startExec(params runParams) error {
 			colinfo.ColTypeInfoFromResCols(u.columns),
 		)
 	}
-	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
+	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
@@ -190,6 +192,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
+		u.run.tu.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 		if err := u.run.tu.finalize(params.ctx); err != nil {
 			return false, err
 		}
@@ -198,10 +201,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(
-		u.run.tu.tableDesc().GetID(),
-		u.run.tu.lastBatchSize,
-	)
+	params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), u.run.tu.lastBatchSize)
 
 	return u.run.tu.lastBatchSize > 0, nil
 }
@@ -288,7 +288,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	if !u.run.checkOrds.Empty() {
 		checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols)+u.run.numPassthrough:]
 		if err := checkMutationInput(
-			params.ctx, &params.p.semaCtx, u.run.tu.tableDesc(), u.run.checkOrds, checkVals,
+			params.ctx, &params.p.semaCtx, params.p.SessionData(), u.run.tu.tableDesc(), u.run.checkOrds, checkVals,
 		); err != nil {
 			return err
 		}
@@ -317,10 +317,9 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 	// If result rows need to be accumulated, do it.
 	if u.run.tu.rows != nil {
-		// The new values can include all columns, the construction of the
-		// values has used execinfra.ScanVisibilityPublicAndNotPublic so the
-		// values may contain additional columns for every newly added column
-		// not yet visible. We do not want them to be available for RETURNING.
+		// The new values can include all columns,  so the values may contain
+		// additional columns for every newly added column not yet visible. We do
+		// not want them to be available for RETURNING.
 		//
 		// MakeUpdater guarantees that the first columns of the new values
 		// are those specified u.columns.
@@ -371,6 +370,10 @@ func (u *updateNode) Close(ctx context.Context) {
 	updateNodePool.Put(u)
 }
 
+func (u *updateNode) rowsWritten() int64 {
+	return u.run.tu.rowsWritten
+}
+
 func (u *updateNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }
@@ -406,28 +409,14 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 	return colinfo.CheckDatumTypeFitsColumnType(ss.column, typ)
 }
 
-// enforceLocalColumnConstraints asserts the column constraints that
-// do not require data validation from other sources than the row data
-// itself. This includes:
-// - rejecting null values in non-nullable columns;
-// - checking width constraints from the column type;
-// - truncating results to the requested precision (not width).
-// Note: the second point is what distinguishes this operation
-// from a regular SQL cast -- here widths are checked, not
-// used to truncate the value silently.
-//
-// The row buffer is modified in-place with the result of the
-// checks.
+// enforceLocalColumnConstraints asserts the column constraints that do not
+// require data validation from other sources than the row data itself. This
+// currently only includes checking for null values in non-nullable columns.
 func enforceLocalColumnConstraints(row tree.Datums, cols []catalog.Column) error {
 	for i, col := range cols {
 		if !col.IsNullable() && row[i] == tree.DNull {
 			return sqlerrors.NewNonNullViolationError(col.GetName())
 		}
-		outVal, err := tree.AdjustValueToType(col.GetType(), row[i])
-		if err != nil {
-			return err
-		}
-		row[i] = outVal
 	}
 	return nil
 }

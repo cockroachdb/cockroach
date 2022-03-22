@@ -7,6 +7,7 @@ go_library(
         "distinct.go",
         "fn_op.go",
         "ordinality.go",
+        "overloads_bin_util.go",
         "simple_project.go",
         ":gen-exec",  # keep
     ],
@@ -33,7 +34,7 @@ go_library(
         "//pkg/util/json",  # keep
         "//pkg/util/log",
         "//pkg/util/uuid",  # keep
-        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",  # keep
     ],
@@ -50,6 +51,7 @@ go_test(
         "ordinality_test.go",
         "simple_project_test.go",
     ],
+    tags = ["no-remote"],
     deps = [
         ":colexecbase",
         "//pkg/col/coldata",
@@ -76,6 +78,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//require",
     ],
 )

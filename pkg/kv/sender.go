@@ -112,12 +112,12 @@ type TxnSender interface {
 	//
 	// If AnyTxnStatus is passed, then this function never returns
 	// errors.
-	GetLeafTxnInputState(context.Context, TxnStatusOpt) (roachpb.LeafTxnInputState, error)
+	GetLeafTxnInputState(context.Context, TxnStatusOpt) (*roachpb.LeafTxnInputState, error)
 
 	// GetLeafTxnFinalState retrieves the final state of a LeafTxn
 	// necessary and sufficient to update a RootTxn with progress made
 	// on its behalf by the LeafTxn.
-	GetLeafTxnFinalState(context.Context, TxnStatusOpt) (roachpb.LeafTxnFinalState, error)
+	GetLeafTxnFinalState(context.Context, TxnStatusOpt) (*roachpb.LeafTxnFinalState, error)
 
 	// UpdateRootWithLeafFinalState updates a RootTxn using the final
 	// state of a LeafTxn.
@@ -260,6 +260,9 @@ type TxnSender interface {
 	// Epoch returns the txn's epoch.
 	Epoch() enginepb.TxnEpoch
 
+	// IsLocking returns whether the transaction has begun acquiring locks.
+	IsLocking() bool
+
 	// PrepareRetryableError generates a
 	// TransactionRetryWithProtoRefreshError with a payload initialized
 	// from this txn.
@@ -281,6 +284,9 @@ type TxnSender interface {
 	//
 	// The method is idempotent.
 	Step(context.Context) error
+
+	// SetReadSeqNum sets the read sequence point for the current transaction.
+	SetReadSeqNum(seq enginepb.TxnSeq) error
 
 	// ConfigureStepping sets the sequencing point behavior.
 	//
@@ -321,6 +327,15 @@ type TxnSender interface {
 	// violations where a future, causally dependent transaction may fail to
 	// observe the writes performed by this transaction.
 	DeferCommitWait(ctx context.Context) func(context.Context) error
+
+	// GetTxnRetryableErr returns an error if the TxnSender had a retryable error,
+	// otherwise nil. In this state Send() always fails with the same retryable
+	// error. ClearTxnRetryableErr can be called to clear this error and make
+	// TxnSender usable again.
+	GetTxnRetryableErr(ctx context.Context) *roachpb.TransactionRetryWithProtoRefreshError
+
+	// ClearTxnRetryableErr clears the retryable error, if any.
+	ClearTxnRetryableErr(ctx context.Context)
 }
 
 // SteppingMode is the argument type to ConfigureStepping.
@@ -426,8 +441,23 @@ func (f NonTransactionalFactoryFunc) NonTransactionalSender() Sender {
 func SendWrappedWith(
 	ctx context.Context, sender Sender, h roachpb.Header, args roachpb.Request,
 ) (roachpb.Response, *roachpb.Error) {
+	return SendWrappedWithAdmission(ctx, sender, h, roachpb.AdmissionHeader{}, args)
+}
+
+// SendWrappedWithAdmission is a convenience function which wraps the request
+// in a batch and sends it via the provided Sender and headers. It returns the
+// unwrapped response or an error. It's valid to pass a `nil` context; an
+// empty one is used in that case.
+func SendWrappedWithAdmission(
+	ctx context.Context,
+	sender Sender,
+	h roachpb.Header,
+	ah roachpb.AdmissionHeader,
+	args roachpb.Request,
+) (roachpb.Response, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.Header = h
+	ba.AdmissionHeader = ah
 	ba.Add(args)
 
 	br, pErr := sender.Send(ctx, ba)

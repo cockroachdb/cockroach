@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Modified from importccl/read_import_pgdump.go.
+// Modified from importer/read_import_pgdump.go.
 
 // Stream streams an io.Reader into tree.Statements.
 type Stream struct {

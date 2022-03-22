@@ -28,7 +28,7 @@ New expression 1 of 1:
    ├── columns: a:1(int!null) b:2(int!null)
    ├── key: (1)
    ├── fd: ()-->(2)
-   ├── scan ab@secondary
+   ├── scan ab@ab_b_idx
    │    ├── columns: a:1(int!null) b:2(int)
    │    ├── key: (1)
    │    └── fd: (1)-->(2)
@@ -74,7 +74,7 @@ Source expression:
              └── const: 1 [type=int]
 
 New expression 1 of 1:
-  scan ab@secondary
+  scan ab@ab_b_idx
    ├── columns: a:1(int!null) b:2(int!null)
    ├── constraint: /2/1: [/1 - /1]
    ├── key: (1)

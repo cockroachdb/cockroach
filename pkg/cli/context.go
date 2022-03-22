@@ -29,11 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -67,6 +68,9 @@ func initCLIDefaults() {
 	setProxyContextDefaults()
 	setTestDirectorySvrContextDefaults()
 	setUserfileContextDefaults()
+	setCertContextDefaults()
+	setDebugRecoverContextDefaults()
+	setDebugSendKVBatchContextDefaults()
 
 	initPreFlagsDefaults()
 
@@ -90,7 +94,7 @@ func clearFlagChanges(cmd *cobra.Command) {
 // See below for defaults.
 var serverCfg = func() server.Config {
 	st := cluster.MakeClusterSettings()
-	settings.SetCanonicalValuesContainer(&st.SV)
+	logcrash.SetGlobalSettings(&st.SV)
 
 	return server.MakeConfig(context.Background(), st)
 }()
@@ -125,6 +129,16 @@ func setServerContextDefaults() {
 	if bytes, _ := memoryPercentResolver(25); bytes != 0 {
 		serverCfg.SQLConfig.MemoryPoolSize = bytes
 	}
+
+	// Attempt to set serverCfg.TimeSeriesServerConfig.QueryMemoryMax to
+	// the default (64MiB) or 1% of system memory, whichever is greater.
+	if bytes, _ := memoryPercentResolver(1); bytes != 0 {
+		if bytes > ts.DefaultQueryMemoryMax {
+			serverCfg.TimeSeriesServerConfig.QueryMemoryMax = bytes
+		} else {
+			serverCfg.TimeSeriesServerConfig.QueryMemoryMax = ts.DefaultQueryMemoryMax
+		}
+	}
 }
 
 // baseCfg points to the base.Config inside serverCfg.
@@ -150,6 +164,8 @@ type cliContext struct {
 	clientConnPort string
 
 	// certPrincipalMap is the cert-principal:db-principal map.
+	// This configuration flag is only used for client commands that establish
+	// a connection to a server.
 	certPrincipalMap []string
 
 	// for CLI commands that use the SQL interface, these parameters
@@ -233,6 +249,35 @@ func setSQLConnContextDefaults() {
 	sqlConnCtx.DebugMode = false
 	sqlConnCtx.Echo = false
 	sqlConnCtx.EnableServerExecutionTimings = false
+}
+
+// certCtx captures the command-line parameters of the various `cert` commands.
+// See below for defaults.
+var certCtx struct {
+	certsDir              string
+	caKey                 string
+	keySize               int
+	caCertificateLifetime time.Duration
+	certificateLifetime   time.Duration
+	allowCAKeyReuse       bool
+	overwriteFiles        bool
+	generatePKCS8Key      bool
+	// certPrincipalMap is the cert-principal:db-principal map.
+	// This configuration flag is only used for 'cert' commands
+	// that generate certificates.
+	certPrincipalMap []string
+}
+
+func setCertContextDefaults() {
+	certCtx.certsDir = base.DefaultCertsDirectory
+	certCtx.caKey = ""
+	certCtx.keySize = defaultKeySize
+	certCtx.caCertificateLifetime = defaultCALifetime
+	certCtx.certificateLifetime = defaultCertLifetime
+	certCtx.allowCAKeyReuse = false
+	certCtx.overwriteFiles = false
+	certCtx.generatePKCS8Key = false
+	certCtx.certPrincipalMap = nil
 }
 
 var sqlExecCtx = clisqlexec.Context{
@@ -460,6 +505,9 @@ var quitCtx struct {
 	// drainWait is the amount of time to wait for the server
 	// to drain. Set to 0 to disable a timeout (let the server decide).
 	drainWait time.Duration
+	// nodeDrainSelf indicates that the command should target
+	// the node we're connected to (this is the default behavior).
+	nodeDrainSelf bool
 }
 
 // setQuitContextDefaults set the default values in quitCtx.  This
@@ -467,6 +515,7 @@ var quitCtx struct {
 // test that exercises command-line parsing.
 func setQuitContextDefaults() {
 	quitCtx.drainWait = 10 * time.Minute
+	quitCtx.nodeDrainSelf = false
 }
 
 // nodeCtx captures the command-line parameters of the `node` command.
@@ -485,6 +534,7 @@ var nodeCtx struct {
 // test that exercises command-line parsing.
 func setNodeContextDefaults() {
 	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
+	nodeCtx.nodeDecommissionSelf = false
 	nodeCtx.statusShowRanges = false
 	nodeCtx.statusShowStats = false
 	nodeCtx.statusShowAll = false
@@ -552,6 +602,8 @@ func setDemoContextDefaults() {
 	demoCtx.Insecure = false
 	demoCtx.SQLPort, _ = strconv.Atoi(base.DefaultPort)
 	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
+	demoCtx.WorkloadMaxQPS = 25
+	demoCtx.Multitenant = true
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'
@@ -598,10 +650,14 @@ func setProxyContextDefaults() {
 	proxyContext.ValidateAccessInterval = 30 * time.Second
 	proxyContext.PollConfigInterval = 30 * time.Second
 	proxyContext.DrainTimeout = 0
+	proxyContext.ThrottleBaseDelay = time.Second
 }
 
 var testDirectorySvrContext struct {
-	port int
+	port          int
+	certsDir      string
+	kvAddrs       string
+	tenantBaseDir string
 }
 
 func setTestDirectorySvrContextDefaults() {

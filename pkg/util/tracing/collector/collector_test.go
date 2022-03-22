@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
@@ -63,46 +64,43 @@ func newTestStructured(i string) *testStructuredImpl {
 // root.child.remotechilddone		<-- traceID1
 // root2												<-- traceID2
 // 		root2.child								<-- traceID2
-func setupTraces(t1, t2 *tracing.Tracer) (uint64, uint64, func()) {
+func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, func()) {
 	// Start a root span on "node 1".
-	root := t1.StartSpan("root", tracing.WithForceRealSpan())
-	root.SetVerbose(true)
+	root := t1.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
 	root.RecordStructured(newTestStructured("root"))
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Start a child span on "node 1".
-	child := t1.StartSpan("root.child", tracing.WithParentAndAutoCollection(root))
+	child := t1.StartSpan("root.child", tracing.WithParent(root))
 
 	// Sleep a bit so that everything that comes afterwards has higher timestamps
 	// than the one we just assigned. Otherwise the sorting is not deterministic.
 	time.Sleep(10 * time.Millisecond)
 
 	// Start a remote child span on "node 2".
-	childRemoteChild := t2.StartSpan("root.child.remotechild", tracing.WithParentAndManualCollection(child.Meta()))
+	childRemoteChild := t2.StartSpan("root.child.remotechild", tracing.WithRemoteParentFromSpanMeta(child.Meta()))
 	childRemoteChild.RecordStructured(newTestStructured("root.child.remotechild"))
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Start another remote child span on "node 2" that we finish.
-	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithParentAndManualCollection(child.Meta()))
-	childRemoteChildFinished.Finish()
-	child.ImportRemoteSpans(childRemoteChildFinished.GetRecording())
+	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithRemoteParentFromSpanMeta(child.Meta()))
+	child.ImportRemoteSpans(childRemoteChildFinished.FinishAndGetRecording(tracing.RecordingVerbose))
 
 	// Start a root span on "node 2".
-	root2 := t2.StartSpan("root2", tracing.WithForceRealSpan())
-	root2.SetVerbose(true)
+	root2 := t2.StartSpan("root2", tracing.WithRecording(tracing.RecordingVerbose))
 	root2.RecordStructured(newTestStructured("root2"))
 
 	// Start a child span on "node 2".
-	child2 := t2.StartSpan("root2.child", tracing.WithParentAndAutoCollection(root2))
+	child2 := t2.StartSpan("root2.child", tracing.WithParent(root2))
 	// Start a remote child span on "node 1".
-	child2RemoteChild := t1.StartSpan("root2.child.remotechild", tracing.WithParentAndManualCollection(child2.Meta()))
+	child2RemoteChild := t1.StartSpan("root2.child.remotechild", tracing.WithRemoteParentFromSpanMeta(child2.Meta()))
 
 	time.Sleep(10 * time.Millisecond)
 
 	// Start another remote child span on "node 1".
-	anotherChild2RemoteChild := t1.StartSpan("root2.child.remotechild2", tracing.WithParentAndManualCollection(child2.Meta()))
+	anotherChild2RemoteChild := t1.StartSpan("root2.child.remotechild2", tracing.WithRemoteParentFromSpanMeta(child2.Meta()))
 	return root.TraceID(), root2.TraceID(), func() {
 		for _, span := range []*tracing.Span{root, child, childRemoteChild, root2, child2,
 			child2RemoteChild, anotherChild2RemoteChild} {
@@ -120,8 +118,8 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
 	defer tc.Stopper().Stop(ctx)
 
-	localTracer := tc.Server(0).Tracer().(*tracing.Tracer)
-	remoteTracer := tc.Server(1).Tracer().(*tracing.Tracer)
+	localTracer := tc.Server(0).TracerI().(*tracing.Tracer)
+	remoteTracer := tc.Server(1).TracerI().(*tracing.Tracer)
 
 	traceCollector := collector.New(
 		tc.Server(0).NodeDialer().(*nodedialer.Dialer),
@@ -129,14 +127,16 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	localTraceID, remoteTraceID, cleanup := setupTraces(localTracer, remoteTracer)
 	defer cleanup()
 
-	getSpansFromAllNodes := func(traceID uint64) map[roachpb.NodeID][]tracing.Recording {
+	getSpansFromAllNodes := func(traceID tracingpb.TraceID) map[roachpb.NodeID][]tracing.Recording {
 		res := make(map[roachpb.NodeID][]tracing.Recording)
 
 		var iter *collector.Iterator
-		for iter = traceCollector.StartIter(ctx, traceID); iter.Valid(); iter.Next() {
+		var err error
+		for iter, err = traceCollector.StartIter(ctx, traceID); err == nil && iter.Valid(); iter.Next() {
 			nodeID, recording := iter.Value()
 			res[nodeID] = append(res[nodeID], recording)
 		}
+		require.NoError(t, err)
 		require.NoError(t, iter.Error())
 		return res
 	}
@@ -145,7 +145,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 		nodeRecordings := getSpansFromAllNodes(localTraceID)
 		node1Recordings := nodeRecordings[roachpb.NodeID(1)]
 		require.Equal(t, 1, len(node1Recordings))
-		require.NoError(t, tracing.TestingCheckRecordedSpans(node1Recordings[0], `
+		require.NoError(t, tracing.CheckRecordedSpans(node1Recordings[0], `
 				span: root
 					tags: _unfinished=1 _verbose=1
 					event: structured=root
@@ -156,7 +156,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	`))
 		node2Recordings := nodeRecordings[roachpb.NodeID(2)]
 		require.Equal(t, 1, len(node2Recordings))
-		require.NoError(t, tracing.TestingCheckRecordedSpans(node2Recordings[0], `
+		require.NoError(t, tracing.CheckRecordedSpans(node2Recordings[0], `
 				span: root.child.remotechild
 					tags: _unfinished=1 _verbose=1
 					event: structured=root.child.remotechild
@@ -169,18 +169,18 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 		nodeRecordings := getSpansFromAllNodes(remoteTraceID)
 		node1Recordings := nodeRecordings[roachpb.NodeID(1)]
 		require.Equal(t, 2, len(node1Recordings))
-		require.NoError(t, tracing.TestingCheckRecordedSpans(node1Recordings[0], `
+		require.NoError(t, tracing.CheckRecordedSpans(node1Recordings[0], `
 				span: root2.child.remotechild
 					tags: _unfinished=1 _verbose=1
 	`))
-		require.NoError(t, tracing.TestingCheckRecordedSpans(node1Recordings[1], `
+		require.NoError(t, tracing.CheckRecordedSpans(node1Recordings[1], `
 				span: root2.child.remotechild2
 					tags: _unfinished=1 _verbose=1
 	`))
 
 		node2Recordings := nodeRecordings[roachpb.NodeID(2)]
 		require.Equal(t, 1, len(node2Recordings))
-		require.NoError(t, tracing.TestingCheckRecordedSpans(node2Recordings[0], `
+		require.NoError(t, tracing.CheckRecordedSpans(node2Recordings[0], `
 				span: root2
 					tags: _unfinished=1 _verbose=1
 					event: structured=root2

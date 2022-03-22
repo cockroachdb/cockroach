@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -43,13 +42,14 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	rpcC := rpc.NewContext(rpc.ContextOptions{
-		TenantID: roachpb.SystemTenantID,
-		Config:   &base.Config{Insecure: true},
-		Clock:    hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
-		Stopper:  stopper,
-		Settings: st,
-	})
+	rpcC := rpc.NewContext(ctx,
+		rpc.ContextOptions{
+			TenantID: roachpb.SystemTenantID,
+			Config:   &base.Config{Insecure: true},
+			Clock:    hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
+			Stopper:  stopper,
+			Settings: st,
+		})
 	rpcC.ClusterID.Set(context.Background(), uuid.MakeV4())
 
 	// mrs := &dummyMultiRaftServer{}
@@ -67,7 +67,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	}
 
 	tp := NewRaftTransport(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
+		log.MakeTestingAmbientCtxWithNewTracer(),
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(rpcC, resolver),
 		grpcServer,

@@ -17,7 +17,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -31,7 +31,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -45,7 +45,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: t@primary
+      table: t@t_pkey
       spans: FULL SCAN
 
 query T
@@ -62,7 +62,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: t@primary
+          table: t@t_pkey
           spans: FULL SCAN
 
 query T
@@ -79,7 +79,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: t@primary
+          table: t@t_pkey
           spans: FULL SCAN
 
 statement ok
@@ -103,55 +103,5 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: t@primary
+          table: t@t_pkey
           spans: FULL SCAN
-
-# Test span generation on interleaved tables.
-# Add x to parent PRIMARY KEY (x, y) once #50659 is fixed.
-# Add x to child PRIMARY KEY (x, y, z) once #50659 is fixed.
-# Add INTERLEAVE IN PARENT parent (x, y) once #50659 is fixed.
-statement ok
-CREATE TABLE parent (x INT, y INT[], PRIMARY KEY (x), FAMILY (x, y));
-CREATE TABLE child (x INT, y INT[], z INT[], PRIMARY KEY (x), FAMILY (x, y, z)) INTERLEAVE IN PARENT parent (x)
-
-query T
-EXPLAIN SELECT x, y FROM parent WHERE x > 1 AND y > ARRAY[1, NULL]
-----
-distribution: local
-vectorized: true
-·
-• filter
-│ filter: y > ARRAY[1,NULL]
-│
-└── • scan
-      missing stats
-      table: parent@primary
-      spans: [/2 - ]
-
-query T
-EXPLAIN SELECT y FROM parent WHERE x = 1 AND y = ARRAY[NULL, NULL]
-----
-distribution: local
-vectorized: true
-·
-• filter
-│ filter: y = ARRAY[NULL,NULL]
-│
-└── • scan
-      missing stats
-      table: parent@primary
-      spans: [/1 - /1]
-
-query T
-EXPLAIN SELECT z FROM child WHERE x = 1 AND y = ARRAY[NULL, NULL]
-----
-distribution: local
-vectorized: true
-·
-• filter
-│ filter: y = ARRAY[NULL,NULL]
-│
-└── • scan
-      missing stats
-      table: child@primary
-      spans: [/1 - /1]

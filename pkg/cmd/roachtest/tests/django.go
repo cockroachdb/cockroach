@@ -16,9 +16,12 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/errors"
 )
 
 var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)(\.(?P<point>\d+))?$`)
@@ -39,14 +42,14 @@ func registerDjango(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		err = alterZoneConfigAndClusterSettings(ctx, version, c, node[0])
+		err = alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -192,14 +195,27 @@ func registerDjango(r registry.Registry) {
 		var fullTestResults []byte
 		for _, testName := range enabledDjangoTests {
 			t.Status("Running django test app ", testName)
-			// Running the test suite is expected to error out, so swallow the error.
-			rawResults, _ := c.RunWithBuffer(
-				ctx, t.L(), node, fmt.Sprintf(djangoRunTestCmd, testName))
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node, fmt.Sprintf(djangoRunTestCmd, testName))
+
+			// Expected to fail but we should still scan the error to check if
+			// there's an SSH/roachprod error.
+			if err != nil {
+				// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+				// or roachprod errors, so we call t.Fatal if the error is not an
+				// install.NonZeroExitCode error
+				commandError := (*install.NonZeroExitCode)(nil)
+				if !errors.As(err, &commandError) {
+					t.Fatal(err)
+				}
+			}
+
+			rawResults := []byte(result.Stdout + result.Stderr)
+
 			fullTestResults = append(fullTestResults, rawResults...)
 			t.L().Printf("Test results for app %s: %s", testName, rawResults)
 			t.L().Printf("Test stdout for app %s:", testName)
-			if err := c.RunL(
-				ctx, t.L(), node, fmt.Sprintf("cd /mnt/data1/django/tests && cat %s.stdout", testName),
+			if err := c.RunE(
+				ctx, node, fmt.Sprintf("cd /mnt/data1/django/tests && cat %s.stdout", testName),
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -242,6 +258,7 @@ DATABASES = {
         'PASSWORD': '',
         'HOST': 'localhost',
         'PORT': 26257,
+				'DISABLE_COCKROACHDB_TELEMETRY': True,
     },
     'other': {
         'ENGINE': 'django_cockroachdb',
@@ -250,6 +267,7 @@ DATABASES = {
         'PASSWORD': '',
         'HOST': 'localhost',
         'PORT': 26257,
+				'DISABLE_COCKROACHDB_TELEMETRY': True,
     },
 }
 SECRET_KEY = 'django_tests_secret_key'

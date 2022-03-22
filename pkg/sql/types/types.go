@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 	"github.com/lib/pq/oid"
 )
 
@@ -312,6 +313,15 @@ var (
 	VarChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_varchar, Locale: &emptyLocale}}
 
+	// QChar is the special "char" type that is a single-character column type.
+	// It's used by system tables. It is reported as "char" (with double quotes
+	// included) in SHOW CREATE and "char" in introspection for compatibility
+	// with PostgreSQL.
+	//
+	// See https://www.postgresql.org/docs/9.1/static/datatype-character.html
+	QChar = &T{InternalType: InternalType{
+		Family: StringFamily, Width: 1, Oid: oid.T_char, Locale: &emptyLocale}}
+
 	// Name is a type-alias for String with a different OID (T_name). It is
 	// reported as NAME in SHOW CREATE and "name" in introspection for
 	// compatibility with PostgreSQL.
@@ -444,6 +454,27 @@ var (
 		},
 	}
 
+	// Void is the type representing void.
+	Void = &T{
+		InternalType: InternalType{
+			Family: VoidFamily,
+			Oid:    oid.T_void,
+			Locale: &emptyLocale,
+		},
+	}
+
+	// EncodedKey is a special type used internally for passing encoded key data.
+	// It behaves similarly to Bytes in most circumstances, except
+	// encoding/decoding. It is currently used to pass around inverted index keys,
+	// which do not fully encode an object.
+	EncodedKey = &T{
+		InternalType: InternalType{
+			Family: EncodedKeyFamily,
+			Oid:    oid.T_unknown,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -499,6 +530,12 @@ var (
 	AnyTuple = &T{InternalType: InternalType{
 		Family: TupleFamily, TupleContents: []*T{Any}, Oid: oid.T_record, Locale: &emptyLocale}}
 
+	// AnyTupleArray is a special type used only during static analysis as a wildcard
+	// type that matches an array of tuples with any number of fields of any type (including
+	// tuple types). Execution-time values should never have this type.
+	AnyTupleArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: AnyTuple, Oid: oid.T__record, Locale: &emptyLocale}}
+
 	// AnyCollatedString is a special type used only during static analysis as a
 	// wildcard type that matches a collated string with any locale. Execution-
 	// time values should never have this type.
@@ -513,6 +550,10 @@ var (
 	// StringArray is the type of an array value having String-typed elements.
 	StringArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: String, Oid: oid.T__text, Locale: &emptyLocale}}
+
+	// BytesArray is the type of an array value having Byte-typed elements.
+	BytesArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Bytes, Oid: oid.T__bytea, Locale: &emptyLocale}}
 
 	// IntArray is the type of an array value having Int-typed elements.
 	IntArray = &T{InternalType: InternalType{
@@ -566,6 +607,14 @@ var (
 	VarBitArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: VarBit, Oid: oid.T__varbit, Locale: &emptyLocale}}
 
+	// AnyEnumArray is the type of an array value having AnyEnum-typed elements.
+	AnyEnumArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: AnyEnum, Oid: oid.T_anyarray, Locale: &emptyLocale}}
+
+	// JSONArray is the type of an array value having JSON-typed elements.
+	JSONArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Jsonb, Oid: oid.T__jsonb, Locale: &emptyLocale}}
+
 	// Int2Vector is a type-alias for an array of Int2 values with a different
 	// OID (T_int2vector instead of T__int2). It is a special VECTOR type used
 	// by Postgres in system tables. Int2vectors are 0-indexed, unlike normal arrays.
@@ -581,24 +630,20 @@ var (
 	typeBit = &T{InternalType: InternalType{
 		Family: BitFamily, Oid: oid.T_bit, Locale: &emptyLocale}}
 
-	// typeBpChar is the "standard SQL" string type of fixed length, where "bp"
-	// stands for "blank padded". It is not exported to avoid confusion with
-	// typeQChar, as well as confusion over its default width.
+	// typeBpChar is a CHAR type with an unspecified width. "bp" stands for
+	// "blank padded". It is not exported to avoid confusion with QChar, as well
+	// as confusion over CHAR's default width of 1.
 	//
 	// It is reported as CHAR in SHOW CREATE and "character" in introspection for
 	// compatibility with PostgreSQL.
-	//
-	// Its default maximum with is 1. It always has a maximum width.
 	typeBpChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale}}
 
-	// typeQChar is a special PostgreSQL-only type supported for compatibility.
-	// It behaves like VARCHAR, its maximum width cannot be modified, and has a
-	// peculiar name in the syntax and introspection. It is not exported to avoid
-	// confusion with typeBpChar, as well as confusion over its default width.
-	//
-	// It is reported as "char" (with double quotes included) in SHOW CREATE and
-	// "char" in introspection for compatibility with PostgreSQL.
+	// typeQChar is a "char" type with an unspecified width. It is not exported
+	// to avoid confusion with QChar. The "char" type should always have a width
+	// of one. A "char" type with an unspecified width is only used when the
+	// length of a "char" value cannot be determined, for example a placeholder
+	// typed as a "char" should have an unspecified width.
 	typeQChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_char, Locale: &emptyLocale}}
 )
@@ -810,14 +855,13 @@ func MakeChar(width int32) *T {
 		Family: StringFamily, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale}}
 }
 
-// MakeQChar constructs a new instance of the "char" type (oid = T_char) having
-// the given max # characters (0 = unspecified number).
-func MakeQChar(width int32) *T {
-	if width == 0 {
-		return typeQChar
+// oidCanBeCollatedString returns true if the given oid is can be a CollatedString.
+func oidCanBeCollatedString(o oid.Oid) bool {
+	switch o {
+	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
+		return true
 	}
-	return &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_char, Width: width, Locale: &emptyLocale}}
+	return false
 }
 
 // MakeCollatedString constructs a new instance of a CollatedStringFamily type
@@ -828,8 +872,7 @@ func MakeQChar(width int32) *T {
 //   VARCHAR(20) => VARCHAR(20) COLLATE EN
 //
 func MakeCollatedString(strType *T, locale string) *T {
-	switch strType.Oid() {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
+	if oidCanBeCollatedString(strType.Oid()) {
 		return &T{InternalType: InternalType{
 			Family: CollatedStringFamily, Oid: strType.Oid(), Width: strType.Width(), Locale: &locale}}
 	}
@@ -1190,27 +1233,85 @@ func (t *T) Precision() int32 {
 // Array types have the same type modifier as the contents of the array.
 // The value will be -1 for types that do not need atttypmod.
 func (t *T) TypeModifier() int32 {
-	typeModifier := int32(-1)
 	if t.Family() == ArrayFamily {
 		return t.ArrayContents().TypeModifier()
 	}
-	if width := t.Width(); width != 0 {
-		switch t.Family() {
-		case StringFamily, CollatedStringFamily:
+	// The type modifier for "char" is always -1.
+	if t.Oid() == oid.T_char {
+		return int32(-1)
+	}
+
+	switch t.Family() {
+	case StringFamily, CollatedStringFamily:
+		if width := t.Width(); width != 0 {
 			// Postgres adds 4 to the attypmod for bounded string types, the
 			// var header size.
-			typeModifier = width + 4
-		case BitFamily:
-			typeModifier = width
-		case DecimalFamily:
-			// attTypMod is calculated by putting the precision in the upper
-			// bits and the scale in the lower bits of a 32-bit int, and adding
-			// 4 (the var header size). We mock this for clients' sake. See
-			// numeric.c.
-			typeModifier = ((t.Precision() << 16) | width) + 4
+			return width + 4
+		}
+	case BitFamily:
+		if width := t.Width(); width != 0 {
+			return width
+		}
+	case DecimalFamily:
+		// attTypMod is calculated by putting the precision in the upper
+		// bits and the scale in the lower bits of a 32-bit int, and adding
+		// 4 (the var header size). We mock this for clients' sake. See
+		// https://github.com/postgres/postgres/blob/5a2832465fd8984d089e8c44c094e6900d987fcd/src/backend/utils/adt/numeric.c#L1242.
+		if width, precision := t.Width(), t.Precision(); precision != 0 || width != 0 {
+			return ((precision << 16) | width) + 4
 		}
 	}
-	return typeModifier
+	return int32(-1)
+}
+
+// WithoutTypeModifiers returns a copy of the given type with the type modifiers
+// reset, if the type has modifiers. The returned type has arbitrary width and
+// precision, or for some types, like timestamps, the maximum allowed width and
+// precision. If the given type already has no type modifiers, it is returned
+// unchanged and the function does not allocate a new type.
+func (t *T) WithoutTypeModifiers() *T {
+	switch t.Family() {
+	case ArrayFamily:
+		// Remove type modifiers of the array content type.
+		newContents := t.ArrayContents().WithoutTypeModifiers()
+		if newContents == t.ArrayContents() {
+			return t
+		}
+		return MakeArray(newContents)
+	case TupleFamily:
+		// Remove type modifiers for each of the tuple content types.
+		oldContents := t.TupleContents()
+		newContents := make([]*T, len(oldContents))
+		changed := false
+		for i := range newContents {
+			newContents[i] = oldContents[i].WithoutTypeModifiers()
+			if newContents[i] != oldContents[i] {
+				changed = true
+			}
+		}
+		if !changed {
+			return t
+		}
+		return MakeTuple(newContents)
+	case EnumFamily:
+		// Enums have no type modifiers.
+		return t
+	}
+
+	// For types that can be a collated string, we copy the type and set the width
+	// to 0 rather than returning the default OidToType type so that we retain the
+	// locale value if the type is collated.
+	if oidCanBeCollatedString(t.Oid()) {
+		newT := *t
+		newT.InternalType.Width = 0
+		return &newT
+	}
+
+	t, ok := OidToType[t.Oid()]
+	if !ok {
+		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
+	}
+	return t
 }
 
 // Scale is an alias method for Width, used for clarity for types in
@@ -1302,6 +1403,8 @@ var familyNames = map[Family]string{
 	TupleFamily:          "tuple",
 	UnknownFamily:        "unknown",
 	UuidFamily:           "uuid",
+	VoidFamily:           "void",
+	EncodedKeyFamily:     "encodedkey",
 }
 
 // Name returns a user-friendly word indicating the family type.
@@ -1552,6 +1655,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 			return "regproc"
 		case oid.T_regprocedure:
 			return "regprocedure"
+		case oid.T_regrole:
+			return "regrole"
 		case oid.T_regtype:
 			return "regtype"
 		default:
@@ -1615,6 +1720,10 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		}
 		return fmt.Sprintf("timestamp(%d) with time zone", typmod)
 	case TupleFamily:
+		if t.UserDefined() {
+			// If we have a user-defined tuple type, use its user-defined name.
+			return t.TypeMeta.Name.Basename()
+		}
 		return "record"
 	case UnknownFamily:
 		return "unknown"
@@ -1811,9 +1920,9 @@ func (t *T) Equivalent(other *T) bool {
 }
 
 // EquivalentOrNull is the same as Equivalent, except it returns true if:
-// * `t` is Unknown (i.e., NULL) and `other` is not a tuple,
+// * `t` is Unknown (i.e., NULL) AND (allowNullTupleEquivalence OR `other` is not a tuple),
 // * `t` is a tuple with all non-Unknown elements matching the types in `other`.
-func (t *T) EquivalentOrNull(other *T) bool {
+func (t *T) EquivalentOrNull(other *T, allowNullTupleEquivalence bool) bool {
 	// Check normal equivalency first, then check for Null
 	normalEquivalency := t.Equivalent(other)
 	if normalEquivalency {
@@ -1822,7 +1931,7 @@ func (t *T) EquivalentOrNull(other *T) bool {
 
 	switch t.Family() {
 	case UnknownFamily:
-		return other.Family() != TupleFamily
+		return allowNullTupleEquivalence || other.Family() != TupleFamily
 
 	case TupleFamily:
 		if other.Family() != TupleFamily {
@@ -1838,7 +1947,7 @@ func (t *T) EquivalentOrNull(other *T) bool {
 			return false
 		}
 		for i := range t.TupleContents() {
-			if !t.TupleContents()[i].EquivalentOrNull(other.TupleContents()[i]) {
+			if !t.TupleContents()[i].EquivalentOrNull(other.TupleContents()[i], allowNullTupleEquivalence) {
 				return false
 			}
 		}
@@ -1875,7 +1984,7 @@ func (t *T) Size() (n int) {
 	temp := *t
 	err := temp.downgradeType()
 	if err != nil {
-		panic(errors.AssertionFailedf("error during Size call: %v", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error during Size call"))
 	}
 	return temp.InternalType.Size()
 }
@@ -2335,6 +2444,16 @@ func (t *T) String() string {
 	return t.Name()
 }
 
+// MarshalText is implemented here so that gogo/protobuf know how to text marshal
+// protobuf struct directly/indirectly depends on types.T without panic.
+func (t *T) MarshalText() (text []byte, err error) {
+	var buf bytes.Buffer
+	if err := proto.MarshalText(&buf, &t.InternalType); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // DebugString returns a detailed dump of the type protobuf struct, suitable for
 // debugging scenarios.
 func (t *T) DebugString() string {
@@ -2430,7 +2549,7 @@ func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
 
 func (t *T) ensureHydratedEnum() {
 	if t.TypeMeta.EnumData == nil {
-		panic(errors.AssertionFailedf("use of enum metadata before hydration as an enum"))
+		panic(errors.AssertionFailedf("use of enum metadata before hydration as an enum: %v %p", t, t))
 	}
 }
 
@@ -2450,8 +2569,6 @@ func IsStringType(t *T) bool {
 // the issue number should be included in the error report to inform the user.
 func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
 	switch t.Family() {
-	case JsonFamily:
-		return false, 23468
 	default:
 		return true, 0
 	}
@@ -2640,9 +2757,10 @@ var unreservedTypeTokens = map[string]*T{
 	"oidvector":  OidVector,
 	// Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
 	"regclass":     RegClass,
+	"regnamespace": RegNamespace,
 	"regproc":      RegProc,
 	"regprocedure": RegProcedure,
-	"regnamespace": RegNamespace,
+	"regrole":      RegRole,
 	"regtype":      RegType,
 
 	"serial2":     &Serial2Type,
@@ -2666,15 +2784,15 @@ var postgresPredefinedTypeIssues = map[string]int{
 	"jsonpath":      22513,
 	"line":          21286,
 	"lseg":          21286,
-	"macaddr":       -1,
-	"macaddr8":      -1,
-	"money":         -1,
+	"macaddr":       45813,
+	"macaddr8":      45813,
+	"money":         41578,
 	"path":          21286,
 	"pg_lsn":        -1,
 	"tsquery":       7821,
 	"tsvector":      7821,
 	"txid_snapshot": -1,
-	"xml":           -1,
+	"xml":           43355,
 }
 
 // SQLString outputs the GeoMetadata in a SQL-compatible string.

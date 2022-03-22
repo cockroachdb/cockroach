@@ -18,11 +18,9 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -38,8 +36,7 @@ func (w metadataCarrier) Set(key, val string) {
 	// The GRPC HPACK implementation rejects any uppercase keys here.
 	//
 	// As such, since the HTTP_HEADERS format is case-insensitive anyway, we
-	// blindly lowercase the key (which is guaranteed to work in the
-	// Inject/Extract sense per the OpenTracing spec).
+	// blindly lowercase the key.
 	key = strings.ToLower(key)
 	w.MD[key] = append(w.MD[key], val)
 }
@@ -57,16 +54,18 @@ func (w metadataCarrier) ForEach(fn func(key, val string) error) error {
 	return nil
 }
 
-func extractSpanMeta(ctx context.Context, tracer *Tracer) (SpanMeta, error) {
+// ExtractSpanMetaFromGRPCCtx retrieves a SpanMeta carried as gRPC metadata by
+// an RPC.
+func ExtractSpanMetaFromGRPCCtx(ctx context.Context, tracer *Tracer) (SpanMeta, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		md = metadata.New(nil)
+		return SpanMeta{}, nil
 	}
 	return tracer.ExtractMetaFrom(metadataCarrier{md})
 }
 
 // spanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
-// of RPCs, deciding for which operations the gRPC opentracing interceptor should
+// of RPCs, deciding for which operations the gRPC tracing interceptor should
 // create a span.
 func spanInclusionFuncForServer(t *Tracer, spanMeta SpanMeta) bool {
 	// If there is an incoming trace on the RPC (spanMeta) or the tracer is
@@ -76,25 +75,40 @@ func spanInclusionFuncForServer(t *Tracer, spanMeta SpanMeta) bool {
 	return !spanMeta.Empty() || t.AlwaysTrace()
 }
 
-// setSpanTags sets one or more tags on the given span according to the
-// error.
-func setSpanTags(sp *Span, err error, client bool) {
-	c := otgrpc.ErrorClass(err)
-	code := codes.Unknown
-	if s, ok := status.FromError(err); ok {
-		code = s.Code()
-	}
-	sp.SetTag("response_code", code)
-	sp.SetTag("response_class", c)
+// setGRPCErrorTag sets an error tag on the span.
+func setGRPCErrorTag(sp *Span, err error) {
 	if err == nil {
 		return
 	}
-	if client || c == otgrpc.ServerError {
-		sp.SetTag(string(ext.Error), true)
+	s, _ := status.FromError(err)
+	sp.SetTag("response_code", attribute.IntValue(int(codes.Error)))
+	if sp.i.otelSpan != nil {
+		sp.i.otelSpan.SetStatus(codes.Error, s.Message())
 	}
 }
 
-var gRPCComponentTag = opentracing.Tag{Key: string(ext.Component), Value: "gRPC"}
+// BatchMethodName is the method name of Internal.Batch RPC.
+const BatchMethodName = "/cockroach.roachpb.Internal/Batch"
+
+// SendKVBatchMethodName is the method name for adminServer.SendKVBatch.
+const SendKVBatchMethodName = "/cockroach.server.serverpb.Admin/SendKVBatch"
+
+// SetupFlowMethodName is the method name of DistSQL.SetupFlow RPC.
+const SetupFlowMethodName = "/cockroach.sql.distsqlrun.DistSQL/SetupFlow"
+const flowStreamMethodName = "/cockroach.sql.distsqlrun.DistSQL/FlowStream"
+
+// methodExcludedFromTracing returns true if a call to the given RPC method does
+// not need to propagate tracing info. Some RPCs (Internal.Batch,
+// DistSQL.SetupFlow) have dedicated fields for passing along the tracing
+// context in the request, which is more efficient than letting the RPC
+// interceptors deal with it. Others (DistSQL.FlowStream) are simply exempt from
+// tracing because it's not worth it.
+func methodExcludedFromTracing(method string) bool {
+	return method == BatchMethodName ||
+		method == SendKVBatchMethodName ||
+		method == SetupFlowMethodName ||
+		method == flowStreamMethodName
+}
 
 // ServerInterceptor returns a grpc.UnaryServerInterceptor suitable
 // for use in a grpc.NewServer call.
@@ -118,7 +132,11 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
-		spanMeta, err := extractSpanMeta(ctx, tracer)
+		if methodExcludedFromTracing(info.FullMethod) {
+			return handler(ctx, req)
+		}
+
+		spanMeta, err := ExtractSpanMetaFromGRPCCtx(ctx, tracer)
 		if err != nil {
 			return nil, err
 		}
@@ -129,15 +147,14 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ctx,
 			info.FullMethod,
-			WithParentAndManualCollection(spanMeta),
+			WithRemoteParentFromSpanMeta(spanMeta),
+			WithServerSpanKind,
 		)
-		serverSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
-		serverSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
 		defer serverSpan.Finish()
 
 		resp, err = handler(ctx, req)
 		if err != nil {
-			setSpanTags(serverSpan, err, false)
+			setGRPCErrorTag(serverSpan, err)
 			serverSpan.Recordf("error: %s", err)
 		}
 		return resp, err
@@ -162,7 +179,10 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 // application-specific gRPC handler(s) to access.
 func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		spanMeta, err := extractSpanMeta(ss.Context(), tracer)
+		if methodExcludedFromTracing(info.FullMethod) {
+			return handler(srv, ss)
+		}
+		spanMeta, err := ExtractSpanMetaFromGRPCCtx(ss.Context(), tracer)
 		if err != nil {
 			return err
 		}
@@ -173,10 +193,9 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ss.Context(),
 			info.FullMethod,
-			WithParentAndManualCollection(spanMeta),
+			WithRemoteParentFromSpanMeta(spanMeta),
+			WithServerSpanKind,
 		)
-		serverSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
-		serverSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
 		defer serverSpan.Finish()
 		ss = &tracingServerStream{
 			ServerStream: ss,
@@ -184,7 +203,7 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		}
 		err = handler(srv, ss)
 		if err != nil {
-			setSpanTags(serverSpan, err, false)
+			setGRPCErrorTag(serverSpan, err)
 			serverSpan.Recordf("error: %s", err)
 		}
 		return err
@@ -201,7 +220,7 @@ func (ss *tracingServerStream) Context() context.Context {
 }
 
 // spanInclusionFuncForClient is used as a SpanInclusionFunc for the client-side
-// of RPCs, deciding for which operations the gRPC opentracing interceptor should
+// of RPCs, deciding for which operations the gRPC tracing interceptor should
 // create a span.
 //
 // We use this to circumvent the interceptor's work when tracing is
@@ -210,7 +229,7 @@ func (ss *tracingServerStream) Context() context.Context {
 //
 // See #17177.
 func spanInclusionFuncForClient(parent *Span) bool {
-	return parent != nil && !parent.i.isNoop()
+	return parent != nil && !parent.IsNoop()
 }
 
 func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {
@@ -220,11 +239,7 @@ func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) conte
 	} else {
 		md = md.Copy()
 	}
-
-	if err := tracer.InjectMetaInto(clientSpan.Meta(), metadataCarrier{md}); err != nil {
-		// We have no better place to record an error than the Span itself.
-		clientSpan.Recordf("error: %s", err)
-	}
+	tracer.InjectMetaInto(clientSpan.Meta(), metadataCarrier{md})
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
@@ -242,7 +257,15 @@ func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) conte
 // metadata; they will also look in the context.Context for an active
 // in-process parent Span and establish a ChildOf relationship if such a parent
 // Span could be found.
-func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterceptor {
+//
+// compatibilityMode is a callback that will be used to check whether the node
+// (still) needs compatibility with 21.2. If it doesn't, then a more performant
+// trace propagation mechanism is used. The compatibility check is built as a
+// callback rather than directly checking the cluster version because this
+// tracing package cannot use cluster settings.
+func ClientInterceptor(
+	tracer *Tracer, init func(*Span), compatibilityMode func(ctx context.Context) bool,
+) grpc.UnaryClientInterceptor {
 	if init == nil {
 		init = func(*Span) {}
 	}
@@ -258,18 +281,26 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		if !spanInclusionFuncForClient(parent) {
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
+
 		clientSpan := tracer.StartSpan(
 			method,
-			WithParentAndAutoCollection(parent),
+			WithParent(parent),
+			WithClientSpanKind,
 		)
-		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
-		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
 		defer clientSpan.Finish()
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
-		err := invoker(ctx, method, req, resp, cc, opts...)
+
+		// For most RPCs we pass along tracing info as gRPC metadata. Some select
+		// RPCs carry the tracing in the request protos, which is more efficient.
+		if compatibilityMode(ctx) || !methodExcludedFromTracing(method) {
+			ctx = injectSpanMeta(ctx, tracer, clientSpan)
+		}
+		var err error
+		if invoker != nil {
+			err = invoker(ctx, method, req, resp, cc, opts...)
+		}
 		if err != nil {
-			setSpanTags(clientSpan, err, true)
+			setGRPCErrorTag(clientSpan, err)
 			clientSpan.Recordf("error: %s", err)
 		}
 		return err
@@ -310,16 +341,18 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 
 		clientSpan := tracer.StartSpan(
 			method,
-			WithParentAndAutoCollection(parent),
+			WithParent(parent),
+			WithClientSpanKind,
 		)
-		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
-		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
+
+		if !methodExcludedFromTracing(method) {
+			ctx = injectSpanMeta(ctx, tracer, clientSpan)
+		}
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
-			setSpanTags(clientSpan, err, true)
+			setGRPCErrorTag(clientSpan, err)
 			clientSpan.Finish()
 			return cs, err
 		}
@@ -335,10 +368,9 @@ func newTracingClientStream(
 	isFinished := new(int32)
 	*isFinished = 0
 	finishFunc := func(err error) {
-		// The current OpenTracing specification forbids finishing a span more than
-		// once. Since we have multiple code paths that could concurrently call
-		// `finishFunc`, we need to add some sort of synchronization to guard against
-		// multiple finishing.
+		// Since we have multiple code paths that could concurrently call
+		// `finishFunc`, we need to add some sort of synchronization to guard
+		// against multiple finishing.
 		if !atomic.CompareAndSwapInt32(isFinished, 0, 1) {
 			return
 		}
@@ -346,7 +378,7 @@ func newTracingClientStream(
 		defer clientSpan.Finish()
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
-			setSpanTags(clientSpan, err, true)
+			setGRPCErrorTag(clientSpan, err)
 		}
 	}
 	go func() {

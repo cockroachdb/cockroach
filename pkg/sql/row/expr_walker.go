@@ -22,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -146,7 +146,6 @@ func makeBuiltinOverride(
 // SequenceMetadata contains information used when processing columns with
 // default expressions which use sequences.
 type SequenceMetadata struct {
-	id              descpb.ID
 	seqDesc         catalog.TableDescriptor
 	instancesPerRow int64
 	curChunk        *jobspb.SequenceValChunk
@@ -320,7 +319,7 @@ func (j *SeqChunkProvider) RequestChunk(
 			if fileProgress.SeqIdToChunks == nil {
 				fileProgress.SeqIdToChunks = make(map[int32]*jobspb.SequenceDetails_SequenceChunks)
 			}
-			seqID := seqMetadata.id
+			seqID := seqMetadata.seqDesc.GetID()
 			if _, ok := fileProgress.SeqIdToChunks[int32(seqID)]; !ok {
 				fileProgress.SeqIdToChunks[int32(seqID)] = &jobspb.SequenceDetails_SequenceChunks{
 					Chunks: make([]*jobspb.SequenceValChunk, 0),
@@ -415,6 +414,7 @@ func boundsExceededError(descriptor catalog.TableDescriptor) error {
 func (j *SeqChunkProvider) checkForPreviouslyAllocatedChunks(
 	seqMetadata *SequenceMetadata, c *CellInfoAnnotation, progress *jobspb.Progress,
 ) (bool, error) {
+	seqOpts := seqMetadata.seqDesc.GetSequenceOpts()
 	var found bool
 	fileProgress := progress.GetImport().SequenceDetails[c.sourceID]
 	if fileProgress.SeqIdToChunks == nil {
@@ -422,7 +422,7 @@ func (j *SeqChunkProvider) checkForPreviouslyAllocatedChunks(
 	}
 	var allocatedSeqChunks *jobspb.SequenceDetails_SequenceChunks
 	var ok bool
-	if allocatedSeqChunks, ok = fileProgress.SeqIdToChunks[int32(seqMetadata.id)]; !ok {
+	if allocatedSeqChunks, ok = fileProgress.SeqIdToChunks[int32(seqMetadata.seqDesc.GetID())]; !ok {
 		return found, nil
 	}
 
@@ -431,8 +431,7 @@ func (j *SeqChunkProvider) checkForPreviouslyAllocatedChunks(
 		// swath of rows encompassing rowID.
 		if chunk.ChunkStartRow <= c.rowID && chunk.NextChunkStartRow > c.rowID {
 			relativeRowIndex := c.rowID - chunk.ChunkStartRow
-			seqMetadata.curVal = chunk.ChunkStartVal +
-				seqMetadata.seqDesc.GetSequenceOpts().Increment*(seqMetadata.instancesPerRow*relativeRowIndex)
+			seqMetadata.curVal = chunk.ChunkStartVal + seqOpts.Increment*(seqMetadata.instancesPerRow*relativeRowIndex)
 			found = true
 			return found, nil
 		}
@@ -445,6 +444,7 @@ func (j *SeqChunkProvider) checkForPreviouslyAllocatedChunks(
 func reserveChunkOfSeqVals(
 	evalCtx *tree.EvalContext, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
 ) error {
+	seqOpts := seqMetadata.seqDesc.GetSequenceOpts()
 	newChunkSize := int64(initialChunkSize)
 	// If we are allocating a subsequent chunk of sequence values, we attempt
 	// to reserve a factor of 10 more than reserved the last time so as to
@@ -463,7 +463,7 @@ func reserveChunkOfSeqVals(
 		newChunkSize = seqMetadata.instancesPerRow
 	}
 
-	incrementValBy := newChunkSize * seqMetadata.seqDesc.GetSequenceOpts().Increment
+	incrementValBy := newChunkSize * seqOpts.Increment
 	// incrementSequenceByVal keeps retrying until it is able to find a slot
 	// of incrementValBy.
 	seqVal, err := incrementSequenceByVal(evalCtx.Context, seqMetadata.seqDesc, evalCtx.DB,
@@ -474,7 +474,7 @@ func reserveChunkOfSeqVals(
 
 	// Update the sequence metadata to reflect the newly reserved chunk.
 	seqMetadata.curChunk = &jobspb.SequenceValChunk{
-		ChunkStartVal:     seqVal - incrementValBy + seqMetadata.seqDesc.GetSequenceOpts().Increment,
+		ChunkStartVal:     seqVal - incrementValBy + seqOpts.Increment,
 		ChunkSize:         newChunkSize,
 		ChunkStartRow:     c.rowID,
 		NextChunkStartRow: c.rowID + (newChunkSize / seqMetadata.instancesPerRow),
@@ -502,9 +502,27 @@ func importNextValByID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum,
 	return importNextValHelper(evalCtx, c, seqMetadata)
 }
 
+// importDefaultToDatabasePrimaryRegion returns the primary region of the
+// database being imported into.
+func importDefaultToDatabasePrimaryRegion(
+	evalCtx *tree.EvalContext, _ tree.Datums,
+) (tree.Datum, error) {
+	regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
+	if err != nil {
+		return nil, err
+	}
+	primaryRegion := regionConfig.PrimaryRegionString()
+	if primaryRegion == "" {
+		return nil, errors.New("primary region on the database being imported into is empty; failed" +
+			" to evaluate expression using `default_to_database_primary_region` builtin")
+	}
+	return tree.NewDString(primaryRegion), nil
+}
+
 func importNextValHelper(
 	evalCtx *tree.EvalContext, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
 ) (tree.Datum, error) {
+	seqOpts := seqMetadata.seqDesc.GetSequenceOpts()
 	if c.seqChunkProvider == nil {
 		return nil, errors.New("no sequence chunk provider configured for the import job")
 	}
@@ -519,7 +537,7 @@ func importNextValHelper(
 	} else {
 		// The current chunk of sequence values can be used for the row being
 		// processed.
-		seqMetadata.curVal += seqMetadata.seqDesc.GetSequenceOpts().Increment
+		seqMetadata.curVal += seqOpts.Increment
 	}
 	return tree.NewDInt(tree.DInt(seqMetadata.curVal)), nil
 }
@@ -607,7 +625,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		visitorSideEffect: func(annot *tree.Annotations, fn *tree.FuncExpr) error {
 			// Get sequence name so that we can update the annotation with the number
 			// of nextval calls to this sequence in a row.
-			seqIdentifier, err := sequence.GetSequenceFromFunc(fn)
+			seqIdentifier, err := seqexpr.GetSequenceFromFunc(fn)
 			if err != nil {
 				return err
 			}
@@ -639,6 +657,32 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				ReturnType: tree.FixedReturnType(types.Int),
 				Info:       "Advances the value of the sequence and returns the final value.",
 				Fn:         importNextValByID,
+			},
+		),
+	},
+	"default_to_database_primary_region": {
+		override: makeBuiltinOverride(
+			tree.FunDefs["default_to_database_primary_region"],
+			tree.Overload{
+				Types:      tree.ArgTypes{{"val", types.String}},
+				ReturnType: tree.FixedReturnType(types.String),
+				Info:       "Returns the primary region of the database.",
+				Fn:         importDefaultToDatabasePrimaryRegion,
+			},
+		),
+	},
+	"gateway_region": {
+		override: makeBuiltinOverride(
+			tree.FunDefs["gateway_region"],
+			tree.Overload{
+				Types:      tree.ArgTypes{},
+				ReturnType: tree.FixedReturnType(types.String),
+				Info:       "Returns the primary region of the database.",
+				// gateway_region also maps to importDefaultToDatabasePrimaryRegion to
+				// ensure that an import into a regional by row table is idempotent, as
+				// it will always return the same value when evaluating default
+				// expression for the crdb_region column.
+				Fn: importDefaultToDatabasePrimaryRegion,
 			},
 		),
 	},

@@ -39,6 +39,11 @@ SELECT extract(minute from interval '10:55:01.456')
 ----
 55
 
+query R
+SELECT date_part('minute', interval '10:55:01.456')
+----
+55
+
 # tests various typmods of intervals
 # matches subset of tests in src/test/regress/expected/interval.out
 subtest interval_postgres_duration_type_tests
@@ -404,12 +409,12 @@ SET intervalstyle = 'sql_standard'
 statement ok
 SET intervalstyle_enabled = 'on'
 
-statement error context-dependent operators are not allowed in computed column\nHINT: INTERVAL to STRING casts depends on IntervalStyle; consider using to_char_with_style\(interval, 'postgres'\)
+statement error context-dependent operators are not allowed in computed column\nHINT: INTERVAL to STRING casts depend on IntervalStyle; consider using to_char\(interval\)
 CREATE TABLE invalid_table (
   invalid_col string AS ('1 hour'::interval::string) STORED
 )
 
-statement error string::interval: context-dependent operators are not allowed in computed column\nHINT: STRING to INTERVAL casts depend on session IntervalStyle; use parse_interval\(string, 'postgres'\) instead
+statement error string::interval: context-dependent operators are not allowed in computed column\nHINT: STRING to INTERVAL casts depend on session IntervalStyle; use parse_interval\(string\) instead
 CREATE TABLE invalid_table (
   invalid_col interval AS ('1 hour'::string::interval) STORED
 )
@@ -445,29 +450,32 @@ SELECT i FROM intervals ORDER BY pk
 1 day 04:06:08.123
 2 years 11 mons -2 days +03:25:45.678
 
-query TTTBBB
-WITH tbl(pk, i, pg, iso, sql_std) AS (
+query TTTTBBBB
+WITH tbl(pk, i, pg, iso, sql_std, default_style) AS (
   SELECT
     pk,
     i,
     to_char_with_style(i, 'postgres') AS pg,
     to_char_with_style(i, 'iso_8601') AS iso,
-    to_char_with_style(i, 'sql_standard') AS sql_std
+    to_char_with_style(i, 'sql_standard') AS sql_std,
+    to_char(i) AS default_style
   FROM intervals
 )
 SELECT
   pg,
   iso,
   sql_std,
+  default_style,
   i = parse_interval(pg, 'postgres'),
   i = parse_interval(iso, 'iso_8601'),
-  i = parse_interval(sql_std, 'sql_standard')
+  i = parse_interval(sql_std, 'sql_standard'),
+  i = parse_interval(default_style) AND pg = default_style
 FROM tbl
 ORDER BY pk
 ----
--2 years -11 mons +1 day 04:05:06.123  P-2Y-11M1DT4H5M6.123S   -2-11 +1 +4:05:06.123  true  true  true
-1 day 04:06:08.123                     P1DT4H6M8.123S          1 4:06:08.123          true  true  true
-2 years 11 mons -2 days +03:25:45.678  P2Y11M-2DT3H25M45.678S  +2-11 -2 +3:25:45.678  true  true  true
+-2 years -11 mons +1 day 04:05:06.123  P-2Y-11M1DT4H5M6.123S   -2-11 +1 +4:05:06.123  -2 years -11 mons +1 day 04:05:06.123  true  true  true  true
+1 day 04:06:08.123                     P1DT4H6M8.123S          1 4:06:08.123          1 day 04:06:08.123                     true  true  true  true
+2 years 11 mons -2 days +03:25:45.678  P2Y11M-2DT3H25M45.678S  +2-11 -2 +3:25:45.678  2 years 11 mons -2 days +03:25:45.678  true  true  true  true
 
 query T
 SELECT array_to_string(array_agg(i ORDER BY pk), ' ') FROM intervals
@@ -615,3 +623,93 @@ SELECT i, i::INTERVAL FROM interval_parsing ORDER BY pk
 -10 years -22 months 1 day 01:02:03   -11-10 +1 +1:02:03
 -10 years 22 months -1 day 01:02:03   -8-2 -1 +1:02:03
 -10 years 22 months -1 day -01:02:03  -8-2 -1 -1:02:03
+
+# Test intervalstyle being respected in pg_indexes.
+
+statement ok
+CREATE TABLE intervalstyle_in_index (
+  a INT8 PRIMARY KEY, b INTERVAL,
+  INDEX idx (b) WHERE b > 'P3Y'
+)
+
+query TT
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'intervalstyle_in_index'
+AND indexname = 'idx'
+----
+idx  CREATE INDEX idx ON test.public.intervalstyle_in_index USING btree (b ASC) WHERE (b > '3-0'::INTERVAL)
+
+statement ok
+SET intervalstyle = 'iso_8601'
+
+query TT
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'intervalstyle_in_index'
+AND indexname = 'idx'
+----
+idx  CREATE INDEX idx ON test.public.intervalstyle_in_index USING btree (b ASC) WHERE (b > 'P3Y'::INTERVAL)
+
+# date_trunc
+statement ok
+SET intervalstyle = 'postgres'
+
+statement error pgcode 22023 interval units "invalid" not recognized
+SELECT date_trunc('invalid', interval '1 month')
+
+statement error pgcode 0A000 interval units "week" not supported because months usually have fractional weeks
+SELECT date_trunc('week', interval '1 month')
+
+statement error pgcode 0A000 interval units "weeks" not supported because months usually have fractional weeks
+SELECT date_trunc('weeks', interval '1 month')
+
+query TT
+SELECT timespan, date_trunc(timespan, '1111 year 4 month 1 day 1 hour 1 minute 1 second 1 millisecond 1 microsecond')
+FROM (VALUES
+  ('millennia'),
+  ('millennium'),
+  ('millenniums'),
+  ('century'),
+  ('centuries'),
+  ('decade'),
+  ('decades'),
+  ('quarter'),
+  ('month'),
+  ('months'),
+  ('day'),
+  ('days'),
+  ('hour'),
+  ('hours'),
+  ('minute'),
+  ('minutes'),
+  ('second'),
+  ('seconds'),
+  ('millisecond'),
+  ('milliseconds'),
+  ('microsecond'),
+  ('microseconds'))
+AS t(timespan)
+----
+millennia     1000 years
+millennium    1000 years
+millenniums   1000 years
+century       1100 years
+centuries     1100 years
+decade        1110 years
+decades       1110 years
+quarter       1111 years 3 mons
+month         1111 years 4 mons
+months        1111 years 4 mons
+day           1111 years 4 mons 1 day
+days          1111 years 4 mons 1 day
+hour          1111 years 4 mons 1 day 01:00:00
+hours         1111 years 4 mons 1 day 01:00:00
+minute        1111 years 4 mons 1 day 01:01:00
+minutes       1111 years 4 mons 1 day 01:01:00
+second        1111 years 4 mons 1 day 01:01:01
+seconds       1111 years 4 mons 1 day 01:01:01
+millisecond   1111 years 4 mons 1 day 01:01:01.001
+milliseconds  1111 years 4 mons 1 day 01:01:01.001
+microsecond   1111 years 4 mons 1 day 01:01:01.001001
+microseconds  1111 years 4 mons 1 day 01:01:01.001001

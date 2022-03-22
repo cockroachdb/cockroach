@@ -34,8 +34,19 @@ zcgo_flags*.go
 build/Railroad.jar
 
 # Bazel generated symlinks
-/bazel-*
 /_bazel
 
 # Per-user .bazelrc
 /.bazelrc.user
+
+# Local disk buffers for "roachprod logs" command
+/*.logs
+
+# Generated code.
+*.pb.go
+*.pb.gw.go
+pkg/roachprod/vm/aws/embedded.go
+pkg/security/securitytest/embedded.go
+
+# Temporary directories during gomock generate
+**/gomock_reflect_*

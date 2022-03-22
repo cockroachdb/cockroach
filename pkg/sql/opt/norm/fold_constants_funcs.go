@@ -356,7 +356,7 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 		return nil, false
 	}
 
-	volatility, ok := tree.LookupCastVolatility(input.DataType(), typ, c.f.evalCtx.SessionData)
+	volatility, ok := tree.LookupCastVolatility(input.DataType(), typ, c.f.evalCtx.SessionData())
 	if !ok || !c.CanFoldOperator(volatility) {
 		return nil, false
 	}
@@ -365,6 +365,32 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 	texpr := tree.NewTypedCastExpr(datum, typ)
 
 	result, err := texpr.Eval(c.f.evalCtx)
+	if err != nil {
+		return nil, false
+	}
+
+	return c.f.ConstructConstVal(result, typ), true
+}
+
+// FoldAssignmentCast evaluates an assignment cast expression with a constant
+// input. It returns a constant expression as long as the evaluation causes no
+// error. Otherwise, it returns ok=false.
+//
+// It is similar to FoldCast, but differs because it performs an assignment cast
+// which has slightly different semantics than an explicit cast (see
+// tree.PerformAssignmentCast). Also, it does not have special logic for casts
+// from strings to OIDs because such casts are not allowed in assignment
+// contexts.
+func (c *CustomFuncs) FoldAssignmentCast(
+	input opt.ScalarExpr, typ *types.T,
+) (_ opt.ScalarExpr, ok bool) {
+	volatility, ok := tree.LookupCastVolatility(input.DataType(), typ, c.f.evalCtx.SessionData())
+	if !ok || !c.CanFoldOperator(volatility) {
+		return nil, false
+	}
+
+	datum := memo.ExtractConstDatum(input)
+	result, err := tree.PerformAssignmentCast(c.f.evalCtx, datum, typ)
 	if err != nil {
 		return nil, false
 	}

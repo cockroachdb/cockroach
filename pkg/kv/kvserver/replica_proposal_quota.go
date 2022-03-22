@@ -87,7 +87,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	status := r.mu.internalRaftGroup.BasicStatus()
 	if r.mu.leaderID != lastLeaderID {
-		if r.mu.replicaID == r.mu.leaderID {
+		if r.replicaID == r.mu.leaderID {
 			// We're becoming the leader.
 			// Initialize the proposalQuotaBaseIndex at the applied index.
 			// After the proposal quota is enabled all entries applied by this replica
@@ -125,7 +125,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		}
 		return
 	} else if r.mu.proposalQuota == nil {
-		if r.mu.replicaID == r.mu.leaderID {
+		if r.replicaID == r.mu.leaderID {
 			log.Fatal(ctx, "leader has uninitialized proposalQuota pool")
 		}
 		// We're a follower.

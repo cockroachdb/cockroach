@@ -5,6 +5,9 @@ go_library(
     srcs = ["crash_reporting.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logcrash",
     visibility = ["//visibility:public"],
+    x_defs = {
+        "github.com/cockroachdb/cockroach/pkg/util/log/logcrash.crashReportEnv": "{STABLE_CRASH_REPORT_ENV}",
+    },
     deps = [
         "//pkg/build",
         "//pkg/settings",
@@ -13,7 +16,7 @@ go_library(
         "//pkg/util/log/severity",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_sentry_go//:sentry-go",
+        "@com_github_getsentry_sentry_go//:sentry-go",
     ],
 )
 
@@ -37,12 +40,11 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/util",
         "//pkg/util/leaktest",
-        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_cockroachdb_sentry_go//:sentry-go",
+        "@com_github_getsentry_sentry_go//:sentry-go",
         "@com_github_kr_pretty//:pretty",
         "@com_github_pmezard_go_difflib//difflib",
         "@com_github_stretchr_testify//assert",

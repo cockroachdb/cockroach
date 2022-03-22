@@ -40,19 +40,12 @@ func (c *CustomFuncs) GenerateStreamingSetOp(
 		// A streaming set operation must have an ordering that includes all output
 		// columns. If the interesting ordering includes some columns but not all,
 		// add the remaining columns in an arbitrary (but deterministic) order.
-		// Note that some columns still may be removed when calling Simplify (e.g.,
-		// if the first column is a key, the others will be removed), but they will
-		// be added back by the execbuilder.
 		missing := grp.Relational().OutputCols.Difference(order.ColSet())
 		if !missing.Empty() {
 			order = order.Copy()
 			missing.ForEach(func(col opt.ColumnID) {
 				order.AppendCol(col, false /* descending */)
 			})
-			fds := &grp.Relational().FuncDeps
-			if order.CanSimplify(fds) {
-				order.Simplify(fds)
-			}
 		}
 
 		newPrivate := *private

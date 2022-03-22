@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -43,9 +44,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // conn implements a pgwire network connection (version 3 of the protocol,
@@ -97,10 +101,16 @@ type conn struct {
 	readBuf    pgwirebase.ReadBuffer
 	msgBuilder writeBuffer
 
+	// vecsScratch is a scratch space used by bufferBatch.
+	vecsScratch coldata.TypedVecs
+
 	sv *settings.Values
 
 	// alwaysLogAuthActivity is used force-enables logging of authn events.
 	alwaysLogAuthActivity bool
+
+	// afterReadMsgTestingKnob is called after reading every message.
+	afterReadMsgTestingKnob func(context.Context) error
 }
 
 // serveConn creates a conn that will serve the netConn. It returns once the
@@ -155,6 +165,9 @@ func (s *Server) serveConn(
 
 	c := newConn(netConn, sArgs, &s.metrics, connStart, &s.execCfg.Settings.SV)
 	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
+	if s.execCfg.PGWireTestingKnobs != nil {
+		c.afterReadMsgTestingKnob = s.execCfg.PGWireTestingKnobs.AfterReadMsgTestingKnob
+	}
 
 	// Do the reading of commands from the network.
 	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)
@@ -204,9 +217,47 @@ func (c *conn) GetErr() error {
 	return nil
 }
 
+func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err error) error {
+	// We could, but do not, report server-side network errors while
+	// trying to send the client error. This is because clients that
+	// receive error payload are highly correlated with clients
+	// disconnecting abruptly.
+	_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
+	return err
+}
+
+func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) error {
+	if c.sessionArgs.IsSuperuser {
+		// This user is a super user and is therefore not affected by connection limits.
+		sqlServer.IncrementConnectionCount()
+		return nil
+	}
+
+	maxNumConnectionsValue := maxNumConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
+	if maxNumConnectionsValue < 0 {
+		// Unlimited connections are allowed.
+		sqlServer.IncrementConnectionCount()
+		return nil
+	}
+	if !sqlServer.IncrementConnectionCountIfLessThan(maxNumConnectionsValue) {
+		return c.sendError(ctx, sqlServer.GetExecutorConfig(), errors.WithHintf(
+			pgerror.New(pgcode.TooManyConnections, "sorry, too many clients already"),
+			"the maximum number of allowed connections is %d and can be modified using the %s config key",
+			maxNumConnectionsValue,
+			maxNumConnections.Key(),
+		))
+	}
+	return nil
+}
+
 func (c *conn) authLogEnabled() bool {
 	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
 }
+
+// maxRepeatedErrorCount is the number of times an error can be received
+// while reading from the network connection before the server decides to give
+// up and abort the connection.
+const maxRepeatedErrorCount = 1 << 15
 
 // serveImpl continuously reads from the network connection and pushes execution
 // instructions into a sql.StmtBuf, from where they'll be processed by a command
@@ -231,10 +282,11 @@ func (c *conn) serveImpl(
 	defer func() { _ = c.conn.Close() }()
 
 	if c.sessionArgs.User.IsRootUser() || c.sessionArgs.User.IsNodeUser() {
-		ctx = logtags.AddTag(ctx, "user", log.Safe(c.sessionArgs.User))
+		ctx = logtags.AddTag(ctx, "user", redact.Safe(c.sessionArgs.User))
 	} else {
 		ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
 	}
+	tracing.SpanFromContext(ctx).SetTag("user", attribute.StringValue(c.sessionArgs.User.Normalized()))
 
 	inTestWithoutSQL := sqlServer == nil
 	if !inTestWithoutSQL {
@@ -261,7 +313,7 @@ func (c *conn) serveImpl(
 
 	var sentDrainSignal bool
 	// The net.Conn is switched to a conn that exits if the ctx is canceled.
-	c.conn = newReadTimeoutConn(c.conn, func() error {
+	c.conn = NewReadTimeoutConn(c.conn, func() error {
 		// If the context was canceled, it's time to stop reading. Either a
 		// higher-level server or the command processor have canceled us.
 		if ctx.Err() != nil {
@@ -290,12 +342,29 @@ func (c *conn) serveImpl(
 	// the command processor.
 	var procCh <-chan error
 
+	// We need a value for the unqualified int size here, but it is controlled
+	// by a session variable, and this layer doesn't have access to the session
+	// data. The callback below is called whenever default_int_size changes.
+	// It happens in a different goroutine, so it has to be changed atomically.
+	var atomicUnqualifiedIntSize = new(int32)
+	onDefaultIntSizeChange := func(newSize int32) {
+		atomic.StoreInt32(atomicUnqualifiedIntSize, newSize)
+	}
+
 	if sqlServer != nil {
 		// Spawn the command processing goroutine, which also handles connection
 		// authentication). It will notify us when it's done through procCh, and
 		// we'll also interact with the authentication process through ac.
 		var ac AuthConn = authPipe
-		procCh = c.processCommandsAsync(ctx, authOpt, ac, sqlServer, reserved, cancelConn)
+		procCh = c.processCommandsAsync(
+			ctx,
+			authOpt,
+			ac,
+			sqlServer,
+			reserved,
+			cancelConn,
+			onDefaultIntSizeChange,
+		)
 	} else {
 		// sqlServer == nil means we are in a local test. In this case
 		// we only need the minimum to make pgx happy.
@@ -312,32 +381,28 @@ func (c *conn) serveImpl(
 		}
 		var ac AuthConn = authPipe
 		// Simulate auth succeeding.
-		ac.AuthOK(ctx, fixedIntSizer{size: types.Int})
+		ac.AuthOK(ctx)
 		dummyCh := make(chan error)
 		close(dummyCh)
 		procCh = dummyCh
 
-		if err := c.sendReadyForQuery(); err != nil {
+		if err := c.sendReadyForQuery(0 /* queryCancelKey */); err != nil {
 			reserved.Close(ctx)
 			return
 		}
 	}
 
 	var terminateSeen bool
-
-	// We need an intSizer, which we're ultimately going to get from the
-	// authenticator once authentication succeeds (because it will actually be a
-	// ConnectionHandler). Until then, we unfortunately still need some intSizer
-	// because we technically might enqueue parsed statements in the statement
-	// buffer even before authentication succeeds (because we need this go routine
-	// to keep reading from the network connection while authentication is in
-	// progress in order to react to the connection closing).
-	var intSizer unqualifiedIntSizer = fixedIntSizer{size: types.Int}
 	var authDone, ignoreUntilSync bool
+	var repeatedErrorCount int
 	for {
-		breakLoop, err := func() (bool, error) {
+		breakLoop, isSimpleQuery, err := func() (bool, bool, error) {
 			typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
 			c.metrics.BytesInCount.Inc(int64(n))
+			if err == nil && c.afterReadMsgTestingKnob != nil {
+				err = c.afterReadMsgTestingKnob(ctx)
+			}
+			isSimpleQuery := typ == pgwirebase.ClientMsgSimpleQuery
 			if err != nil {
 				if pgwirebase.IsMessageTooBigError(err) {
 					log.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
@@ -346,67 +411,66 @@ func (c *conn) serveImpl(
 					slurpN, slurpErr := c.readBuf.SlurpBytes(&c.rd, pgwirebase.GetMessageTooBigSize(err))
 					c.metrics.BytesInCount.Inc(int64(slurpN))
 					if slurpErr != nil {
-						return false, errors.Wrap(slurpErr, "pgwire: error slurping remaining bytes")
+						return false, isSimpleQuery, errors.Wrap(slurpErr, "pgwire: error slurping remaining bytes")
 					}
-
-					// Write out the error over pgwire.
-					if err := c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
-						return false, errors.New("pgwire: error writing too big error message to the client")
-					}
-
-					// If this is a simple query, we have to send the sync message back as
-					// well. Otherwise, we ignore all messages until receiving a sync.
-					if typ == pgwirebase.ClientMsgSimpleQuery {
-						if err = c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
-							return false, errors.New("pgwire: error writing sync to the client whilst message is too big")
-						}
-					} else {
-						ignoreUntilSync = true
-					}
-
-					// We need to continue processing here for pgwire clients to be able to
-					// successfully read the error message off pgwire.
-					//
-					// If break here, we terminate the connection. The client will instead see that
-					// we terminated the connection prematurely (as opposed to seeing a ClientMsgTerminate
-					// packet) and instead return a broken pipe or io.EOF error message.
-					return false, nil
 				}
-				return false, errors.Wrap(err, "pgwire: error reading input")
+
+				// Write out the error over pgwire.
+				if err := c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
+					return false, isSimpleQuery, errors.New("pgwire: error writing too big error message to the client")
+				}
+
+				// If this is a simple query, we have to send the sync message back as
+				// well.
+				if isSimpleQuery {
+					if err := c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
+						return false, isSimpleQuery, errors.New("pgwire: error writing sync to the client whilst message is too big")
+					}
+				}
+
+				// We need to continue processing here for pgwire clients to be able to
+				// successfully read the error message off pgwire.
+				//
+				// If break here, we terminate the connection. The client will instead see that
+				// we terminated the connection prematurely (as opposed to seeing a ClientMsgTerminate
+				// packet) and instead return a broken pipe or io.EOF error message.
+				return false, isSimpleQuery, errors.Wrap(err, "pgwire: error reading input")
 			}
 			timeReceived := timeutil.Now()
 			log.VEventf(ctx, 2, "pgwire: processing %s", typ)
 
-			if ignoreUntilSync && typ != pgwirebase.ClientMsgSync {
-				log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
-				return false, nil
+			if ignoreUntilSync {
+				if typ != pgwirebase.ClientMsgSync {
+					log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
+					return false, isSimpleQuery, nil
+				}
+				ignoreUntilSync = false
 			}
-			ignoreUntilSync = false
 
 			if !authDone {
 				if typ == pgwirebase.ClientMsgPassword {
 					var pwd []byte
 					if pwd, err = c.readBuf.GetBytes(n - 4); err != nil {
-						return false, err
+						return false, isSimpleQuery, err
 					}
 					// Pass the data to the authenticator. This hopefully causes it to finish
 					// authentication in the background and give us an intSizer when we loop
 					// around.
 					if err = authenticator.sendPwdData(pwd); err != nil {
-						return false, err
+						return false, isSimpleQuery, err
 					}
-					return false, nil
+					return false, isSimpleQuery, nil
 				}
 				// Wait for the auth result.
-				if intSizer, err = authenticator.authResult(); err != nil {
+				if err = authenticator.authResult(); err != nil {
 					// The error has already been sent to the client.
-					return true, nil //nolint:returnerrcheck
+					return true, isSimpleQuery, nil //nolint:returnerrcheck
 				}
 				authDone = true
 
 				// We count the connection establish latency until we are ready to
 				// serve a SQL query. It includes the time it takes to authenticate.
-				duration := timeutil.Now().Sub(c.startTime).Nanoseconds()
+				duration := timeutil.Since(c.startTime).Nanoseconds()
 				c.metrics.ConnLatency.RecordValue(duration)
 			}
 
@@ -414,35 +478,46 @@ func (c *conn) serveImpl(
 			case pgwirebase.ClientMsgPassword:
 				// This messages are only acceptable during the auth phase, handled above.
 				err = pgwirebase.NewProtocolViolationErrorf("unexpected authentication data")
-				return true, writeErr(
+				return true, isSimpleQuery, writeErr(
 					ctx, &sqlServer.GetExecutorConfig().Settings.SV, err,
 					&c.msgBuilder, &c.writerState.buf)
 			case pgwirebase.ClientMsgSimpleQuery:
 				if err = c.handleSimpleQuery(
-					ctx, &c.readBuf, timeReceived, intSizer.GetUnqualifiedIntSize(),
+					ctx, &c.readBuf, timeReceived, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)),
 				); err != nil {
-					return false, err
+					return false, isSimpleQuery, err
 				}
-				return false, c.stmtBuf.Push(ctx, sql.Sync{})
+				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{})
 
 			case pgwirebase.ClientMsgExecute:
-				return false, c.handleExecute(ctx, &c.readBuf, timeReceived)
+				// To support the 1PC txn fast path, we peek at the next command to
+				// see if it is a Sync. This is because in the extended protocol, an
+				// implicit transaction cannot commit until the Sync is seen. If there's
+				// an error while peeking (for example, there are no bytes in the
+				// buffer), the error is ignored since it will be handled on the next
+				// loop iteration.
+				followedBySync := false
+				if nextMsgType, err := c.rd.Peek(1); err == nil &&
+					pgwirebase.ClientMessageType(nextMsgType[0]) == pgwirebase.ClientMsgSync {
+					followedBySync = true
+				}
+				return false, isSimpleQuery, c.handleExecute(ctx, &c.readBuf, timeReceived, followedBySync)
 
 			case pgwirebase.ClientMsgParse:
-				return false, c.handleParse(ctx, &c.readBuf, intSizer.GetUnqualifiedIntSize())
+				return false, isSimpleQuery, c.handleParse(ctx, &c.readBuf, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
 
 			case pgwirebase.ClientMsgDescribe:
-				return false, c.handleDescribe(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleDescribe(ctx, &c.readBuf)
 
 			case pgwirebase.ClientMsgBind:
-				return false, c.handleBind(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleBind(ctx, &c.readBuf)
 
 			case pgwirebase.ClientMsgClose:
-				return false, c.handleClose(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleClose(ctx, &c.readBuf)
 
 			case pgwirebase.ClientMsgTerminate:
 				terminateSeen = true
-				return true, nil
+				return true, isSimpleQuery, nil
 
 			case pgwirebase.ClientMsgSync:
 				// We're starting a batch here. If the client continues using the extended
@@ -450,10 +525,10 @@ func (c *conn) serveImpl(
 				// message has to be skipped. See:
 				// https://www.postgresql.org/docs/current/10/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 
-				return false, c.stmtBuf.Push(ctx, sql.Sync{})
+				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{})
 
 			case pgwirebase.ClientMsgFlush:
-				return false, c.handleFlush(ctx)
+				return false, isSimpleQuery, c.handleFlush(ctx)
 
 			case pgwirebase.ClientMsgCopyData, pgwirebase.ClientMsgCopyDone, pgwirebase.ClientMsgCopyFail:
 				// We're supposed to ignore these messages, per the protocol spec. This
@@ -461,21 +536,33 @@ func (c *conn) serveImpl(
 				// operation: the server will send an error and a ready message back to
 				// the client, and must then ignore further copy messages. See:
 				// https://github.com/postgres/postgres/blob/6e1dd2773eb60a6ab87b27b8d9391b756e904ac3/src/backend/tcop/postgres.c#L4295
-				return false, nil
+				return false, isSimpleQuery, nil
 			default:
-				return false, c.stmtBuf.Push(
+				return false, isSimpleQuery, c.stmtBuf.Push(
 					ctx,
 					sql.SendError{Err: pgwirebase.NewUnrecognizedMsgTypeErr(typ)})
 			}
 		}()
 		if err != nil {
 			log.VEventf(ctx, 1, "pgwire: error processing message: %s", err)
-			ignoreUntilSync = true
-			// If we can't read data because the connection was closed or the context
-			// was canceled (e.g. during authentication), then we should break.
-			if netutil.IsClosedConnection(err) || errors.Is(err, context.Canceled) {
+			if !isSimpleQuery {
+				// In the extended protocol, after seeing an error, we ignore all
+				// messages until receiving a sync.
+				ignoreUntilSync = true
+			}
+			repeatedErrorCount++
+			// If we can't read data because of any one of the following conditions,
+			// then we should break:
+			// 1. the connection was closed.
+			// 2. the context was canceled (e.g. during authentication).
+			// 3. we reached an arbitrary threshold of repeated errors.
+			if netutil.IsClosedConnection(err) ||
+				errors.Is(err, context.Canceled) ||
+				repeatedErrorCount > maxRepeatedErrorCount {
 				break
 			}
+		} else {
+			repeatedErrorCount = 0
 		}
 		if breakLoop {
 			break
@@ -521,24 +608,6 @@ func (c *conn) serveImpl(
 	}
 }
 
-// unqualifiedIntSizer is used by a conn to get the SQL session's current int size
-// setting.
-//
-// It's a restriction on the ConnectionHandler type.
-type unqualifiedIntSizer interface {
-	// GetUnqualifiedIntSize returns the size that the parser should consider for an
-	// unqualified INT.
-	GetUnqualifiedIntSize() *types.T
-}
-
-type fixedIntSizer struct {
-	size *types.T
-}
-
-func (f fixedIntSizer) GetUnqualifiedIntSize() *types.T {
-	return f.size
-}
-
 // processCommandsAsync spawns a goroutine that authenticates the connection and
 // then processes commands from c.stmtBuf.
 //
@@ -565,6 +634,7 @@ func (c *conn) processCommandsAsync(
 	sqlServer *sql.Server,
 	reserved mon.BoundAccount,
 	cancelConn func(),
+	onDefaultIntSizeChange func(newSize int32),
 ) <-chan error {
 	// reservedOwned is true while we own reserved, false when we pass ownership
 	// away.
@@ -628,13 +698,22 @@ func (c *conn) processCommandsAsync(
 			return
 		}
 
+		if retErr = c.checkMaxConnections(ctx, sqlServer); retErr != nil {
+			return
+		}
+		defer sqlServer.DecrementConnectionCount()
+
+		if retErr = c.authOKMessage(); retErr != nil {
+			return
+		}
+
 		// Inform the client of the default session settings.
-		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer)
+		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange)
 		if retErr != nil {
 			return
 		}
 		// Signal the connection was established to the authenticator.
-		ac.AuthOK(ctx, connHandler)
+		ac.AuthOK(ctx)
 		// Mark the authentication as succeeded in case a panic
 		// is thrown below and we need to report to the client
 		// using the defer above.
@@ -667,10 +746,16 @@ func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) erro
 }
 
 func (c *conn) sendInitialConnData(
-	ctx context.Context, sqlServer *sql.Server,
+	ctx context.Context, sqlServer *sql.Server, onDefaultIntSizeChange func(newSize int32),
 ) (sql.ConnectionHandler, error) {
 	connHandler, err := sqlServer.SetupConn(
-		ctx, c.sessionArgs, &c.stmtBuf, c, c.metrics.SQLMemMetrics)
+		ctx,
+		c.sessionArgs,
+		&c.stmtBuf,
+		c,
+		c.metrics.SQLMemMetrics,
+		onDefaultIntSizeChange,
+	)
 	if err != nil {
 		_ /* err */ = writeErr(
 			ctx, &sqlServer.GetExecutorConfig().Settings.SV, err, &c.msgBuilder, c.conn)
@@ -695,35 +780,19 @@ func (c *conn) sendInitialConnData(
 		return sql.ConnectionHandler{}, err
 	}
 
-	// TODO(knz): this should retrieve the admin status during
-	// authentication using the roles table, instead of using a
-	// simple/naive username match.
-	isSuperUser := c.sessionArgs.User.IsRootUser()
-	superUserVal := "off"
-	if isSuperUser {
-		superUserVal = "on"
-	}
-	if err := c.sendParamStatus("is_superuser", superUserVal); err != nil {
-		return sql.ConnectionHandler{}, err
-	}
-	if err := c.sendReadyForQuery(); err != nil {
+	if err := c.sendReadyForQuery(connHandler.GetQueryCancelKey()); err != nil {
 		return sql.ConnectionHandler{}, err
 	}
 	return connHandler, nil
 }
 
 // sendReadyForQuery sends the final messages of the connection handshake.
-// This includes a placeholder BackendKeyData message and a ServerMsgReady
+// This includes a BackendKeyData message and a ServerMsgReady
 // message indicating that there is no active transaction.
-func (c *conn) sendReadyForQuery() error {
-	// Send the client a dummy BackendKeyData message. This is necessary for
-	// compatibility with tools that require this message. This information is
-	// normally used by clients to send a CancelRequest message:
-	// https://www.postgresql.org/docs/9.6/static/protocol-flow.html#AEN112861
-	// CockroachDB currently ignores all CancelRequests.
+func (c *conn) sendReadyForQuery(queryCancelKey pgwirecancel.BackendKeyData) error {
+	// Send our BackendKeyData to the client, so they can cancel the connection.
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBackendKeyData)
-	c.msgBuilder.putInt32(0)
-	c.msgBuilder.putInt32(0)
+	c.msgBuilder.putInt64(int64(queryCancelKey))
 	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
 		return err
 	}
@@ -800,6 +869,7 @@ func (c *conn) handleSimpleQuery(
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
 				ParseEnd:     endParse,
+				LastInBatch:  i == len(stmts)-1,
 			}); err != nil {
 			return err
 		}
@@ -867,9 +937,9 @@ func (c *conn) handleParse(
 			if t == 0 {
 				continue
 			}
-			// If the OID is user defined, then write nil into the type hints and let
-			// the consumer of the PrepareStmt resolve the types.
-			if types.IsOIDUserDefinedType(t) {
+			// If the OID is user defined or unknown, then write nil into the type
+			// hints and let the consumer of the PrepareStmt resolve the types.
+			if t == oid.T_unknown || types.IsOIDUserDefinedType(t) {
 				sqlTypeHints[i] = nil
 				continue
 			}
@@ -888,6 +958,9 @@ func (c *conn) handleParse(
 		// We don't support COPY in extended protocol because it'd be complicated:
 		// it wouldn't be the preparing, but the execution that would need to
 		// execute the copyMachine.
+		// Be aware that the copyMachine assumes it always runs in the simple
+		// protocol, so if we ever support this, many parts of the copyMachine
+		// would need to be changed.
 		// Also note that COPY FROM in extended mode seems to be quite broken in
 		// Postgres too:
 		// https://www.postgresql.org/message-id/flat/CAMsr%2BYGvp2wRx9pPSxaKFdaObxX8DzWse%2BOkWk2xpXSvT0rq-g%40mail.gmail.com#CAMsr+YGvp2wRx9pPSxaKFdaObxX8DzWse+OkWk2xpXSvT0rq-g@mail.gmail.com
@@ -1079,7 +1152,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleExecute(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time,
+	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time, followedBySync bool,
 ) error {
 	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
 	portalName, err := buf.GetString()
@@ -1091,9 +1164,10 @@ func (c *conn) handleExecute(
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	return c.stmtBuf.Push(ctx, sql.ExecPortal{
-		Name:         portalName,
-		TimeReceived: timeReceived,
-		Limit:        int(limit),
+		Name:           portalName,
+		TimeReceived:   timeReceived,
+		Limit:          int(limit),
+		FollowedBySync: followedBySync,
 	})
 }
 
@@ -1103,12 +1177,14 @@ func (c *conn) handleFlush(ctx context.Context) error {
 }
 
 // BeginCopyIn is part of the pgwirebase.Conn interface.
-func (c *conn) BeginCopyIn(ctx context.Context, columns []colinfo.ResultColumn) error {
+func (c *conn) BeginCopyIn(
+	ctx context.Context, columns []colinfo.ResultColumn, format pgwirebase.FormatCode,
+) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgCopyInResponse)
-	c.msgBuilder.writeByte(byte(pgwirebase.FormatText))
+	c.msgBuilder.writeByte(byte(format))
 	c.msgBuilder.putInt16(int16(len(columns)))
 	for range columns {
-		c.msgBuilder.putInt16(int16(pgwirebase.FormatText))
+		c.msgBuilder.putInt16(int16(format))
 	}
 	return c.msgBuilder.finishMsg(c.conn)
 }
@@ -1268,7 +1344,7 @@ func (c *conn) bufferRow(
 		}
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
@@ -1287,31 +1363,35 @@ func (c *conn) bufferBatch(
 ) {
 	sel := batch.Selection()
 	n := batch.Length()
-	vecs := batch.ColVecs()
-	width := int16(len(vecs))
-	for i := 0; i < n; i++ {
-		rowIdx := i
-		if sel != nil {
-			rowIdx = sel[rowIdx]
-		}
-		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
-		c.msgBuilder.putInt16(width)
-		for colIdx, col := range vecs {
-			fmtCode := pgwirebase.FormatText
-			if formatCodes != nil {
-				fmtCode = formatCodes[colIdx]
+	if n > 0 {
+		c.vecsScratch.SetBatch(batch)
+		// Make sure that c doesn't hold on to the memory of the batch.
+		defer c.vecsScratch.Reset()
+		width := int16(len(c.vecsScratch.Vecs))
+		for i := 0; i < n; i++ {
+			rowIdx := i
+			if sel != nil {
+				rowIdx = sel[rowIdx]
 			}
-			switch fmtCode {
-			case pgwirebase.FormatText:
-				c.msgBuilder.writeTextColumnarElement(ctx, col, rowIdx, conv, sessionLoc)
-			case pgwirebase.FormatBinary:
-				c.msgBuilder.writeBinaryColumnarElement(ctx, col, rowIdx, sessionLoc)
-			default:
-				c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
+			c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
+			c.msgBuilder.putInt16(width)
+			for vecIdx := 0; vecIdx < len(c.vecsScratch.Vecs); vecIdx++ {
+				fmtCode := pgwirebase.FormatText
+				if formatCodes != nil {
+					fmtCode = formatCodes[vecIdx]
+				}
+				switch fmtCode {
+				case pgwirebase.FormatText:
+					c.msgBuilder.writeTextColumnarElement(ctx, &c.vecsScratch, vecIdx, rowIdx, conv, sessionLoc)
+				case pgwirebase.FormatBinary:
+					c.msgBuilder.writeBinaryColumnarElement(ctx, &c.vecsScratch, vecIdx, rowIdx, sessionLoc)
+				default:
+					c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
+				}
 			}
-		}
-		if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-			panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+			if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+				panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+			}
 		}
 	}
 }
@@ -1320,28 +1400,28 @@ func (c *conn) bufferReadyForQuery(txnStatus byte) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 	c.msgBuilder.writeByte(txnStatus)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferParseComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgParseComplete)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferBindComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgBindComplete)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferCloseComplete() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgCloseComplete)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
@@ -1350,28 +1430,28 @@ func (c *conn) bufferCommandComplete(tag []byte) {
 	c.msgBuilder.write(tag)
 	c.msgBuilder.nullTerminate()
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferPortalSuspended() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgPortalSuspended)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferErr(ctx context.Context, err error) {
 	if err := writeErr(ctx, c.sv,
 		err, &c.msgBuilder, &c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferEmptyQueryResponse() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgEmptyQuery)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
@@ -1442,14 +1522,14 @@ func (c *conn) bufferParamDesc(types []oid.Oid) {
 		c.msgBuilder.putInt32(int32(t))
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
 func (c *conn) bufferNoDataMsg() {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoData)
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
-		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
 }
 
@@ -1682,10 +1762,10 @@ var statusReportParams = []string{
 	"server_encoding",
 	"client_encoding",
 	"application_name",
-	// Note: is_superuser and session_authorization are handled
-	// specially in serveImpl().
+	// Note: session_authorization is handled specially in serveImpl().
 	"DateStyle",
 	"IntervalStyle",
+	"is_superuser",
 	"TimeZone",
 	"integer_datetimes",
 	"standard_conforming_strings",
@@ -1709,7 +1789,8 @@ type readTimeoutConn struct {
 	checkExitConds func() error
 }
 
-func newReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
+// NewReadTimeoutConn wraps the given connection with a readTimeoutConn.
+func NewReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
 	return &readTimeoutConn{
 		Conn:           c,
 		checkExitConds: checkExitConds,
@@ -1734,9 +1815,11 @@ func (c *readTimeoutConn) Read(b []byte) (int, error) {
 			return 0, err
 		}
 		n, err := c.Conn.Read(b)
-		// Continue if the error is due to timing out.
-		if ne := (net.Error)(nil); errors.As(err, &ne) && ne.Timeout() {
-			continue
+		if err != nil {
+			// Continue if the error is due to timing out.
+			if ne := (net.Error)(nil); errors.As(err, &ne) && ne.Timeout() {
+				continue
+			}
 		}
 		return n, err
 	}

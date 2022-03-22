@@ -12,7 +12,8 @@
 package geodist
 
 import (
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
 )
@@ -141,7 +142,7 @@ func ShapeDistance(c DistanceCalculator, a Shape, b Shape) (bool, error) {
 		case Polygon:
 			return onPointToPolygon(c, *a, b), nil
 		default:
-			return false, errors.Newf("unknown shape: %T", b)
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown shape: %T", b)
 		}
 	case LineString:
 		switch b := b.(type) {
@@ -155,7 +156,7 @@ func ShapeDistance(c DistanceCalculator, a Shape, b Shape) (bool, error) {
 		case Polygon:
 			return onLineStringToPolygon(c, a, b), nil
 		default:
-			return false, errors.Newf("unknown shape: %T", b)
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown shape: %T", b)
 		}
 	case Polygon:
 		switch b := b.(type) {
@@ -172,10 +173,10 @@ func ShapeDistance(c DistanceCalculator, a Shape, b Shape) (bool, error) {
 		case Polygon:
 			return onPolygonToPolygon(c, a, b), nil
 		default:
-			return false, errors.Newf("unknown shape: %T", b)
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown shape: %T", b)
 		}
 	}
-	return false, errors.Newf("unknown shape: %T", a)
+	return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown shape: %T", a)
 }
 
 // onPointToEdgesExceptFirstEdgeStart updates the distance against the edges of a shape and a point.

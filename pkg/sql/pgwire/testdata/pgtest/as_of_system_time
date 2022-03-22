@@ -1,0 +1,115 @@
+# This test relies on a CoockroachDB-specific feature, so everything
+# is marked as crdb_only.
+
+only crdb
+----
+
+let $before_table_timestamp
+Query {"String": "SELECT cluster_logical_timestamp()"}
+----
+
+send
+Query {"String": "CREATE TABLE tab(a INT8)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Make sure AOST is handled during Parse. Preparing the statement should
+# fail since the table did not exist in the past.
+send
+Parse {"Name": "s0", "Query": "SELECT * FROM tab AS OF SYSTEM TIME '$before_table_timestamp'"}
+Sync
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"42P01","Message":"relation \"tab\" does not exist"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+let $before_data_timestamp
+Query {"String": "SELECT cluster_logical_timestamp()"}
+----
+
+send
+Query {"String": "INSERT INTO tab VALUES(1)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Make sure AOST is handled consistently during Parse/Bind/Execute. This should
+# succeed, but should not be able to read the data that was added to the table.
+send
+Parse {"Name": "historical_stmt", "Query": "SELECT * FROM tab AS OF SYSTEM TIME '$before_data_timestamp'"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "historical_stmt"}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Make sure AOST is handled consistently during Bind/Execute. This also should
+# not be able to see the data in the table, since this is a historical read.
+send
+Bind {"DestinationPortal": "p2", "PreparedStatement": "historical_stmt"}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+let $after_data_timestamp
+Query {"String": "SELECT cluster_logical_timestamp()"}
+----
+
+# Preparing another statement with the later timestamp should succeed.
+send
+Parse {"Name": "historical_stmt_working", "Query": "SELECT * FROM tab AS OF SYSTEM TIME '$after_data_timestamp'"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "historical_stmt_working"}
+Execute {"Portal": "p3"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# And reusing that statement should work as well.
+send
+Bind {"DestinationPortal": "p4", "PreparedStatement": "historical_stmt_working"}
+Execute {"Portal": "p4"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

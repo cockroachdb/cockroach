@@ -25,6 +25,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 
@@ -37,6 +38,7 @@ go_test(
         "routers_test.go",
     ],
     embed = [":rowflow"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/base",
         "//pkg/keys",

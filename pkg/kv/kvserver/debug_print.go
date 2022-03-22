@@ -13,10 +13,10 @@ package kvserver
 import (
 	"bytes"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -27,30 +27,67 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// PrintKeyValue attempts to pretty-print the specified MVCCKeyValue to
+// PrintEngineKeyValue attempts to print the given key-value pair to
+// os.Stdout, utilizing SprintMVCCKeyValue in the case of an MVCCKeyValue.
+func PrintEngineKeyValue(k storage.EngineKey, v []byte) {
+	fmt.Println(SprintEngineKeyValue(k, v))
+}
+
+// PrintMVCCKeyValue attempts to pretty-print the specified MVCCKeyValue to
 // os.Stdout, falling back to '%q' formatting.
-func PrintKeyValue(kv storage.MVCCKeyValue) {
-	fmt.Println(SprintKeyValue(kv, true /* printKey */))
+func PrintMVCCKeyValue(kv storage.MVCCKeyValue) {
+	fmt.Println(SprintMVCCKeyValue(kv, true /* printKey */))
 }
 
-// SprintKey pretty-prints the specified MVCCKey.
-func SprintKey(key storage.MVCCKey) string {
-	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeKey(key))
-}
-
-// DebugSprintKeyValueDecoders allows injecting alternative debug decoders.
-var DebugSprintKeyValueDecoders []func(kv storage.MVCCKeyValue) (string, error)
-
-// SprintKeyValue is like PrintKeyValue, but returns a string. If
-// printKey is true, prints the key and the value together; otherwise,
-// prints just the value.
-func SprintKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
-	var sb strings.Builder
-	if printKey {
-		sb.WriteString(SprintKey(kv.Key))
+// SprintEngineKey pretty-prints the specified EngineKey, using the correct
+// MVCC or Lock Table version formatting.
+func SprintEngineKey(key storage.EngineKey) string {
+	if key.IsMVCCKey() {
+		if mvccKey, err := key.ToMVCCKey(); err == nil {
+			return SprintMVCCKey(mvccKey)
+		}
 	}
 
-	decoders := append(DebugSprintKeyValueDecoders,
+	return fmt.Sprintf("%s %x (%#x): ", key.Key, key.Version, key.Encode())
+}
+
+// SprintMVCCKey pretty-prints the specified MVCCKey.
+func SprintMVCCKey(key storage.MVCCKey) string {
+	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeMVCCKey(key))
+}
+
+// SprintEngineKeyValue is like PrintEngineKeyValue, but returns a string.  In
+// the case of an MVCCKey, it will utilize SprintMVCCKeyValue for proper MVCC
+// formatting.
+func SprintEngineKeyValue(k storage.EngineKey, v []byte) string {
+	if k.IsMVCCKey() {
+		if key, err := k.ToMVCCKey(); err == nil {
+			return SprintMVCCKeyValue(storage.MVCCKeyValue{Key: key, Value: v}, true /* printKey */)
+		}
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s %x (%#x): ", k.Key, k.Version, k.Encode())
+	if out, err := tryIntent(storage.MVCCKeyValue{Value: v}); err == nil {
+		sb.WriteString(out)
+	} else {
+		fmt.Fprintf(&sb, "%x", v)
+	}
+	return sb.String()
+}
+
+// DebugSprintMVCCKeyValueDecoders allows injecting alternative debug decoders.
+var DebugSprintMVCCKeyValueDecoders []func(kv storage.MVCCKeyValue) (string, error)
+
+// SprintMVCCKeyValue is like PrintMVCCKeyValue, but returns a string. If
+// printKey is true, prints the key and the value together; otherwise,
+// prints just the value.
+func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
+	var sb strings.Builder
+	if printKey {
+		sb.WriteString(SprintMVCCKey(kv.Key))
+	}
+
+	decoders := append(DebugSprintMVCCKeyValueDecoders,
 		tryRaftLogEntry,
 		tryRangeDescriptor,
 		tryMeta,
@@ -103,7 +140,7 @@ func tryIntent(kv storage.MVCCKeyValue) (string, error) {
 	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
 		return "", err
 	}
-	s := fmt.Sprintf("%+v", meta)
+	s := fmt.Sprintf("%+v", &meta)
 	if meta.Txn != nil {
 		s = meta.Txn.WriteTimestamp.String() + " " + s
 	}
@@ -126,46 +163,40 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 	for r.Next() {
 		switch r.BatchType() {
 		case storage.BatchTypeDeletion:
-			mvccKey, err := r.MVCCKey()
+			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Delete: %s\n", SprintKey(mvccKey)))
+			sb.WriteString(fmt.Sprintf("Delete: %s\n", SprintEngineKey(engineKey)))
 		case storage.BatchTypeValue:
-			mvccKey, err := r.MVCCKey()
+			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintKeyValue(storage.MVCCKeyValue{
-				Key:   mvccKey,
-				Value: r.Value(),
-			}, true /* printKey */)))
+			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintEngineKeyValue(engineKey, r.Value())))
 		case storage.BatchTypeMerge:
-			mvccKey, err := r.MVCCKey()
+			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintKeyValue(storage.MVCCKeyValue{
-				Key:   mvccKey,
-				Value: r.Value(),
-			}, true /* printKey */)))
+			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintEngineKeyValue(engineKey, r.Value())))
 		case storage.BatchTypeSingleDeletion:
-			mvccKey, err := r.MVCCKey()
+			engineKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Single Delete: %s\n", SprintKey(mvccKey)))
+			sb.WriteString(fmt.Sprintf("Single Delete: %s\n", SprintEngineKey(engineKey)))
 		case storage.BatchTypeRangeDeletion:
-			mvccStartKey, err := r.MVCCKey()
+			engineStartKey, err := r.EngineKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			mvccEndKey, err := r.MVCCEndKey()
+			engineEndKey, err := r.EngineEndKey()
 			if err != nil {
 				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf(
-				"Delete Range: [%s, %s)\n", SprintKey(mvccStartKey), SprintKey(mvccEndKey),
+				"Delete Range: [%s, %s)\n", SprintEngineKey(engineStartKey), SprintEngineKey(engineEndKey),
 			))
 		default:
 			sb.WriteString(fmt.Sprintf("unsupported batch type: %d\n", r.BatchType()))
@@ -186,7 +217,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 		if len(ent.Data) == 0 {
 			return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 		}
-		_, cmdData := DecodeRaftCommand(ent.Data)
+		_, cmdData := kvserverbase.DecodeRaftCommand(ent.Data)
 		if err := protoutil.Unmarshal(cmdData, &cmd); err != nil {
 			return "", err
 		}
@@ -206,7 +237,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 			c = cc
 		}
 
-		var ctx ConfChangeContext
+		var ctx kvserverpb.ConfChangeContext
 		if err := protoutil.Unmarshal(c.AsV2().Context, &ctx); err != nil {
 			return "", err
 		}
@@ -262,15 +293,6 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 	// switch. Other types are handled inside the switch and return.
 	var msg protoutil.Message
 	switch {
-	case bytes.Equal(suffix, keys.LocalLeaseAppliedIndexLegacySuffix):
-		fallthrough
-	case bytes.Equal(suffix, keys.LocalRaftAppliedIndexLegacySuffix):
-		i, err := value.GetInt()
-		if err != nil {
-			return "", err
-		}
-		return strconv.FormatInt(i, 10), nil
-
 	case bytes.Equal(suffix, keys.LocalAbortSpanSuffix):
 		msg = &roachpb.AbortSpanEntry{}
 
@@ -283,7 +305,7 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 	case bytes.Equal(suffix, keys.LocalRangeTombstoneSuffix):
 		msg = &roachpb.RangeTombstone{}
 
-	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateLegacySuffix):
+	case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
 		msg = &roachpb.RaftTruncatedState{}
 
 	case bytes.Equal(suffix, keys.LocalRangeLeaseSuffix):
@@ -385,22 +407,4 @@ func (s *stringifyWriteBatch) String() string {
 		return wbStr
 	}
 	return fmt.Sprintf("failed to stringify write batch (%x): %s", s.Data, err)
-}
-
-// PrintEngineKeyValue attempts to print the given key-value pair.
-func PrintEngineKeyValue(k storage.EngineKey, v []byte) {
-	if k.IsMVCCKey() {
-		if key, err := k.ToMVCCKey(); err == nil {
-			PrintKeyValue(storage.MVCCKeyValue{Key: key, Value: v})
-			return
-		}
-	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "%s %x (%#x): ", k.Key, k.Version, k.Encode())
-	if out, err := tryIntent(storage.MVCCKeyValue{Value: v}); err == nil {
-		sb.WriteString(out)
-	} else {
-		fmt.Fprintf(&sb, "%x", v)
-	}
-	fmt.Println(sb.String())
 }

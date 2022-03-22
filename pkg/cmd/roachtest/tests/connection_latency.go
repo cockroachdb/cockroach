@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +40,8 @@ func runConnectionLatencyTest(
 	err = c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload")
 	require.NoError(t, err)
 
-	err = c.StartE(ctx, option.StartArgs("--secure"))
+	settings := install.MakeClusterSettings(install.SecureOption(true))
+	err = c.StartE(ctx, t.L(), option.DefaultStartOpts(), settings)
 	require.NoError(t, err)
 
 	var passwordFlag string
@@ -63,7 +65,7 @@ func runConnectionLatencyTest(
 	runWorkload := func(roachNodes, loadNode option.NodeListOption, locality string) {
 		var urlString string
 		var urls []string
-		externalIps, err := c.ExternalIP(ctx, roachNodes)
+		externalIps, err := c.ExternalIP(ctx, t.L(), roachNodes)
 		require.NoError(t, err)
 
 		if password {

@@ -124,12 +124,12 @@ vectorized: true
 │
 └── • lookup join
     │ estimated row count: 33
-    │ table: metric_values@primary
+    │ table: metric_values@metric_values_pkey
     │ lookup condition: (metric_id = id) AND ("time" > '2020-01-01 00:00:00+00:00')
     │
     └── • index join
         │ estimated row count: 1
-        │ table: metrics@primary
+        │ table: metrics@metrics_pkey
         │
         └── • scan
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -154,12 +154,12 @@ vectorized: true
 │ order: +value
 │
 └── • lookup join
-    │ table: metric_values_desc@primary
+    │ table: metric_values_desc@metric_values_desc_pkey
     │ lookup condition: (metric_id = id) AND ("time" > '2020-01-01 00:00:00+00:00')
     │
     └── • index join
         │ estimated row count: 1
-        │ table: metrics@primary
+        │ table: metrics@metrics_pkey
         │
         └── • scan
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -186,12 +186,12 @@ vectorized: true
 │
 └── • lookup join
     │ estimated row count: 33
-    │ table: metric_values@primary
+    │ table: metric_values@metric_values_pkey
     │ lookup condition: (metric_id = id) AND ("time" >= '2020-01-01 00:00:00+00:00')
     │
     └── • index join
         │ estimated row count: 1
-        │ table: metrics@primary
+        │ table: metrics@metrics_pkey
         │
         └── • scan
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -216,12 +216,12 @@ vectorized: true
 │ order: +value
 │
 └── • lookup join
-    │ table: metric_values_desc@primary
+    │ table: metric_values_desc@metric_values_desc_pkey
     │ lookup condition: (metric_id = id) AND ("time" >= '2020-01-01 00:00:00+00:00')
     │
     └── • index join
         │ estimated row count: 1
-        │ table: metrics@primary
+        │ table: metrics@metrics_pkey
         │
         └── • scan
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -243,12 +243,12 @@ vectorized: true
 ·
 • lookup join
 │ estimated row count: 33
-│ table: metric_values@primary
+│ table: metric_values@metric_values_pkey
 │ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:00+00:00')
 │
 └── • index join
     │ estimated row count: 1
-    │ table: metrics@primary
+    │ table: metrics@metrics_pkey
     │
     └── • scan
           estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -269,12 +269,12 @@ distribution: local
 vectorized: true
 ·
 • lookup join
-│ table: metric_values_desc@primary
+│ table: metric_values_desc@metric_values_desc_pkey
 │ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:00+00:00')
 │
 └── • index join
     │ estimated row count: 1
-    │ table: metrics@primary
+    │ table: metrics@metrics_pkey
     │
     └── • scan
           estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -301,12 +301,12 @@ vectorized: true
 │
 └── • lookup join
     │ estimated row count: 33
-    │ table: metric_values@primary
+    │ table: metric_values@metric_values_pkey
     │ lookup condition: (metric_id = id) AND ("time" <= '2020-01-01 00:00:00+00:00')
     │
     └── • index join
         │ estimated row count: 1
-        │ table: metrics@primary
+        │ table: metrics@metrics_pkey
         │
         └── • scan
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -331,12 +331,12 @@ vectorized: true
 │ order: +value
 │
 └── • lookup join
-    │ table: metric_values_desc@primary
+    │ table: metric_values_desc@metric_values_desc_pkey
     │ lookup condition: (metric_id = id) AND ("time" <= '2020-01-01 00:00:00+00:00')
     │
     └── • index join
         │ estimated row count: 1
-        │ table: metrics@primary
+        │ table: metrics@metrics_pkey
         │
         └── • scan
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -363,12 +363,12 @@ vectorized: true
 │
 └── • lookup join
     │ estimated row count: 33
-    │ table: metric_values@primary
+    │ table: metric_values@metric_values_pkey
     │ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:10+00:00')
     │
     └── • index join
         │ estimated row count: 1
-        │ table: metrics@primary
+        │ table: metrics@metrics_pkey
         │
         └── • scan
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -393,12 +393,12 @@ vectorized: true
 │ order: +value
 │
 └── • lookup join
-    │ table: metric_values_desc@primary
+    │ table: metric_values_desc@metric_values_desc_pkey
     │ lookup condition: (metric_id = id) AND ("time" < '2020-01-01 00:00:10+00:00')
     │
     └── • index join
         │ estimated row count: 1
-        │ table: metrics@primary
+        │ table: metrics@metrics_pkey
         │
         └── • scan
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -425,12 +425,12 @@ vectorized: true
 │
 └── • lookup join
     │ estimated row count: 11
-    │ table: metric_values@primary
+    │ table: metric_values@metric_values_pkey
     │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
     │
     └── • index join
         │ estimated row count: 1
-        │ table: metrics@primary
+        │ table: metrics@metrics_pkey
         │
         └── • scan
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -455,12 +455,12 @@ vectorized: true
 │ order: +value
 │
 └── • lookup join
-    │ table: metric_values_desc@primary
+    │ table: metric_values_desc@metric_values_desc_pkey
     │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
     │
     └── • index join
         │ estimated row count: 1
-        │ table: metrics@primary
+        │ table: metrics@metrics_pkey
         │
         └── • scan
               estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -487,13 +487,13 @@ vectorized: true
 │
 └── • lookup join (left outer)
     │ estimated row count: 11
-    │ table: metric_values@primary
+    │ table: metric_values@metric_values_pkey
     │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
     │ pred: name = 'cpu'
     │
     └── • scan
           estimated row count: 10 (100% of the table; stats collected <hidden> ago)
-          table: metrics@primary
+          table: metrics@metrics_pkey
           spans: FULL SCAN
 
 # Test lookup conditions w/ a semi join.
@@ -509,12 +509,12 @@ vectorized: true
 ·
 • lookup join (semi)
 │ estimated row count: 10
-│ table: metric_values@primary
+│ table: metric_values@metric_values_pkey
 │ lookup condition: (metric_id = id) AND (("time" >= '2020-01-01 00:00:00+00:00') AND ("time" <= '2020-01-01 00:10:00+00:00'))
 │
 └── • scan
       estimated row count: 10 (100% of the table; stats collected <hidden> ago)
-      table: metrics@primary
+      table: metrics@metrics_pkey
       spans: FULL SCAN
 
 # Test NULL values in pre-join where conditions.
@@ -539,7 +539,7 @@ vectorized: true
 │
 └── • lookup join
     │ estimated row count: 3
-    │ table: metric_values@primary
+    │ table: metric_values@metric_values_pkey
     │ equality: (metric_id, time) = (metric_id,time)
     │ equality cols are key
     │
@@ -550,7 +550,7 @@ vectorized: true
         │
         └── • index join
             │ estimated row count: 1
-            │ table: metrics@primary
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -574,7 +574,7 @@ vectorized: true
 ·
 • lookup join
 │ estimated row count: 0
-│ table: metrics@primary
+│ table: metrics@metrics_pkey
 │ equality: (id) = (id)
 │ equality cols are key
 │
@@ -584,7 +584,7 @@ vectorized: true
     │
     └── • lookup join
         │ estimated row count: 0
-        │ table: metric_values@primary
+        │ table: metric_values@metric_values_pkey
         │ equality: (metric_id, time) = (metric_id,time)
         │ equality cols are key
         │
@@ -615,7 +615,7 @@ vectorized: true
 ·
 • lookup join
 │ estimated row count: 0
-│ table: metrics@primary
+│ table: metrics@metrics_pkey
 │ equality: (id) = (id)
 │ equality cols are key
 │
@@ -625,7 +625,7 @@ vectorized: true
     │
     └── • lookup join
         │ estimated row count: 0
-        │ table: metric_values@primary
+        │ table: metric_values@metric_values_pkey
         │ equality: (metric_id, time) = (metric_id,time)
         │ equality cols are key
         │
@@ -656,7 +656,7 @@ vectorized: true
 ·
 • lookup join
 │ estimated row count: 0
-│ table: metrics@primary
+│ table: metrics@metrics_pkey
 │ equality: (id) = (id)
 │ equality cols are key
 │
@@ -666,7 +666,7 @@ vectorized: true
     │
     └── • lookup join
         │ estimated row count: 0
-        │ table: metric_values@primary
+        │ table: metric_values@metric_values_pkey
         │ equality: (metric_id, time) = (metric_id,time)
         │ equality cols are key
         │
@@ -698,7 +698,7 @@ vectorized: true
 ·
 • lookup join
 │ estimated row count: 0
-│ table: metrics@primary
+│ table: metrics@metrics_pkey
 │ equality: (id) = (id)
 │ equality cols are key
 │
@@ -708,7 +708,7 @@ vectorized: true
     │
     └── • lookup join
         │ estimated row count: 0
-        │ table: metric_values@primary
+        │ table: metric_values@metric_values_pkey
         │ equality: (metric_id, time) = (metric_id,time)
         │ equality cols are key
         │
@@ -739,7 +739,7 @@ vectorized: true
 ·
 • lookup join
 │ estimated row count: 0
-│ table: metrics@primary
+│ table: metrics@metrics_pkey
 │ equality: (id) = (id)
 │ equality cols are key
 │
@@ -749,7 +749,7 @@ vectorized: true
     │
     └── • lookup join
         │ estimated row count: 0
-        │ table: metric_values@primary
+        │ table: metric_values@metric_values_pkey
         │ equality: (metric_id, time) = (metric_id,time)
         │ equality cols are key
         │
@@ -785,7 +785,7 @@ vectorized: true
 │
 └── • lookup join
     │ estimated row count: 3
-    │ table: metric_values@primary
+    │ table: metric_values@metric_values_pkey
     │ equality: (metric_id, time) = (metric_id,time)
     │ equality cols are key
     │
@@ -796,7 +796,7 @@ vectorized: true
         │
         └── • index join
             │ estimated row count: 1
-            │ table: metrics@primary
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -822,7 +822,7 @@ vectorized: true
 ·
 • lookup join
 │ estimated row count: 0
-│ table: metrics@primary
+│ table: metrics@metrics_pkey
 │ equality: (id) = (id)
 │ equality cols are key
 │
@@ -832,7 +832,7 @@ vectorized: true
     │
     └── • lookup join
         │ estimated row count: 0
-        │ table: metric_values@primary
+        │ table: metric_values@metric_values_pkey
         │ equality: (metric_id, time) = (metric_id,time)
         │ equality cols are key
         │
@@ -847,3 +847,97 @@ vectorized: true
                       estimated row count: 1 (10% of the table; stats collected <hidden> ago)
                       table: metrics@name_index
                       spans: [/'cpu' - /'cpu']
+
+
+# Regression test for issue #68200.  This ensures that we properly construct the
+# span to account for both ends of the inequality.
+statement ok
+CREATE TABLE order_line (ol_o_id INT8, ol_i_id INT8);
+INSERT
+INTO
+  order_line (ol_o_id, ol_i_id)
+VALUES
+  (19, 6463), (20, 6463), (100, 6463), (101, 6463);
+CREATE INDEX ol_io ON order_line (ol_i_id, ol_o_id);
+CREATE TABLE stock (s_i_id INT8);
+INSERT INTO stock (s_i_id) VALUES (6463)
+
+query T kvtrace(Scan,prefix=/Table/109/2/6463/{)
+SELECT
+  s_i_id, ol_o_id
+FROM
+  stock INNER LOOKUP JOIN order_line ON s_i_id = ol_i_id
+WHERE
+  ol_o_id BETWEEN 20 AND 100
+----
+Scan /Table/109/2/6463/{20-101}
+
+query T
+EXPLAIN (VERBOSE)
+SELECT
+  s_i_id, ol_o_id
+FROM
+  stock INNER LOOKUP JOIN order_line ON s_i_id = ol_i_id
+WHERE
+  ol_o_id BETWEEN 20 AND 100
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (s_i_id, ol_o_id)
+│ estimated row count: 7,939 (missing stats)
+│
+└── • lookup join (inner)
+    │ columns: (s_i_id, ol_o_id, ol_i_id)
+    │ estimated row count: 7,939 (missing stats)
+    │ table: order_line@ol_io
+    │ lookup condition: (s_i_id = ol_i_id) AND ((ol_o_id >= 20) AND (ol_o_id <= 100))
+    │
+    └── • scan
+          columns: (s_i_id)
+          estimated row count: 1,000 (missing stats)
+          table: stock@stock_pkey
+          spans: FULL SCAN
+
+# Make sure we don't confuse logic to handle constants and inequalities.
+query T
+EXPLAIN (VERBOSE)
+SELECT
+  s_i_id, ol_o_id
+FROM
+  stock INNER LOOKUP JOIN order_line ON s_i_id = ol_i_id
+WHERE
+  ol_o_id IN (19, 20, 21) AND ol_o_id >= 20
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (s_i_id, ol_o_id)
+│ estimated row count: 196 (missing stats)
+│
+└── • project
+    │ columns: (s_i_id, ol_o_id, ol_i_id)
+    │ estimated row count: 196 (missing stats)
+    │
+    └── • lookup join (inner)
+        │ columns: (s_i_id, "lookup_join_const_col_@5", ol_o_id, ol_i_id)
+        │ table: order_line@ol_io
+        │ equality: (s_i_id, lookup_join_const_col_@5) = (ol_i_id,ol_o_id)
+        │
+        └── • cross join (inner)
+            │ columns: (s_i_id, "lookup_join_const_col_@5")
+            │ estimated row count: 2,000 (missing stats)
+            │
+            ├── • scan
+            │     columns: (s_i_id)
+            │     estimated row count: 1,000 (missing stats)
+            │     table: stock@stock_pkey
+            │     spans: FULL SCAN
+            │
+            └── • values
+                  columns: ("lookup_join_const_col_@5")
+                  size: 1 column, 2 rows
+                  row 0, expr 0: 20
+                  row 1, expr 0: 21

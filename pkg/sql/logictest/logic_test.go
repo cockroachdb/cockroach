@@ -11,8 +11,11 @@
 package logictest
 
 import (
+	"runtime"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -26,7 +29,9 @@ import (
 // See the comments in logic.go for more details.
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	RunLogicTest(t, TestServerArgs{}, "testdata/logic_test/[^.]*")
+	skip.UnderDeadlock(t, "times out and/or hangs")
+	runtime.GOMAXPROCS(16)
+	RunLogicTest(t, TestServerArgs{}, testutils.TestDataPath(t, "logic_test", "[^.]*"))
 }
 
 // TestSqlLiteLogic runs the supported SqlLite logic tests. See the comments

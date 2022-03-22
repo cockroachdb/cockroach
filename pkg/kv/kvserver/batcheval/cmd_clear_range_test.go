@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type wrappedBatch struct {
@@ -64,6 +66,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 	overFull := ClearRangeBytesThreshold/len(valueStr) + 1
 	tests := []struct {
 		keyCount           int
+		estimatedStats     bool
 		expClearIterCount  int
 		expClearRangeCount int
 	}{
@@ -84,6 +87,13 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			expClearIterCount:  0,
 			expClearRangeCount: 1,
 		},
+		// Estimated stats always use ClearRange.
+		{
+			keyCount:           1,
+			estimatedStats:     true,
+			expClearIterCount:  0,
+			expClearRangeCount: 1,
+		},
 	}
 
 	for _, test := range tests {
@@ -99,6 +109,9 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if test.estimatedStats {
+				stats.ContainsEstimates++
+			}
 
 			batch := &wrappedBatch{Batch: eng.NewBatch()}
 			defer batch.Close()
@@ -107,7 +120,12 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			h.RangeID = desc.RangeID
 
 			cArgs := CommandArgs{Header: h}
-			cArgs.EvalCtx = (&MockEvalCtx{Desc: &desc, Clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), Stats: stats}).EvalContext()
+			cArgs.EvalCtx = (&MockEvalCtx{
+				ClusterSettings: cluster.MakeTestingClusterSettings(),
+				Desc:            &desc,
+				Clock:           hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+				Stats:           stats,
+			}).EvalContext()
 			cArgs.Args = &roachpb.ClearRangeRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key:    startKey,
@@ -116,14 +134,17 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			}
 			cArgs.Stats = &enginepb.MVCCStats{}
 
-			if _, err := ClearRange(ctx, batch, cArgs, &roachpb.ClearRangeResponse{}); err != nil {
-				t.Fatal(err)
-			}
+			result, err := ClearRange(ctx, batch, cArgs, &roachpb.ClearRangeResponse{})
+			require.NoError(t, err)
+			require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+			require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans, []roachpb.Span{{Key: startKey, EndKey: endKey}})
 
-			// Verify cArgs.Stats is equal to the stats we wrote.
+			// Verify cArgs.Stats is equal to the stats we wrote, ignoring some values.
 			newStats := stats
-			newStats.SysBytes, newStats.SysCount, newStats.AbortSpanBytes = 0, 0, 0          // ignore these values
-			cArgs.Stats.SysBytes, cArgs.Stats.SysCount, cArgs.Stats.AbortSpanBytes = 0, 0, 0 // these too, as GC threshold is updated
+			newStats.ContainsEstimates, cArgs.Stats.ContainsEstimates = 0, 0
+			newStats.SysBytes, cArgs.Stats.SysBytes = 0, 0
+			newStats.SysCount, cArgs.Stats.SysCount = 0, 0
+			newStats.AbortSpanBytes, cArgs.Stats.AbortSpanBytes = 0, 0
 			newStats.Add(*cArgs.Stats)
 			newStats.AgeTo(0) // pin at LastUpdateNanos==0
 			if !newStats.Equal(enginepb.MVCCStats{}) {
@@ -172,10 +193,15 @@ func TestCmdClearRangeDeadline(t *testing.T) {
 	}
 
 	cArgs := CommandArgs{
-		Header:  roachpb.Header{RangeID: desc.RangeID},
-		EvalCtx: (&MockEvalCtx{Desc: &desc, Clock: clock, Stats: stats}).EvalContext(),
-		Stats:   &enginepb.MVCCStats{},
-		Args:    &args,
+		Header: roachpb.Header{RangeID: desc.RangeID},
+		EvalCtx: (&MockEvalCtx{
+			ClusterSettings: cluster.MakeTestingClusterSettings(),
+			Desc:            &desc,
+			Clock:           clock,
+			Stats:           stats,
+		}).EvalContext(),
+		Stats: &enginepb.MVCCStats{},
+		Args:  &args,
 	}
 
 	batch := eng.NewBatch()

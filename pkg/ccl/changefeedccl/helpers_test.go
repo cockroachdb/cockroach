@@ -22,13 +22,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	// Imported to allow locality-related table mutations
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +52,7 @@ func waitForSchemaChange(
 	t testing.TB, sqlDB *sqlutils.SQLRunner, stmt string, arguments ...interface{},
 ) {
 	sqlDB.Exec(t, stmt, arguments...)
-	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' ORDER BY created DESC LIMIT 1")
 	var jobID string
 	row.Scan(&jobID)
 
@@ -101,7 +103,7 @@ func stripTsFromPayloads(payloads []cdctest.TestFeedMessage) ([]string, error) {
 		var value []byte
 		var message map[string]interface{}
 		if err := gojson.Unmarshal(m.Value, &message); err != nil {
-			return nil, errors.Newf(`unmarshal: %s: %s`, m.Value, err)
+			return nil, errors.Wrapf(err, `unmarshal: %s`, m.Value)
 		}
 		delete(message, "updated")
 		value, err := reformatJSON(message)
@@ -118,7 +120,7 @@ func extractUpdatedFromValue(value []byte) (float64, error) {
 		Updated string `json:"updated"`
 	}
 	if err := gojson.Unmarshal(value, &updatedRaw); err != nil {
-		return -1, errors.Newf(`unmarshal: %s: %s`, value, err)
+		return -1, errors.Wrapf(err, `unmarshal: %s`, value)
 	}
 	updatedVal, err := strconv.ParseFloat(updatedRaw.Updated, 64)
 	if err != nil {
@@ -186,7 +188,7 @@ func assertPayloadsBaseErr(
 		// format again with timestamps stripped
 		actualFormatted, err = stripTsFromPayloads(actual)
 		if err != nil {
-			return nil
+			return err
 		}
 	}
 
@@ -222,34 +224,6 @@ func avroToJSON(t testing.TB, reg *cdctest.SchemaRegistry, avroBytes []byte) []b
 	return json
 }
 
-func assertPayloadsAvro(
-	t testing.TB, reg *cdctest.SchemaRegistry, f cdctest.TestFeed, expected []string,
-) {
-	t.Helper()
-
-	var actual []string
-	for len(actual) < len(expected) {
-		m, err := f.Next()
-		if err != nil {
-			t.Fatal(err)
-		} else if m == nil {
-			t.Fatal(`expected message`)
-		} else if m.Key != nil {
-			key, value := avroToJSON(t, reg, m.Key), avroToJSON(t, reg, m.Value)
-			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, m.Topic, key, value))
-		}
-	}
-
-	// The tests that use this aren't concerned with order, just that these are
-	// the next len(expected) messages.
-	sort.Strings(expected)
-	sort.Strings(actual)
-	if !reflect.DeepEqual(expected, actual) {
-		t.Fatalf("expected\n  %s\ngot\n  %s",
-			strings.Join(expected, "\n  "), strings.Join(actual, "\n  "))
-	}
-}
-
 func assertRegisteredSubjects(t testing.TB, reg *cdctest.SchemaRegistry, expected []string) {
 	t.Helper()
 
@@ -275,7 +249,9 @@ func parseTimeToHLC(t testing.TB, s string) hlc.Timestamp {
 	return ts
 }
 
-func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
+// Expect to receive a resolved timestamp and the partition it belongs to from
+// a test changefeed.
+func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) (hlc.Timestamp, string) {
 	t.Helper()
 	m, err := f.Next()
 	if err != nil {
@@ -283,7 +259,7 @@ func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
 	} else if m == nil {
 		t.Fatal(`expected message`)
 	}
-	return extractResolvedTimestamp(t, m)
+	return extractResolvedTimestamp(t, m), m.Partition
 }
 
 func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Timestamp {
@@ -305,9 +281,7 @@ func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Time
 	return parseTimeToHLC(t, resolvedRaw.Resolved)
 }
 
-func expectResolvedTimestampAvro(
-	t testing.TB, reg *cdctest.SchemaRegistry, f cdctest.TestFeed,
-) hlc.Timestamp {
+func expectResolvedTimestampAvro(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
 	t.Helper()
 	m, err := f.Next()
 	if err != nil {
@@ -316,13 +290,14 @@ func expectResolvedTimestampAvro(
 		t.Fatal(`expected message`)
 	}
 	if m.Key != nil {
-		key, value := avroToJSON(t, reg, m.Key), avroToJSON(t, reg, m.Value)
-		t.Fatalf(`unexpected row %s: %s -> %s`, m.Topic, key, value)
+		t.Fatalf(`unexpected row %s: %s -> %s`, m.Topic, m.Key, m.Value)
 	}
 	if m.Resolved == nil {
 		t.Fatal(`expected a resolved timestamp notification`)
 	}
-	resolvedNative, err := reg.EncodedAvroToNative(m.Resolved)
+
+	var resolvedNative interface{}
+	err = gojson.Unmarshal(m.Resolved, &resolvedNative)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,6 +328,7 @@ func startTestFullServer(
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		Server:           &server.TestingKnobs{},
 	}
 	if options.knobsFn != nil {
 		options.knobsFn(&knobs)
@@ -368,7 +344,7 @@ func startTestFullServer(
 	}
 
 	ctx := context.Background()
-	resetFlushFrequency := changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)
+	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
 	s, db, _ := serverutils.StartServer(t, args)
 
 	cleanup := func() {
@@ -394,25 +370,52 @@ func startTestFullServer(
 	return s, db, cleanup
 }
 
-func startTestTenant(
-	t testing.TB, options feedTestOptions,
-) (serverutils.TestServerInterface, *gosql.DB, func()) {
-	// We need to open a new log scope because StartTenant
-	// calls log.SetNodeIDs which can only be called once
-	// per log scope. If we don't open a log scope here,
-	// then any test function that wants to use this twice
-	// would fail.
-	logScope := log.Scope(t)
+// startTestCluster starts a 3 node cluster.
+//
+// Note, if a testfeed depends on particular testing knobs, those may
+// need to be applied to each of the servers in the test cluster
+// returned from this function.
+func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB, func()) {
 	ctx := context.Background()
-
-	kvServer, _, kvCleanup := startTestFullServer(t, options)
-	cleanup := func() {
-		kvCleanup()
-		logScope.Close(t)
-	}
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
+	cluster, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, knobs,
+		multiregionccltestutils.WithUseDatabase("d"),
+	)
+	cleanupAndReset := func() {
+		cleanup()
+		resetFlushFrequency()
+	}
+
+	var err error
+	defer func() {
+		if err != nil {
+			cleanupAndReset()
+			require.NoError(t, err)
+		}
+	}()
+	_, err = db.ExecContext(ctx, serverSetupStatements)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `ALTER DATABASE d PRIMARY REGION "us-east1"`)
+	return cluster, db, cleanupAndReset
+}
+
+func startTestTenant(
+	t testing.TB, options feedTestOptions,
+) (serverutils.TestServerInterface, *gosql.DB, func()) {
+	ctx := context.Background()
+
+	kvServer, _, cleanupCluster := startTestFullServer(t, options)
+	knobs := base.TestingKnobs{
+		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		Server:           &server.TestingKnobs{},
 	}
 	if options.knobsFn != nil {
 		options.knobsFn(&knobs)
@@ -436,7 +439,12 @@ func startTestTenant(
 	// Log so that it is clear if a failed test happened
 	// to run on a tenant.
 	t.Logf("Running test using tenant %s", tenantID)
-	return server, tenantDB, cleanup
+	return server, tenantDB, func() {
+		tenantServer.Stopper().Stop(context.Background())
+		log.Infof(context.Background(), "tenant server stopped")
+		cleanupCluster()
+		log.Infof(context.Background(), "cluster shut down")
+	}
 }
 
 type cdcTestFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)
@@ -508,6 +516,23 @@ func sinklessTestWithOptions(testFn cdcTestFn, opts feedTestOptions) func(*testi
 	}
 }
 
+// RunRandomSink runs the testFn against one of a number of possible
+// sinks. Sinkless is not included in the possible sinks.
+func RunRandomSinkTest(t *testing.T, desc string, testFn cdcTestFn, testOpts ...feedTestOption) {
+	// TODO(ssd): It would be nice if explicitly selecting a test
+	// via -run/TESTS= would force it to always run.
+	switch p := rand.Float32(); {
+	case p < 0.20:
+		t.Run(fmt.Sprintf("enterprise/%s", desc), enterpriseTest(testFn, testOpts...))
+	case p < 0.40:
+		t.Run(fmt.Sprintf("cloudstorage/%s", desc), cloudStorageTest(testFn, testOpts...))
+	case p < 0.60:
+		t.Run(fmt.Sprintf("webhook/%s", desc), webhookTest(testFn, testOpts...))
+	default: // Run kafka a bit more often
+		t.Run(fmt.Sprintf("kafka/%s", desc), kafkaTest(testFn, testOpts...))
+	}
+}
+
 func enterpriseTest(testFn cdcTestFn, testOpts ...feedTestOption) func(*testing.T) {
 	return enterpriseTestWithOptions(testFn, makeOptions(testOpts...))
 }
@@ -543,10 +568,10 @@ func cloudStorageTestWithOptions(testFn cdcTestFn, options feedTestOptions) func
 			}
 			blobClientFactory := blobs.NewLocalOnlyBlobClientFactory(options.externalIODir)
 			if serverKnobs, ok := knobs.Server.(*server.TestingKnobs); ok {
-				serverKnobs.TenantBlobClientFactory = blobClientFactory
+				serverKnobs.BlobClientFactory = blobClientFactory
 			} else {
 				knobs.Server = &server.TestingKnobs{
-					TenantBlobClientFactory: blobClientFactory,
+					BlobClientFactory: blobClientFactory,
 				}
 			}
 		}
@@ -584,6 +609,19 @@ func webhookTestWithOptions(testFn cdcTestFn, options feedTestOptions) func(*tes
 	}
 }
 
+func pubsubTest(testFn cdcTestFn, testOpts ...feedTestOption) func(t *testing.T) {
+	return pubsubTestWithOptions(testFn, makeOptions(testOpts...))
+}
+
+func pubsubTestWithOptions(testFn cdcTestFn, options feedTestOptions) func(*testing.T) {
+	return func(t *testing.T) {
+		s, db, stopServer := startTestServer(t, options)
+		defer stopServer()
+		f := makePubsubFeedFactory(s, db)
+		testFn(t, db, f)
+	}
+}
+
 func serverArgsRegion(args base.TestServerArgs) string {
 	for _, tier := range args.Locality.Tiers {
 		if tier.Key == "region" {
@@ -591,6 +629,30 @@ func serverArgsRegion(args base.TestServerArgs) string {
 		}
 	}
 	return ""
+}
+
+// expectNotice creates a pretty crude database connection that doesn't involve
+// a lot of cdc test framework, use with caution. Driver-agnostic tools don't
+// have clean ways of inspecting incoming notices.
+func expectNotice(t *testing.T, s serverutils.TestServerInterface, sql string, expected string) {
+	url, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+	base, err := pq.NewConnector(url.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual := "(no notice)"
+	connector := pq.ConnectorWithNoticeHandler(base, func(n *pq.Error) {
+		actual = n.Message
+	})
+
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+	sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+	sqlDB.Exec(t, sql)
+
+	require.Equal(t, expected, actual)
 }
 
 func feed(

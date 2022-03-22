@@ -48,6 +48,35 @@ var MustExist ConfigOption = func(cfg *engineConfig) error {
 	return nil
 }
 
+// DisableAutomaticCompactions configures an engine to be opened with disabled
+// automatic compactions. Used primarily for debugCompactCmd.
+var DisableAutomaticCompactions ConfigOption = func(cfg *engineConfig) error {
+	cfg.Opts.DisableAutomaticCompactions = true
+	return nil
+}
+
+// ForTesting configures the engine for use in testing. It may randomize some
+// config options to improve test coverage.
+var ForTesting ConfigOption = func(cfg *engineConfig) error {
+	if cfg.Settings == nil {
+		cfg.Settings = cluster.MakeTestingClusterSettings()
+	}
+	return nil
+}
+
+// ForStickyEngineTesting is similar to ForTesting but leaves separated
+// intents as enabled since we cannot ensure consistency in the test setup
+// between what the KV layer thinks and what the engine does in terms of
+// writing separated intents. Since our optimizations are for the case where
+// we know there are only separated intents, this sidesteps any test issues
+// due to inconsistencies.
+var ForStickyEngineTesting ConfigOption = func(cfg *engineConfig) error {
+	if cfg.Settings == nil {
+		cfg.Settings = cluster.MakeTestingClusterSettings()
+	}
+	return nil
+}
+
 // Attributes configures the engine's attributes.
 func Attributes(attrs roachpb.Attributes) ConfigOption {
 	return func(cfg *engineConfig) error {
@@ -90,6 +119,19 @@ func CacheSize(size int64) ConfigOption {
 	}
 }
 
+// EncryptionAtRest configures an engine to use encryption-at-rest. It is used
+// for configuring in-memory engines, which are used in tests. It is not safe
+// to modify the given slice afterwards as it is captured by reference.
+func EncryptionAtRest(encryptionOptions []byte) ConfigOption {
+	return func(cfg *engineConfig) error {
+		if len(encryptionOptions) > 0 {
+			cfg.UseFileRegistry = true
+			cfg.EncryptionOptions = encryptionOptions
+		}
+		return nil
+	}
+}
+
 // Hook configures a hook to initialize additional storage options. It's used
 // to initialize encryption-at-rest details in CCL builds.
 func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
@@ -99,13 +141,6 @@ func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
 		}
 		return hookFunc(&cfg.PebbleConfig.StorageConfig)
 	}
-}
-
-// SettingsForTesting configures the engine's cluster settings for an engine
-// used in testing. It may randomize some cluster settings to improve test
-// coverage.
-func SettingsForTesting() ConfigOption {
-	return Settings(makeRandomSettingsForSeparatedIntents())
 }
 
 // A Location describes where the storage engine's data will be written. A
@@ -123,7 +158,7 @@ func Filesystem(dir string) Location {
 		// fs is left nil intentionally, so that it will be left as the
 		// default of vfs.Default wrapped in vfs.WithDiskHealthChecks
 		// (initialized by DefaultPebbleOptions).
-		// TODO(jackson): Refactor to make it harder to accidentially remove
+		// TODO(jackson): Refactor to make it harder to accidentally remove
 		// disk health checks by setting your own VFS in a call to NewPebble.
 	}
 }
@@ -164,5 +199,21 @@ func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, err
 		cfg.Opts.Cache = pebble.NewCache(*cfg.cacheSize)
 		defer cfg.Opts.Cache.Unref()
 	}
-	return NewPebble(ctx, cfg.PebbleConfig)
+	if cfg.Settings == nil {
+		cfg.Settings = cluster.MakeClusterSettings()
+	}
+	p, err := NewPebble(ctx, cfg.PebbleConfig)
+	if err != nil {
+		return nil, err
+	}
+	// Set the active cluster version, ensuring the engine's format
+	// major version is ratcheted sufficiently high to match the
+	// settings cluster version.
+	if v := p.settings.Version.ActiveVersionOrEmpty(ctx).Version; v != (roachpb.Version{}) {
+		if err := p.SetMinVersion(v); err != nil {
+			p.Close()
+			return nil, err
+		}
+	}
+	return p, nil
 }

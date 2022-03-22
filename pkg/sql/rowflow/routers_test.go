@@ -79,8 +79,8 @@ func TestRouters(t *testing.T) {
 	const numCols = 6
 	const numRows = 200
 
-	rng, _ := randutil.NewPseudoRand()
-	alloc := &rowenc.DatumAlloc{}
+	rng, _ := randutil.NewTestRand()
+	alloc := &tree.DatumAlloc{}
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
@@ -241,7 +241,7 @@ func TestRouters(t *testing.T) {
 			case execinfrapb.OutputRouterSpec_BY_RANGE:
 				// Verify each row is in the correct output stream.
 				enc := testRangeRouterSpec.Encodings[0]
-				var alloc rowenc.DatumAlloc
+				var alloc tree.DatumAlloc
 				for bIdx := range rows {
 					for _, row := range rows[bIdx] {
 						data, err := row[enc.Column].Encode(types[enc.Column], &alloc, enc.Encoding, nil)
@@ -354,7 +354,7 @@ func TestConsumerStatus(t *testing.T) {
 				d = tree.NewDInt(math.MaxInt32)
 				row1 = rowenc.EncDatumRow{rowenc.DatumToEncDatum(colTypes[0], d)}
 			default:
-				rng, _ := randutil.NewPseudoRand()
+				rng, _ := randutil.NewTestRand()
 				vals := randgen.RandEncDatumRowsOfTypes(rng, 1 /* numRows */, colTypes)
 				row0 = vals[0]
 				row1 = row0
@@ -431,7 +431,7 @@ func TestConsumerStatus(t *testing.T) {
 func preimageAttack(
 	colTypes []*types.T, hr *hashRouter, streamIdx int, numStreams int,
 ) (rowenc.EncDatumRow, error) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for {
 		vals := randgen.RandEncDatumRowOfTypes(rng, colTypes)
 		curStreamIdx, err := hr.computeDestination(vals)
@@ -686,7 +686,7 @@ func TestRouterBlocks(t *testing.T) {
 			var numRowsSent uint32
 			stop := make(chan struct{})
 			go func() {
-				rng, _ := randutil.NewPseudoRand()
+				rng, _ := randutil.NewTestRand()
 			Loop:
 				for {
 					select {
@@ -754,8 +754,7 @@ func TestRouterDiskSpill(t *testing.T) {
 
 	// Enable stats recording.
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("root", tracing.WithForceRealSpan())
-	sp.SetVerbose(true)
+	sp := tracer.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
 	ctx := tracing.ContextWithSpan(context.Background(), sp)
 
 	st := cluster.MakeTestingClusterSettings()
@@ -791,7 +790,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		},
 		DiskMonitor: diskMonitor,
 	}
-	alloc := &rowenc.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 
 	extraMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
 	defer extraMemMonitor.Stop(ctx)

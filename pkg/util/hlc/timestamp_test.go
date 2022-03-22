@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func makeTS(walltime int64, logical int32) Timestamp {
@@ -23,6 +24,38 @@ func makeTS(walltime int64, logical int32) Timestamp {
 
 func makeSynTS(walltime int64, logical int32) Timestamp {
 	return makeTS(walltime, logical).WithSynthetic(true)
+}
+
+func TestCompare(t *testing.T) {
+	w0l0 := Timestamp{}
+	w1l1 := Timestamp{WallTime: 1, Logical: 1}
+	w1l2 := Timestamp{WallTime: 1, Logical: 2}
+	w2l1 := Timestamp{WallTime: 2, Logical: 1}
+	w2l2 := Timestamp{WallTime: 2, Logical: 2}
+
+	testcases := map[string]struct {
+		a      Timestamp
+		b      Timestamp
+		expect int
+	}{
+		"empty eq empty": {w0l0, w0l0, 0},
+		"empty lt set":   {w0l0, w1l1, -1},
+		"set gt empty":   {w1l1, w0l0, 1},
+		"set eq set":     {w1l1, w1l1, 0},
+
+		"wall lt":         {w1l1, w2l1, -1},
+		"wall gt":         {w2l1, w1l1, 1},
+		"logical lt":      {w1l1, w1l2, -1},
+		"logical gt":      {w1l2, w1l1, 1},
+		"both lt":         {w1l1, w2l2, -1},
+		"both gt":         {w2l2, w1l1, 1},
+		"wall precedence": {w2l1, w1l2, 1},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expect, tc.a.Compare(tc.b))
+		})
+	}
 }
 
 func TestEqOrdering(t *testing.T) {

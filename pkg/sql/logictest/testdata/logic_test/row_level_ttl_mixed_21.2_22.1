@@ -1,0 +1,10 @@
+# LogicTest: local-mixed-21.2-22.1
+
+statement error row level TTL is only available once the cluster is fully upgraded
+CREATE TABLE tbl () WITH (ttl_expire_after = '10 minutes')
+
+statement ok
+CREATE TABLE tbl ()
+
+statement error row level TTL is only available once the cluster is fully upgraded
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes')

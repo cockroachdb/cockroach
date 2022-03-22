@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"reflect"
 	"regexp"
@@ -43,7 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/maruel/panicparse/stack"
+	"github.com/maruel/panicparse/v2/stack"
 	"github.com/petermattis/goid"
 )
 
@@ -53,9 +54,10 @@ import (
 // The input files use the following DSL:
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [uncertainty-limit=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [max-lock-wait-queue-length=<int>]
+// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
 //   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 // sequence     req=<req-name> [eval-kind=<pess|opt|pess-after-opt]
+// poison       req=<req-name>
 // finish       req=<req-name>
 //
 // handle-write-intent-error  req=<req-name> txn=<txn-name> key=<key> lease-seq=<seq>
@@ -76,14 +78,16 @@ import (
 // debug-lock-table
 // debug-disable-txn-pushes
 // debug-set-clock           ts=<secs>
+// debug-advance-clock       ts=<secs>
 // debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=<count>
+// debug-set-max-locks n=<count>
 // reset
 //
 func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	datadriven.Walk(t, "testdata/concurrency_manager", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
 		c := newCluster()
 		c.enableTxnPushes()
 		m := concurrency.NewManager(c.makeConfig())
@@ -154,10 +158,21 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				waitPolicy := scanWaitPolicy(t, d, false /* required */)
 
+				var lockTimeout time.Duration
+				if d.HasArg("lock-timeout") {
+					// A lock timeout of 1ns will be considered immediately expired
+					// without a delay by the lockTableWaiter, ensuring that the lock
+					// timeout logic deterministically fires.
+					// See (*lockTableWaiterImpl).timeUntilDeadline.
+					lockTimeout = 1 * time.Nanosecond
+				}
+
 				var maxLockWaitQueueLength int
 				if d.HasArg("max-lock-wait-queue-length") {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
 				}
+
+				pp := scanPoisonPolicy(t, d)
 
 				// Each roachpb.Request is provided on an indented line.
 				reqs, reqUnions := scanRequests(t, d, c)
@@ -169,10 +184,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					// TODO(nvanbenschoten): test Priority
 					ReadConsistency:        readConsistency,
 					WaitPolicy:             waitPolicy,
+					LockTimeout:            lockTimeout,
 					MaxLockWaitQueueLength: maxLockWaitQueueLength,
 					Requests:               reqUnions,
 					LatchSpans:             latchSpans,
 					LockSpans:              lockSpans,
+					PoisonPolicy:           pp,
 				}
 				return ""
 
@@ -243,6 +260,21 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					c.mu.Lock()
 					delete(c.guardsByReqName, reqName)
 					c.mu.Unlock()
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "poison":
+				var reqName string
+				d.ScanArgs(t, "req", &reqName)
+				guard, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+
+				opName := fmt.Sprintf("poison %s", reqName)
+				mon.runSync(opName, func(ctx context.Context) {
+					log.Event(ctx, "poisoning request")
+					m.PoisonReq(guard)
 				})
 				return c.waitAndCollect(t, mon)
 
@@ -499,10 +531,22 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.manual.Set(nanos)
 				return ""
 
+			case "debug-advance-clock":
+				var secs int
+				d.ScanArgs(t, "ts", &secs)
+				c.manual.Increment(int64(secs) * time.Second.Nanoseconds())
+				return ""
+
 			case "debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache":
 				var n int
 				d.ScanArgs(t, "n", &n)
 				c.setDiscoveredLocksThresholdToConsultFinalizedTxnCache(n)
+				return ""
+
+			case "debug-set-max-locks":
+				var n int
+				d.ScanArgs(t, "n", &n)
+				m.TestingSetMaxLocks(int64(n))
 				return ""
 
 			case "reset":
@@ -606,9 +650,6 @@ func (c *cluster) makeConfig() concurrency.Config {
 		Settings:       c.st,
 		Clock:          c.clock,
 		IntentResolver: c,
-		OnContentionEvent: func(ev *roachpb.ContentionEvent) {
-			ev.Duration = 1234 * time.Millisecond // for determinism
-		},
 		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
 	}
 }
@@ -901,7 +942,7 @@ func (c *cluster) collectSpans(
 	h := roachpb.Header{Txn: txn, Timestamp: ts}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
-			cmd.DeclareKeys(c.rangeDesc, h, req, latchSpans, lockSpans)
+			cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans, 0)
 		} else {
 			t.Fatalf("unrecognized command %s", req.Method())
 		}
@@ -932,6 +973,7 @@ func (c *cluster) waitAndCollect(t *testing.T, m *monitor) string {
 type monitor struct {
 	seq int
 	gs  map[*monitoredGoroutine]struct{}
+	tr  *tracing.Tracer
 	buf []byte // avoids allocations
 }
 
@@ -949,19 +991,21 @@ type monitoredGoroutine struct {
 
 func newMonitor() *monitor {
 	return &monitor{
+		tr: tracing.NewTracer(),
 		gs: make(map[*monitoredGoroutine]struct{}),
 	}
 }
 
 func (m *monitor) runSync(opName string, fn func(context.Context)) {
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(
-		context.Background(), tracing.NewTracer(), opName)
+	ctx, sp := m.tr.StartSpanCtx(context.Background(), opName, tracing.WithRecording(tracing.RecordingVerbose))
 	g := &monitoredGoroutine{
-		opSeq:   0, // synchronous
-		opName:  opName,
-		ctx:     ctx,
-		collect: collect,
-		cancel:  cancel,
+		opSeq:  0, // synchronous
+		opName: opName,
+		ctx:    ctx,
+		collect: func() tracing.Recording {
+			return sp.GetConfiguredRecording()
+		},
+		cancel: sp.Finish,
 	}
 	m.gs[g] = struct{}{}
 	fn(ctx)
@@ -970,14 +1014,15 @@ func (m *monitor) runSync(opName string, fn func(context.Context)) {
 
 func (m *monitor) runAsync(opName string, fn func(context.Context)) (cancel func()) {
 	m.seq++
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(
-		context.Background(), tracing.NewTracer(), opName)
+	ctx, sp := m.tr.StartSpanCtx(context.Background(), opName, tracing.WithRecording(tracing.RecordingVerbose))
 	g := &monitoredGoroutine{
-		opSeq:   m.seq,
-		opName:  opName,
-		ctx:     ctx,
-		collect: collect,
-		cancel:  cancel,
+		opSeq:  m.seq,
+		opName: opName,
+		ctx:    ctx,
+		collect: func() tracing.Recording {
+			return sp.GetConfiguredRecording()
+		},
+		cancel: sp.Finish,
 	}
 	m.gs[g] = struct{}{}
 	go func() {
@@ -1008,16 +1053,14 @@ func (m *monitor) collectRecordings() string {
 		rec := g.collect()
 		for _, span := range rec {
 			for _, log := range span.Logs {
-				for _, field := range log.Fields {
-					if prev > 0 {
-						prev--
-						continue
-					}
-					logs = append(logs, logRecord{
-						g: g, value: field.Value,
-					})
-					g.prevEvents++
+				if prev > 0 {
+					prev--
+					continue
 				}
+				logs = append(logs, logRecord{
+					g: g, value: log.Msg().StripMarkers(),
+				})
+				g.prevEvents++
 			}
 		}
 		if atomic.LoadInt32(&g.finished) == 1 {
@@ -1058,11 +1101,7 @@ func (m *monitor) hasNewEvents(g *monitoredGoroutine) bool {
 	events := 0
 	rec := g.collect()
 	for _, span := range rec {
-		for _, log := range span.Logs {
-			for range log.Fields {
-				events++
-			}
-		}
+		events += len(span.Logs)
 	}
 	return events > g.prevEvents
 }
@@ -1138,7 +1177,8 @@ func (m *monitor) waitForAsyncGoroutinesToStall(t *testing.T) {
 			continue
 		}
 		stalledCall := firstNonStdlib(stat.Stack.Calls)
-		log.Eventf(g.ctx, "blocked on %s in %s", stat.State, stalledCall.Func.PkgDotName())
+		log.Eventf(g.ctx, "blocked on %s in %s.%s",
+			stat.State, stalledCall.Func.DirName, stalledCall.Func.Name)
 	}
 }
 
@@ -1201,6 +1241,28 @@ var goroutineStalledStates = map[string]bool{
 // matches the provided filter. It uses the provided buffer to avoid repeat
 // allocations.
 func goroutineStatus(t *testing.T, filter string, buf *[]byte) []*stack.Goroutine {
+	b := stacks(buf)
+	s, _, err := stack.ScanSnapshot(bytes.NewBuffer(b), ioutil.Discard, stack.DefaultOpts())
+	if err != io.EOF {
+		t.Fatalf("could not parse goroutine dump: %v", err)
+		return nil
+	}
+
+	matching := s.Goroutines[:0]
+	for _, g := range s.Goroutines {
+		for _, call := range g.Stack.Calls {
+			if strings.Contains(call.Func.Complete, filter) {
+				matching = append(matching, g)
+				break
+			}
+		}
+	}
+	return matching
+}
+
+// stacks is a wrapper for runtime.Stack that attempts to recover the data for
+// all goroutines. It uses the provided buffer to avoid repeat allocations.
+func stacks(buf *[]byte) []byte {
 	// We don't know how big the buffer needs to be to collect all the
 	// goroutines. Start with 64 KB and try a few times, doubling each time.
 	// NB: This is inspired by runtime/pprof/pprof.go:writeGoroutineStacks.
@@ -1216,30 +1278,12 @@ func goroutineStatus(t *testing.T, filter string, buf *[]byte) []*stack.Goroutin
 		}
 		*buf = make([]byte, 2*len(*buf))
 	}
-
-	// guesspaths=true is required for Call objects to have IsStdlib filled in.
-	guesspaths := true
-	ctx, err := stack.ParseDump(bytes.NewBuffer(truncBuf), ioutil.Discard, guesspaths)
-	if err != nil {
-		t.Fatalf("could not parse goroutine dump: %v", err)
-		return nil
-	}
-
-	matching := ctx.Goroutines[:0]
-	for _, g := range ctx.Goroutines {
-		for _, call := range g.Stack.Calls {
-			if strings.Contains(call.Func.Raw, filter) {
-				matching = append(matching, g)
-				break
-			}
-		}
-	}
-	return matching
+	return truncBuf
 }
 
 func firstNonStdlib(calls []stack.Call) stack.Call {
 	for _, call := range calls {
-		if !call.IsStdlib {
+		if call.Location != stack.Stdlib {
 			return call
 		}
 	}

@@ -270,12 +270,13 @@ func TestStopperCloserConcurrent(t *testing.T) {
 func TestStopperNumTasks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
-	defer s.Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stop(ctx)
 	var tasks []chan bool
 	for i := 0; i < 3; i++ {
 		c := make(chan bool)
 		tasks = append(tasks, c)
-		if err := s.RunAsyncTask(context.Background(), "test", func(_ context.Context) {
+		if err := s.RunAsyncTask(ctx, "test", func(_ context.Context) {
 			// Wait for channel to close
 			<-c
 		}); err != nil {
@@ -687,34 +688,80 @@ func (cf closerFunc) Close() { cf() }
 // the ChildSpan option.
 func TestStopperRunAsyncTaskTracing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := stop.NewStopper()
+	tr := tracing.NewTracerWithOpt(context.Background(), tracing.WithTracingMode(tracing.TracingModeActiveSpansRegistry))
+	s := stop.NewStopper(stop.WithTracer(tr))
 
-	ctx, getRecording, finish := tracing.ContextWithRecordingSpan(
-		context.Background(), tracing.NewTracer(), "parent")
+	ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(context.Background(), tr, "parent")
+	defer getRecAndFinish()
+	root := tracing.SpanFromContext(ctx)
+	require.NotNil(t, root)
+	traceID := root.TraceID()
 
 	// Start two child tasks. Only the one with ChildSpan:true is expected to be
 	// present in the parent's recording.
 	require.NoError(t, s.RunAsyncTaskEx(ctx, stop.TaskOpts{
-		TaskName:  "async child",
-		ChildSpan: false,
+		TaskName: "async child different recording",
+		SpanOpt:  stop.FollowsFromSpan,
 	},
 		func(ctx context.Context) {
 			log.Event(ctx, "async 1")
 		},
 	))
 	require.NoError(t, s.RunAsyncTaskEx(ctx, stop.TaskOpts{
-		TaskName:  "async child same trace",
-		ChildSpan: true,
+		TaskName: "async child same trace",
+		SpanOpt:  stop.ChildSpan,
 	},
 		func(ctx context.Context) {
 			log.Event(ctx, "async 2")
 		},
 	))
 
+	{
+		errC := make(chan error)
+		require.NoError(t, s.RunAsyncTaskEx(ctx, stop.TaskOpts{
+			TaskName: "sterile parent",
+			SpanOpt:  stop.SterileRootSpan,
+		},
+			func(ctx context.Context) {
+				log.Event(ctx, "async 3")
+				sp1 := tracing.SpanFromContext(ctx)
+				if sp1 == nil {
+					errC <- errors.Errorf("missing span")
+					return
+				}
+				sp2 := tr.StartSpan("child", tracing.WithParent(sp1))
+				defer sp2.Finish()
+				if sp2.TraceID() == traceID {
+					errC <- errors.Errorf("expected different trace")
+				}
+				close(errC)
+			},
+		))
+		require.NoError(t, <-errC)
+	}
+
 	s.Stop(ctx)
-	finish()
-	require.NoError(t, tracing.TestingCheckRecordedSpans(getRecording(), `
+	require.NoError(t, tracing.CheckRecordedSpans(getRecAndFinish(), `
 		span: parent
+			tags: _verbose=1
 			span: async child same trace
+				tags: _verbose=1
 				event: async 2`))
+}
+
+// Test that RunAsyncTask creates root spans when the caller doesn't have a
+// span.
+func TestStopperRunAsyncTaskCreatesRootSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tr := tracing.NewTracer()
+	ctx := context.Background()
+	s := stop.NewStopper(stop.WithTracer(tr))
+	defer s.Stop(ctx)
+	c := make(chan *tracing.Span)
+	require.NoError(t, s.RunAsyncTask(ctx, "test",
+		func(ctx context.Context) {
+			c <- tracing.SpanFromContext(ctx)
+		},
+	))
+	require.NotNil(t, <-c)
 }

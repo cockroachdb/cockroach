@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/logictest"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -22,7 +23,7 @@ const logictestGlob = "logic_test/[^.]*"
 
 func TestCCLLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	logictest.RunLogicTest(t, logictest.TestServerArgs{}, filepath.Join("testdata/", logictestGlob))
+	logictest.RunLogicTest(t, logictest.TestServerArgs{}, testutils.TestDataPath(t, logictestGlob))
 }
 
 // TestTenantLogic runs all non-CCL logic test files under the 3node-tenant
@@ -46,7 +47,7 @@ func TestTenantLogic(t *testing.T) {
 		filepath.Join(testdataDir, logictestGlob))
 	logictest.RunLogicTestWithDefaultConfig(
 		t, logictest.TestServerArgs{}, "3node-tenant", true, /* runCCLConfigs */
-		filepath.Join("testdata/", logictestGlob))
+		testutils.TestDataPath(t, logictestGlob))
 }
 
 func TestTenantSQLLiteLogic(t *testing.T) {

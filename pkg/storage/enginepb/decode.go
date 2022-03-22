@@ -43,28 +43,30 @@ func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 }
 
 // DecodeKey decodes an key/timestamp from its serialized representation.
-func DecodeKey(encodedKey []byte) (key []byte, timestamp hlc.Timestamp, _ error) {
-	key, ts, ok := SplitMVCCKey(encodedKey)
+func DecodeKey(encodedKey []byte) ([]byte, hlc.Timestamp, error) {
+	key, encodedTS, ok := SplitMVCCKey(encodedKey)
 	if !ok {
-		return nil, timestamp, errors.Errorf("invalid encoded mvcc key: %x", encodedKey)
+		return nil, hlc.Timestamp{}, errors.Errorf("invalid encoded mvcc key: %x", encodedKey)
 	}
-	switch len(ts) {
+	// NB: This logic is duplicated with storage.decodeMVCCTimestamp() to avoid the
+	// overhead of an additional function call (~13%).
+	var timestamp hlc.Timestamp
+	switch len(encodedTS) {
 	case 0:
 		// No-op.
 	case 8:
-		timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
+		timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
 	case 12:
-		timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
-		timestamp.Logical = int32(binary.BigEndian.Uint32(ts[8:12]))
+		timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
+		timestamp.Logical = int32(binary.BigEndian.Uint32(encodedTS[8:12]))
 	case 13:
-		timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
-		timestamp.Logical = int32(binary.BigEndian.Uint32(ts[8:12]))
-		timestamp.Synthetic = ts[12] != 0
+		timestamp.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
+		timestamp.Logical = int32(binary.BigEndian.Uint32(encodedTS[8:12]))
+		timestamp.Synthetic = encodedTS[12] != 0
 	default:
-		return nil, timestamp, errors.Errorf(
-			"invalid encoded mvcc key: %x bad timestamp %x", encodedKey, ts)
+		return nil, hlc.Timestamp{}, errors.Errorf(
+			"invalid encoded mvcc key: %x bad timestamp %x", encodedKey, encodedTS)
 	}
-
 	return key, timestamp, nil
 }
 

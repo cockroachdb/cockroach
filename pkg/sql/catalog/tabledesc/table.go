@@ -17,6 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -25,9 +27,48 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
+
+// ColumnDefDescs contains the non-error return values for MakeColumnDefDescs.
+type ColumnDefDescs struct {
+	// tree.ColumnTableDef is the column definition from which this struct is
+	// derived.
+	*tree.ColumnTableDef
+
+	// descpb.ColumnDescriptor is the column descriptor built from the column
+	// definition.
+	*descpb.ColumnDescriptor
+
+	// PrimaryKeyOrUniqueIndexDescriptor is the index descriptor for the index implied by a
+	// PRIMARY KEY or UNIQUE column.
+	PrimaryKeyOrUniqueIndexDescriptor *descpb.IndexDescriptor
+
+	// DefaultExpr and OnUpdateExpr are the DEFAULT and ON UPDATE expressions,
+	// returned in tree.TypedExpr form for analysis, e.g. recording sequence
+	// dependencies.
+	DefaultExpr, OnUpdateExpr tree.TypedExpr
+}
+
+// MaxBucketAllowed is the maximum number of buckets allowed when creating a
+// hash-sharded index or primary key.
+const MaxBucketAllowed = 2048
+
+// ForEachTypedExpr iterates over each typed expression in this struct.
+func (cdd *ColumnDefDescs) ForEachTypedExpr(fn func(tree.TypedExpr) error) error {
+	if cdd.ColumnTableDef.HasDefaultExpr() {
+		if err := fn(cdd.DefaultExpr); err != nil {
+			return err
+		}
+	}
+	if cdd.ColumnTableDef.HasOnUpdateExpr() {
+		if err := fn(cdd.OnUpdateExpr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
@@ -41,28 +82,27 @@ import (
 // semaCtx can be nil if no default expression is used for the
 // column or during cluster bootstrapping.
 //
-// The DEFAULT expression is returned in TypedExpr form for analysis (e.g. recording
-// sequence dependencies).
+// See the ColumnDefDescs definition for a description of the return values.
 func MakeColumnDefDescs(
 	ctx context.Context, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
-) (*descpb.ColumnDescriptor, *descpb.IndexDescriptor, tree.TypedExpr, error) {
+) (*ColumnDefDescs, error) {
 	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
 		// the caller has not suitably called processSerialInColumnDef()
 		// prior to calling MakeColumnDefDescs. The dependent sequences
 		// must be created, and the SERIAL type eliminated, prior to this
 		// point.
-		return nil, nil, nil, pgerror.New(pgcode.FeatureNotSupported,
+		return nil, pgerror.New(pgcode.FeatureNotSupported,
 			"SERIAL cannot be used in this context")
 	}
 
 	if len(d.CheckExprs) > 0 {
 		// Should never happen since `HoistConstraints` moves these to table level
-		return nil, nil, nil, errors.New("unexpected column CHECK constraint")
+		return nil, errors.New("unexpected column CHECK constraint")
 	}
 	if d.HasFKConstraint() {
 		// Should never happen since `HoistConstraints` moves these to table level
-		return nil, nil, nil, errors.New("unexpected column REFERENCED constraint")
+		return nil, errors.New("unexpected column REFERENCED constraint")
 	}
 
 	col := &descpb.ColumnDescriptor{
@@ -71,36 +111,70 @@ func MakeColumnDefDescs(
 		Virtual:  d.IsVirtual(),
 		Hidden:   d.Hidden,
 	}
+	ret := &ColumnDefDescs{
+		ColumnTableDef:   d,
+		ColumnDescriptor: col,
+	}
+
+	if d.GeneratedIdentity.IsGeneratedAsIdentity {
+		switch d.GeneratedIdentity.GeneratedAsIdentityType {
+		case tree.GeneratedAlways:
+			col.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+		case tree.GeneratedByDefault:
+			col.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+		default:
+			return nil, errors.AssertionFailedf(
+				"column %s is of invalid generated as identity type (neither ALWAYS nor BY DEFAULT)", string(d.Name))
+		}
+		if genSeqOpt := d.GeneratedIdentity.SeqOptions; genSeqOpt != nil {
+			s := tree.Serialize(&d.GeneratedIdentity.SeqOptions)
+			col.GeneratedAsIdentitySequenceOption = &s
+		}
+	}
 
 	// Validate and assign column type.
 	resType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
-	if err := colinfo.ValidateColumnDefType(resType); err != nil {
-		return nil, nil, nil, err
+	if err = colinfo.ValidateColumnDefType(resType); err != nil {
+		return nil, err
 	}
 	col.Type = resType
 
-	var typedExpr tree.TypedExpr
 	if d.HasDefaultExpr() {
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
-		var err error
-		if typedExpr, err = schemaexpr.SanitizeVarFreeExpr(
+		ret.DefaultExpr, err = schemaexpr.SanitizeVarFreeExpr(
 			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, tree.VolatilityVolatile,
-		); err != nil {
-			return nil, nil, nil, err
+		)
+		if err != nil {
+			return nil, err
 		}
 
 		// Keep the type checked expression so that the type annotation gets
 		// properly stored, only if the default expression is not NULL.
 		// Otherwise we want to keep the default expression nil.
-		if typedExpr != tree.DNull {
-			d.DefaultExpr.Expr = typedExpr
+		if ret.DefaultExpr != tree.DNull {
+			d.DefaultExpr.Expr = ret.DefaultExpr
 			s := tree.Serialize(d.DefaultExpr.Expr)
 			col.DefaultExpr = &s
 		}
+	}
+
+	if d.HasOnUpdateExpr() {
+		// Verify the on update expression type is compatible with the column type
+		// and does not contain invalid functions.
+		ret.OnUpdateExpr, err = schemaexpr.SanitizeVarFreeExpr(
+			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, tree.VolatilityVolatile,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		d.OnUpdateExpr.Expr = ret.OnUpdateExpr
+		s := tree.Serialize(d.OnUpdateExpr.Expr)
+		col.OnUpdateExpr = &s
 	}
 
 	if d.IsComputed() {
@@ -113,25 +187,24 @@ func MakeColumnDefDescs(
 		col.ComputeExpr = &s
 	}
 
-	var idx *descpb.IndexDescriptor
 	if d.PrimaryKey.IsPrimaryKey || (d.Unique.IsUnique && !d.Unique.WithoutIndex) {
 		if !d.PrimaryKey.Sharded {
-			idx = &descpb.IndexDescriptor{
+			ret.PrimaryKeyOrUniqueIndexDescriptor = &descpb.IndexDescriptor{
 				Unique:              true,
 				KeyColumnNames:      []string{string(d.Name)},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 			}
 		} else {
-			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
+			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets, d.PrimaryKey.StorageParams)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, err
 			}
 			shardColName := GetShardColumnName([]string{string(d.Name)}, buckets)
-			idx = &descpb.IndexDescriptor{
+			ret.PrimaryKeyOrUniqueIndexDescriptor = &descpb.IndexDescriptor{
 				Unique:              true,
 				KeyColumnNames:      []string{shardColName, string(d.Name)},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-				Sharded: descpb.ShardedDescriptor{
+				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         shardColName,
 					ShardBuckets: buckets,
@@ -140,32 +213,60 @@ func MakeColumnDefDescs(
 			}
 		}
 		if d.Unique.ConstraintName != "" {
-			idx.Name = string(d.Unique.ConstraintName)
+			ret.PrimaryKeyOrUniqueIndexDescriptor.Name = string(d.Unique.ConstraintName)
 		}
 	}
 
-	return col, idx, typedExpr, nil
+	return ret, nil
 }
 
 // EvalShardBucketCount evaluates and checks the integer argument to a `USING HASH WITH
 // BUCKET_COUNT` index creation query.
 func EvalShardBucketCount(
-	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, shardBuckets tree.Expr,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	shardBuckets tree.Expr,
+	storageParams tree.StorageParams,
 ) (int32, error) {
-	const invalidBucketCountMsg = `BUCKET_COUNT must be an integer greater than 1`
-	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,
-	)
-	if err != nil {
-		return 0, err
+	_, legacyBucketNotGiven := shardBuckets.(tree.DefaultVal)
+	paramVal := storageParams.GetVal(`bucket_count`)
+
+	// The legacy `BUCKET_COUNT` should not be set together with the new
+	// `bucket_count` storage param.
+	if !legacyBucketNotGiven && paramVal != nil {
+		return 0, pgerror.New(
+			pgcode.InvalidParameterValue,
+			`"bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time`,
+		)
 	}
-	d, err := typedExpr.Eval(evalCtx)
-	if err != nil {
-		return 0, pgerror.Wrap(err, pgcode.InvalidParameterValue, invalidBucketCountMsg)
+
+	var buckets int64
+	const invalidBucketCountMsg = `hash sharded index bucket count must be in range [2, 2048], got %v`
+	// If shardBuckets is not specified, use default bucket count from cluster setting.
+	if legacyBucketNotGiven && paramVal == nil {
+		buckets = catconstants.DefaultHashShardedIndexBucketCount.Get(&evalCtx.Settings.SV)
+	} else {
+		if paramVal != nil {
+			shardBuckets = paramVal
+		}
+		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
+			ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,
+		)
+		if err != nil {
+			return 0, err
+		}
+		d, err := typedExpr.Eval(evalCtx)
+		if err != nil {
+			return 0, pgerror.Wrapf(err, pgcode.InvalidParameterValue, invalidBucketCountMsg, typedExpr)
+		}
+		buckets = int64(tree.MustBeDInt(d))
 	}
-	buckets := tree.MustBeDInt(d)
 	if buckets < 2 {
-		return 0, pgerror.New(pgcode.InvalidParameterValue, invalidBucketCountMsg)
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, invalidBucketCountMsg, buckets)
+	}
+	if buckets > MaxBucketAllowed {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, invalidBucketCountMsg, buckets)
 	}
 	return int32(buckets), nil
 }
@@ -181,13 +282,12 @@ func GetShardColumnName(colNames []string, buckets int32) string {
 	)
 }
 
-// GetConstraintInfo returns a summary of all constraints on the table.
+// GetConstraintInfo implements the TableDescriptor interface.
 func (desc *wrapper) GetConstraintInfo() (map[string]descpb.ConstraintDetail, error) {
 	return desc.collectConstraintInfo(nil)
 }
 
-// GetConstraintInfoWithLookup returns a summary of all constraints on the
-// table using the provided function to fetch a TableDescriptor from an ID.
+// GetConstraintInfoWithLookup implements the TableDescriptor interface.
 func (desc *wrapper) GetConstraintInfoWithLookup(
 	tableLookup catalog.TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
@@ -234,16 +334,30 @@ func (desc *wrapper) collectConstraintInfo(
 			if hidden {
 				continue
 			}
-			detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypePK}
+			indexName := index.Name
+			// If a primary key swap is occurring, then the primary index name can
+			// be seen as being under the new name.
+			for _, mutation := range desc.GetMutations() {
+				if mutation.GetPrimaryKeySwap() != nil {
+					indexName = mutation.GetPrimaryKeySwap().NewPrimaryIndexName
+				}
+			}
+			detail := descpb.ConstraintDetail{
+				Kind:         descpb.ConstraintTypePK,
+				ConstraintID: index.ConstraintID,
+			}
 			detail.Columns = index.KeyColumnNames
 			detail.Index = index
-			info[index.Name] = detail
+			info[indexName] = detail
 		} else if index.Unique {
 			if _, ok := info[index.Name]; ok {
 				return nil, pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", index.Name)
 			}
-			detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeUnique}
+			detail := descpb.ConstraintDetail{
+				Kind:         descpb.ConstraintTypeUnique,
+				ConstraintID: index.ConstraintID,
+			}
 			detail.Columns = index.KeyColumnNames
 			detail.Index = index
 			info[index.Name] = detail
@@ -257,7 +371,10 @@ func (desc *wrapper) collectConstraintInfo(
 			return nil, pgerror.Newf(pgcode.DuplicateObject,
 				"duplicate constraint name: %q", uc.Name)
 		}
-		detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeUnique}
+		detail := descpb.ConstraintDetail{
+			Kind:         descpb.ConstraintTypeUnique,
+			ConstraintID: uc.ConstraintID,
+		}
 		// Constraints in the Validating state are considered Unvalidated for this
 		// purpose.
 		detail.Unvalidated = uc.Validity != descpb.ConstraintValidity_Validated
@@ -276,7 +393,10 @@ func (desc *wrapper) collectConstraintInfo(
 			return nil, pgerror.Newf(pgcode.DuplicateObject,
 				"duplicate constraint name: %q", fk.Name)
 		}
-		detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeFK}
+		detail := descpb.ConstraintDetail{
+			Kind:         descpb.ConstraintTypeFK,
+			ConstraintID: fk.ConstraintID,
+		}
 		// Constraints in the Validating state are considered Unvalidated for this
 		// purpose.
 		detail.Unvalidated = fk.Validity != descpb.ConstraintValidity_Validated
@@ -292,7 +412,7 @@ func (desc *wrapper) collectConstraintInfo(
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"error resolving table %d referenced in foreign key",
-					log.Safe(fk.ReferencedTableID))
+					redact.Safe(fk.ReferencedTableID))
 			}
 			referencedColumnNames, err := other.NamesForColumnIDs(fk.ReferencedColumnIDs)
 			if err != nil {
@@ -309,7 +429,10 @@ func (desc *wrapper) collectConstraintInfo(
 			return nil, pgerror.Newf(pgcode.DuplicateObject,
 				"duplicate constraint name: %q", c.Name)
 		}
-		detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeCheck}
+		detail := descpb.ConstraintDetail{
+			Kind:         descpb.ConstraintTypeCheck,
+			ConstraintID: c.ConstraintID,
+		}
 		// Constraints in the Validating state are considered Unvalidated for this
 		// purpose.
 		detail.Unvalidated = c.Validity != descpb.ConstraintValidity_Validated
@@ -325,7 +448,7 @@ func (desc *wrapper) collectConstraintInfo(
 				col, err := desc.FindColumnWithID(colID)
 				if err != nil {
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-						"error finding column %d in table %s", log.Safe(colID), desc.Name)
+						"error finding column %d in table %s", redact.Safe(colID), desc.Name)
 				}
 				detail.Columns = append(detail.Columns, col.GetName())
 			}
@@ -382,7 +505,7 @@ func InitTableDescriptor(
 	id, parentID, parentSchemaID descpb.ID,
 	name string,
 	creationTime hlc.Timestamp,
-	privileges *descpb.PrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
 	persistence tree.Persistence,
 ) Mutable {
 	return Mutable{
@@ -450,19 +573,200 @@ func FindPublicColumnWithID(
 	return col, nil
 }
 
-// FindVirtualColumn returns a catalog.Column matching the virtual column
+// FindInvertedColumn returns a catalog.Column matching the inverted column
 // descriptor in `spec` if not nil, nil otherwise.
-func FindVirtualColumn(
-	desc catalog.TableDescriptor, virtualColDesc *descpb.ColumnDescriptor,
+func FindInvertedColumn(
+	desc catalog.TableDescriptor, invertedColDesc *descpb.ColumnDescriptor,
 ) catalog.Column {
-	if virtualColDesc == nil {
+	if invertedColDesc == nil {
 		return nil
 	}
-	found, err := desc.FindColumnWithID(virtualColDesc.ID)
+	found, err := desc.FindColumnWithID(invertedColDesc.ID)
 	if err != nil {
 		panic(errors.HandleAsAssertionFailure(err))
 	}
-	virtualColumn := found.DeepCopy()
-	*virtualColumn.ColumnDesc() = *virtualColDesc
-	return virtualColumn
+	invertedColumn := found.DeepCopy()
+	*invertedColumn.ColumnDesc() = *invertedColDesc
+	return invertedColumn
+}
+
+// PrimaryKeyString returns the pretty-printed primary key declaration for a
+// table descriptor.
+func PrimaryKeyString(desc catalog.TableDescriptor) string {
+	primaryIdx := desc.GetPrimaryIndex()
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	f.WriteString("PRIMARY KEY (")
+	startIdx := primaryIdx.ExplicitColumnStartIdx()
+	for i, n := startIdx, primaryIdx.NumKeyColumns(); i < n; i++ {
+		if i > startIdx {
+			f.WriteString(", ")
+		}
+		// Primary key columns cannot be inaccessible computed columns, so it is
+		// safe to always print the column name. For secondary indexes, we have
+		// to print inaccessible computed column expressions. See
+		// catformat.FormatIndexElements.
+		name := primaryIdx.GetKeyColumnName(i)
+		f.FormatNameP(&name)
+		f.WriteByte(' ')
+		f.WriteString(primaryIdx.GetKeyColumnDirection(i).String())
+	}
+	f.WriteByte(')')
+	if primaryIdx.IsSharded() {
+		f.WriteString(
+			fmt.Sprintf(" USING HASH WITH (bucket_count=%v)", primaryIdx.GetSharded().ShardBuckets),
+		)
+	}
+	return f.CloseAndGetString()
+}
+
+// ColumnNamePlaceholder constructs a placeholder name for a column based on its
+// id.
+func ColumnNamePlaceholder(id descpb.ColumnID) string {
+	return fmt.Sprintf("crdb_internal_column_%d_name_placeholder", id)
+}
+
+// IndexNamePlaceholder constructs a placeholder name for an index based on its
+// id.
+func IndexNamePlaceholder(id descpb.IndexID) string {
+	return fmt.Sprintf("crdb_internal_index_%d_name_placeholder", id)
+}
+
+// RenameColumnInTable will rename the column in tableDesc from oldName to
+// newName, including in expressions as well as shard columns.
+// The function is recursive because of this, but there should only be one level
+// of recursion.
+func RenameColumnInTable(
+	tableDesc *Mutable,
+	col catalog.Column,
+	newName tree.Name,
+	isShardColumnRenameable func(shardCol catalog.Column, newShardColName tree.Name) (bool, error),
+) error {
+	renameInExpr := func(expr *string) error {
+		newExpr, renameErr := schemaexpr.RenameColumn(*expr, col.ColName(), newName)
+		if renameErr != nil {
+			return renameErr
+		}
+		*expr = newExpr
+		return nil
+	}
+
+	// Rename the column in CHECK constraints.
+	for i := range tableDesc.Checks {
+		if err := renameInExpr(&tableDesc.Checks[i].Expr); err != nil {
+			return err
+		}
+	}
+
+	// Rename the column in computed columns.
+	for i := range tableDesc.Columns {
+		if otherCol := &tableDesc.Columns[i]; otherCol.IsComputed() {
+			if err := renameInExpr(otherCol.ComputeExpr); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Rename the column in partial idx predicates.
+	for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
+		if idx.IsPartial() {
+			if err := renameInExpr(&idx.IndexDesc().Predicate); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Do all of the above renames inside check constraints, computed expressions,
+	// and idx predicates that are in mutations.
+	for i := range tableDesc.Mutations {
+		m := &tableDesc.Mutations[i]
+		if constraint := m.GetConstraint(); constraint != nil {
+			if constraint.ConstraintType == descpb.ConstraintToUpdate_CHECK ||
+				constraint.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL {
+				if err := renameInExpr(&constraint.Check.Expr); err != nil {
+					return err
+				}
+			}
+		} else if otherCol := m.GetColumn(); otherCol != nil {
+			if otherCol.IsComputed() {
+				if err := renameInExpr(otherCol.ComputeExpr); err != nil {
+					return err
+				}
+			}
+		} else if idx := m.GetIndex(); idx != nil {
+			if idx.IsPartial() {
+				if err := renameInExpr(&idx.Predicate); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Rename the column in hash-sharded idx descriptors. Potentially rename the
+	// shard column too if we haven't already done it.
+	shardColumnsToRename := make(map[tree.Name]tree.Name) // map[oldShardColName]newShardColName
+	maybeUpdateShardedDesc := func(shardedDesc *catpb.ShardedDescriptor) {
+		if !shardedDesc.IsSharded {
+			return
+		}
+		oldShardColName := tree.Name(GetShardColumnName(
+			shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
+		var changed bool
+		for i, c := range shardedDesc.ColumnNames {
+			if c == string(col.ColName()) {
+				changed = true
+				shardedDesc.ColumnNames[i] = string(newName)
+			}
+		}
+		if !changed {
+			return
+		}
+		newShardColName, alreadyRenamed := shardColumnsToRename[oldShardColName]
+		if !alreadyRenamed {
+			newShardColName = tree.Name(GetShardColumnName(shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
+			shardColumnsToRename[oldShardColName] = newShardColName
+		}
+		// Keep the shardedDesc name in sync with the column name.
+		shardedDesc.Name = string(newShardColName)
+	}
+	for _, idx := range tableDesc.NonDropIndexes() {
+		maybeUpdateShardedDesc(&idx.IndexDesc().Sharded)
+	}
+
+	// Rename the REGIONAL BY ROW column reference.
+	if tableDesc.IsLocalityRegionalByRow() {
+		rbrColName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
+		if err != nil {
+			return err
+		}
+		if rbrColName == col.ColName() {
+			tableDesc.SetTableLocalityRegionalByRow(newName)
+		}
+	}
+
+	// Rename the column name in the column, the column family, the indexes...
+	tableDesc.RenameColumnDescriptor(col, string(newName))
+
+	// Rename any shard columns which need to be renamed because their name was
+	// based on this column.
+	for oldShardColName, newShardColName := range shardColumnsToRename {
+		shardCol, err := tableDesc.FindColumnWithName(oldShardColName)
+		if err != nil {
+			return err
+		}
+		var canBeRenamed bool
+		if isShardColumnRenameable == nil {
+			canBeRenamed = true
+		} else if canBeRenamed, err = isShardColumnRenameable(shardCol, newShardColName); err != nil {
+			return err
+		}
+		if !canBeRenamed {
+			return nil
+		}
+		// Recursively rename the shard column.
+		// We don't need to worry about deeper than one recursive call because
+		// shard columns cannot refer to each other.
+		return RenameColumnInTable(tableDesc, shardCol, newShardColName, nil /* isShardColumnRenameable */)
+	}
+
+	return nil
 }

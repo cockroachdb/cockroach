@@ -52,6 +52,9 @@ record-active-data-key
 check-all-recorded-data-keys
 ----
 
+close
+----
+
 # Test that starts with one active data and store key. Checks that data key is not rotated
 # until SetActiveStoreKeyInfo is called. Also tests key rotation and holding multiple store
 # and data keys.
@@ -154,6 +157,9 @@ check-all-recorded-data-keys
 ----
 
 check-exposed val=false
+----
+
+close
 ----
 
 # Test that keys transition to exposed.

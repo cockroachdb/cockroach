@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -45,7 +46,7 @@ Capable of detecting the following errors:
 * MVCC stats that are inconsistent with the data within the range
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugCheckStoreCmd),
+	RunE: clierrorplus.MaybeDecorateError(runDebugCheckStoreCmd),
 }
 
 var errCheckFoundProblem = errors.New("check-store found problems")
@@ -145,7 +146,7 @@ func checkStoreRangeStats(
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	eng, err := OpenExistingStore(dir, stopper, true /* readOnly */)
+	eng, err := OpenExistingStore(dir, stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
 	if err != nil {
 		return err
 	}
@@ -165,7 +166,7 @@ func checkStoreRangeStats(
 	}
 
 	go func() {
-		if err := kvserver.IterateRangeDescriptors(ctx, eng,
+		if err := kvserver.IterateRangeDescriptorsFromDisk(ctx, eng,
 			func(desc roachpb.RangeDescriptor) error {
 				inCh <- checkInput{eng: eng, desc: &desc, sl: stateloader.Make(desc.RangeID)}
 				return nil
@@ -219,7 +220,7 @@ func checkStoreRaftState(
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(dir, stopper, true /* readOnly */)
+	db, err := OpenExistingStore(dir, stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
 	if err != nil {
 		return err
 	}
@@ -251,7 +252,7 @@ func checkStoreRaftState(
 					return err
 				}
 				getReplicaInfo(rangeID).committedIndex = hs.Commit
-			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateLegacySuffix):
+			case bytes.Equal(suffix, keys.LocalRaftTruncatedStateSuffix):
 				var trunc roachpb.RaftTruncatedState
 				if err := kv.Value.GetProto(&trunc); err != nil {
 					return err
@@ -263,12 +264,6 @@ func checkStoreRaftState(
 					return err
 				}
 				getReplicaInfo(rangeID).appliedIndex = state.RaftAppliedIndex
-			case bytes.Equal(suffix, keys.LocalRaftAppliedIndexLegacySuffix):
-				idx, err := kv.Value.GetInt()
-				if err != nil {
-					return err
-				}
-				getReplicaInfo(rangeID).appliedIndex = uint64(idx)
 			case bytes.Equal(suffix, keys.LocalRaftLogSuffix):
 				_, index, err := encoding.DecodeUint64Ascending(detail)
 				if err != nil {

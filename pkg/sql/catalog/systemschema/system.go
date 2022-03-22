@@ -13,6 +13,7 @@ package systemschema
 import (
 	"context"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -20,10 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -67,20 +71,22 @@ CREATE TABLE system.namespace (
   "parentSchemaID" INT8,
   name       STRING,
   id         INT8,
-  PRIMARY KEY ("parentID", "parentSchemaID", name)
+  CONSTRAINT "primary" PRIMARY KEY ("parentID", "parentSchemaID", name)
 );`
 
 	DescriptorTableSchema = `
 CREATE TABLE system.descriptor (
-  id         INT8 PRIMARY KEY,
-  descriptor BYTES
+  id         INT8,
+  descriptor BYTES,
+  CONSTRAINT "primary" PRIMARY KEY (id)
 );`
 
 	UsersTableSchema = `
 CREATE TABLE system.users (
-  username         STRING PRIMARY KEY,
+  username         STRING,
   "hashedPassword" BYTES,
-  "isRole"         BOOL NOT NULL DEFAULT false
+  "isRole"         BOOL NOT NULL DEFAULT false,
+  CONSTRAINT "primary" PRIMARY KEY (username)
 );`
 
 	RoleOptionsTableSchema = `
@@ -88,23 +94,25 @@ CREATE TABLE system.role_options (
 	username STRING NOT NULL,
 	option STRING NOT NULL,
 	value STRING,
-	PRIMARY KEY (username, option),
+	CONSTRAINT "primary" PRIMARY KEY (username, option),
 	FAMILY "primary" (username, option, value)
 )`
 
 	// Zone settings per DB/Table.
 	ZonesTableSchema = `
 CREATE TABLE system.zones (
-  id     INT8 PRIMARY KEY,
-  config BYTES
+  id     INT8,
+  config BYTES,
+  CONSTRAINT "primary" PRIMARY KEY (id)
 );`
 
 	SettingsTableSchema = `
 CREATE TABLE system.settings (
-	name              STRING    NOT NULL PRIMARY KEY,
+	name              STRING    NOT NULL,
 	value             STRING    NOT NULL,
 	"lastUpdated"     TIMESTAMP NOT NULL DEFAULT now(),
 	"valueType"       STRING,
+	CONSTRAINT "primary" PRIMARY KEY (name),
 	FAMILY (name, value, "lastUpdated", "valueType")
 );`
 
@@ -113,9 +121,10 @@ CREATE SEQUENCE system.descriptor_id_seq;`
 
 	TenantsTableSchema = `
 CREATE TABLE system.tenants (
-	id     INT8 NOT NULL PRIMARY KEY,
+	id     INT8 NOT NULL,
 	active BOOL NOT NULL DEFAULT true,
 	info   BYTES,
+	CONSTRAINT "primary" PRIMARY KEY (id),
 	FAMILY "primary" (id, active, info)
 );`
 )
@@ -128,7 +137,7 @@ CREATE TABLE system.lease (
   version    INT8,
   "nodeID"   INT8,
   expiration TIMESTAMP,
-  PRIMARY KEY ("descID", version, expiration, "nodeID")
+  CONSTRAINT "primary" PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
 
 	// TODO(knz): targetID and reportingID are deprecated and should
@@ -142,7 +151,7 @@ CREATE TABLE system.eventlog (
   "reportingID" INT8       NOT NULL,
   info          STRING,
   "uniqueID"    BYTES      DEFAULT uuid_v4(),
-  PRIMARY KEY (timestamp, "uniqueID")
+  CONSTRAINT "primary" PRIMARY KEY (timestamp, "uniqueID")
 );`
 
 	// rangelog is currently envisioned as a wide table; many different event
@@ -156,15 +165,19 @@ CREATE TABLE system.rangelog (
   "otherRangeID" INT8,
   info           STRING,
   "uniqueID"     INT8       DEFAULT unique_rowid(),
-  PRIMARY KEY (timestamp, "uniqueID")
+  CONSTRAINT "primary" PRIMARY KEY (timestamp, "uniqueID")
 );`
 
 	UITableSchema = `
 CREATE TABLE system.ui (
-	key           STRING PRIMARY KEY,
+	key           STRING,
 	value         BYTES,
-	"lastUpdated" TIMESTAMP NOT NULL
+	"lastUpdated" TIMESTAMP NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (key)
 );`
+
+	// JobsRunStatsIdxPredicate is the predicate in jobs_run_stats_idx in JobsTable.
+	JobsRunStatsIdxPredicate = `status IN ('running':::STRING, 'reverting':::STRING, 'pending':::STRING, 'pause-requested':::STRING, 'cancel-requested':::STRING)`
 
 	// Note: this schema is changed in a migration (a progress column is added in
 	// a separate family).
@@ -172,7 +185,7 @@ CREATE TABLE system.ui (
 	// This is done to minimize migration work required.
 	JobsTableSchema = `
 CREATE TABLE system.jobs (
-	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
+	id                INT8      DEFAULT unique_rowid(),
 	status            STRING    NOT NULL,
 	created           TIMESTAMP NOT NULL DEFAULT now(),
 	payload           BYTES     NOT NULL,
@@ -181,12 +194,20 @@ CREATE TABLE system.jobs (
 	created_by_id     INT,
 	claim_session_id  BYTES,
 	claim_instance_id INT8,
+	num_runs          INT8,
+	last_run          TIMESTAMP,
+	CONSTRAINT "primary" PRIMARY KEY (id),
 	INDEX (status, created),
 	INDEX (created_by_type, created_by_id) STORING (status),
-
+	INDEX jobs_run_stats_idx (
+    claim_session_id,
+    status,
+    created
+  ) STORING(last_run, num_runs, claim_instance_id)
+    WHERE ` + JobsRunStatsIdxPredicate + `,
 	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id),
 	FAMILY progress (progress),
-	FAMILY claim (claim_session_id, claim_instance_id)
+	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
 );`
 
 	// web_sessions are used to track authenticated user actions over stateless
@@ -195,7 +216,7 @@ CREATE TABLE system.jobs (
 	// Design outlined in /docs/RFCS/web_session_login.rfc
 	WebSessionsTableSchema = `
 CREATE TABLE system.web_sessions (
-	id             INT8       NOT NULL DEFAULT unique_rowid() PRIMARY KEY,
+	id             INT8       NOT NULL DEFAULT unique_rowid(),
 	"hashedSecret" BYTES      NOT NULL,
 	username       STRING     NOT NULL,
 	"createdAt"    TIMESTAMP  NOT NULL DEFAULT now(),
@@ -203,17 +224,23 @@ CREATE TABLE system.web_sessions (
 	"revokedAt"    TIMESTAMP,
 	"lastUsedAt"   TIMESTAMP  NOT NULL DEFAULT now(),
 	"auditInfo"    STRING,
+	CONSTRAINT "primary" PRIMARY KEY (id),
 	INDEX ("expiresAt"),
 	INDEX ("createdAt"),
+  INDEX ("revokedAt"),
+  INDEX ("lastUsedAt"),
 	FAMILY (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
 );`
 
-	// table_statistics is used to track statistics collected about individual columns
-	// or groups of columns from every table in the database. Each row contains the
-	// number of distinct values of the column group and (optionally) a histogram if there
-	// is only one column in columnIDs.
+	// table_statistics is used to track statistics collected about individual
+	// columns or groups of columns from every table in the database. Each row
+	// contains the number of distinct values of the column group, the number of
+	// null values, the average size of the column(s), and (optionally) a
+	// histogram if there is only one column in columnIDs.
 	//
 	// Design outlined in /docs/RFCS/20170908_sql_optimizer_statistics.md
+	// Note: avgSize is a newer statistic than the RFC above. It contains the
+	// average size of the column group in bytes.
 	TableStatisticsTableSchema = `
 CREATE TABLE system.table_statistics (
 	"tableID"       INT8       NOT NULL,
@@ -224,9 +251,10 @@ CREATE TABLE system.table_statistics (
 	"rowCount"      INT8       NOT NULL,
 	"distinctCount" INT8       NOT NULL,
 	"nullCount"     INT8       NOT NULL,
+	"avgSize"       INT8       NOT NULL DEFAULT 0,
 	histogram       BYTES,
-	PRIMARY KEY ("tableID", "statisticID"),
-	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram)
+	CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
+	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", "avgSize", histogram)
 );`
 
 	// locations are used to map a locality specified by a node to geographic
@@ -237,7 +265,7 @@ CREATE TABLE system.locations (
   "localityValue" STRING,
   latitude        DECIMAL(18,15) NOT NULL,
   longitude       DECIMAL(18,15) NOT NULL,
-  PRIMARY KEY ("localityKey", "localityValue"),
+  CONSTRAINT "primary" PRIMARY KEY ("localityKey", "localityValue"),
   FAMILY ("localityKey", "localityValue", latitude, longitude)
 );`
 
@@ -247,7 +275,7 @@ CREATE TABLE system.role_members (
   "role"   STRING NOT NULL,
   "member" STRING NOT NULL,
   "isAdmin"  BOOL NOT NULL,
-  PRIMARY KEY  ("role", "member"),
+  CONSTRAINT "primary" PRIMARY KEY ("role", "member"),
   INDEX ("role"),
   INDEX ("member")
 );`
@@ -259,71 +287,153 @@ CREATE TABLE system.comments (
    object_id INT NOT NULL,    -- object ID, this will be usually db/table desc ID
    sub_id    INT NOT NULL,    -- sub ID for column or indexes inside table, 0 for pure table
    comment   STRING NOT NULL, -- the comment
-   PRIMARY KEY (type, object_id, sub_id)
+   CONSTRAINT "primary" PRIMARY KEY (type, object_id, sub_id)
+);`
+
+	// reports_meta stores reports metadata
+	ReportsMetaTableSchema = `
+CREATE TABLE system.reports_meta (
+	id INT8 NOT NULL, "generated" TIMESTAMPTZ NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, "generated")
+);`
+
+	// replication_constraint_stats stores replication constraint statistics
+	ReplicationConstraintStatsTableSchema = `
+CREATE TABLE system.replication_constraint_stats (
+	zone_id
+		INT8 NOT NULL,
+	subzone_id
+		INT8 NOT NULL,
+	type
+		STRING NOT NULL,
+	config
+		STRING NOT NULL,
+	report_id
+		INT8 NOT NULL,
+	violation_start
+		TIMESTAMPTZ NULL,
+	violating_ranges
+		INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, type ASC, config ASC),
+	FAMILY "primary" (zone_id, subzone_id, type, config, report_id, violation_start, violating_ranges)
+);`
+
+	// replication_critical_localities stores replication critical localities
+	ReplicationCriticalLocalitiesTableSchema = `
+CREATE TABLE system.replication_critical_localities (
+	zone_id
+		INT8 NOT NULL,
+	subzone_id
+		INT8 NOT NULL,
+	locality
+		STRING NOT NULL,
+	report_id
+		INT8 NOT NULL,
+	at_risk_ranges
+		INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, locality ASC),
+	FAMILY "primary" (zone_id, subzone_id, locality, report_id, at_risk_ranges)
+);`
+
+	// replication_stats stores replication statistics
+	ReplicationStatsTableSchema = `
+CREATE TABLE system.replication_stats (
+	zone_id
+		INT8 NOT NULL,
+	subzone_id
+		INT8 NOT NULL,
+	report_id
+		INT8 NOT NULL,
+	total_ranges
+		INT8 NOT NULL,
+	unavailable_ranges
+		INT8 NOT NULL,
+	under_replicated_ranges
+		INT8 NOT NULL,
+	over_replicated_ranges
+		INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (zone_id, subzone_id),
+	FAMILY "primary" (
+		zone_id,
+		subzone_id,
+		report_id,
+		total_ranges,
+		unavailable_ranges,
+		under_replicated_ranges,
+		over_replicated_ranges
+	)
 );`
 
 	// protected_ts_meta stores a single row of metadata for the protectedts
 	// subsystem.
 	ProtectedTimestampsMetaTableSchema = `
 CREATE TABLE system.protected_ts_meta (
-   singleton   BOOL NOT NULL PRIMARY KEY DEFAULT (true),
+   singleton   BOOL NOT NULL DEFAULT (true),
    version     INT8 NOT NULL,
    num_records INT8 NOT NULL,
    num_spans   INT8 NOT NULL,
    total_bytes INT8 NOT NULL,
    CONSTRAINT check_singleton  CHECK (singleton),
-   FAMILY "primary" (singleton, version, num_records, num_spans, total_bytes)
+   CONSTRAINT "primary" PRIMARY KEY (singleton),
+	 FAMILY "primary" (singleton, version, num_records, num_spans, total_bytes)
 );`
 
 	ProtectedTimestampsRecordsTableSchema = `
 CREATE TABLE system.protected_ts_records (
-   id        UUID NOT NULL PRIMARY KEY,
+   id        UUID NOT NULL,
    ts        DECIMAL NOT NULL,
    meta_type STRING NOT NULL,
    meta      BYTES,
    num_spans INT8 NOT NULL, -- num spans is important to know how to decode spans
    spans     BYTES NOT NULL,
    verified  BOOL NOT NULL DEFAULT (false),
-   FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified)
+   target    BYTES,         -- target is an encoded protobuf that specifies what the pts record will protect
+   CONSTRAINT "primary" PRIMARY KEY (id),
+	 FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified, target)
 );`
 
 	StatementBundleChunksTableSchema = `
 CREATE TABLE system.statement_bundle_chunks (
-   id          INT8 PRIMARY KEY DEFAULT unique_rowid(),
+   id          INT8 DEFAULT unique_rowid(),
 	 description STRING,
 	 data        BYTES NOT NULL,
-
-   FAMILY "primary" (id, description, data)
+	 CONSTRAINT "primary" PRIMARY KEY (id),
+	 FAMILY "primary" (id, description, data)
 );`
 
 	StatementDiagnosticsRequestsTableSchema = `
 CREATE TABLE system.statement_diagnostics_requests(
-	id INT8 DEFAULT unique_rowid() PRIMARY KEY NOT NULL,
+	id INT8 DEFAULT unique_rowid() NOT NULL,
 	completed BOOL NOT NULL DEFAULT FALSE,
 	statement_fingerprint STRING NOT NULL,
 	statement_diagnostics_id INT8,
 	requested_at TIMESTAMPTZ NOT NULL,
-	INDEX completed_idx (completed, id) STORING (statement_fingerprint),
+	min_execution_latency INTERVAL NULL,
+	expires_at TIMESTAMPTZ NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id),
+	INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at),
 
-	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at)
+	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at)
 );`
 
 	StatementDiagnosticsTableSchema = `
 create table system.statement_diagnostics(
-  id INT8 DEFAULT unique_rowid() PRIMARY KEY NOT NULL,
+  id INT8 DEFAULT unique_rowid() NOT NULL,
   statement_fingerprint STRING NOT NULL,
   statement STRING NOT NULL,
   collected_at TIMESTAMPTZ NOT NULL,
   trace JSONB,
   bundle_chunks INT ARRAY,
 	error STRING,
+	CONSTRAINT "primary" PRIMARY KEY (id),
 
 	FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error)
 );`
 
 	ScheduledJobsTableSchema = `
 CREATE TABLE system.scheduled_jobs (
-    schedule_id      INT DEFAULT unique_rowid() PRIMARY KEY NOT NULL,
+    schedule_id      INT DEFAULT unique_rowid() NOT NULL,
     schedule_name    STRING NOT NULL,
     created          TIMESTAMPTZ NOT NULL DEFAULT now(),
     owner            STRING NOT NULL,
@@ -334,10 +444,11 @@ CREATE TABLE system.scheduled_jobs (
     executor_type    STRING NOT NULL,
     execution_args   BYTES NOT NULL,
 
+    CONSTRAINT "primary" PRIMARY KEY (schedule_id),
     INDEX "next_run_idx" (next_run),
 
-    FAMILY sched (schedule_id, next_run, schedule_state),
-    FAMILY other (
+ 	 FAMILY sched (schedule_id, next_run, schedule_state),
+ 	 FAMILY other (
        schedule_name, created, owner, schedule_expr, 
        schedule_details, executor_type, execution_args 
     )
@@ -345,8 +456,9 @@ CREATE TABLE system.scheduled_jobs (
 
 	SqllivenessTableSchema = `
 CREATE TABLE system.sqlliveness (
-    session_id       BYTES PRIMARY KEY NOT NULL,
+    session_id       BYTES NOT NULL,
     expiration       DECIMAL NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (session_id),
   	FAMILY fam0_session_id_expiration (session_id, expiration)
 )`
 
@@ -357,16 +469,17 @@ CREATE TABLE system.migrations (
     patch        INT8 NOT NULL,
     internal     INT8 NOT NULL,
     completed_at TIMESTAMPTZ NOT NULL,
-    FAMILY "primary" (major, minor, patch, internal, completed_at),
-    PRIMARY KEY (major, minor, patch, internal)
+ 	 FAMILY "primary" (major, minor, patch, internal, completed_at),
+    CONSTRAINT "primary" PRIMARY KEY (major, minor, patch, internal)
 )`
 
 	JoinTokensTableSchema = `
 CREATE TABLE system.join_tokens (
-    id           UUID NOT NULL PRIMARY KEY,
+    id           UUID NOT NULL,
     secret       BYTES NOT NULL,
     expiration   TIMESTAMPTZ NOT NULL,
-    FAMILY "primary" (id, secret, expiration)
+    CONSTRAINT "primary" PRIMARY KEY (id),
+ 	 FAMILY "primary" (id, secret, expiration)
 )`
 
 	// TODO(azhng): Currently we choose number of bucket for hash-sharding to be
@@ -375,24 +488,30 @@ CREATE TABLE system.join_tokens (
 	//  implemented, we need to revisit this choice and retune the configuration.
 	StatementStatisticsTableSchema = `
 CREATE TABLE system.statement_statistics (
-    aggregated_ts  TIMESTAMPTZ NOT NULL,
-    fingerprint_id BYTES NOT NULL,
-    plan_hash      INT8 NOT NULL,
-    app_name       STRING NOT NULL,
-    node_id        INT8 NOT NULL,
+    aggregated_ts              TIMESTAMPTZ NOT NULL,
+    fingerprint_id             BYTES NOT NULL,
+    transaction_fingerprint_id BYTES NOT NULL,
+    plan_hash                  BYTES NOT NULL,
+    app_name                   STRING NOT NULL,
+    node_id                    INT8 NOT NULL,
 
     agg_interval INTERVAL NOT NULL,
     metadata   JSONB NOT NULL,
     statistics JSONB NOT NULL,
     plan JSONB NOT NULL,
 
-    PRIMARY KEY (aggregated_ts, fingerprint_id, plan_hash, app_name, node_id)
-      USING HASH WITH BUCKET_COUNT = 8,
-    INDEX "fingerprint_stats_idx" (fingerprint_id, aggregated_ts, plan_hash, app_name, node_id),
+    crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 INT4 NOT VISIBLE NOT NULL AS (
+      mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)
+    ) STORED,
+
+    CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
+      USING HASH WITH (bucket_count=8),
+    INDEX "fingerprint_stats_idx" (fingerprint_id, transaction_fingerprint_id),
 		FAMILY "primary" (
-			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8,
+			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
 			aggregated_ts,
 			fingerprint_id,
+			transaction_fingerprint_id,
 			plan_hash,
 			app_name,
 			node_id,
@@ -415,9 +534,13 @@ CREATE TABLE system.transaction_statistics (
     metadata   JSONB NOT NULL,
     statistics JSONB NOT NULL,
 
-    PRIMARY KEY (aggregated_ts, fingerprint_id, app_name, node_id)
-      USING HASH WITH BUCKET_COUNT = 8,
-    INDEX "fingerprint_stats_idx" (fingerprint_id, aggregated_ts, app_name, node_id),
+    crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 INT4 NOT VISIBLE NOT NULL AS (
+      mod(fnv32("crdb_internal.datums_to_bytes"(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8
+    )) STORED,
+
+    CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, app_name, node_id)
+      USING HASH WITH (bucket_count=8),
+    INDEX "fingerprint_stats_idx" (fingerprint_id),
 		FAMILY "primary" (
 			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,
 			aggregated_ts,
@@ -435,7 +558,7 @@ CREATE TABLE system.database_role_settings (
     database_id  OID NOT NULL,
     role_name    STRING NOT NULL,
     settings     STRING[] NOT NULL,
-    PRIMARY KEY (database_id, role_name),
+    CONSTRAINT "primary" PRIMARY KEY (database_id, role_name),
 		FAMILY "primary" (
 			database_id,
       role_name,
@@ -447,21 +570,26 @@ CREATE TABLE system.database_role_settings (
 CREATE TABLE system.tenant_usage (
   tenant_id INT NOT NULL,
 
-	-- For each tenant, there is a special row with instance_id = 0 which contains
-	-- per-tenant stat. Each SQL instance (pod) also has its own row with
-	-- per-instance state.
-	instance_id INT NOT NULL,
+  -- For each tenant, there is a special row with instance_id = 0 which contains
+  -- per-tenant stat. Each SQL instance (pod) also has its own row with
+  -- per-instance state.
+  instance_id INT NOT NULL,
 
-	-- next_instance_id identifies the next live instance ID, with the smallest ID
-	-- larger than this instance_id (or 0 if there is no such ID).
-	-- We are overlaying a circular linked list of all live instances, with
-	-- instance 0 acting as a sentinel (always the head of the list).
-	next_instance_id INT NOT NULL,
+  -- next_instance_id identifies the next live instance ID, with the smallest ID
+  -- larger than this instance_id (or 0 if there is no such ID).
+  -- We are overlaying a circular linked list of all live instances, with
+  -- instance 0 acting as a sentinel (always the head of the list).
+  next_instance_id INT NOT NULL,
 
-	-- -------------------------------------------------------------------
-	--  The following fields are used only for the per-tenant state, when
-	--  instance_id = 0.
-	-- -------------------------------------------------------------------
+  -- Time when we last interacted with this row. For the per-tenant row, this
+  -- is the time of the last update from any instance. For instance rows, this
+  -- is the time of the last update from that particular instance.
+  last_update TIMESTAMP NOT NULL,
+
+  -- -------------------------------------------------------------------
+  --  The following fields are used only for the per-tenant state, when
+  --  instance_id = 0.
+  -- -------------------------------------------------------------------
 
   -- Bucket configuration.
   ru_burst_limit FLOAT,
@@ -473,57 +601,77 @@ CREATE TABLE system.tenant_usage (
   -- Current sum of the shares values for all instances.
   current_share_sum FLOAT,
 
-  -- Cumulative usage statistics.
-  total_ru_usage            FLOAT,
-  total_read_requests       INT,
-  total_read_bytes          INT,
-  total_write_requests      INT,
-  total_write_bytes         INT,
-  total_sql_pod_cpu_seconds FLOAT, -- TODO: Maybe milliseconds and INT8?
+  -- Cumulative usage statistics, encoded as roachpb.TenantConsumption.
+  total_consumption BYTES,
 
-	-- -------------------------------------------------------------
-	--  The following fields are used for per-instance state, when
-	--  instance_id != 0.
-	-- --------------------------------------------------------------
+  -- -------------------------------------------------------------
+  --  The following fields are used for per-instance state, when
+  --  instance_id != 0.
+  -- --------------------------------------------------------------
 
-	-- The lease is a unique identifier for this instance, necessary because
-	-- instance IDs can be reused.
-	instance_lease BYTES,
+  -- The lease is a unique identifier for this instance, necessary because
+  -- instance IDs can be reused.
+  instance_lease BYTES,
 
-	-- Last request sequence number. These numbers are provided by the
-	-- instance and are monotonically increasing; used to detect duplicate
-	-- requests and provide idempotency.
-	instance_seq INT,
+  -- Last request sequence number. These numbers are provided by the
+  -- instance and are monotonically increasing; used to detect duplicate
+  -- requests and provide idempotency.
+  instance_seq INT,
 
-	-- Current shares value for this instance.
+  -- Current shares value for this instance.
   instance_shares FLOAT,
 
-	-- Time when we last heard from this instance.
-	instance_last_update TIMESTAMP,
+  FAMILY "primary" (
+    tenant_id, instance_id, next_instance_id, last_update,
+    ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
+    total_consumption,
+    instance_lease, instance_seq, instance_shares
+  ),
 
-	FAMILY "primary" (
-	  tenant_id, instance_id, next_instance_id,
-	  ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
-	  total_ru_usage, total_read_requests, total_read_bytes, total_write_requests,
-	  total_write_bytes, total_sql_pod_cpu_seconds,
-	  instance_lease, instance_seq, instance_shares, instance_last_update
-	),
-
-  PRIMARY KEY (tenant_id, instance_id)
+	CONSTRAINT "primary" PRIMARY KEY (tenant_id, instance_id)
 )`
 
 	SQLInstancesTableSchema = `
 CREATE TABLE system.sql_instances (
-    id           INT NOT NULL PRIMARY KEY,
+    id           INT NOT NULL,
     addr         STRING,
     session_id   BYTES,
+    CONSTRAINT "primary" PRIMARY KEY (id),
     FAMILY "primary" (id, addr, session_id)
 )`
+
+	SpanConfigurationsTableSchema = `
+CREATE TABLE system.span_configurations (
+    start_key    BYTES NOT NULL,
+    end_key      BYTES NOT NULL,
+    config        BYTES NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (start_key),
+    CONSTRAINT check_bounds CHECK (start_key < end_key),
+    FAMILY "primary" (start_key, end_key, config)
+)`
+
+	TenantSettingsTableSchema = `
+CREATE TABLE system.tenant_settings (
+	-- A non-zero tenant_id indicates that this is a setting specific to that
+	-- particular tenant. A zero tenant_id indicates an "all tenant" setting that
+	-- applies to all tenants which don't a tenant-specific value for this
+	-- setting.
+	tenant_id    INT8 NOT NULL,
+	name         STRING NOT NULL,
+	value        STRING NOT NULL,
+	last_updated TIMESTAMP NOT NULL DEFAULT now(),
+	value_type   STRING NOT NULL,
+
+	-- reason is unused for now.
+	reason       STRING,
+	CONSTRAINT "primary" PRIMARY KEY (tenant_id, name),
+	FAMILY (tenant_id, name, value, last_updated, value_type, reason)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
 	return descpb.IndexDescriptor{
-		Name:                tabledesc.PrimaryKeyIndexName,
+		Name:                tabledesc.LegacyPrimaryKeyIndexName,
 		ID:                  1,
 		Unique:              true,
 		KeyColumnNames:      []string{name},
@@ -541,275 +689,331 @@ var (
 	// TABLE statements for both statement and transaction tables in a SQL shell.
 	// If we are to change how we compute hash values in the future, we need to
 	// modify these two expressions as well.
-	sqlStmtHashComputeExpr = "mod(fnv32(COALESCE(CAST(aggregated_ts AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(app_name AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(fingerprint_id AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(node_id AS STRING), '':::STRING)) + fnv32(COALESCE(CAST(plan_hash AS STRING), '':::STRING))))), 8:::INT8)"
-	sqlTxnHashComputeExpr  = "mod(fnv32(COALESCE(CAST(aggregated_ts AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(app_name AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(fingerprint_id AS STRING), '':::STRING)) + fnv32(COALESCE(CAST(node_id AS STRING), '':::STRING)))), 8:::INT8)"
+	sqlStmtHashComputeExpr = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)`
+	sqlTxnHashComputeExpr  = `mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)`
+)
+
+const (
+	// SQLStatsHashShardBucketCount is the number of buckets used in the hash sharded
+	// primary key in the sql stats tables. If we are to change the number of buckets
+	// in the hash sharded primary key in the sql stats tables, this value needs to
+	// be updated.
+	SQLStatsHashShardBucketCount = 8
+
+	// StmtStatsHashColumnName is the name of the hash column of
+	// system.statement_statistics.
+	StmtStatsHashColumnName = "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8"
+
+	// TxnStatsHashColumnName is the name of the hash column of
+	// system.transaction_statistics.
+	TxnStatsHashColumnName = "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8"
 )
 
 // SystemDatabaseName is the name of the system database.
-const SystemDatabaseName = "system"
+const SystemDatabaseName = catconstants.SystemDatabaseName
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
 func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
+	priv := privilege.List{privilege.CONNECT}
 	return dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name:    SystemDatabaseName,
 		ID:      keys.SystemDatabaseID,
 		Version: 1,
 		// Assign max privileges to root user.
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.SystemDatabaseID], security.NodeUserName()),
+		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
+			priv, security.NodeUserName()),
 	}).BuildImmutableDatabase()
 }
 
-func makeTable(desc descpb.TableDescriptor) catalog.TableDescriptor {
-	ctx := context.Background()
-	b := tabledesc.NewBuilder(&desc)
-	err := b.RunPostDeserializationChanges(ctx, nil /* DescGetter */)
-	if err != nil {
-		log.Fatalf(ctx, "Error when building descriptor of system table %q: %s", desc.Name, err)
+func systemTable(
+	name catconstants.SystemTableName,
+	id descpb.ID,
+	columns []descpb.ColumnDescriptor,
+	families []descpb.ColumnFamilyDescriptor,
+	indexes ...descpb.IndexDescriptor,
+) descpb.TableDescriptor {
+	tbl := descpb.TableDescriptor{
+		Name:                    string(name),
+		ID:                      id,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
+		Version:                 1,
+		Columns:                 columns,
+		Families:                families,
+		PrimaryIndex:            indexes[0],
+		Indexes:                 indexes[1:],
+		FormatVersion:           descpb.InterleavedFormatVersion,
+		NextMutationID:          1,
+		NextConstraintID:        1,
 	}
-	return b.BuildImmutableTable()
+	tbl.PrimaryIndex.ConstraintID = tbl.NextConstraintID
+	tbl.NextConstraintID++
+	for _, col := range columns {
+		if tbl.NextColumnID <= col.ID {
+			tbl.NextColumnID = col.ID + 1
+		}
+	}
+	for _, fam := range families {
+		if tbl.NextFamilyID <= fam.ID {
+			tbl.NextFamilyID = fam.ID + 1
+		}
+	}
+	for i, idx := range indexes {
+		if tbl.NextIndexID <= idx.ID {
+			tbl.NextIndexID = idx.ID + 1
+		}
+		// Only assigned constraint IDs to unique non-primary indexes.
+		if idx.Unique && i > 1 {
+			tbl.Indexes[i-1].ConstraintID = tbl.NextConstraintID
+			tbl.NextConstraintID++
+		}
+	}
+	return tbl
 }
+
+func registerSystemTable(
+	createTableStmt string, tbl descpb.TableDescriptor, fns ...func(tbl *descpb.TableDescriptor),
+) catalog.TableDescriptor {
+	ctx := context.Background()
+	if _, alreadyExists := SystemTableDescriptors[createTableStmt]; alreadyExists {
+		log.Fatalf(ctx, "system table %q cannot be registered, existing entry for %s", tbl.Name, createTableStmt)
+	}
+	{
+		nameInfo := descpb.NameInfo{
+			ParentID:       tbl.ParentID,
+			ParentSchemaID: tbl.UnexposedParentSchemaID,
+			Name:           tbl.Name,
+		}
+		privs := catprivilege.SystemSuperuserPrivileges(nameInfo)
+		if privs == nil {
+			log.Fatalf(ctx, "no superuser privileges found when building descriptor of system table %q", tbl.Name)
+		}
+		tbl.Privileges = catpb.NewCustomSuperuserPrivilegeDescriptor(privs, security.NodeUserName())
+	}
+	for _, fn := range fns {
+		fn(&tbl)
+	}
+	b := tabledesc.NewBuilder(&tbl)
+	if err := b.RunPostDeserializationChanges(); err != nil {
+		log.Fatalf(
+			ctx, "system table %q cannot be registered, error during RunPostDeserializationChanges: %+v",
+			tbl.Name, err,
+		)
+	}
+	desc := b.BuildImmutableTable()
+	SystemTableDescriptors[createTableStmt] = desc
+	return desc
+}
+
+var (
+	// SystemDB is the descriptor for the system database.
+	SystemDB = MakeSystemDatabaseDesc()
+
+	// SystemTableDescriptors contains the registered table descriptors for each
+	// system table. The map is populated by calling registerSystemTable and is
+	// keyed by the CREATE TABLE statements with which these descriptors are
+	// tested against in TestSystemTableLiterals.
+	SystemTableDescriptors = make(map[string]catalog.TableDescriptor)
+)
 
 // These system config descpb.TableDescriptor literals should match the descriptor
 // that would be produced by evaluating one of the above `CREATE TABLE`
 // statements. See the `TestSystemTableLiterals` which checks that they do
 // indeed match, and has suggestions on writing and maintaining them.
 var (
-	// SystemDB is the descriptor for the system database.
-	SystemDB = MakeSystemDatabaseDesc()
 
 	// NamespaceTable is the descriptor for the namespace table. Note that this
 	// table should only be written to via KV puts, not via the SQL layer. Some
 	// code assumes that it only has KV entries for column family 4, not the
 	// "sentinel" column family 0 which would be written by SQL.
-	NamespaceTable = makeTable(descpb.TableDescriptor{
-		Name:                    catconstants.NamespaceTableName,
-		ID:                      keys.NamespaceTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "parentID", ID: 1, Type: types.Int},
-			{Name: "parentSchemaID", ID: 2, Type: types.Int},
-			{Name: "name", ID: 3, Type: types.String},
-			{Name: "id", ID: 4, Type: types.Int, Nullable: true},
-		},
-		NextColumnID: 5,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "parentSchemaID", "name"}, ColumnIDs: []descpb.ColumnID{1, 2, 3}},
-			{Name: "fam_4_id", ID: catconstants.NamespaceTableFamilyID, ColumnNames: []string{"id"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
-		},
-		NextFamilyID: catconstants.NamespaceTableFamilyID + 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  catconstants.NamespaceTablePrimaryIndexID,
-			Unique:              true,
-			KeyColumnNames:      []string{"parentID", "parentSchemaID", "name"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.NamespaceTableID], security.NodeUserName(),
-		),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	NamespaceTable = registerSystemTable(
+		NamespaceTableSchema,
+		systemTable(
+			catconstants.NamespaceTableName,
+			keys.NamespaceTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "parentID", ID: 1, Type: types.Int},
+				{Name: "parentSchemaID", ID: 2, Type: types.Int},
+				{Name: "name", ID: 3, Type: types.String},
+				{Name: "id", ID: 4, Type: types.Int, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "parentSchemaID", "name"}, ColumnIDs: []descpb.ColumnID{1, 2, 3}},
+				{Name: "fam_4_id", ID: catconstants.NamespaceTableFamilyID, ColumnNames: []string{"id"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  catconstants.NamespaceTablePrimaryIndexID,
+				Unique:              true,
+				KeyColumnNames:      []string{"parentID", "parentSchemaID", "name"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
+			},
+		))
 
 	// DescriptorTable is the descriptor for the descriptor table.
-	DescriptorTable = makeTable(descpb.TableDescriptor{
-		Name: "descriptor",
-		ID:   keys.DescriptorTableID,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.DescriptorTableID], security.NodeUserName()),
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int},
-			{Name: "descriptor", ID: keys.DescriptorTableDescriptorColID, Type: types.Bytes, Nullable: true},
-		},
-		NextColumnID: 3,
-		Families: []descpb.ColumnFamilyDescriptor{
-			// The id of the first col fam is hardcoded in keys.MakeDescMetadataKey().
-			{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
-			{
-				Name: "fam_2_descriptor", ID: keys.DescriptorTableDescriptorColFamID,
-				ColumnNames:     []string{"descriptor"},
-				ColumnIDs:       []descpb.ColumnID{keys.DescriptorTableDescriptorColID},
-				DefaultColumnID: keys.DescriptorTableDescriptorColID,
+	DescriptorTable = registerSystemTable(
+		DescriptorTableSchema,
+		systemTable(
+			catconstants.DescriptorTableName,
+			keys.DescriptorTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int},
+				{Name: "descriptor", ID: keys.DescriptorTableDescriptorColID, Type: types.Bytes, Nullable: true},
 			},
-		},
-		PrimaryIndex:   pk("id"),
-		NextFamilyID:   3,
-		NextIndexID:    2,
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			[]descpb.ColumnFamilyDescriptor{
+				// The id of the first col fam is hardcoded in keys.MakeDescMetadataKey().
+				{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
+				{
+					Name: "fam_2_descriptor", ID: keys.DescriptorTableDescriptorColFamID,
+					ColumnNames:     []string{"descriptor"},
+					ColumnIDs:       []descpb.ColumnID{keys.DescriptorTableDescriptorColID},
+					DefaultColumnID: keys.DescriptorTableDescriptorColID,
+				},
+			},
+			pk("id"),
+		))
 
 	falseBoolString = "false"
 	trueBoolString  = "true"
+	zeroIntString   = "0:::INT8"
 
 	// UsersTable is the descriptor for the users table.
-	UsersTable = makeTable(descpb.TableDescriptor{
-		Name:                    "users",
-		ID:                      keys.UsersTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "username", ID: 1, Type: types.String},
-			{Name: "hashedPassword", ID: 2, Type: types.Bytes, Nullable: true},
-			{Name: "isRole", ID: 3, Type: types.Bool, DefaultExpr: &falseBoolString},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
-			{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
-		},
-		PrimaryIndex: pk("username"),
-		NextFamilyID: 4,
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.UsersTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	UsersTable = registerSystemTable(
+		UsersTableSchema,
+		systemTable(
+			catconstants.UsersTableName,
+			keys.UsersTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "username", ID: 1, Type: types.String},
+				{Name: "hashedPassword", ID: 2, Type: types.Bytes, Nullable: true},
+				{Name: "isRole", ID: 3, Type: types.Bool, DefaultExpr: &falseBoolString},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
+				{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
+				{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
+			},
+			pk("username"),
+		))
 
 	// ZonesTable is the descriptor for the zones table.
-	ZonesTable = makeTable(descpb.TableDescriptor{
-		Name:                    "zones",
-		ID:                      keys.ZonesTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int},
-			{Name: "config", ID: keys.ZonesTableConfigColumnID, Type: types.Bytes, Nullable: true},
-		},
-		NextColumnID: 3,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
-			{Name: "fam_2_config", ID: keys.ZonesTableConfigColFamID, ColumnNames: []string{"config"},
-				ColumnIDs: []descpb.ColumnID{keys.ZonesTableConfigColumnID}, DefaultColumnID: keys.ZonesTableConfigColumnID},
-		},
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  keys.ZonesTablePrimaryIndexID,
-			Unique:              true,
-			KeyColumnNames:      []string{"id"},
-			KeyColumnDirections: singleASC,
-			KeyColumnIDs:        []descpb.ColumnID{keys.ZonesTablePrimaryIndexID},
-		},
-		NextFamilyID: 3,
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.ZonesTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	ZonesTable = registerSystemTable(
+		ZonesTableSchema,
+		systemTable(
+			catconstants.ZonesTableName,
+			keys.ZonesTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int},
+				{Name: "config", ID: keys.ZonesTableConfigColumnID, Type: types.Bytes, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
+				{Name: "fam_2_config", ID: keys.ZonesTableConfigColFamID, ColumnNames: []string{"config"},
+					ColumnIDs: []descpb.ColumnID{keys.ZonesTableConfigColumnID}, DefaultColumnID: keys.ZonesTableConfigColumnID},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  keys.ZonesTablePrimaryIndexID,
+				Unique:              true,
+				KeyColumnNames:      []string{"id"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        []descpb.ColumnID{keys.ZonesTablePrimaryIndexID},
+			},
+		))
 
 	// SettingsTable is the descriptor for the settings table.
 	// It contains all cluster settings for which a value has been set.
-	SettingsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "settings",
-		ID:                      keys.SettingsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "name", ID: 1, Type: types.String},
-			{Name: "value", ID: 2, Type: types.String},
-			{Name: "lastUpdated", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
-			{Name: "valueType", ID: 4, Type: types.String, Nullable: true},
-		},
-		NextColumnID: 5,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "fam_0_name_value_lastUpdated_valueType",
-				ID:          0,
-				ColumnNames: []string{"name", "value", "lastUpdated", "valueType"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
+	SettingsTable = registerSystemTable(
+		SettingsTableSchema,
+		systemTable(
+			catconstants.SettingsTableName,
+			keys.SettingsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "name", ID: 1, Type: types.String},
+				{Name: "value", ID: 2, Type: types.String},
+				{Name: "lastUpdated", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "valueType", ID: 4, Type: types.String, Nullable: true},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: pk("name"),
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.SettingsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "fam_0_name_value_lastUpdated_valueType",
+					ID:          0,
+					ColumnNames: []string{"name", "value", "lastUpdated", "valueType"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
+				},
+			},
+			pk("name"),
+		))
 
 	// DescIDSequence is the descriptor for the descriptor ID sequence.
-	DescIDSequence = makeTable(descpb.TableDescriptor{
-		Name:                    "descriptor_id_seq",
-		ID:                      keys.DescIDSequenceID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: tabledesc.SequenceColumnName, ID: tabledesc.SequenceColumnID, Type: types.Int},
+	DescIDSequence = registerSystemTable(
+		DescIDSequenceSchema,
+		systemTable(
+			catconstants.DescIDSequenceTableName,
+			keys.DescIDSequenceID,
+			[]descpb.ColumnDescriptor{
+				{Name: tabledesc.SequenceColumnName, ID: tabledesc.SequenceColumnID, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{{
+				Name:            "primary",
+				ID:              keys.SequenceColumnFamilyID,
+				ColumnNames:     []string{tabledesc.SequenceColumnName},
+				ColumnIDs:       []descpb.ColumnID{tabledesc.SequenceColumnID},
+				DefaultColumnID: tabledesc.SequenceColumnID,
+			}},
+			descpb.IndexDescriptor{
+				ID:                  keys.SequenceIndexID,
+				Name:                tabledesc.LegacyPrimaryKeyIndexName,
+				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.SequenceOpts = &descpb.TableDescriptor_SequenceOpts{
+				Increment: 1,
+				MinValue:  1,
+				MaxValue:  math.MaxInt64,
+				Start:     1,
+				CacheSize: 1,
+			}
+			tbl.NextColumnID = 0
+			tbl.NextFamilyID = 0
+			tbl.NextIndexID = 0
+			tbl.NextMutationID = 0
+			// Sequences never exposed their internal constraints,
+			// so all IDs will be left at zero. CREATE SEQUENCE has
+			// the same behaviour.
+			tbl.NextConstraintID = 0
+			tbl.PrimaryIndex.ConstraintID = 0
 		},
-		Families: []descpb.ColumnFamilyDescriptor{{
-			Name:            "primary",
-			ID:              keys.SequenceColumnFamilyID,
-			ColumnNames:     []string{tabledesc.SequenceColumnName},
-			ColumnIDs:       []descpb.ColumnID{tabledesc.SequenceColumnID},
-			DefaultColumnID: tabledesc.SequenceColumnID,
-		}},
-		PrimaryIndex: descpb.IndexDescriptor{
-			ID:                  keys.SequenceIndexID,
-			Name:                tabledesc.PrimaryKeyIndexName,
-			KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
-			KeyColumnNames:      []string{tabledesc.SequenceColumnName},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-		},
-		SequenceOpts: &descpb.TableDescriptor_SequenceOpts{
-			Increment: 1,
-			MinValue:  1,
-			MaxValue:  math.MaxInt64,
-			Start:     1,
-			CacheSize: 1,
-		},
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.DescIDSequenceID], security.NodeUserName()),
-		FormatVersion: descpb.InterleavedFormatVersion,
-	})
+	)
 
-	TenantsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "tenants",
-		ID:                      keys.TenantsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int},
-			{Name: "active", ID: 2, Type: types.Bool, DefaultExpr: &trueBoolString},
-			// NOTE: info is currently a placeholder and may be kept, replaced,
-			// or even just removed. The idea is to provide users of
-			// multi-tenancy with some ability to store associated metadata with
-			// each tenant. For instance, it might prove to be useful to map a
-			// tenant in a cluster back to the corresponding user ID in CC.
-			{Name: "info", ID: 3, Type: types.Bytes, Nullable: true},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{{
-			Name:        "primary",
-			ID:          0,
-			ColumnNames: []string{"id", "active", "info"},
-			ColumnIDs:   []descpb.ColumnID{1, 2, 3},
-		}},
-		NextFamilyID: 1,
-		PrimaryIndex: pk("id"),
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.TenantsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	TenantsTable = registerSystemTable(
+		TenantsTableSchema,
+		systemTable(
+			catconstants.TenantsTableName,
+			keys.TenantsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int},
+				{Name: "active", ID: 2, Type: types.Bool, DefaultExpr: &trueBoolString},
+				// NOTE: info is currently a placeholder and may be kept, replaced,
+				// or even just removed. The idea is to provide users of
+				// multi-tenancy with some ability to store associated metadata with
+				// each tenant. For instance, it might prove to be useful to map a
+				// tenant in a cluster back to the corresponding user ID in CC.
+				{Name: "info", ID: 3, Type: types.Bytes, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{{
+				Name:        "primary",
+				ID:          0,
+				ColumnNames: []string{"id", "active", "info"},
+				ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+			}},
+			pk("id"),
+		))
 )
 
 // These system descpb.TableDescriptor literals should match the descriptor that
@@ -819,202 +1023,167 @@ var (
 // suggestions on writing and maintaining them.
 var (
 	// LeaseTable is the descriptor for the leases table.
-	LeaseTable = makeTable(descpb.TableDescriptor{
-		Name:                    "lease",
-		ID:                      keys.LeaseTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "descID", ID: 1, Type: types.Int},
-			{Name: "version", ID: 2, Type: types.Int},
-			{Name: "nodeID", ID: 3, Type: types.Int},
-			{Name: "expiration", ID: 4, Type: types.Timestamp},
-		},
-		NextColumnID: 5,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []descpb.ColumnID{1, 2, 3, 4}},
-		},
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"descID", "version", "expiration", "nodeID"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 2, 4, 3},
-		},
-		NextFamilyID: 1,
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.LeaseTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	LeaseTable = registerSystemTable(
+		LeaseTableSchema,
+		systemTable(
+			catconstants.LeaseTableName,
+			keys.LeaseTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "descID", ID: 1, Type: types.Int},
+				{Name: "version", ID: 2, Type: types.Int},
+				{Name: "nodeID", ID: 3, Type: types.Int},
+				{Name: "expiration", ID: 4, Type: types.Timestamp},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []descpb.ColumnID{1, 2, 3, 4}},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"descID", "version", "expiration", "nodeID"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 4, 3},
+			},
+		))
 
 	uuidV4String = "uuid_v4()"
 
 	// EventLogTable is the descriptor for the event log table.
-	EventLogTable = makeTable(descpb.TableDescriptor{
-		Name:                    "eventlog",
-		ID:                      keys.EventLogTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "timestamp", ID: 1, Type: types.Timestamp},
-			{Name: "eventType", ID: 2, Type: types.String},
-			// TODO(knz): targetID and reportingID are deprecated and should
-			// be removed after v21.1 is released. Their content is now
-			// available inside the info payload, which is a JSON blob.
-			{Name: "targetID", ID: 3, Type: types.Int},
-			{Name: "reportingID", ID: 4, Type: types.Int},
-			{Name: "info", ID: 5, Type: types.String, Nullable: true},
-			{Name: "uniqueID", ID: 6, Type: types.Bytes, DefaultExpr: &uuidV4String},
-		},
-		NextColumnID: 7,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []descpb.ColumnID{1, 6}},
-			{Name: "fam_2_eventType", ID: 2, ColumnNames: []string{"eventType"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_targetID", ID: 3, ColumnNames: []string{"targetID"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
-			{Name: "fam_4_reportingID", ID: 4, ColumnNames: []string{"reportingID"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
-			{Name: "fam_5_info", ID: 5, ColumnNames: []string{"info"}, ColumnIDs: []descpb.ColumnID{5}, DefaultColumnID: 5},
-		},
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"timestamp", "uniqueID"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 6},
-		},
-		NextFamilyID: 6,
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.EventLogTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	EventLogTable = registerSystemTable(
+		EventLogTableSchema,
+		systemTable(
+			catconstants.EventLogTableName,
+			keys.EventLogTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "timestamp", ID: 1, Type: types.Timestamp},
+				{Name: "eventType", ID: 2, Type: types.String},
+				// TODO(knz): targetID and reportingID are deprecated and should
+				// be removed after v21.1 is released. Their content is now
+				// available inside the info payload, which is a JSON blob.
+				{Name: "targetID", ID: 3, Type: types.Int},
+				{Name: "reportingID", ID: 4, Type: types.Int},
+				{Name: "info", ID: 5, Type: types.String, Nullable: true},
+				{Name: "uniqueID", ID: 6, Type: types.Bytes, DefaultExpr: &uuidV4String},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []descpb.ColumnID{1, 6}},
+				{Name: "fam_2_eventType", ID: 2, ColumnNames: []string{"eventType"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
+				{Name: "fam_3_targetID", ID: 3, ColumnNames: []string{"targetID"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
+				{Name: "fam_4_reportingID", ID: 4, ColumnNames: []string{"reportingID"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
+				{Name: "fam_5_info", ID: 5, ColumnNames: []string{"info"}, ColumnIDs: []descpb.ColumnID{5}, DefaultColumnID: 5},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"timestamp", "uniqueID"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 6},
+			},
+		))
 
 	uniqueRowIDString = "unique_rowid()"
 
 	// RangeEventTable is the descriptor for the range log table.
-	RangeEventTable = makeTable(descpb.TableDescriptor{
-		Name:                    "rangelog",
-		ID:                      keys.RangeEventTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "timestamp", ID: 1, Type: types.Timestamp},
-			{Name: "rangeID", ID: 2, Type: types.Int},
-			{Name: "storeID", ID: 3, Type: types.Int},
-			{Name: "eventType", ID: 4, Type: types.String},
-			{Name: "otherRangeID", ID: 5, Type: types.Int, Nullable: true},
-			{Name: "info", ID: 6, Type: types.String, Nullable: true},
-			{Name: "uniqueID", ID: 7, Type: types.Int, DefaultExpr: &uniqueRowIDString},
-		},
-		NextColumnID: 8,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []descpb.ColumnID{1, 7}},
-			{Name: "fam_2_rangeID", ID: 2, ColumnNames: []string{"rangeID"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_storeID", ID: 3, ColumnNames: []string{"storeID"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
-			{Name: "fam_4_eventType", ID: 4, ColumnNames: []string{"eventType"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
-			{Name: "fam_5_otherRangeID", ID: 5, ColumnNames: []string{"otherRangeID"}, ColumnIDs: []descpb.ColumnID{5}, DefaultColumnID: 5},
-			{Name: "fam_6_info", ID: 6, ColumnNames: []string{"info"}, ColumnIDs: []descpb.ColumnID{6}, DefaultColumnID: 6},
-		},
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"timestamp", "uniqueID"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 7},
-		},
-		NextFamilyID: 7,
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.RangeEventTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	RangeEventTable = registerSystemTable(
+		RangeEventTableSchema,
+		systemTable(
+			catconstants.RangeEventTableName,
+			keys.RangeEventTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "timestamp", ID: 1, Type: types.Timestamp},
+				{Name: "rangeID", ID: 2, Type: types.Int},
+				{Name: "storeID", ID: 3, Type: types.Int},
+				{Name: "eventType", ID: 4, Type: types.String},
+				{Name: "otherRangeID", ID: 5, Type: types.Int, Nullable: true},
+				{Name: "info", ID: 6, Type: types.String, Nullable: true},
+				{Name: "uniqueID", ID: 7, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []descpb.ColumnID{1, 7}},
+				{Name: "fam_2_rangeID", ID: 2, ColumnNames: []string{"rangeID"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
+				{Name: "fam_3_storeID", ID: 3, ColumnNames: []string{"storeID"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
+				{Name: "fam_4_eventType", ID: 4, ColumnNames: []string{"eventType"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
+				{Name: "fam_5_otherRangeID", ID: 5, ColumnNames: []string{"otherRangeID"}, ColumnIDs: []descpb.ColumnID{5}, DefaultColumnID: 5},
+				{Name: "fam_6_info", ID: 6, ColumnNames: []string{"info"}, ColumnIDs: []descpb.ColumnID{6}, DefaultColumnID: 6},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"timestamp", "uniqueID"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 7},
+			},
+		))
 
 	// UITable is the descriptor for the ui table.
-	UITable = makeTable(descpb.TableDescriptor{
-		Name:                    "ui",
-		ID:                      keys.UITableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "key", ID: 1, Type: types.String},
-			{Name: "value", ID: 2, Type: types.Bytes, Nullable: true},
-			{Name: "lastUpdated", ID: 3, Type: types.Timestamp},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
-			{Name: "fam_2_value", ID: 2, ColumnNames: []string{"value"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_lastUpdated", ID: 3, ColumnNames: []string{"lastUpdated"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
-		},
-		NextFamilyID: 4,
-		PrimaryIndex: pk("key"),
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.UITableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	UITable = registerSystemTable(
+		UITableSchema,
+		systemTable(
+			catconstants.UITableName,
+			keys.UITableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "key", ID: 1, Type: types.String},
+				{Name: "value", ID: 2, Type: types.Bytes, Nullable: true},
+				{Name: "lastUpdated", ID: 3, Type: types.Timestamp},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
+				{Name: "fam_2_value", ID: 2, ColumnNames: []string{"value"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
+				{Name: "fam_3_lastUpdated", ID: 3, ColumnNames: []string{"lastUpdated"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
+			},
+			pk("key"),
+		))
 
-	nowString   = "now():::TIMESTAMP"
-	nowTZString = "now():::TIMESTAMPTZ"
+	nowString = "now():::TIMESTAMP"
 
 	// JobsTable is the descriptor for the jobs table.
-	JobsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "jobs",
-		ID:                      keys.JobsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
-			{Name: "status", ID: 2, Type: types.String},
-			{Name: "created", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
-			{Name: "payload", ID: 4, Type: types.Bytes},
-			{Name: "progress", ID: 5, Type: types.Bytes, Nullable: true},
-			{Name: "created_by_type", ID: 6, Type: types.String, Nullable: true},
-			{Name: "created_by_id", ID: 7, Type: types.Int, Nullable: true},
-			{Name: "claim_session_id", ID: 8, Type: types.Bytes, Nullable: true},
-			{Name: "claim_instance_id", ID: 9, Type: types.Int, Nullable: true},
-		},
-		NextColumnID: 10,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				// NB: We are using family name that existed prior to adding created_by_type and
-				// created_by_id columns.  This is done to minimize and simplify migration work
-				// that needed to be done.
-				Name:        "fam_0_id_status_created_payload",
-				ID:          0,
-				ColumnNames: []string{"id", "status", "created", "payload", "created_by_type", "created_by_id"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 6, 7},
+	JobsTable = registerSystemTable(
+		JobsTableSchema,
+		systemTable(
+			catconstants.JobsTableName,
+			keys.JobsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+				{Name: "status", ID: 2, Type: types.String},
+				{Name: "created", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "payload", ID: 4, Type: types.Bytes},
+				{Name: "progress", ID: 5, Type: types.Bytes, Nullable: true},
+				{Name: "created_by_type", ID: 6, Type: types.String, Nullable: true},
+				{Name: "created_by_id", ID: 7, Type: types.Int, Nullable: true},
+				{Name: "claim_session_id", ID: 8, Type: types.Bytes, Nullable: true},
+				{Name: "claim_instance_id", ID: 9, Type: types.Int, Nullable: true},
+				{Name: "num_runs", ID: 10, Type: types.Int, Nullable: true},
+				{Name: "last_run", ID: 11, Type: types.Timestamp, Nullable: true},
 			},
-			{
-				Name:            "progress",
-				ID:              1,
-				ColumnNames:     []string{"progress"},
-				ColumnIDs:       []descpb.ColumnID{5},
-				DefaultColumnID: 5,
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					// NB: We are using family name that existed prior to adding created_by_type and
+					// created_by_id columns.  This is done to minimize and simplify migration work
+					// that needed to be done.
+					Name:        "fam_0_id_status_created_payload",
+					ID:          0,
+					ColumnNames: []string{"id", "status", "created", "payload", "created_by_type", "created_by_id"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 6, 7},
+				},
+				{
+					Name:            "progress",
+					ID:              1,
+					ColumnNames:     []string{"progress"},
+					ColumnIDs:       []descpb.ColumnID{5},
+					DefaultColumnID: 5,
+				},
+				{
+					Name:        "claim",
+					ID:          2,
+					ColumnNames: []string{"claim_session_id", "claim_instance_id", "num_runs", "last_run"},
+					ColumnIDs:   []descpb.ColumnID{8, 9, 10, 11},
+				},
 			},
-			{
-				Name:        "claim",
-				ID:          2,
-				ColumnNames: []string{"claim_session_id", "claim_instance_id"},
-				ColumnIDs:   []descpb.ColumnID{8, 9},
-			},
-		},
-		NextFamilyID: 3,
-		PrimaryIndex: pk("id"),
-		Indexes: []descpb.IndexDescriptor{
-			{
+			pk("id"),
+			descpb.IndexDescriptor{
 				Name:                "jobs_status_created_idx",
 				ID:                  2,
 				Unique:              false,
@@ -1024,7 +1193,7 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-			{
+			descpb.IndexDescriptor{
 				Name:                "jobs_created_by_type_created_by_id_idx",
 				ID:                  3,
 				Unique:              false,
@@ -1036,53 +1205,56 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-		},
-		NextIndexID: 4,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.JobsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			descpb.IndexDescriptor{
+				Name:                "jobs_run_stats_idx",
+				ID:                  4,
+				Unique:              false,
+				KeyColumnNames:      []string{"claim_session_id", "status", "created"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{8, 2, 3},
+				StoreColumnNames:    []string{"last_run", "num_runs", "claim_instance_id"},
+				StoreColumnIDs:      []descpb.ColumnID{11, 10, 9},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Predicate:           JobsRunStatsIdxPredicate,
+			},
+		))
 
 	// WebSessions table to authenticate sessions over stateless connections.
-	WebSessionsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "web_sessions",
-		ID:                      keys.WebSessionsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
-			{Name: "hashedSecret", ID: 2, Type: types.Bytes},
-			{Name: "username", ID: 3, Type: types.String},
-			{Name: "createdAt", ID: 4, Type: types.Timestamp, DefaultExpr: &nowString},
-			{Name: "expiresAt", ID: 5, Type: types.Timestamp},
-			{Name: "revokedAt", ID: 6, Type: types.Timestamp, Nullable: true},
-			{Name: "lastUsedAt", ID: 7, Type: types.Timestamp, DefaultExpr: &nowString},
-			{Name: "auditInfo", ID: 8, Type: types.String, Nullable: true},
-		},
-		NextColumnID: 9,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name: "fam_0_id_hashedSecret_username_createdAt_expiresAt_revokedAt_lastUsedAt_auditInfo",
-				ID:   0,
-				ColumnNames: []string{
-					"id",
-					"hashedSecret",
-					"username",
-					"createdAt",
-					"expiresAt",
-					"revokedAt",
-					"lastUsedAt",
-					"auditInfo",
-				},
-				ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+	WebSessionsTable = registerSystemTable(
+		WebSessionsTableSchema,
+		systemTable(
+			catconstants.WebSessionsTableName,
+			keys.WebSessionsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+				{Name: "hashedSecret", ID: 2, Type: types.Bytes},
+				{Name: "username", ID: 3, Type: types.String},
+				{Name: "createdAt", ID: 4, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "expiresAt", ID: 5, Type: types.Timestamp},
+				{Name: "revokedAt", ID: 6, Type: types.Timestamp, Nullable: true},
+				{Name: "lastUsedAt", ID: 7, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "auditInfo", ID: 8, Type: types.String, Nullable: true},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: pk("id"),
-		Indexes: []descpb.IndexDescriptor{
-			{
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "fam_0_id_hashedSecret_username_createdAt_expiresAt_revokedAt_lastUsedAt_auditInfo",
+					ID:   0,
+					ColumnNames: []string{
+						"id",
+						"hashedSecret",
+						"username",
+						"createdAt",
+						"expiresAt",
+						"revokedAt",
+						"lastUsedAt",
+						"auditInfo",
+					},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+				},
+			},
+			pk("id"),
+			descpb.IndexDescriptor{
 				Name:                "web_sessions_expiresAt_idx",
 				ID:                  2,
 				Unique:              false,
@@ -1092,7 +1264,7 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-			{
+			descpb.IndexDescriptor{
 				Name:                "web_sessions_createdAt_idx",
 				ID:                  3,
 				Unique:              false,
@@ -1102,146 +1274,142 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-		},
-		NextIndexID: 4,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.WebSessionsTableID], security.NodeUserName()),
-		NextMutationID: 1,
-		FormatVersion:  3,
-	})
+			descpb.IndexDescriptor{
+				Name:                "web_sessions_revokedAt_idx",
+				ID:                  4,
+				Unique:              false,
+				KeyColumnNames:      []string{"revokedAt"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{6},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:                "web_sessions_lastUsedAt_idx",
+				ID:                  5,
+				Unique:              false,
+				KeyColumnNames:      []string{"lastUsedAt"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{7},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		))
 
 	// TableStatistics table to hold statistics about columns and column groups.
-	TableStatisticsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "table_statistics",
-		ID:                      keys.TableStatisticsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "tableID", ID: 1, Type: types.Int},
-			{Name: "statisticID", ID: 2, Type: types.Int, DefaultExpr: &uniqueRowIDString},
-			{Name: "name", ID: 3, Type: types.String, Nullable: true},
-			{Name: "columnIDs", ID: 4, Type: types.IntArray},
-			{Name: "createdAt", ID: 5, Type: types.Timestamp, DefaultExpr: &nowString},
-			{Name: "rowCount", ID: 6, Type: types.Int},
-			{Name: "distinctCount", ID: 7, Type: types.Int},
-			{Name: "nullCount", ID: 8, Type: types.Int},
-			{Name: "histogram", ID: 9, Type: types.Bytes, Nullable: true},
-		},
-		NextColumnID: 10,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram",
-				ID:   0,
-				ColumnNames: []string{
-					"tableID",
-					"statisticID",
-					"name",
-					"columnIDs",
-					"createdAt",
-					"rowCount",
-					"distinctCount",
-					"nullCount",
-					"histogram",
-				},
-				ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+	TableStatisticsTable = registerSystemTable(
+		TableStatisticsTableSchema,
+		systemTable(
+			catconstants.TableStatisticsTableName,
+			keys.TableStatisticsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "tableID", ID: 1, Type: types.Int},
+				{Name: "statisticID", ID: 2, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+				{Name: "name", ID: 3, Type: types.String, Nullable: true},
+				{Name: "columnIDs", ID: 4, Type: types.IntArray},
+				{Name: "createdAt", ID: 5, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "rowCount", ID: 6, Type: types.Int},
+				{Name: "distinctCount", ID: 7, Type: types.Int},
+				{Name: "nullCount", ID: 8, Type: types.Int},
+				{Name: "avgSize", ID: 9, Type: types.Int, DefaultExpr: &zeroIntString},
+				{Name: "histogram", ID: 10, Type: types.Bytes, Nullable: true},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"tableID", "statisticID"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.TableStatisticsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_avgSize_histogram",
+					ID:   0,
+					ColumnNames: []string{
+						"tableID",
+						"statisticID",
+						"name",
+						"columnIDs",
+						"createdAt",
+						"rowCount",
+						"distinctCount",
+						"nullCount",
+						"avgSize",
+						"histogram",
+					},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"tableID", "statisticID"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+		))
 
 	latLonDecimal = types.MakeDecimal(18, 15)
 
 	// LocationsTable is the descriptor for the locations table.
-	LocationsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "locations",
-		ID:                      keys.LocationsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "localityKey", ID: 1, Type: types.String},
-			{Name: "localityValue", ID: 2, Type: types.String},
-			{Name: "latitude", ID: 3, Type: latLonDecimal},
-			{Name: "longitude", ID: 4, Type: latLonDecimal},
-		},
-		NextColumnID: 5,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "fam_0_localityKey_localityValue_latitude_longitude",
-				ID:          0,
-				ColumnNames: []string{"localityKey", "localityValue", "latitude", "longitude"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
+	LocationsTable = registerSystemTable(
+		LocationsTableSchema,
+		systemTable(
+			catconstants.LocationsTableName,
+			keys.LocationsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "localityKey", ID: 1, Type: types.String},
+				{Name: "localityValue", ID: 2, Type: types.String},
+				{Name: "latitude", ID: 3, Type: latLonDecimal},
+				{Name: "longitude", ID: 4, Type: latLonDecimal},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"localityKey", "localityValue"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.LocationsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "fam_0_localityKey_localityValue_latitude_longitude",
+					ID:          0,
+					ColumnNames: []string{"localityKey", "localityValue", "latitude", "longitude"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"localityKey", "localityValue"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+		))
 
 	// RoleMembersTable is the descriptor for the role_members table.
-	RoleMembersTable = makeTable(descpb.TableDescriptor{
-		Name:                    "role_members",
-		ID:                      keys.RoleMembersTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "role", ID: 1, Type: types.String},
-			{Name: "member", ID: 2, Type: types.String},
-			{Name: "isAdmin", ID: 3, Type: types.Bool},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "primary",
-				ID:          0,
-				ColumnNames: []string{"role", "member"},
-				ColumnIDs:   []descpb.ColumnID{1, 2},
+	RoleMembersTable = registerSystemTable(
+		RoleMembersTableSchema,
+		systemTable(
+			catconstants.RoleMembersTableName,
+			keys.RoleMembersTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "role", ID: 1, Type: types.String},
+				{Name: "member", ID: 2, Type: types.String},
+				{Name: "isAdmin", ID: 3, Type: types.Bool},
 			},
-			{
-				Name:            "fam_3_isAdmin",
-				ID:              3,
-				ColumnNames:     []string{"isAdmin"},
-				ColumnIDs:       []descpb.ColumnID{3},
-				DefaultColumnID: 3,
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"role", "member"},
+					ColumnIDs:   []descpb.ColumnID{1, 2},
+				},
+				{
+					Name:            "fam_3_isAdmin",
+					ID:              3,
+					ColumnNames:     []string{"isAdmin"},
+					ColumnIDs:       []descpb.ColumnID{3},
+					DefaultColumnID: 3,
+				},
 			},
-		},
-		NextFamilyID: 4,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"role", "member"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-		},
-		Indexes: []descpb.IndexDescriptor{
-			{
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"role", "member"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+			descpb.IndexDescriptor{
 				Name:                "role_members_role_idx",
 				ID:                  2,
 				Unique:              false,
@@ -1251,7 +1419,7 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{2},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-			{
+			descpb.IndexDescriptor{
 				Name:                "role_members_member_idx",
 				ID:                  3,
 				Unique:              false,
@@ -1261,518 +1429,439 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-		},
-		NextIndexID: 4,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.RoleMembersTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+		))
 
 	// CommentsTable is the descriptor for the comments table.
-	CommentsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "comments",
-		ID:                      keys.CommentsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "type", ID: 1, Type: types.Int},
-			{Name: "object_id", ID: 2, Type: types.Int},
-			{Name: "sub_id", ID: 3, Type: types.Int},
-			{Name: "comment", ID: 4, Type: types.String},
+	CommentsTable = registerSystemTable(
+		CommentsTableSchema,
+		systemTable(
+			catconstants.CommentsTableName,
+			keys.CommentsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "type", ID: 1, Type: types.Int},
+				{Name: "object_id", ID: 2, Type: types.Int},
+				{Name: "sub_id", ID: 3, Type: types.Int},
+				{Name: "comment", ID: 4, Type: types.String},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{Name: "primary", ID: 0, ColumnNames: []string{"type", "object_id", "sub_id"}, ColumnIDs: []descpb.ColumnID{1, 2, 3}},
+				{Name: "fam_4_comment", ID: 4, ColumnNames: []string{"comment"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"type", "object_id", "sub_id"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Privileges.Version = catpb.Version21_2
+			tbl.Privileges.Users = append(tbl.Privileges.Users, catpb.UserPrivileges{
+				UserProto:  security.PublicRoleName().EncodeProto(),
+				Privileges: privilege.List{privilege.SELECT}.ToBitField(),
+			})
+			sort.Slice(tbl.Privileges.Users, func(i, j int) bool {
+				return tbl.Privileges.Users[i].User().LessThan(tbl.Privileges.Users[j].User())
+			})
 		},
-		NextColumnID: 5,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"type", "object_id", "sub_id"}, ColumnIDs: []descpb.ColumnID{1, 2, 3}},
-			{Name: "fam_4_comment", ID: 4, ColumnNames: []string{"comment"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
-		},
-		NextFamilyID: 5,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"type", "object_id", "sub_id"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
-		},
-		NextIndexID: 2,
-		Privileges: newCommentPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.CommentsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	)
 
-	ReportsMetaTable = makeTable(descpb.TableDescriptor{
-		Name:                    "reports_meta",
-		ID:                      keys.ReportsMetaTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int},
-			{Name: "generated", ID: 2, Type: types.TimestampTZ},
-		},
-		NextColumnID: 3,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "primary",
-				ID:          0,
-				ColumnNames: []string{"id", "generated"},
-				ColumnIDs:   []descpb.ColumnID{1, 2},
+	ReportsMetaTable = registerSystemTable(
+		ReportsMetaTableSchema,
+		systemTable(
+			catconstants.ReportsMetaTableName,
+			keys.ReportsMetaTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int},
+				{Name: "generated", ID: 2, Type: types.TimestampTZ},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:           "primary",
-			ID:             1,
-			Unique:         true,
-			KeyColumnNames: []string{"id"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC,
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"id", "generated"},
+					ColumnIDs:       []descpb.ColumnID{1, 2},
+					DefaultColumnID: 2,
+				},
 			},
-			KeyColumnIDs: []descpb.ColumnID{1},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.ReportsMetaTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"id"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+		))
 
 	ReplicationConstraintStatsTableTTL = time.Minute * 10
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationConstraintStatsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "replication_constraint_stats",
-		ID:                      keys.ReplicationConstraintStatsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "zone_id", ID: 1, Type: types.Int},
-			{Name: "subzone_id", ID: 2, Type: types.Int},
-			{Name: "type", ID: 3, Type: types.String},
-			{Name: "config", ID: 4, Type: types.String},
-			{Name: "report_id", ID: 5, Type: types.Int},
-			{Name: "violation_start", ID: 6, Type: types.TimestampTZ, Nullable: true},
-			{Name: "violating_ranges", ID: 7, Type: types.Int},
-		},
-		NextColumnID: 8,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name: "primary",
-				ID:   0,
-				ColumnNames: []string{
-					"zone_id",
-					"subzone_id",
-					"type",
-					"config",
-					"report_id",
-					"violation_start",
-					"violating_ranges",
+	ReplicationConstraintStatsTable = registerSystemTable(
+		ReplicationConstraintStatsTableSchema,
+		systemTable(
+			catconstants.ReplicationConstraintStatsTableName,
+			keys.ReplicationConstraintStatsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "zone_id", ID: 1, Type: types.Int},
+				{Name: "subzone_id", ID: 2, Type: types.Int},
+				{Name: "type", ID: 3, Type: types.String},
+				{Name: "config", ID: 4, Type: types.String},
+				{Name: "report_id", ID: 5, Type: types.Int},
+				{Name: "violation_start", ID: 6, Type: types.TimestampTZ, Nullable: true},
+				{Name: "violating_ranges", ID: 7, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"zone_id",
+						"subzone_id",
+						"type",
+						"config",
+						"report_id",
+						"violation_start",
+						"violating_ranges",
+					},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
 				},
-				ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:           "primary",
-			ID:             1,
-			Unique:         true,
-			KeyColumnNames: []string{"zone_id", "subzone_id", "type", "config"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"zone_id", "subzone_id", "type", "config"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
 			},
-			KeyColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.ReplicationConstraintStatsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+		))
 
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationCriticalLocalitiesTable = makeTable(descpb.TableDescriptor{
-		Name:                    "replication_critical_localities",
-		ID:                      keys.ReplicationCriticalLocalitiesTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "zone_id", ID: 1, Type: types.Int},
-			{Name: "subzone_id", ID: 2, Type: types.Int},
-			{Name: "locality", ID: 3, Type: types.String},
-			{Name: "report_id", ID: 4, Type: types.Int},
-			{Name: "at_risk_ranges", ID: 5, Type: types.Int},
-		},
-		NextColumnID: 6,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name: "primary",
-				ID:   0,
-				ColumnNames: []string{
-					"zone_id",
-					"subzone_id",
-					"locality",
-					"report_id",
-					"at_risk_ranges",
+	ReplicationCriticalLocalitiesTable = registerSystemTable(
+		ReplicationCriticalLocalitiesTableSchema,
+		systemTable(
+			catconstants.ReplicationCriticalLocalitiesTableName,
+			keys.ReplicationCriticalLocalitiesTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "zone_id", ID: 1, Type: types.Int},
+				{Name: "subzone_id", ID: 2, Type: types.Int},
+				{Name: "locality", ID: 3, Type: types.String},
+				{Name: "report_id", ID: 4, Type: types.Int},
+				{Name: "at_risk_ranges", ID: 5, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"zone_id",
+						"subzone_id",
+						"locality",
+						"report_id",
+						"at_risk_ranges",
+					},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5},
 				},
-				ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:           "primary",
-			ID:             1,
-			Unique:         true,
-			KeyColumnNames: []string{"zone_id", "subzone_id", "locality"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"zone_id", "subzone_id", "locality"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2, 3},
 			},
-			KeyColumnIDs: []descpb.ColumnID{1, 2, 3},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.ReplicationCriticalLocalitiesTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+		))
 
 	ReplicationStatsTableTTL = time.Minute * 10
 	// TODO(andrei): In 20.1 we should add a foreign key reference to the
 	// reports_meta table. Until then, it would cost us having to create an index
 	// on report_id.
-	ReplicationStatsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "replication_stats",
-		ID:                      keys.ReplicationStatsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "zone_id", ID: 1, Type: types.Int},
-			{Name: "subzone_id", ID: 2, Type: types.Int},
-			{Name: "report_id", ID: 3, Type: types.Int},
-			{Name: "total_ranges", ID: 4, Type: types.Int},
-			{Name: "unavailable_ranges", ID: 5, Type: types.Int},
-			{Name: "under_replicated_ranges", ID: 6, Type: types.Int},
-			{Name: "over_replicated_ranges", ID: 7, Type: types.Int},
-		},
-		NextColumnID: 8,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name: "primary",
-				ID:   0,
-				ColumnNames: []string{
-					"zone_id",
-					"subzone_id",
-					"report_id",
-					"total_ranges",
-					"unavailable_ranges",
-					"under_replicated_ranges",
-					"over_replicated_ranges",
+	ReplicationStatsTable = registerSystemTable(
+		ReplicationStatsTableSchema,
+		systemTable(
+			"replication_stats",
+			keys.ReplicationStatsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "zone_id", ID: 1, Type: types.Int},
+				{Name: "subzone_id", ID: 2, Type: types.Int},
+				{Name: "report_id", ID: 3, Type: types.Int},
+				{Name: "total_ranges", ID: 4, Type: types.Int},
+				{Name: "unavailable_ranges", ID: 5, Type: types.Int},
+				{Name: "under_replicated_ranges", ID: 6, Type: types.Int},
+				{Name: "over_replicated_ranges", ID: 7, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"zone_id",
+						"subzone_id",
+						"report_id",
+						"total_ranges",
+						"unavailable_ranges",
+						"under_replicated_ranges",
+						"over_replicated_ranges",
+					},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
 				},
-				ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
 			},
-		},
-		NextFamilyID: 2,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"zone_id", "subzone_id"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.ReplicationStatsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"zone_id", "subzone_id"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+		))
 
-	ProtectedTimestampsMetaTable = makeTable(descpb.TableDescriptor{
-		Name:                    "protected_ts_meta",
-		ID:                      keys.ProtectedTimestampsMetaTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{
-				Name:        "singleton",
-				ID:          1,
-				Type:        types.Bool,
-				DefaultExpr: &trueBoolString,
+	ProtectedTimestampsMetaTable = registerSystemTable(
+		ProtectedTimestampsMetaTableSchema,
+		systemTable(
+			catconstants.ProtectedTimestampsMetaTableName,
+			keys.ProtectedTimestampsMetaTableID,
+			[]descpb.ColumnDescriptor{
+				{
+					Name:        "singleton",
+					ID:          1,
+					Type:        types.Bool,
+					DefaultExpr: &trueBoolString,
+				},
+				{Name: "version", ID: 2, Type: types.Int},
+				{Name: "num_records", ID: 3, Type: types.Int},
+				{Name: "num_spans", ID: 4, Type: types.Int},
+				{Name: "total_bytes", ID: 5, Type: types.Int},
 			},
-			{Name: "version", ID: 2, Type: types.Int},
-			{Name: "num_records", ID: 3, Type: types.Int},
-			{Name: "num_spans", ID: 4, Type: types.Int},
-			{Name: "total_bytes", ID: 5, Type: types.Int},
-		},
-		Checks: []*descpb.TableDescriptor_CheckConstraint{
-			{
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ColumnNames: []string{"singleton", "version", "num_records", "num_spans", "total_bytes"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"singleton"},
+				KeyColumnIDs:   []descpb.ColumnID{1},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+				},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
 				Name:      "check_singleton",
 				Expr:      "singleton",
 				ColumnIDs: []descpb.ColumnID{1},
-			},
+			}}
 		},
-		NextColumnID: 6,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "primary",
-				ColumnNames: []string{"singleton", "version", "num_records", "num_spans", "total_bytes"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
-			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:           "primary",
-			ID:             1,
-			Unique:         true,
-			KeyColumnNames: []string{"singleton"},
-			KeyColumnIDs:   []descpb.ColumnID{1},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC,
-			},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.ProtectedTimestampsMetaTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	)
 
-	ProtectedTimestampsRecordsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "protected_ts_records",
-		ID:                      keys.ProtectedTimestampsRecordsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Uuid},
-			{Name: "ts", ID: 2, Type: types.Decimal},
-			{Name: "meta_type", ID: 3, Type: types.String},
-			{Name: "meta", ID: 4, Type: types.Bytes, Nullable: true},
-			{Name: "num_spans", ID: 5, Type: types.Int},
-			{Name: "spans", ID: 6, Type: types.Bytes},
-			{Name: "verified", ID: 7, Type: types.Bool, DefaultExpr: &falseBoolString},
-		},
-		NextColumnID: 8,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "primary",
-				ColumnNames: []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+	ProtectedTimestampsRecordsTable = registerSystemTable(
+		ProtectedTimestampsRecordsTableSchema,
+		systemTable(
+			catconstants.ProtectedTimestampsRecordsTableName,
+			keys.ProtectedTimestampsRecordsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Uuid},
+				{Name: "ts", ID: 2, Type: types.Decimal},
+				{Name: "meta_type", ID: 3, Type: types.String},
+				{Name: "meta", ID: 4, Type: types.Bytes, Nullable: true},
+				{Name: "num_spans", ID: 5, Type: types.Int},
+				{Name: "spans", ID: 6, Type: types.Bytes},
+				{Name: "verified", ID: 7, Type: types.Bool, DefaultExpr: &falseBoolString},
+				// target will store an encoded protobuf indicating what the protected
+				// timestamp record will protect. A record can protect either a cluster,
+				// tenants or a schema objects (databases/tables).
+				{Name: "target", ID: 8, Type: types.Bytes, Nullable: true},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:           "primary",
-			ID:             1,
-			Unique:         true,
-			KeyColumnNames: []string{"id"},
-			KeyColumnIDs:   []descpb.ColumnID{1},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC,
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ColumnNames: []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+				},
 			},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.ProtectedTimestampsRecordsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"id"},
+				KeyColumnIDs:   []descpb.ColumnID{1},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+				},
+			},
+		))
 
 	// RoleOptionsTable is the descriptor for the role_options table.
-	RoleOptionsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "role_options",
-		ID:                      keys.RoleOptionsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "username", ID: 1, Type: types.String},
-			{Name: "option", ID: 2, Type: types.String},
-			{Name: "value", ID: 3, Type: types.String, Nullable: true},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:            "primary",
-				ColumnNames:     []string{"username", "option", "value"},
-				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
-				DefaultColumnID: 3,
+	RoleOptionsTable = registerSystemTable(
+		RoleOptionsTableSchema,
+		systemTable(
+			catconstants.RoleOptionsTableName,
+			keys.RoleOptionsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "username", ID: 1, Type: types.String},
+				{Name: "option", ID: 2, Type: types.String},
+				{Name: "value", ID: 3, Type: types.String, Nullable: true},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:                "primary",
-			ID:                  1,
-			Unique:              true,
-			KeyColumnNames:      []string{"username", "option"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			KeyColumnIDs:        []descpb.ColumnID{1, 2},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.RoleOptionsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ColumnNames:     []string{"username", "option", "value"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+					DefaultColumnID: 3,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"username", "option"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+			},
+		))
 
-	StatementBundleChunksTable = makeTable(descpb.TableDescriptor{
-		Name:                    "statement_bundle_chunks",
-		ID:                      keys.StatementBundleChunksTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
-			{Name: "description", ID: 2, Type: types.String, Nullable: true},
-			{Name: "data", ID: 3, Type: types.Bytes},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "primary",
-				ColumnNames: []string{"id", "description", "data"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+	StatementBundleChunksTable = registerSystemTable(
+		StatementBundleChunksTableSchema,
+		systemTable(
+			catconstants.StatementBundleChunksTableName,
+			keys.StatementBundleChunksTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+				{Name: "description", ID: 2, Type: types.String, Nullable: true},
+				{Name: "data", ID: 3, Type: types.Bytes},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: pk("id"),
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.StatementBundleChunksTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ColumnNames: []string{"id", "description", "data"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				},
+			},
+			pk("id"),
+		))
 
 	// TODO(andrei): Add a foreign key reference to the statement_diagnostics table when
 	// it no longer requires us to create an index on statement_diagnostics_id.
-	StatementDiagnosticsRequestsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "statement_diagnostics_requests",
-		ID:                      keys.StatementDiagnosticsRequestsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
-			{Name: "completed", ID: 2, Type: types.Bool, Nullable: false, DefaultExpr: &falseBoolString},
-			{Name: "statement_fingerprint", ID: 3, Type: types.String, Nullable: false},
-			{Name: "statement_diagnostics_id", ID: 4, Type: types.Int, Nullable: true},
-			{Name: "requested_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
-		},
-		NextColumnID: 6,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "primary",
-				ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+	StatementDiagnosticsRequestsTable = registerSystemTable(
+		StatementDiagnosticsRequestsTableSchema,
+		systemTable(
+			catconstants.StatementDiagnosticsRequestsTableName,
+			keys.StatementDiagnosticsRequestsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
+				{Name: "completed", ID: 2, Type: types.Bool, Nullable: false, DefaultExpr: &falseBoolString},
+				{Name: "statement_fingerprint", ID: 3, Type: types.String, Nullable: false},
+				{Name: "statement_diagnostics_id", ID: 4, Type: types.Int, Nullable: true},
+				{Name: "requested_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
+				{Name: "min_execution_latency", ID: 6, Type: types.Interval, Nullable: true},
+				{Name: "expires_at", ID: 7, Type: types.TimestampTZ, Nullable: true},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: pk("id"),
-		// Index for the polling query.
-		Indexes: []descpb.IndexDescriptor{
-			{
-				Name:                "completed_idx",
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+				},
+			},
+			pk("id"),
+			// Index for the polling query.
+			descpb.IndexDescriptor{
+				Name:                "completed_idx_v2",
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"completed", "id"},
-				StoreColumnNames:    []string{"statement_fingerprint"},
+				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-				StoreColumnIDs:      []descpb.ColumnID{3},
+				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-		},
-		NextIndexID: 3,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.StatementDiagnosticsRequestsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+		))
 
-	StatementDiagnosticsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "statement_diagnostics",
-		ID:                      keys.StatementDiagnosticsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
-			{Name: "statement_fingerprint", ID: 2, Type: types.String, Nullable: false},
-			{Name: "statement", ID: 3, Type: types.String, Nullable: false},
-			{Name: "collected_at", ID: 4, Type: types.TimestampTZ, Nullable: false},
-			// TODO(radu): remove this column; it is no longer used.
-			{Name: "trace", ID: 5, Type: types.Jsonb, Nullable: true},
-			{Name: "bundle_chunks", ID: 6, Type: types.IntArray, Nullable: true},
-			{Name: "error", ID: 7, Type: types.String, Nullable: true},
-		},
-		NextColumnID: 8,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name: "primary",
-				ColumnNames: []string{"id", "statement_fingerprint", "statement",
-					"collected_at", "trace", "bundle_chunks", "error"},
-				ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+	StatementDiagnosticsTable = registerSystemTable(
+		StatementDiagnosticsTableSchema,
+		systemTable(
+			catconstants.StatementDiagnosticsTableName,
+			keys.StatementDiagnosticsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
+				{Name: "statement_fingerprint", ID: 2, Type: types.String, Nullable: false},
+				{Name: "statement", ID: 3, Type: types.String, Nullable: false},
+				{Name: "collected_at", ID: 4, Type: types.TimestampTZ, Nullable: false},
+				// TODO(radu): remove this column; it is no longer used.
+				{Name: "trace", ID: 5, Type: types.Jsonb, Nullable: true},
+				{Name: "bundle_chunks", ID: 6, Type: types.IntArray, Nullable: true},
+				{Name: "error", ID: 7, Type: types.String, Nullable: true},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: pk("id"),
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.StatementDiagnosticsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ColumnNames: []string{"id", "statement_fingerprint", "statement",
+						"collected_at", "trace", "bundle_chunks", "error"},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+				},
+			},
+			pk("id"),
+		))
+
+	nowTZString = "now():::TIMESTAMPTZ"
 
 	// ScheduledJobsTable is the descriptor for the scheduled jobs table.
-	ScheduledJobsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "scheduled_jobs",
-		ID:                      keys.ScheduledJobsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "schedule_id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
-			{Name: "schedule_name", ID: 2, Type: types.String, Nullable: false},
-			{Name: "created", ID: 3, Type: types.TimestampTZ, DefaultExpr: &nowTZString, Nullable: false},
-			{Name: "owner", ID: 4, Type: types.String, Nullable: false},
-			{Name: "next_run", ID: 5, Type: types.TimestampTZ, Nullable: true},
-			{Name: "schedule_state", ID: 6, Type: types.Bytes, Nullable: true},
-			{Name: "schedule_expr", ID: 7, Type: types.String, Nullable: true},
-			{Name: "schedule_details", ID: 8, Type: types.Bytes, Nullable: true},
-			{Name: "executor_type", ID: 9, Type: types.String, Nullable: false},
-			{Name: "execution_args", ID: 10, Type: types.Bytes, Nullable: false},
-		},
-		NextColumnID: 11,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:        "sched",
-				ID:          0,
-				ColumnNames: []string{"schedule_id", "next_run", "schedule_state"},
-				ColumnIDs:   []descpb.ColumnID{1, 5, 6},
+	ScheduledJobsTable = registerSystemTable(
+		ScheduledJobsTableSchema,
+		systemTable(
+			"scheduled_jobs",
+			keys.ScheduledJobsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "schedule_id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
+				{Name: "schedule_name", ID: 2, Type: types.String, Nullable: false},
+				{Name: "created", ID: 3, Type: types.TimestampTZ, DefaultExpr: &nowTZString, Nullable: false},
+				{Name: "owner", ID: 4, Type: types.String, Nullable: false},
+				{Name: "next_run", ID: 5, Type: types.TimestampTZ, Nullable: true},
+				{Name: "schedule_state", ID: 6, Type: types.Bytes, Nullable: true},
+				{Name: "schedule_expr", ID: 7, Type: types.String, Nullable: true},
+				{Name: "schedule_details", ID: 8, Type: types.Bytes, Nullable: true},
+				{Name: "executor_type", ID: 9, Type: types.String, Nullable: false},
+				{Name: "execution_args", ID: 10, Type: types.Bytes, Nullable: false},
 			},
-			{
-				Name: "other",
-				ID:   1,
-				ColumnNames: []string{
-					"schedule_name", "created", "owner", "schedule_expr",
-					"schedule_details", "executor_type", "execution_args",
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "sched",
+					ID:          0,
+					ColumnNames: []string{"schedule_id", "next_run", "schedule_state"},
+					ColumnIDs:   []descpb.ColumnID{1, 5, 6},
 				},
-				ColumnIDs: []descpb.ColumnID{2, 3, 4, 7, 8, 9, 10},
+				{
+					Name: "other",
+					ID:   1,
+					ColumnNames: []string{
+						"schedule_name", "created", "owner", "schedule_expr",
+						"schedule_details", "executor_type", "execution_args",
+					},
+					ColumnIDs: []descpb.ColumnID{2, 3, 4, 7, 8, 9, 10},
+				},
 			},
-		},
-		NextFamilyID: 2,
-		PrimaryIndex: pk("schedule_id"),
-		Indexes: []descpb.IndexDescriptor{
-			{
+			pk("schedule_id"),
+			descpb.IndexDescriptor{
 				Name:                "next_run_idx",
 				ID:                  2,
 				Unique:              false,
@@ -1782,226 +1871,150 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-		},
-		NextIndexID: 3,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.ScheduledJobsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+		))
 
 	// SqllivenessTable is the descriptor for the sqlliveness table.
-	SqllivenessTable = makeTable(descpb.TableDescriptor{
-		Name:                    "sqlliveness",
-		ID:                      keys.SqllivenessID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
-			{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
-		},
-		NextColumnID: 3,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:            "fam0_session_id_expiration",
-				ID:              0,
-				ColumnNames:     []string{"session_id", "expiration"},
-				ColumnIDs:       []descpb.ColumnID{1, 2},
-				DefaultColumnID: 2,
+	SqllivenessTable = registerSystemTable(
+		SqllivenessTableSchema,
+		systemTable(
+			catconstants.SqllivenessTableName,
+			keys.SqllivenessID,
+			[]descpb.ColumnDescriptor{
+				{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
+				{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: pk("session_id"),
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.SqllivenessID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "fam0_session_id_expiration",
+					ID:              0,
+					ColumnNames:     []string{"session_id", "expiration"},
+					ColumnIDs:       []descpb.ColumnID{1, 2},
+					DefaultColumnID: 2,
+				},
+			},
+			pk("session_id"),
+		))
 
 	// MigrationsTable is the descriptor for the migrations table. It stores facts
 	// about the completion state of long-running migrations. It is used to
 	// prevent migrations from running again after they have been completed.
-	MigrationsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "migrations",
-		ID:                      keys.MigrationsID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "major", ID: 1, Type: types.Int, Nullable: false},
-			{Name: "minor", ID: 2, Type: types.Int, Nullable: false},
-			{Name: "patch", ID: 3, Type: types.Int, Nullable: false},
-			{Name: "internal", ID: 4, Type: types.Int, Nullable: false},
-			{Name: "completed_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
-		},
-		NextColumnID: 6,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:            "primary",
-				ID:              0,
-				ColumnNames:     []string{"major", "minor", "patch", "internal", "completed_at"},
-				ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5},
-				DefaultColumnID: 5,
+	MigrationsTable = registerSystemTable(
+		MigrationsTableSchema,
+		systemTable(
+			catconstants.MigrationsTableName,
+			keys.MigrationsID,
+			[]descpb.ColumnDescriptor{
+				{Name: "major", ID: 1, Type: types.Int, Nullable: false},
+				{Name: "minor", ID: 2, Type: types.Int, Nullable: false},
+				{Name: "patch", ID: 3, Type: types.Int, Nullable: false},
+				{Name: "internal", ID: 4, Type: types.Int, Nullable: false},
+				{Name: "completed_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:           tabledesc.PrimaryKeyIndexName,
-			ID:             1,
-			Unique:         true,
-			KeyColumnNames: []string{"major", "minor", "patch", "internal"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"major", "minor", "patch", "internal", "completed_at"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5},
+					DefaultColumnID: 5,
+				},
 			},
-			KeyColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.JobsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"major", "minor", "patch", "internal"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2, 3, 4},
+			},
+		))
 
 	// JoinTokensTable is the descriptor for the join tokens table.
-	JoinTokensTable = makeTable(descpb.TableDescriptor{
-		Name:                    "join_tokens",
-		ID:                      keys.JoinTokensTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Uuid, Nullable: false},
-			{Name: "secret", ID: 2, Type: types.Bytes, Nullable: false},
-			{Name: "expiration", ID: 3, Type: types.TimestampTZ, Nullable: false},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:            "primary",
-				ID:              0,
-				ColumnNames:     []string{"id", "secret", "expiration"},
-				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
-				DefaultColumnID: 0,
+	JoinTokensTable = registerSystemTable(
+		JoinTokensTableSchema,
+		systemTable(
+			catconstants.JoinTokensTableName,
+			keys.JoinTokensTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Uuid, Nullable: false},
+				{Name: "secret", ID: 2, Type: types.Bytes, Nullable: false},
+				{Name: "expiration", ID: 3, Type: types.TimestampTZ, Nullable: false},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:           tabledesc.PrimaryKeyIndexName,
-			ID:             1,
-			Unique:         true,
-			KeyColumnNames: []string{"id"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC,
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"id", "secret", "expiration"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+					DefaultColumnID: 0,
+				},
 			},
-			KeyColumnIDs: []descpb.ColumnID{1},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.JoinTokensTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"id"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+		))
 
 	// StatementStatisticsTable is the descriptor for the SQL statement stats table.
 	// It stores statistics for statement fingerprints.
-	StatementStatisticsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "statement_statistics",
-		ID:                      keys.StatementStatisticsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
-			{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
-			{Name: "plan_hash", ID: 3, Type: types.Int, Nullable: false},
-			{Name: "app_name", ID: 4, Type: types.String, Nullable: false},
-			{Name: "node_id", ID: 5, Type: types.Int, Nullable: false},
-			{Name: "agg_interval", ID: 6, Type: types.Interval, Nullable: false},
-			{Name: "metadata", ID: 7, Type: types.Jsonb, Nullable: false},
-			{Name: "statistics", ID: 8, Type: types.Jsonb, Nullable: false},
-			{Name: "plan", ID: 9, Type: types.Jsonb, Nullable: false},
-			{
-				Name:        "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
-				ID:          10,
-				Type:        types.Int4,
-				Nullable:    false,
-				ComputeExpr: &sqlStmtHashComputeExpr,
-				Hidden:      true,
-			},
-		},
-		NextColumnID: 11,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name: "primary",
-				ID:   0,
-				ColumnNames: []string{
-					"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
-					"aggregated_ts", "fingerprint_id", "plan_hash", "app_name", "node_id",
-					"agg_interval", "metadata", "statistics", "plan",
-				},
-				ColumnIDs:       []descpb.ColumnID{10, 1, 2, 3, 4, 5, 6, 7, 8, 9},
-				DefaultColumnID: 0,
-			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:   tabledesc.PrimaryKeyIndexName,
-			ID:     1,
-			Unique: true,
-			KeyColumnNames: []string{
-				"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
-				"aggregated_ts",
-				"fingerprint_id",
-				"plan_hash",
-				"app_name",
-				"node_id",
-			},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-			},
-			KeyColumnIDs: []descpb.ColumnID{10, 1, 2, 3, 4, 5},
-			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
-			Sharded: descpb.ShardedDescriptor{
-				IsSharded:    true,
-				Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
-				ShardBuckets: 8,
-				ColumnNames: []string{
-					"aggregated_ts",
-					"app_name",
-					"fingerprint_id",
-					"node_id",
-					"plan_hash",
+	StatementStatisticsTable = registerSystemTable(
+		StatementStatisticsTableSchema,
+		systemTable(
+			catconstants.StatementStatisticsTableName,
+			keys.StatementStatisticsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
+				{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
+				{Name: "transaction_fingerprint_id", ID: 3, Type: types.Bytes, Nullable: false},
+				{Name: "plan_hash", ID: 4, Type: types.Bytes, Nullable: false},
+				{Name: "app_name", ID: 5, Type: types.String, Nullable: false},
+				{Name: "node_id", ID: 6, Type: types.Int, Nullable: false},
+				{Name: "agg_interval", ID: 7, Type: types.Interval, Nullable: false},
+				{Name: "metadata", ID: 8, Type: types.Jsonb, Nullable: false},
+				{Name: "statistics", ID: 9, Type: types.Jsonb, Nullable: false},
+				{Name: "plan", ID: 10, Type: types.Jsonb, Nullable: false},
+				{
+					Name:        "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
+					ID:          11,
+					Type:        types.Int4,
+					Nullable:    false,
+					ComputeExpr: &sqlStmtHashComputeExpr,
+					Hidden:      true,
 				},
 			},
-		},
-		Checks: []*descpb.TableDescriptor_CheckConstraint{
-			{
-				Expr:                "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
-				Name:                "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
-				Validity:            descpb.ConstraintValidity_Validated,
-				ColumnIDs:           []descpb.ColumnID{10},
-				IsNonNullConstraint: false,
-				Hidden:              true,
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
+						"aggregated_ts", "fingerprint_id", "transaction_fingerprint_id", "plan_hash", "app_name", "node_id",
+						"agg_interval", "metadata", "statistics", "plan",
+					},
+					ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					DefaultColumnID: 0,
+				},
 			},
-		},
-		Indexes: []descpb.IndexDescriptor{
-			{
-				Name:   "fingerprint_stats_idx",
-				ID:     2,
-				Unique: false,
+			descpb.IndexDescriptor{
+				Name:   tabledesc.LegacyPrimaryKeyIndexName,
+				ID:     1,
+				Unique: true,
 				KeyColumnNames: []string{
-					"fingerprint_id",
+					"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
 					"aggregated_ts",
+					"fingerprint_id",
+					"transaction_fingerprint_id",
 					"plan_hash",
 					"app_name",
 					"node_id",
@@ -2012,129 +2025,149 @@ var (
 					descpb.IndexDescriptor_ASC,
 					descpb.IndexDescriptor_ASC,
 					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
 				},
-				KeyColumnIDs:       []descpb.ColumnID{2, 1, 3, 4, 5},
-				KeySuffixColumnIDs: []descpb.ColumnID{10},
+				KeyColumnIDs: []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6},
+				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+				Sharded: catpb.ShardedDescriptor{
+					IsSharded:    true,
+					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
+					ShardBuckets: 8,
+					ColumnNames: []string{
+						"aggregated_ts",
+						"app_name",
+						"fingerprint_id",
+						"node_id",
+						"plan_hash",
+						"transaction_fingerprint_id",
+					},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:   "fingerprint_stats_idx",
+				ID:     2,
+				Unique: false,
+				KeyColumnNames: []string{
+					"fingerprint_id",
+					"transaction_fingerprint_id",
+				},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{2, 3},
+				KeySuffixColumnIDs: []descpb.ColumnID{11, 1, 4, 5, 6},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Expr:                "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
+				Name:                "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
+				Validity:            descpb.ConstraintValidity_Validated,
+				ColumnIDs:           []descpb.ColumnID{11},
+				IsNonNullConstraint: false,
+				Hidden:              true,
+			}}
 		},
-		NextIndexID: 3,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.StatementStatisticsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	)
 
 	// TransactionStatisticsTable is the descriptor for the SQL transaction stats
 	// table. It stores statistics for transaction fingerprints.
-	TransactionStatisticsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "transaction_statistics",
-		ID:                      keys.TransactionStatisticsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
-			{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
-			{Name: "app_name", ID: 3, Type: types.String, Nullable: false},
-			{Name: "node_id", ID: 4, Type: types.Int, Nullable: false},
-			{Name: "agg_interval", ID: 5, Type: types.Interval, Nullable: false},
-			{Name: "metadata", ID: 6, Type: types.Jsonb, Nullable: false},
-			{Name: "statistics", ID: 7, Type: types.Jsonb, Nullable: false},
-			{
-				Name:        "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
-				ID:          8,
-				Type:        types.Int4,
-				Nullable:    false,
-				ComputeExpr: &sqlTxnHashComputeExpr,
-				Hidden:      true,
-			},
-		},
-		NextColumnID: 9,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name: "primary",
-				ID:   0,
-				ColumnNames: []string{
-					"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
-					"aggregated_ts", "fingerprint_id", "app_name", "node_id",
-					"agg_interval", "metadata", "statistics",
+	TransactionStatisticsTable = registerSystemTable(
+		TransactionStatisticsTableSchema,
+		systemTable(
+			catconstants.TransactionStatisticsTableName,
+			keys.TransactionStatisticsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
+				{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
+				{Name: "app_name", ID: 3, Type: types.String, Nullable: false},
+				{Name: "node_id", ID: 4, Type: types.Int, Nullable: false},
+				{Name: "agg_interval", ID: 5, Type: types.Interval, Nullable: false},
+				{Name: "metadata", ID: 6, Type: types.Jsonb, Nullable: false},
+				{Name: "statistics", ID: 7, Type: types.Jsonb, Nullable: false},
+				{
+					Name:        "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
+					ID:          8,
+					Type:        types.Int4,
+					Nullable:    false,
+					ComputeExpr: &sqlTxnHashComputeExpr,
+					Hidden:      true,
 				},
-				ColumnIDs:       []descpb.ColumnID{8, 1, 2, 3, 4, 5, 6, 7},
-				DefaultColumnID: 0,
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:   tabledesc.PrimaryKeyIndexName,
-			ID:     1,
-			Unique: true,
-			KeyColumnNames: []string{
-				"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
-				"aggregated_ts",
-				"fingerprint_id",
-				"app_name",
-				"node_id",
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
+						"aggregated_ts", "fingerprint_id", "app_name", "node_id",
+						"agg_interval", "metadata", "statistics",
+					},
+					ColumnIDs:       []descpb.ColumnID{8, 1, 2, 3, 4, 5, 6, 7},
+					DefaultColumnID: 0,
+				},
 			},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
-			},
-			KeyColumnIDs: []descpb.ColumnID{8, 1, 2, 3, 4},
-			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
-			Sharded: descpb.ShardedDescriptor{
-				IsSharded:    true,
-				Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
-				ShardBuckets: 8,
-				ColumnNames: []string{
+			descpb.IndexDescriptor{
+				Name:   tabledesc.LegacyPrimaryKeyIndexName,
+				ID:     1,
+				Unique: true,
+				KeyColumnNames: []string{
+					"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
 					"aggregated_ts",
-					"app_name",
 					"fingerprint_id",
+					"app_name",
 					"node_id",
 				},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{8, 1, 2, 3, 4},
+				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+				Sharded: catpb.ShardedDescriptor{
+					IsSharded:    true,
+					Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
+					ShardBuckets: 8,
+					ColumnNames: []string{
+						"aggregated_ts",
+						"app_name",
+						"fingerprint_id",
+						"node_id",
+					},
+				},
 			},
-		},
-		Checks: []*descpb.TableDescriptor_CheckConstraint{
-			{
+			descpb.IndexDescriptor{
+				Name:   "fingerprint_stats_idx",
+				ID:     2,
+				Unique: false,
+				KeyColumnNames: []string{
+					"fingerprint_id",
+				},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{2},
+				KeySuffixColumnIDs: []descpb.ColumnID{8, 1, 3, 4},
+				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
 				Expr:                "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
 				Name:                "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
 				Validity:            descpb.ConstraintValidity_Validated,
 				ColumnIDs:           []descpb.ColumnID{8},
 				IsNonNullConstraint: false,
 				Hidden:              true,
-			},
+			}}
 		},
-		Indexes: []descpb.IndexDescriptor{
-			{
-				Name:   "fingerprint_stats_idx",
-				ID:     2,
-				Unique: false,
-				KeyColumnNames: []string{
-					"fingerprint_id",
-					"aggregated_ts",
-					"app_name",
-					"node_id",
-				},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-					descpb.IndexDescriptor_ASC,
-				},
-				KeyColumnIDs:       []descpb.ColumnID{2, 1, 3, 4},
-				KeySuffixColumnIDs: []descpb.ColumnID{8},
-				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
-			},
-		},
-		NextIndexID: 3,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.TransactionStatisticsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	)
 
 	// DatabaseRoleSettingsTable holds default values for session variables
 	// for each role and database combination. It is analogous to the
@@ -2142,164 +2175,248 @@ var (
 	// have stable OIDs associated with them, so this table continues the
 	// convention of keying based on the role name (which is how privileges
 	// work also).
-	DatabaseRoleSettingsTable = makeTable(descpb.TableDescriptor{
-		Name:                    "database_role_settings",
-		ID:                      keys.DatabaseRoleSettingsTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "database_id", ID: 1, Type: types.Oid, Nullable: false},
-			{Name: "role_name", ID: 2, Type: types.String, Nullable: false},
-			{Name: "settings", ID: 3, Type: types.StringArray, Nullable: false},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:            "primary",
-				ID:              0,
-				ColumnNames:     []string{"database_id", "role_name", "settings"},
-				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
-				DefaultColumnID: 3,
+	DatabaseRoleSettingsTable = registerSystemTable(
+		DatabaseRoleSettingsTableSchema,
+		systemTable(
+			catconstants.DatabaseRoleSettingsTableName,
+			keys.DatabaseRoleSettingsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "database_id", ID: 1, Type: types.Oid, Nullable: false},
+				{Name: "role_name", ID: 2, Type: types.String, Nullable: false},
+				{Name: "settings", ID: 3, Type: types.StringArray, Nullable: false},
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:           tabledesc.PrimaryKeyIndexName,
-			ID:             1,
-			Unique:         true,
-			KeyColumnNames: []string{"database_id", "role_name"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"database_id", "role_name", "settings"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+					DefaultColumnID: 3,
+				},
 			},
-			KeyColumnIDs: []descpb.ColumnID{1, 2},
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.DatabaseRoleSettingsTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"database_id", "role_name"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+			},
+		))
 
+	// The tenant_usage table receives periodic updates from all SQL pods. We want
+	// to limit the amount of clutter in the table.
+	TenantUsageTableTTL = 2 * time.Hour
 	// TenantUsageTable is the descriptor for the tenant_usage table. It is used
 	// to coordinate throttling of tenant SQL pods and to track consumption.
-	TenantUsageTable = makeTable(descpb.TableDescriptor{
-		Name:                    "tenant_usage",
-		ID:                      keys.TenantUsageTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "tenant_id", ID: 1, Type: types.Int, Nullable: false},
-			{Name: "instance_id", ID: 2, Type: types.Int, Nullable: false},
-			{Name: "next_instance_id", ID: 3, Type: types.Int, Nullable: false},
-			{Name: "ru_burst_limit", ID: 4, Type: types.Float, Nullable: true},
-			{Name: "ru_refill_rate", ID: 5, Type: types.Float, Nullable: true},
-			{Name: "ru_current", ID: 6, Type: types.Float, Nullable: true},
-			{Name: "current_share_sum", ID: 7, Type: types.Float, Nullable: true},
-			{Name: "total_ru_usage", ID: 8, Type: types.Float, Nullable: true},
-			{Name: "total_read_requests", ID: 9, Type: types.Int, Nullable: true},
-			{Name: "total_read_bytes", ID: 10, Type: types.Int, Nullable: true},
-			{Name: "total_write_requests", ID: 11, Type: types.Int, Nullable: true},
-			{Name: "total_write_bytes", ID: 12, Type: types.Int, Nullable: true},
-			{Name: "total_sql_pod_cpu_seconds", ID: 13, Type: types.Float, Nullable: true},
-			{Name: "instance_lease", ID: 14, Type: types.Bytes, Nullable: true},
-			{Name: "instance_seq", ID: 15, Type: types.Int, Nullable: true},
-			{Name: "instance_shares", ID: 16, Type: types.Float, Nullable: true},
-			{Name: "instance_last_update", ID: 17, Type: types.Timestamp, Nullable: true},
-		},
-		NextColumnID: 18,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name: "primary",
-				ID:   0,
-				ColumnNames: []string{
-					"tenant_id", "instance_id", "next_instance_id",
-					"ru_burst_limit", "ru_refill_rate", "ru_current", "current_share_sum",
-					"total_ru_usage", "total_read_requests", "total_read_bytes", "total_write_requests",
-					"total_write_bytes", "total_sql_pod_cpu_seconds",
-					"instance_lease", "instance_seq", "instance_shares", "instance_last_update",
+	TenantUsageTable = registerSystemTable(
+		TenantUsageTableSchema,
+		systemTable(
+			catconstants.TenantUsageTableName,
+			keys.TenantUsageTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "tenant_id", ID: 1, Type: types.Int, Nullable: false},
+				{Name: "instance_id", ID: 2, Type: types.Int, Nullable: false},
+				{Name: "next_instance_id", ID: 3, Type: types.Int, Nullable: false},
+				{Name: "last_update", ID: 4, Type: types.Timestamp, Nullable: false},
+				{Name: "ru_burst_limit", ID: 5, Type: types.Float, Nullable: true},
+				{Name: "ru_refill_rate", ID: 6, Type: types.Float, Nullable: true},
+				{Name: "ru_current", ID: 7, Type: types.Float, Nullable: true},
+				{Name: "current_share_sum", ID: 8, Type: types.Float, Nullable: true},
+				{Name: "total_consumption", ID: 9, Type: types.Bytes, Nullable: true},
+				{Name: "instance_lease", ID: 10, Type: types.Bytes, Nullable: true},
+				{Name: "instance_seq", ID: 11, Type: types.Int, Nullable: true},
+				{Name: "instance_shares", ID: 12, Type: types.Float, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"tenant_id", "instance_id", "next_instance_id", "last_update",
+						"ru_burst_limit", "ru_refill_rate", "ru_current", "current_share_sum",
+						"total_consumption",
+						"instance_lease", "instance_seq", "instance_shares",
+					},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+					DefaultColumnID: 0,
 				},
-				ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17},
-				DefaultColumnID: 0,
 			},
-		},
-		NextFamilyID: 1,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:           tabledesc.PrimaryKeyIndexName,
-			ID:             1,
-			Unique:         true,
-			KeyColumnNames: []string{"tenant_id", "instance_id"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC,
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"tenant_id", "instance_id"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-			KeyColumnIDs: []descpb.ColumnID{1, 2},
-			Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.TenantUsageTableID], security.NodeUserName(),
-		),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+		))
 
 	// SQLInstancesTable is the descriptor for the sqlinstances table
 	// It stores information about all the SQL instances for a tenant
 	// and their associated session and address information.
-	SQLInstancesTable = makeTable(descpb.TableDescriptor{
-		Name:                    "sql_instances",
-		ID:                      keys.SQLInstancesTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "id", ID: 1, Type: types.Int, Nullable: false},
-			{Name: "addr", ID: 2, Type: types.String, Nullable: true},
-			{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{
-				Name:            "primary",
-				ID:              0,
-				ColumnNames:     []string{"id", "addr", "session_id"},
-				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
-				DefaultColumnID: 0,
+	SQLInstancesTable = registerSystemTable(
+		SQLInstancesTableSchema,
+		systemTable(
+			catconstants.SQLInstancesTableName,
+			keys.SQLInstancesTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int, Nullable: false},
+				{Name: "addr", ID: 2, Type: types.String, Nullable: true},
+				{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
 			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"id", "addr", "session_id"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+					DefaultColumnID: 0,
+				},
+			},
+			pk("id"),
+		))
+
+	// SpanConfigurationsTable is the descriptor for the system tenant's span
+	// configurations table.
+	SpanConfigurationsTable = registerSystemTable(
+		SpanConfigurationsTableSchema,
+		systemTable(
+			catconstants.SpanConfigurationsTableName,
+			keys.SpanConfigurationsTableID,
+			[]descpb.ColumnDescriptor{
+				{Name: "start_key", ID: 1, Type: types.Bytes},
+				{Name: "end_key", ID: 2, Type: types.Bytes},
+				{Name: "config", ID: 3, Type: types.Bytes},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"start_key", "end_key", "config"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  keys.SpanConfigurationsTablePrimaryKeyIndexID,
+				Unique:              true,
+				KeyColumnNames:      []string{"start_key"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        singleID1,
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Name:      "check_bounds",
+				Expr:      "start_key < end_key",
+				ColumnIDs: []descpb.ColumnID{1, 2},
+			}}
 		},
-		NextFamilyID: 1,
-		PrimaryIndex: pk("id"),
-		NextIndexID:  2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.SQLInstancesTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
+	)
+
+	// TenantSettingsTable is the descriptor for the tenant settings table.
+	// It contains overrides for cluster settings for tenants.
+	TenantSettingsTable = registerSystemTable(
+		TenantSettingsTableSchema,
+		systemTable(
+			catconstants.TenantSettingsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "tenant_id", ID: 1, Type: types.Int},
+				{Name: "name", ID: 2, Type: types.String},
+				{Name: "value", ID: 3, Type: types.String},
+				{Name: "last_updated", ID: 4, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "value_type", ID: 5, Type: types.String},
+				{Name: "reason", ID: 6, Type: types.String, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "fam_0_tenant_id_name_value_last_updated_value_type_reason",
+					ID:          0,
+					ColumnNames: []string{"tenant_id", "name", "value", "last_updated", "value_type", "reason"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"tenant_id", "name"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		))
 )
 
-// newCommentPrivilegeDescriptor returns a privilege descriptor for comment table
-func newCommentPrivilegeDescriptor(
-	priv privilege.List, owner security.SQLUsername,
-) *descpb.PrivilegeDescriptor {
-	selectPriv := privilege.List{privilege.SELECT}
-	return &descpb.PrivilegeDescriptor{
-		OwnerProto: owner.EncodeProto(),
-		Users: []descpb.UserPrivileges{
-			{
-				UserProto:  security.AdminRoleName().EncodeProto(),
-				Privileges: priv.ToBitField(),
-			},
-			{
-				UserProto:  security.PublicRoleName().EncodeProto(),
-				Privileges: selectPriv.ToBitField(),
-			},
-			{
-				UserProto:  security.RootUserName().EncodeProto(),
-				Privileges: priv.ToBitField(),
-			},
-		},
-		Version: descpb.Version21_2,
-	}
+type descRefByName struct {
+	parentID       descpb.ID
+	parentSchemaID descpb.ID
+	name           string
 }
+
+var (
+	// UnleasableSystemDescriptors contains the system descriptors which
+	// cannot be leased. This includes the lease table itself, among others.
+	UnleasableSystemDescriptors = []catalog.Descriptor{
+		SystemDB,
+		LeaseTable,
+		DescriptorTable,
+		NamespaceTable,
+		RangeEventTable,
+	}
+
+	unleasableSystemDescriptorsByID = func(s []catalog.Descriptor) map[descpb.ID]struct{} {
+		m := make(map[descpb.ID]struct{}, len(s))
+		for _, d := range s {
+			m[d.GetID()] = struct{}{}
+		}
+		return m
+	}(UnleasableSystemDescriptors)
+
+	unleasableSystemDescriptorsByName = func(s []catalog.Descriptor) map[descRefByName]struct{} {
+		m := make(map[descRefByName]struct{}, len(s))
+		for _, d := range s {
+			m[descRefByName{
+				parentID:       d.GetParentID(),
+				parentSchemaID: d.GetParentSchemaID(),
+				name:           d.GetName(),
+			}] = struct{}{}
+		}
+		return m
+	}(UnleasableSystemDescriptors)
+)
+
+// IsUnleasableSystemDescriptorByID returns whether the specified descriptor is
+// a member of the UnleasableSystemDescriptors set, given an ID.
+func IsUnleasableSystemDescriptorByID(id descpb.ID) bool {
+	_, ok := unleasableSystemDescriptorsByID[id]
+	return ok
+}
+
+// IsUnleasableSystemDescriptorByName returns whether the specified descriptor
+// is a member of the UnleasableSystemDescriptors set, given a database, schema,
+// and name.
+func IsUnleasableSystemDescriptorByName(
+	parentID descpb.ID, parentSchemaID descpb.ID, name string,
+) bool {
+	_, ok := unleasableSystemDescriptorsByName[descRefByName{
+		parentID:       parentID,
+		parentSchemaID: parentSchemaID,
+		name:           name,
+	}]
+	return ok
+}
+
+// SpanConfigurationsTableName represents system.span_configurations.
+var SpanConfigurationsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(catconstants.SpanConfigurationsTableName))

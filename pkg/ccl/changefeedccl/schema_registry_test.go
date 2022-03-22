@@ -10,7 +10,6 @@ package changefeedccl
 
 import (
 	"context"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -18,6 +17,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
+
+func TestConfluentSchemaRegistry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("errors with no scheme", func(t *testing.T) {
+		_, err := newConfluentSchemaRegistry("justsomestring")
+		require.Error(t, err)
+	})
+	t.Run("errors with unsupported scheme", func(t *testing.T) {
+		url := "gopher://myhost"
+		_, err := newConfluentSchemaRegistry(url)
+		require.Error(t, err)
+	})
+}
 
 func TestConfluentSchemaRegistryPing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -38,19 +52,6 @@ func TestConfluentSchemaRegistryPing(t *testing.T) {
 	})
 	t.Run("Ping errors with bad host", func(t *testing.T) {
 		reg, err := newConfluentSchemaRegistry("http://host-does-exist-and-we-care")
-		require.NoError(t, err)
-		require.Error(t, reg.Ping(context.Background()))
-	})
-	t.Run("Ping errors with no scheme", func(t *testing.T) {
-		reg, err := newConfluentSchemaRegistry("justsomestring")
-		require.NoError(t, err)                          // url.Parse is everyone's friend
-		require.Error(t, reg.Ping(context.Background())) // we aren't
-	})
-	t.Run("Ping errors with bad scheme", func(t *testing.T) {
-		url, err := url.Parse(regServer.URL())
-		require.NoError(t, err)
-		url.Scheme = "gopher://"
-		reg, err := newConfluentSchemaRegistry(url.String())
 		require.NoError(t, err)
 		require.Error(t, reg.Ping(context.Background()))
 	})

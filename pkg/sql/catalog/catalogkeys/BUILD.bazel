@@ -7,11 +7,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/sem/tree",
         "//pkg/util/encoding",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -24,7 +23,7 @@ go_test(
     embed = [":catalogkeys"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/leaktest",
     ],
 )

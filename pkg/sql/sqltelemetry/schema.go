@@ -31,10 +31,6 @@ func SchemaNewTypeCounter(t string) telemetry.Counter {
 }
 
 var (
-	// CreateInterleavedTableCounter is to be incremented every time an
-	// interleaved table is being created.
-	CreateInterleavedTableCounter = telemetry.GetCounterOnce("sql.schema.create_interleaved_table")
-
 	// CreateTempTableCounter is to be incremented every time a TEMP TABLE
 	// has been created.
 	CreateTempTableCounter = telemetry.GetCounterOnce("sql.schema.create_temp_table")
@@ -165,3 +161,21 @@ var CreateUnloggedTableCounter = telemetry.GetCounterOnce("sql.schema.create_unl
 // SchemaRefreshMaterializedView is to be incremented every time a materialized
 // view is refreshed.
 var SchemaRefreshMaterializedView = telemetry.GetCounterOnce("sql.schema.refresh_materialized_view")
+
+// SchemaChangeErrorCounter is to be incremented for different types
+// of errors.
+func SchemaChangeErrorCounter(typ string) telemetry.Counter {
+	return telemetry.GetCounter(fmt.Sprintf("sql.schema_changer.errors.%s", typ))
+}
+
+// SetTableStorageParameter is to be incremented every time a table storage
+// parameter has been SET (through CREATE TABLE or ALTER TABLE).
+func SetTableStorageParameter(param string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.table_storage_parameter." + param + ".set")
+}
+
+// ResetTableStorageParameter is to be incremented every time a table storage
+// parameter has been RESET.
+func ResetTableStorageParameter(param string) telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.table_storage_parameter." + param + ".reset")
+}

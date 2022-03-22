@@ -12,23 +12,27 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"gopkg.in/yaml.v2"
@@ -38,7 +42,7 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 
 		var ts testState
@@ -60,16 +64,27 @@ type testState struct {
 	db          *gosql.DB
 	kvDB        *kv.DB
 	r           *sqlutils.SQLRunner
+	clock       *timeutil.ManualTime
 	tenantUsage multitenant.TenantUsageServer
 	metricsReg  *metric.Registry
+	autoSeqNum  int64
 }
+
+const timeFormat = "15:04:05.000"
+
+var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 func (ts *testState) start(t *testing.T) {
 	// Set up a server that we use only for the system tables.
 	ts.s, ts.db, ts.kvDB = serverutils.StartServer(t, base.TestServerArgs{})
 	ts.r = sqlutils.MakeSQLRunner(ts.db)
 
-	ts.tenantUsage = server.NewTenantUsageServer(ts.kvDB, ts.s.InternalExecutor().(*sql.InternalExecutor))
+	ts.clock = timeutil.NewManualTime(t0)
+	ts.tenantUsage = tenantcostserver.NewInstance(
+		ts.s.ClusterSettings(),
+		ts.kvDB,
+		ts.s.InternalExecutor().(*sql.InternalExecutor), ts.clock,
+	)
 	ts.metricsReg = metric.NewRegistry()
 	ts.metricsReg.AddMetricStruct(ts.tenantUsage.Metrics())
 }
@@ -78,12 +93,18 @@ func (ts *testState) stop() {
 	ts.s.Stopper().Stop(context.Background())
 }
 
+func (ts *testState) formatTime(tm time.Time) string {
+	return tm.Format(timeFormat)
+}
+
 var testStateCommands = map[string]func(*testState, *testing.T, *datadriven.TestData) string{
 	"create-tenant":        (*testState).createTenant,
 	"token-bucket-request": (*testState).tokenBucketRequest,
 	"metrics":              (*testState).metrics,
 	"configure":            (*testState).configure,
 	"inspect":              (*testState).inspect,
+	"wait-inspect":         (*testState).waitInspect,
+	"advance":              (*testState).advance,
 }
 
 func (ts *testState) tenantID(t *testing.T, d *datadriven.TestData) uint64 {
@@ -108,25 +129,48 @@ func (ts *testState) createTenant(t *testing.T, d *datadriven.TestData) string {
 	return ""
 }
 
+// tokenBucketRequest runs a TokenBucket request against a tenant (with ID
+// specified in a tenant=X argument). The input is a yaml for the struct below.
 func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) string {
 	tenantID := ts.tenantID(t, d)
 	var args struct {
-		InstanceID  uint32 `yaml:"instance_id"`
-		Consumption struct {
-			RU              float64 `yaml:"ru"`
-			ReadReq         uint64  `yaml:"read_req"`
-			ReadBytes       uint64  `yaml:"read_bytes"`
-			WriteReq        uint64  `yaml:"write_req"`
-			WriteBytes      uint64  `yaml:"write_bytes"`
-			SQLPodsCPUUsage float64 `yaml:"sql_pods_cpu_usage"`
+		InstanceID         uint32 `yaml:"instance_id"`
+		InstanceLease      string `yaml:"instance_lease"`
+		NextLiveInstanceID uint32 `yaml:"next_live_instance_id"`
+		SeqNum             int64  `yaml:"seq_num"`
+		Consumption        struct {
+			RU                float64 `yaml:"ru"`
+			ReadReq           uint64  `yaml:"read_req"`
+			ReadBytes         uint64  `yaml:"read_bytes"`
+			WriteReq          uint64  `yaml:"write_req"`
+			WriteBytes        uint64  `yaml:"write_bytes"`
+			SQLPodsCPUUsage   float64 `yaml:"sql_pods_cpu_usage"`
+			PGWireEgressBytes uint64  `yaml:"pgwire_egress_bytes"`
 		}
+		RU     float64 `yaml:"ru"`
+		Period string  `yaml:"period"`
 	}
+	args.SeqNum = -1
+	args.Period = "10s"
+	args.InstanceLease = "foo"
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &args); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
 	}
+	// If sequence number not specified, use an auto-incrementing number.
+	if args.SeqNum == -1 {
+		ts.autoSeqNum++
+		args.SeqNum = ts.autoSeqNum
+	}
+	period, err := time.ParseDuration(args.Period)
+	if err != nil {
+		d.Fatalf(t, "failed to parse duration: %v", args.Period)
+	}
 	req := roachpb.TokenBucketRequest{
-		TenantID:   uint64(tenantID),
-		InstanceID: args.InstanceID,
+		TenantID:           tenantID,
+		InstanceID:         args.InstanceID,
+		InstanceLease:      []byte(args.InstanceLease),
+		NextLiveInstanceID: args.NextLiveInstanceID,
+		SeqNum:             args.SeqNum,
 		ConsumptionSinceLastRequest: roachpb.TenantConsumption{
 			RU:                args.Consumption.RU,
 			ReadRequests:      args.Consumption.ReadReq,
@@ -134,7 +178,10 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			WriteRequests:     args.Consumption.WriteReq,
 			WriteBytes:        args.Consumption.WriteBytes,
 			SQLPodsCPUSeconds: args.Consumption.SQLPodsCPUUsage,
+			PGWireEgressBytes: args.Consumption.PGWireEgressBytes,
 		},
+		RequestedRU:         args.RU,
+		TargetRequestPeriod: period,
 	}
 	res := ts.tenantUsage.TokenBucketRequest(
 		context.Background(), roachpb.MakeTenantID(tenantID), &req,
@@ -142,9 +189,23 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 	if res.Error != (errors.EncodedError{}) {
 		return fmt.Sprintf("error: %v", errors.DecodeError(context.Background(), res.Error))
 	}
-	return ""
+	if res.GrantedRU == 0 {
+		if res.TrickleDuration != 0 {
+			d.Fatalf(t, "trickle duration set with 0 granted RUs")
+		}
+		return ""
+	}
+	trickleStr := "immediately"
+	if res.TrickleDuration != 0 {
+		trickleStr = fmt.Sprintf("over %s", res.TrickleDuration)
+	}
+	return fmt.Sprintf(
+		"%.10g RUs granted %s. Fallback rate: %.10g RU/s\n",
+		res.GrantedRU, trickleStr, res.FallbackRate,
+	)
 }
 
+// metrics outputs all metrics that match the regex in the input.
 func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 	re, err := regexp.Compile(d.Input)
 	if err != nil {
@@ -157,6 +218,8 @@ func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 	return str
 }
 
+// configure reconfigures the token bucket for a tenant (specified in a tenant=X
+// argument). The input is a yaml for the struct below.
 func (ts *testState) configure(t *testing.T, d *datadriven.TestData) string {
 	tenantID := ts.tenantID(t, d)
 	var args struct {
@@ -168,17 +231,21 @@ func (ts *testState) configure(t *testing.T, d *datadriven.TestData) string {
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &args); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
 	}
-	ts.r.Exec(
-		t,
-		`SELECT crdb_internal.update_tenant_resource_limits($1, $2, $3, $4, now(), 0)`,
-		tenantID,
-		args.AvailableRU,
-		args.RefillRate,
-		args.MaxBurstRU,
-	)
+	if err := ts.kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		return ts.tenantUsage.ReconfigureTokenBucket(
+			ctx, txn,
+			roachpb.MakeTenantID(tenantID),
+			args.AvailableRU, args.RefillRate, args.MaxBurstRU,
+			time.Time{}, 0,
+		)
+	}); err != nil {
+		d.Fatalf(t, "reconfigure error: %v", err)
+	}
 	return ""
 }
 
+// inspect shows all the metadata for a tenant (specified in a tenant=X
+// argument), in a user-friendly format.
 func (ts *testState) inspect(t *testing.T, d *datadriven.TestData) string {
 	tenantID := ts.tenantID(t, d)
 	res, err := tenantcostserver.InspectTenantMetadata(
@@ -186,9 +253,114 @@ func (ts *testState) inspect(t *testing.T, d *datadriven.TestData) string {
 		ts.s.InternalExecutor().(*sql.InternalExecutor),
 		nil, /* txn */
 		roachpb.MakeTenantID(tenantID),
+		timeFormat,
 	)
 	if err != nil {
 		d.Fatalf(t, "error inspecting tenant state: %v", err)
 	}
 	return res
+}
+
+// inspect-wait is like inspect but waits a little bit and retries until the
+// output equals the expected output; used for cases where
+func (ts *testState) waitInspect(t *testing.T, d *datadriven.TestData) string {
+	time.Sleep(1 * time.Millisecond)
+	testutils.SucceedsSoon(t, func() error {
+		res := ts.inspect(t, d)
+		if res == d.Expected {
+			return nil
+		}
+		return errors.Errorf("-- expected:\n%s\n-- got:\n%s", d.Expected, res)
+	})
+	return d.Expected
+}
+
+// advance advances the clock by the provided duration and returns the new
+// current time.
+func (ts *testState) advance(t *testing.T, d *datadriven.TestData) string {
+	dur, err := time.ParseDuration(d.Input)
+	if err != nil {
+		d.Fatalf(t, "failed to parse input as duration: %v", err)
+	}
+	// This is hacky, but we want to be able to test the time going back which is
+	// not allowed by ManualTime.Advance(). This is safe to do because we are not
+	// using timers.
+	*ts.clock = *timeutil.NewManualTime(ts.clock.Now().Add(dur))
+	return ts.formatTime(ts.clock.Now())
+}
+
+// TestInstanceCleanup is a randomized test that verifies that the server keeps
+// up with a changing live set.
+func TestInstanceCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var ts testState
+	ts.start(t)
+	defer ts.stop()
+
+	ts.r.Exec(t, fmt.Sprintf("SELECT crdb_internal.create_tenant(%d)", 5))
+
+	// Note: this number needs to be at most maxInstancesCleanup.
+	const maxInstances = 10
+	var liveset, prev util.FastIntSet
+
+	for steps := 0; steps < 100; steps++ {
+		// Keep the previous set for debugging.
+		prev = liveset.Copy()
+		// Make a few random changes to the set.
+		for n := rand.Intn(4); n >= 0; n-- {
+			x := 1 + rand.Intn(maxInstances)
+			if rand.Intn(2) == 0 {
+				liveset.Add(x)
+			} else {
+				liveset.Remove(x)
+			}
+		}
+		// Advance the time so all existing instances look stale.
+		ts.clock.Advance(5 * time.Minute)
+		if liveset.Empty() {
+			// An empty live set can't trigger cleanup.
+			continue
+		}
+		// Send one token bucket update from each instance, in random order.
+		instances := liveset.Ordered()
+		for _, i := range rand.Perm(len(instances)) {
+			req := roachpb.TokenBucketRequest{
+				TenantID:   5,
+				InstanceID: uint32(instances[i]),
+			}
+			if i+1 < len(instances) {
+				req.NextLiveInstanceID = uint32(instances[i+1])
+			} else {
+				req.NextLiveInstanceID = uint32(instances[0])
+			}
+			res := ts.tenantUsage.TokenBucketRequest(
+				context.Background(), roachpb.MakeTenantID(5), &req,
+			)
+			if res.Error != (errors.EncodedError{}) {
+				t.Fatal(errors.DecodeError(context.Background(), res.Error))
+			}
+		}
+		// Verify that the server reached the correct liveset.
+		rows := ts.r.Query(t,
+			"SELECT instance_id FROM system.tenant_usage WHERE tenant_id = 5 AND instance_id > 0",
+		)
+		var serverSet util.FastIntSet
+		for rows.Next() {
+			var id int
+			if err := rows.Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			serverSet.Add(id)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		if !liveset.Equals(serverSet) {
+			t.Fatalf(
+				"previous live set: %s  current live set: %s  server live set: %s",
+				liveset, prev, serverSet,
+			)
+		}
+	}
 }

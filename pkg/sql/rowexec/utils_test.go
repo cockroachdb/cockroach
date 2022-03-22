@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // runProcessorTest instantiates a processor with the provided spec, runs it
@@ -38,6 +40,8 @@ func runProcessorTest(
 	outputTypes []*types.T,
 	expected rowenc.EncDatumRows,
 	txn *kv.Txn,
+	stopper *stop.Stopper,
+	distSender *kvcoord.DistSender,
 ) {
 	in := distsqlutils.NewRowBuffer(inputTypes, inputRows, distsqlutils.RowBufferArgs{})
 	out := &distsqlutils.RowBuffer{}
@@ -46,7 +50,7 @@ func runProcessorTest(
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := execinfra.FlowCtx{
-		Cfg:     &execinfra.ServerConfig{Settings: st},
+		Cfg:     &execinfra.ServerConfig{Settings: st, Stopper: stopper, DistSender: distSender},
 		EvalCtx: &evalCtx,
 		Txn:     txn,
 	}

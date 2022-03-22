@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -46,6 +47,7 @@ var _ chunkBackfiller = &columnBackfiller{}
 // Each function retains a reference to its corresponding TxnCoordSender, so we
 // need to be careful not to accumulate an unbounded number of these functions.
 var backfillerMaxCommitWaitFns = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"schemachanger.backfiller.max_commit_wait_fns",
 	"the maximum number of commit-wait functions that the columnBackfiller will accumulate before consuming them to reclaim memory",
 	128,
@@ -63,7 +65,7 @@ func newColumnBackfiller(
 	columnBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"column-backfill-mon")
 	cb := &columnBackfiller{
-		desc: spec.BuildTableDescriptor(),
+		desc: flowCtx.TableDescriptor(&spec.Table),
 		backfiller: backfiller{
 			name:        "Column",
 			filter:      backfill.ColumnMutationFilter,
@@ -99,7 +101,7 @@ func (cb *columnBackfiller) CurrentBufferFill() float32 {
 
 // runChunk implements the chunkBackfiller interface.
 func (cb *columnBackfiller) runChunk(
-	ctx context.Context, sp roachpb.Span, chunkSize int64, _ hlc.Timestamp,
+	ctx context.Context, sp roachpb.Span, chunkSize rowinfra.RowLimit, _ hlc.Timestamp,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
 	var commitWaitFn func(context.Context) error

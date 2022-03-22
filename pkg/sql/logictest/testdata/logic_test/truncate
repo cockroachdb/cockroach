@@ -50,7 +50,7 @@ query II
 SELECT * FROM kview
 ----
 
-query T
+query T retry
 SELECT status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'
 ----
 running
@@ -70,73 +70,6 @@ INSERT INTO selfref VALUES (1, NULL);
 
 statement ok
 DROP TABLE selfref
-
-subtest truncate_interleave
-
-statement ok
-CREATE TABLE a (a INT PRIMARY KEY)
-
-statement ok
-CREATE TABLE b (a INT, b INT, PRIMARY KEY (a, b), UNIQUE INDEX(b)) INTERLEAVE IN PARENT a(a)
-
-statement error "a" is interleaved by table "b"
-TRUNCATE a
-
-statement ok
-TRUNCATE a CASCADE
-
-statement ok
-TRUNCATE b
-
-statement ok
-TRUNCATE b CASCADE
-
-statement ok
-CREATE TABLE c (c INT PRIMARY KEY, d INT REFERENCES b(b))
-
-statement error "b" is referenced by foreign key from table "c"
-TRUNCATE a, b
-
-statement ok
-INSERT INTO b VALUES(1, 2)
-
-statement ok
-INSERT INTO c VALUES(1, 2)
-
-statement ok
-TRUNCATE a CASCADE
-
-query II
-SELECT * FROM c
-----
-
-statement ok
-CREATE TABLE d (c INT PRIMARY KEY) INTERLEAVE IN PARENT c(c);
-
-statement ok
-TRUNCATE a, b, c, d
-
-statement error "c" is interleaved by table "d"
-TRUNCATE a, b, c
-
-statement error "c" is interleaved by table "d"
-TRUNCATE a, b, c
-
-statement ok
-INSERT INTO b VALUES(1, 2)
-
-statement ok
-INSERT INTO c VALUES(1, 2)
-
-statement ok
-INSERT INTO d VALUES (1)
-
-statement ok
-TRUNCATE a CASCADE
-
-query I
-SELECT * FROM d
-----
 
 subtest truncate_29010
 
@@ -211,25 +144,47 @@ z      comm"en"t2
 query TT rowsort
 SELECT distinct(index_name), comment FROM [SHOW INDEXES FROM t WITH COMMENT]
 ----
-primary  NULL
-i1       NULL
-i2       comm'ent3
-i3       NULL
+t_pkey  NULL
+i1      NULL
+i2      comm'ent3
+i3      NULL
 
 # Ensure that truncate comment reasignment works when index and column IDs
 # don't all start from 1.
 statement ok
 DROP TABLE t;
+
+statement ok
 CREATE TABLE t (x INT, y INT, z INT);
+
+statement ok
 ALTER TABLE t DROP COLUMN y;
+
+statement ok
 ALTER TABLE t ADD COLUMN y INT;
+
+statement ok
 ALTER TABLE t DROP COLUMN y;
+
+statement ok
 ALTER TABLE t ADD COLUMN y INT;
+
+statement ok
 CREATE INDEX i ON t (x);
+
+statement ok
 DROP INDEX t@i;
+
+statement ok
 CREATE INDEX i ON t (x);
+
+statement ok
 DROP INDEX t@i;
+
+statement ok
 CREATE INDEX i ON t (x);
+
+statement ok
 COMMENT ON COLUMN t.y IS 'hello1';
 COMMENT ON INDEX t@i IS 'hello2'
 
@@ -244,5 +199,5 @@ z      NULL
 query TT rowsort
 SELECT distinct(index_name), comment FROM [SHOW INDEXES FROM t WITH COMMENT]
 ----
-primary  NULL
-i        hello2
+t_pkey  NULL
+i       hello2

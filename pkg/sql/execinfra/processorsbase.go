@@ -21,12 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Processor is a common interface implemented by all processors, used by the
@@ -664,12 +666,12 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 				pb.span.RecordStructured(stats)
 			}
 		}
-		if trace := pb.span.GetRecording(); trace != nil {
+		if trace := pb.span.GetConfiguredRecording(); trace != nil {
 			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 		}
 	}
 
-	if util.CrdbTestBuild && pb.Ctx == nil {
+	if buildutil.CrdbTestBuild && pb.Ctx == nil {
 		panic(
 			errors.AssertionFailedf(
 				"unexpected nil ProcessorBase.Ctx when draining. Was StartInternal called?",
@@ -784,12 +786,12 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.MemMonitor = memMonitor
 
 	// Hydrate all types used in the processor.
-	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
+	resolver := flowCtx.NewTypeResolver(evalCtx.Txn)
 	if err := resolver.HydrateTypeSlice(evalCtx.Context, coreOutputTypes); err != nil {
 		return err
 	}
 	pb.SemaCtx = tree.MakeSemaContext()
-	pb.SemaCtx.TypeResolver = resolver
+	pb.SemaCtx.TypeResolver = &resolver
 
 	return pb.OutputHelper.Init(post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx)
 }
@@ -832,7 +834,12 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta execinfrapb.ProducerMetadata) {
 // ProcessorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
 func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.Span) {
-	return tracing.ChildSpanRemote(ctx, name)
+	sp := tracing.SpanFromContext(ctx)
+	if sp == nil {
+		return ctx, nil
+	}
+	return sp.Tracer().StartSpanCtx(ctx, name,
+		tracing.WithParent(sp), tracing.WithDetachedRecording())
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the
@@ -864,8 +871,8 @@ func (pb *ProcessorBaseNoHelper) startImpl(
 	if createSpan {
 		pb.Ctx, pb.span = ProcessorSpan(ctx, spanName)
 		if pb.span != nil && pb.span.IsVerbose() {
-			pb.span.SetTag(execinfrapb.FlowIDTagKey, pb.FlowCtx.ID.String())
-			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.ProcessorID)
+			pb.span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(pb.FlowCtx.ID.String()))
+			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(pb.ProcessorID)))
 		}
 	} else {
 		pb.Ctx = ctx
@@ -885,7 +892,16 @@ func (pb *ProcessorBaseNoHelper) startImpl(
 //     // Perform processor specific close work.
 //   }
 func (pb *ProcessorBase) InternalClose() bool {
-	closing := pb.ProcessorBaseNoHelper.InternalClose()
+	return pb.InternalCloseEx(nil /* onClose */)
+}
+
+// InternalCloseEx is like InternalClose, but also takes a closure to run in
+// case the processor was not already closed. The closure is run before the
+// processor's span is finished, so the closure can finalize work that relies on
+// that span (e.g. async work previously started by the processor that has
+// captured the processor's span).
+func (pb *ProcessorBase) InternalCloseEx(onClose func()) bool {
+	closing := pb.ProcessorBaseNoHelper.InternalCloseEx(onClose)
 	if closing {
 		// This prevents Next() from returning more rows.
 		pb.OutputHelper.consumerClosed()
@@ -895,24 +911,33 @@ func (pb *ProcessorBase) InternalClose() bool {
 
 // InternalClose is the meat of ProcessorBase.InternalClose.
 func (pb *ProcessorBaseNoHelper) InternalClose() bool {
-	closing := !pb.Closed
+	return pb.InternalCloseEx(nil /* onClose */)
+}
+
+// InternalCloseEx is the meat of ProcessorBase.InternalCloseEx.
+func (pb *ProcessorBaseNoHelper) InternalCloseEx(onClose func()) bool {
 	// Protection around double closing is useful for allowing ConsumerClosed() to
 	// be called on processors that have already closed themselves by moving to
 	// StateTrailingMeta.
-	if closing {
-		for _, input := range pb.inputsToDrain[pb.curInputToDrain:] {
-			input.ConsumerClosed()
-		}
-
-		pb.Closed = true
-		pb.span.Finish()
-		pb.span = nil
-		// Reset the context so that any incidental uses after this point do not
-		// access the finished span.
-		pb.Ctx = pb.origCtx
-		pb.EvalCtx.Context = pb.origCtx
+	if pb.Closed {
+		return false
 	}
-	return closing
+	for _, input := range pb.inputsToDrain[pb.curInputToDrain:] {
+		input.ConsumerClosed()
+	}
+
+	if onClose != nil {
+		onClose()
+	}
+
+	pb.Closed = true
+	pb.span.Finish()
+	pb.span = nil
+	// Reset the context so that any incidental uses after this point do not
+	// access the finished span.
+	pb.Ctx = pb.origCtx
+	pb.EvalCtx.Context = pb.origCtx
+	return true
 }
 
 // ConsumerDone is part of the RowSource interface.
@@ -962,7 +987,7 @@ func NewLimitedMonitorNoFlowCtx(
 	flowCtx := &FlowCtx{
 		Cfg: config,
 		EvalCtx: &tree.EvalContext{
-			SessionData: sd,
+			SessionDataStack: sessiondata.NewStack(sd),
 		},
 	}
 	return NewLimitedMonitor(ctx, parent, flowCtx, name)
@@ -979,4 +1004,17 @@ type LocalProcessor interface {
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.
 	SetInput(ctx context.Context, input RowSource) error
+}
+
+// HasParallelProcessors returns whether flow contains multiple processors in
+// the same stage.
+func HasParallelProcessors(flow *execinfrapb.FlowSpec) bool {
+	var seen util.FastIntSet
+	for _, p := range flow.Processors {
+		if seen.Contains(int(p.StageID)) {
+			return true
+		}
+		seen.Add(int(p.StageID))
+	}
+	return false
 }

@@ -268,7 +268,7 @@ like this:
   different localities. If it's legal to make a cross-locality transfer based on
   the nodes in question and the current `interLocalityRebalanceThreshold`, then
   we can begin considering whether it's worth it to make a transfer based on the
-  distributon of requests to the replica.
+  distribution of requests to the replica.
 
 # Testing
 

@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-//go:generate mockgen -package=rangecache -destination=mocks_generated.go . RangeDescriptorDB
+//go:generate mockgen -package=rangecachemock -destination=rangecachemock/mocks_generated.go . RangeDescriptorDB
 
 // rangeCacheKey is the key type used to store and sort values in the
 // RangeCache.
@@ -77,6 +77,7 @@ type RangeDescriptorDB interface {
 type RangeCache struct {
 	st      *cluster.Settings
 	stopper *stop.Stopper
+	tracer  *tracing.Tracer
 	// RangeDescriptorDB is used to retrieve range descriptors from the
 	// database, which will be cached by this structure.
 	db RangeDescriptorDB
@@ -175,9 +176,13 @@ func makeLookupRequestKey(
 // NewRangeCache returns a new RangeCache which uses the given RangeDescriptorDB
 // as the underlying source of range descriptors.
 func NewRangeCache(
-	st *cluster.Settings, db RangeDescriptorDB, size func() int64, stopper *stop.Stopper,
+	st *cluster.Settings,
+	db RangeDescriptorDB,
+	size func() int64,
+	stopper *stop.Stopper,
+	tracer *tracing.Tracer,
 ) *RangeCache {
-	rdc := &RangeCache{st: st, db: db, stopper: stopper}
+	rdc := &RangeCache{st: st, db: db, stopper: stopper, tracer: tracer}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(n int, _, _ interface{}) bool {
@@ -374,7 +379,9 @@ func (et *EvictionToken) syncRLocked(
 // It's legal to pass in a lease with a zero Sequence; it will be treated as a
 // speculative lease and considered newer than any existing lease (and then in
 // turn will be overridden by any subsequent update).
-func (et *EvictionToken) UpdateLease(ctx context.Context, l *roachpb.Lease) bool {
+func (et *EvictionToken) UpdateLease(
+	ctx context.Context, l *roachpb.Lease, descGeneration roachpb.RangeGeneration,
+) bool {
 	rdc := et.rdc
 	rdc.rangeCache.Lock()
 	defer rdc.rangeCache.Unlock()
@@ -383,7 +390,7 @@ func (et *EvictionToken) UpdateLease(ctx context.Context, l *roachpb.Lease) bool
 	if !stillValid {
 		return false
 	}
-	ok, newEntry := cachedEntry.updateLease(l)
+	ok, newEntry := cachedEntry.updateLease(l, descGeneration)
 	if !ok {
 		return false
 	}
@@ -402,11 +409,13 @@ func (et *EvictionToken) UpdateLease(ctx context.Context, l *roachpb.Lease) bool
 // a full lease. This is called when a likely leaseholder is known, but not a
 // full lease. The lease we'll insert into the cache will be considered
 // "speculative".
-func (et *EvictionToken) UpdateLeaseholder(ctx context.Context, lh roachpb.ReplicaDescriptor) {
+func (et *EvictionToken) UpdateLeaseholder(
+	ctx context.Context, lh roachpb.ReplicaDescriptor, descGeneration roachpb.RangeGeneration,
+) {
 	// Notice that we don't initialize Lease.Sequence, which will make
 	// entry.LeaseSpeculative() return true.
 	l := &roachpb.Lease{Replica: lh}
-	et.UpdateLease(ctx, l)
+	et.UpdateLease(ctx, l, descGeneration)
 }
 
 // EvictLease evicts information about the current lease from the cache, if the
@@ -634,24 +643,28 @@ func (rc *RangeCache) tryLookup(
 		return returnToken, nil
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "lookup range descriptor: key=%s (reverse: %t)", key, useReverseScan)
-	}
+	log.VEventf(ctx, 2, "looking up range descriptor: key=%s", key)
 
 	var prevDesc *roachpb.RangeDescriptor
 	if evictToken.Valid() {
 		prevDesc = evictToken.Desc()
 	}
 	requestKey := makeLookupRequestKey(key, prevDesc, useReverseScan)
+	// Fork a context with a new span before reqCtx is captured by the DoChan
+	// closure below; the parent span might get finished by the time the closure
+	// starts. In the "leader" case, the closure will take ownership of the new
+	// span.
+	reqCtx, reqSpan := tracing.EnsureChildSpan(ctx, rc.tracer, "range lookup")
 	resC, leader := rc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
+		defer reqSpan.Finish()
 		var lookupRes EvictionToken
-		if err := rc.stopper.RunTaskWithErr(ctx, "rangecache: range lookup", func(ctx context.Context) error {
-			ctx, reqSpan := tracing.ForkSpan(ctx, "range lookup")
-			defer reqSpan.Finish()
+		if err := rc.stopper.RunTaskWithErr(reqCtx, "rangecache: range lookup", func(ctx context.Context) error {
 			// Clear the context's cancelation. This request services potentially many
 			// callers waiting for its result, and using the flight's leader's
 			// cancelation doesn't make sense.
-			ctx = logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+			ctx, cancel := rc.stopper.WithCancelOnQuiesce(
+				logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
+			defer cancel()
 			ctx = tracing.ContextWithSpan(ctx, reqSpan)
 
 			// Since we don't inherit any other cancelation, let's put in a generous
@@ -744,6 +757,9 @@ func (rc *RangeCache) tryLookup(
 		if rc.coalesced != nil {
 			rc.coalesced <- struct{}{}
 		}
+		// In the leader case, the callback takes ownership of reqSpan. If we're not
+		// the leader, we've created the span for no reason and have to finish it.
+		reqSpan.Finish()
 	}
 
 	// Wait for the inflight request.
@@ -761,9 +777,9 @@ func (rc *RangeCache) tryLookup(
 		s = res.Val.(EvictionToken).String()
 	}
 	if res.Shared {
-		log.Eventf(ctx, "looked up range descriptor with shared request: %s", s)
+		log.VEventf(ctx, 2, "looked up range descriptor with shared request: %s", s)
 	} else {
-		log.Eventf(ctx, "looked up range descriptor: %s", s)
+		log.VEventf(ctx, 2, "looked up range descriptor: %s", s)
 	}
 	if res.Err != nil {
 		return EvictionToken{}, res.Err
@@ -1291,11 +1307,15 @@ func compareEntryLeases(a, b *CacheEntry) int {
 // This means that the passed-in lease is older than the lease already in the
 // entry.
 //
-// If the new leaseholder is not a replica in the descriptor, we assume the
-// lease information to be more recent than the entry's descriptor, and we
-// return true, nil. The caller should evict the receiver from the cache, but
-// it'll have to do extra work to figure out what to insert instead.
-func (e *CacheEntry) updateLease(l *roachpb.Lease) (updated bool, newEntry *CacheEntry) {
+// If the new leaseholder is not a replica in the descriptor, and the error is
+// coming from a replica with range descriptor generation at least as high as
+// the cache's, we deduce the lease information to be more recent than the
+// entry's descriptor, and we return true, nil. The caller should evict the
+// receiver from the cache, but it'll have to do extra work to figure out what
+// to insert instead.
+func (e *CacheEntry) updateLease(
+	l *roachpb.Lease, descGeneration roachpb.RangeGeneration,
+) (updated bool, newEntry *CacheEntry) {
 	// If l is older than what the entry has (or the same), return early.
 	//
 	// This method handles speculative leases: a new lease with a sequence of 0 is
@@ -1314,11 +1334,21 @@ func (e *CacheEntry) updateLease(l *roachpb.Lease) (updated bool, newEntry *Cach
 		return false, e
 	}
 
-	// Check whether the lease we were given is compatible with the replicas in
-	// the descriptor. If it's not, the descriptor must be really stale, and the
-	// RangeCacheEntry needs to be evicted.
+	// If the lease is incompatible with the cached descriptor and the error is
+	// coming from a replica that has a non-stale descriptor, the cached
+	// descriptor must be stale and the RangeCacheEntry needs to be evicted.
 	_, ok := e.desc.GetReplicaDescriptorByID(l.Replica.ReplicaID)
 	if !ok {
+		// If the error is coming from a replica that has a stale range descriptor,
+		// we cannot trigger a cache eviction since this means we've rebalanced the
+		// old leaseholder away. If we were to evict here, we'd keep evicting until
+		// this replica applied the new lease. Not updating the cache here means
+		// that we'll end up trying all voting replicas until we either hit the new
+		// leaseholder or hit a replica that has accurate knowledge of the
+		// leaseholder.
+		if descGeneration != 0 && descGeneration < e.desc.Generation {
+			return false, nil
+		}
 		return true, nil
 	}
 

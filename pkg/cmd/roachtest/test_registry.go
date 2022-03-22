@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -25,6 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
+
+var loadTeams = func() (team.Map, error) {
+	return team.DefaultLoadTeams()
+}
 
 func ownerToAlias(o registry.Owner) team.Alias {
 	return team.Alias(fmt.Sprintf("cockroachdb/%s", o))
@@ -72,7 +77,7 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 		os.Exit(1)
 	}
 	if err := r.prepareSpec(&spec); err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
 	r.m[spec.Name] = &spec
@@ -115,7 +120,7 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	if spec.Owner == `` {
 		return fmt.Errorf(`%s: unspecified owner`, spec.Name)
 	}
-	teams, err := team.DefaultLoadTeams()
+	teams, err := loadTeams()
 	if err != nil {
 		return err
 	}
@@ -126,6 +131,26 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 		spec.Tags = []string{registry.DefaultTag}
 	}
 	spec.Tags = append(spec.Tags, "owner-"+string(spec.Owner))
+
+	// At the time of writing, we expect the roachtest job to finish within 24h
+	// and have corresponding timeouts set up in CI. Since each individual test
+	// may not be scheduled until a few hours in due to the CPU quota, individual
+	// tests should expect to take "less time". Longer-running tests require the
+	// weekly tag.
+	const maxTimeout = 18 * time.Hour
+	if spec.Timeout > maxTimeout {
+		var weekly bool
+		for _, tag := range spec.Tags {
+			if tag == "weekly" {
+				weekly = true
+			}
+		}
+		if !weekly {
+			return fmt.Errorf(
+				"%s: timeout %s exceeds the maximum allowed of %s", spec.Name, spec.Timeout, maxTimeout,
+			)
+		}
+	}
 
 	return nil
 }

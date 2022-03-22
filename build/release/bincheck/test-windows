@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+source ./download_binary.sh
+
+if [[ $# -ne 2 ]]
+then
+  echo "usage: $0 EXPECTED-VERSION EXPECTED-SHA" >&2
+  exit 1
+fi
+
+COCKROACH_VERSION=$1
+COCKROACH_SHA=$2
+
+download_and_extract "$COCKROACH_VERSION" "windows-6.2-amd64.zip"
+./bincheck ./mnt/cockroach.exe "$COCKROACH_VERSION" "$COCKROACH_SHA"

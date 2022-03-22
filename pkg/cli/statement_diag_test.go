@@ -32,13 +32,13 @@ func Example_statement_diag() {
 		        (20, 'SELECT _ FROM _ WHERE _ > _', 'SELECT a FROM t WHERE b > 1', '2010-01-02 03:04:06', ARRAY[1001,1002,1003]),
 		        (30, 'SELECT _ FROM _ WHERE _ > _', 'SELECT a FROM t WHERE b > 1', '2010-01-02 03:04:07', ARRAY[1001])`,
 
-		`INSERT INTO system.statement_diagnostics_requests(id, completed, statement_fingerprint, statement_diagnostics_id, requested_at)
-		 VALUES (1, TRUE, 'SELECT _ FROM _', 10, '2010-01-02 03:04:00'),
-		        (2, TRUE, 'SELECT _ FROM _ WHERE _ > _', 20, '2010-01-02 03:04:02'),
-		        (3, TRUE, 'SELECT _ FROM _ WHERE _ > _', 30, '2010-01-02 03:04:05'),
-						(4, FALSE, 'SELECT _ + _', NULL, '2010-01-02 03:04:10'),
-						(5, FALSE, 'SELECT _ - _', NULL, '2010-01-02 03:04:11'),
-						(6, FALSE, 'SELECT _ / _', NULL, '2010-01-02 03:04:12')`,
+		`INSERT INTO system.statement_diagnostics_requests(id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at)
+		 VALUES (1, TRUE, 'SELECT _ FROM _', 10, '2010-01-02 03:04:00', NULL, NULL),
+		        (2, TRUE, 'SELECT _ FROM _ WHERE _ > _', 20, '2010-01-02 03:04:02', NULL, NULL),
+		        (3, TRUE, 'SELECT _ FROM _ WHERE _ > _', 30, '2010-01-02 03:04:05', NULL, NULL),
+		        (4, FALSE, 'SELECT _ + _', NULL, '2010-01-02 03:04:10', '1d 2h 3m 4s 5ms 6us', NULL),
+		        (5, FALSE, 'SELECT _ - _', NULL, '2010-01-02 03:04:11', NULL, '2030-01-02 03:04:12'),
+		        (6, FALSE, 'SELECT _ / _', NULL, '2010-01-02 03:04:12', '0s', NULL)`,
 	}
 
 	for _, cmd := range commands {
@@ -48,7 +48,7 @@ func Example_statement_diag() {
 		}
 	}
 	c.RunWithArgs([]string{"statement-diag", "list"})
-	c.RunWithArgs([]string{"statement-diag", "download", "13", "foo.zip"})
+	c.RunWithArgs([]string{"statement-diag", "download", "13"})
 	tmpfile, err := ioutil.TempFile("", "bundle-*.zip")
 	if err != nil {
 		log.Fatalf(context.Background(), "Couldn't execute sql: %s", err)
@@ -82,6 +82,7 @@ func Example_statement_diag() {
 	c.RunWithArgs([]string{"statement-diag", "cancel", "--all", "5"})
 	c.RunWithArgs([]string{"statement-diag", "cancel", "4"})
 	c.RunWithArgs([]string{"statement-diag", "list"})
+	c.RunWithArgs([]string{"statement-diag", "cancel", "123"})
 	c.RunWithArgs([]string{"statement-diag", "cancel", "--all"})
 	c.RunWithArgs([]string{"statement-diag", "list"})
 
@@ -94,22 +95,22 @@ func Example_statement_diag() {
 	//   10  2010-01-02 03:04:05 UTC  SELECT _ FROM _
 	//
 	// Outstanding activation requests:
-	//   ID  Activation time          Statement
-	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _
-	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _
-	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _
-	// statement-diag download 13 foo.zip
-	// ERROR: no statement diagnostics bundle with ID 13
+	//   ID  Activation time          Statement     Min execution latency  Expires at
+	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  N/A                    never
+	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  N/A                    2030-01-02 03:04:12 +0000 UTC
+	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _  26h3m4.005s            never
+	// statement-diag download 13
+	// ERROR: failed to download statement diagnostics bundle 13 to 'stmt-bundle-13.zip': no statement diagnostics bundle with ID 13
 	// statement-diag download 20 tempfile.zip
 	// bundle data: chunk1chunk2chunk3
 	// statement-diag download xx
-	// ERROR: accepts 2 arg(s), received 1
+	// ERROR: invalid bundle ID
 	// statement-diag delete --all 20
 	// ERROR: extra arguments with --all
 	// statement-diag delete 20 30
 	// ERROR: accepts at most 1 arg(s), received 2
 	// statement-diag delete xx
-	// ERROR: invalid id
+	// ERROR: invalid ID
 	// statement-diag delete 13
 	// ERROR: no statement diagnostics bundle with ID 13
 	// statement-diag delete 10
@@ -120,20 +121,20 @@ func Example_statement_diag() {
 	//   20  2010-01-02 03:04:06 UTC  SELECT _ FROM _ WHERE _ > _
 	//
 	// Outstanding activation requests:
-	//   ID  Activation time          Statement
-	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _
-	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _
-	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _
+	//   ID  Activation time          Statement     Min execution latency  Expires at
+	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  N/A                    never
+	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  N/A                    2030-01-02 03:04:12 +0000 UTC
+	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _  26h3m4.005s            never
 	// statement-diag delete --all
 	// statement-diag list
 	// No statement diagnostics bundles available.
 	// Outstanding activation requests:
-	//   ID  Activation time          Statement
-	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _
-	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _
-	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _
+	//   ID  Activation time          Statement     Min execution latency  Expires at
+	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  N/A                    never
+	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  N/A                    2030-01-02 03:04:12 +0000 UTC
+	//   4   2010-01-02 03:04:10 UTC  SELECT _ + _  26h3m4.005s            never
 	// statement-diag cancel xx
-	// ERROR: invalid id
+	// ERROR: invalid ID
 	// statement-diag cancel 5 6
 	// ERROR: accepts at most 1 arg(s), received 2
 	// statement-diag cancel --all 5
@@ -142,9 +143,11 @@ func Example_statement_diag() {
 	// statement-diag list
 	// No statement diagnostics bundles available.
 	// Outstanding activation requests:
-	//   ID  Activation time          Statement
-	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _
-	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _
+	//   ID  Activation time          Statement     Min execution latency  Expires at
+	//   6   2010-01-02 03:04:12 UTC  SELECT _ / _  N/A                    never
+	//   5   2010-01-02 03:04:11 UTC  SELECT _ - _  N/A                    2030-01-02 03:04:12 +0000 UTC
+	// statement-diag cancel 123
+	// ERROR: no outstanding activation request with ID 123
 	// statement-diag cancel --all
 	// statement-diag list
 	// No statement diagnostics bundles available.

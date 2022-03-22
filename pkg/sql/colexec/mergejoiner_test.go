@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -1612,6 +1611,46 @@ func getMJTestCases() []*joinTestCase {
 			rightEqColsAreKey: true,
 			expected:          colexectestutils.Tuples{{1}},
 		},
+		{
+			description: "LEFT SEMI join with non-unique eq column",
+			joinType:    descpb.LeftSemiJoin,
+			leftTypes:   []*types.T{types.Int, types.Int},
+			rightTypes:  []*types.T{types.Int, types.Int},
+			leftTuples:  colexectestutils.Tuples{{nil, 4}, {nil, 2}, {0, nil}, {0, 3}, {0, nil}, {1, nil}, {3, 3}, {3, nil}, {3, 0}, {4, 0}},
+			rightTuples: colexectestutils.Tuples{{1, nil}, {nil, nil}, {nil, 0}, {3, 1}, {3, 1}, {1, 1}, {nil, 2}, {2, 2}, {3, 3}, {2, 4}},
+			leftEqCols:  []uint32{0},
+			rightEqCols: []uint32{1},
+			leftOutCols: []uint32{0, 1},
+			expected:    colexectestutils.Tuples{{0, nil}, {0, 3}, {0, nil}, {1, nil}, {3, 3}, {3, nil}, {3, 0}, {4, 0}},
+		},
+		{
+			description:     "FULL OUTER join with nulls and DESC",
+			joinType:        descpb.FullOuterJoin,
+			leftTypes:       []*types.T{types.Int, types.Int},
+			rightTypes:      []*types.T{types.Int, types.Int},
+			leftTuples:      colexectestutils.Tuples{{0, 4}, {nil, 0}, {3, 0}},
+			rightTuples:     colexectestutils.Tuples{{0, 1}, {nil, 0}, {4, nil}},
+			leftOutCols:     []uint32{0, 1},
+			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{1},
+			rightEqCols:     []uint32{1},
+			leftDirections:  []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			rightDirections: []execinfrapb.Ordering_Column_Direction{execinfrapb.Ordering_Column_DESC},
+			expected:        colexectestutils.Tuples{{0, 4, nil, nil}, {nil, nil, 0, 1}, {nil, 0, nil, 0}, {3, 0, nil, 0}, {nil, nil, 4, nil}},
+		},
+		{
+			description:  "RIGHT OUTER join with a single match in the middle",
+			joinType:     descpb.RightOuterJoin,
+			leftTypes:    []*types.T{types.Int, types.Int},
+			rightTypes:   []*types.T{types.Int, types.Int},
+			leftTuples:   colexectestutils.Tuples{{nil, 4}, {nil, 4}, {2, nil}, {2, nil}, {2, 4}, {3, 0}},
+			rightTuples:  colexectestutils.Tuples{{nil, 1}, {1, nil}, {1, 0}, {2, 4}, {3, nil}, {3, 2}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{0, 1},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 1},
+			expected:     colexectestutils.Tuples{{nil, nil, nil, 1}, {nil, nil, 1, nil}, {nil, nil, 1, 0}, {2, 4, 2, 4}, {nil, nil, 3, nil}, {nil, nil, 3, 2}},
+		},
 	}
 	return withMirrors(mjTestCases)
 }
@@ -1631,10 +1670,8 @@ func TestMergeJoiner(t *testing.T) {
 	}
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	var (
-		accounts []*mon.BoundAccount
-		monitors []*mon.BytesMonitor
-	)
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 	for _, tc := range getMJTestCases() {
 		for _, tc := range tc.mutateTypes() {
 			tc.init()
@@ -1668,24 +1705,17 @@ func TestMergeJoiner(t *testing.T) {
 							StreamingMemAccount: testMemAcc,
 							DiskQueueCfg:        queueCfg,
 							FDSemaphore:         colexecop.NewTestingSemaphore(mjFDLimit),
+							MonitorRegistry:     &monitorRegistry,
 						}
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 						if err != nil {
 							return nil, err
 						}
-						accounts = append(accounts, result.OpAccounts...)
-						monitors = append(monitors, result.OpMonitors...)
 						return result.Root, nil
 					})
 			}
 		}
-	}
-	for _, acc := range accounts {
-		acc.Close(ctx)
-	}
-	for _, mon := range monitors {
-		mon.Stop(ctx)
 	}
 }
 
@@ -1718,7 +1748,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	}
 	leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
-	a, err := colexecjoin.NewMergeJoinOp(
+	a := colexecjoin.NewMergeJoinOp(
 		testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 		colexecop.NewTestingSemaphore(mjFDLimit), descpb.FullOuterJoin,
 		leftSource, rightSource, typs, typs,
@@ -1726,9 +1756,6 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		testDiskAcc, &evalCtx,
 	)
-	if err != nil {
-		t.Fatal("error in merge join op constructor", err)
-	}
 	a.Init(ctx)
 	i, count, expVal := 0, 0, int64(0)
 	for b := a.Next(); b.Length() != 0; b = a.Next() {
@@ -1791,7 +1818,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 				}
 				leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 				rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
-				a, err := colexecjoin.NewMergeJoinOp(
+				a := colexecjoin.NewMergeJoinOp(
 					testAllocator, execinfra.DefaultMemoryLimit,
 					queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 					leftSource, rightSource, typs, typs,
@@ -1799,9 +1826,6 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					testDiskAcc, &evalCtx,
 				)
-				if err != nil {
-					t.Fatal("error in merge join op constructor", err)
-				}
 				a.Init(ctx)
 				i := 0
 				count := 0
@@ -1869,7 +1893,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					}
 					leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
-					a, err := colexecjoin.NewMergeJoinOp(
+					a := colexecjoin.NewMergeJoinOp(
 						testAllocator, execinfra.DefaultMemoryLimit,
 						queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
@@ -1877,9 +1901,6 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						testDiskAcc, &evalCtx,
 					)
-					if err != nil {
-						t.Fatal("error in merge join op constructor", err)
-					}
 					a.Init(ctx)
 					i := 0
 					count := 0
@@ -1924,7 +1945,7 @@ type expectedGroup struct {
 func newBatchesOfRandIntRows(
 	nTuples int, maxRunLength int64, skipValues bool, randomIncrement int64,
 ) ([]coldata.Vec, []coldata.Vec, []expectedGroup) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	lCols := []coldata.Vec{testAllocator.NewMemColumn(types.Int, nTuples)}
 	lCol := lCols[0].Int64()
 	rCols := []coldata.Vec{testAllocator.NewMemColumn(types.Int, nTuples)}
@@ -1999,7 +2020,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 					leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, lCols, nTuples)
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, rCols, nTuples)
 
-					a, err := colexecjoin.NewMergeJoinOp(
+					a := colexecjoin.NewMergeJoinOp(
 						testAllocator, execinfra.DefaultMemoryLimit,
 						queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
@@ -2007,9 +2028,6 @@ func TestMergeJoinerRandomized(t *testing.T) {
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						testDiskAcc, &evalCtx,
 					)
-					if err != nil {
-						t.Fatal("error in merge join op constructor", err)
-					}
 					a.Init(ctx)
 					i := 0
 					count := 0

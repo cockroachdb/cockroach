@@ -695,7 +695,7 @@ func TestConcat(t *testing.T) {
 }
 
 func TestConcatRand(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	for i := 0; i < 1000; i++ {
 		w1 := uint(rng.Int31n(256))

@@ -89,7 +89,7 @@ eexpect "cli.demo.explicitflags.logtostderr"
 eexpect "cli.demo.explicitflags.no-example-database"
 eexpect "cli.demo.runs"
 eexpect "defaultdb>"
-interrupt
+send_eof
 eexpect ":/# "
 end_test
 
@@ -112,7 +112,7 @@ eexpect "cli.start-single-node.explicitflags.listening-url-file"
 eexpect "cli.start-single-node.explicitflags.max-sql-memory"
 eexpect "cli.start-single-node.runs"
 eexpect "defaultdb>"
-interrupt
+send_eof
 eexpect ":/# "
 end_test
 
@@ -121,7 +121,7 @@ send "export COCKROACH_URL=`cat server_url`;\r"
 eexpect ":/# "
 send "$argv sql\r"
 eexpect "defaultdb>"
-interrupt
+send_eof
 eexpect ":/# "
 end_test
 

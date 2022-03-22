@@ -1,0 +1,49 @@
+apply
+set [b,d):A
+set {entire-keyspace}:X
+set [e,g):B
+----
+added {entire-keyspace}:X
+added [b,d):A
+added [e,g):B
+
+# Span encompassing all spans we have inserted.
+overlapping span=[a,j)
+----
+[b,d):A+X
+[e,g):B+X
+
+apply
+set [g,i):C
+----
+added [g,i):C
+
+# Span encompassing all spans we have inserted.
+overlapping span=[a,i)
+----
+[b,d):A+X
+[e,g):B+X
+[g,i):C+X
+
+# Span straddling first and second span.
+overlapping span=[b,e)
+----
+[b,d):A+X
+
+# Straddling all 3 spans.
+overlapping span=[c,h)
+----
+[b,d):A+X
+[e,g):B+X
+[g,i):C+X
+
+apply
+set {source=1,target=1}:Y
+----
+added {source=1,target=1}:Y
+
+overlapping span=[a,i)
+----
+[b,d):A+X+Y
+[e,g):B+X+Y
+[g,i):C+X+Y

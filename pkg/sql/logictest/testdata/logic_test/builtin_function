@@ -1,6 +1,4 @@
-# LogicTest: !3node-tenant(49854) !fakedist-spec-planning
-# TODO(asubiotto): Possibly split out the test that attempts to set a zone
-# config in order to run the other ones.
+# LogicTest: !fakedist-spec-planning
 
 statement ok
 CREATE TABLE foo (a int)
@@ -103,7 +101,7 @@ upper
 ROACH7
 
 query T
-SELECT unaccent(str) FROM ( VALUES 
+SELECT unaccent(str) FROM ( VALUES
    ('no_special_CHARACTERS1!'),
    ('Żółć'),
    ('⃞h̀ＥＬＬＯ`̀́⃞'),
@@ -1232,7 +1230,7 @@ SELECT sign(-2.0), sign(-0.0), sign(0.0), sign(2.0)
 query RR
 SELECT sqrt(4.0::float), sqrt(9.0::decimal)
 ----
-2 3
+2  3.0000000000000000000
 
 query error cannot take square root of a negative number
 SELECT sqrt(-1.0::float)
@@ -2054,6 +2052,7 @@ VALUES (format_type('anyelement'::regtype, -1)),
        (format_type('regnamespace'::regtype, -1)),
        (format_type('regproc'::regtype, -1)),
        (format_type('regprocedure'::regtype, -1)),
+       (format_type('regrole'::regtype, -1)),
        (format_type('regtype'::regtype, -1)),
        (format_type('string'::regtype, -1)),
        (format_type('time'::regtype, -1)),
@@ -2097,6 +2096,7 @@ regclass
 regnamespace
 regproc
 regprocedure
+regrole
 regtype
 text
 time without time zone
@@ -2491,52 +2491,7 @@ SELECT pg_catalog.pg_client_encoding()
 ----
 UTF8
 
-subtest check_consistency
-
-# Sanity-check crdb_internal.check_consistency.
-
-statement error start key must be >= "\\x02"
-SELECT crdb_internal.check_consistency(true, '\x01', '\xffff')
-
-statement error end key must be < "\\xff\\xff"
-SELECT crdb_internal.check_consistency(true, '\x02', '\xffff00')
-
-statement error start key must be less than end key
-SELECT crdb_internal.check_consistency(true, '\x02', '\x02')
-
-statement error start key must be less than end key
-SELECT crdb_internal.check_consistency(true, '\x03', '\x02')
-
-query ITT
-SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM crdb_internal.check_consistency(true, '\x02', '\xffff') WHERE range_id = 1
-----
-1  RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SeparatedIntentCount: SysBytes: SysCount: AbortSpanBytes:}
-
-# Without explicit keys, scans all ranges (we don't test this too precisely to
-# avoid flaking the test when the range count changes, just want to know that
-# we're touching multiple ranges).
-query B
-SELECT count(*) > 5 FROM crdb_internal.check_consistency(true, '', '')
-----
-true
-
-# Query that should touch only a single range.
-query B
-SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\x03', '\x0300')
-----
-true
-
-# Ditto, but implicit start key \x02
-query B
-SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '', '\x0200')
-----
-true
-
-# Ditto, but implicit end key.
-query B
-SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\xff', '')
-----
-true
+subtest width_bucket
 
 # Tests for width_bucket builtin
 query I
@@ -2617,14 +2572,6 @@ bool
 query error pq: more than one function named 'unnest'
 SELECT pg_get_function_result('unnest'::regproc);
 
-# Regression test for #40297.
-statement ok
-CREATE TABLE t40297 AS SELECT g FROM generate_series(NULL, NULL) AS g
-
-query I
-SELECT COALESCE((SELECT ()), NULL) FROM t40297
-----
-
 query T
 SELECT CASE WHEN true THEN (1, 2) ELSE NULL END
 ----
@@ -2658,107 +2605,6 @@ query T
 select to_hex('abc')
 ----
 616263
-
-# Test crdb_internal commands which execute as root, but
-# only checks for permissions afterwards.
-subtest crdb_internal_privileged_only
-
-user root
-
-statement ok
-CREATE DATABASE root_test
-
-statement ok
-CREATE TABLE root_test.t(a int)
-
-statement ok
-ALTER DATABASE root_test CONFIGURE ZONE USING num_replicas = 5
-
-query I
-SELECT crdb_internal.get_namespace_id(0, 'does_not_exist')
-----
-NULL
-
-query I
-SELECT crdb_internal.get_namespace_id(0, 'root_test')
-----
-63
-
-query I
-SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
-----
-64
-
-query T
-SELECT crdb_internal.get_zone_config(-1)::string
-----
-NULL
-
-query T
-SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
-----
-\x2805500158017800
-
-query T
-SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
-----
-NULL
-
-# switch users -- this one has no permissions so expect errors
-user testuser
-
-query I
-SELECT crdb_internal.get_namespace_id(0, 'does_not_exist')
-----
-NULL
-
-query error insufficient privilege
-SELECT crdb_internal.get_namespace_id(0, 'root_test')
-
-query T
-SELECT crdb_internal.get_zone_config(-1)::string
-----
-NULL
-
-query error insufficient privilege
-SELECT crdb_internal.get_zone_config(61)::string -- based on root query. having no permissions blocks us from this test rapidly changing though.
-
-# give testuser permissions on everything and retest
-user root
-
-statement ok
-GRANT ALL ON DATABASE root_test TO testuser
-
-statement ok
-GRANT ALL ON root_test.t TO testuser
-
-user testuser
-
-query I
-SELECT crdb_internal.get_namespace_id(0, 'root_test')
-----
-63
-
-query I
-SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
-----
-64
-
-query T
-SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
-----
-\x2805500158017800
-
-query T
-SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
-----
-NULL
-
-# reset state to default
-user root
-
-statement ok
-DROP DATABASE root_test CASCADE
 
 # Test for timezone builtin.
 subtest timezone_test
@@ -2978,8 +2824,12 @@ select crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)-
 ----
 system
 
+query T
+select crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, true, true)->'database'->>'name' from system.descriptor where id=1
+----
+system
 
-query error pq: crdb_internal.pb_to_json\(\): unknown proto message type cockroach.sql.sqlbase.descriptor
+query error pq: crdb_internal.pb_to_json\(\): invalid protocol message: unknown proto message type cockroach.sql.sqlbase.descriptor
 select crdb_internal.pb_to_json('cockroach.sql.sqlbase.descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
 
 query B
@@ -2991,6 +2841,9 @@ query B
 select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)) = descriptor from system.descriptor where id = 1
 ----
 true
+
+query error pq: crdb_internal.json_to_pb\(\): invalid proto JSON: unmarshaling json to cockroach.sql.sqlbase.Descriptor: unknown field "__redacted__" in descpb.Descriptor
+select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, true, true)) = descriptor from system.descriptor where id = 1
 
 subtest regexp_split
 
@@ -3195,3 +3048,167 @@ query B
 SELECT 'ACTIVE'::text ~ similar_to_escape(NULL::text)
 ----
 NULL
+
+subtest password_hash
+
+# Need to escapes the dollar signs since the testlogic language gives them special meaning.
+
+query error pgcode 42601 bcrypt algorithm version .3. requested is newer than current version .2.
+SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'3a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq')::bytes)
+
+query error pgcode 42601 too short to be a bcrypted password
+SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'2a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v0')::bytes)
+
+query error pgcode 42601 cost 1 is outside allowed range \(4,31\)
+SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'2a$'||'01$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq')::bytes)
+
+query T
+SELECT crdb_internal.check_password_hash_format(('CRDB-BCRYPT$'||'2a$'||'10$'||'vcmoIBvgeHjgScVHWRMWI.Z3v03WMixAw2bBS6qZihljSUuwi88Yq')::bytes)
+----
+crdb-bcrypt
+
+# Legacy format, only recognized for parsing, not for storing passwords.
+query T
+SELECT crdb_internal.check_password_hash_format('md5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+----
+md5
+
+# Not yet supported for storing passwords, but recognized on input.
+query T
+SELECT crdb_internal.check_password_hash_format(('SCRAM-SHA-256$'||'4096:B5VaTCvCLDzZxSYL829oVA==$'||'3Ako3mNxNtdsaSOJl0Av3i6vyV2OiSP9Ly7famdFSbw=:d7BfSmrtjwbF74mSoOhQiDSpoIvlakXKdpBNb3Meunc=')::bytes)
+----
+scram-sha-256
+
+subtest pgcrypto
+
+# NB: CockroachDB currently differs from Postgres, since the shaX functions
+# return a string in CockroachDB, while Postgres returns bytea.
+query BTT
+SELECT
+  encode(digest('abc', alg), 'hex') = expected, digest(NULL, alg), digest('abc', NULL)
+FROM
+  (
+    VALUES
+      ('md5', md5('abc')),
+      ('sha1', sha1('abc')),
+      ('sha224', sha224('abc')),
+      ('sha256', sha256('abc')),
+      ('sha384', sha384('abc')),
+      ('sha512', sha512('abc'))
+  )
+    AS v (alg, expected);
+----
+true  NULL  NULL
+true  NULL  NULL
+true  NULL  NULL
+true  NULL  NULL
+true  NULL  NULL
+true  NULL  NULL
+
+query T
+SELECT digest(NULL, 'made up alg')
+----
+NULL
+
+statement error pgcode 22023 cannot use "made up alg", no such hash algorithm
+SELECT digest('cat', 'made up alg')
+
+# NB: These results were manually confirmed to match the hashed values
+# created by Postgres.
+query T
+SELECT encode(hmac('abc', 'key', alg), 'hex')
+FROM (VALUES ('md5'), ('sha1'), ('sha224'), ('sha256'), ('sha384'), ('sha512')) v(alg)
+----
+d2fe98063f876b03193afb49b4979591
+4fd0b215276ef12f2b3e4c8ecac2811498b656fc
+f524670b7e34f31467de0aa96593861cf65117d414fb2d86158d760e
+9c196e32dc0175f86f4b1cb89289d6619de6bee699e4c378e68309ed97a1a6ab
+30ddb9c8f347cffbfb44e519d814f074cf4047a55d6f563324f1c6a33920e5edfb2a34bac60bdc96cd33a95623d7d638
+3926a207c8c42b0c41792cbd3e1a1aaaf5f7a25704f62dfc939c4987dd7ce060009c5bb1c2447355b3216f10b537e9afa7b64a4e5391b0d631172d07939e087a
+
+query TTT
+SELECT hmac('abc', 'key', NULL), hmac('abc', NULL, 'made up alg'), hmac(NULL, 'key', 'sha256')
+----
+NULL  NULL  NULL
+
+statement error pgcode 22023 cannot use "made up alg", no such hash algorithm
+SELECT hmac('dog', 'key', 'made up alg')
+
+subtest session_revival_token
+
+user host-cluster-root
+
+# TODO(rafi): use ALTER TENANT ALL when available.
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
+		(0, 'server.user_login.session_revival_token.enabled', 'true', 'b');
+
+user root
+
+statement ok
+CREATE USER parentuser;
+GRANT parentuser TO testuser
+
+skipif config 3node-tenant
+statement error session revival tokens are not supported on this cluster
+select crdb_internal.create_session_revival_token()
+
+onlyif config 3node-tenant
+statement error cannot create token for root user
+select crdb_internal.create_session_revival_token()
+
+user testuser
+
+statement ok
+CREATE TABLE token_payload(algorithm STRING, "expiresAt" TIMESTAMPTZ, "issuedAt" TIMESTAMPTZ, "user" STRING)
+
+# Make sure the token is generated for testuser, not parentuser.
+statement ok
+SET ROLE parentuser
+
+# create_session_revival_token requires tenant-signing certs, so it only works
+# in 3node-tenant.
+onlyif config 3node-tenant
+query TTBBBB
+WITH
+  a AS (SELECT crdb_internal.create_session_revival_token() AS token),
+  b AS (
+    SELECT
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sessiondatapb.SessionRevivalToken',
+        a.token
+      ) AS json_token
+    FROM a
+  ),
+  c AS (
+    SELECT
+      (json_populate_record(
+        NULL::token_payload,
+        crdb_internal.pb_to_json(
+          'cockroach.sql.sessiondatapb.SessionRevivalToken.Payload',
+          decode(b.json_token->>'payload', 'base64'),
+          true
+        )
+      )).*
+    FROM b
+  )
+SELECT
+  algorithm,
+  "user",
+  "expiresAt" > now(),
+  "expiresAt" < (now() + INTERVAL '11 minutes'),
+  "expiresAt" > "issuedAt",
+  crdb_internal.validate_session_revival_token(a.token)
+FROM
+  c, a
+----
+Ed25519  testuser  true  true  true  true
+
+user host-cluster-root
+
+# TODO(rafi): use ALTER TENANT ALL when available.
+statement ok
+UPSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
+		(0, 'server.user_login.session_revival_token.enabled', 'false', 'b')
+
+user root

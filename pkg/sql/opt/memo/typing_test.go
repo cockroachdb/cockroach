@@ -18,10 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	tu "github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 func TestTyping(t *testing.T) {
-	runDataDrivenTest(t, "testdata/typing",
+	runDataDrivenTest(t, tu.TestDataPath(t, "typing"),
 		memo.ExprFmtHideMiscProps|
 			memo.ExprFmtHideConstraints|
 			memo.ExprFmtHideFuncDeps|

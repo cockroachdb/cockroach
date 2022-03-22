@@ -24,6 +24,7 @@ go_library(
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//proto",
         "@com_github_lib_pq//oid",
     ],
 )
@@ -31,11 +32,18 @@ go_library(
 go_test(
     name = "types_test",
     size = "small",
-    srcs = ["types_test.go"],
+    srcs = [
+        "dep_test.go",
+        "types_test.go",
+        "types_text_marshal_test.go",
+    ],
     embed = [":types"],
     deps = [
         "//pkg/geo/geopb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/oidext",
+        "//pkg/testutils/buildutil",
         "//pkg/util/protoutil",
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//assert",

@@ -60,9 +60,9 @@ users       bar         false       1             id           ASC        false 
 users       bar         false       2             name         ASC        false    false
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
-users       primary     false       1             id           ASC        false    false
-users       primary     false       2             name         N/A        true     false
-users       primary     false       3             title        N/A        true     false
+users       users_pkey  false       1             id           ASC        false    false
+users       users_pkey  false       2             name         N/A        true     false
+users       users_pkey  false       3             title        N/A        true     false
 
 statement error index "zap" does not exist
 DROP INDEX users@zap
@@ -78,9 +78,9 @@ users       bar         false       1             id           ASC        false 
 users       bar         false       2             name         ASC        false    false
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
-users       primary     false       1             id           ASC        false    false
-users       primary     false       2             name         N/A        true     false
-users       primary     false       3             title        N/A        true     false
+users       users_pkey  false       1             id           ASC        false    false
+users       users_pkey  false       2             name         N/A        true     false
+users       users_pkey  false       3             title        N/A        true     false
 
 # Also test that dropping with a non-existing index still drops 'foo'.
 
@@ -93,9 +93,9 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
-users       primary     false       1             id           ASC        false    false
-users       primary     false       2             name         N/A        true     false
-users       primary     false       3             title        N/A        true     false
+users       users_pkey  false       1             id           ASC        false    false
+users       users_pkey  false       2             name         N/A        true     false
+users       users_pkey  false       3             title        N/A        true     false
 
 user testuser
 
@@ -122,9 +122,9 @@ query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
-users       primary     false       2             name         N/A        true     false
-users       primary     false       3             title        N/A        true     false
+users       users_pkey  false       1             id           ASC        false    false
+users       users_pkey  false       2             name         N/A        true     false
+users       users_pkey  false       3             title        N/A        true     false
 
 user root
 
@@ -154,9 +154,9 @@ users       bar         true        1             title        ASC        false 
 users       bar         true        2             id           ASC        false    true
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
-users       primary     false       1             id           ASC        false    false
-users       primary     false       2             name         N/A        true     false
-users       primary     false       3             title        N/A        true     false
+users       users_pkey  false       1             id           ASC        false    false
+users       users_pkey  false       2             name         N/A        true     false
+users       users_pkey  false       3             title        N/A        true     false
 
 statement ok
 CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=foo}
@@ -173,9 +173,9 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
-users       primary     false       1             id           ASC        false    false
-users       primary     false       2             name         N/A        true     false
-users       primary     false       3             title        N/A        true     false
+users       users_pkey  false       1             id           ASC        false    false
+users       users_pkey  false       2             name         N/A        true     false
+users       users_pkey  false       3             title        N/A        true     false
 
 statement ok
 CREATE VIEW v2 AS SELECT name FROM v
@@ -207,9 +207,9 @@ query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
-users       primary     false       2             name         N/A        true     false
-users       primary     false       3             title        N/A        true     false
+users       users_pkey  false       1             id           ASC        false    false
+users       users_pkey  false       2             name         N/A        true     false
+users       users_pkey  false       3             title        N/A        true     false
 
 query TTTTIT
 SHOW TABLES
@@ -230,9 +230,9 @@ query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
-users       primary     false       2             name         N/A        true     false
-users       primary     false       3             title        N/A        true     false
+users       users_pkey  false       1             id           ASC        false    false
+users       users_pkey  false       2             name         N/A        true     false
+users       users_pkey  false       3             title        N/A        true     false
 
 # Test that it still succeeds when an index does not exist.
 
@@ -287,10 +287,20 @@ subtest fk_drop
 # there is another index that can satisfy the foreign key constraint.
 statement ok
 CREATE TABLE fk1 (x int);
+
+statement ok
 CREATE TABLE fk2 (x int PRIMARY KEY);
+
+statement ok
 CREATE INDEX i ON fk1 (x);
+
+statement ok
 CREATE INDEX i2 ON fk1 (x);
+
+statement ok
 ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
+
+statement ok
 DROP INDEX fk1@i CASCADE
 
 query TT
@@ -299,10 +309,9 @@ SHOW CREATE fk1
 fk1  CREATE TABLE public.fk1 (
      x INT8 NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+     CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
      CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
-     INDEX i2 (x ASC),
-     FAMILY "primary" (x, rowid)
+     INDEX i2 (x ASC)
 )
 
 # test that notices are generated on index drops
@@ -327,7 +336,7 @@ DROP INDEX t_secondary CASCADE;
 ALTER TABLE t DROP COLUMN b;
 INSERT INTO t SELECT a + 1 FROM t;
 
-statement error pgcode 23505 duplicate key value: decoding err=column-id "2" does not exist
+statement error pgcode 23505 duplicate key value violates unique constraint "t_secondary"\nDETAIL: Key \(b\)=\(0\.0\) already exists
 UPSERT INTO t SELECT a + 1 FROM t;
 
 statement ok
@@ -337,4 +346,4 @@ COMMIT;
 subtest drop_primary_key
 
 statement error pgcode 0A000 cannot drop the primary index of a table using DROP INDEX
-CREATE TABLE drop_primary(); DROP INDEX drop_primary@primary CASCADE;
+CREATE TABLE drop_primary(); DROP INDEX drop_primary@drop_primary_pkey CASCADE;

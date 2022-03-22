@@ -15,10 +15,12 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // IndexedRows are rows with the corresponding indices.
@@ -67,7 +69,7 @@ type WindowFrameRangeOps struct{}
 // provided left and right types and returns them along with a boolean which
 // indicates whether lookup is successful.
 func (o WindowFrameRangeOps) LookupImpl(left, right *types.T) (*BinOp, *BinOp, bool) {
-	plusOverloads, minusOverloads := BinOps[Plus], BinOps[Minus]
+	plusOverloads, minusOverloads := BinOps[treebin.Plus], BinOps[treebin.Minus]
 	plusOp, found := plusOverloads.lookupImpl(left, right)
 	if !found {
 		return nil, nil, false
@@ -112,11 +114,11 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 		return 0, nil
 	}
 	switch wfr.Frame.Mode {
-	case RANGE:
+	case treewindow.RANGE:
 		switch wfr.Frame.Bounds.StartBound.BoundType {
-		case UnboundedPreceding:
+		case treewindow.UnboundedPreceding:
 			return 0, nil
-		case OffsetPreceding:
+		case treewindow.OffsetPreceding:
 			value, err := wfr.getValueByOffset(ctx, evalCtx, wfr.StartBoundOffset, true /* negative */)
 			if err != nil {
 				return 0, err
@@ -161,10 +163,10 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 				}
 				return cmp >= 0
 			}), wfr.err
-		case CurrentRow:
+		case treewindow.CurrentRow:
 			// Spec: in RANGE mode CURRENT ROW means that the frame starts with the current row's first peer.
 			return wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum), nil
-		case OffsetFollowing:
+		case treewindow.OffsetFollowing:
 			value, err := wfr.getValueByOffset(ctx, evalCtx, wfr.StartBoundOffset, false /* negative */)
 			if err != nil {
 				return 0, err
@@ -210,22 +212,22 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in RANGE mode: %d",
-				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
-	case ROWS:
+	case treewindow.ROWS:
 		switch wfr.Frame.Bounds.StartBound.BoundType {
-		case UnboundedPreceding:
+		case treewindow.UnboundedPreceding:
 			return 0, nil
-		case OffsetPreceding:
+		case treewindow.OffsetPreceding:
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			idx := wfr.RowIdx - int(offset)
 			if idx < 0 {
 				idx = 0
 			}
 			return idx, nil
-		case CurrentRow:
+		case treewindow.CurrentRow:
 			return wfr.RowIdx, nil
-		case OffsetFollowing:
+		case treewindow.OffsetFollowing:
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			idx := wfr.RowIdx + int(offset)
 			if idx >= wfr.PartitionSize() || int(offset) >= wfr.PartitionSize() {
@@ -237,23 +239,23 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in ROWS mode: %d",
-				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
-	case GROUPS:
+	case treewindow.GROUPS:
 		switch wfr.Frame.Bounds.StartBound.BoundType {
-		case UnboundedPreceding:
+		case treewindow.UnboundedPreceding:
 			return 0, nil
-		case OffsetPreceding:
+		case treewindow.OffsetPreceding:
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum - int(offset)
 			if peerGroupNum < 0 {
 				peerGroupNum = 0
 			}
 			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum), nil
-		case CurrentRow:
+		case treewindow.CurrentRow:
 			// Spec: in GROUPS mode CURRENT ROW means that the frame starts with the current row's first peer.
 			return wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum), nil
-		case OffsetFollowing:
+		case treewindow.OffsetFollowing:
 			offset := MustBeDInt(wfr.StartBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum + int(offset)
 			lastPeerGroupNum := wfr.PeerHelper.GetLastPeerGroupNum()
@@ -266,7 +268,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in GROUPS mode: %d",
-				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
 	default:
 		return 0, errors.AssertionFailedf("unexpected WindowFrameMode: %d", wfr.Frame.Mode)
@@ -279,16 +281,16 @@ func (f *WindowFrame) IsDefaultFrame() bool {
 	if f == nil {
 		return true
 	}
-	if f.Bounds.StartBound.BoundType == UnboundedPreceding {
-		return f.DefaultFrameExclusion() && f.Mode == RANGE &&
-			(f.Bounds.EndBound == nil || f.Bounds.EndBound.BoundType == CurrentRow)
+	if f.Bounds.StartBound.BoundType == treewindow.UnboundedPreceding {
+		return f.DefaultFrameExclusion() && f.Mode == treewindow.RANGE &&
+			(f.Bounds.EndBound == nil || f.Bounds.EndBound.BoundType == treewindow.CurrentRow)
 	}
 	return false
 }
 
 // DefaultFrameExclusion returns true if optional frame exclusion is omitted.
 func (f *WindowFrame) DefaultFrameExclusion() bool {
-	return f == nil || f.Exclusion == NoExclusion
+	return f == nil || f.Exclusion == treewindow.NoExclusion
 }
 
 // FrameEndIdx returns the index of the first row after the frame.
@@ -297,14 +299,14 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		return wfr.DefaultFrameSize(), nil
 	}
 	switch wfr.Frame.Mode {
-	case RANGE:
+	case treewindow.RANGE:
 		if wfr.Frame.Bounds.EndBound == nil {
 			// We're using default value of CURRENT ROW when EndBound is omitted.
 			// Spec: in RANGE mode CURRENT ROW means that the frame ends with the current row's last peer.
 			return wfr.DefaultFrameSize(), nil
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
-		case OffsetPreceding:
+		case treewindow.OffsetPreceding:
 			value, err := wfr.getValueByOffset(ctx, evalCtx, wfr.EndBoundOffset, true /* negative */)
 			if err != nil {
 				return 0, err
@@ -353,10 +355,10 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 				}
 				return cmp > 0
 			}), wfr.err
-		case CurrentRow:
+		case treewindow.CurrentRow:
 			// Spec: in RANGE mode CURRENT ROW means that the frame end with the current row's last peer.
 			return wfr.DefaultFrameSize(), nil
-		case OffsetFollowing:
+		case treewindow.OffsetFollowing:
 			value, err := wfr.getValueByOffset(ctx, evalCtx, wfr.EndBoundOffset, false /* negative */)
 			if err != nil {
 				return 0, err
@@ -399,29 +401,29 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 				}
 				return cmp > 0
 			}), wfr.err
-		case UnboundedFollowing:
+		case treewindow.UnboundedFollowing:
 			return wfr.unboundedFollowing(), nil
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in RANGE mode: %d",
-				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
-	case ROWS:
+	case treewindow.ROWS:
 		if wfr.Frame.Bounds.EndBound == nil {
 			// We're using default value of CURRENT ROW when EndBound is omitted.
 			return wfr.RowIdx + 1, nil
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
-		case OffsetPreceding:
+		case treewindow.OffsetPreceding:
 			offset := MustBeDInt(wfr.EndBoundOffset)
 			idx := wfr.RowIdx - int(offset) + 1
 			if idx < 0 {
 				idx = 0
 			}
 			return idx, nil
-		case CurrentRow:
+		case treewindow.CurrentRow:
 			return wfr.RowIdx + 1, nil
-		case OffsetFollowing:
+		case treewindow.OffsetFollowing:
 			offset := MustBeDInt(wfr.EndBoundOffset)
 			idx := wfr.RowIdx + int(offset) + 1
 			if idx >= wfr.PartitionSize() || int(offset) >= wfr.PartitionSize() {
@@ -430,21 +432,21 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 				idx = wfr.unboundedFollowing()
 			}
 			return idx, nil
-		case UnboundedFollowing:
+		case treewindow.UnboundedFollowing:
 			return wfr.unboundedFollowing(), nil
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in ROWS mode: %d",
-				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
-	case GROUPS:
+	case treewindow.GROUPS:
 		if wfr.Frame.Bounds.EndBound == nil {
 			// We're using default value of CURRENT ROW when EndBound is omitted.
 			// Spec: in GROUPS mode CURRENT ROW means that the frame ends with the current row's last peer.
 			return wfr.DefaultFrameSize(), nil
 		}
 		switch wfr.Frame.Bounds.EndBound.BoundType {
-		case OffsetPreceding:
+		case treewindow.OffsetPreceding:
 			offset := MustBeDInt(wfr.EndBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum - int(offset)
 			if peerGroupNum < wfr.PeerHelper.headPeerGroupNum {
@@ -452,9 +454,9 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 				return 0, nil
 			}
 			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum) + wfr.PeerHelper.GetRowCount(peerGroupNum), nil
-		case CurrentRow:
+		case treewindow.CurrentRow:
 			return wfr.DefaultFrameSize(), nil
-		case OffsetFollowing:
+		case treewindow.OffsetFollowing:
 			offset := MustBeDInt(wfr.EndBoundOffset)
 			peerGroupNum := wfr.CurRowPeerGroupNum + int(offset)
 			lastPeerGroupNum := wfr.PeerHelper.GetLastPeerGroupNum()
@@ -464,16 +466,16 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 				return wfr.unboundedFollowing(), nil
 			}
 			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum) + wfr.PeerHelper.GetRowCount(peerGroupNum), nil
-		case UnboundedFollowing:
+		case treewindow.UnboundedFollowing:
 			return wfr.unboundedFollowing(), nil
 		default:
 			return 0, errors.AssertionFailedf(
 				"unexpected WindowFrameBoundType in GROUPS mode: %d",
-				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
+				redact.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
 	default:
 		return 0, errors.AssertionFailedf(
-			"unexpected WindowFrameMode: %d", log.Safe(wfr.Frame.Mode))
+			"unexpected WindowFrameMode: %d", redact.Safe(wfr.Frame.Mode))
 	}
 }
 
@@ -574,7 +576,7 @@ func (wfr *WindowFrameRun) valueAt(ctx context.Context, idx int) (Datum, error) 
 // RangeModeWithOffsets returns whether the frame is in RANGE mode with at least
 // one of the bounds containing an offset.
 func (wfr *WindowFrameRun) RangeModeWithOffsets() bool {
-	return wfr.Frame.Mode == RANGE && wfr.Frame.Bounds.HasOffset()
+	return wfr.Frame.Mode == treewindow.RANGE && wfr.Frame.Bounds.HasOffset()
 }
 
 // FullPartitionIsInWindow checks whether we have such a window frame that all
@@ -593,13 +595,13 @@ func (wfr *WindowFrameRun) FullPartitionIsInWindow() bool {
 	}
 	// precedingConfirmed and followingConfirmed indicate whether, for every row,
 	// all preceding and following, respectively, rows are always in the window.
-	precedingConfirmed := wfr.Frame.Bounds.StartBound.BoundType == UnboundedPreceding
-	followingConfirmed := wfr.Frame.Bounds.EndBound.BoundType == UnboundedFollowing
-	if wfr.Frame.Mode == ROWS || wfr.Frame.Mode == GROUPS {
+	precedingConfirmed := wfr.Frame.Bounds.StartBound.BoundType == treewindow.UnboundedPreceding
+	followingConfirmed := wfr.Frame.Bounds.EndBound.BoundType == treewindow.UnboundedFollowing
+	if wfr.Frame.Mode == treewindow.ROWS || wfr.Frame.Mode == treewindow.GROUPS {
 		// Every peer group in GROUPS mode always contains at least one row, so
 		// treating GROUPS as ROWS here is a subset of the cases when we should
 		// return true.
-		if wfr.Frame.Bounds.StartBound.BoundType == OffsetPreceding {
+		if wfr.Frame.Bounds.StartBound.BoundType == treewindow.OffsetPreceding {
 			// Both ROWS and GROUPS have an offset of integer type, so this type
 			// conversion is safe.
 			startOffset := wfr.StartBoundOffset.(*DInt)
@@ -610,7 +612,7 @@ func (wfr *WindowFrameRun) FullPartitionIsInWindow() bool {
 			// last, second to last, etc.
 			precedingConfirmed = precedingConfirmed || *startOffset >= DInt(wfr.Rows.Len()-1)
 		}
-		if wfr.Frame.Bounds.EndBound.BoundType == OffsetFollowing {
+		if wfr.Frame.Bounds.EndBound.BoundType == treewindow.OffsetFollowing {
 			// Both ROWS and GROUPS have an offset of integer type, so this type
 			// conversion is safe.
 			endOffset := wfr.EndBoundOffset.(*DInt)
@@ -638,13 +640,13 @@ func (wfr *WindowFrameRun) isRowExcluded(idx int) (bool, error) {
 		return false, nil
 	}
 	switch wfr.Frame.Exclusion {
-	case ExcludeCurrentRow:
+	case treewindow.ExcludeCurrentRow:
 		return idx == wfr.RowIdx, nil
-	case ExcludeGroup:
+	case treewindow.ExcludeGroup:
 		curRowFirstPeerIdx := wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum)
 		curRowPeerGroupRowCount := wfr.PeerHelper.GetRowCount(wfr.CurRowPeerGroupNum)
 		return curRowFirstPeerIdx <= idx && idx < curRowFirstPeerIdx+curRowPeerGroupRowCount, nil
-	case ExcludeTies:
+	case treewindow.ExcludeTies:
 		curRowFirstPeerIdx := wfr.PeerHelper.GetFirstPeerIdx(wfr.CurRowPeerGroupNum)
 		curRowPeerGroupRowCount := wfr.PeerHelper.GetRowCount(wfr.CurRowPeerGroupNum)
 		return curRowFirstPeerIdx <= idx && idx < curRowFirstPeerIdx+curRowPeerGroupRowCount && idx != wfr.RowIdx, nil

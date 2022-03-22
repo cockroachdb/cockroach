@@ -15,45 +15,49 @@ package descs
 import (
 	"bytes"
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 // makeCollection constructs a Collection.
 func makeCollection(
+	ctx context.Context,
 	leaseMgr *lease.Manager,
 	settings *cluster.Settings,
+	codec keys.SQLCodec,
 	hydratedTables *hydratedtables.Cache,
+	systemNamespace *systemDatabaseNamespaceCache,
 	virtualSchemas catalog.VirtualSchemas,
-	sessionData *sessiondata.SessionData,
+	temporarySchemaProvider TemporarySchemaProvider,
 ) Collection {
-	codec := keys.SystemSQLCodec
-	if leaseMgr != nil { // permitted for testing
-		codec = leaseMgr.Codec()
-	}
 	return Collection{
 		settings:       settings,
+		version:        settings.Version.ActiveVersion(ctx),
 		hydratedTables: hydratedTables,
 		virtual:        makeVirtualDescriptors(virtualSchemas),
 		leased:         makeLeasedDescriptors(leaseMgr),
-		synthetic:      makeSyntheticDescriptors(),
-		kv:             makeKVDescriptors(codec),
-		temporary:      makeTemporaryDescriptors(codec, sessionData),
+		kv:             makeKVDescriptors(codec, systemNamespace),
+		temporary:      makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
+		direct:         makeDirect(ctx, codec, settings),
 	}
 }
 
@@ -67,12 +71,24 @@ type Collection struct {
 	// settings dictate whether we validate descriptors on write.
 	settings *cluster.Settings
 
+	// version used for validation
+	version clusterversion.ClusterVersion
+
 	// virtualSchemas optionally holds the virtual schemas.
 	virtual virtualDescriptors
 
 	// A collection of descriptors valid for the timestamp. They are released once
 	// the transaction using them is complete.
 	leased leasedDescriptors
+
+	// Descriptors modified by the uncommitted transaction affiliated with this
+	// Collection. This allows a transaction to see its own modifications while
+	// bypassing the descriptor lease mechanism. The lease mechanism will have its
+	// own transaction to read the descriptor and will hang waiting for the
+	// uncommitted changes to the descriptor if this transaction is PRIORITY HIGH.
+	// These descriptors are local to this Collection and their state is thus not
+	// visible to other transactions.
+	uncommitted uncommittedDescriptors
 
 	// A collection of descriptors which were read from the store.
 	kv kvDescriptors
@@ -99,7 +115,22 @@ type Collection struct {
 
 	// droppedDescriptors that will not need to wait for new
 	// lease versions.
-	deletedDescs []catalog.Descriptor
+	deletedDescs catalog.DescriptorIDSet
+
+	// maxTimestampBoundDeadlineHolder contains the maximum timestamp to read
+	// schemas at. This is only set during the retries of bounded_staleness when
+	// nearest_only=True, in which we want a schema read that should be no older
+	// than MaxTimestampBound.
+	maxTimestampBoundDeadlineHolder maxTimestampBoundDeadlineHolder
+
+	// Session is a sqlliveness.Session which may be optionally set.
+	// It must be set in the multi-tenant environment for ephemeral
+	// SQL pods. It should not be set otherwise.
+	sqlLivenessSession sqlliveness.Session
+
+	// direct provides low-level access to descriptors via the Direct interface.
+	// For the most part, it is in deprecated or testing settings.
+	direct direct
 }
 
 var _ catalog.Accessor = (*Collection)(nil)
@@ -108,7 +139,17 @@ var _ catalog.Accessor = (*Collection)(nil)
 // based on the leased descriptors in this collection. This update is
 // only done when a deadline exists.
 func (tc *Collection) MaybeUpdateDeadline(ctx context.Context, txn *kv.Txn) (err error) {
-	return tc.leased.maybeUpdateDeadline(ctx, txn)
+	return tc.leased.maybeUpdateDeadline(ctx, txn, tc.sqlLivenessSession)
+}
+
+// SetMaxTimestampBound sets the maximum timestamp to read schemas at.
+func (tc *Collection) SetMaxTimestampBound(maxTimestampBound hlc.Timestamp) {
+	tc.maxTimestampBoundDeadlineHolder.maxTimestampBound = maxTimestampBound
+}
+
+// ResetMaxTimestampBound resets the maximum timestamp to read schemas at.
+func (tc *Collection) ResetMaxTimestampBound() {
+	tc.maxTimestampBoundDeadlineHolder.maxTimestampBound = hlc.Timestamp{}
 }
 
 // SkipValidationOnWrite avoids validating uncommitted descriptors prior to
@@ -126,31 +167,32 @@ func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.
 // ReleaseLeases releases all leases. Errors are logged but ignored.
 func (tc *Collection) ReleaseLeases(ctx context.Context) {
 	tc.leased.releaseAll(ctx)
+	// Clear the associated sqlliveness.session
+	tc.sqlLivenessSession = nil
 }
 
 // ReleaseAll releases all state currently held by the Collection.
 // ReleaseAll calls ReleaseLeases.
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
+	tc.uncommitted.reset()
 	tc.kv.reset()
 	tc.synthetic.reset()
-	tc.deletedDescs = nil
+	tc.deletedDescs = catalog.DescriptorIDSet{}
+	tc.skipValidationOnWrite = false
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
 // tables.
 func (tc *Collection) HasUncommittedTables() bool {
-	return tc.kv.hasUncommittedTables()
+	return tc.uncommitted.hasUncommittedTables()
 }
 
 // HasUncommittedTypes returns true if the Collection contains uncommitted
 // types.
 func (tc *Collection) HasUncommittedTypes() bool {
-	return tc.kv.hasUncommittedTypes()
+	return tc.uncommitted.hasUncommittedTypes()
 }
-
-// Satisfy the linter.
-var _ = (*Collection).HasUncommittedTypes
 
 // AddUncommittedDescriptor adds an uncommitted descriptor modified in the
 // transaction to the Collection. The descriptor must either be a new descriptor
@@ -162,28 +204,16 @@ var _ = (*Collection).HasUncommittedTypes
 // immutably will return a copy of the descriptor in the current state. A deep
 // copy is performed in this call.
 func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) error {
-	_, err := tc.kv.addUncommittedDescriptor(desc)
-	return err
-}
-
-// maybeRefreshCachedFieldsOnTypeDescriptor refreshes the cached fields on a
-// Mutable if the given descriptor is a type descriptor and works as a pass
-// through for all other descriptors. Mutable type descriptors are refreshed to
-// reconstruct enumMetadata. This ensures that tables hydration following a
-// type descriptor update (in the same txn) happens using the modified fields.
-func maybeRefreshCachedFieldsOnTypeDescriptor(
-	desc catalog.MutableDescriptor,
-) (catalog.MutableDescriptor, error) {
-	typeDesc, ok := desc.(catalog.TypeDescriptor)
-	if ok {
-		return typedesc.UpdateCachedFieldsOnModifiedMutable(typeDesc)
-	}
-	return desc, nil
+	// Invalidate all the cached descriptors since a stale copy of this may be
+	// included.
+	tc.kv.releaseAllDescriptors()
+	return tc.uncommitted.checkIn(desc)
 }
 
 // ValidateOnWriteEnabled is the cluster setting used to enable or disable
 // validating descriptors prior to writing.
 var ValidateOnWriteEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.catalog.descs.validate_on_write.enabled",
 	"set to true to validate descriptors prior to writing, false to disable; default is true",
 	true, /* defaultValue */
@@ -196,14 +226,20 @@ func (tc *Collection) WriteDescToBatch(
 ) error {
 	desc.MaybeIncrementVersion()
 	if !tc.skipValidationOnWrite && ValidateOnWriteEnabled.Get(&tc.settings.SV) {
-		if err := catalog.ValidateSelf(desc); err != nil {
+		if err := validate.Self(tc.version, desc); err != nil {
 			return err
 		}
 	}
 	if err := tc.AddUncommittedDescriptor(desc); err != nil {
 		return err
 	}
-	return catalogkv.WriteDescToBatch(ctx, kvTrace, tc.settings, b, tc.codec(), desc.GetID(), desc)
+	descKey := catalogkeys.MakeDescMetadataKey(tc.codec(), desc.GetID())
+	proto := desc.DescriptorProto()
+	if kvTrace {
+		log.VEventf(ctx, 2, "Put %s -> %s", descKey, proto)
+	}
+	b.Put(descKey, proto)
+	return nil
 }
 
 // WriteDesc constructs a new Batch, calls WriteDescToBatch and runs it.
@@ -221,27 +257,18 @@ func (tc *Collection) WriteDesc(
 // undergone a schema change. Returns nil for no schema changes. The version
 // returned for each schema change is ClusterVersion - 1, because that's the one
 // that will be used when checking for table descriptor two version invariance.
-func (tc *Collection) GetDescriptorsWithNewVersion() []lease.IDVersion {
-	return tc.kv.getDescriptorsWithNewVersion()
+func (tc *Collection) GetDescriptorsWithNewVersion() (originalVersions []lease.IDVersion) {
+	_ = tc.uncommitted.iterateNewVersionByID(func(originalVersion lease.IDVersion) error {
+		originalVersions = append(originalVersions, originalVersion)
+		return nil
+	})
+	return originalVersions
 }
 
 // GetUncommittedTables returns all the tables updated or created in the
 // transaction.
 func (tc *Collection) GetUncommittedTables() (tables []catalog.TableDescriptor) {
-	return tc.kv.getUncommittedTables()
-}
-
-// ValidateUncommittedDescriptors validates all uncommitted descriptors.
-// Validation includes cross-reference checks. Referenced descriptors are
-// read from the store unless they happen to also be part of the uncommitted
-// descriptor set. We purposefully avoid using leased descriptors as those may
-// be one version behind, in which case it's possible (and legitimate) that
-// those are missing back-references which would cause validation to fail.
-func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) error {
-	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
-		return nil
-	}
-	return tc.kv.validateUncommittedDescriptors(ctx, txn)
+	return tc.uncommitted.getUncommittedTables()
 }
 
 func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
@@ -251,10 +278,8 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 // GetAllDescriptors returns all descriptors visible by the transaction,
 // first checking the Collection's cached descriptors for validity if validate
 // is set to true before defaulting to a key-value scan, if necessary.
-func (tc *Collection) GetAllDescriptors(
-	ctx context.Context, txn *kv.Txn,
-) ([]catalog.Descriptor, error) {
-	return tc.kv.getAllDescriptors(ctx, txn)
+func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
+	return tc.kv.getAllDescriptors(ctx, txn, tc.version)
 }
 
 // GetAllDatabaseDescriptors returns all database descriptors visible by the
@@ -266,16 +291,49 @@ func (tc *Collection) GetAllDescriptors(
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
-	return tc.kv.getAllDatabaseDescriptors(ctx, txn)
+	vd := tc.newValidationDereferencer(txn)
+	return tc.kv.getAllDatabaseDescriptors(ctx, tc.version, txn, vd)
+}
+
+// GetAllTableDescriptorsInDatabase returns all the table descriptors visible to
+// the transaction under the database with the given ID. It first checks the
+// collection's cached descriptors before defaulting to a key-value scan, if
+// necessary.
+func (tc *Collection) GetAllTableDescriptorsInDatabase(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID,
+) ([]catalog.TableDescriptor, error) {
+	// Ensure the given ID does indeed belong to a database.
+	found, _, err := tc.getDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
+		AvoidLeased: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+	}
+	all, err := tc.GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	var ret []catalog.TableDescriptor
+	for _, desc := range all.OrderedDescriptors() {
+		if desc.GetParentID() == dbID {
+			if table, ok := desc.(catalog.TableDescriptor); ok {
+				ret = append(ret, table)
+			}
+		}
+	}
+	return ret, nil
 }
 
 // GetSchemasForDatabase returns the schemas for a given database
 // visible by the transaction. This uses the schema cache locally
 // if possible, or else performs a scan on kv.
 func (tc *Collection) GetSchemasForDatabase(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID,
+	ctx context.Context, txn *kv.Txn, dbDesc catalog.DatabaseDescriptor,
 ) (map[descpb.ID]string, error) {
-	return tc.kv.getSchemasForDatabase(ctx, txn, dbID)
+	return tc.kv.getSchemasForDatabase(ctx, txn, dbDesc)
 }
 
 // GetObjectNamesAndIDs returns the names and IDs of all objects in a database and schema.
@@ -294,7 +352,7 @@ func (tc *Collection) GetObjectNamesAndIDs(
 
 	schemaFlags := tree.SchemaLookupFlags{
 		Required:       flags.Required,
-		AvoidCached:    flags.RequireMutable || flags.AvoidCached,
+		AvoidLeased:    flags.RequireMutable || flags.AvoidLeased,
 		IncludeDropped: flags.IncludeDropped,
 		IncludeOffline: flags.IncludeOffline,
 	}
@@ -342,6 +400,19 @@ func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
 	tc.synthetic.set(descs)
 }
 
+// AddSyntheticDescriptor replaces a descriptor with a synthetic
+// one temporarily for a given transaction. This synthetic descriptor
+// will be immutable.
+func (tc *Collection) AddSyntheticDescriptor(desc catalog.Descriptor) {
+	tc.synthetic.add(desc)
+}
+
+// RemoveSyntheticDescriptor removes a synthetic descriptor
+// override that temporarily exists for a given transaction.
+func (tc *Collection) RemoveSyntheticDescriptor(id descpb.ID) {
+	tc.synthetic.remove(id)
+}
+
 func (tc *Collection) codec() keys.SQLCodec {
 	return tc.kv.codec
 }
@@ -353,6 +424,12 @@ func (tc *Collection) codec() keys.SQLCodec {
 // be inside storage.
 // Note: that this happens, at time of writing, only when reverting an
 // IMPORT or RESTORE.
-func (tc *Collection) AddDeletedDescriptor(desc catalog.Descriptor) {
-	tc.deletedDescs = append(tc.deletedDescs, desc)
+func (tc *Collection) AddDeletedDescriptor(id descpb.ID) {
+	tc.deletedDescs.Add(id)
+}
+
+// SetSession sets the sqlliveness.Session for the transaction. This
+// should only be called in a multi-tenant environment.
+func (tc *Collection) SetSession(session sqlliveness.Session) {
+	tc.sqlLivenessSession = session
 }

@@ -35,14 +35,12 @@ func (b *Builder) buildJoin(
 ) (outScope *scope) {
 	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, locking, inScope)
 
-	isLateral := false
 	inScopeRight := inScope
-	// If this is a lateral join, use leftScope as inScope for the right side.
-	// The right side scope of a LATERAL join includes the columns produced by
-	// the left side.
-	if t, ok := join.Right.(*tree.AliasedTableExpr); ok && t.Lateral {
-		telemetry.Inc(sqltelemetry.LateralJoinUseCounter)
-		isLateral = true
+	isLateral := b.exprIsLateral(join.Right)
+	if isLateral {
+		// If this is a lateral join, use leftScope as inScope for the right side.
+		// The right side scope of a LATERAL join includes the columns produced by
+		// the left side.
 		inScopeRight = leftScope
 		inScopeRight.context = exprKindLateralJoin
 	}
@@ -97,7 +95,7 @@ func (b *Builder) buildJoin(
 		outScope = inScope.push()
 
 		var jb usingJoinBuilder
-		jb.init(b, joinType, flags, leftScope, rightScope, outScope)
+		jb.init(b, joinType, flags, isLateral, leftScope, rightScope, outScope)
 
 		switch t := cond.(type) {
 		case tree.NaturalJoinCond:
@@ -128,8 +126,8 @@ func (b *Builder) buildJoin(
 			filters = memo.TrueFilter
 		}
 
-		left := leftScope.expr.(memo.RelExpr)
-		right := rightScope.expr.(memo.RelExpr)
+		left := leftScope.expr
+		right := rightScope.expr
 		outScope.expr = b.constructJoin(
 			joinType, left, right, filters, &memo.JoinPrivate{Flags: flags}, isLateral,
 		)
@@ -297,6 +295,7 @@ type usingJoinBuilder struct {
 	joinType   descpb.JoinType
 	joinFlags  memo.JoinFlags
 	filters    memo.FiltersExpr
+	isLateral  bool
 	leftScope  *scope
 	rightScope *scope
 	outScope   *scope
@@ -315,6 +314,7 @@ func (jb *usingJoinBuilder) init(
 	b *Builder,
 	joinType descpb.JoinType,
 	flags memo.JoinFlags,
+	isLateral bool,
 	leftScope, rightScope, outScope *scope,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
@@ -323,6 +323,7 @@ func (jb *usingJoinBuilder) init(
 		b:          b,
 		joinType:   joinType,
 		joinFlags:  flags,
+		isLateral:  isLateral,
 		leftScope:  leftScope,
 		rightScope: rightScope,
 		outScope:   outScope,
@@ -402,11 +403,11 @@ func (jb *usingJoinBuilder) finishBuild() {
 
 	jb.outScope.expr = jb.b.constructJoin(
 		jb.joinType,
-		jb.leftScope.expr.(memo.RelExpr),
-		jb.rightScope.expr.(memo.RelExpr),
+		jb.leftScope.expr,
+		jb.rightScope.expr,
 		jb.filters,
 		&memo.JoinPrivate{Flags: jb.joinFlags},
-		false, /* isLateral */
+		jb.isLateral,
 	)
 
 	if !jb.ifNullCols.Empty() {
@@ -420,7 +421,7 @@ func (jb *usingJoinBuilder) finishBuild() {
 			}
 		}
 
-		jb.outScope.expr = jb.b.constructProject(jb.outScope.expr.(memo.RelExpr), jb.outScope.cols)
+		jb.outScope.expr = jb.b.constructProject(jb.outScope.expr, jb.outScope.cols)
 	}
 }
 
@@ -490,7 +491,7 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		col.table = tree.TableName{}
 		jb.outScope.cols = append(jb.outScope.cols, col)
 	} else if jb.joinType == descpb.RightOuterJoin &&
-		!colinfo.HasCompositeKeyEncoding(leftCol.typ) {
+		!colinfo.CanHaveCompositeKeyEncoding(leftCol.typ) {
 		// The merged column is the same as the corresponding column from the
 		// right side.
 		col := *rightCol

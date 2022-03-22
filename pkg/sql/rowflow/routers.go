@@ -27,12 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type router interface {
@@ -310,7 +312,8 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, "router output")
-				span.SetTag(execinfrapb.StreamIDTagKey, ro.streamID)
+				defer span.Finish()
+				span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(ro.streamID)))
 				ro.stats.Inputs = make([]execinfrapb.InputStats, 1)
 			}
 
@@ -373,11 +376,10 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 						ro.stats.Exec.MaxAllocatedMem.Set(uint64(ro.memoryMonitor.MaximumBytes()))
 						ro.stats.Exec.MaxAllocatedDisk.Set(uint64(ro.diskMonitor.MaximumBytes()))
 						span.RecordStructured(&ro.stats)
-						span.Finish()
-						if trace := execinfra.GetTraceData(ctx); trace != nil {
+						if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
 							ro.mu.Unlock()
 							rb.semaphore <- struct{}{}
-							status := ro.stream.Push(nil, &execinfrapb.ProducerMetadata{TraceData: trace})
+							status := ro.stream.Push(nil /* row */, meta)
 							rb.updateStreamState(&streamStatus, status)
 							<-rb.semaphore
 							ro.mu.Lock()
@@ -515,7 +517,7 @@ type hashRouter struct {
 
 	hashCols []uint32
 	buffer   []byte
-	alloc    rowenc.DatumAlloc
+	alloc    tree.DatumAlloc
 }
 
 // rangeRouter is a router that assumes the keyColumn'th column of incoming
@@ -526,7 +528,7 @@ type hashRouter struct {
 type rangeRouter struct {
 	routerBase
 
-	alloc rowenc.DatumAlloc
+	alloc tree.DatumAlloc
 	// b is a temp storage location used during encoding
 	b         []byte
 	encodings []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding

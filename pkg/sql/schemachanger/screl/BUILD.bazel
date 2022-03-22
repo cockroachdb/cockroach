@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "screl",
+    srcs = [
+        "attr.go",
+        "compare.go",
+        "doc.go",
+        "format.go",
+        "node.go",
+        "scalars.go",
+        "walk.go",
+        ":gen-attr-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/iterutil",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "screl_test",
+    size = "small",
+    srcs = [
+        "attribute_test.go",
+        "query_test.go",
+        "scalars_test.go",
+        "walk_test.go",
+    ],
+    embed = [":screl"],
+    deps = [
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/types",
+        "//pkg/util/iterutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+stringer(
+    name = "gen-attr-stringer",
+    src = "attr.go",
+    typ = "Attr",
+)

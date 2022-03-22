@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -25,9 +26,10 @@ import (
 // isolation from conflicting transactions to the lockSpans set.
 type DeclareKeysFunc func(
 	rs ImmutableRangeState,
-	header roachpb.Header,
+	header *roachpb.Header,
 	request roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
+	maxOffset time.Duration,
 )
 
 // ImmutableRangeState exposes the properties of a Range that cannot change

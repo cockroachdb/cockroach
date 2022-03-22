@@ -13,8 +13,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -68,9 +68,7 @@ func (n *renameColumnNode) startExec(params runParams) error {
 	ctx := params.ctx
 	tableDesc := n.tableDesc
 
-	const allowRenameOfShardColumn = false
-	descChanged, err := params.p.renameColumn(params.ctx, tableDesc, &n.n.Name,
-		&n.n.NewName, allowRenameOfShardColumn)
+	descChanged, err := params.p.renameColumn(params.ctx, tableDesc, n.n.Name, n.n.NewName)
 	if err != nil {
 		return err
 	}
@@ -87,22 +85,19 @@ func (n *renameColumnNode) startExec(params runParams) error {
 		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
-// renameColumn will rename the column in tableDesc from oldName to newName.
-// If allowRenameOfShardColumn is false, this method will return an error if
-// the column being renamed is a generated column for a hash sharded index.
-func (p *planner) renameColumn(
-	ctx context.Context,
-	tableDesc *tabledesc.Mutable,
-	oldName, newName *tree.Name,
-	allowRenameOfShardColumn bool,
-) (changed bool, err error) {
-	if *newName == "" {
-		return false, errEmptyColumnName
+// findColumnToRename will return the column in tableDesc which is to be renamed
+// from oldName to newName, provided that the rename is valid. If not, it will
+// return an error.
+func (p *planner) findColumnToRename(
+	ctx context.Context, tableDesc *tabledesc.Mutable, oldName, newName tree.Name,
+) (catalog.Column, error) {
+	if newName == "" {
+		return nil, errEmptyColumnName
 	}
 
-	col, err := tableDesc.FindColumnWithName(*oldName)
+	col, err := tableDesc.FindColumnWithName(oldName)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	for _, tableRef := range tableDesc.DependedOnBy {
@@ -113,21 +108,18 @@ func (p *planner) renameColumn(
 			}
 		}
 		if found {
-			return false, p.dependentViewError(
+			return nil, p.dependentViewError(
 				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID, "rename",
 			)
 		}
 	}
-	if *oldName == *newName {
+	if oldName == newName {
 		// Noop.
-		return false, nil
+		return nil, nil
 	}
-	isShardColumn := tableDesc.IsShardColumn(col)
-	if isShardColumn && !allowRenameOfShardColumn {
-		return false, pgerror.Newf(pgcode.ReservedName, "cannot rename shard column")
-	}
+
 	if col.IsInaccessible() {
-		return false, pgerror.Newf(
+		return nil, pgerror.Newf(
 			pgcode.UndefinedColumn,
 			"column %q is inaccessible and cannot be renamed",
 			col.GetName(),
@@ -136,131 +128,33 @@ func (p *planner) renameColumn(
 	// Understand if the active column already exists before checking for column
 	// mutations to detect assertion failure of empty mutation and no column.
 	// Otherwise we would have to make the above call twice.
-	_, err = checkColumnDoesNotExist(tableDesc, *newName)
+	_, err = checkColumnDoesNotExist(tableDesc, newName)
 	if err != nil {
+		return nil, err
+	}
+	return col, nil
+}
+
+// renameColumn will rename the column in tableDesc from oldName to newName.
+// If allowRenameOfShardColumn is false, this method will return an error if
+// the column being renamed is a generated column for a hash sharded index.
+func (p *planner) renameColumn(
+	ctx context.Context, tableDesc *tabledesc.Mutable, oldName, newName tree.Name,
+) (changed bool, err error) {
+	col, err := p.findColumnToRename(ctx, tableDesc, oldName, newName)
+	if err != nil || col == nil {
 		return false, err
 	}
-
-	// Rename the column in CHECK constraints.
-	for i := range tableDesc.Checks {
-		var err error
-		tableDesc.Checks[i].Expr, err = schemaexpr.RenameColumn(tableDesc.Checks[i].Expr, *oldName, *newName)
-		if err != nil {
+	if tableDesc.IsShardColumn(col) {
+		return false, pgerror.Newf(pgcode.ReservedName, "cannot rename shard column")
+	}
+	if err := tabledesc.RenameColumnInTable(tableDesc, col, newName, func(shardCol catalog.Column, newShardColName tree.Name) (bool, error) {
+		if c, err := p.findColumnToRename(ctx, tableDesc, shardCol.ColName(), newShardColName); err != nil || c == nil {
 			return false, err
 		}
-	}
-
-	// Rename the column in computed columns.
-	for i := range tableDesc.Columns {
-		if otherCol := &tableDesc.Columns[i]; otherCol.IsComputed() {
-			newExpr, err := schemaexpr.RenameColumn(*otherCol.ComputeExpr, *oldName, *newName)
-			if err != nil {
-				return false, err
-			}
-			otherCol.ComputeExpr = &newExpr
-		}
-	}
-
-	// Rename the column in partial index predicates.
-	for _, index := range tableDesc.PublicNonPrimaryIndexes() {
-		if index.IsPartial() {
-			newExpr, err := schemaexpr.RenameColumn(index.GetPredicate(), *oldName, *newName)
-			if err != nil {
-				return false, err
-			}
-			index.IndexDesc().Predicate = newExpr
-		}
-	}
-
-	// Do all of the above renames inside check constraints, computed expressions,
-	// and index predicates that are in mutations.
-	for i := range tableDesc.Mutations {
-		m := &tableDesc.Mutations[i]
-		if constraint := m.GetConstraint(); constraint != nil {
-			if constraint.ConstraintType == descpb.ConstraintToUpdate_CHECK ||
-				constraint.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL {
-				var err error
-				constraint.Check.Expr, err = schemaexpr.RenameColumn(constraint.Check.Expr, *oldName, *newName)
-				if err != nil {
-					return false, err
-				}
-			}
-		} else if otherCol := m.GetColumn(); otherCol != nil {
-			if otherCol.IsComputed() {
-				newExpr, err := schemaexpr.RenameColumn(*otherCol.ComputeExpr, *oldName, *newName)
-				if err != nil {
-					return false, err
-				}
-				otherCol.ComputeExpr = &newExpr
-			}
-		} else if index := m.GetIndex(); index != nil {
-			if index.IsPartial() {
-				var err error
-				index.Predicate, err = schemaexpr.RenameColumn(index.Predicate, *oldName, *newName)
-				if err != nil {
-					return false, err
-				}
-			}
-		}
-	}
-
-	// Rename the column in hash-sharded index descriptors. Potentially rename the
-	// shard column too if we haven't already done it.
-	shardColumnsToRename := make(map[tree.Name]tree.Name) // map[oldShardColName]newShardColName
-	maybeUpdateShardedDesc := func(shardedDesc *descpb.ShardedDescriptor) {
-		if !shardedDesc.IsSharded {
-			return
-		}
-		oldShardColName := tree.Name(tabledesc.GetShardColumnName(
-			shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
-		var changed bool
-		for i, c := range shardedDesc.ColumnNames {
-			if c == string(*oldName) {
-				changed = true
-				shardedDesc.ColumnNames[i] = string(*newName)
-			}
-		}
-		if !changed {
-			return
-		}
-		newName, alreadyRenamed := shardColumnsToRename[oldShardColName]
-		if !alreadyRenamed {
-			newName = tree.Name(tabledesc.GetShardColumnName(
-				shardedDesc.ColumnNames, shardedDesc.ShardBuckets))
-			shardColumnsToRename[oldShardColName] = newName
-		}
-		// Keep the shardedDesc name in sync with the column name.
-		shardedDesc.Name = string(newName)
-	}
-	for _, idx := range tableDesc.NonDropIndexes() {
-		maybeUpdateShardedDesc(&idx.IndexDesc().Sharded)
-	}
-
-	// Rename the column in the indexes.
-	tableDesc.RenameColumnDescriptor(col, string(*newName))
-
-	// Rename any shard columns which need to be renamed because their name was
-	// based on this column.
-	for oldShardColName, newShardColName := range shardColumnsToRename {
-		// Recursively call p.renameColumn. We don't need to worry about deeper than
-		// one recursive call because shard columns cannot refer to each other.
-		const allowRenameOfShardColumn = true
-		_, err = p.renameColumn(ctx, tableDesc, &oldShardColName, &newShardColName,
-			allowRenameOfShardColumn)
-		if err != nil {
-			return false, err
-		}
-	}
-
-	// Rename the REGIONAL BY ROW column reference.
-	if tableDesc.IsLocalityRegionalByRow() {
-		rbrColName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
-		if err != nil {
-			return false, err
-		}
-		if rbrColName == *oldName {
-			tableDesc.SetTableLocalityRegionalByRow(*newName)
-		}
+		return true, nil
+	}); err != nil {
+		return false, err
 	}
 	return true, nil
 }

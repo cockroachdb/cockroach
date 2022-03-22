@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for ntile.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
@@ -50,7 +52,7 @@ func NewNTileOperator(args *WindowArgs, argIdx int) colexecop.Operator {
 	} else {
 		windower = &nTileWithPartition{base}
 	}
-	return newBufferedWindowOperator(args, windower, types.Int)
+	return newBufferedWindowOperator(args, windower, types.Int, args.MemoryLimit)
 }
 
 // nTileBase extracts common fields and methods of the two variations of ntile
@@ -254,4 +256,4 @@ func (b *nTileBase) startNewPartition() {
 
 func (b *nTileBase) Init(ctx context.Context) {}
 
-func (b *nTileBase) Close() {}
+func (b *nTileBase) Close(context.Context) {}

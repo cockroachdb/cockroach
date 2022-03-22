@@ -13,6 +13,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -23,25 +24,32 @@ import (
 
 	cloudstorage "github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
+	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // The following env variable names match those specified in the TeamCity
 // configuration for the nightly roachtests. Any changes must be made to both
 // references of the name.
 const (
-	KMSRegionAEnvVar = "AWS_KMS_REGION_A"
-	KMSRegionBEnvVar = "AWS_KMS_REGION_B"
-	KMSKeyARNAEnvVar = "AWS_KMS_KEY_ARN_A"
-	KMSKeyARNBEnvVar = "AWS_KMS_KEY_ARN_B"
+	KMSRegionAEnvVar  = "AWS_KMS_REGION_A"
+	KMSRegionBEnvVar  = "AWS_KMS_REGION_B"
+	KMSKeyARNAEnvVar  = "AWS_KMS_KEY_ARN_A"
+	KMSKeyARNBEnvVar  = "AWS_KMS_KEY_ARN_B"
+	KMSKeyNameAEnvVar = "GOOGLE_KMS_KEY_A"
+	KMSKeyNameBEnvVar = "GOOGLE_KMS_KEY_B"
+	KMSGCSCredentials = "GOOGLE_EPHEMERAL_CREDENTIALS"
 
 	// rows2TiB is the number of rows to import to load 2TB of data (when
 	// replicated).
@@ -53,34 +61,43 @@ const (
 	rows3GiB   = rows30GiB / 10
 )
 
-func importBankDataSplit(
-	ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster,
-) string {
+func destinationName(c cluster.Cluster) string {
 	dest := c.Name()
-	// Randomize starting with encryption-at-rest enabled.
-	c.EncryptAtRandom(true)
-
 	if c.IsLocal() {
 		dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 	}
+	return dest
+}
+
+func importBankDataSplit(
+	ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster,
+) string {
+	dest := destinationName(c)
 
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
-	c.Start(ctx)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	runImportBankDataSplit(ctx, rows, ranges, t, c)
+	return dest
+}
+
+func runImportBankDataSplit(ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 	time.Sleep(time.Second) // wait for csv server to open listener
-
 	importArgs := []string{
 		"./workload", "fixtures", "import", "bank",
-		"--db=bank", "--payload-bytes=10240", fmt.Sprintf("--ranges=%d", ranges), "--csv-server", "http://localhost:8081",
-		fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
+		"--db=bank",
+		"--payload-bytes=10240",
+		"--csv-server", "http://localhost:8081",
+		"--seed=1",
+		fmt.Sprintf("--ranges=%d", ranges),
+		fmt.Sprintf("--rows=%d", rows),
+		"{pgurl:1}",
 	}
 	c.Run(ctx, c.Node(1), importArgs...)
-
-	return dest
 }
 
 func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluster) string {
@@ -103,16 +120,17 @@ func registerBackupNodeShutdown(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
-		Owner:   registry.OwnerBulkIO,
-		Cluster: backupNodeRestartSpec,
+		Name:            fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         backupNodeRestartSpec,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
-			startBackup := func(c cluster.Cluster) (jobID string, err error) {
-				gatewayDB := c.Conn(ctx, gatewayNode)
+			startBackup := func(c cluster.Cluster, t test.Test) (jobID string, err error) {
+				gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
 				defer gatewayDB.Close()
 
 				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
@@ -123,16 +141,17 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
-		Owner:   registry.OwnerBulkIO,
-		Cluster: backupNodeRestartSpec,
+		Name:            fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         backupNodeRestartSpec,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
-			startBackup := func(c cluster.Cluster) (jobID string, err error) {
-				gatewayDB := c.Conn(ctx, gatewayNode)
+			startBackup := func(c cluster.Cluster, t test.Test) (jobID string, err error) {
+				gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
 				defer gatewayDB.Close()
 
 				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
@@ -143,6 +162,64 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		},
 	})
 
+}
+
+func registerBackupMixedVersion(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:            "backup/mixed-version",
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         r.MakeClusterSpec(4),
+		EncryptAtRandom: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// An empty string means that the cockroach binary specified by flag
+			// `cockroach` will be used.
+			const mainVersion = ""
+			roachNodes := c.All()
+			predV, err := PredecessorVersion(*t.BuildVersion())
+			require.NoError(t, err)
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
+			loadBackupDataStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+				rows := rows3GiB
+				if c.IsLocal() {
+					rows = 100
+				}
+				runImportBankDataSplit(ctx, rows, 0 /* ranges */, t, u.c)
+			}
+			successfulBackupStep := func(nodeID int, opts ...string) versionStep {
+				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+					backupOpts := ""
+					if len(opts) > 0 {
+						backupOpts = fmt.Sprintf("WITH %s", strings.Join(opts, ", "))
+					}
+					backupQuery := fmt.Sprintf("BACKUP bank.bank TO 'nodelocal://%d/%s' %s",
+						nodeID, destinationName(c), backupOpts)
+
+					gatewayDB := c.Conn(ctx, t.L(), nodeID)
+					defer gatewayDB.Close()
+					t.Status("Running: ", backupQuery)
+					_, err := gatewayDB.ExecContext(ctx, backupQuery)
+					require.NoError(t, err)
+				}
+			}
+			u := newVersionUpgradeTest(c,
+				uploadAndStartFromCheckpointFixture(roachNodes, predV),
+				waitForUpgradeStep(roachNodes),
+				preventAutoUpgradeStep(1),
+				loadBackupDataStep,
+				// Upgrade some of the nodes.
+				binaryUpgradeStep(c.Nodes(1, 2), mainVersion),
+				// Backup from new node should succeed.
+				successfulBackupStep(1),
+				// Backup from new node with revision history should succeed.
+				successfulBackupStep(2, "revision_history"),
+				// Backup from old node should succeed.
+				successfulBackupStep(3),
+				// Backup from old node with revision history should succeed.
+				successfulBackupStep(4, "revision_history"),
+			)
+			u.run(ctx, t)
+		},
+	})
 }
 
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
@@ -172,9 +249,10 @@ func registerBackup(r registry.Registry) {
 
 	backup2TBSpec := r.MakeClusterSpec(10)
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
-		Owner:   registry.OwnerBulkIO,
-		Cluster: backup2TBSpec,
+		Name:            fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         backup2TBSpec,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
 			if c.IsLocal() {
@@ -210,136 +288,158 @@ func registerBackup(r registry.Registry) {
 	})
 
 	KMSSpec := r.MakeClusterSpec(3)
-	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
-		Owner:   registry.OwnerBulkIO,
-		Cluster: KMSSpec,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud == spec.GCE {
-				t.Skip("backupKMS roachtest is only configured to run on AWS", "")
-			}
+	for _, item := range []struct {
+		kmsProvider string
+		machine     string
+	}{
+		{kmsProvider: "GCS", machine: spec.GCE},
+		{kmsProvider: "AWS", machine: spec.AWS},
+	} {
+		item := item
+		r.Add(registry.TestSpec{
+			Name:            fmt.Sprintf("backup/KMS/%s/%s", item.kmsProvider, KMSSpec.String()),
+			Owner:           registry.OwnerBulkIO,
+			Cluster:         KMSSpec,
+			EncryptAtRandom: true,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.Spec().Cloud != item.machine {
+					t.Skip("backupKMS roachtest is only configured to run on "+item.machine, "")
+				}
 
-			// ~10GiB - which is 30Gib replicated.
-			rows := rows30GiB
-			if c.IsLocal() {
-				rows = 100
-			}
-			dest := importBankData(ctx, rows, t, c)
+				// ~10GiB - which is 30Gib replicated.
+				rows := rows30GiB
+				if c.IsLocal() {
+					rows = 100
+				}
+				dest := importBankData(ctx, rows, t, c)
 
-			conn := c.Conn(ctx, 1)
-			m := c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				_, err := conn.ExecContext(ctx, `
+				conn := c.Conn(ctx, t.L(), 1)
+				m := c.NewMonitor(ctx)
+				m.Go(func(ctx context.Context) error {
+					_, err := conn.ExecContext(ctx, `
 					CREATE DATABASE restoreA;
 					CREATE DATABASE restoreB;
 				`)
-				return err
-			})
-			m.Wait()
-
-			var kmsURIA, kmsURIB string
-			var err error
-			m = c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`running encrypted backup`)
-				kmsURIA, err = getAWSKMSURI(KMSRegionAEnvVar, KMSKeyARNAEnvVar)
-				if err != nil {
 					return err
-				}
+				})
+				m.Wait()
+				var kmsURIA, kmsURIB string
+				var err error
+				backupPath := fmt.Sprintf("nodelocal://1/kmsbackup/%s/%s", item.kmsProvider, dest)
 
-				kmsURIB, err = getAWSKMSURI(KMSRegionBEnvVar, KMSKeyARNBEnvVar)
-				if err != nil {
-					return err
-				}
+				m = c.NewMonitor(ctx)
+				m.Go(func(ctx context.Context) error {
+					switch item.kmsProvider {
+					case "AWS":
+						t.Status(`running encrypted backup with AWS KMS`)
+						kmsURIA, err = getAWSKMSURI(KMSRegionAEnvVar, KMSKeyARNAEnvVar)
+						if err != nil {
+							return err
+						}
 
-				kmsOptions := fmt.Sprintf("KMS=('%s', '%s')", kmsURIA, kmsURIB)
-				_, err := conn.ExecContext(ctx,
-					`BACKUP bank.bank TO 'nodelocal://1/kmsbackup/`+dest+`' WITH `+kmsOptions)
-				return err
-			})
-			m.Wait()
+						kmsURIB, err = getAWSKMSURI(KMSRegionBEnvVar, KMSKeyARNBEnvVar)
+						if err != nil {
+							return err
+						}
+					case "GCS":
+						t.Status(`running encrypted backup with GCS KMS`)
+						kmsURIA, err = getGCSKMSURI(KMSKeyNameAEnvVar)
+						if err != nil {
+							return err
+						}
 
-			// Restore the encrypted BACKUP using each of KMS URI A and B separately.
-			m = c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`restore using KMSURIA`)
-				if _, err := conn.ExecContext(ctx,
-					`RESTORE bank.bank FROM $1 WITH into_db=restoreA, kms=$2`,
-					`nodelocal://1/kmsbackup/`+dest, kmsURIA,
-				); err != nil {
-					return err
-				}
-
-				t.Status(`restore using KMSURIB`)
-				if _, err := conn.ExecContext(ctx,
-					`RESTORE bank.bank FROM $1 WITH into_db=restoreB, kms=$2`,
-					`nodelocal://1/kmsbackup/`+dest, kmsURIB,
-				); err != nil {
-					return err
-				}
-
-				t.Status(`fingerprint`)
-				fingerprint := func(db string) (string, error) {
-					var b strings.Builder
-
-					query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, "bank")
-					rows, err := conn.QueryContext(ctx, query)
-					if err != nil {
-						return "", err
+						kmsURIB, err = getGCSKMSURI(KMSKeyNameBEnvVar)
+						if err != nil {
+							return err
+						}
 					}
-					defer rows.Close()
-					for rows.Next() {
-						var name, fp string
-						if err := rows.Scan(&name, &fp); err != nil {
+
+					kmsOptions := fmt.Sprintf("KMS=('%s', '%s')", kmsURIA, kmsURIB)
+					_, err := conn.ExecContext(ctx, `BACKUP bank.bank TO '`+backupPath+`' WITH `+kmsOptions)
+					return err
+				})
+				m.Wait()
+
+				// Restore the encrypted BACKUP using each of KMS URI A and B separately.
+				m = c.NewMonitor(ctx)
+				m.Go(func(ctx context.Context) error {
+					t.Status(`restore using KMSURIA`)
+					if _, err := conn.ExecContext(ctx,
+						`RESTORE bank.bank FROM $1 WITH into_db=restoreA, kms=$2`,
+						backupPath, kmsURIA,
+					); err != nil {
+						return err
+					}
+
+					t.Status(`restore using KMSURIB`)
+					if _, err := conn.ExecContext(ctx,
+						`RESTORE bank.bank FROM $1 WITH into_db=restoreB, kms=$2`,
+						backupPath, kmsURIB,
+					); err != nil {
+						return err
+					}
+
+					t.Status(`fingerprint`)
+					fingerprint := func(db string) (string, error) {
+						var b strings.Builder
+
+						query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, "bank")
+						rows, err := conn.QueryContext(ctx, query)
+						if err != nil {
 							return "", err
 						}
-						fmt.Fprintf(&b, "%s: %s\n", name, fp)
+						defer rows.Close()
+						for rows.Next() {
+							var name, fp string
+							if err := rows.Scan(&name, &fp); err != nil {
+								return "", err
+							}
+							fmt.Fprintf(&b, "%s: %s\n", name, fp)
+						}
+
+						return b.String(), rows.Err()
 					}
 
-					return b.String(), rows.Err()
-				}
+					originalBank, err := fingerprint("bank")
+					if err != nil {
+						return err
+					}
+					restoreA, err := fingerprint("restoreA")
+					if err != nil {
+						return err
+					}
+					restoreB, err := fingerprint("restoreB")
+					if err != nil {
+						return err
+					}
 
-				originalBank, err := fingerprint("bank")
-				if err != nil {
-					return err
-				}
-				restoreA, err := fingerprint("restoreA")
-				if err != nil {
-					return err
-				}
-				restoreB, err := fingerprint("restoreB")
-				if err != nil {
-					return err
-				}
-
-				if originalBank != restoreA {
-					return errors.Errorf("got %s, expected %s while comparing restoreA with originalBank", restoreA, originalBank)
-				}
-				if originalBank != restoreB {
-					return errors.Errorf("got %s, expected %s while comparing restoreB with originalBank", restoreB, originalBank)
-				}
-
-				return nil
-			})
-			m.Wait()
-		},
-	})
+					if originalBank != restoreA {
+						return errors.Errorf("got %s, expected %s while comparing restoreA with originalBank", restoreA, originalBank)
+					}
+					if originalBank != restoreB {
+						return errors.Errorf("got %s, expected %s while comparing restoreB with originalBank", restoreB, originalBank)
+					}
+					return nil
+				})
+				m.Wait()
+			},
+		})
+	}
 
 	// backupTPCC continuously runs TPCC, takes a full backup after some time,
 	// and incremental after more time. It then restores the two backups and
 	// verifies them with a fingerprint.
 	r.Add(registry.TestSpec{
-		Name:    `backupTPCC`,
-		Owner:   registry.OwnerBulkIO,
-		Cluster: r.MakeClusterSpec(3),
-		Timeout: 1 * time.Hour,
+		Name:            `backupTPCC`,
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         r.MakeClusterSpec(3),
+		Timeout:         1 * time.Hour,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			// Randomize starting with encryption-at-rest enabled.
-			c.EncryptAtRandom(true)
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-			c.Start(ctx)
-			conn := c.Conn(ctx, 1)
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+			conn := c.Conn(ctx, t.L(), 1)
 
 			duration := 5 * time.Minute
 			if c.IsLocal() {
@@ -557,9 +657,35 @@ func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
 		return "", errors.Newf("env variable %s must be present to run the KMS test", keyIDEnvVariable)
 	}
 
-	// Set AUTH to implicit
+	// Set AUTH to specified
 	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
 	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
+
+	return correctURI, nil
+}
+
+func getGCSKMSURI(keyIDEnvVariable string) (string, error) {
+	q := make(url.Values)
+	expect := map[string]string{
+		KMSGCSCredentials: gcp.CredentialsParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			return "", errors.Newf("env variable %s must be present to run the KMS test", env)
+		}
+		// Nightlies load in json file of credentials but we want base64 encoded
+		q.Add(param, base64.StdEncoding.EncodeToString([]byte(v)))
+	}
+
+	keyID := os.Getenv(keyIDEnvVariable)
+	if keyID == "" {
+		return "", errors.Newf("", "%s env var must be set", keyIDEnvVariable)
+	}
+
+	// Set AUTH to specified
+	q.Set(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
+	correctURI := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 
 	return correctURI, nil
 }

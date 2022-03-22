@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -74,6 +73,12 @@ import (
 //
 //    Executes SQL statements and then outputs information about reported sql
 //    statement statistics.
+//
+//  - rewrite
+//
+//    Installs a rule to rewrite all matches of the regexp in the first
+//    line to the string in the second line. This is useful to eliminate
+//    non-determinism in the output.
 //
 func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bool) {
 	// Note: these tests cannot be run in parallel (with each other or with other
@@ -127,6 +132,14 @@ type telemetryTest struct {
 	tenantDB       *gosql.DB
 	tempDirCleanup func()
 	allowlist      featureAllowlist
+	rewrites       []rewrite
+}
+
+// rewrite is used to rewrite portions of the output.
+// It can be used to remove non-deterministic output.
+type rewrite struct {
+	pattern     *regexp.Regexp
+	replacement string
 }
 
 func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
@@ -156,9 +169,6 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 	tt.serverDB = tt.cluster.ServerConn(0)
 	tt.prepareCluster(tt.serverDB)
 
-	// Prevent a logging assertion that the server ID is initialized multiple times.
-	log.TestingClearServerIdentifiers()
-
 	tt.tenant, tt.tenantDB = serverutils.StartTenant(tt.t, tt.server, base.TestTenantArgs{
 		TenantID:                    serverutils.TestTenantID(),
 		AllowSettingClusterSettings: true,
@@ -178,7 +188,17 @@ func (tt *telemetryTest) RunTest(
 	db *gosql.DB,
 	reportDiags func(ctx context.Context),
 	sqlServer *sql.Server,
-) string {
+) (out string) {
+	defer func() {
+		if out == "" {
+			return
+		}
+		for _, r := range tt.rewrites {
+			in := out
+			out = r.pattern.ReplaceAllString(out, r.replacement)
+			tt.t.Log(r.pattern, r.replacement, in == out, r.pattern.MatchString(out), out)
+		}
+	}()
 	ctx := context.Background()
 	switch td.Cmd {
 	case "exec":
@@ -259,6 +279,21 @@ func (tt *telemetryTest) RunTest(
 		last := tt.diagSrv.LastRequestData()
 		buf.WriteString(formatSQLStats(last.SqlStats))
 		return buf.String()
+
+	case "rewrite":
+		lines := strings.Split(td.Input, "\n")
+		if len(lines) != 2 {
+			td.Fatalf(tt.t, "rewrite: expected two lines")
+		}
+		pattern, err := regexp.Compile(lines[0])
+		if err != nil {
+			td.Fatalf(tt.t, "rewrite: invalid pattern: %v", err)
+		}
+		tt.rewrites = append(tt.rewrites, rewrite{
+			pattern:     pattern,
+			replacement: lines[1],
+		})
+		return ""
 
 	default:
 		td.Fatalf(tt.t, "unknown command %s", td.Cmd)

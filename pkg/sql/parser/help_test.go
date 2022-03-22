@@ -36,6 +36,12 @@ func TestContextualHelp(t *testing.T) {
 	}{
 		{`ALTER ??`, `ALTER`},
 
+		{`ALTER CHANGEFEED ??`, `ALTER CHANGEFEED`},
+		{`ALTER CHANGEFEED 123 ADD ??`, `ALTER CHANGEFEED`},
+		{`ALTER CHANGEFEED 123 DROP ??`, `ALTER CHANGEFEED`},
+
+		{`ALTER BACKUP foo ADD NEW_KMS=bar WITH OLD_KMS=foobar ??`, `ALTER BACKUP`},
+
 		{`ALTER TABLE IF ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ADD ??`, `ALTER TABLE`},
@@ -43,6 +49,13 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER TABLE blah RENAME TO ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah RENAME TO blih ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah SPLIT AT (SELECT 1) ??`, `ALTER TABLE`},
+
+		{`ALTER TENANT 1 ??`, `ALTER TENANT`},
+		{`ALTER TENANT 1 SET ??`, `ALTER TENANT`},
+		{`ALTER TENANT 1 RESET ??`, `ALTER TENANT`},
+		{`ALTER TENANT ALL ??`, `ALTER TENANT`},
+		{`ALTER TENANT ALL SET ??`, `ALTER TENANT`},
+		{`ALTER TENANT ALL RESET ??`, `ALTER TENANT`},
 
 		{`ALTER TYPE ??`, `ALTER TYPE`},
 		{`ALTER TYPE t ??`, `ALTER TYPE`},
@@ -107,6 +120,7 @@ func TestContextualHelp(t *testing.T) {
 		{`CANCEL SESSIONS ??`, `CANCEL SESSIONS`},
 		{`CANCEL SESSIONS IF ??`, `CANCEL SESSIONS`},
 		{`CANCEL SESSIONS IF EXISTS ??`, `CANCEL SESSIONS`},
+		{`CANCEL ALL ??`, `CANCEL ALL JOBS`},
 
 		{`CREATE UNIQUE ??`, `CREATE`},
 		{`CREATE UNIQUE INDEX ??`, `CREATE INDEX`},
@@ -217,6 +231,19 @@ func TestContextualHelp(t *testing.T) {
 		{`DEALLOCATE ALL ??`, `DEALLOCATE`},
 		{`DEALLOCATE PREPARE ??`, `DEALLOCATE`},
 
+		{`DECLARE ??`, `DECLARE`},
+		{`DECLARE foo ??`, `DECLARE`},
+		{`DECLARE foo BINARY ??`, `DECLARE`},
+		{`DECLARE foo BINARY CURSOR ??`, `DECLARE`},
+
+		{`CLOSE ??`, `CLOSE`},
+
+		{`FETCH ??`, `FETCH`},
+		{`FETCH 1 ??`, `FETCH`},
+
+		{`MOVE ??`, `MOVE`},
+		{`MOVE 1 ??`, `MOVE`},
+
 		{`INSERT INTO ??`, `INSERT`},
 		{`INSERT INTO blah (??`, `<SELECTCLAUSE>`},
 		{`INSERT INTO blah VALUES (1) RETURNING ??`, `INSERT`},
@@ -246,6 +273,7 @@ func TestContextualHelp(t *testing.T) {
 		{`PAUSE JOBS ??`, `PAUSE JOBS`},
 		{`PAUSE SCHEDULE ??`, `PAUSE SCHEDULES`},
 		{`PAUSE SCHEDULES ??`, `PAUSE SCHEDULES`},
+		{`PAUSE ALL ??`, `PAUSE ALL JOBS`},
 
 		{`REASSIGN OWNED BY ?? TO ??`, `REASSIGN OWNED BY`},
 		{`REASSIGN OWNED BY foo, bar TO ??`, `REASSIGN OWNED BY`},
@@ -256,6 +284,7 @@ func TestContextualHelp(t *testing.T) {
 		{`RESUME JOBS ??`, `RESUME JOBS`},
 		{`RESUME SCHEDULE ??`, `RESUME SCHEDULES`},
 		{`RESUME SCHEDULES ??`, `RESUME SCHEDULES`},
+		{`RESUME ALL ??`, `RESUME ALL JOBS`},
 
 		{`REVOKE ALL ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM ??`, `REVOKE`},
@@ -308,6 +337,10 @@ func TestContextualHelp(t *testing.T) {
 
 		{`SHOW CLUSTER SETTING all ??`, `SHOW CLUSTER SETTING`},
 		{`SHOW ALL CLUSTER ??`, `SHOW CLUSTER SETTING`},
+		{`SHOW CLUSTER SETTING a FOR TENANT ??`, `SHOW CLUSTER SETTING`},
+		{`SHOW ALL CLUSTER SETTINGS FOR TENANT ??`, `SHOW CLUSTER SETTING`},
+		{`SHOW CLUSTER SETTINGS FOR TENANT ??`, `SHOW CLUSTER SETTING`},
+		{`SHOW PUBLIC CLUSTER SETTINGS FOR TENANT ??`, `SHOW CLUSTER SETTING`},
 
 		{`SHOW COLUMNS FROM ??`, `SHOW COLUMNS`},
 		{`SHOW COLUMNS FROM foo ??`, `SHOW COLUMNS`},
@@ -366,6 +399,11 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW SYNTAX 'foo' ??`, `SHOW SYNTAX`},
 		{`SHOW SAVEPOINT STATUS ??`, `SHOW SAVEPOINT`},
 
+		{`SHOW TRANSFER ??`, `SHOW TRANSFER`},
+		{`SHOW TRANSFER STATE ??`, `SHOW TRANSFER`},
+		{`SHOW TRANSFER STATE WITH ??`, `SHOW TRANSFER`},
+		{`SHOW TRANSFER STATE WITH 'foo' ??`, `SHOW TRANSFER`},
+
 		{`SHOW RANGE ??`, `SHOW RANGE`},
 
 		{`SHOW RANGES ??`, `SHOW RANGES`},
@@ -399,6 +437,8 @@ func TestContextualHelp(t *testing.T) {
 		{`SET SESSION TIME ZONE 'UTC' ??`, `SET SESSION`},
 		{`SET SESSION blah TO ??`, `SET SESSION`},
 		{`SET SESSION blah TO 42 ??`, `SET SESSION`},
+		{`SET LOCAL TIME ??`, `SET LOCAL`},
+		{`SET LOCAL TIME ZONE 'UTC' ??`, `SET LOCAL`},
 
 		{`SET TRANSACTION ??`, `SET TRANSACTION`},
 		{`SET TRANSACTION ISOLATION LEVEL SNAPSHOT ??`, `SET TRANSACTION`},
@@ -445,7 +485,6 @@ func TestContextualHelp(t *testing.T) {
 		{`RESTORE foo FROM 'bar' ??`, `RESTORE`},
 		{`RESTORE DATABASE ??`, `RESTORE`},
 
-		{`IMPORT TABLE foo CREATE USING 'foo.sql' CSV DATA ('foo') ??`, `IMPORT`},
 		{`IMPORT TABLE ??`, `IMPORT`},
 
 		{`EXPORT ??`, `EXPORT`},

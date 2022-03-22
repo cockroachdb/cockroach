@@ -26,7 +26,16 @@ echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packa
 
 # Install packages and clean up
 apt-get update -y
-apt-get install google-cloud-sdk awscli azure-cli -y
+apt-get install -y google-cloud-sdk azure-cli unzip
 rm -rf /var/lib/apt/lists/*
 
-go get github.com/cockroachdb/cockroach/pkg/cmd/roachprod
+# Debian ships with awscli version 1.x, which is unsupported by roachprod.
+# Install aws-cli using the official instructions from
+# https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-linux.html
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.0.30.zip" -o "awscliv2.zip"
+sha256sum -c - <<EOF
+7ee475f22c1b35cc9e53affbf96a9ffce91706e154a9441d0d39cbf8366b718e  awscliv2.zip
+EOF
+unzip awscliv2.zip
+./aws/install
+rm -rf aws awscliv2.zip

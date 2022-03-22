@@ -378,7 +378,7 @@ SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b AND larg
 27  NULL
 30  NULL
 
-## Left join with ON filter on non-covering index
+## Left join with ON filter on non-covering index. Will execute as paired-joins.
 query II rowsort
 SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
 ----
@@ -393,48 +393,25 @@ SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND larg
 27  NULL
 30  NULL
 
-# Lookup joins against interleaved tables. Regression test for #28981.
-# This is now tested more thoroughly by joinreader_test.go.
-
-statement ok
-CREATE TABLE parent (a INT, b INT, PRIMARY KEY(a, b))
-
-statement ok
-CREATE TABLE child (a INT, b INT, c INT, PRIMARY KEY(a, b, c)) INTERLEAVE IN PARENT parent(a, b)
-
-statement ok
-CREATE TABLE source (a INT)
-
-statement ok
-ALTER TABLE source INJECT STATISTICS '[
-  {
-    "columns": ["a"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1,
-    "distinct_count": 1
-  }
-]'
-
-statement ok
-ALTER TABLE child INJECT STATISTICS '[
-  {
-    "columns": ["a", "b", "c"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 10,
-    "distinct_count": 10
-  }
-]'
-
-statement ok
-INSERT INTO child VALUES(1, 2, 3)
-
-statement ok
-INSERT INTO source VALUES(1)
-
-query IIII
-SELECT * FROM source JOIN child ON source.a = child.a
+## Left semi join with ON filter on non-covering index. Will execute as paired-joins.
+query I rowsort
+SELECT small.c FROM small WHERE EXISTS(SELECT 1 FROM large WHERE small.c = large.b AND large.d < 30)
 ----
-1 1 2 3
+6
+12
+
+## Left anti join with ON filter on non-covering index. Will execute as paired-joins.
+query I rowsort
+SELECT small.c FROM small WHERE NOT EXISTS(SELECT 1 FROM large WHERE small.c = large.b AND large.d < 30)
+----
+3
+9
+15
+18
+21
+24
+27
+30
 
 ###########################################################
 #  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #

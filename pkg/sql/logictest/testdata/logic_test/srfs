@@ -967,10 +967,10 @@ SELECT tbl, idx, (i.keys).n
 	  JOIN pg_class ct2 ON ix.indexrelid = ct2.oid) AS i
 ORDER BY 1,2,3
 ----
-tbl   idx      n
-vals  primary  1
-vals  woo      1
-vals  woo      2
+tbl   idx        n
+vals  vals_pkey  1
+vals  woo        1
+vals  woo        2
 
 subtest dbviz_example_query
 
@@ -1016,7 +1016,7 @@ SELECT NULL AS TABLE_CAT,
    WHERE true AND ct.relname = 'j' AND i.indisprimary
 ORDER BY table_name, pk_name, key_seq
 ----
-NULL  public  j  x  1  primary
+NULL  public  j  x  1  j_pkey
 
 subtest liquibase_example_query
 

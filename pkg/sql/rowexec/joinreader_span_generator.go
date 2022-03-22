@@ -16,11 +16,14 @@ import (
 	"sort"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -35,6 +38,10 @@ type joinReaderSpanGenerator interface {
 	// are returned in rows order, but there are no duplicates (i.e. if a 2nd row
 	// results in the same spans as a previous row, the results don't include them
 	// a second time).
+	//
+	// The returned spans are not accounted for, so it is the caller's
+	// responsibility to register the spans memory usage with our memory
+	// accounting system.
 	generateSpans(ctx context.Context, rows []rowenc.EncDatumRow) (roachpb.Spans, error)
 
 	// getMatchingRowIndices returns the indices of the input rows that desire
@@ -45,6 +52,9 @@ type joinReaderSpanGenerator interface {
 	// maxLookupCols returns the maximum number of index columns used as the key
 	// for each lookup.
 	maxLookupCols() int
+
+	// close releases any resources associated with the joinReaderSpanGenerator.
+	close(context.Context)
 }
 
 var _ joinReaderSpanGenerator = &defaultSpanGenerator{}
@@ -52,9 +62,9 @@ var _ joinReaderSpanGenerator = &multiSpanGenerator{}
 var _ joinReaderSpanGenerator = &localityOptimizedSpanGenerator{}
 
 type defaultSpanGenerator struct {
-	spanBuilder *span.Builder
-	numKeyCols  int
-	lookupCols  []uint32
+	spanBuilder  span.Builder
+	spanSplitter span.Splitter
+	lookupCols   []uint32
 
 	indexKeyRow rowenc.EncDatumRow
 	// keyToInputRowIndices maps a lookup span key to the input row indices that
@@ -67,7 +77,33 @@ type defaultSpanGenerator struct {
 
 	scratchSpans roachpb.Spans
 
+	// memAcc is owned by this span generator and is closed when the generator
+	// is closed.
 	memAcc *mon.BoundAccount
+}
+
+func (g *defaultSpanGenerator) init(
+	evalCtx *tree.EvalContext,
+	codec keys.SQLCodec,
+	fetchSpec *descpb.IndexFetchSpec,
+	splitFamilyIDs []descpb.FamilyID,
+	keyToInputRowIndices map[string][]int,
+	lookupCols []uint32,
+	memAcc *mon.BoundAccount,
+) error {
+	g.spanBuilder.InitWithFetchSpec(evalCtx, codec, fetchSpec)
+	g.spanSplitter = span.MakeSplitterWithFamilyIDs(len(fetchSpec.KeyFullColumns()), splitFamilyIDs)
+	g.lookupCols = lookupCols
+	if len(lookupCols) > len(fetchSpec.KeyAndSuffixColumns) {
+		return errors.AssertionFailedf(
+			"%d lookup columns specified, expecting at most %d", len(lookupCols), len(fetchSpec.KeyAndSuffixColumns),
+		)
+	}
+	g.indexKeyRow = nil
+	g.keyToInputRowIndices = keyToInputRowIndices
+	g.scratchSpans = nil
+	g.memAcc = memAcc
+	return nil
 }
 
 // Generate spans for a given row.
@@ -79,17 +115,11 @@ type defaultSpanGenerator struct {
 func (g *defaultSpanGenerator) generateSpan(
 	row rowenc.EncDatumRow,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	numLookupCols := len(g.lookupCols)
-	if numLookupCols > g.numKeyCols {
-		return roachpb.Span{}, false, errors.Errorf(
-			"%d lookup columns specified, expecting at most %d", numLookupCols, g.numKeyCols)
-	}
-
 	g.indexKeyRow = g.indexKeyRow[:0]
 	for _, id := range g.lookupCols {
 		g.indexKeyRow = append(g.indexKeyRow, row[id])
 	}
-	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow, numLookupCols)
+	return g.spanBuilder.SpanFromEncDatums(g.indexKeyRow)
 }
 
 func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool {
@@ -105,9 +135,6 @@ func (g *defaultSpanGenerator) hasNullLookupColumn(row rowenc.EncDatumRow) bool 
 func (g *defaultSpanGenerator) generateSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
-	// Memory accounting.
-	beforeSize := g.memUsage()
-
 	// This loop gets optimized to a runtime.mapclear call.
 	for k := range g.keyToInputRowIndices {
 		delete(g.keyToInputRowIndices, k)
@@ -126,12 +153,12 @@ func (g *defaultSpanGenerator) generateSpans(
 		}
 		if g.keyToInputRowIndices == nil {
 			// Index join.
-			g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+			g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
 				g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
 		} else {
 			inputRowIndices := g.keyToInputRowIndices[string(generatedSpan.Key)]
 			if inputRowIndices == nil {
-				g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+				g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
 					g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
 			}
 			g.keyToInputRowIndices[string(generatedSpan.Key)] = append(inputRowIndices, i)
@@ -139,8 +166,7 @@ func (g *defaultSpanGenerator) generateSpans(
 	}
 
 	// Memory accounting.
-	afterSize := g.memUsage()
-	if err := g.memAcc.Resize(ctx, beforeSize, afterSize); err != nil {
+	if err := g.memAcc.ResizeTo(ctx, g.memUsage()); err != nil {
 		return nil, err
 	}
 
@@ -159,6 +185,8 @@ func (g *defaultSpanGenerator) maxLookupCols() int {
 
 // memUsage returns the size of the data structures in the defaultSpanGenerator
 // for memory accounting purposes.
+// NOTE: this does not account for scratchSpans because the joinReader passes
+// the ownership of spans to the fetcher which will account for it accordingly.
 func (g *defaultSpanGenerator) memUsage() int64 {
 	// Account for keyToInputRowIndices.
 	var size int64
@@ -167,10 +195,12 @@ func (g *defaultSpanGenerator) memUsage() int64 {
 		size += memsize.String + int64(len(k))
 		size += memsize.IntSliceOverhead + memsize.Int*int64(cap(v))
 	}
-
-	// Account for scratchSpans.
-	size += g.scratchSpans.MemUsage()
 	return size
+}
+
+func (g *defaultSpanGenerator) close(ctx context.Context) {
+	g.memAcc.Close(ctx)
+	*g = defaultSpanGenerator{}
 }
 
 type spanRowIndex struct {
@@ -211,7 +241,8 @@ func (s spanRowIndices) memUsage() int64 {
 // In this case, the multiSpanGenerator would generate two spans for each input
 // row: [/'east'/<val_a> - /'east'/<val_a>] [/'west'/<val_a> - /'west'/<val_a>].
 type multiSpanGenerator struct {
-	spanBuilder *span.Builder
+	spanBuilder  span.Builder
+	spanSplitter span.Splitter
 
 	// indexColInfos stores info about the values that each index column can
 	// take on in the spans produced by the multiSpanGenerator. See the comment
@@ -245,9 +276,9 @@ type multiSpanGenerator struct {
 	// multiSpanGenerator. indexOrds must be a prefix of the index columns.
 	indexOrds util.FastIntSet
 
-	// tableOrdToIndexOrd maps the ordinals of columns in the table to their
-	// ordinals in the index.
-	tableOrdToIndexOrd util.FastIntMap
+	// fetchedOrdToIndexKeyOrd maps the ordinals of fetched (right-hand side)
+	// columns to ordinals in the index key columns.
+	fetchedOrdToIndexKeyOrd util.FastIntMap
 
 	// numInputCols is the number of columns in the input to the joinReader.
 	numInputCols int
@@ -258,6 +289,8 @@ type multiSpanGenerator struct {
 
 	scratchSpans roachpb.Spans
 
+	// memAcc is owned by this span generator and is closed when the generator
+	// is closed.
 	memAcc *mon.BoundAccount
 }
 
@@ -330,17 +363,20 @@ func (g *multiSpanGenerator) maxLookupCols() int {
 // init must be called before the multiSpanGenerator can be used to generate
 // spans.
 func (g *multiSpanGenerator) init(
-	spanBuilder *span.Builder,
-	numKeyCols int,
+	evalCtx *tree.EvalContext,
+	codec keys.SQLCodec,
+	fetchSpec *descpb.IndexFetchSpec,
+	splitFamilyIDs []descpb.FamilyID,
 	numInputCols int,
 	exprHelper *execinfrapb.ExprHelper,
-	tableOrdToIndexOrd util.FastIntMap,
+	fetchedOrdToIndexKeyOrd util.FastIntMap,
 	memAcc *mon.BoundAccount,
 ) error {
-	g.spanBuilder = spanBuilder
+	g.spanBuilder.InitWithFetchSpec(evalCtx, codec, fetchSpec)
+	g.spanSplitter = span.MakeSplitterWithFamilyIDs(len(fetchSpec.KeyFullColumns()), splitFamilyIDs)
 	g.numInputCols = numInputCols
 	g.keyToInputRowIndices = make(map[string][]int)
-	g.tableOrdToIndexOrd = tableOrdToIndexOrd
+	g.fetchedOrdToIndexKeyOrd = fetchedOrdToIndexKeyOrd
 	g.inequalityColIdx = -1
 	g.memAcc = memAcc
 
@@ -350,7 +386,7 @@ func (g *multiSpanGenerator) init(
 
 	// Process the given expression to fill in g.indexColInfos with info from the
 	// join conditions. This info will be used later to generate the spans.
-	g.indexColInfos = make([]multiSpanGeneratorColInfo, 0, numKeyCols)
+	g.indexColInfos = make([]multiSpanGeneratorColInfo, 0, len(fetchSpec.KeyAndSuffixColumns))
 	if err := g.fillInIndexColInfos(exprHelper.Expr); err != nil {
 		return err
 	}
@@ -363,9 +399,9 @@ func (g *multiSpanGenerator) init(
 			"columns in the join condition do not form a prefix on the index",
 		)
 	}
-	if lookupColsCount > numKeyCols {
+	if lookupColsCount > len(fetchSpec.KeyAndSuffixColumns) {
 		return errors.AssertionFailedf(
-			"%d lookup columns specified, expecting at most %d", lookupColsCount, numKeyCols,
+			"%d lookup columns specified, expecting at most %d", lookupColsCount, len(fetchSpec.KeyAndSuffixColumns),
 		)
 	}
 
@@ -444,9 +480,9 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 		setOfVals := false
 		inequality := false
 		switch t.Operator.Symbol {
-		case tree.EQ, tree.In:
+		case treecmp.EQ, treecmp.In:
 			setOfVals = true
-		case tree.GE, tree.LE, tree.GT, tree.LT:
+		case treecmp.GE, treecmp.LE, treecmp.GT, treecmp.LT:
 			inequality = true
 		default:
 			// This should never happen because of enforcement at opt time.
@@ -499,44 +535,63 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 
 		// NB: we make no attempt to deal with column direction here, that is sorted
 		// out later in the span builder.
-		var inequalityInfo multiSpanGeneratorInequalityColInfo
-		if lval, err := getInfo(t.Left.(tree.TypedExpr)); err != nil {
+
+		lval, err := getInfo(t.Left.(tree.TypedExpr))
+		if err != nil {
 			return err
-		} else if lval != nil {
-			if t.Operator.Symbol == tree.LT || t.Operator.Symbol == tree.LE {
-				inequalityInfo.start = lval
-				inequalityInfo.startInclusive = t.Operator.Symbol == tree.LE
-			} else {
-				inequalityInfo.end = lval
-				inequalityInfo.endInclusive = t.Operator.Symbol == tree.GE
-			}
 		}
 
-		if rval, err := getInfo(t.Right.(tree.TypedExpr)); err != nil {
+		rval, err := getInfo(t.Right.(tree.TypedExpr))
+		if err != nil {
 			return err
-		} else if rval != nil {
-			if t.Operator.Symbol == tree.LT || t.Operator.Symbol == tree.LE {
-				inequalityInfo.end = rval
-				inequalityInfo.endInclusive = t.Operator.Symbol == tree.LE
-			} else {
-				inequalityInfo.start = rval
-				inequalityInfo.startInclusive = t.Operator.Symbol == tree.GE
-			}
 		}
 
-		idxOrd, ok := g.tableOrdToIndexOrd.Get(tabOrd)
+		idxOrd, ok := g.fetchedOrdToIndexKeyOrd.Get(tabOrd)
 		if !ok {
 			return errors.AssertionFailedf("table column %d not found in index", tabOrd)
 		}
 
+		// Make sure slice has room for new entry.
+		if len(g.indexColInfos) <= idxOrd {
+			g.indexColInfos = g.indexColInfos[:idxOrd+1]
+		}
+
 		if inequality {
+			// If we have two inequalities we might already have an info, ie if we
+			// have a < 10 and a > 0 we'll have two invocations of fillInIndexColInfo
+			// for each comparison and they need to update the same info.
+			colInfo := g.indexColInfos[idxOrd]
+			var inequalityInfo multiSpanGeneratorInequalityColInfo
+			if colInfo != nil {
+				inequalityInfo, ok = colInfo.(multiSpanGeneratorInequalityColInfo)
+				if !ok {
+					return errors.AssertionFailedf("unexpected colinfo type (%d): %T", idxOrd, colInfo)
+				}
+			}
+
+			if lval != nil {
+				if t.Operator.Symbol == treecmp.LT || t.Operator.Symbol == treecmp.LE {
+					inequalityInfo.start = lval
+					inequalityInfo.startInclusive = t.Operator.Symbol == treecmp.LE
+				} else {
+					inequalityInfo.end = lval
+					inequalityInfo.endInclusive = t.Operator.Symbol == treecmp.GE
+				}
+			}
+
+			if rval != nil {
+				if t.Operator.Symbol == treecmp.LT || t.Operator.Symbol == treecmp.LE {
+					inequalityInfo.end = rval
+					inequalityInfo.endInclusive = t.Operator.Symbol == treecmp.LE
+				} else {
+					inequalityInfo.start = rval
+					inequalityInfo.startInclusive = t.Operator.Symbol == treecmp.GE
+				}
+			}
 			info = inequalityInfo
 			g.inequalityColIdx = idxOrd
 		}
 
-		if len(g.indexColInfos) <= idxOrd {
-			g.indexColInfos = g.indexColInfos[:idxOrd+1]
-		}
 		g.indexColInfos[idxOrd] = info
 		g.indexOrds.Add(idxOrd)
 
@@ -573,7 +628,7 @@ func (g *multiSpanGenerator) generateNonNullSpans(row rowenc.EncDatumRow) (roach
 		var err error
 		var containsNull bool
 		if g.inequalityColIdx == -1 {
-			s, containsNull, err = g.spanBuilder.SpanFromEncDatums(indexKeyRow, len(g.indexColInfos))
+			s, containsNull, err = g.spanBuilder.SpanFromEncDatums(indexKeyRow[:len(g.indexColInfos)])
 		} else {
 			s, containsNull, err = g.spanBuilder.SpanFromEncDatumsWithRange(indexKeyRow, len(g.indexColInfos),
 				inequalityInfo.start, inequalityInfo.startInclusive, inequalityInfo.end, inequalityInfo.endInclusive)
@@ -615,9 +670,6 @@ func (s *spanRowIndices) findInputRowIndicesByKey(key roachpb.Key) []int {
 func (g *multiSpanGenerator) generateSpans(
 	ctx context.Context, rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
-	// Memory accounting.
-	beforeSize := g.memUsage()
-
 	// This loop gets optimized to a runtime.mapclear call.
 	for k := range g.keyToInputRowIndices {
 		delete(g.keyToInputRowIndices, k)
@@ -638,12 +690,11 @@ func (g *multiSpanGenerator) generateSpans(
 			if inputRowIndices == nil {
 				// MaybeSplitSpanIntoSeparateFamilies is an optimization for doing more
 				// efficient point lookups when the span hits multiple column families.
-				// It doesn't work with inequality ranges because the prefixLen we pass
-				// in here is wrong and possibly other reasons.
+				// It doesn't work with inequality ranges because they aren't point lookups.
 				if g.inequalityColIdx != -1 {
 					g.scratchSpans = append(g.scratchSpans, *generatedSpan)
 				} else {
-					g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+					g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
 						g.scratchSpans, *generatedSpan, len(g.indexColInfos), false /* containsNull */)
 				}
 			}
@@ -666,8 +717,7 @@ func (g *multiSpanGenerator) generateSpans(
 	}
 
 	// Memory accounting.
-	afterSize := g.memUsage()
-	if err := g.memAcc.Resize(ctx, beforeSize, afterSize); err != nil {
+	if err := g.memAcc.ResizeTo(ctx, g.memUsage()); err != nil {
 		return nil, err
 	}
 
@@ -684,6 +734,8 @@ func (g *multiSpanGenerator) getMatchingRowIndices(key roachpb.Key) []int {
 
 // memUsage returns the size of the data structures in the multiSpanGenerator
 // for memory accounting purposes.
+// NOTE: this does not account for scratchSpans because the joinReader passes
+// the ownership of spans to the fetcher which will account for it accordingly.
 func (g *multiSpanGenerator) memUsage() int64 {
 	// Account for keyToInputRowIndices.
 	var size int64
@@ -695,10 +747,12 @@ func (g *multiSpanGenerator) memUsage() int64 {
 
 	// Account for spanToInputRowIndices.
 	size += g.spanToInputRowIndices.memUsage()
-
-	// Account for scratchSpans.
-	size += g.scratchSpans.MemUsage()
 	return size
+}
+
+func (g *multiSpanGenerator) close(ctx context.Context) {
+	g.memAcc.Close(ctx)
+	*g = multiSpanGenerator{}
 }
 
 // localityOptimizedSpanGenerator is the span generator for locality optimized
@@ -711,23 +765,30 @@ type localityOptimizedSpanGenerator struct {
 }
 
 // init must be called before the localityOptimizedSpanGenerator can be used to
-// generate spans.
+// generate spans. Note that we use two different span builders so that both
+// local and remote span generators could release their own when they are
+// close()d.
 func (g *localityOptimizedSpanGenerator) init(
-	spanBuilder *span.Builder,
-	numKeyCols int,
+	evalCtx *tree.EvalContext,
+	codec keys.SQLCodec,
+	fetchSpec *descpb.IndexFetchSpec,
+	splitFamilyIDs []descpb.FamilyID,
 	numInputCols int,
 	localExprHelper *execinfrapb.ExprHelper,
 	remoteExprHelper *execinfrapb.ExprHelper,
-	tableOrdToIndexOrd util.FastIntMap,
-	memAcc *mon.BoundAccount,
+	fetchedOrdToIndexKeyOrd util.FastIntMap,
+	localSpanGenMemAcc *mon.BoundAccount,
+	remoteSpanGenMemAcc *mon.BoundAccount,
 ) error {
 	if err := g.localSpanGen.init(
-		spanBuilder, numKeyCols, numInputCols, localExprHelper, tableOrdToIndexOrd, memAcc,
+		evalCtx, codec, fetchSpec, splitFamilyIDs,
+		numInputCols, localExprHelper, fetchedOrdToIndexKeyOrd, localSpanGenMemAcc,
 	); err != nil {
 		return err
 	}
 	if err := g.remoteSpanGen.init(
-		spanBuilder, numKeyCols, numInputCols, remoteExprHelper, tableOrdToIndexOrd, memAcc,
+		evalCtx, codec, fetchSpec, splitFamilyIDs,
+		numInputCols, remoteExprHelper, fetchedOrdToIndexKeyOrd, remoteSpanGenMemAcc,
 	); err != nil {
 		return err
 	}
@@ -770,4 +831,10 @@ func (g *localityOptimizedSpanGenerator) getMatchingRowIndices(key roachpb.Key) 
 		return res
 	}
 	return g.remoteSpanGen.getMatchingRowIndices(key)
+}
+
+func (g *localityOptimizedSpanGenerator) close(ctx context.Context) {
+	g.localSpanGen.close(ctx)
+	g.remoteSpanGen.close(ctx)
+	*g = localityOptimizedSpanGenerator{}
 }

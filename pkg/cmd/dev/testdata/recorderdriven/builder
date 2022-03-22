@@ -1,0 +1,19 @@
+dev builder
+----
+which docker
+id
+bazel info workspace --color=no
+cat crdb-checkout/build/teamcity-bazel-support.sh
+docker volume inspect bzlhome
+mkdir crdb-checkout/artifacts
+docker run --rm -it -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220121-121551
+
+dev builder echo hi
+----
+which docker
+id
+bazel info workspace --color=no
+cat crdb-checkout/build/teamcity-bazel-support.sh
+docker volume inspect bzlhome
+mkdir crdb-checkout/artifacts
+docker run --rm -i -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220121-121551 echo hi

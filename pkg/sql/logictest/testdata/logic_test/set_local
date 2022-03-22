@@ -1,0 +1,543 @@
+statement ok
+CREATE TABLE tbl (
+  ttz TIMESTAMPTZ,
+  ival INTERVAL
+);
+INSERT INTO tbl VALUES
+  ('2020-08-25 15:16:17.123456', '1 day 15:16:17.123456'::interval)
+
+query T noticetrace
+SET LOCAL TIME ZONE +6
+----
+WARNING: SET LOCAL can only be used in transaction blocks
+
+statement ok
+SET intervalstyle_enabled = 'on'
+
+# Set TIME ZONE local to the transaction, but IntervalStyle globally.
+statement ok
+BEGIN;
+SET LOCAL TIME ZONE 'America/Los_Angeles';
+SET IntervalStyle = 'iso_8601'
+
+query T
+SHOW TIME ZONE
+----
+America/Los_Angeles
+
+query T
+SHOW INTERVALSTYLE
+----
+iso_8601
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 08:16:17.123456 -0700 PDT  P1DT15H16M17.123456S
+
+# Rollback and ensure the values are correct.
+# NOTE: we do not rollback set like Postgres does (see #69396)
+statement ok
+ROLLBACK
+
+query T
+SHOW TIME ZONE
+----
+UTC
+
+query T
+SHOW INTERVALSTYLE
+----
+iso_8601
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  P1DT15H16M17.123456S
+
+# Do the same thing but this time commit, checking the settings are the same
+# before we do the SET.
+statement ok
+BEGIN;
+
+query T
+SHOW TIME ZONE
+----
+UTC
+
+query T
+SHOW INTERVALSTYLE
+----
+iso_8601
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  P1DT15H16M17.123456S
+
+statement ok
+SET LOCAL TIME ZONE 'America/New_York';
+SET IntervalStyle = 'postgres'
+
+query T
+SHOW TIME ZONE
+----
+America/New_York
+
+query T
+SHOW INTERVALSTYLE
+----
+postgres
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 11:16:17.123456 -0400 EDT  1 day 15:16:17.123456
+
+statement ok
+COMMIT
+
+query T
+SHOW TIME ZONE
+----
+UTC
+
+query T
+SHOW INTERVALSTYLE
+----
+postgres
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+# Now try commit/rollback in an aborted transaction.
+statement ok
+BEGIN;
+SET LOCAL IntervalStyle = 'sql_standard'
+
+query T
+SHOW INTERVALSTYLE
+----
+sql_standard
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 15:16:17.123456
+
+statement error at or near "bad": syntax error
+BAD SYNTAX
+
+statement error current transaction is aborted, commands ignored until end of transaction block
+SET LOCAL IntervalStyle = 'postgres'
+
+statement ok
+ROLLBACK
+
+query T
+SHOW INTERVALSTYLE
+----
+postgres
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+statement ok
+BEGIN;
+SET LOCAL IntervalStyle = 'sql_standard'
+
+query T
+SHOW INTERVALSTYLE
+----
+sql_standard
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 15:16:17.123456
+
+statement error at or near "bad": syntax error
+BAD SYNTAX
+
+statement error current transaction is aborted, commands ignored until end of transaction block
+SET LOCAL IntervalStyle = 'postgres'
+
+statement ok
+COMMIT
+
+query T
+SHOW INTERVALSTYLE
+----
+postgres
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+# Test savepoints succeed during COMMIT/ROLLBACK, with no releasing of
+# savepoint items.
+
+statement ok
+BEGIN;
+SET LOCAL TIME ZONE -10
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 05:16:17.123456 -1000 -1000  1 day 15:16:17.123456
+
+statement ok
+SAVEPOINT s1;
+SET LOCAL TIME ZONE -11
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 04:16:17.123456 -1100 -1100  1 day 15:16:17.123456
+
+statement ok
+SAVEPOINT s2;
+SET INTERVALSTYLE = 'sql_standard';
+SET LOCAL TIME ZONE -12
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 03:16:17.123456 -1200 -1200  1 15:16:17.123456
+
+statement ok
+COMMIT
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 15:16:17.123456
+
+statement ok
+BEGIN;
+SET LOCAL TIME ZONE -10
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 05:16:17.123456 -1000 -1000  1 15:16:17.123456
+
+statement ok
+SAVEPOINT s1;
+SET LOCAL TIME ZONE -11
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 04:16:17.123456 -1100 -1100  1 15:16:17.123456
+
+statement ok
+SAVEPOINT s2;
+SET INTERVALSTYLE = 'postgres';
+SET LOCAL TIME ZONE -12
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 03:16:17.123456 -1200 -1200  1 day 15:16:17.123456
+
+statement ok
+ROLLBACK
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+# Test ROLLBACK TO SAVEPOINT without any errors.
+
+statement ok
+BEGIN
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+statement ok
+SET LOCAL TIME ZONE -1;
+SAVEPOINT s1
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 14:16:17.123456 -0100 -0100  1 day 15:16:17.123456
+
+statement ok
+SET LOCAL TIME ZONE -2;
+SAVEPOINT s2
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 13:16:17.123456 -0200 -0200  1 day 15:16:17.123456
+
+statement ok
+SET INTERVALSTYLE = 'postgres';
+SET LOCAL TIME ZONE -3;
+SAVEPOINT s3
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 12:16:17.123456 -0300 -0300  1 day 15:16:17.123456
+
+statement ok
+ROLLBACK TO SAVEPOINT s3
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 12:16:17.123456 -0300 -0300  1 day 15:16:17.123456
+
+statement ok
+ROLLBACK TO SAVEPOINT s2
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 13:16:17.123456 -0200 -0200  1 day 15:16:17.123456
+
+statement ok
+ROLLBACK TO SAVEPOINT s1
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 14:16:17.123456 -0100 -0100  1 day 15:16:17.123456
+
+statement ok
+SET LOCAL TIME ZONE -2;
+SAVEPOINT s2;
+SET LOCAL TIME ZONE -3;
+SAVEPOINT s3
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 12:16:17.123456 -0300 -0300  1 day 15:16:17.123456
+
+statement ok
+ROLLBACK TO SAVEPOINT s1
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 14:16:17.123456 -0100 -0100  1 day 15:16:17.123456
+
+statement ok
+COMMIT
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+# Test ROLLBACK TO SAVEPOINT without an aborted error.
+
+statement ok
+BEGIN;
+SET LOCAL TIME ZONE -1; SAVEPOINT s1;
+SET LOCAL TIME ZONE -2; SAVEPOINT s2;
+SET LOCAL TIME ZONE -3; SAVEPOINT s3
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 12:16:17.123456 -0300 -0300  1 day 15:16:17.123456
+
+statement error at or near "bad": syntax error
+BAD SYNTAX
+
+statement ok
+ROLLBACK TO SAVEPOINT s3
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 12:16:17.123456 -0300 -0300  1 day 15:16:17.123456
+
+statement error at or near "bad": syntax error
+BAD SYNTAX
+
+statement ok
+ROLLBACK TO SAVEPOINT s1
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 14:16:17.123456 -0100 -0100  1 day 15:16:17.123456
+
+statement ok
+COMMIT
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+# Test RELEASE SAVEPOINT.
+
+statement ok
+BEGIN;
+SET LOCAL TIME ZONE -1; SAVEPOINT s1;
+SET LOCAL TIME ZONE -2; SAVEPOINT s2;
+SET LOCAL TIME ZONE -3; SAVEPOINT s3
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 12:16:17.123456 -0300 -0300  1 day 15:16:17.123456
+
+statement ok
+RELEASE SAVEPOINT s1
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 12:16:17.123456 -0300 -0300  1 day 15:16:17.123456
+
+statement ok
+SET LOCAL TIME ZONE -1; SAVEPOINT s1;
+SET LOCAL TIME ZONE -2; SAVEPOINT s2;
+SET LOCAL TIME ZONE -3; SAVEPOINT s3
+
+statement ok
+RELEASE SAVEPOINT s2
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 12:16:17.123456 -0300 -0300  1 day 15:16:17.123456
+
+statement ok
+ROLLBACK TO SAVEPOINT s1
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 12:16:17.123456 -0300 -0300  1 day 15:16:17.123456
+
+statement ok
+COMMIT
+
+query TT 
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+# Test SET LOCAL is correctly resets application_name.
+
+statement ok
+BEGIN;
+SET LOCAL application_name = 'my name is sasha fierce'
+
+query T
+SHOW application_name
+----
+my name is sasha fierce
+
+query T
+SELECT application_name FROM crdb_internal.node_sessions
+WHERE active_queries LIKE 'SELECT application_name%'
+----
+my name is sasha fierce
+
+statement ok
+ROLLBACK
+
+query T
+SHOW application_name
+----
+·
+
+query T
+SELECT application_name FROM crdb_internal.node_sessions
+WHERE active_queries LIKE 'SELECT application_name%'
+----
+·
+
+# Test for SET DATABASE
+
+statement ok
+CREATE DATABASE alt_db
+
+statement ok
+BEGIN;
+SET LOCAL database = 'alt_db'
+
+query T
+SHOW DATABASE
+----
+alt_db
+
+statement ok
+ROLLBACK
+
+query T
+SHOW DATABASE
+----
+test
+
+# Verify that the cockroach_restart savepoint is handled correctly.
+statement ok
+BEGIN;
+SAVEPOINT cockroach_restart;
+SET LOCAL TIME ZONE -1
+
+query TT
+SELECT * FROM tbl
+----
+2020-08-25 14:16:17.123456 -0100 -0100  1 day 15:16:17.123456
+
+statement ok
+RELEASE SAVEPOINT cockroach_restart;
+COMMIT
+
+query TT
+SELECT * FROM tbl
+----
+2020-08-25 15:16:17.123456 +0000 UTC  1 day 15:16:17.123456
+
+# Verify that custom session variables are handled correctly.
+statement ok
+SET custom_option.local_setting = 'abc';
+SET custom_option.session_setting = 'abc'
+
+statement ok
+BEGIN;
+SET LOCAL custom_option.local_setting = 'def';
+SET custom_option.session_setting = 'def'
+
+query T
+SHOW custom_option.local_setting
+----
+def
+
+query T
+SHOW custom_option.session_setting
+----
+def
+
+statement ok
+COMMIT
+
+query T
+SHOW custom_option.local_setting
+----
+abc
+
+query T
+SHOW custom_option.session_setting
+----
+def

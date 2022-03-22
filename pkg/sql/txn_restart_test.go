@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -362,7 +364,7 @@ func (ta *TxnAborter) statementFilter(
 	ta.mu.Unlock()
 	if shouldAbort {
 		if err := ta.abortTxn(ri.key); err != nil {
-			panic(errors.AssertionFailedf("TxnAborter failed to abort: %s", err))
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "TxnAborter failed to abort"))
 		}
 	}
 }
@@ -372,8 +374,8 @@ func (ta *TxnAborter) executorKnobs() base.ModuleTestingKnobs {
 	return &sql.ExecutorTestingKnobs{
 		// We're going to abort txns using a TxnAborter, and that's incompatible
 		// with AutoCommit.
-		DisableAutoCommit: true,
-		StatementFilter:   ta.statementFilter,
+		DisableAutoCommitDuringExec: true,
+		StatementFilter:             ta.statementFilter,
 	}
 }
 
@@ -471,13 +473,10 @@ func TestTxnAutoRetry(t *testing.T) {
 	// lib/pq connection directly. As of Feb 2016, there's code in cli/sql_util.go to
 	// do that.
 	sqlDB.SetMaxOpenConns(1)
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);`)
 
 	// Set up error injection that causes retries.
 	magicVals := createFilterVals(nil, nil)
@@ -537,12 +536,16 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 	// current allocation count in monitor and checking that it has the
 	// same value at the beginning of each retry.
 	rows, err := sqlDB.Query(`
+BEGIN;
 INSERT INTO t.public.test(k, v, t) VALUES (1, 'boulanger', cluster_logical_timestamp()) RETURNING 1;
+END;
 BEGIN;
 INSERT INTO t.public.test(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp()) RETURNING 1;
 INSERT INTO t.public.test(k, v, t) VALUES (3, 'fajita', cluster_logical_timestamp()) RETURNING 1;
 END;
+BEGIN;
 INSERT INTO t.public.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp()) RETURNING 1;
+END;
 BEGIN;
 INSERT INTO t.public.test(k, v, t) VALUES (5, 'josephine', cluster_logical_timestamp()) RETURNING 1;
 INSERT INTO t.public.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timestamp()) RETURNING 1;
@@ -1143,39 +1146,25 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	advancement := 2 * base.DefaultDescriptorLeaseDuration
-
-	var cmdFilters tests.CommandFilters
-	cmdFilters.AppendFilter(tests.CheckEndTxnTrigger, true)
-
-	testKey := []byte("test_key")
-	storeTestingKnobs := &kvserver.StoreTestingKnobs{
-		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-			TestingEvalFilter: cmdFilters.RunFilters,
-		},
-		DisableMaxOffsetCheck: true,
-	}
-
 	const refreshAttempts = 3
 	clientTestingKnobs := &kvcoord.ClientTestingKnobs{
 		MaxTxnRefreshAttempts: refreshAttempts,
 	}
 
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs.Store = storeTestingKnobs
-	params.Knobs.KVClient = clientTestingKnobs
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
+	testKey := []byte("test_key")
+	var s serverutils.TestServerInterface
 	var clockUpdate, restartDone int32
-	cleanupFilter := cmdFilters.AppendFilter(
-		func(args kvserverbase.FilterArgs) *roachpb.Error {
-			if req, ok := args.Req.(*roachpb.GetRequest); ok {
+	testingResponseFilter := func(
+		ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+	) *roachpb.Error {
+		for _, ru := range ba.Requests {
+			if req := ru.GetGet(); req != nil {
 				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					if atomic.LoadInt32(&clockUpdate) == 0 {
 						atomic.AddInt32(&clockUpdate, 1)
 						// Hack to advance the transaction timestamp on a
 						// transaction restart.
+						const advancement = 2 * base.DefaultDescriptorLeaseDuration
 						now := s.Clock().NowAsClockTimestamp()
 						now.WallTime += advancement.Nanoseconds()
 						s.Clock().Update(now)
@@ -1187,7 +1176,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 						atomic.AddInt32(&restartDone, 1)
 						// Return ReadWithinUncertaintyIntervalError to update
 						// the transaction timestamp on retry.
-						txn := args.Hdr.Txn
+						txn := ba.Txn
 						txn.ResetObservedTimestamps()
 						now := s.Clock().NowAsClockTimestamp()
 						txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
@@ -1195,9 +1184,22 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 					}
 				}
 			}
-			return nil
-		}, false)
-	defer cleanupFilter()
+		}
+		return nil
+	}
+	storeTestingKnobs := &kvserver.StoreTestingKnobs{
+		// We use a TestingResponseFilter to avoid server-side refreshes of the
+		// ReadWithinUncertaintyIntervalError that the filter returns.
+		TestingResponseFilter: testingResponseFilter,
+		DisableMaxOffsetCheck: true,
+	}
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.Store = storeTestingKnobs
+	params.Knobs.KVClient = clientTestingKnobs
+	var sqlDB *gosql.DB
+	s, sqlDB, _ = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
 
 	sqlDB.SetMaxOpenConns(1)
 	if _, err := sqlDB.Exec(`
@@ -1301,8 +1303,36 @@ func TestDistSQLRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// One of the rows in the table.
-	targetKey := roachpb.Key("\275\211\212")
+	createTable := func(db *gosql.DB) {
+		sqlutils.CreateTable(t, db, "t",
+			"num INT PRIMARY KEY",
+			3, /* numRows */
+			sqlutils.ToRowFn(sqlutils.RowIdxFn))
+	}
+
+	// We can't programmatically get the targetKey since it's used before
+	// the test cluster is created.
+	// targetKey is represents one of the rows in the table.
+	// +2 since the first two available ids are allocated to the database and
+	// public schema.
+	firstTableID := func() (id uint32) {
+		tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
+			})
+		defer tc.Stopper().Stop(context.Background())
+		db := tc.ServerConn(0)
+		createTable(db)
+		row := db.QueryRow("SELECT 't'::REGCLASS::OID")
+		require.NotNil(t, row)
+		require.NoError(t, row.Scan(&id))
+		return id
+	}()
+	indexID := uint32(1)
+	valInTable := uint64(2)
+	indexKey := keys.SystemSQLCodec.IndexPrefix(firstTableID, indexID)
+	targetKey := encoding.EncodeUvarintAscending(indexKey, valInTable)
 
 	restarted := true
 
@@ -1340,10 +1370,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	db := tc.ServerConn(0)
-	sqlutils.CreateTable(t, db, "t",
-		"num INT PRIMARY KEY",
-		3, /* numRows */
-		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+	createTable(db)
 
 	// We're going to split one of the tables, but node 4 is unaware of this.
 	_, err := db.Exec(fmt.Sprintf(`

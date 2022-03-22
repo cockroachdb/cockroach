@@ -5,3 +5,11 @@ lexical error: invalid UTF-8 byte sequence
 DETAIL: source SQL:
 e'\xad'::string
 ^
+
+error
+SELECT ((1, 2)).@0
+----
+at or near "0": syntax error: invalid numeric tuple index: indexes must be > 0
+DETAIL: source SQL:
+SELECT ((1, 2)).@0
+                 ^

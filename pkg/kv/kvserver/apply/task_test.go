@@ -52,9 +52,10 @@ type appliedCmd struct {
 	*checkedCmd
 }
 
-func (c *cmd) Index() uint64   { return c.index }
-func (c *cmd) IsTrivial() bool { return !c.nonTrivial }
-func (c *cmd) IsLocal() bool   { return !c.nonLocal }
+func (c *cmd) Index() uint64        { return c.index }
+func (c *cmd) IsTrivial() bool      { return !c.nonTrivial }
+func (c *cmd) IsLocal() bool        { return !c.nonLocal }
+func (c *cmd) Ctx() context.Context { return context.Background() }
 func (c *cmd) AckErrAndFinish(_ context.Context, err error) error {
 	c.acked = true
 	c.finished = true
@@ -138,7 +139,7 @@ func (sm *testStateMachine) NewBatch(ephemeral bool) apply.Batch {
 	return &testBatch{sm: sm, ephemeral: ephemeral}
 }
 func (sm *testStateMachine) ApplySideEffects(
-	cmdI apply.CheckedCommand,
+	_ context.Context, cmdI apply.CheckedCommand,
 ) (apply.AppliedCommand, error) {
 	cmd := cmdI.(*checkedCmd)
 	sm.appliedSideEffects = append(sm.appliedSideEffects, cmd.index)
@@ -160,7 +161,7 @@ type testBatch struct {
 	staged    []uint64
 }
 
-func (b *testBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error) {
+func (b *testBatch) Stage(_ context.Context, cmdI apply.Command) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*cmd)
 	b.staged = append(b.staged, cmd.index)
 	ccmd := checkedCmd{cmd: cmd, rejected: cmd.shouldReject}

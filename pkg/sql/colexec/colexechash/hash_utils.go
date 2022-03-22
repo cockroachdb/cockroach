@@ -15,8 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // initHash, rehash, and finalizeHash work together to compute the hash value
@@ -117,9 +116,8 @@ type TupleHashDistributor struct {
 	selections [][]int
 	// cancelChecker is used during the hashing of the rows to distribute to
 	// check for query cancellation.
-	cancelChecker  colexecutils.CancelChecker
-	overloadHelper execgen.OverloadHelper
-	datumAlloc     rowenc.DatumAlloc
+	cancelChecker colexecutils.CancelChecker
+	datumAlloc    tree.DatumAlloc
 }
 
 // NewTupleHashDistributor returns a new TupleHashDistributor.
@@ -157,7 +155,7 @@ func (d *TupleHashDistributor) Distribute(b coldata.Batch, hashCols []uint32) []
 	}
 
 	for _, i := range hashCols {
-		rehash(d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, &d.overloadHelper, &d.datumAlloc)
+		rehash(d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, &d.datumAlloc)
 	}
 
 	finalizeHash(d.buckets, n, uint64(len(d.selections)))

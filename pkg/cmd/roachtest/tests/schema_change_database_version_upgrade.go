@@ -15,10 +15,13 @@ import (
 	gosql "database/sql"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -46,9 +49,12 @@ func registerSchemaChangeDatabaseVersionUpgrade(r registry.Registry) {
 func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Put and start the binary.
-		args := u.uploadVersion(ctx, t, nodes, v)
+		binary := u.uploadVersion(ctx, t, nodes, v)
 		// NB: can't start sequentially since cluster already bootstrapped.
-		u.c.Start(ctx, nodes, args, option.StartArgsDontEncrypt, option.RoachprodArgOption{"--sequential=false"})
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.Sequential = false
+		settings := install.MakeClusterSettings(install.BinaryOption(binary))
+		u.c.Start(ctx, t.L(), startOpts, settings, nodes)
 	}
 }
 
@@ -62,6 +68,9 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	if err != nil {
 		t.Fatal(err)
 	}
+	// If the version is PublicSchemasWithDescriptors, we do not support
+	// ALTER DATABASE CONVERT TO SCHEMA.
+	publicSchemaWithDescriptorsVersion := clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors)
 
 	createDatabaseWithTableStep := func(dbName string) versionStep {
 		t.L().Printf("creating database %s", dbName)
@@ -87,7 +96,7 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	assertDatabaseNotResolvable := func(ctx context.Context, db *gosql.DB, dbName string) error {
 		_, err = db.ExecContext(ctx, fmt.Sprintf(`SELECT table_name FROM [SHOW TABLES FROM %s]`, dbName))
 		if err == nil || err.Error() != "pq: target database or schema does not exist" {
-			return errors.AssertionFailedf("unexpected error: %s", err)
+			return errors.Newf("unexpected error: %s", pgerror.FullError(err))
 		}
 		return nil
 	}
@@ -154,6 +163,9 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	}
 
 	createParentDatabaseStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		if publicSchemaWithDescriptorsVersion.LessEq(u.clusterVersion(ctx, t, 1)) {
+			return
+		}
 		t.L().Printf("creating parent database")
 		db := u.conn(ctx, t, 1)
 		_, err := db.ExecContext(ctx, `CREATE DATABASE new_parent_db`)
@@ -162,6 +174,9 @@ func runSchemaChangeDatabaseVersionUpgrade(
 
 	reparentDatabaseStep := func(dbName string) versionStep {
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+			if publicSchemaWithDescriptorsVersion.LessEq(u.clusterVersion(ctx, t, 1)) {
+				return
+			}
 			db := u.conn(ctx, t, 1)
 			t.L().Printf("reparenting database %s", dbName)
 			_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER DATABASE %s CONVERT TO SCHEMA WITH PARENT new_parent_db;`, dbName))
@@ -171,14 +186,17 @@ func runSchemaChangeDatabaseVersionUpgrade(
 
 	validationStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		t.L().Printf("validating")
-		buf, err := c.RunWithBuffer(ctx, t.L(), c.Node(1),
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1),
 			[]string{"./cockroach debug doctor cluster", "--url {pgurl:1}"}...)
 		require.NoError(t, err)
-		t.L().Printf("%s", buf)
+		t.L().Printf("%s", result.Stdout)
 	}
 
 	interactWithReparentedSchemaStep := func(schemaName string) versionStep {
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+			if publicSchemaWithDescriptorsVersion.LessEq(u.clusterVersion(ctx, t, 1)) {
+				return
+			}
 			t.L().Printf("running schema changes on %s", schemaName)
 			db := u.conn(ctx, t, 1)
 
@@ -201,6 +219,9 @@ func runSchemaChangeDatabaseVersionUpgrade(
 	}
 
 	dropDatabaseCascadeStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		if publicSchemaWithDescriptorsVersion.LessEq(u.clusterVersion(ctx, t, 1)) {
+			return
+		}
 		t.L().Printf("dropping parent database")
 		db := u.conn(ctx, t, 1)
 		_, err = db.ExecContext(ctx, `

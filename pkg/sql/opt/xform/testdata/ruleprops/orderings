@@ -73,7 +73,7 @@ project
 opt
 SELECT min(b), a FROM abc GROUP BY a
 ----
-group-by
+group-by (streaming)
  ├── columns: min:7 a:1
  ├── grouping columns: a:1
  ├── internal-ordering: +1
@@ -81,7 +81,7 @@ group-by
  ├── fd: (1)-->(7)
  ├── prune: (7)
  ├── interesting orderings: (+1)
- ├── scan abc@secondary
+ ├── scan abc@abc_a_b_idx
  │    ├── columns: a:1 b:2
  │    ├── ordering: +1
  │    ├── prune: (1,2)
@@ -93,7 +93,7 @@ group-by
 opt
 SELECT min(b), c FROM abc GROUP BY c
 ----
-group-by
+group-by (hash)
  ├── columns: min:7 c:3
  ├── grouping columns: c:3
  ├── key: (3)
@@ -114,7 +114,7 @@ group-by
 opt
 SELECT array_agg(a), b, c FROM (SELECT * FROM abc ORDER BY b, a) GROUP BY b, c
 ----
-group-by
+group-by (hash)
  ├── columns: array_agg:7 b:2 c:3
  ├── grouping columns: b:2 c:3
  ├── internal-ordering: +1 opt(2,3)
@@ -172,7 +172,7 @@ index-join abc
  ├── fd: ()-->(1), (3)~~>(2)
  ├── prune: (2,3)
  ├── interesting orderings: (+2 opt(1)) (+3 opt(1))
- └── scan abc@secondary
+ └── scan abc@abc_a_b_idx
       ├── columns: a:1!null b:2 rowid:4!null
       ├── constraint: /1/2/4: [/1 - /1]
       ├── key: (4)
@@ -192,7 +192,7 @@ index-join abc
  ├── ordering: +1
  ├── prune: (2,3)
  ├── interesting orderings: (+1,+2)
- └── scan abc@secondary
+ └── scan abc@abc_a_b_idx
       ├── columns: a:1 b:2 rowid:4!null
       ├── limit: 10
       ├── key: (4)
@@ -204,30 +204,22 @@ index-join abc
 opt
 SELECT * FROM abc ORDER BY b LIMIT 10
 ----
-limit
+top-k
  ├── columns: a:1 b:2 c:3
  ├── internal-ordering: +2
+ ├── k: 10
  ├── cardinality: [0 - 10]
  ├── lax-key: (1-3)
  ├── fd: (3)~~>(1,2)
  ├── ordering: +2
  ├── prune: (1,3)
  ├── interesting orderings: (+2)
- ├── sort
- │    ├── columns: a:1 b:2 c:3
- │    ├── lax-key: (1-3)
- │    ├── fd: (3)~~>(1,2)
- │    ├── ordering: +2
- │    ├── limit hint: 10.00
- │    ├── prune: (1-3)
- │    ├── interesting orderings: (+1,+2) (+3)
- │    └── scan abc
- │         ├── columns: a:1 b:2 c:3
- │         ├── lax-key: (1-3)
- │         ├── fd: (3)~~>(1,2)
- │         ├── prune: (1-3)
- │         └── interesting orderings: (+1,+2) (+3)
- └── 10
+ └── scan abc
+      ├── columns: a:1 b:2 c:3
+      ├── lax-key: (1-3)
+      ├── fd: (3)~~>(1,2)
+      ├── prune: (1-3)
+      └── interesting orderings: (+1,+2) (+3)
 
 opt
 SELECT * FROM abc ORDER BY a OFFSET 10

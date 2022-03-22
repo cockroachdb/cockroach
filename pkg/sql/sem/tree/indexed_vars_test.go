@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,10 +58,10 @@ func TestIndexedVars(t *testing.T) {
 			h.IndexedVarUsed(0), h.IndexedVarUsed(1), h.IndexedVarUsed(2), h.IndexedVarUsed(3))
 	}
 
-	binary := func(op BinaryOperator, left, right Expr) Expr {
+	binary := func(op treebin.BinaryOperator, left, right Expr) Expr {
 		return &BinaryExpr{Operator: op, Left: left, Right: right}
 	}
-	expr := binary(MakeBinaryOperator(Plus), v0, binary(MakeBinaryOperator(Mult), v1, v2))
+	expr := binary(treebin.MakeBinaryOperator(treebin.Plus), v0, binary(treebin.MakeBinaryOperator(treebin.Mult), v1, v2))
 
 	// Verify the expression evaluates correctly.
 	ctx := context.Background()

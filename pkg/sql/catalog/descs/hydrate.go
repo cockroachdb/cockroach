@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // hydrateTypesInTableDesc installs user defined type metadata in all types.T
@@ -49,13 +48,14 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			dbDesc, err := tc.GetMutableDescriptorByID(ctx, desc.ParentID, txn)
+			dbDesc, err := tc.GetMutableDescriptorByID(ctx, txn, desc.ParentID)
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
 			sc, err := tc.getSchemaByID(
 				ctx, txn, desc.ParentSchemaID,
 				tree.SchemaLookupFlags{
+					Required:       true,
 					IncludeOffline: true,
 					RequireMutable: true,
 				},
@@ -89,7 +89,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 				return tree.TypeName{}, nil, err
 			}
 			sc, err := tc.GetImmutableSchemaByID(
-				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{})
+				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
@@ -113,14 +113,11 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		}
 
 		// Make a copy of the underlying descriptor before hydration.
-		descBase := protoutil.Clone(t.TableDesc()).(*descpb.TableDescriptor)
-		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, getType); err != nil {
+		mut := t.NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
+		if err := typedesc.HydrateTypesInTableDescriptor(ctx, mut.TableDesc(), getType); err != nil {
 			return nil, err
 		}
-		if t.IsUncommittedVersion() {
-			return tabledesc.NewBuilderForUncommittedVersion(descBase).BuildImmutableTable(), nil
-		}
-		return tabledesc.NewBuilder(descBase).BuildImmutableTable(), nil
+		return mut.ImmutableCopy().(catalog.TableDescriptor), nil
 	default:
 		return desc, nil
 	}
@@ -168,6 +165,7 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 			// the only cases we have to consider here.
 			var scName string
 			switch typDesc.GetParentSchemaID() {
+			// TODO(richardjcai): Remove case for keys.PublicSchemaID in 22.2.
 			case keys.PublicSchemaID:
 				scName = tree.PublicSchema
 			default:

@@ -170,7 +170,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	// them everywhere.
 	{
 		act := fmt.Sprintf("%+v", result.Metrics{})
-		exp := "{LeaseRequestSuccess:0 LeaseRequestError:0 LeaseTransferSuccess:0 LeaseTransferError:0 ResolveCommit:0 ResolveAbort:0 ResolvePoison:0}"
+		exp := "{LeaseRequestSuccess:0 LeaseRequestError:0 LeaseTransferSuccess:0 LeaseTransferError:0 ResolveCommit:0 ResolveAbort:0 ResolvePoison:0 AddSSTableAsWrites:0}"
 		if act != exp {
 			t.Errorf("need to update this test due to added fields: %v", act)
 		}
@@ -187,7 +187,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	require.NoError(t, err)
 	span := roachpb.Span{Key: key, EndKey: key.Next()}
 
-	txn := roachpb.MakeTransaction("foo", span.Key, roachpb.MinUserPriority, hlc.Timestamp{WallTime: 123}, 999)
+	txn := roachpb.MakeTransaction("foo", span.Key, roachpb.MinUserPriority, hlc.Timestamp{WallTime: 123}, 999, int32(s.NodeID()))
 
 	const resolveCommitCount = int64(200)
 	const resolveAbortCount = int64(800)
@@ -337,7 +337,7 @@ func TestStoreMetrics(t *testing.T) {
 	// Verify stats after addition.
 	verifyStats(t, tc, 1, 2)
 	checkGauge(t, "store 0", tc.GetFirstStoreFromServer(t, 0).Metrics().ReplicaCount, initialCount+1)
-	tc.RemoveLeaseHolderOrFatal(t, desc, tc.Target(0), tc.Target(1))
+	tc.RemoveLeaseHolderOrFatal(t, desc, tc.Target(0))
 	testutils.SucceedsSoon(t, func() error {
 		_, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 		if err == nil {
@@ -380,11 +380,8 @@ func TestStoreMaxBehindNanosOnlyTracksEpochBasedLeases(t *testing.T) {
 	// with the caveat that under extreme stress, we need to make sure that the
 	// subsystem remains live.
 	const closedTimestampDuration = 15 * time.Millisecond
-	const closedTimestampFraction = 1
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1",
 		closedTimestampDuration.String())
-	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1",
-		closedTimestampFraction)
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = $1",
 		closedTimestampDuration.String())
 

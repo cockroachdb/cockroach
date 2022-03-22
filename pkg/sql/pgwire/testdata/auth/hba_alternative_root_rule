@@ -1,0 +1,58 @@
+# This verifies that if the first line of the HBA config
+# is:
+#     host  all root 127.0.0.1/32 cert-password
+# the default root rule of:
+#     host  all root all cert-password
+# will not be included
+
+config secure
+----
+
+set_hba
+host  all root 127.0.0.1/32 cert-password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root 127.0.0.1/32 cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS      METHOD        OPTIONS
+host   all      root 127.0.0.1/32 cert-password
+
+subtest root_localhost
+
+# Root can connect because the tests originate from 127.0.0.1
+connect user=root
+----
+ok defaultdb
+
+subtest end root_localhost
+
+# This verifies that if the first line of the HBA config
+# is slightly different, the default root rule is still
+# included. The following:
+#    host all root 127.0.0.2/32 cert-password
+# will be converted into:
+#    host  all root all cert-password
+#    host all root 127.0.0.2/32 cert-password
+set_hba
+host all root 127.0.0.2/32 cert-password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all root 127.0.0.2/32 cert-password
+#
+# Interpreted configuration:
+# TYPE DATABASE USER ADDRESS      METHOD        OPTIONS
+host   all      root all          cert-password
+host   all      root 127.0.0.2/32 cert-password
+
+subtest root_default_rule
+
+# Root can connect because of the default rule
+connect user=root
+----
+ok defaultdb
+
+subtest end root_default_rule

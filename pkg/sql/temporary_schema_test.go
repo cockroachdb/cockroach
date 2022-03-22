@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -55,10 +56,16 @@ func TestCleanupSchemaObjects(t *testing.T) {
 	_, err = conn.ExecContext(ctx, `
 SET experimental_enable_temp_tables=true;
 SET serial_normalization='sql_sequence';
-CREATE TEMP TABLE a (a SERIAL, c INT);
+CREATE TEMP TABLE a (a SERIAL, c INT);`,
+	)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `
 ALTER TABLE a ADD COLUMN b SERIAL;
 CREATE TEMP SEQUENCE a_sequence;
-CREATE TEMP VIEW a_view AS SELECT a FROM a;
+CREATE TEMP VIEW a_view AS SELECT a FROM a;`,
+	)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `
 CREATE TABLE perm_table (a int DEFAULT nextval('a_sequence'), b int);
 INSERT INTO perm_table VALUES (DEFAULT, 1);
 `)
@@ -82,8 +89,10 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	}
 	for _, name := range selectableTempNames {
 		// Check tables are accessible.
-		_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", tempSchemaName, name))
+		var rows *gosql.Rows
+		rows, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", tempSchemaName, name))
 		require.NoError(t, err)
+		require.NoError(t, rows.Close())
 	}
 
 	require.NoError(
@@ -94,6 +103,8 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 			kvDB,
 			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 				execCfg := s.ExecutorConfig().(ExecutorConfig)
+				defaultDB, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, namesToID["defaultdb"])
+				require.NoError(t, err)
 				err = cleanupSchemaObjects(
 					ctx,
 					execCfg.Settings,
@@ -101,7 +112,7 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 					descsCol,
 					execCfg.Codec,
 					s.InternalExecutor().(*InternalExecutor),
-					namesToID["defaultdb"],
+					defaultDB,
 					tempSchemaName,
 				)
 				require.NoError(t, err)
@@ -112,8 +123,10 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
 
 	// Check perm_table performs correctly, and has the right schema.
-	_, err = db.Query("SELECT * FROM perm_table")
+	var rows *gosql.Rows
+	rows, err = db.Query("SELECT * FROM perm_table")
 	require.NoError(t, err)
+	require.NoError(t, rows.Close())
 
 	var colDefault gosql.NullString
 	err = db.QueryRow(
@@ -140,6 +153,8 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 			},
 		},
 	}
+	settings := cluster.MakeTestingClusterSettings()
+	TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Microsecond)
 	tc := serverutils.StartNewTestCluster(
 		t,
 		numNodes,
@@ -147,6 +162,7 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "defaultdb",
 				Knobs:       knobs,
+				Settings:    settings,
 			},
 		},
 	)

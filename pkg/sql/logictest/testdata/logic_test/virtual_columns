@@ -17,14 +17,6 @@ CREATE TABLE t (
   FAMILY (v)
 )
 
-statement error primary index column "v" cannot be virtual
-CREATE TABLE t (
-  a INT,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  PRIMARY KEY (b,v)
-)
-
 statement error index "t_b_idx" cannot store virtual column "v"
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -1190,8 +1182,7 @@ CREATE TABLE public.t63167_b (
    a INT8 NULL,
    v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, rowid)
+   CONSTRAINT t63167_a_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Test that columns backfills to tables with virtual columns work.
@@ -1226,3 +1217,48 @@ INSERT INTO t67528 (s) VALUES ('')
 
 statement ok
 CREATE INDEX ON t67528 (v DESC)
+
+# Regression test for #73372. Test backfills with partial indexes that reference
+# non-null virtual columns.
+subtest 73372
+
+statement ok
+CREATE TABLE t73372 (
+  i INT NOT NULL,
+  s STRING NOT NULL,
+  v INT AS (i) VIRTUAL NOT NULL,
+  INDEX idx (i) WHERE v >= 0
+)
+
+statement ok
+INSERT INTO t73372 (i, s) VALUES (0, 'foo')
+
+statement ok
+ALTER TABLE t73372 ALTER PRIMARY KEY USING COLUMNS (s, i)
+
+query ITI
+SELECT * FROM t73372
+----
+0  foo  0
+
+# Regression test for #75147. The optimizer should consider virtual PK columns
+# as stored to prevent infinite recursion during query planning.
+statement ok
+CREATE TABLE t75147 (
+  a INT,
+  b INT,
+  c INT,
+  v1 INT AS (c) VIRTUAL,
+  v2 INT AS (c) VIRTUAL,
+  PRIMARY KEY (b, v1, v2),
+  INDEX (a)
+);
+
+statement ok
+SELECT 'foo'
+FROM t75147 AS t1
+JOIN t75147 AS t2 ON
+  t1.v2 = t2.v2
+  AND t1.v1 = t2.v1
+  AND t1.b = t2.b
+JOIN t75147 AS t3 ON t1.a = t3.a;

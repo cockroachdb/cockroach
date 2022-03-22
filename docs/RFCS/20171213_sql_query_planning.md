@@ -272,7 +272,7 @@ SELECT * FROM
 ### Stats
 
 Table statistics power both the cost model and the search of alternate
-query plans. A simple example of where stastistics guide the search of
+query plans. A simple example of where statistics guide the search of
 alternate query plans is in join ordering:
 
 ```sql
@@ -580,7 +580,7 @@ the property is used or not, but makes accessing the property in a
 transformation fast. Computing a property can be done only when the
 property is used, but is not feasible if the computation requires an
 entire sub-expression tree (as opposed to a fragment). [Computed
-properties](#computed_properties) primarly occur for scalar properties
+properties](#computed_properties) primarily occur for scalar properties
 for which transformations often have the entire scalar expression.
 
 #### Tracked properties

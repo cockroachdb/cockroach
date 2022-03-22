@@ -18,9 +18,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -126,6 +128,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			// We cannot compare these.
 			actual.Stopper = nil
 			actual.StoreSpecs = nil
+			actual.Knobs.JobsTestingKnobs = nil
 
 			assert.Equal(t, tc.expected, actual)
 		})
@@ -145,8 +148,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	demoCtx.SimulateLatency = true
 	demoCtx.NumNodes = 9
 
-	certsDir, err := ioutil.TempDir("", "cli-demo-test")
-	require.NoError(t, err)
+	certsDir := t.TempDir()
 
 	cleanupFunc := securitytest.CreateTestCerts(certsDir)
 	defer func() {
@@ -179,7 +181,11 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	require.NoError(t, c.Start(ctx, func(ctx context.Context, s *server.Server, _ bool, adminUser, adminPassword string) error {
 		return s.RunLocalSQL(ctx,
 			func(ctx context.Context, ie *sql.InternalExecutor) error {
-				_, err := ie.Exec(ctx, "admin-user", nil, "CREATE USER $1 WITH PASSWORD $2", adminUser, adminPassword)
+				_, err := ie.Exec(
+					ctx, "admin-user", nil,
+					fmt.Sprintf("CREATE USER %s WITH PASSWORD $1", adminUser),
+					adminPassword,
+				)
 				return err
 			})
 	}))
@@ -206,7 +212,8 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			url, err := c.getNetworkURLForServer(ctx, tc.nodeIdx, true /* includeAppName */)
+			url, err := c.getNetworkURLForServer(ctx, tc.nodeIdx,
+				true /* includeAppName */, false /* isTenant */)
 			require.NoError(t, err)
 			sqlConnCtx := clisqlclient.Context{}
 			conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, url.ToPQ().String())
@@ -228,6 +235,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 			startTime := timeutil.Now()
 			sqlExecCtx := clisqlexec.Context{}
 			_, _, err = sqlExecCtx.RunQuery(
+				context.Background(),
 				conn,
 				clisqlclient.MakeQuery(`SHOW ALL CLUSTER QUERIES`),
 				false,
@@ -242,5 +250,74 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 				totalDuration,
 			)
 		})
+	}
+}
+
+func TestTransientClusterMultitenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test is too slow to complete under the race detector, sometimes.
+	skip.UnderRace(t)
+
+	demoCtx := newDemoCtx()
+	// Set up an empty 3-node cluster with tenants on each node.
+	demoCtx.NumNodes = 3
+	demoCtx.Multitenant = true
+	demoCtx.Localities = []roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "prize-winner", Value: "otan"}}},
+		{Tiers: []roachpb.Tier{{Key: "prize-winner", Value: "otan"}}},
+		{Tiers: []roachpb.Tier{{Key: "prize-winner", Value: "otan"}}},
+	}
+
+	security.ResetAssetLoader()
+	certsDir := t.TempDir()
+
+	require.NoError(t, demoCtx.generateCerts(certsDir))
+
+	ctx := context.Background()
+
+	// Setup the transient cluster.
+	c := transientCluster{
+		demoCtx:              demoCtx,
+		stopper:              stop.NewStopper(),
+		demoDir:              certsDir,
+		stickyEngineRegistry: server.NewStickyInMemEnginesRegistry(),
+		infoLog:              log.Infof,
+		warnLog:              log.Warningf,
+		shoutLog:             log.Ops.Shoutf,
+	}
+	// Stop the cluster when the test exits, including when it fails.
+	// This also calls the Stop() method on the stopper, and thus
+	// cancels everything controlled by the stopper.
+	defer c.Close(ctx)
+
+	// Also ensure the context gets canceled when the stopper
+	// terminates above.
+	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
+
+	require.NoError(t, c.Start(ctx, func(ctx context.Context, s *server.Server, _ bool, adminUser, adminPassword string) error {
+		return s.RunLocalSQL(ctx,
+			func(ctx context.Context, ie *sql.InternalExecutor) error {
+				_, err := ie.Exec(ctx, "admin-user", nil, fmt.Sprintf("CREATE USER %s WITH PASSWORD %s", adminUser,
+					adminPassword))
+				return err
+			})
+	}))
+
+	for i := 0; i < demoCtx.NumNodes; i++ {
+		url, err := c.getNetworkURLForServer(ctx, i,
+			true /* includeAppName */, true /* isTenant */)
+		require.NoError(t, err)
+		sqlConnCtx := clisqlclient.Context{}
+		conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, url.ToPQ().String())
+		defer func() {
+			if err := conn.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// Create a table on each tenant to make sure that the tenants are separate.
+		require.NoError(t, conn.Exec(context.Background(), "CREATE TABLE a (a int PRIMARY KEY)"))
 	}
 }

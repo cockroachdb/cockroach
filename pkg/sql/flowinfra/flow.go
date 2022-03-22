@@ -32,9 +32,9 @@ type flowStatus int
 
 // Flow status indicators.
 const (
-	FlowNotStarted flowStatus = iota
-	FlowRunning
-	FlowFinished
+	flowNotStarted flowStatus = iota
+	flowRunning
+	flowFinished
 )
 
 // Startable is any component that can be started (a router or an outbox).
@@ -107,11 +107,22 @@ type Flow interface {
 	// canceled before all goroutines exit, it calls f.cancel().
 	Wait()
 
-	// IsLocal returns whether this flow does not have any remote execution.
+	// IsLocal returns whether this flow is being run as part of a local-only
+	// query.
 	IsLocal() bool
+
+	// HasInboundStreams returns whether this flow has any inbound streams (i.e.
+	// it is part of the distributed plan and other nodes are sending data to
+	// this flow).
+	HasInboundStreams() bool
 
 	// IsVectorized returns whether this flow will run with vectorized execution.
 	IsVectorized() bool
+
+	// StatementSQL is the SQL statement for which this flow is executing. It is
+	// populated on a best effort basis (only available for user-issued queries
+	// that are also not like BulkIO/CDC related).
+	StatementSQL() string
 
 	// GetFlowCtx returns the flow context of this flow.
 	GetFlowCtx() *execinfra.FlowCtx
@@ -122,8 +133,11 @@ type Flow interface {
 	// GetID returns the flow ID.
 	GetID() execinfrapb.FlowID
 
-	// Cleanup should be called when the flow completes (after all processors and
-	// mailboxes exited).
+	// Cleanup must be called whenever the flow is done (meaning it either
+	// completes gracefully after all processors and mailboxes exited or an
+	// error is encountered that stops the flow from making progress). The
+	// implementations must be safe to execute in case the Flow is never Run()
+	// or Start()ed.
 	Cleanup(context.Context)
 
 	// ConcurrentTxnUse returns true if multiple processors/operators in the flow
@@ -164,7 +178,8 @@ type FlowBase struct {
 	startedGoroutines bool
 
 	// inboundStreams are streams that receive data from other hosts; this map
-	// is to be passed to FlowRegistry.RegisterFlow.
+	// is to be passed to FlowRegistry.RegisterFlow. This map is populated in
+	// Flow.Setup(), so it is safe to lookup into concurrently later.
 	inboundStreams map[execinfrapb.StreamID]*InboundStreamInfo
 
 	// waitGroup is used to wait for async components of the flow:
@@ -172,6 +187,10 @@ type FlowBase struct {
 	//  - inbound streams
 	//  - outboxes
 	waitGroup sync.WaitGroup
+
+	onFlowCleanup func()
+
+	statementSQL string
 
 	doneFn func()
 
@@ -181,6 +200,10 @@ type FlowBase struct {
 	// multiple times).
 	ctxCancel context.CancelFunc
 	ctxDone   <-chan struct{}
+
+	// sp is the span that this Flow runs in. Can be nil if no span was created
+	// for the flow. Flow.Cleanup() finishes it.
+	sp *tracing.Span
 
 	// spec is the request that produced this flow. Only used for debugging.
 	spec *execinfrapb.FlowSpec
@@ -218,15 +241,33 @@ func (f *FlowBase) ConcurrentTxnUse() bool {
 	return false
 }
 
+// SetStartedGoroutines sets FlowBase.startedGoroutines to the passed in value.
+// This allows notifying the FlowBase about the concurrent goroutines which are
+// started outside of the FlowBase.StartInternal machinery.
+func (f *FlowBase) SetStartedGoroutines(val bool) {
+	f.startedGoroutines = val
+}
+
+// Started returns true if f has either been Run() or Start()ed.
+func (f *FlowBase) Started() bool {
+	return f.status != flowNotStarted
+}
+
 var _ Flow = &FlowBase{}
 
 // NewFlowBase creates a new FlowBase.
+//
+// sp, if not nil, is the Span corresponding to the flow. The flow takes
+// ownership; Cleanup() will finish it.
 func NewFlowBase(
 	flowCtx execinfra.FlowCtx,
+	sp *tracing.Span,
 	flowReg *FlowRegistry,
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
+	onFlowCleanup func(),
+	statementSQL string,
 ) *FlowBase {
 	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
 	// cluster, where the SQL node is single tenant. The tenant below is used
@@ -241,16 +282,23 @@ func NewFlowBase(
 		admissionInfo.Priority = admission.WorkPriority(h.Priority)
 		admissionInfo.CreateTime = h.CreateTime
 	}
-	base := &FlowBase{
+	return &FlowBase{
 		FlowCtx:               flowCtx,
+		sp:                    sp,
 		flowRegistry:          flowReg,
 		rowSyncFlowConsumer:   rowSyncFlowConsumer,
 		batchSyncFlowConsumer: batchSyncFlowConsumer,
 		localProcessors:       localProcessors,
 		admissionInfo:         admissionInfo,
+		onFlowCleanup:         onFlowCleanup,
+		status:                flowNotStarted,
+		statementSQL:          statementSQL,
 	}
-	base.status = FlowNotStarted
-	return base
+}
+
+// StatementSQL is part of the Flow interface.
+func (f *FlowBase) StatementSQL() string {
+	return f.statementSQL
 }
 
 // GetFlowCtx is part of the Flow interface.
@@ -343,7 +391,7 @@ func (f *FlowBase) StartInternal(
 
 	// Only register the flow if there will be inbound stream connections that
 	// need to look up this flow in the flow registry.
-	if !f.IsLocal() {
+	if f.HasInboundStreams() {
 		// Once we call RegisterFlow, the inbound streams become accessible; we must
 		// set up the WaitGroup counter before.
 		// The counter will be further incremented below to account for the
@@ -357,7 +405,7 @@ func (f *FlowBase) StartInternal(
 		}
 	}
 
-	f.status = FlowRunning
+	f.status = flowRunning
 
 	if log.V(1) {
 		log.Infof(ctx, "registered flow %s", f.ID.Short())
@@ -372,13 +420,22 @@ func (f *FlowBase) StartInternal(
 			f.waitGroup.Done()
 		}(i)
 	}
-	f.startedGoroutines = len(f.startables) > 0 || len(processors) > 0 || !f.IsLocal()
+	// Note that we might have already set f.startedGoroutines to true if it is
+	// a vectorized flow with a parallel unordered synchronizer. That component
+	// starts goroutines on its own, so we need to preserve that fact so that we
+	// correctly wait in Wait().
+	f.startedGoroutines = f.startedGoroutines || len(f.startables) > 0 || len(processors) > 0 || f.HasInboundStreams()
 	return nil
 }
 
-// IsLocal returns whether this flow does not have any remote execution.
+// IsLocal returns whether this flow is being run as part of a local-only query.
 func (f *FlowBase) IsLocal() bool {
-	return len(f.inboundStreams) == 0
+	return f.Local
+}
+
+// HasInboundStreams returns whether this flow has any inbound streams.
+func (f *FlowBase) HasInboundStreams() bool {
+	return len(f.inboundStreams) != 0
 }
 
 // IsVectorized returns whether this flow will run with vectorized execution.
@@ -388,10 +445,7 @@ func (f *FlowBase) IsVectorized() bool {
 
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
-	if err := f.StartInternal(ctx, f.processors, doneFn); err != nil {
-		return err
-	}
-	return nil
+	return f.StartInternal(ctx, f.processors, doneFn)
 }
 
 // Run is part of the Flow interface.
@@ -454,24 +508,23 @@ func (f *FlowBase) Wait() {
 // NOTE: this implements only the shared clean up logic between row-based and
 // vectorized flows.
 func (f *FlowBase) Cleanup(ctx context.Context) {
-	if f.status == FlowFinished {
+	if f.status == flowFinished {
 		panic("flow cleanup called twice")
 	}
 
-	// Release any descriptors accessed by this flow
-	if f.TypeResolverFactory != nil {
-		f.TypeResolverFactory.CleanupFunc(ctx)
+	// Release any descriptors accessed by this flow.
+	if f.Descriptors != nil && f.IsDescriptorsCleanupRequired {
+		f.Descriptors.ReleaseAll(ctx)
 	}
 
-	sp := tracing.SpanFromContext(ctx)
-	if sp != nil {
-		defer sp.Finish()
+	if f.sp != nil {
+		defer f.sp.Finish()
 		if f.Gateway && f.CollectStats {
 			// If this is the gateway node and we're collecting execution stats,
 			// output the maximum memory usage to the flow span. Note that
 			// non-gateway nodes use the last outbox to send this information
 			// over.
-			sp.RecordStructured(&execinfrapb.ComponentStats{
+			f.sp.RecordStructured(&execinfrapb.ComponentStats{
 				Component: execinfrapb.FlowComponentID(f.NodeID.SQLInstanceID(), f.FlowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage:  optional.MakeUint(uint64(f.FlowCtx.EvalCtx.Mon.MaximumBytes())),
@@ -493,37 +546,30 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
 	}
-	// Local flows do not get registered.
-	if !f.IsLocal() && f.status != FlowNotStarted {
+	if f.HasInboundStreams() && f.Started() {
 		f.flowRegistry.UnregisterFlow(f.ID)
 	}
-	f.status = FlowFinished
+	f.status = flowFinished
 	f.ctxCancel()
+	if f.onFlowCleanup != nil {
+		f.onFlowCleanup()
+	}
 	if f.doneFn != nil {
 		f.doneFn()
 	}
 }
 
-// cancel iterates through all unconnected streams of this flow and marks them canceled.
-// This function is called in Wait() after the associated context has been canceled.
-// In order to cancel a flow, call f.ctxCancel() instead of this function.
+// cancel cancels all unconnected streams of this flow. This function is called
+// in Wait() after the associated context has been canceled. In order to cancel
+// a flow, call f.ctxCancel() instead of this function.
 //
 // For a detailed description of the distsql query cancellation mechanism,
 // read docs/RFCS/query_cancellation.md.
 func (f *FlowBase) cancel() {
-	// If the flow is local, there are no inbound streams to cancel.
-	if f.IsLocal() {
+	if !f.HasInboundStreams() {
 		return
 	}
-	f.flowRegistry.Lock()
-	timedOutReceivers := f.flowRegistry.cancelPendingStreamsLocked(f.ID)
-	f.flowRegistry.Unlock()
-
-	for _, receiver := range timedOutReceivers {
-		go func(receiver InboundStreamHandler) {
-			// Stream has yet to be started; send an error to its
-			// receiver and prevent it from being connected.
-			receiver.Timeout(cancelchecker.QueryCanceledError)
-		}(receiver)
-	}
+	// Pending streams have yet to be started; send an error to its receivers
+	// and prevent them from being connected.
+	f.flowRegistry.cancelPendingStreams(f.ID, cancelchecker.QueryCanceledError)
 }

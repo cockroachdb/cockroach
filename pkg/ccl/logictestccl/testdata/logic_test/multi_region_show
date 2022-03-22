@@ -1,4 +1,4 @@
-# LogicTest: multiregion-9node-3region-3azs
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
 
 statement ok
 CREATE DATABASE test_local_db
@@ -44,6 +44,18 @@ SHOW CREATE DATABASE multi_region_test_explicit_primary_region_db
 ----
 database_name                                     create_statement
 multi_region_test_explicit_primary_region_db      CREATE DATABASE multi_region_test_explicit_primary_region_db PRIMARY REGION "ap-southeast-2" REGIONS = "ap-southeast-2", "ca-central-1", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+SET enable_multiregion_placement_policy = true;
+
+statement ok
+CREATE DATABASE multi_region_test_placement_restricted_db PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "ca-central-1", "us-east-1" PLACEMENT RESTRICTED
+
+query TT colnames
+SHOW CREATE DATABASE multi_region_test_placement_restricted_db
+----
+database_name                                     create_statement
+multi_region_test_placement_restricted_db         CREATE DATABASE multi_region_test_placement_restricted_db PRIMARY REGION "ap-southeast-2" REGIONS = "ap-southeast-2", "ca-central-1", "us-east-1" SURVIVE ZONE FAILURE PLACEMENT RESTRICTED
 
 statement error target database or schema does not exist
 SHOW CREATE DATABASE foo

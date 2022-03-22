@@ -31,6 +31,8 @@ func (f formatFluentJSONCompact) formatEntry(entry logEntry) *buffer {
 	return formatJSON(entry, true /* fluent */, tagCompact)
 }
 
+func (formatFluentJSONCompact) contentType() string { return "application/json" }
+
 type formatFluentJSONFull struct{}
 
 func (formatFluentJSONFull) formatterName() string { return "json-fluent" }
@@ -40,6 +42,8 @@ func (f formatFluentJSONFull) formatEntry(entry logEntry) *buffer {
 }
 
 func (formatFluentJSONFull) doc() string { return formatJSONDoc(true /* fluent */, tagVerbose) }
+
+func (formatFluentJSONFull) contentType() string { return "application/json" }
 
 type formatJSONCompact struct{}
 
@@ -51,6 +55,8 @@ func (f formatJSONCompact) formatEntry(entry logEntry) *buffer {
 
 func (formatJSONCompact) doc() string { return formatJSONDoc(false /* fluent */, tagCompact) }
 
+func (formatJSONCompact) contentType() string { return "application/json" }
+
 type formatJSONFull struct{}
 
 func (formatJSONFull) formatterName() string { return "json" }
@@ -60,6 +66,8 @@ func (f formatJSONFull) formatEntry(entry logEntry) *buffer {
 }
 
 func (formatJSONFull) doc() string { return formatJSONDoc(false /* fluent */, tagVerbose) }
+
+func (formatJSONFull) contentType() string { return "application/json" }
 
 func formatJSONDoc(forFluent bool, tags tagChoice) string {
 	var buf strings.Builder
@@ -173,6 +181,8 @@ var jsonTags = map[byte]struct {
 		"The node ID where the event was generated, once known. Only reported for single-tenant or KV servers.", true},
 	'x': {[2]string{"x", "cluster_id"},
 		"The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers.", true},
+	'v': {[2]string{"v", "version"},
+		"The binary version with which the event was generated.", true},
 	// SQL servers in multi-tenant deployments.
 	'q': {[2]string{"q", "instance_id"},
 		"The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers.", true},
@@ -188,8 +198,6 @@ const (
 	tagCompact tagChoice = 0
 	tagVerbose tagChoice = 1
 )
-
-var programEscaped = strings.ReplaceAll(program, ".", "_")
 
 var channelNamesLowercase = func() map[Channel]string {
 	lnames := make(map[Channel]string, len(logpb.Channel_name))
@@ -208,7 +216,11 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		buf.WriteString(`"tag":"`)
 		// Note: fluent prefers if there is no period in the tag other
 		// than the one splitting the application and category.
-		buf.WriteString(programEscaped)
+		// We rely on program having been processed by replacePeriods()
+		// already.
+		// Also use escapeString() in case program contains double
+		// quotes or other special JSON characters.
+		escapeString(buf, fileNameConstants.program)
 		buf.WriteByte('.')
 		if !entry.header {
 			buf.WriteString(channelNamesLowercase[entry.ch])
@@ -270,26 +282,32 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		escapeString(buf, entry.clusterID)
 		buf.WriteByte('"')
 	}
-	if entry.nodeID != 0 {
+	if entry.nodeID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['N'].tags[tags])
 		buf.WriteString(`":`)
-		n = buf.someDigits(0, int(entry.nodeID))
-		buf.Write(buf.tmp[:n])
+		buf.WriteString(entry.nodeID)
 	}
 	if entry.tenantID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['T'].tags[tags])
-		buf.WriteString(`":"`)
-		escapeString(buf, entry.tenantID)
-		buf.WriteByte('"')
+		buf.WriteString(`":`)
+		buf.WriteString(entry.tenantID)
 	}
-	if entry.sqlInstanceID != 0 {
+	if entry.sqlInstanceID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['q'].tags[tags])
 		buf.WriteString(`":`)
-		n = buf.someDigits(0, int(entry.sqlInstanceID))
-		buf.Write(buf.tmp[:n])
+		buf.WriteString(entry.sqlInstanceID)
+	}
+
+	// The binary version.
+	if entry.version != "" {
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['v'].tags[tags])
+		buf.WriteString(`":"`)
+		escapeString(buf, entry.version)
+		buf.WriteByte('"')
 	}
 
 	if !entry.header {
@@ -359,25 +377,9 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 	}
 
 	// Tags.
-	if entry.tags != nil {
+	if entry.payload.tags != nil {
 		buf.WriteString(`,"tags":{`)
-		comma := `"`
-		for _, t := range entry.tags.Get() {
-			buf.WriteString(comma)
-			escapeString(buf, t.Key())
-			buf.WriteString(`":"`)
-			if v := t.Value(); v != nil && v != "" {
-				var r string
-				if entry.payload.redactable {
-					r = string(redact.Sprint(v))
-				} else {
-					r = fmt.Sprint(v)
-				}
-				escapeString(buf, r)
-			}
-			buf.WriteByte('"')
-			comma = `,"`
-		}
+		entry.payload.tags.formatJSONToBuffer(buf)
 		buf.WriteByte('}')
 	}
 

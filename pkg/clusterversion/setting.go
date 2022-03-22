@@ -62,6 +62,7 @@ func registerClusterVersionSetting() *clusterVersionSetting {
 	s := &clusterVersionSetting{}
 	s.VersionSetting = settings.MakeVersionSetting(s)
 	settings.RegisterVersionSetting(
+		settings.TenantWritable,
 		KeyVersionSetting,
 		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<internal>,
 		&s.VersionSetting)
@@ -157,26 +158,26 @@ func (cv *clusterVersionSetting) Decode(val []byte) (settings.ClusterVersionImpl
 }
 
 // Validate is part of the VersionSettingImpl interface.
-func (cv *clusterVersionSetting) Validate(
+func (cv *clusterVersionSetting) ValidateVersionUpgrade(
 	_ context.Context, sv *settings.Values, curRawProto, newRawProto []byte,
-) ([]byte, error) {
+) error {
 	var newCV ClusterVersion
 	if err := protoutil.Unmarshal(newRawProto, &newCV); err != nil {
-		return nil, err
+		return err
 	}
 
 	if err := cv.validateBinaryVersions(newCV.Version, sv); err != nil {
-		return nil, err
+		return err
 	}
 
 	var oldCV ClusterVersion
 	if err := protoutil.Unmarshal(curRawProto, &oldCV); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Versions cannot be downgraded.
 	if newCV.Version.Less(oldCV.Version) {
-		return nil, errors.Errorf(
+		return errors.Errorf(
 			"versions cannot be downgraded (attempting to downgrade from %s to %s)",
 			oldCV.Version, newCV.Version)
 	}
@@ -184,13 +185,12 @@ func (cv *clusterVersionSetting) Validate(
 	// Prevent cluster version upgrade until cluster.preserve_downgrade_option
 	// is reset.
 	if downgrade := preserveDowngradeVersion.Get(sv); downgrade != "" {
-		return nil, errors.Errorf(
+		return errors.Errorf(
 			"cannot upgrade to %s: cluster.preserve_downgrade_option is set to %s",
 			newCV.Version, downgrade)
 	}
 
-	// Return the serialized form of the new version.
-	return protoutil.Marshal(&newCV)
+	return nil
 }
 
 // ValidateBinaryVersions is part of the VersionSettingImpl interface.
@@ -241,6 +241,7 @@ var preserveDowngradeVersion = registerPreserveDowngradeVersionSetting()
 
 func registerPreserveDowngradeVersionSetting() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
+		settings.TenantWritable,
 		"cluster.preserve_downgrade_option",
 		"disable (automatic or manual) cluster version upgrade from the specified version until reset",
 		"",

@@ -1,0 +1,102 @@
+# Test cases when a user has default privileges in a schema.
+
+statement ok
+CREATE ROLE test1;
+CREATE ROLE test2;
+GRANT test1, test2 TO root;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 IN SCHEMA public GRANT SELECT ON TABLES TO test2;
+
+statement error pq: role test1 cannot be dropped because some objects depend on it\nowner of default privileges on new relations belonging to role test1
+DROP ROLE test1
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations belonging to role test1
+DROP ROLE test2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 IN SCHEMA public REVOKE ALL ON TABLES FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 IN SCHEMA public REVOKE ALL ON TYPES FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ROLE test1 IN SCHEMA public REVOKE ALL ON SEQUENCES FROM test2;
+
+statement ok
+DROP ROLE test1;
+
+statement ok
+DROP ROLE test2;
+
+statement ok
+CREATE USER test2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA public GRANT SELECT ON TABLES TO test2
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations for all roles
+DROP ROLE test2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA public REVOKE SELECT ON TABLES FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA public GRANT USAGE ON TYPES TO test2;
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new types for all roles
+DROP ROLE test2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA public REVOKE USAGE ON TYPES FROM test2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA public GRANT SELECT ON SEQUENCES TO test2;
+
+statement error pq: role test2 cannot be dropped because some objects depend on it\nprivileges for default privileges on new sequences for all roles
+DROP ROLE test2
+
+# In a user defined schema.
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE ROLE test3;
+CREATE ROLE test4;
+GRANT test3, test4 TO root;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE test3 IN SCHEMA s GRANT SELECT ON TABLES TO test4;
+
+statement error pq: role test3 cannot be dropped because some objects depend on it\nowner of default privileges on new relations belonging to role test3
+DROP ROLE test3
+
+statement error pq: role test4 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations belonging to role test3
+DROP ROLE test4;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE test3 IN SCHEMA s REVOKE ALL ON TABLES FROM test4;
+ALTER DEFAULT PRIVILEGES FOR ROLE test3 IN SCHEMA s REVOKE ALL ON TYPES FROM test4;
+ALTER DEFAULT PRIVILEGES FOR ROLE test3 IN SCHEMA s REVOKE ALL ON SEQUENCES FROM test4;
+
+statement ok
+DROP ROLE test3;
+
+statement ok
+DROP ROLE test4;
+
+statement ok
+CREATE USER test4
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA s GRANT SELECT ON TABLES TO test4
+
+statement error pq: role test4 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations for all roles
+DROP ROLE test4;
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA s REVOKE SELECT ON TABLES FROM test4;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA s GRANT USAGE ON TYPES TO test4;
+
+statement error pq: role test4 cannot be dropped because some objects depend on it\nprivileges for default privileges on new types for all roles
+DROP ROLE test4
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA s REVOKE USAGE ON TYPES FROM test4;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA s GRANT SELECT ON SEQUENCES TO test4;
+
+statement error pq: role test4 cannot be dropped because some objects depend on it\nprivileges for default privileges on new sequences for all roles
+DROP ROLE test4

@@ -136,7 +136,7 @@ func TestResolveTableIndex(t *testing.T) {
 			name: tree.TableIndexName{
 				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, "a"),
 			},
-			expected: `t.public.a@primary`,
+			expected: `t.public.a@a_pkey`,
 		},
 		{
 			name: tree.TableIndexName{

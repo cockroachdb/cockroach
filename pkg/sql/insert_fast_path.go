@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -50,6 +51,8 @@ type insertFastPathNode struct {
 
 	run insertFastPathRun
 }
+
+var _ mutationPlanNode = &insertFastPathNode{}
 
 type insertFastPathRun struct {
 	insertRun
@@ -86,11 +89,12 @@ type insertFastPathFKSpanInfo struct {
 type insertFastPathFKCheck struct {
 	exec.InsertFastPathFKCheck
 
-	tabDesc     catalog.TableDescriptor
-	idx         catalog.Index
-	keyPrefix   []byte
-	colMap      catalog.TableColMap
-	spanBuilder *span.Builder
+	tabDesc      catalog.TableDescriptor
+	idx          catalog.Index
+	keyPrefix    []byte
+	colMap       catalog.TableColMap
+	spanBuilder  span.Builder
+	spanSplitter span.Splitter
 }
 
 func (c *insertFastPathFKCheck) init(params runParams) error {
@@ -99,8 +103,9 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 	c.idx = idx.idx
 
 	codec := params.ExecCfg().Codec
-	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc, c.idx.GetID())
-	c.spanBuilder = span.MakeBuilder(params.EvalContext(), codec, c.tabDesc, c.idx)
+	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc.GetID(), c.idx.GetID())
+	c.spanBuilder.Init(params.EvalContext(), codec, c.tabDesc, c.idx)
+	c.spanSplitter = span.MakeSplitter(c.tabDesc, c.idx, util.FastIntSet{} /* neededColOrdinals */)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
 		return errors.AssertionFailedf(
@@ -123,7 +128,7 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 // generateSpan returns the span that we need to look up to confirm existence of
 // the referenced row.
 func (c *insertFastPathFKCheck) generateSpan(inputRow tree.Datums) (roachpb.Span, error) {
-	return row.FKCheckSpan(c.spanBuilder, inputRow, c.colMap, len(c.InsertCols))
+	return row.FKCheckSpan(&c.spanBuilder, c.spanSplitter, inputRow, c.colMap, len(c.InsertCols))
 }
 
 // errorForRow returns an error indicating failure of this FK check for the
@@ -162,8 +167,8 @@ func (r *insertFastPathRun) addFKChecks(
 				return c.errorForRow(inputRow)
 			}
 			// We have a row with only NULLS, or a row with some NULLs and match
-			// method PARTIAL. We can ignore this row.
-			return nil
+			// method PARTIAL. We can skip this FK check for this row.
+			continue
 		}
 
 		span, err := c.generateSpan(inputRow)
@@ -247,7 +252,7 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 		}
 	}
 
-	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext())
+	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
@@ -302,6 +307,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		return false, err
 	}
 
+	n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 	if err := n.run.ti.finalize(params.ctx); err != nil {
 		return false, err
 	}
@@ -309,7 +315,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 	n.run.done = true
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.ri.Helper.TableDesc.GetID(), len(n.input))
+	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.ri.Helper.TableDesc, len(n.input))
 
 	return true, nil
 }
@@ -324,6 +330,10 @@ func (n *insertFastPathNode) Close(ctx context.Context) {
 	n.run.ti.close(ctx)
 	*n = insertFastPathNode{}
 	insertFastPathNodePool.Put(n)
+}
+
+func (n *insertFastPathNode) rowsWritten() int64 {
+	return n.run.ti.rowsWritten
 }
 
 // See planner.autoCommit.

@@ -131,6 +131,11 @@ type intentInterleavingIter struct {
 	intentLimitKeyBuf []byte
 }
 
+// TODO(bananabrick): Update intent interleaving iter so that
+// it doesn't understand interleaved intents. As of now, cockroach
+// can't write new interleaved intents, but can read them using
+// this iterator.
+
 var _ MVCCIterator = &intentInterleavingIter{}
 
 var intentInterleavingIterPool = sync.Pool{
@@ -925,10 +930,6 @@ func (i *intentInterleavingIter) ValueProto(msg protoutil.Message) error {
 	return protoutil.Unmarshal(value, msg)
 }
 
-func (i *intentInterleavingIter) IsCurIntentSeparated() bool {
-	return i.isCurAtIntentIter()
-}
-
 func (i *intentInterleavingIter) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
@@ -939,12 +940,6 @@ func (i *intentInterleavingIter) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	return findSplitKeyUsingIterator(i, start, end, minSplitKey, targetSize)
-}
-
-func (i *intentInterleavingIter) CheckForKeyCollisions(
-	sstData []byte, start, end roachpb.Key,
-) (enginepb.MVCCStats, error) {
-	return checkForKeyCollisionsGo(i, sstData, start, end)
 }
 
 func (i *intentInterleavingIter) SetUpperBound(key roachpb.Key) {
@@ -969,6 +964,7 @@ func (i *intentInterleavingIter) Stats() IteratorStats {
 		stats.Stats.ForwardStepCount[i] += intentStats.Stats.ForwardStepCount[i]
 		stats.Stats.ReverseStepCount[i] += intentStats.Stats.ReverseStepCount[i]
 	}
+	stats.Stats.InternalStats.Merge(intentStats.Stats.InternalStats)
 	return stats
 }
 
@@ -981,7 +977,7 @@ func (i *intentInterleavingIter) SupportsPrev() bool {
 // the identical engine state.
 func newMVCCIteratorByCloningEngineIter(iter EngineIterator, opts IterOptions) MVCCIterator {
 	pIter := iter.GetRawIter()
-	it := newPebbleIterator(nil, pIter, opts)
+	it := newPebbleIterator(nil, pIter, opts, StandardDurability)
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}

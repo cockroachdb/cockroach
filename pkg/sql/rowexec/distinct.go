@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -43,7 +44,7 @@ type distinct struct {
 		nonOrdered []uint32
 	}
 	memAcc           mon.BoundAccount
-	datumAlloc       rowenc.DatumAlloc
+	datumAlloc       tree.DatumAlloc
 	scratch          []byte
 	nullsAreDistinct bool
 	nullCount        uint32
@@ -268,7 +269,7 @@ func (d *distinct) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 				// Row is a duplicate input to an Upsert operation, so raise
 				// an error.
 				//
-				// TODO(knz): errorOnDup could be passed via log.Safe() if
+				// TODO(knz): errorOnDup could be passed via redact.Safe() if
 				// there was a guarantee that it does not contain PII. Or
 				// better yet, the caller would construct an `error` object to
 				// return here instead of a string.
@@ -318,7 +319,7 @@ func (d *sortedDistinct) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 		if matched {
 			if d.errorOnDup != "" {
 				// Row is a duplicate input to an Upsert operation, so raise an error.
-				// TODO(knz): errorOnDup could be passed via log.Safe() if
+				// TODO(knz): errorOnDup could be passed via redact.Safe() if
 				// there was a guarantee that it does not contain PII.
 				err = pgerror.Newf(pgcode.CardinalityViolation, "%s", d.errorOnDup)
 				d.MoveToDraining(err)

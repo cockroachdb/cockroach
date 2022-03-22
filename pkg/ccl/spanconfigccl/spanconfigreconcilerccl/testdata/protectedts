@@ -1,0 +1,136 @@
+reconcile
+----
+
+mutations discard
+----
+
+# Write a protected timestamp record on the cluster.
+protect record-id=1 ts=1
+cluster
+----
+
+# Write a protected timestamp record on the system tenant keyspace, and on the
+# secondary tenant keyspace.
+protect record-id=2 ts=2
+tenants 1,2
+----
+
+mutations
+----
+upsert {entire-keyspace}                   protection_policies=[{ts: 1}]
+upsert {source=1,target=1}                 protection_policies=[{ts: 2}]
+upsert {source=1,target=2}                 protection_policies=[{ts: 2}]
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t1();
+CREATE TABLE db.t2();
+----
+
+mutations
+----
+upsert /Table/10{6-7}                      range default
+upsert /Table/10{7-8}                      range default
+
+# Write a protected timestamp record on each table.
+protect record-id=3 ts=3
+descs 106,107
+----
+
+mutations
+----
+delete /Table/10{6-7}
+upsert /Table/10{6-7}                      protection_policies=[{ts: 3}]
+delete /Table/10{7-8}
+upsert /Table/10{7-8}                      protection_policies=[{ts: 3}]
+
+# Write a protected timestamp record on the database to ensure
+# it applies to the tables in the database.
+protect record-id=4 ts=4
+descs 104
+----
+
+mutations
+----
+delete /Table/10{6-7}
+upsert /Table/10{6-7}                      protection_policies=[{ts: 3} {ts: 4}]
+delete /Table/10{7-8}
+upsert /Table/10{7-8}                      protection_policies=[{ts: 3} {ts: 4}]
+
+# Write a protected timestamp record on the entire keyspace.
+protect record-id=5 ts=5
+cluster
+----
+
+mutations
+----
+delete {entire-keyspace}
+upsert {entire-keyspace}                   protection_policies=[{ts: 1} {ts: 5}]
+
+state limit=3
+----
+{entire-keyspace}                          protection_policies=[{ts: 1} {ts: 5}]
+{source=1,target=1}                        protection_policies=[{ts: 2}]
+{source=1,target=2}                        protection_policies=[{ts: 2}]
+...
+
+state offset=51
+----
+...
+/Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
+/Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
+
+# Release the cluster records.
+release record-id=5
+----
+
+mutations
+----
+delete {entire-keyspace}
+upsert {entire-keyspace}                   protection_policies=[{ts: 1}]
+
+release record-id=1
+----
+
+# At this point there are no cluster target protected timestamp records, and so we should only see
+# a delete entry.
+mutations
+----
+delete {entire-keyspace}
+
+state limit=2
+----
+{source=1,target=1}                        protection_policies=[{ts: 2}]
+{source=1,target=2}                        protection_policies=[{ts: 2}]
+...
+
+# Release the tenant records.
+release record-id=2
+----
+
+# At this point there are no tenant target protected timestamp records on the
+# system tenant, or secondary tenant and so we should only see delete entries.
+mutations
+----
+delete {source=1,target=1}
+delete {source=1,target=2}
+
+state limit=2
+----
+/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
+...
+
+# Release the schema object records.
+release record-id=3
+----
+
+release record-id=4
+----
+
+mutations
+----
+delete /Table/10{6-7}
+upsert /Table/10{6-7}                      range default
+delete /Table/10{7-8}
+upsert /Table/10{7-8}                      range default

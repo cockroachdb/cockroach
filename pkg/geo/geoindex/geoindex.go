@@ -94,7 +94,7 @@ var CommuteRelationshipMap = map[RelationshipType]RelationshipType{
 //   rooted at the covering of g, (b) all the parent nodes of the covering
 //   of g. The individual entries in (b) are representable as ranges of
 //   length 1. All of this is represented as UnionKeySpans. Covers, which
-//   is the shape that g covers, currently delegates to Interects so
+//   is the shape that g covers, currently delegates to Intersects so
 //   returns the same.
 //
 // - CoveredBy, which are the shapes that g is covered-by, needs to compute
@@ -237,33 +237,6 @@ var geoRelationshipTypeStr = map[RelationshipType]string{
 
 func (gr RelationshipType) String() string {
 	return geoRelationshipTypeStr[gr]
-}
-
-// IsEmptyConfig returns whether the given config contains a geospatial index
-// configuration.
-func IsEmptyConfig(cfg *Config) bool {
-	if cfg == nil {
-		return true
-	}
-	return cfg.S2Geography == nil && cfg.S2Geometry == nil
-}
-
-// IsGeographyConfig returns whether the config is a geography geospatial
-// index configuration.
-func IsGeographyConfig(cfg *Config) bool {
-	if cfg == nil {
-		return false
-	}
-	return cfg.S2Geography != nil
-}
-
-// IsGeometryConfig returns whether the config is a geometry geospatial
-// index configuration.
-func IsGeometryConfig(cfg *Config) bool {
-	if cfg == nil {
-		return false
-	}
-	return cfg.S2Geometry != nil
 }
 
 // Key is one entry under which a geospatial shape is stored on behalf of an

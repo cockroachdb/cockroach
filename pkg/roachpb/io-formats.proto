@@ -24,6 +24,7 @@ message IOFileFormat {
     PgCopy = 4;
     PgDump = 5;
     Avro = 6;
+    Parquet = 7;
   }
 
   optional FileFormat format = 1 [(gogoproto.nullable) = false];
@@ -33,12 +34,14 @@ message IOFileFormat {
   optional MysqldumpOptions mysql_dump = 9 [(gogoproto.nullable) = false];
   optional PgDumpOptions pg_dump = 6 [(gogoproto.nullable) = false];
   optional AvroOptions avro = 8 [(gogoproto.nullable) = false];
+  optional ParquetOptions parquet = 10 [(gogoproto.nullable) = false];
 
   enum Compression {
     Auto = 0;
     None = 1;
     Gzip = 2;
     Bzip = 3;
+    Snappy = 4;
   }
   optional Compression compression = 5 [(gogoproto.nullable) = false];
   // If true, don't abort on failures but instead save the offending row and keep on.
@@ -78,7 +81,7 @@ message MySQLOutfileOptions {
   optional int32 field_separator = 2 [(gogoproto.nullable) = false];
   // enclose is the enclosing (quoting) behavior (i.e. if specified and if optional).
   optional Enclose enclose = 3 [(gogoproto.nullable) = false];
-  // encloser is the character used to enclose (qupte) fields (--fields-enclosed-by)
+  // encloser is the character used to enclose (quote) fields (--fields-enclosed-by)
   optional int32 encloser = 4 [(gogoproto.nullable) = false];
   // has_escape indicates that an escape character is set (mysql's default is not).
   optional bool has_escape = 5 [(gogoproto.nullable) = false];
@@ -95,7 +98,7 @@ message MySQLOutfileOptions {
 
 // PgCopyOptions describe the format of postgresql's COPY TO STDOUT.
 message PgCopyOptions {
-  // delimiter is the delimitor between columns (DELIMITER)
+  // delimiter is the delimiter between columns (DELIMITER)
   optional int32 delimiter = 1 [(gogoproto.nullable) = false];
   // null is the NULL value (NULL)
   optional string null = 2 [(gogoproto.nullable) = false];
@@ -149,4 +152,9 @@ message AvroOptions {
   optional int32 max_record_size = 4 [(gogoproto.nullable) = false];
   optional int32 record_separator = 5 [(gogoproto.nullable) = false];
   optional int64 row_limit = 6 [(gogoproto.nullable) = false];
+}
+
+message ParquetOptions {
+  // col_nullability specifies which columns allow null values in the exported parquet file.
+  repeated bool col_nullability = 1 ;
 }

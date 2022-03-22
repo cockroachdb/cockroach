@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -44,6 +45,21 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
+
+// mergeApplicationTimeout is the timeout when waiting for a merge command to be
+// applied on all range replicas. There doesn't appear to be any strong reason
+// why this value was chosen in particular, but it seems to work.
+const mergeApplicationTimeout = 5 * time.Second
+
+// sendSnapshotTimeout is the timeout for sending snapshots. While a snapshot is
+// in transit, Raft log truncation is halted to allow the recipient to catch up.
+// If the snapshot takes very long to transfer for whatever reason this can
+// cause the Raft log to grow very large. We therefore set a conservative
+// timeout to eventually allow Raft log truncation while avoiding snapshot
+// starvation -- even if another snapshot is sent immediately, this still
+// allows truncation up to the new snapshot index.
+var sendSnapshotTimeout = envutil.EnvOrDefaultDuration(
+	"COCKROACH_RAFT_SEND_SNAPSHOT_TIMEOUT", 1*time.Hour)
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
@@ -295,15 +311,15 @@ func (r *Replica) adminSplitWithDescriptor(
 	reason string,
 ) (roachpb.AdminSplitResponse, error) {
 	var err error
+	var reply roachpb.AdminSplitResponse
+
 	// The split queue doesn't care about the set of replicas, so if we somehow
 	// are being handed one that's in a joint state, finalize that before
 	// continuing.
-	desc, err = maybeLeaveAtomicChangeReplicas(ctx, r.store, desc)
+	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
-		return roachpb.AdminSplitResponse{}, err
+		return reply, err
 	}
-
-	var reply roachpb.AdminSplitResponse
 
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
@@ -319,7 +335,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			foundSplitKey, err = storage.MVCCFindSplitKey(
 				ctx, r.store.engine, desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
-				return reply, errors.Errorf("unable to determine split key: %s", err)
+				return reply, errors.Wrap(err, "unable to determine split key")
 			}
 			if foundSplitKey == nil {
 				// No suitable split key could be found.
@@ -330,14 +346,22 @@ func (r *Replica) adminSplitWithDescriptor(
 			// range's bounds, return an error for the client to try again on the
 			// correct range.
 			if !kvserverbase.ContainsKey(desc, args.Key) {
-				l, _ := r.GetLease()
-				return reply, roachpb.NewRangeKeyMismatchError(ctx, args.Key, args.Key, desc, &l)
+				ri := r.GetRangeInfo(ctx)
+				return reply, roachpb.NewRangeKeyMismatchErrorWithCTPolicy(ctx, args.Key, args.Key, desc, &ri.Lease, ri.ClosedTimestampPolicy)
 			}
 			foundSplitKey = args.SplitKey
 		}
 
 		if !kvserverbase.ContainsKey(desc, foundSplitKey) {
 			return reply, errors.Errorf("requested split key %s out of bounds of %s", args.SplitKey, r)
+		}
+
+		// If predicate keys are specified, make sure they are contained by this
+		// range as well.
+		for _, k := range args.PredicateKeys {
+			if !kvserverbase.ContainsKey(desc, k) {
+				return reply, errors.Errorf("requested predicate key %s out of bounds of %s", k, r)
+			}
 		}
 
 		var err error
@@ -562,13 +586,6 @@ func (r *Replica) AdminMerge(
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
 
-		// If we aren't certain that all possible nodes in the cluster support a
-		// range merge transaction refreshing its reads while the RHS range is
-		// subsumed, observe the commit timestamp to force a client-side retry.
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries) {
-			_ = txn.CommitTimestamp()
-		}
-
 		// Pipelining might send QueryIntent requests to the RHS after the RHS has
 		// noticed the merge and started blocking all traffic. This causes the merge
 		// transaction to deadlock. Just turn pipelining off; the structure of the
@@ -735,9 +752,11 @@ func (r *Replica) AdminMerge(
 		}
 		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
 
-		err = waitForApplication(
-			ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
-			rhsSnapshotRes.LeaseAppliedIndex)
+		err = contextutil.RunWithTimeout(ctx, "waiting for merge application", mergeApplicationTimeout,
+			func(ctx context.Context) error {
+				return waitForApplication(ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, mergeReplicas,
+					rhsSnapshotRes.LeaseAppliedIndex)
+			})
 		if err != nil {
 			return errors.Wrap(err, "waiting for all right-hand replicas to catch up")
 		}
@@ -802,25 +821,28 @@ func waitForApplication(
 	replicas []roachpb.ReplicaDescriptor,
 	leaseIndex uint64,
 ) error {
-	return contextutil.RunWithTimeout(ctx, "wait for application", 5*time.Second, func(ctx context.Context) error {
-		g := ctxgroup.WithContext(ctx)
-		for _, repl := range replicas {
-			repl := repl // copy for goroutine
-			g.GoCtx(func(ctx context.Context) error {
-				conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
-				if err != nil {
-					return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
-				}
-				_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
-					StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
-					RangeID:            rangeID,
-					LeaseIndex:         leaseIndex,
-				})
-				return err
+	if dialer == nil && len(replicas) == 1 {
+		// This early return supports unit tests (testContext{}) that also
+		// want to perform merges.
+		return nil
+	}
+	g := ctxgroup.WithContext(ctx)
+	for _, repl := range replicas {
+		repl := repl // copy for goroutine
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
+			if err != nil {
+				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
+			}
+			_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
+				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
+				RangeID:            rangeID,
+				LeaseIndex:         leaseIndex,
 			})
-		}
-		return g.Wait()
-	})
+			return err
+		})
+	}
+	return g.Wait()
 }
 
 // waitForReplicasInit blocks until it has proof that the replicas listed in
@@ -833,6 +855,11 @@ func waitForReplicasInit(
 	rangeID roachpb.RangeID,
 	replicas []roachpb.ReplicaDescriptor,
 ) error {
+	if dialer == nil && len(replicas) == 1 {
+		// This early return supports unit tests (testContext{}) that also
+		// want to perform merges.
+		return nil
+	}
 	return contextutil.RunWithTimeout(ctx, "wait for replicas init", 5*time.Second, func(ctx context.Context) error {
 		g := ctxgroup.WithContext(ctx)
 		for _, repl := range replicas {
@@ -942,7 +969,7 @@ func waitForReplicasInit(
 func (r *Replica) ChangeReplicas(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
+	priority kvserverpb.SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs roachpb.ReplicationChanges,
@@ -972,7 +999,7 @@ func (r *Replica) ChangeReplicas(
 func (r *Replica) changeReplicasImpl(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
+	priority kvserverpb.SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs roachpb.ReplicationChanges,
@@ -981,7 +1008,7 @@ func (r *Replica) changeReplicasImpl(
 	// If in a joint config, clean up. The assumption here is that the caller
 	// of ChangeReplicas didn't even realize that they were holding on to a
 	// joint descriptor and would rather not have to deal with that fact.
-	desc, err = maybeLeaveAtomicChangeReplicas(ctx, r.store, desc)
+	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -1031,6 +1058,21 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
+	// Before we initialize learners, check that we're not removing the leaseholder.
+	// Or if we are, ensure that leaseholder is collocated with the Raft leader.
+	// A leaseholder that isn't the Raft leader doesn't know whether other replicas
+	// are sufficiently up-to-date (have the latest snapshot), and so choosing a
+	// target for lease transfer is riskier as it may result in temporary unavailability.
+	for _, target := range targets.voterRemovals {
+		if r.NodeID() == target.NodeID && r.StoreID() == target.StoreID {
+			raftStatus := r.RaftStatus()
+			if raftStatus == nil || len(raftStatus.Progress) == 0 {
+				log.VErrEventf(ctx, 5, "%v", errLeaseholderNotRaftLeader)
+				return nil, errLeaseholderNotRaftLeader
+			}
+		}
+	}
+
 	if adds := targets.voterAdditions; len(adds) > 0 {
 		// For all newly added voters, first add LEARNER replicas. They accept raft
 		// traffic (so they can catch up) but don't get to vote (so they don't
@@ -1057,9 +1099,8 @@ func (r *Replica) changeReplicasImpl(
 		)
 		if err != nil {
 			// If the error occurred while transitioning out of an atomic replication
-			// change, try again here with a fresh descriptor; this is a noop
-			// otherwise.
-			if _, err := maybeLeaveAtomicChangeReplicas(ctx, r.store, r.Desc()); err != nil {
+			// change, try again here with a fresh descriptor; this is a noop otherwise.
+			if _, err := r.maybeLeaveAtomicChangeReplicas(ctx, r.Desc()); err != nil {
 				return nil, err
 			}
 			if fn := r.store.cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
@@ -1118,7 +1159,7 @@ func (r *Replica) changeReplicasImpl(
 		// If we demoted or swapped any voters with non-voters, we likely are in a
 		// joint config or have learners on the range. Let's exit the joint config
 		// and remove the learners.
-		return maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, r.store, desc)
+		return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
 	}
 	return desc, nil
 }
@@ -1156,14 +1197,80 @@ func synthesizeTargetsByChangeType(
 	return result
 }
 
+// maybeTransferLeaseDuringLeaveJoint checks whether the leaseholder is being
+// removed and if so looks for a suitable transfer target for the lease and
+// attempts to transfer the lease to that target. If a target isn't found
+// or lease transfer fails, an error is returned.
+func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
+	ctx context.Context, desc *roachpb.RangeDescriptor,
+) error {
+	voters := desc.Replicas().VoterDescriptors()
+	// Determine whether the current leaseholder is being removed. voters includes
+	// the set of full or incoming voters that will remain after the joint configuration is
+	// complete. If we don't find the current leaseholder there this means it's being removed,
+	// and we're going to transfer the lease to another voter below, before exiting the JOINT config.
+	beingRemoved := true
+	for _, v := range voters {
+		if v.ReplicaID == r.ReplicaID() {
+			beingRemoved = false
+			break
+		}
+	}
+	if !beingRemoved {
+		return nil
+	}
+	// TransferLeaseTarget looks for a suitable target for lease transfer.
+	// Replicas are filtered from considerations based on the arguments passed,
+	// as well as various indicators. One such filtering is a requirement that a
+	// target replica has applied a snapshot. We exclude VOTER_INCOMING replicas
+	// from this check, since they only move to this state after applying a
+	// snapshot. Another filtering is based on the lieveness status of nodes
+	// We do not transfer the lease to nodes in draining or unknown state.
+	// Unknown is a temporary state, and is usually resolved after receiving a
+	// gossip message. But we do not know whether a particular node is alive,
+	// and would rather stay in the JOINT config than transferring the lease
+	// to a dead node. If no candidates are found, we will remain in a JOINT
+	// config, and rely on upper layers to retry exiting from the config.
+	target := r.store.allocator.TransferLeaseTarget(
+		ctx,
+		r.SpanConfig(),
+		voters,
+		r,
+		r.leaseholderStats,
+		true, /* forceDecisionWithoutStats */
+		transferLeaseOptions{
+			goal:                     followTheWorkload,
+			checkTransferLeaseSource: false,
+			checkCandidateFullness:   false,
+			dryRun:                   false,
+		},
+	)
+	if target == (roachpb.ReplicaDescriptor{}) {
+		err := errors.Errorf(
+			"could not find a better lease transfer target for r%d", desc.RangeID)
+		log.VErrEventf(ctx, 5, "%v", err)
+		// Couldn't find a target. Returning nil means we're not exiting the JOINT config, and the
+		// caller will retry. Note that the JOINT config isn't rolled back.
+		return err
+	}
+	log.VEventf(ctx, 5, "current leaseholder %v is being removed through an"+
+		" atomic replication change. Transferring lease to %v", r.String(), target)
+	err := r.store.DB().AdminTransferLease(ctx, r.startKey, target.StoreID)
+	if err != nil {
+		return err
+	}
+	log.VEventf(ctx, 5, "leaseholder transfer to %v complete", target)
+	return nil
+}
+
 // maybeLeaveAtomicChangeReplicas transitions out of the joint configuration if
 // the descriptor indicates one. This involves running a distributed transaction
 // updating said descriptor, the result of which will be returned. The
 // descriptor returned from this method will contain replicas of type LEARNER,
 // NON_VOTER, and VOTER_FULL only.
-func maybeLeaveAtomicChangeReplicas(
-	ctx context.Context, s *Store, desc *roachpb.RangeDescriptor,
-) (*roachpb.RangeDescriptor, error) {
+func (r *Replica) maybeLeaveAtomicChangeReplicas(
+	ctx context.Context, desc *roachpb.RangeDescriptor,
+) (rangeDesc *roachpb.RangeDescriptor, err error) {
 	// We want execChangeReplicasTxn to be able to make sure it's only tasked
 	// with leaving a joint state when it's in one, so make sure we don't call
 	// it if we're not.
@@ -1173,10 +1280,21 @@ func maybeLeaveAtomicChangeReplicas(
 	// NB: this is matched on in TestMergeQueueSeesLearner.
 	log.Eventf(ctx, "transitioning out of joint configuration %s", desc)
 
+	// If the leaseholder is being demoted, leaving the joint config is only
+	// possible if we first transfer the lease. A range not being able to exit
+	// the JOINT config will wedge splits, merges, and all rebalancing on the
+	// range including load-based rebalancing. We currently prefer to stay in
+	// the JOINT config than to transfer the lease to a suspected node. Exiting
+	// the JOINT config is retried by upper layers.
+	if err := r.maybeTransferLeaseDuringLeaveJoint(ctx, desc); err != nil {
+		return desc, err
+	}
+
 	// NB: reason and detail won't be used because no range log event will be
 	// emitted.
 	//
 	// TODO(tbg): reconsider this.
+	s := r.store
 	return execChangeReplicasTxn(
 		ctx, desc, kvserverpb.ReasonUnknown /* unused */, "", nil, /* iChgs */
 		changeReplicasTxnArgs{
@@ -1191,16 +1309,16 @@ func maybeLeaveAtomicChangeReplicas(
 // maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
 // returns, all remaining replicas will be of type VOTER_FULL or NON_VOTER.
-func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
-	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
-) (*roachpb.RangeDescriptor, error) {
-	desc, err := maybeLeaveAtomicChangeReplicas(ctx, store, desc)
+func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
+	ctx context.Context, desc *roachpb.RangeDescriptor,
+) (rangeDesc *roachpb.RangeDescriptor, err error) {
+	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
+
 	// Now the config isn't joint any more, but we may have demoted some voters
 	// into learners. These learners should go as well.
-
 	learners := desc.Replicas().LearnerDescriptors()
 	if len(learners) == 0 {
 		return desc, nil
@@ -1216,6 +1334,7 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	//
 	// https://github.com/cockroachdb/cockroach/pull/40268
 	origDesc := desc
+	store := r.store
 	for _, target := range targets {
 		var err error
 		desc, err = execChangeReplicasTxn(
@@ -1523,7 +1642,7 @@ func getChangesByNodeID(chgs roachpb.ReplicationChanges) changesByNodeID {
 func (r *Replica) initializeRaftLearners(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
+	priority kvserverpb.SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	targets []roachpb.ReplicationTarget,
@@ -1669,7 +1788,7 @@ func (r *Replica) initializeRaftLearners(
 		// orphaned learner. Second, this tickled some bugs in etcd/raft around
 		// switching between StateSnapshot and StateProbe. Even if we worked through
 		// these, it would be susceptible to future similar issues.
-		if err := r.sendSnapshot(ctx, rDesc, SnapshotRequest_INITIAL, priority); err != nil {
+		if err := r.sendSnapshot(ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority); err != nil {
 			return nil, err
 		}
 	}
@@ -1729,7 +1848,7 @@ func (r *Replica) execReplicationChangesForVoters(
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	voterAdditions, voterRemovals []roachpb.ReplicationTarget,
-) (*roachpb.RangeDescriptor, error) {
+) (rangeDesc *roachpb.RangeDescriptor, err error) {
 	// TODO(dan): We allow ranges with learner replicas to split, so in theory
 	// this may want to detect that and retry, sending a snapshot and promoting
 	// both sides.
@@ -1747,7 +1866,6 @@ func (r *Replica) execReplicationChangesForVoters(
 		iChgs = append(iChgs, internalReplicationChange{target: target, typ: typ})
 	}
 
-	var err error
 	desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
 		db:                                   r.store.DB(),
 		liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
@@ -1765,7 +1883,7 @@ func (r *Replica) execReplicationChangesForVoters(
 
 	// Leave the joint config if we entered one. Also, remove any learners we
 	// might have picked up due to removal-via-demotion.
-	return maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, r.store, desc)
+	return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
 }
 
 // tryRollbackRaftLearner attempts to remove a learner specified by the target.
@@ -1806,7 +1924,10 @@ func (r *Replica) tryRollbackRaftLearner(
 			})
 		return err
 	}
-	rollbackCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	rollbackCtx := r.AnnotateCtx(context.Background())
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	rollbackCtx = logtags.AddTags(rollbackCtx, logtags.FromContext(ctx))
 	if err := contextutil.RunWithTimeout(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
@@ -2042,11 +2163,11 @@ type changeReplicasTxnArgs struct {
 	//
 	// - Replicas on decommissioning node/store are considered live.
 	//
-	// - If `includeSuspectStores` is true, stores that are marked suspect (i.e.
+	// - If `includeSuspectAndDrainingStores` is true, stores that are marked suspect (i.e.
 	// stores that have failed a liveness heartbeat in the recent past) are
 	// considered live. Otherwise, they are excluded from the returned slices.
 	liveAndDeadReplicas func(
-		repls []roachpb.ReplicaDescriptor, includeSuspectStores bool,
+		repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
 	) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor)
 
 	logChange                            logChangeFn
@@ -2141,7 +2262,7 @@ func execChangeReplicasTxn(
 			// Note that the allocator will avoid rebalancing to stores that are
 			// currently marked suspect. See uses of StorePool.getStoreList() in
 			// allocator.go.
-			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors(), true /* includeSuspectStores */)
+			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors(), true /* includeSuspectAndDrainingStores */)
 			if !replicas.CanMakeProgress(
 				func(rDesc roachpb.ReplicaDescriptor) bool {
 					for _, inner := range liveReplicas {
@@ -2408,8 +2529,8 @@ func recordRangeEventsInLog(
 func (r *Replica) sendSnapshot(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
-	snapType SnapshotRequest_Type,
-	priority SnapshotRequest_Priority,
+	snapType kvserverpb.SnapshotRequest_Type,
+	priority kvserverpb.SnapshotRequest_Priority,
 ) (retErr error) {
 	defer func() {
 		// Report the snapshot status to Raft, which expects us to do this once we
@@ -2448,43 +2569,25 @@ func (r *Replica) sendSnapshot(
 		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
 	}
 
-	usesReplicatedTruncatedState, err := storage.MVCCGetProto(
-		ctx, snap.EngineSnap, keys.RaftTruncatedStateLegacyKey(r.RangeID), hlc.Timestamp{}, nil, storage.MVCCGetOptions{},
-	)
-	if err != nil {
-		return errors.Wrap(err, "loading legacy truncated state")
+	// We avoid shipping over the past Raft log in the snapshot by changing
+	// the truncated state (we're allowed to -- it's an unreplicated key and not
+	// subject to mapping across replicas). The actual sending happens here:
+	_ = (*kvBatchSnapshotStrategy)(nil).Send
+	// and results in no log entries being sent at all. Note that
+	// Metadata.Index is really the applied index of the replica.
+	snap.State.TruncatedState = &roachpb.RaftTruncatedState{
+		Index: snap.RaftSnap.Metadata.Index,
+		Term:  snap.RaftSnap.Metadata.Term,
 	}
 
-	canAvoidSendingLog := !usesReplicatedTruncatedState &&
-		snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex
+	// See comment on DeprecatedUsingAppliedStateKey for why we need to set this
+	// explicitly for snapshots going out to followers.
+	snap.State.DeprecatedUsingAppliedStateKey = true
 
-	if canAvoidSendingLog {
-		// If we're not using a legacy (replicated) truncated state, we avoid
-		// sending the (past) Raft log in the snapshot in the first place and
-		// send only those entries that are actually useful to the follower.
-		// This is done by changing the truncated state, which we're allowed
-		// to do since it is not a replicated key (and thus not subject to
-		// matching across replicas). The actual sending happens here:
-		_ = (*kvBatchSnapshotStrategy)(nil).Send
-		// and results in no log entries being sent at all. Note that
-		// Metadata.Index is really the applied index of the replica.
-		snap.State.TruncatedState = &roachpb.RaftTruncatedState{
-			Index: snap.RaftSnap.Metadata.Index,
-			Term:  snap.RaftSnap.Metadata.Term,
-		}
-	}
-
-	req := SnapshotRequest_Header{
-		State: snap.State,
-		// Tell the recipient whether it needs to synthesize the new
-		// unreplicated TruncatedState. It could tell by itself by peeking into
-		// the data, but it uses a write only batch for performance which
-		// doesn't support that; this is easier. Notably, this is true if the
-		// snap index itself is the one at which the migration happens.
-		//
-		// See VersionUnreplicatedRaftTruncatedState.
-		UnreplicatedTruncatedState: !usesReplicatedTruncatedState,
-		RaftMessageRequest: RaftMessageRequest{
+	req := kvserverpb.SnapshotRequest_Header{
+		State:                                snap.State,
+		DeprecatedUnreplicatedTruncatedState: true,
+		RaftMessageRequest: kvserverpb.RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: sender,
 			ToReplica:   recipient,
@@ -2497,14 +2600,9 @@ func (r *Replica) sendSnapshot(
 			},
 		},
 		RangeSize: r.GetMVCCStats().Total(),
-		// Recipients currently cannot choose to decline any snapshots.
-		// In 19.2 and earlier versions pre-emptive snapshots could be declined.
-		//
-		// TODO(ajwerner): Consider removing the CanDecline flag.
-		CanDecline: false,
-		Priority:   priority,
-		Strategy:   SnapshotRequest_KV_BATCH,
-		Type:       snapType,
+		Priority:  priority,
+		Strategy:  kvserverpb.SnapshotRequest_KV_BATCH,
+		Type:      snapType,
 	}
 	newBatchFn := func() storage.Batch {
 		return r.store.Engine().NewUnindexedBatch(true /* writeOnly */)
@@ -2512,14 +2610,18 @@ func (r *Replica) sendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
-	if err := r.store.cfg.Transport.SendSnapshot(
-		ctx,
-		r.store.allocator.storePool,
-		req,
-		snap,
-		newBatchFn,
-		sent,
-	); err != nil {
+	err = contextutil.RunWithTimeout(
+		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
+			return r.store.cfg.Transport.SendSnapshot(
+				ctx,
+				r.store.allocator.storePool,
+				req,
+				snap,
+				newBatchFn,
+				sent,
+			)
+		})
+	if err != nil {
 		if errors.Is(err, errMalformedSnapshot) {
 			tag := fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short())
 			if dir, err := r.store.checkpoint(ctx, tag); err != nil {
@@ -2666,10 +2768,11 @@ func updateRangeDescriptor(
 //
 // This is best-effort; it's possible that the replicate queue on the
 // leaseholder could take action at the same time, causing errors.
-func (s *Store) AdminRelocateRange(
+func (r *Replica) AdminRelocateRange(
 	ctx context.Context,
 	rangeDesc roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) error {
 	if containsDuplicates(voterTargets) {
 		return errors.AssertionFailedf(
@@ -2692,14 +2795,17 @@ func (s *Store) AdminRelocateRange(
 
 	// Remove learners so we don't have to think about relocating them, and leave
 	// the joint config if we're in one.
-	newDesc, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, s, &rangeDesc)
+	newDesc, err :=
+		r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
 		return err
 	}
 	rangeDesc = *newDesc
 
-	rangeDesc, err = s.relocateReplicas(ctx, rangeDesc, voterTargets, nonVoterTargets)
+	rangeDesc, err = r.relocateReplicas(
+		ctx, rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
+	)
 	if err != nil {
 		return err
 	}
@@ -2727,10 +2833,11 @@ func (s *Store) AdminRelocateRange(
 //
 // Transient errors returned from relocateOne are retried until things
 // work out.
-func (s *Store) relocateReplicas(
+func (r *Replica) relocateReplicas(
 	ctx context.Context,
 	rangeDesc roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) (roachpb.RangeDescriptor, error) {
 	startKey := rangeDesc.StartKey.AsRawKey()
 	transferLease := func(target roachpb.ReplicationTarget) error {
@@ -2739,11 +2846,11 @@ func (s *Store) relocateReplicas(
 		// the leaseholder so we'll fail there later if this fails), so it
 		// seems like a good idea to return any errors here to the caller (or
 		// to retry some errors appropriately).
-		if err := s.DB().AdminTransferLease(
+		if err := r.store.DB().AdminTransferLease(
 			ctx, startKey, target.StoreID,
 		); err != nil {
 			log.Warningf(ctx, "while transferring lease: %+v", err)
-			if s.TestingKnobs().DontIgnoreFailureToTransferLease {
+			if r.store.TestingKnobs().DontIgnoreFailureToTransferLease {
 				return err
 			}
 		}
@@ -2757,27 +2864,43 @@ func (s *Store) relocateReplicas(
 				return rangeDesc, err
 			}
 
-			ops, leaseTarget, err := s.relocateOne(ctx, &rangeDesc, voterTargets, nonVoterTargets)
+			ops, leaseTarget, err := r.relocateOne(
+				ctx, &rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
+			)
 			if err != nil {
 				return rangeDesc, err
 			}
-			if leaseTarget != nil {
-				// NB: we may need to transfer even if there are no ops, to make
-				// sure the attempt is made to make the first target the final
-				// leaseholder.
-				if err := transferLease(*leaseTarget); err != nil {
-					return rangeDesc, err
+
+			if !r.store.cfg.Settings.Version.IsActive(ctx,
+				clusterversion.EnableLeaseHolderRemoval) {
+				if leaseTarget != nil {
+					// NB: we may need to transfer even if there are no ops, to make
+					// sure the attempt is made to make the first target the final
+					// leaseholder.
+					if err := transferLease(*leaseTarget); err != nil {
+						return rangeDesc, err
+					}
 				}
-			}
-			if len(ops) == 0 {
-				// Done.
+				if len(ops) == 0 {
+					// Done
+					return rangeDesc, ctx.Err()
+				}
+			} else if len(ops) == 0 {
+				if len(voterTargets) > 0 && transferLeaseToFirstVoter {
+					// NB: we may need to transfer even if there are no ops, to make
+					// sure the attempt is made to make the first target the final
+					// leaseholder.
+					if err := transferLease(voterTargets[0]); err != nil {
+						return rangeDesc, err
+					}
+				}
 				return rangeDesc, ctx.Err()
 			}
 
 			opss := [][]roachpb.ReplicationChange{ops}
 			success := true
 			for _, ops := range opss {
-				newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, rangeDesc, ops)
+				newDesc, err := r.store.DB().AdminChangeReplicas(ctx, startKey, rangeDesc, ops)
 				if err != nil {
 					returnErr := errors.Wrapf(err, "while carrying out changes %v", ops)
 					if !isSnapshotError(err) {
@@ -2792,8 +2915,8 @@ func (s *Store) relocateReplicas(
 				rangeDesc = *newDesc
 			}
 			if success {
-				if fn := s.cfg.TestingKnobs.OnRelocatedOne; fn != nil {
-					fn(ops, leaseTarget)
+				if fn := r.store.cfg.TestingKnobs.OnRelocatedOne; fn != nil {
+					fn(ops, &voterTargets[0])
 				}
 
 				break
@@ -2842,10 +2965,11 @@ func (r *relocationArgs) finalRelocationTargets() []roachpb.ReplicationTarget {
 	}
 }
 
-func (s *Store) relocateOne(
+func (r *Replica) relocateOne(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
 	if repls := desc.Replicas(); len(repls.VoterFullAndNonVoterDescriptors()) != len(repls.Descriptors()) {
 		// The caller removed all the learners and left the joint config, so there
@@ -2854,16 +2978,16 @@ func (s *Store) relocateOne(
 			`range %s was either in a joint configuration or had learner replicas: %v`, desc, desc.Replicas())
 	}
 
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
-	if sysCfg == nil {
-		return nil, nil, fmt.Errorf("no system config available, unable to perform RelocateRange")
+	confReader, err := r.store.GetConfReader(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "can't relocate range")
 	}
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
+	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	storeList, _, _ := s.allocator.storePool.getStoreList(storeFilterNone)
+	storeList, _, _ := r.store.allocator.storePool.getStoreList(storeFilterNone)
 	storeMap := storeListToMap(storeList)
 
 	// Compute which replica to add and/or remove, respectively. We then ask the
@@ -2895,36 +3019,33 @@ func (s *Store) relocateOne(
 		for _, candidate := range candidateTargets {
 			store, ok := storeMap[candidate.StoreID]
 			if !ok {
-				return nil, nil, fmt.Errorf("cannot up-replicate to s%d; missing gossiped StoreDescriptor",
-					candidate.StoreID)
+				return nil, nil, fmt.Errorf(
+					"cannot up-replicate to s%d; missing gossiped StoreDescriptor"+
+						" (the store is likely dead, draining or decommissioning)", candidate.StoreID,
+				)
 			}
 			candidateDescs = append(candidateDescs, *store)
 		}
 		candidateStoreList := makeStoreList(candidateDescs)
 
-		targetStore, _ := s.allocator.allocateTargetFromList(
+		additionTarget, _ = r.store.allocator.allocateTargetFromList(
 			ctx,
 			candidateStoreList,
-			zone,
+			conf,
 			existingVoters,
 			existingNonVoters,
-			s.allocator.scorerOptions(),
+			r.store.allocator.scorerOptions(),
 			// NB: Allow the allocator to return target stores that might be on the
 			// same node as an existing replica. This is to ensure that relocations
 			// that require "lateral" movement of replicas within a node can succeed.
 			true, /* allowMultipleReplsPerNode */
 			args.targetType,
 		)
-		if targetStore == nil {
+		if roachpb.Empty(additionTarget) {
 			return nil, nil, fmt.Errorf(
 				"none of the remaining %ss %v are legal additions to %v",
 				args.targetType, args.targetsToAdd(), desc.Replicas(),
 			)
-		}
-
-		additionTarget = roachpb.ReplicationTarget{
-			NodeID:  targetStore.Node.NodeID,
-			StoreID: targetStore.StoreID,
 		}
 
 		// Pretend the new replica is already there so that the removal logic below
@@ -2975,9 +3096,14 @@ func (s *Store) relocateOne(
 		// (s1,s2,s3,s4) which is a reasonable request; that replica set is
 		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
 		// may not want to do that due to constraints.
-		targetStore, _, err := s.allocator.removeTarget(
-			ctx, zone, args.targetsToRemove(), existingVoters,
-			existingNonVoters, args.targetType,
+		targetStore, _, err := r.store.allocator.removeTarget(
+			ctx,
+			conf,
+			r.store.allocator.storeListForTargets(args.targetsToRemove()),
+			existingVoters,
+			existingNonVoters,
+			args.targetType,
+			r.store.allocator.scorerOptions(),
 		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(
@@ -2989,20 +3115,21 @@ func (s *Store) relocateOne(
 			NodeID:  targetStore.NodeID,
 			StoreID: targetStore.StoreID,
 		}
-		// We can't remove the leaseholder, which really throws a wrench into
-		// atomic replication changes. If we find that we're trying to do just
-		// that, we need to first move the lease elsewhere. This is not possible
-		// if there is no other replica available at that point, i.e. if the
-		// existing descriptor is a single replica that's being replaced.
+		// Prior to 22.1 we can't remove the leaseholder. If we find that we're
+		// trying to do just that, we need to first move the lease elsewhere.
+		// This is not possible if there is no other replica available at that
+		// point, i.e. if the existing descriptor is a single replica that's
+		// being replaced.
 		var b kv.Batch
 		liReq := &roachpb.LeaseInfoRequest{}
 		liReq.Key = desc.StartKey.AsRawKey()
 		b.AddRawRequest(liReq)
-		if err := s.DB().Run(ctx, &b); err != nil {
+		if err := r.store.DB().Run(ctx, &b); err != nil {
 			return nil, nil, errors.Wrap(err, "looking up lease")
 		}
 		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
-		shouldRemove = curLeaseholder.StoreID != removalTarget.StoreID
+		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) ||
+			r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
 		if args.targetType == voterTarget {
 			// If the voter being removed is about to be added as a non-voter, then we
 			// can just demote it.
@@ -3071,9 +3198,9 @@ func (s *Store) relocateOne(
 		}
 	}
 
-	if len(ops) == 0 {
-		// Make sure that the first target is the final leaseholder, as
-		// AdminRelocateRange specifies.
+	if len(ops) == 0 && transferLeaseToFirstVoter {
+		// Make sure that the first target is the final leaseholder, if the caller
+		// asked for it.
 		transferTarget = &voterTargets[0]
 	}
 	return ops, transferTarget, nil
@@ -3182,13 +3309,36 @@ func (r *Replica) adminScatter(
 		MaxRetries:     5,
 	}
 
-	// Loop until the replicate queue decides there is nothing left to do for the
-	// range. Note that we disable lease transfers until the final step as
-	// transferring the lease prevents any further action on this node.
+	// On every `processOneChange` call with the `scatter` option set, stores in
+	// the cluster are essentially randomly categorized as "overfull" or
+	// "underfull" (replicas on overfull stores are then rebalanced to the
+	// underfull ones). Since each existing replica will be on a store categorized
+	// as either underfull or overfull, it can be expected to be rebalanced with a
+	// probability of 0.5. This means that, roughly speaking, for N replicas,
+	// probability of a successful rebalance is (1 - (0.5)^N). Thus, we limit the
+	// number of times we try to scatter a particular range to its replication
+	// factor.
+	maxAttempts := len(r.Desc().Replicas().Descriptors())
+	currentAttempt := 0
+
+	// Loop until the replicate queue decides there is nothing left to do or until
+	// we hit `maxAttempts` for the range. Note that we disable lease transfers
+	// until the final step as transferring the lease prevents any further action
+	// on this node.
 	var allowLeaseTransfer bool
+	var err error
+	requeue := true
 	canTransferLease := func(ctx context.Context, repl *Replica) bool { return allowLeaseTransfer }
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
-		requeue, err := rq.processOneChange(ctx, r, canTransferLease, false /* dryRun */)
+		if currentAttempt == maxAttempts {
+			break
+		}
+		if currentAttempt == maxAttempts-1 || !requeue {
+			allowLeaseTransfer = true
+		}
+		requeue, err = rq.processOneChange(
+			ctx, r, canTransferLease, true /* scatter */, false, /* dryRun */
+		)
 		if err != nil {
 			// TODO(tbg): can this use IsRetriableReplicationError?
 			if isSnapshotError(err) {
@@ -3196,12 +3346,7 @@ func (r *Replica) adminScatter(
 			}
 			break
 		}
-		if !requeue {
-			if allowLeaseTransfer {
-				break
-			}
-			allowLeaseTransfer = true
-		}
+		currentAttempt++
 		re.Reset()
 	}
 
@@ -3224,39 +3369,29 @@ func (r *Replica) adminScatter(
 	}
 
 	ri := r.GetRangeInfo(ctx)
+	stats := r.GetMVCCStats()
 	return roachpb.AdminScatterResponse{
 		RangeInfos: []roachpb.RangeInfo{ri},
+		MVCCStats:  &stats,
 	}, nil
 }
 
+// TODO(arul): AdminVerifyProtectedTimestampRequest can entirely go away in
+// 22.2.
 func (r *Replica) adminVerifyProtectedTimestamp(
-	ctx context.Context, args roachpb.AdminVerifyProtectedTimestampRequest,
+	ctx context.Context, _ roachpb.AdminVerifyProtectedTimestampRequest,
 ) (resp roachpb.AdminVerifyProtectedTimestampResponse, err error) {
-	var doesNotApplyReason string
-	resp.Verified, doesNotApplyReason, err = r.protectedTimestampRecordApplies(ctx, &args)
-	if err != nil {
-		return resp, err
-	}
-
-	// In certain cases we do not want to return an error even if we failed to
-	// verify the protected ts record. This ensures that executeAdminBatch adds
-	// the response to the batch, thereby allowing us to aggregate the
-	// verification failures across all AdminVerifyProtectedTimestampRequests and
-	// construct a more informative error to show to the user.
-	if doesNotApplyReason != "" {
-		if !resp.Verified {
-			desc := r.Desc()
-			failedRange := roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{
-				RangeID:  int64(desc.GetRangeID()),
-				StartKey: desc.GetStartKey(),
-				EndKey:   desc.EndKey,
-				Reason:   doesNotApplyReason,
-			}
-			resp.VerificationFailedRanges = append(resp.VerificationFailedRanges, failedRange)
-			// TODO(adityamaru): This is here for compatibility with 20.2, remove in
-			// 21.2.
-			resp.DeprecatedFailedRanges = append(resp.DeprecatedFailedRanges, *r.Desc())
-		}
-	}
+	// AdminVerifyProtectedTimestampRequest is not supported starting from the
+	// 22.1 release. We expect nodes running a 22.1 binary to still service this
+	// request in a {21.2, 22.1} mixed version cluster. This can happen if the
+	// request is initiated on a 21.2 node and the leaseholder of the range it is
+	// trying to verify is on a 22.1 node.
+	//
+	// We simply return true without attempting to verify in such a case. This
+	// ensures upstream jobs (backups) don't fail as a result. It is okay to
+	// return true regardless even if the PTS record being verified does not apply
+	// as the failure mode is non-destructive. Infact, this is the reason we're
+	// no longer supporting Verification past 22.1.
+	resp.Verified = true
 	return resp, nil
 }

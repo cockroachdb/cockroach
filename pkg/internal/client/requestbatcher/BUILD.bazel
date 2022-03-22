@@ -7,7 +7,7 @@ go_library(
     visibility = ["//pkg:__subpackages__"],
     deps = [
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/contextutil",
         "//pkg/util/log",
         "//pkg/util/stop",
@@ -21,7 +21,7 @@ go_test(
     srcs = ["batcher_test.go"],
     embed = [":requestbatcher"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/stop",

@@ -106,7 +106,9 @@ func TestKeyAddress(t *testing.T) {
 	}{
 		{roachpb.Key{}, roachpb.RKeyMin},
 		{roachpb.Key("123"), roachpb.RKey("123")},
+		{MakeRangeKeyPrefix(roachpb.RKey("foo")), roachpb.RKey("foo")},
 		{RangeDescriptorKey(roachpb.RKey("foo")), roachpb.RKey("foo")},
+		{MakeRangeKeyPrefix(roachpb.RKey("baz")), roachpb.RKey("baz")},
 		{TransactionKey(roachpb.Key("baz"), uuid.MakeV4()), roachpb.RKey("baz")},
 		{TransactionKey(roachpb.KeyMax, uuid.MakeV4()), roachpb.RKeyMax},
 		{RangeDescriptorKey(roachpb.RKey(TransactionKey(roachpb.Key("doubleBaz"), uuid.MakeV4()))), roachpb.RKey("doubleBaz")},
@@ -114,6 +116,30 @@ func TestKeyAddress(t *testing.T) {
 	}
 	for i, test := range testCases {
 		if keyAddr, err := Addr(test.key); err != nil {
+			t.Errorf("%d: %v", i, err)
+		} else if !keyAddr.Equal(test.expAddress) {
+			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
+		}
+	}
+}
+
+func TestKeyAddressUpperBound(t *testing.T) {
+	testCases := []struct {
+		key        roachpb.Key
+		expAddress roachpb.RKey
+	}{
+		{roachpb.Key{}, roachpb.RKeyMin},
+		{roachpb.Key("123"), roachpb.RKey("123")},
+		{MakeRangeKeyPrefix(roachpb.RKey("foo")), roachpb.RKey("foo")},
+		{RangeDescriptorKey(roachpb.RKey("foo")), roachpb.RKey("foo").Next()},
+		{MakeRangeKeyPrefix(roachpb.RKey("baz")), roachpb.RKey("baz")},
+		{TransactionKey(roachpb.Key("baz"), uuid.MakeV4()), roachpb.RKey("baz").Next()},
+		{TransactionKey(roachpb.KeyMax, uuid.MakeV4()), roachpb.RKeyMax.Next()},
+		{RangeDescriptorKey(roachpb.RKey(TransactionKey(roachpb.Key("doubleBaz"), uuid.MakeV4()))), roachpb.RKey("doubleBaz").Next()},
+		{nil, nil},
+	}
+	for i, test := range testCases {
+		if keyAddr, err := AddrUpperBound(test.key); err != nil {
 			t.Errorf("%d: %v", i, err)
 		} else if !keyAddr.Equal(test.expAddress) {
 			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
@@ -130,10 +156,7 @@ func TestKeyAddressError(t *testing.T) {
 		"local range ID key .* is not addressable": {
 			AbortSpanKey(0, uuid.MakeV4()),
 			RangeTombstoneKey(0),
-			RaftAppliedIndexLegacyKey(0),
-			RaftTruncatedStateLegacyKey(0),
 			RangeLeaseKey(0),
-			RangeStatsLegacyKey(0),
 			RaftHardStateKey(0),
 			RaftLogPrefix(0),
 			RaftLogKey(0, 0),
@@ -658,7 +681,7 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		{es(1, 200)[:2], "insufficient bytes to decode uvarint value"},
 		// The column ID suffix is invalid.
 		{es(1, 2, 200)[:3], "insufficient bytes to decode uvarint value"},
-		// Exercises a former overflow bug. We decode a uint(18446744073709551610) which, if casted
+		// Exercises a former overflow bug. We decode a uint(18446744073709551610) which, if cast
 		// to int carelessly, results in -6.
 		{encoding.EncodeVarintAscending(tenSysCodec.TablePrefix(999), 322434), "malformed table key"},
 		// Same test cases, but for tenant 5.

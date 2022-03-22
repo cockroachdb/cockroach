@@ -1,5 +1,3 @@
-# LogicTest: !3node-tenant(49854)
-
 statement ok
 GRANT CREATE ON DATABASE test TO testuser
 
@@ -28,7 +26,7 @@ REVOKE ALL ON t FROM testuser
 # Owner should able to grant all privileges to other roles.
 
 statement ok
-GRANT ALL ON t TO new_role
+GRANT ALL ON t TO new_role WITH GRANT OPTION
 
 # Test ownership of views.
 
@@ -48,7 +46,7 @@ statement ok
 ALTER TABLE v2 RENAME to v
 
 statement ok
-GRANT ALL ON v TO new_role
+GRANT ALL ON v TO new_role WITH GRANT OPTION
 
 statement ok
 DROP VIEW v
@@ -73,7 +71,7 @@ statement ok
 ALTER SEQUENCE s2 RENAME to s
 
 statement ok
-GRANT ALL ON s TO new_role
+GRANT ALL ON s TO new_role WITH GRANT OPTION
 
 statement ok
 DROP SEQUENCE s
@@ -105,7 +103,7 @@ statement ok
 ALTER TABLE d.t2 RENAME TO d.t
 
 statement ok
-GRANT ALL ON DATABASE d TO new_role
+GRANT ALL ON DATABASE d TO new_role WITH GRANT OPTION
 
 statement ok
 DROP TABLE d.t
@@ -134,10 +132,25 @@ CREATE DATABASE d
 user root
 
 statement ok
-REVOKE admin FROM testuser
+REVOKE admin FROM testuser;
+GRANT ALL ON DATABASE d to testuser2
+
+# Remove the following two lines once the GRANT privilege is removed in 22.2
+statement ok
+REVOKE GRANT OPTION FOR ALL PRIVILEGES ON DATABASE d FROM testuser2
+
+user testuser2
+
+# testuser2 has ALL privileges, no grant options, and is not a member of a role,
+# so it can't GRANT.
+statement error user testuser2 missing WITH GRANT OPTION privilege on ALL
+GRANT ALL ON DATABASE d TO new_role WITH GRANT OPTION
+
+user root
 
 statement ok
-GRANT testuser TO testuser2
+GRANT testuser TO testuser2;
+REVOKE ALL ON DATABASE d FROM testuser2
 
 user testuser2
 
@@ -150,13 +163,7 @@ statement ok
 CREATE TABLE d.t()
 
 statement ok
-ALTER TABLE d.t RENAME TO d.t2
-
-statement ok
-ALTER TABLE d.t2 RENAME TO d.t
-
-statement ok
-GRANT ALL ON DATABASE d TO new_role
+GRANT ALL ON DATABASE d TO new_role WITH GRANT OPTION
 
 statement ok
 DROP TABLE d.t
@@ -199,9 +206,10 @@ user root
 # ownership.
 
 statement ok
-REVOKE ALL ON DATABASE test FROM testuser
+REVOKE ALL ON DATABASE test FROM testuser;
+REVOKE ALL ON TABLE d.t FROM testuser;
 
-statement error pq: role testuser cannot be dropped because some objects depend on it.*\n.*owner of database d.*\n.*owner of table test.public.t.*\n.*owner of table d.public.t
+statement error pq: role testuser cannot be dropped because some objects depend on it\nowner of database d\nowner of table d.public.t\nowner of table test.public.t
 DROP ROLE testuser
 
 # Cannot drop object due to owned objects message should only show the owned
@@ -212,6 +220,9 @@ user testuser2
 
 statement ok
 CREATE TABLE t2()
+
+statement ok
+REVOKE ALL ON TABLE t2 FROM testuser2
 
 statement error pq: role testuser2 cannot be dropped because some objects depend on it.*\n.*owner of table test.public.t2
 DROP ROLE testuser2, testuser
@@ -235,9 +246,12 @@ CREATE TABLE s.t()
 user root
 
 statement ok
-REVOKE ALL ON DATABASE test FROM testuser
+REVOKE ALL ON DATABASE test FROM testuser;
+REVOKE ALL ON SCHEMA d.s FROM testuser;
+REVOKE ALL ON TYPE d.typ FROM testuser;
+REVOKE ALL ON TABLE d.s.t FROM testuser;
 
 user testuser
 
-statement error pq: role testuser cannot be dropped because some objects depend on it.*\n.*owner of database d.*\n.*owner of table test.public.t.*\n.*owner of table d.public.t.*\n.*owner of table d.s.t.*\n.*owner of schema s.*\n.*owner of type d.public._?typ.*\n.*owner of type d.public._?typ
+statement error pq: role testuser cannot be dropped because some objects depend on it\nowner of database d\nowner of schema s
 DROP ROLE testuser

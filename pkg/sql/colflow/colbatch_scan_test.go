@@ -22,13 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -52,15 +53,17 @@ func TestColBatchScanMeta(t *testing.T) {
 		3, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
-	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	st := s.ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
+	var monitorRegistry colexecargs.MonitorRegistry
+	defer monitorRegistry.Close(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	leafInputState := rootTxn.GetLeafTxnInputState(ctx)
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), &leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
@@ -70,14 +73,20 @@ func TestColBatchScanMeta(t *testing.T) {
 		Local:  true,
 		NodeID: evalCtx.NodeID,
 	}
+	var fetchSpec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(
+		&fetchSpec, keys.SystemSQLCodec, td, td.GetPrimaryIndex(),
+		[]descpb.ColumnID{td.PublicColumns()[0].GetID()},
+	); err != nil {
+		t.Fatal(err)
+	}
 	spec := execinfrapb.ProcessorSpec{
 		Core: execinfrapb.ProcessorCoreUnion{
 			TableReader: &execinfrapb.TableReaderSpec{
-				Spans: []execinfrapb.TableReaderSpan{
-					{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)},
+				FetchSpec: fetchSpec,
+				Spans: []roachpb.Span{
+					td.PrimaryIndexSpan(keys.SystemSQLCodec),
 				},
-				NeededColumns: []uint32{0},
-				Table:         *td.TableDesc(),
 			}},
 		ResultTypes: types.OneIntCol,
 	}
@@ -85,15 +94,16 @@ func TestColBatchScanMeta(t *testing.T) {
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                &spec,
 		StreamingMemAccount: testMemAcc,
+		MonitorRegistry:     &monitorRegistry,
 	}
 	res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.TestCleanup()
+	defer res.TestCleanupNoError(t)
 	tr := res.Root
 	tr.Init(ctx)
-	meta := tr.(*colexecutils.CancelChecker).Input.(colexecop.DrainableOperator).DrainMeta()
+	meta := res.MetadataSources[0].DrainMeta()
 	var txnFinalStateSeen bool
 	for _, m := range meta {
 		if m.LeafTxnFinalState != nil {
@@ -124,22 +134,29 @@ func BenchmarkColBatchScan(b *testing.B) {
 			numRows,
 			sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
 		)
-		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+			var fetchSpec descpb.IndexFetchSpec
+			if err := rowenc.InitIndexFetchSpec(
+				&fetchSpec, keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndex(),
+				[]descpb.ColumnID{tableDesc.PublicColumns()[0].GetID(), tableDesc.PublicColumns()[1].GetID()},
+			); err != nil {
+				b.Fatal(err)
+			}
 			spec := execinfrapb.ProcessorSpec{
 				Core: execinfrapb.ProcessorCoreUnion{
 					TableReader: &execinfrapb.TableReaderSpec{
-						Table: *tableDesc.TableDesc(),
-						Spans: []execinfrapb.TableReaderSpan{
-							{Span: tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
-						},
-						NeededColumns: []uint32{0, 1},
+						FetchSpec: fetchSpec,
+						// Spans will be set below.
 					}},
 				ResultTypes: types.TwoIntCols,
 			}
 
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
+			var monitorRegistry colexecargs.MonitorRegistry
+			defer monitorRegistry.Close(ctx)
 
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
@@ -151,9 +168,14 @@ func BenchmarkColBatchScan(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
+				// We have to set the spans on each iteration since the
+				// txnKVFetcher reuses the passed-in slice and destructively
+				// modifies it.
+				spec.Core.TableReader.Spans = []roachpb.Span{span}
 				args := &colexecargs.NewColOperatorArgs{
 					Spec:                &spec,
 					StreamingMemAccount: testMemAcc,
+					MonitorRegistry:     &monitorRegistry,
 				}
 				res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 				if err != nil {
@@ -169,7 +191,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 					}
 				}
 				b.StopTimer()
-				res.TestCleanup()
+				res.TestCleanupNoError(b)
 			}
 		})
 	}

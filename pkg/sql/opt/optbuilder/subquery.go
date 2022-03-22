@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -241,12 +242,12 @@ func (s *subquery) buildSubquery(desiredTypes []*types.T) {
 		// We need to add a projection to remove the extra columns.
 		projScope := outScope.push()
 		projScope.appendColumnsFromScope(outScope)
-		projScope.expr = s.scope.builder.constructProject(outScope.expr.(memo.RelExpr), projScope.cols)
+		projScope.expr = s.scope.builder.constructProject(outScope.expr, projScope.cols)
 		outScope = projScope
 	}
 
 	s.cols = outScope.cols
-	s.node = outScope.expr.(memo.RelExpr)
+	s.node = outScope.expr
 	s.ordering = ord
 }
 
@@ -354,14 +355,14 @@ func (b *Builder) buildMultiRowSubquery(
 
 	var cmp opt.Operator
 	switch c.Operator.Symbol {
-	case tree.In, tree.NotIn:
+	case treecmp.In, treecmp.NotIn:
 		// <var> = x
 		cmp = opt.EqOp
 
-	case tree.Any, tree.Some, tree.All:
+	case treecmp.Any, treecmp.Some, treecmp.All:
 		// <var> <comp> x
 		cmp = opt.ComparisonOpMap[c.SubOperator.Symbol]
-		if c.Operator.Symbol == tree.All {
+		if c.Operator.Symbol == treecmp.All {
 			// NOT(<var> <comp> x)
 			cmp = opt.NegateOpMap[cmp]
 		}
@@ -378,7 +379,7 @@ func (b *Builder) buildMultiRowSubquery(
 		OriginalExpr: s.Subquery,
 	})
 	switch c.Operator.Symbol {
-	case tree.NotIn, tree.All:
+	case treecmp.NotIn, treecmp.All:
 		// NOT Any(...)
 		out = b.factory.ConstructNot(out)
 	}

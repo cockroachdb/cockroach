@@ -1,0 +1,319 @@
+@startuml
+object Database
+
+Database :  DatabaseID
+
+object Schema
+
+Schema :  SchemaID
+Schema :  IsTemporary
+Schema :  IsPublic
+Schema :  IsVirtual
+
+object View
+
+View :  ViewID
+View : []UsesTypeIDs
+View : []UsesRelationIDs
+View :  IsTemporary
+View :  IsMaterialized
+
+object Sequence
+
+Sequence :  SequenceID
+Sequence :  IsTemporary
+
+object Table
+
+Table :  TableID
+Table :  IsTemporary
+
+object EnumType
+
+EnumType :  TypeID
+EnumType :  ArrayTypeID
+EnumType :  IsMultiRegion
+
+object AliasType
+
+AliasType :  TypeID
+AliasType :  TypeT
+
+object ColumnFamily
+
+ColumnFamily :  TableID
+ColumnFamily :  FamilyID
+ColumnFamily :  Name
+
+object Column
+
+Column :  TableID
+Column :  ColumnID
+Column :  IsHidden
+Column :  IsInaccessible
+Column :  GeneratedAsIdentityType
+Column :  GeneratedAsIdentitySequenceOption
+Column :  PgAttributeNum
+
+object PrimaryIndex
+
+PrimaryIndex :  Index
+
+object SecondaryIndex
+
+SecondaryIndex :  Index
+
+object TemporaryIndex
+
+TemporaryIndex :  Index
+TemporaryIndex :  IsUsingSecondaryEncoding
+
+object UniqueWithoutIndexConstraint
+
+UniqueWithoutIndexConstraint :  TableID
+UniqueWithoutIndexConstraint :  ConstraintID
+UniqueWithoutIndexConstraint : []ColumnIDs
+
+object CheckConstraint
+
+CheckConstraint :  TableID
+CheckConstraint :  ConstraintID
+CheckConstraint : []ColumnIDs
+CheckConstraint :  Expression
+
+object ForeignKeyConstraint
+
+ForeignKeyConstraint :  TableID
+ForeignKeyConstraint :  ConstraintID
+ForeignKeyConstraint : []ColumnIDs
+ForeignKeyConstraint :  ReferencedTableID
+ForeignKeyConstraint : []ReferencedColumnIDs
+
+object TableComment
+
+TableComment :  TableID
+TableComment :  Comment
+
+object RowLevelTTL
+
+RowLevelTTL :  TableID
+RowLevelTTL :  RowLevelTTL
+
+object TableLocalityGlobal
+
+TableLocalityGlobal :  TableID
+
+object TableLocalityPrimaryRegion
+
+TableLocalityPrimaryRegion :  TableID
+
+object TableLocalitySecondaryRegion
+
+TableLocalitySecondaryRegion :  TableID
+TableLocalitySecondaryRegion :  RegionEnumTypeID
+TableLocalitySecondaryRegion :  RegionName
+
+object TableLocalityRegionalByRow
+
+TableLocalityRegionalByRow :  TableID
+TableLocalityRegionalByRow :  As
+
+object ColumnName
+
+ColumnName :  TableID
+ColumnName :  ColumnID
+ColumnName :  Name
+
+object ColumnType
+
+ColumnType :  TableID
+ColumnType :  FamilyID
+ColumnType :  ColumnID
+ColumnType :  TypeT
+ColumnType :  IsNullable
+ColumnType :  ComputeExpr
+ColumnType :  IsVirtual
+ColumnType :  IsRelationBeingDropped
+
+object ColumnDefaultExpression
+
+ColumnDefaultExpression :  TableID
+ColumnDefaultExpression :  ColumnID
+ColumnDefaultExpression :  Expression
+
+object ColumnOnUpdateExpression
+
+ColumnOnUpdateExpression :  TableID
+ColumnOnUpdateExpression :  ColumnID
+ColumnOnUpdateExpression :  Expression
+
+object SequenceOwner
+
+SequenceOwner :  SequenceID
+SequenceOwner :  TableID
+SequenceOwner :  ColumnID
+
+object ColumnComment
+
+ColumnComment :  TableID
+ColumnComment :  ColumnID
+ColumnComment :  Comment
+
+object IndexName
+
+IndexName :  TableID
+IndexName :  IndexID
+IndexName :  Name
+
+object IndexPartitioning
+
+IndexPartitioning :  TableID
+IndexPartitioning :  IndexID
+IndexPartitioning :  PartitioningDescriptor
+
+object SecondaryIndexPartial
+
+SecondaryIndexPartial :  TableID
+SecondaryIndexPartial :  IndexID
+SecondaryIndexPartial :  Expression
+SecondaryIndexPartial :  IsRelationBeingDropped
+
+object IndexComment
+
+IndexComment :  TableID
+IndexComment :  IndexID
+IndexComment :  Comment
+
+object ConstraintName
+
+ConstraintName :  TableID
+ConstraintName :  ConstraintID
+ConstraintName :  Name
+
+object ConstraintComment
+
+ConstraintComment :  TableID
+ConstraintComment :  ConstraintID
+ConstraintComment :  Comment
+
+object Namespace
+
+Namespace :  DatabaseID
+Namespace :  SchemaID
+Namespace :  DescriptorID
+Namespace :  Name
+
+object Owner
+
+Owner :  DescriptorID
+Owner :  Owner
+
+object UserPrivileges
+
+UserPrivileges :  DescriptorID
+UserPrivileges :  UserName
+UserPrivileges :  Privileges
+
+object DatabaseRegionConfig
+
+DatabaseRegionConfig :  DatabaseID
+DatabaseRegionConfig :  RegionEnumTypeID
+
+object DatabaseRoleSetting
+
+DatabaseRoleSetting :  DatabaseID
+DatabaseRoleSetting :  RoleName
+
+object DatabaseComment
+
+DatabaseComment :  DatabaseID
+DatabaseComment :  Comment
+
+object SchemaParent
+
+SchemaParent :  SchemaID
+SchemaParent :  ParentDatabaseID
+
+object SchemaComment
+
+SchemaComment :  SchemaID
+SchemaComment :  Comment
+
+object ObjectParent
+
+ObjectParent :  ObjectID
+ObjectParent :  ParentSchemaID
+
+Table <|-- ColumnFamily
+Table <|-- Column
+View <|-- Column
+Table <|-- PrimaryIndex
+View <|-- PrimaryIndex
+Table <|-- SecondaryIndex
+View <|-- SecondaryIndex
+Table <|-- TemporaryIndex
+View <|-- TemporaryIndex
+Table <|-- UniqueWithoutIndexConstraint
+Table <|-- CheckConstraint
+Table <|-- ForeignKeyConstraint
+Table <|-- TableComment
+View <|-- TableComment
+Sequence <|-- TableComment
+Table <|-- RowLevelTTL
+Table <|-- TableLocalityGlobal
+Table <|-- TableLocalityPrimaryRegion
+Table <|-- TableLocalitySecondaryRegion
+Table <|-- TableLocalityRegionalByRow
+Column <|-- ColumnName
+Column <|-- ColumnType
+Column <|-- ColumnDefaultExpression
+Column <|-- ColumnOnUpdateExpression
+Column <|-- SequenceOwner
+Column <|-- ColumnComment
+PrimaryIndex <|-- IndexName
+SecondaryIndex <|-- IndexName
+PrimaryIndex <|-- IndexPartitioning
+SecondaryIndex <|-- IndexPartitioning
+SecondaryIndex <|-- SecondaryIndexPartial
+PrimaryIndex <|-- IndexComment
+SecondaryIndex <|-- IndexComment
+UniqueWithoutIndexConstraint <|-- ConstraintName
+CheckConstraint <|-- ConstraintName
+ForeignKeyConstraint <|-- ConstraintName
+PrimaryIndex <|-- ConstraintComment
+SecondaryIndex <|-- ConstraintComment
+UniqueWithoutIndexConstraint <|-- ConstraintComment
+CheckConstraint <|-- ConstraintComment
+ForeignKeyConstraint <|-- ConstraintComment
+Table <|-- Namespace
+View <|-- Namespace
+Sequence <|-- Namespace
+Database <|-- Namespace
+Schema <|-- Namespace
+AliasType <|-- Namespace
+EnumType <|-- Namespace
+Table <|-- Owner
+View <|-- Owner
+Sequence <|-- Owner
+Database <|-- Owner
+Schema <|-- Owner
+AliasType <|-- Owner
+EnumType <|-- Owner
+Table <|-- UserPrivileges
+View <|-- UserPrivileges
+Sequence <|-- UserPrivileges
+Database <|-- UserPrivileges
+Schema <|-- UserPrivileges
+AliasType <|-- UserPrivileges
+EnumType <|-- UserPrivileges
+Database <|-- DatabaseRegionConfig
+Database <|-- DatabaseRoleSetting
+Database <|-- DatabaseComment
+Schema <|-- SchemaParent
+Schema <|-- SchemaComment
+AliasType <|-- ObjectParent
+EnumType <|-- ObjectParent
+Table <|-- ObjectParent
+View <|-- ObjectParent
+Sequence <|-- ObjectParent
+@enduml

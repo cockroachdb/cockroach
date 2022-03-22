@@ -128,6 +128,10 @@ var (
 				ppFunc: timeseriesKeyPrint,
 				PSFunc: parseUnsupported,
 			},
+			{Name: "/SystemSpanConfigKeys", prefix: SystemSpanConfigPrefix,
+				ppFunc: decodeKeyPrint,
+				PSFunc: parseUnsupported,
+			},
 		}},
 		{Name: "/NamespaceTable", start: NamespaceTableMin, end: NamespaceTableMax, Entries: []DictEntry{
 			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: parseUnsupported},
@@ -160,13 +164,11 @@ var (
 		{name: "RangeTombstone", suffix: LocalRangeTombstoneSuffix},
 		{name: "RaftHardState", suffix: LocalRaftHardStateSuffix},
 		{name: "RangeAppliedState", suffix: LocalRangeAppliedStateSuffix},
-		{name: "RaftAppliedIndex", suffix: LocalRaftAppliedIndexLegacySuffix},
-		{name: "LeaseAppliedIndex", suffix: LocalLeaseAppliedIndexLegacySuffix},
 		{name: "RaftLog", suffix: LocalRaftLogSuffix,
 			ppFunc: raftLogKeyPrint,
 			psFunc: raftLogKeyParse,
 		},
-		{name: "RaftTruncatedState", suffix: LocalRaftTruncatedStateLegacySuffix},
+		{name: "RaftTruncatedState", suffix: LocalRaftTruncatedStateSuffix},
 		{name: "RangeLastReplicaGCTimestamp", suffix: LocalRangeLastReplicaGCTimestampSuffix},
 		{name: "RangeLease", suffix: LocalRangeLeaseSuffix},
 		{name: "RangePriorReadSummary", suffix: LocalRangePriorReadSummarySuffix},
@@ -183,6 +185,7 @@ var (
 		{name: "RangeDescriptor", suffix: LocalRangeDescriptorSuffix, atEnd: true},
 		{name: "Transaction", suffix: LocalTransactionSuffix, atEnd: false},
 		{name: "QueueLastProcessed", suffix: LocalQueueLastProcessedSuffix, atEnd: false},
+		{name: "RangeProbe", suffix: LocalRangeProbeSuffix, atEnd: true},
 	}
 )
 
@@ -194,8 +197,8 @@ var constSubKeyDict = []struct {
 	{"/gossipBootstrap", localStoreGossipSuffix},
 	{"/clusterVersion", localStoreClusterVersionSuffix},
 	{"/nodeTombstone", localStoreNodeTombstoneSuffix},
-	{"/suggestedCompaction", localStoreSuggestedCompactionSuffix},
 	{"/cachedSettings", localStoreCachedSettingsSuffix},
+	{"/lossOfQuorumRecovery/applied", localStoreUnsafeReplicaRecoverySuffix},
 }
 
 func nodeTombstoneKeyPrint(key roachpb.Key) string {
@@ -225,6 +228,10 @@ func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 				return v.name + "/" + cachedSettingsKeyPrint(
 					append(roachpb.Key(nil), append(LocalStorePrefix, key...)...),
 				)
+			} else if v.key.Equal(localStoreUnsafeReplicaRecoverySuffix) {
+				return v.name + "/" + lossOfQuorumRecoveryEntryKeyPrint(
+					append(roachpb.Key(nil), append(LocalStorePrefix, key...)...),
+				)
 			}
 			return v.name
 		}
@@ -233,18 +240,32 @@ func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 	return fmt.Sprintf("%q", []byte(key))
 }
 
+func lossOfQuorumRecoveryEntryKeyPrint(key roachpb.Key) string {
+	entryID, err := DecodeStoreUnsafeReplicaRecoveryKey(key)
+	if err != nil {
+		return fmt.Sprintf("<invalid: %s>", err)
+	}
+	return entryID.String()
+}
+
 func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 	for _, s := range constSubKeyDict {
 		if strings.HasPrefix(input, s.name) {
 			switch {
 			case
-				s.key.Equal(localStoreSuggestedCompactionSuffix),
 				s.key.Equal(localStoreNodeTombstoneSuffix),
 				s.key.Equal(localStoreCachedSettingsSuffix):
 				panic(&ErrUglifyUnsupported{errors.Errorf("cannot parse local store key with suffix %s", s.key)})
+			case s.key.Equal(localStoreUnsafeReplicaRecoverySuffix):
+				recordIDString := input[len(localStoreUnsafeReplicaRecoverySuffix):]
+				recordUUID, err := uuid.FromString(recordIDString)
+				if err != nil {
+					panic(&ErrUglifyUnsupported{errors.Errorf("cannot parse local store key with suffix %s", s.key)})
+				}
+				output = StoreUnsafeReplicaRecoveryKey(recordUUID)
 			default:
+				output = MakeStoreKey(s.key, nil)
 			}
-			output = MakeStoreKey(s.key, nil)
 			return
 		}
 	}
@@ -665,7 +686,7 @@ func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRaw
 		if quoteRawKeys {
 			return fmt.Sprintf("%q", []byte(key)), false
 		}
-		return fmt.Sprintf("%s", []byte(key)), false
+		return string(key), false
 	}
 
 	for _, k := range keyOfKeyDict {
@@ -706,7 +727,7 @@ func init() {
 // PrettyPrintRange pretty prints a compact representation of a key range. The
 // output is of the form:
 //    commonPrefix{remainingStart-remainingEnd}
-// If the end key is empty, the outut is of the form:
+// If the end key is empty, the output is of the form:
 //    start
 // It prints at most maxChars, truncating components as needed. See
 // TestPrettyPrintRange for some examples.

@@ -35,7 +35,7 @@ type streamGroupAccumulator struct {
 
 	// curGroup maintains the rows accumulated in the current group.
 	curGroup   []rowenc.EncDatumRow
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 
 	// leftoverRow is the first row of the next group. It's saved in the
 	// accumulator after the current group is returned, so the accumulator can

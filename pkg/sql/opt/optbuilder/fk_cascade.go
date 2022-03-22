@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -283,10 +284,9 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 		mb.fetchScope = b.buildScan(
 			b.addTable(cb.childTable, &mb.alias),
 			tableOrdinals(cb.childTable, columnKinds{
-				includeMutations:       false,
-				includeSystem:          false,
-				includeInverted:        false,
-				includeVirtualComputed: false,
+				includeMutations: false,
+				includeSystem:    false,
+				includeInverted:  false,
 			}),
 			nil, /* indexFlags */
 			noRowLocking,
@@ -502,20 +502,12 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	bindingProps *props.Relational,
 	oldValues opt.ColList,
 ) (outScope *scope) {
-	// We must fetch virtual computed columns for cascades that result in an
-	// update to the child table. The execution engine requires that the fetch
-	// columns are a superset of the update columns. See the related panic in
-	// execFactory.ConstructUpdate.
-	action := fk.DeleteReferenceAction()
-	fetchVirtualComputedCols := action == tree.SetNull || action == tree.SetDefault
-
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
-			includeMutations:       false,
-			includeSystem:          false,
-			includeInverted:        false,
-			includeVirtualComputed: fetchVirtualComputedCols,
+			includeMutations: false,
+			includeSystem:    false,
+			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -677,10 +669,6 @@ func (cb *onUpdateCascadeBuilder) Build(
 			updateExprs[i] = &tree.UpdateExpr{}
 			switch cb.action {
 			case tree.Cascade:
-				// TODO(radu): This requires special code in addUpdateCols to
-				// prevent this scopeColumn from being duplicated in mb.outScope
-				// (see the addCol anonymous function in addUpdateCols). Find a
-				// cleaner way to handle this.
 				updateExprs[i].Expr = &newValScopeCols[i]
 			case tree.SetNull:
 				updateExprs[i].Expr = tree.DNull
@@ -750,16 +738,12 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	oldValues opt.ColList,
 	newValues opt.ColList,
 ) (outScope *scope) {
-	// We must fetch virtual computed columns for cascades. The execution engine
-	// requires that the fetch columns are a superset of the update columns. See
-	// the related panic in execFactory.ConstructUpdate.
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
 		tableOrdinals(childTable, columnKinds{
-			includeMutations:       false,
-			includeSystem:          false,
-			includeInverted:        false,
-			includeVirtualComputed: true,
+			includeMutations: false,
+			includeSystem:    false,
+			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -778,13 +762,13 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	outCols := make(opt.ColList, numFKCols*2)
 	outColsOld := outCols[:numFKCols]
 	outColsNew := outCols[numFKCols:]
-	for i := range outColsOld {
-		c := md.ColumnMeta(oldValues[i])
-		outColsOld[i] = md.AddColumn(c.Alias, c.Type)
-	}
-	for i := range outColsNew {
-		c := md.ColumnMeta(newValues[i])
-		outColsNew[i] = md.AddColumn(c.Alias, c.Type)
+	for i := 0; i < numFKCols; i++ {
+		c := childTable.Column(fk.OriginColumnOrdinal(childTable, i))
+		typ := md.ColumnMeta(oldValues[i]).Type
+		oldName := fmt.Sprintf("%s_old", c.ColName())
+		newName := fmt.Sprintf("%s_new", c.ColName())
+		outColsOld[i] = md.AddColumn(oldName, typ)
+		outColsNew[i] = md.AddColumn(newName, typ)
 	}
 
 	md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
@@ -871,12 +855,17 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 		outScope.expr, mutationInput, on, memo.EmptyJoinPrivate,
 	)
 	// Append the columns from the right-hand side to the scope.
-	for i, col := range outCols {
+	//
+	// These columns can only be referenced if they are update columns. In that
+	// case, they are given distinct names in mutationBuilder.addUpdateCol, so
+	// we make them anonymous here. This prevents column name ambiguity in
+	// outScope. There is no need to attach a metadata name here because these
+	// columns have already been added to the metadata with a name in the calls
+	// to md.AddColumn above.
+	for _, col := range outCols {
 		colMeta := md.ColumnMeta(col)
-		ord := fk.OriginColumnOrdinal(childTable, i%numFKCols)
-		c := childTable.Column(ord)
 		outScope.cols = append(outScope.cols, scopeColumn{
-			name: scopeColName(c.ColName()),
+			name: scopeColName(""),
 			id:   col,
 			typ:  colMeta.Type,
 		})

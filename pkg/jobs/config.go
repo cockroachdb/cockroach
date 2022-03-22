@@ -20,35 +20,61 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-const intervalBaseSettingKey = "jobs.registry.interval.base"
-const adoptIntervalSettingKey = "jobs.registry.interval.adopt"
-const cancelIntervalSettingKey = "jobs.registry.interval.cancel"
-const gcIntervalSettingKey = "jobs.registry.interval.gc"
-const retentionTimeSettingKey = "jobs.retention_time"
-const cancelUpdateLimitKey = "jobs.cancel_update_limit"
+const (
+	intervalBaseSettingKey         = "jobs.registry.interval.base"
+	adoptIntervalSettingKey        = "jobs.registry.interval.adopt"
+	cancelIntervalSettingKey       = "jobs.registry.interval.cancel"
+	gcIntervalSettingKey           = "jobs.registry.interval.gc"
+	retentionTimeSettingKey        = "jobs.retention_time"
+	cancelUpdateLimitKey           = "jobs.cancel_update_limit"
+	retryInitialDelaySettingKey    = "jobs.registry.retry.initial_delay"
+	retryMaxDelaySettingKey        = "jobs.registry.retry.max_delay"
+	executionErrorsMaxEntriesKey   = "jobs.execution_errors.max_entries"
+	executionErrorsMaxEntrySizeKey = "jobs.execution_errors.max_entry_size"
+	debugPausePointsSettingKey     = "jobs.debug.pausepoints"
+)
 
-// defaultAdoptInterval is the default adopt interval.
-var defaultAdoptInterval = 30 * time.Second
+const (
+	// defaultAdoptInterval is the default adopt interval.
+	defaultAdoptInterval = 30 * time.Second
 
-// defaultCancelInterval is the default cancel interval.
-var defaultCancelInterval = 10 * time.Second
+	// defaultCancelInterval is the default cancel interval.
+	defaultCancelInterval = 10 * time.Second
 
-// defaultGcInterval is the default GC Interval.
-var defaultGcInterval = 1 * time.Hour
+	// defaultGcInterval is the default GC Interval.
+	defaultGcInterval = 1 * time.Hour
 
-// defaultIntervalBase is the default interval base.
-var defaultIntervalBase = 1.0
+	// defaultIntervalBase is the default interval base.
+	defaultIntervalBase = 1.0
 
-// defaultRetentionTime is the default duration for which terminal jobs are
-// kept in the records.
-var defaultRetentionTime = 14 * 24 * time.Hour
+	// defaultRetentionTime is the default duration for which terminal jobs are
+	// kept in the records.
+	defaultRetentionTime = 14 * 24 * time.Hour
 
-// defaultCancellationsUpdateLimit is the default number of jobs that can be
-// updated when canceling jobs concurrently from dead sessions.
-var defaultCancellationsUpdateLimit int64 = 1000
+	// defaultCancellationsUpdateLimit is the default number of jobs that can be
+	// updated when canceling jobs concurrently from dead sessions.
+	defaultCancellationsUpdateLimit int64 = 1000
+
+	// defaultRetryInitialDelay is the initial delay in the calculation of exponentially
+	// increasing delays to retry failed jobs.
+	defaultRetryInitialDelay = 30 * time.Second
+
+	// defaultRetryMaxDelay is the maximum delay to retry a failed job.
+	defaultRetryMaxDelay = 24 * time.Hour
+
+	// defaultExecutionErrorsMaxEntries is the default number of error entries
+	// which will be retained.
+	defaultExecutionErrorsMaxEntries = 3
+
+	// defaultExecutionErrorsMaxEntrySize is the maximum allowed size of an
+	// error. If this size is exceeded, the error will be formatted as a string
+	// and then truncated to fit the size.
+	defaultExecutionErrorsMaxEntrySize = 64 << 10 // 64 KiB
+)
 
 var (
 	intervalBaseSetting = settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		intervalBaseSettingKey,
 		"the base multiplier for other intervals such as adopt, cancel, and gc",
 		defaultIntervalBase,
@@ -56,6 +82,7 @@ var (
 	)
 
 	adoptIntervalSetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		adoptIntervalSettingKey,
 		"the interval at which a node (a) claims some of the pending jobs and "+
 			"(b) restart its already claimed jobs that are in running or reverting "+
@@ -65,6 +92,7 @@ var (
 	)
 
 	cancelIntervalSetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		cancelIntervalSettingKey,
 		"the interval at which a node cancels the jobs belonging to the known "+
 			"dead sessions",
@@ -73,6 +101,7 @@ var (
 	)
 
 	gcIntervalSetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		gcIntervalSettingKey,
 		"the interval a node deletes expired job records that have exceeded their "+
 			"retention duration",
@@ -81,6 +110,7 @@ var (
 	)
 
 	retentionTimeSetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
 		retentionTimeSettingKey,
 		"the amount of time to retain records for completed jobs before",
 		defaultRetentionTime,
@@ -88,16 +118,59 @@ var (
 	).WithPublic()
 
 	cancellationsUpdateLimitSetting = settings.RegisterIntSetting(
+		settings.TenantWritable,
 		cancelUpdateLimitKey,
 		"the number of jobs that can be updated when canceling jobs concurrently from dead sessions",
 		defaultCancellationsUpdateLimit,
 		settings.NonNegativeInt,
 	)
+
+	retryInitialDelaySetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
+		retryInitialDelaySettingKey,
+		"the starting duration of exponential-backoff delay"+
+			" to retry a job which encountered a retryable error or had its coordinator"+
+			" fail. The delay doubles after each retry.",
+		defaultRetryInitialDelay,
+		settings.NonNegativeDuration,
+	)
+
+	retryMaxDelaySetting = settings.RegisterDurationSetting(
+		settings.TenantWritable,
+		retryMaxDelaySettingKey,
+		"the maximum duration by which a job can be delayed to retry",
+		defaultRetryMaxDelay,
+		settings.PositiveDuration,
+	)
+
+	executionErrorsMaxEntriesSetting = settings.RegisterIntSetting(
+		settings.TenantWritable,
+		executionErrorsMaxEntriesKey,
+		"the maximum number of retriable error entries which will be stored for introspection",
+		defaultExecutionErrorsMaxEntries,
+		settings.NonNegativeInt,
+	)
+
+	executionErrorsMaxEntrySize = settings.RegisterByteSizeSetting(
+		settings.TenantWritable,
+		executionErrorsMaxEntrySizeKey,
+		"the maximum byte size of individual error entries which will be stored"+
+			" for introspection",
+		defaultExecutionErrorsMaxEntrySize,
+		settings.NonNegativeInt,
+	)
+
+	debugPausepoints = settings.RegisterStringSetting(
+		settings.TenantWritable,
+		debugPausePointsSettingKey,
+		"the list, comma separated, of named pausepoints currently enabled for debugging",
+		"",
+	)
 )
 
 // jitter adds a small jitter in the given duration.
 func jitter(dur time.Duration) time.Duration {
-	const jitter = 1 / 6
+	const jitter = 1.0 / 6.0
 	jitterFraction := 1 + (2*rand.Float64()-1)*jitter // 1 + [-1/6, +1/6)
 	return time.Duration(float64(dur) * jitterFraction)
 }

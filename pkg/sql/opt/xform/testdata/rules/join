@@ -64,7 +64,25 @@ CREATE TABLE virt (
   j INT NOT NULL,
   v1 INT AS (i + 10) VIRTUAL,
   v2 INT AS (i + 100) VIRTUAL,
-  CHECK (j IN (10, 20, 30))
+  v3 INT AS (i + j) VIRTUAL,
+  v4 INT NOT NULL AS (i + 1) VIRTUAL,
+  l INT,
+  CHECK (j IN (10, 20, 30)),
+  CHECK (v4 IN (1, 2, 3))
+)
+----
+
+exec-ddl
+CREATE TABLE shard (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  shard_a INT NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 3)) STORED,
+  shard_a_b INT NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a, b)), 3)) VIRTUAL,
+  shard_b_null INT AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 3)) STORED,
+  CHECK (shard_a IN (0, 1, 2)),
+  CHECK (shard_a_b IN (0, 1, 2)),
+  CHECK (shard_b_null IN (0, 1, 2))
 )
 ----
 
@@ -109,6 +127,34 @@ ALTER TABLE small INJECT STATISTICS '[
     "created_at": "2018-05-01 1:00:00.00000+00:00",
     "row_count": 10,
     "distinct_count": 6
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE virt INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100000000,
+    "distinct_count": 100000000
+  },
+  {
+    "columns": ["l"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100000000,
+    "distinct_count": 100000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE shard INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100000000,
+    "distinct_count": 100000000
   }
 ]'
 ----
@@ -181,55 +227,55 @@ inner-join (merge)
 memo expect=ReorderJoins
 SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 ----
-memo (optimized, ~36KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
+memo (optimized, ~42KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (merge-join G2 G3 G10 inner-join,+1,+7) (merge-join G3 G2 G10 inner-join,+7,+1) (lookup-join G3 G10 abc@ab,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G5 G6 G10 inner-join,+7,+12) (merge-join G6 G5 G10 inner-join,+12,+7) (lookup-join G6 G10 stu,keyCols=[12],outCols=(1-3,7-9,12-14)) (merge-join G8 G9 G10 inner-join,+7,+12) (lookup-join G8 G10 xyz@xy,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G9 G8 G10 inner-join,+12,+7)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14]
  │         ├── best: (merge-join G5="[ordering: +7]" G6="[ordering: +(1|12)]" G10 inner-join,+7,+12)
- │         └── cost: 13056.05
+ │         └── cost: 13045.10
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan abc@ab,cols=(1-3))
- │    │    └── cost: 1095.41
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G3: (inner-join G5 G9 G7) (inner-join G9 G5 G7) (merge-join G5 G9 G10 inner-join,+7,+12) (lookup-join G5 G10 xyz@xy,keyCols=[7],outCols=(7-9,12-14)) (merge-join G9 G5 G10 inner-join,+12,+7) (lookup-join G9 G10 stu,keyCols=[12],outCols=(7-9,12-14))
  │    ├── [ordering: +(7|12)]
  │    │    ├── best: (merge-join G5="[ordering: +7]" G9="[ordering: +12]" G10 inner-join,+7,+12)
- │    │    └── cost: 11930.63
+ │    │    └── cost: 11920.36
  │    └── []
  │         ├── best: (merge-join G5="[ordering: +7]" G9="[ordering: +12]" G10 inner-join,+7,+12)
- │         └── cost: 11930.63
+ │         └── cost: 11920.36
  ├── G4: (filters G11)
  ├── G5: (scan stu,cols=(7-9)) (scan stu@uts,cols=(7-9))
  │    ├── [ordering: +7]
  │    │    ├── best: (scan stu,cols=(7-9))
- │    │    └── cost: 10625.21
+ │    │    └── cost: 10624.62
  │    └── []
  │         ├── best: (scan stu,cols=(7-9))
- │         └── cost: 10625.21
+ │         └── cost: 10624.62
  ├── G6: (inner-join G2 G9 G12) (inner-join G9 G2 G12) (merge-join G2 G9 G10 inner-join,+1,+12) (lookup-join G2 G10 xyz@xy,keyCols=[1],outCols=(1-3,12-14)) (merge-join G9 G2 G10 inner-join,+12,+1) (lookup-join G9 G10 abc@ab,keyCols=[12],outCols=(1-3,12-14))
  │    ├── [ordering: +(1|12)]
  │    │    ├── best: (merge-join G2="[ordering: +1]" G9="[ordering: +12]" G10 inner-join,+1,+12)
- │    │    └── cost: 2220.83
+ │    │    └── cost: 2219.46
  │    └── []
  │         ├── best: (merge-join G2="[ordering: +1]" G9="[ordering: +12]" G10 inner-join,+1,+12)
- │         └── cost: 2220.83
+ │         └── cost: 2219.46
  ├── G7: (filters G13)
  ├── G8: (inner-join G2 G5 G4) (inner-join G5 G2 G4) (merge-join G2 G5 G10 inner-join,+1,+7) (lookup-join G2 G10 stu,keyCols=[1],outCols=(1-3,7-9)) (merge-join G5 G2 G10 inner-join,+7,+1) (lookup-join G5 G10 abc@ab,keyCols=[7],outCols=(1-3,7-9))
  │    ├── [ordering: +(1|7)]
- │    │    ├── best: (merge-join G2="[ordering: +1]" G5="[ordering: +7]" G10 inner-join,+1,+7)
- │    │    └── cost: 11930.63
+ │    │    ├── best: (merge-join G5="[ordering: +7]" G2="[ordering: +1]" G10 inner-join,+7,+1)
+ │    │    └── cost: 11920.36
  │    └── []
- │         ├── best: (merge-join G2="[ordering: +1]" G5="[ordering: +7]" G10 inner-join,+1,+7)
- │         └── cost: 11930.63
+ │         ├── best: (merge-join G5="[ordering: +7]" G2="[ordering: +1]" G10 inner-join,+7,+1)
+ │         └── cost: 11920.36
  ├── G9: (scan xyz,cols=(12-14)) (scan xyz@xy,cols=(12-14)) (scan xyz@yz,cols=(12-14))
  │    ├── [ordering: +12]
  │    │    ├── best: (scan xyz@xy,cols=(12-14))
- │    │    └── cost: 1095.41
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (scan xyz,cols=(12-14))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G10: (filters)
  ├── G11: (eq G14 G15)
  ├── G12: (filters G16)
@@ -239,200 +285,46 @@ memo (optimized, ~36KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:1
  ├── G16: (eq G14 G17)
  └── G17: (variable x)
 
-# Regression test for #36226.
-exec-ddl
-CREATE TABLE parent1 (pid1 INT PRIMARY KEY, pa1 INT)
-----
-
-exec-ddl
-CREATE TABLE child1 (
-  pid1 INT,
-  cid1 INT,
-  ca1 INT,
-  PRIMARY KEY(pid1, cid1)
-)
-INTERLEAVE IN PARENT parent1 (pid1)
-----
-
-exec-ddl
-CREATE TABLE grandchild1 (
-  pid1 INT,
-  cid1 INT,
-  gcid1 INT,
-  gca1 INT,
-  PRIMARY KEY(pid1, cid1, gcid1)
-)
-INTERLEAVE IN PARENT child1 (pid1, cid1)
-----
-
-opt expect=ReorderJoins join-limit=4
-SELECT * FROM grandchild1
-JOIN child1 USING (pid1, cid1)
-JOIN parent1 USING (pid1)
-ORDER BY pid1
-----
-project
- ├── columns: pid1:1!null cid1:2!null gcid1:3!null gca1:4 ca1:9 pa1:13
- ├── key: (1-3)
- ├── fd: (1-3)-->(4), (1,2)-->(9), (1)-->(13)
- ├── ordering: +1
- └── inner-join (lookup parent1)
-      ├── columns: grandchild1.pid1:1!null grandchild1.cid1:2!null gcid1:3!null gca1:4 child1.pid1:7!null child1.cid1:8!null ca1:9 parent1.pid1:12!null pa1:13
-      ├── key columns: [1] = [12]
-      ├── lookup columns are key
-      ├── key: (3,8,12)
-      ├── fd: (1-3)-->(4), (7,8)-->(9), (1)==(7,12), (7)==(1,12), (2)==(8), (8)==(2), (12)-->(13), (12)==(1,7)
-      ├── ordering: +(1|7|12) [actual: +1]
-      ├── inner-join (merge)
-      │    ├── columns: grandchild1.pid1:1!null grandchild1.cid1:2!null gcid1:3!null gca1:4 child1.pid1:7!null child1.cid1:8!null ca1:9
-      │    ├── left ordering: +1,+2
-      │    ├── right ordering: +7,+8
-      │    ├── key: (3,7,8)
-      │    ├── fd: (1-3)-->(4), (7,8)-->(9), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
-      │    ├── ordering: +(1|7) [actual: +1]
-      │    ├── scan grandchild1
-      │    │    ├── columns: grandchild1.pid1:1!null grandchild1.cid1:2!null gcid1:3!null gca1:4
-      │    │    ├── key: (1-3)
-      │    │    ├── fd: (1-3)-->(4)
-      │    │    └── ordering: +1,+2
-      │    ├── scan child1
-      │    │    ├── columns: child1.pid1:7!null child1.cid1:8!null ca1:9
-      │    │    ├── key: (7,8)
-      │    │    ├── fd: (7,8)-->(9)
-      │    │    └── ordering: +7,+8
-      │    └── filters (true)
-      └── filters (true)
-
-memo expect=ReorderJoins join-limit=4
-SELECT * FROM grandchild1
-JOIN child1 USING (pid1, cid1)
-JOIN parent1 USING (pid1)
-ORDER BY pid1
-----
-memo (optimized, ~34KB, required=[presentation: pid1:1,cid1:2,gcid1:3,gca1:4,ca1:9,pa1:13] [ordering: +1])
- ├── G1: (project G2 G3 pid1 cid1 gcid1 gca1 ca1 pa1)
- │    ├── [presentation: pid1:1,cid1:2,gcid1:3,gca1:4,ca1:9,pa1:13] [ordering: +1]
- │    │    ├── best: (project G2="[ordering: +(1|7|12)]" G3 pid1 cid1 gcid1 gca1 ca1 pa1)
- │    │    └── cost: 2817.85
- │    └── []
- │         ├── best: (project G2 G3 pid1 cid1 gcid1 gca1 ca1 pa1)
- │         └── cost: 2817.85
- ├── G2: (inner-join G4 G5 G6) (inner-join G7 G8 G9) (inner-join G8 G7 G9) (inner-join G10 G11 G9) (inner-join G11 G10 G9) (inner-join G5 G4 G6) (merge-join G4 G5 G12 inner-join,+1,+12) (lookup-join G4 G12 parent1,keyCols=[1],outCols=(1-4,7-9,12,13)) (merge-join G7 G8 G12 inner-join,+1,+2,+7,+8) (merge-join G8 G7 G12 inner-join,+7,+8,+1,+2) (lookup-join G8 G12 grandchild1,keyCols=[7 8],outCols=(1-4,7-9,12,13)) (merge-join G10 G11 G12 inner-join,+7,+8,+1,+2) (merge-join G11 G10 G12 inner-join,+1,+2,+7,+8) (lookup-join G11 G12 child1,keyCols=[1 2],outCols=(1-4,7-9,12,13)) (merge-join G5 G4 G12 inner-join,+12,+1)
- │    ├── [ordering: +(1|7|12)]
- │    │    ├── best: (lookup-join G4="[ordering: +(1|7)]" G12 parent1,keyCols=[1],outCols=(1-4,7-9,12,13))
- │    │    └── cost: 2816.84
- │    └── []
- │         ├── best: (lookup-join G4 G12 parent1,keyCols=[1],outCols=(1-4,7-9,12,13))
- │         └── cost: 2816.84
- ├── G3: (projections)
- ├── G4: (inner-join G7 G10 G9) (inner-join G10 G7 G9) (merge-join G7 G10 G12 inner-join,+1,+2,+7,+8) (lookup-join G7 G12 child1,keyCols=[1 2],outCols=(1-4,7-9)) (merge-join G10 G7 G12 inner-join,+7,+8,+1,+2) (lookup-join G10 G12 grandchild1,keyCols=[7 8],outCols=(1-4,7-9))
- │    ├── [ordering: +(1|7)]
- │    │    ├── best: (merge-join G7="[ordering: +1,+2]" G10="[ordering: +7,+8]" G12 inner-join,+1,+2,+7,+8)
- │    │    └── cost: 2211.83
- │    └── []
- │         ├── best: (merge-join G7="[ordering: +1,+2]" G10="[ordering: +7,+8]" G12 inner-join,+1,+2,+7,+8)
- │         └── cost: 2211.83
- ├── G5: (scan parent1,cols=(12,13))
- │    ├── [ordering: +12]
- │    │    ├── best: (scan parent1,cols=(12,13))
- │    │    └── cost: 1064.81
- │    └── []
- │         ├── best: (scan parent1,cols=(12,13))
- │         └── cost: 1064.81
- ├── G6: (filters G13)
- ├── G7: (scan grandchild1,cols=(1-4))
- │    ├── [ordering: +1,+2]
- │    │    ├── best: (scan grandchild1,cols=(1-4))
- │    │    └── cost: 1105.61
- │    ├── [ordering: +1]
- │    │    ├── best: (scan grandchild1,cols=(1-4))
- │    │    └── cost: 1105.61
- │    └── []
- │         ├── best: (scan grandchild1,cols=(1-4))
- │         └── cost: 1105.61
- ├── G8: (inner-join G10 G5 G14) (inner-join G5 G10 G14) (merge-join G10 G5 G12 inner-join,+7,+12) (lookup-join G10 G12 parent1,keyCols=[7],outCols=(7-9,12,13)) (merge-join G5 G10 G12 inner-join,+12,+7) (lookup-join G5 G12 child1,keyCols=[12],outCols=(7-9,12,13))
- │    ├── [ordering: +(7|12),+8]
- │    │    ├── best: (sort G8)
- │    │    └── cost: 2460.47
- │    ├── [ordering: +(7|12)]
- │    │    ├── best: (merge-join G10="[ordering: +7]" G5="[ordering: +12]" G12 inner-join,+7,+12)
- │    │    └── cost: 2180.03
- │    └── []
- │         ├── best: (merge-join G10="[ordering: +7]" G5="[ordering: +12]" G12 inner-join,+7,+12)
- │         └── cost: 2180.03
- ├── G9: (filters G15 G16)
- ├── G10: (scan child1,cols=(7-9))
- │    ├── [ordering: +7,+8]
- │    │    ├── best: (scan child1,cols=(7-9))
- │    │    └── cost: 1085.21
- │    ├── [ordering: +7]
- │    │    ├── best: (scan child1,cols=(7-9))
- │    │    └── cost: 1085.21
- │    └── []
- │         ├── best: (scan child1,cols=(7-9))
- │         └── cost: 1085.21
- ├── G11: (inner-join G7 G5 G6) (inner-join G5 G7 G6) (merge-join G7 G5 G12 inner-join,+1,+12) (lookup-join G7 G12 parent1,keyCols=[1],outCols=(1-4,12,13)) (merge-join G5 G7 G12 inner-join,+12,+1) (lookup-join G5 G12 grandchild1,keyCols=[12],outCols=(1-4,12,13))
- │    ├── [ordering: +(1|12),+2]
- │    │    ├── best: (sort G11)
- │    │    └── cost: 2490.87
- │    ├── [ordering: +(1|12)]
- │    │    ├── best: (merge-join G7="[ordering: +1]" G5="[ordering: +12]" G12 inner-join,+1,+12)
- │    │    └── cost: 2200.43
- │    └── []
- │         ├── best: (merge-join G7="[ordering: +1]" G5="[ordering: +12]" G12 inner-join,+1,+12)
- │         └── cost: 2200.43
- ├── G12: (filters)
- ├── G13: (eq G17 G18)
- ├── G14: (filters G19)
- ├── G15: (eq G17 G20)
- ├── G16: (eq G21 G22)
- ├── G17: (variable grandchild1.pid1)
- ├── G18: (variable parent1.pid1)
- ├── G19: (eq G20 G18)
- ├── G20: (variable child1.pid1)
- ├── G21: (variable grandchild1.cid1)
- └── G22: (variable child1.cid1)
-
 # Cross joins are not reordered apart from commutation.
 memo
 SELECT * FROM abc, stu, xyz, pqr WHERE a = 1
 ----
-memo (optimized, ~24KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~28KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (inner-join G3 G2 G4)
- │         └── cost: 325035583.13
+ │         └── cost: 325035590.20
  ├── G2: (select G5 G6) (scan abc@ab,cols=(1-3),constrained)
  │    └── []
  │         ├── best: (scan abc@ab,cols=(1-3),constrained)
- │         └── cost: 15.78
+ │         └── cost: 15.09
  ├── G3: (inner-join G7 G8 G4) (inner-join G8 G7 G4)
  │    └── []
  │         ├── best: (inner-join G8 G7 G4)
- │         └── cost: 100035567.32
+ │         └── cost: 100035565.07
  ├── G4: (filters)
  ├── G5: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G6: (filters G9)
  ├── G7: (scan stu,cols=(7-9)) (scan stu@uts,cols=(7-9))
  │    └── []
  │         ├── best: (scan stu,cols=(7-9))
- │         └── cost: 10625.21
+ │         └── cost: 10624.62
  ├── G8: (inner-join G10 G11 G4) (inner-join G11 G10 G4)
  │    └── []
  │         ├── best: (inner-join G10 G11 G4)
- │         └── cost: 12251.58
+ │         └── cost: 12249.91
  ├── G9: (eq G12 G13)
  ├── G10: (scan xyz,cols=(12-14)) (scan xyz@xy,cols=(12-14)) (scan xyz@yz,cols=(12-14))
  │    └── []
  │         ├── best: (scan xyz,cols=(12-14))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G11: (scan pqr,cols=(18-22))
  │    └── []
  │         ├── best: (scan pqr,cols=(18-22))
- │         └── cost: 1126.01
+ │         └── cost: 1125.02
  ├── G12: (variable a)
  └── G13: (const 1)
 
@@ -443,57 +335,57 @@ SELECT *
 FROM stu, abc, xyz, pqr
 WHERE u = a AND a = x AND x = p
 ----
-memo (optimized, ~32KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~37KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+3,+6) (merge-join G3 G2 G5 inner-join,+6,+3) (lookup-join G3 G5 stu@uts,keyCols=[6],outCols=(1-3,6-8,12-14,18-22))
  │    └── [presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (merge-join G2="[ordering: +3]" G3="[ordering: +(6|12|18)]" G5 inner-join,+3,+6)
- │         └── cost: 14212.07
+ │         └── cost: 14200.14
  ├── G2: (scan stu,cols=(1-3)) (scan stu@uts,cols=(1-3))
  │    ├── [ordering: +3]
  │    │    ├── best: (scan stu@uts,cols=(1-3))
- │    │    └── cost: 10625.21
+ │    │    └── cost: 10624.62
  │    └── []
  │         ├── best: (scan stu,cols=(1-3))
- │         └── cost: 10625.21
+ │         └── cost: 10624.62
  ├── G3: (inner-join G6 G7 G8) (inner-join G7 G6 G8) (merge-join G6 G7 G5 inner-join,+6,+12) (merge-join G7 G6 G5 inner-join,+12,+6) (lookup-join G7 G5 abc@ab,keyCols=[12],outCols=(6-8,12-14,18-22))
  │    ├── [ordering: +(6|12|18)]
  │    │    ├── best: (merge-join G6="[ordering: +6]" G7="[ordering: +(12|18)]" G5 inner-join,+6,+12)
- │    │    └── cost: 3376.85
+ │    │    └── cost: 3374.50
  │    └── []
  │         ├── best: (merge-join G6="[ordering: +6]" G7="[ordering: +(12|18)]" G5 inner-join,+6,+12)
- │         └── cost: 3376.85
+ │         └── cost: 3374.50
  ├── G4: (filters G9)
  ├── G5: (filters)
  ├── G6: (scan abc,cols=(6-8)) (scan abc@ab,cols=(6-8)) (scan abc@bc,cols=(6-8))
  │    ├── [ordering: +6]
  │    │    ├── best: (scan abc@ab,cols=(6-8))
- │    │    └── cost: 1095.41
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (scan abc,cols=(6-8))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G7: (inner-join G10 G11 G12) (inner-join G11 G10 G12) (merge-join G10 G11 G5 inner-join,+12,+18) (lookup-join G10 G5 pqr,keyCols=[12],outCols=(12-14,18-22)) (merge-join G11 G10 G5 inner-join,+18,+12) (lookup-join G11 G5 xyz@xy,keyCols=[18],outCols=(12-14,18-22))
  │    ├── [ordering: +(12|18)]
  │    │    ├── best: (merge-join G10="[ordering: +12]" G11="[ordering: +18]" G5 inner-join,+12,+18)
- │    │    └── cost: 2251.43
+ │    │    └── cost: 2249.76
  │    └── []
  │         ├── best: (merge-join G10="[ordering: +12]" G11="[ordering: +18]" G5 inner-join,+12,+18)
- │         └── cost: 2251.43
+ │         └── cost: 2249.76
  ├── G8: (filters G13)
  ├── G9: (eq G14 G15)
  ├── G10: (scan xyz,cols=(12-14)) (scan xyz@xy,cols=(12-14)) (scan xyz@yz,cols=(12-14))
  │    ├── [ordering: +12]
  │    │    ├── best: (scan xyz@xy,cols=(12-14))
- │    │    └── cost: 1095.41
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (scan xyz,cols=(12-14))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G11: (scan pqr,cols=(18-22))
  │    ├── [ordering: +18]
  │    │    ├── best: (scan pqr,cols=(18-22))
- │    │    └── cost: 1126.01
+ │    │    └── cost: 1125.02
  │    └── []
  │         ├── best: (scan pqr,cols=(18-22))
- │         └── cost: 1126.01
+ │         └── cost: 1125.02
  ├── G12: (filters G16)
  ├── G13: (eq G15 G17)
  ├── G14: (variable u)
@@ -537,19 +429,19 @@ INNER JOIN LATERAL (
 )
 ON a = v
 ----
-memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,v:7,s:8,t:9,u:10])
+memo (optimized, ~15KB, required=[presentation: a:1,b:2,c:3,v:7,s:8,t:9,u:10])
  ├── G1: (inner-join-apply G2 G3 G4)
  │    └── [presentation: a:1,b:2,c:3,v:7,s:8,t:9,u:10]
  │         ├── best: (inner-join-apply G2 G3 G4)
- │         └── cost: 1189.91
+ │         └── cost: 1189.24
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G3: (inner-join G5 G6 G7) (inner-join G6 G5 G7) (lookup-join G5 G8 stu,keyCols=[7],outCols=(7-10)) (merge-join G6 G5 G8 inner-join,+8,+7)
  │    └── []
  │         ├── best: (lookup-join G5 G8 stu,keyCols=[7],outCols=(7-10))
- │         └── cost: 81.44
+ │         └── cost: 81.45
  ├── G4: (filters G9)
  ├── G5: (values G10 id=v1)
  │    ├── [ordering: +7]
@@ -561,10 +453,10 @@ memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,v:7,s:8,t:9,u:10])
  ├── G6: (scan stu,cols=(8-10)) (scan stu@uts,cols=(8-10))
  │    ├── [ordering: +8]
  │    │    ├── best: (scan stu,cols=(8-10))
- │    │    └── cost: 10625.21
+ │    │    └── cost: 10624.62
  │    └── []
  │         ├── best: (scan stu,cols=(8-10))
- │         └── cost: 10625.21
+ │         └── cost: 10624.62
  ├── G7: (filters G11)
  ├── G8: (filters)
  ├── G9: (eq G12 G13)
@@ -648,13 +540,13 @@ SELECT * FROM abc
 LEFT JOIN stu ON a = s
 LEFT JOIN small ON a = m
 ----
-left-join (merge)
+right-join (merge)
+ ├── scan stu
  ├── left-join (merge)
  │    ├── scan abc@ab
  │    ├── sort
  │    │    └── scan small
  │    └── filters (true)
- ├── scan stu
  └── filters (true)
 
 # Don't add a join between xyz and stu to the memo (because doing so would
@@ -1100,8 +992,8 @@ ReorderJoins
 Source expression:
   full-join (hash)
    ├── full-join (merge)
-   │    ├── scan abc@ab
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    ├── scan xyz
    └── filters
@@ -1133,8 +1025,8 @@ New expression 3 of 3:
   full-join (hash)
    ├── scan xyz
    ├── full-join (merge)
-   │    ├── scan abc@ab
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    └── filters
         └── b = y
@@ -1254,9 +1146,9 @@ ReorderJoins
 ================================================================================
 Source expression:
   left-join (hash)
-   ├── left-join (merge)
-   │    ├── scan abc@ab
+   ├── right-join (merge)
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    ├── scan xyz
    └── filters
@@ -1313,8 +1205,8 @@ ReorderJoins
 Source expression:
   left-join (hash)
    ├── full-join (merge)
-   │    ├── scan abc@ab
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    ├── scan xyz
    └── filters
@@ -1349,25 +1241,25 @@ New expression 2 of 2:
 memo expect=ReorderJoins
 SELECT * FROM abc JOIN xyz ON a=z
 ----
-memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+9) (lookup-join G3 G5 abc@ab,keyCols=[9],outCols=(1-3,7-9))
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G2 G3 G4)
- │         └── cost: 2230.88
+ │         └── cost: 2229.51
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan abc@ab,cols=(1-3))
- │    │    └── cost: 1095.41
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G3: (scan xyz,cols=(7-9)) (scan xyz@xy,cols=(7-9)) (scan xyz@yz,cols=(7-9))
  │    ├── [ordering: +9]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1344.88
+ │    │    └── cost: 1344.20
  │    └── []
  │         ├── best: (scan xyz,cols=(7-9))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G4: (filters G6)
  ├── G5: (filters)
  ├── G6: (eq G7 G8)
@@ -1377,25 +1269,25 @@ memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
 memo expect=ReorderJoins
 SELECT * FROM abc FULL OUTER JOIN xyz ON a=z
 ----
-memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~11KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (full-join G2 G3 G4) (full-join G3 G2 G4) (merge-join G2 G3 G5 full-join,+1,+9)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (full-join G2 G3 G4)
- │         └── cost: 2230.98
+ │         └── cost: 2229.61
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan abc@ab,cols=(1-3))
- │    │    └── cost: 1095.41
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G3: (scan xyz,cols=(7-9)) (scan xyz@xy,cols=(7-9)) (scan xyz@yz,cols=(7-9))
  │    ├── [ordering: +9]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1344.88
+ │    │    └── cost: 1344.20
  │    └── []
  │         ├── best: (scan xyz,cols=(7-9))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G4: (filters G6)
  ├── G5: (filters)
  ├── G6: (eq G7 G8)
@@ -1460,22 +1352,22 @@ full-join (hash)
 # Verify that commuting works correctly when there is a lookup join hint
 # (specifically that it returns the original expression and flags when applied
 # twice; if it didn't, we'd see more inner-join expressions).
-memo expect=ReorderJoins
+memo expect-not=ReorderJoins
 SELECT * FROM abc INNER LOOKUP JOIN xyz ON a=x
 ----
-memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9))
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9))
- │         └── cost: 23175.42
+ │         └── cost: 23174.74
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G3: (scan xyz,cols=(7-9)) (scan xyz@xy,cols=(7-9)) (scan xyz@yz,cols=(7-9))
  │    └── []
  │         ├── best: (scan xyz,cols=(7-9))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G4: (filters G6)
  ├── G5: (filters)
  ├── G6: (eq G7 G8)
@@ -1520,8 +1412,8 @@ ReorderJoins
 Source expression:
   inner-join (hash)
    ├── inner-join (merge)
-   │    ├── scan abc@ab
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    ├── scan xyz
    └── filters
@@ -1531,8 +1423,8 @@ New expression 1 of 1:
   inner-join (hash)
    ├── scan xyz
    ├── inner-join (merge)
-   │    ├── scan abc@ab
    │    ├── scan stu
+   │    ├── scan abc@ab
    │    └── filters (true)
    └── filters
         └── s = x
@@ -1546,25 +1438,25 @@ New expression 1 of 1:
 memo
 SELECT * FROM abc LEFT OUTER JOIN xyz ON a=z
 ----
-memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~11KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (left-join G2 G3 G4) (right-join G3 G2 G4) (merge-join G2 G3 G5 left-join,+1,+9)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (left-join G2 G3 G4)
- │         └── cost: 2230.98
+ │         └── cost: 2229.61
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan abc@ab,cols=(1-3))
- │    │    └── cost: 1095.41
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G3: (scan xyz,cols=(7-9)) (scan xyz@xy,cols=(7-9)) (scan xyz@yz,cols=(7-9))
  │    ├── [ordering: +9]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1344.88
+ │    │    └── cost: 1344.20
  │    └── []
  │         ├── best: (scan xyz,cols=(7-9))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G4: (filters G6)
  ├── G5: (filters)
  ├── G6: (eq G7 G8)
@@ -1593,25 +1485,25 @@ right-join (hash)
 memo
 SELECT * FROM abc RIGHT OUTER JOIN xyz ON a=z
 ----
-memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (left-join G2 G3 G4) (right-join G3 G2 G4) (lookup-join G2 G5 abc@ab,keyCols=[9],outCols=(1-3,7-9)) (merge-join G3 G2 G5 right-join,+1,+9)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (left-join G2 G3 G4)
- │         └── cost: 2230.98
+ │         └── cost: 2229.61
  ├── G2: (scan xyz,cols=(7-9)) (scan xyz@xy,cols=(7-9)) (scan xyz@yz,cols=(7-9))
  │    ├── [ordering: +9]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1344.88
+ │    │    └── cost: 1344.20
  │    └── []
  │         ├── best: (scan xyz,cols=(7-9))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G3: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan abc@ab,cols=(1-3))
- │    │    └── cost: 1095.41
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G4: (filters G6)
  ├── G5: (filters)
  ├── G6: (eq G7 G8)
@@ -1723,14 +1615,14 @@ semi-join (lookup t.public.def)
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── key columns: [1 3] = [7 8]
  ├── lookup columns are key
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
- ├── cost: 532.440394
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
+ ├── cost: 531.760394
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+2,+3)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
- │    ├── cost: 132.41
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=1, avgsize(3)=4]
+ │    ├── cost: 131.72
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2) (+2,+3)
  │    └── unfiltered-cols: (1-6)
@@ -1746,14 +1638,14 @@ semi-join (lookup t.public.def)
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── key columns: [1 3] = [7 8]
  ├── lookup columns are key
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
- ├── cost: 532.440394
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=0, avgsize(3)=4]
+ ├── cost: 531.760394
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+2,+3)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
- │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
- │    ├── cost: 132.41
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=1, avgsize(3)=4]
+ │    ├── cost: 131.72
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2) (+2,+3)
  │    └── unfiltered-cols: (1-6)
@@ -1821,7 +1713,7 @@ semi-join (merge)
  │    ├── columns: cust_id:6 order_date:7!null
  │    ├── fd: ()-->(7)
  │    ├── ordering: +6 opt(7) [actual: +6]
- │    └── scan orders@secondary [as=o]
+ │    └── scan orders@orders_order_date_idx [as=o]
  │         ├── columns: cust_id:6 order_date:7!null
  │         ├── constraint: /7/5: [/'2019-01-01' - /'2019-01-01']
  │         └── fd: ()-->(7)
@@ -1848,7 +1740,7 @@ project
       │    ├── columns: cust_id:6
       │    ├── grouping columns: cust_id:6
       │    ├── key: (6)
-      │    └── scan orders@secondary [as=o]
+      │    └── scan orders@orders_order_date_idx [as=o]
       │         ├── columns: cust_id:6 order_date:7!null
       │         ├── constraint: /7/5: [/'2019-01-01' - /'2019-01-01']
       │         └── fd: ()-->(7)
@@ -1863,39 +1755,39 @@ SELECT * FROM abc JOIN xyz ON a=x
 ----
 inner-join (merge)
  ├── columns: a:1!null b:2 c:3 x:7!null y:8 z:9
- ├── left ordering: +1
- ├── right ordering: +7
+ ├── left ordering: +7
+ ├── right ordering: +1
  ├── fd: (1)==(7), (7)==(1)
- ├── scan abc@ab
- │    ├── columns: a:1 b:2 c:3
- │    └── ordering: +1
  ├── scan xyz@xy
  │    ├── columns: x:7 y:8 z:9
  │    └── ordering: +7
+ ├── scan abc@ab
+ │    ├── columns: a:1 b:2 c:3
+ │    └── ordering: +1
  └── filters (true)
 
 memo
 SELECT * FROM abc JOIN xyz ON a=x
 ----
-memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~14KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+7) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9)) (merge-join G3 G2 G5 inner-join,+7,+1) (lookup-join G3 G5 abc@ab,keyCols=[7],outCols=(1-3,7-9))
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
- │         ├── best: (merge-join G2="[ordering: +1]" G3="[ordering: +7]" G5 inner-join,+1,+7)
- │         └── cost: 1239.83
+ │         ├── best: (merge-join G3="[ordering: +7]" G2="[ordering: +1]" G5 inner-join,+7,+1)
+ │         └── cost: 1237.56
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan abc@ab,cols=(1-3))
- │    │    └── cost: 132.41
+ │    │    └── cost: 131.72
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 132.41
+ │         └── cost: 131.72
  ├── G3: (scan xyz,cols=(7-9)) (scan xyz@xy,cols=(7-9)) (scan xyz@yz,cols=(7-9))
  │    ├── [ordering: +7]
  │    │    ├── best: (scan xyz@xy,cols=(7-9))
- │    │    └── cost: 1095.41
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (scan xyz,cols=(7-9))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G4: (filters G6)
  ├── G5: (filters)
  ├── G6: (eq G7 G8)
@@ -1906,19 +1798,19 @@ memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
 memo
 SELECT * FROM abc INNER HASH JOIN xyz ON a=x
 ----
-memo (optimized, ~9KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G2 G3 G4)
- │         └── cost: 1247.73
+ │         └── cost: 1246.36
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 132.41
+ │         └── cost: 131.72
  ├── G3: (scan xyz,cols=(7-9)) (scan xyz@xy,cols=(7-9)) (scan xyz@yz,cols=(7-9))
  │    └── []
  │         ├── best: (scan xyz,cols=(7-9))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G4: (filters G5)
  ├── G5: (eq G6 G7)
  ├── G6: (variable a)
@@ -1929,15 +1821,15 @@ SELECT * FROM abc JOIN xyz ON x=a
 ----
 inner-join (merge)
  ├── columns: a:1!null b:2 c:3 x:7!null y:8 z:9
- ├── left ordering: +1
- ├── right ordering: +7
+ ├── left ordering: +7
+ ├── right ordering: +1
  ├── fd: (1)==(7), (7)==(1)
- ├── scan abc@ab
- │    ├── columns: a:1 b:2 c:3
- │    └── ordering: +1
  ├── scan xyz@xy
  │    ├── columns: x:7 y:8 z:9
  │    └── ordering: +7
+ ├── scan abc@ab
+ │    ├── columns: a:1 b:2 c:3
+ │    └── ordering: +1
  └── filters (true)
 
 opt
@@ -1945,15 +1837,15 @@ SELECT * FROM abc JOIN xyz ON a=x AND a=x AND x=a
 ----
 inner-join (merge)
  ├── columns: a:1!null b:2 c:3 x:7!null y:8 z:9
- ├── left ordering: +1
- ├── right ordering: +7
+ ├── left ordering: +7
+ ├── right ordering: +1
  ├── fd: (1)==(7), (7)==(1)
- ├── scan abc@ab
- │    ├── columns: a:1 b:2 c:3
- │    └── ordering: +1
  ├── scan xyz@xy
  │    ├── columns: x:7 y:8 z:9
  │    └── ordering: +7
+ ├── scan abc@ab
+ │    ├── columns: a:1 b:2 c:3
+ │    └── ordering: +1
  └── filters (true)
 
 # Use constraints to force the choice of an index which doesn't help, and
@@ -1976,31 +1868,31 @@ inner-join (lookup xyz@xy)
 memo
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
-memo (optimized, ~15KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
+memo (optimized, ~18KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+2,+3,+6,+7,+8) (merge-join G2 G3 G5 inner-join,+3,+2,+1,+8,+7,+6) (lookup-join G2 G5 stu [as=r],keyCols=[1 2 3],outCols=(1-3,6-8)) (lookup-join G2 G5 stu@uts [as=r],keyCols=[3 2 1],outCols=(1-3,6-8)) (merge-join G3 G2 G5 inner-join,+6,+7,+8,+1,+2,+3) (merge-join G3 G2 G5 inner-join,+8,+7,+6,+3,+2,+1) (lookup-join G3 G5 stu [as=l],keyCols=[6 7 8],outCols=(1-3,6-8)) (lookup-join G3 G5 stu@uts [as=l],keyCols=[8 7 6],outCols=(1-3,6-8))
  │    └── [presentation: s:1,t:2,u:3,s:6,t:7,u:8]
  │         ├── best: (merge-join G2="[ordering: +1,+2,+3]" G3="[ordering: +6,+7,+8]" G5 inner-join,+1,+2,+3,+6,+7,+8)
- │         └── cost: 21450.43
+ │         └── cost: 21449.26
  ├── G2: (scan stu [as=l],cols=(1-3)) (scan stu@uts [as=l],cols=(1-3))
  │    ├── [ordering: +1,+2,+3]
  │    │    ├── best: (scan stu [as=l],cols=(1-3))
- │    │    └── cost: 10625.21
+ │    │    └── cost: 10624.62
  │    ├── [ordering: +3,+2,+1]
  │    │    ├── best: (scan stu@uts [as=l],cols=(1-3))
- │    │    └── cost: 10625.21
+ │    │    └── cost: 10624.62
  │    └── []
  │         ├── best: (scan stu [as=l],cols=(1-3))
- │         └── cost: 10625.21
+ │         └── cost: 10624.62
  ├── G3: (scan stu [as=r],cols=(6-8)) (scan stu@uts [as=r],cols=(6-8))
  │    ├── [ordering: +6,+7,+8]
  │    │    ├── best: (scan stu [as=r],cols=(6-8))
- │    │    └── cost: 10625.21
+ │    │    └── cost: 10624.62
  │    ├── [ordering: +8,+7,+6]
  │    │    ├── best: (scan stu@uts [as=r],cols=(6-8))
- │    │    └── cost: 10625.21
+ │    │    └── cost: 10624.62
  │    └── []
  │         ├── best: (scan stu [as=r],cols=(6-8))
- │         └── cost: 10625.21
+ │         └── cost: 10624.62
  ├── G4: (filters G6 G7 G8)
  ├── G5: (filters)
  ├── G6: (eq G9 G10)
@@ -2183,33 +2075,33 @@ left-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=b
 ----
-memo (optimized, ~13KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+memo (optimized, ~16KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G3 G2 G4)
- │         └── cost: 1240.67
+ │         └── cost: 1239.31
  ├── G2: (select G5 G6) (select G7 G6) (select G8 G6)
  │    └── []
  │         ├── best: (select G7 G6)
- │         └── cost: 122.73
+ │         └── cost: 122.05
  ├── G3: (scan xyz,cols=(7-9)) (scan xyz@xy,cols=(7-9)) (scan xyz@yz,cols=(7-9))
  │    └── []
  │         ├── best: (scan xyz,cols=(7-9))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G4: (filters)
  ├── G5: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 132.41
+ │         └── cost: 131.72
  ├── G6: (filters G9)
  ├── G7: (scan abc@ab,cols=(1-3),constrained)
  │    └── []
  │         ├── best: (scan abc@ab,cols=(1-3),constrained)
- │         └── cost: 121.71
+ │         └── cost: 121.02
  ├── G8: (scan abc@bc,cols=(1-3),constrained)
  │    └── []
  │         ├── best: (scan abc@bc,cols=(1-3),constrained)
- │         └── cost: 121.71
+ │         └── cost: 121.02
  ├── G9: (eq G10 G11)
  ├── G10: (variable a)
  └── G11: (variable b)
@@ -2221,19 +2113,19 @@ CREATE TABLE kfloat (k FLOAT PRIMARY KEY)
 memo
 SELECT * FROM abc JOIN kfloat ON a=k
 ----
-memo (optimized, ~10KB, required=[presentation: a:1,b:2,c:3,k:7])
+memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,k:7])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,k:7]
  │         ├── best: (inner-join G3 G2 G4)
- │         └── cost: 2191.09
+ │         └── cost: 2190.22
  ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
  │    └── []
  │         ├── best: (scan abc,cols=(1-3))
- │         └── cost: 132.41
+ │         └── cost: 131.72
  ├── G3: (scan kfloat,cols=(7))
  │    └── []
  │         ├── best: (scan kfloat,cols=(7))
- │         └── cost: 1044.41
+ │         └── cost: 1044.22
  ├── G4: (filters G5)
  ├── G5: (eq G6 G7)
  ├── G6: (variable a)
@@ -2272,16 +2164,16 @@ left-join (merge)
  │    └── ordering: +13
  ├── inner-join (merge)
  │    ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
- │    ├── left ordering: +1,+2
- │    ├── right ordering: +7,+8
+ │    ├── left ordering: +7,+8
+ │    ├── right ordering: +1,+2
  │    ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
- │    ├── ordering: +(1|7) [actual: +1]
- │    ├── scan abc@ab
- │    │    ├── columns: a:1 b:2 c:3
- │    │    └── ordering: +1,+2
+ │    ├── ordering: +(1|7) [actual: +7]
  │    ├── scan xyz@xy
  │    │    ├── columns: x:7 y:8 z:9
  │    │    └── ordering: +7,+8
+ │    ├── scan abc@ab
+ │    │    ├── columns: a:1 b:2 c:3
+ │    │    └── ordering: +1,+2
  │    └── filters (true)
  └── filters (true)
 
@@ -2299,16 +2191,16 @@ left-join (merge)
  │    └── ordering: +15,+14
  ├── inner-join (merge)
  │    ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
- │    ├── left ordering: +1,+2
- │    ├── right ordering: +7,+8
+ │    ├── left ordering: +7,+8
+ │    ├── right ordering: +1,+2
  │    ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
- │    ├── ordering: +(1|7),+(2|8) [actual: +1,+2]
- │    ├── scan abc@ab
- │    │    ├── columns: a:1 b:2 c:3
- │    │    └── ordering: +1,+2
+ │    ├── ordering: +(1|7),+(2|8) [actual: +7,+8]
  │    ├── scan xyz@xy
  │    │    ├── columns: x:7 y:8 z:9
  │    │    └── ordering: +7,+8
+ │    ├── scan abc@ab
+ │    │    ├── columns: a:1 b:2 c:3
+ │    │    └── ordering: +1,+2
  │    └── filters (true)
  └── filters (true)
 
@@ -2330,10 +2222,10 @@ inner-join (merge)
  ├── left ordering: +1
  ├── right ordering: +5
  ├── fd: (1)==(5), (5)==(1)
- ├── scan partial_a@secondary,partial
+ ├── scan partial_a@partial_a_a_idx,partial
  │    ├── columns: a:1!null
  │    └── ordering: +1
- ├── scan partial_b@secondary,partial
+ ├── scan partial_b@partial_b_b_idx,partial
  │    ├── columns: b:5!null
  │    └── ordering: +5
  └── filters (true)
@@ -2354,7 +2246,7 @@ CREATE TABLE abcde (a INT, b INT, c INT, d INT, e INT, INDEX (a,b,c))
 opt expect=GenerateLookupJoins
 SELECT a,b,n,m FROM small JOIN abcd ON a=m
 ----
-inner-join (lookup abcd@secondary)
+inner-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6!null b:7 n:2 m:1!null
  ├── key columns: [1] = [6]
  ├── fd: (1)==(6), (6)==(1)
@@ -2366,7 +2258,7 @@ inner-join (lookup abcd@secondary)
 opt expect=GenerateLookupJoins
 SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m
 ----
-left-join (lookup abcd@secondary)
+left-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6 b:7 n:2 m:1
  ├── key columns: [1] = [6]
  ├── scan small
@@ -2377,7 +2269,7 @@ left-join (lookup abcd@secondary)
 opt expect=GenerateLookupJoins
 SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>n
 ----
-left-join (lookup abcd@secondary)
+left-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6 b:7 n:2 m:1
  ├── key columns: [1] = [6]
  ├── scan small
@@ -2394,7 +2286,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7 abcd.rowid:9!null
  │    ├── key columns: [1] = [6]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
@@ -2411,7 +2303,7 @@ left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── left-join (lookup abcd@secondary)
+ ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
  │    ├── key columns: [1] = [6]
  │    ├── fd: (9)-->(6,7)
@@ -2429,7 +2321,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2!null a:6!null b:7!null abcd.rowid:9!null
  │    ├── key columns: [1] = [6]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
@@ -2447,7 +2339,7 @@ left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── left-join (lookup abcd@secondary)
+ ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
  │    ├── key columns: [1] = [6]
  │    ├── fd: (9)-->(6,7)
@@ -2466,7 +2358,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7 abcd.rowid:9!null
  │    ├── key columns: [1] = [6]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
@@ -2477,19 +2369,24 @@ inner-join (lookup abcd)
       └── c:8 > n:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 # Non-covering case, extra filter not bound by index, left join.
-# In this case, we can't yet convert to a lookup join (see
-# the GenerateLookupJoins custom func).
-opt expect-not=GenerateLookupJoins
+# In this case, we can generate lookup joins as paired-joins.
+opt expect=GenerateLookupJoins
 SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n
 ----
-right-join (hash)
+left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
- ├── scan abcd
- │    └── columns: a:6 b:7 c:8
- ├── scan small
- │    └── columns: m:1 n:2
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── left-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9 continuation:12
+ │    ├── key columns: [1] = [6]
+ │    ├── first join in paired joiner; continuation column: continuation:12
+ │    ├── fd: (9)-->(6,7,12)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
  └── filters
-      ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── c:8 > n:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 
@@ -2707,19 +2604,19 @@ No new expressions.
 memo expect-not=GenerateLookupJoins
 SELECT a,b,n,m FROM small INNER HASH JOIN abcd ON a=m
 ----
-memo (optimized, ~8KB, required=[presentation: a:6,b:7,n:2,m:1])
+memo (optimized, ~9KB, required=[presentation: a:6,b:7,n:2,m:1])
  ├── G1: (inner-join G2 G3 G4)
  │    └── [presentation: a:6,b:7,n:2,m:1]
  │         ├── best: (inner-join G2 G3 G4)
- │         └── cost: 1129.29
+ │         └── cost: 1128.32
  ├── G2: (scan small,cols=(1,2))
  │    └── []
  │         ├── best: (scan small,cols=(1,2))
- │         └── cost: 35.51
- ├── G3: (scan abcd,cols=(6,7)) (scan abcd@secondary,cols=(6,7))
+ │         └── cost: 35.02
+ ├── G3: (scan abcd,cols=(6,7)) (scan abcd@abcd_a_b_idx,cols=(6,7))
  │    └── []
- │         ├── best: (scan abcd@secondary,cols=(6,7))
- │         └── cost: 1075.01
+ │         ├── best: (scan abcd@abcd_a_b_idx,cols=(6,7))
+ │         └── cost: 1074.52
  ├── G4: (filters G5)
  ├── G5: (eq G6 G7)
  ├── G6: (variable a)
@@ -2729,53 +2626,213 @@ memo (optimized, ~8KB, required=[presentation: a:6,b:7,n:2,m:1])
 opt expect=GenerateLookupJoins
 SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a)
 ----
-semi-join (lookup abcd@secondary)
+semi-join (lookup abcd@abcd_a_b_idx)
  ├── columns: m:1 n:2
  ├── key columns: [1] = [6]
  ├── scan small
  │    └── columns: m:1 n:2
  └── filters (true)
 
-# We should not generate a lookup semi-join when the index doesn't contain all
-# columns in the join condition.
-opt expect-not=GenerateLookupJoins
+# We can generate a lookup semi-join when the index doesn't contain all
+# columns in the join condition, using paired-joins.
+opt expect=GenerateLookupJoins
 SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c)
 ----
-semi-join (hash)
+semi-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── scan small
- │    └── columns: m:1 n:2
- ├── scan abcd
- │    └── columns: a:6 c:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1!null n:2 a:6!null abcd.rowid:9!null continuation:13
+ │    ├── key columns: [1] = [6]
+ │    ├── first join in paired joiner; continuation column: continuation:13
+ │    ├── fd: (9)-->(6,13), (1)==(6), (6)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
  └── filters
-      ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 # Lookup anti-join with index that contains all columns in the join condition.
 opt expect=GenerateLookupJoins
 SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a)
 ----
-anti-join (lookup abcd@secondary)
+anti-join (lookup abcd@abcd_a_b_idx)
  ├── columns: m:1 n:2
  ├── key columns: [1] = [6]
  ├── scan small
  │    └── columns: m:1 n:2
  └── filters (true)
 
-# We should not generate a lookup anti-join when the index doesn't contain all
-# columns in the join condition.
-opt expect-not=GenerateLookupJoins
+# We can generate a lookup anti-join when the index doesn't contain all
+# columns in the join condition, using paired-joins.
+opt expect=GenerateLookupJoins
 SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c)
 ----
-anti-join (hash)
+anti-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── scan small
- │    └── columns: m:1 n:2
- ├── scan abcd
- │    └── columns: a:6 c:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── left-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1 n:2 a:6 abcd.rowid:9 continuation:13
+ │    ├── key columns: [1] = [6]
+ │    ├── first join in paired joiner; continuation column: continuation:13
+ │    ├── fd: (9)-->(6,13)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
  └── filters
-      ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+exec-ddl
+CREATE INDEX shard_a_idx ON shard (shard_a, a)
+----
+
+# Generate an inner lookup join by synthesizing an equality constraint for an
+# indexed computed column.
+opt expect=GenerateLookupJoins
+SELECT m, k FROM small INNER LOOKUP JOIN shard ON small.m = shard.a
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── fd: (6)-->(1)
+ └── inner-join (lookup shard@shard_a_idx)
+      ├── columns: m:1!null k:6!null a:7!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [14 1] = [9 7]
+      ├── fd: (6)-->(7), (1)==(7), (7)==(1)
+      ├── project
+      │    ├── columns: shard_a_eq:14 m:1
+      │    ├── immutable
+      │    ├── fd: (1)-->(14)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── projections
+      │         └── mod(fnv32(crdb_internal.datums_to_bytes(m:1)), 3) [as=shard_a_eq:14, outer=(1), immutable]
+      └── filters (true)
+
+# Generate a left lookup join by synthesizing an equality constraint for an
+# indexed computed column.
+opt expect=GenerateLookupJoins
+SELECT m, k FROM small LEFT LOOKUP JOIN shard ON small.m = shard.a
+----
+project
+ ├── columns: m:1 k:6
+ └── left-join (lookup shard@shard_a_idx)
+      ├── columns: m:1 k:6 a:7
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [14 1] = [9 7]
+      ├── fd: (6)-->(7)
+      ├── project
+      │    ├── columns: shard_a_eq:14 m:1
+      │    ├── immutable
+      │    ├── fd: (1)-->(14)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── projections
+      │         └── mod(fnv32(crdb_internal.datums_to_bytes(m:1)), 3) [as=shard_a_eq:14, outer=(1), immutable]
+      └── filters (true)
+
+# Generate a semi lookup join by synthesizing an equality constraint for an
+# indexed computed column.
+opt expect=GenerateLookupJoins
+SELECT m FROM small WHERE EXISTS (SELECT * FROM shard WHERE small.m = shard.a)
+----
+semi-join (lookup shard@shard_a_idx)
+ ├── columns: m:1
+ ├── key columns: [14 1] = [9 7]
+ ├── project
+ │    ├── columns: shard_a_eq:14 m:1
+ │    ├── immutable
+ │    ├── fd: (1)-->(14)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── projections
+ │         └── mod(fnv32(crdb_internal.datums_to_bytes(m:1)), 3) [as=shard_a_eq:14, outer=(1), immutable]
+ └── filters (true)
+
+# Generate an anti lookup join by synthesizing an equality constraint for an
+# indexed computed column.
+opt expect=GenerateLookupJoins
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM shard WHERE small.m = shard.a)
+----
+anti-join (lookup shard@shard_a_idx)
+ ├── columns: m:1
+ ├── key columns: [14 1] = [9 7]
+ ├── project
+ │    ├── columns: shard_a_eq:14 m:1
+ │    ├── immutable
+ │    ├── fd: (1)-->(14)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── projections
+ │         └── mod(fnv32(crdb_internal.datums_to_bytes(m:1)), 3) [as=shard_a_eq:14, outer=(1), immutable]
+ └── filters (true)
+
+exec-ddl
+DROP INDEX shard_a_idx
+----
+
+exec-ddl
+CREATE INDEX shard_a_b_idx ON shard (shard_a_b, a, b)
+----
+
+# Generate a lookup join by synthesizing an equality constraint for an indexed
+# computed column when the expression references multiple columns.
+opt expect=GenerateLookupJoins
+SELECT m, k FROM small INNER LOOKUP JOIN shard ON small.m = shard.a AND small.n = shard.b
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── fd: (6)-->(1)
+ └── inner-join (lookup shard@shard_a_b_idx)
+      ├── columns: m:1!null n:2!null k:6!null a:7!null b:8!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [14 1 2] = [10 7 8]
+      ├── fd: (6)-->(7,8), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
+      ├── project
+      │    ├── columns: shard_a_b_eq:14 m:1 n:2
+      │    ├── immutable
+      │    ├── fd: (1,2)-->(14)
+      │    ├── scan small
+      │    │    └── columns: m:1 n:2
+      │    └── projections
+      │         └── mod(fnv32(crdb_internal.datums_to_bytes(m:1, n:2)), 3) [as=shard_a_b_eq:14, outer=(1,2), immutable]
+      └── filters (true)
+
+exec-ddl
+DROP INDEX shard_a_b_idx
+----
+
+exec-ddl
+CREATE INDEX shard_b_null_idx ON shard (shard_b_null, b)
+----
+
+# Do not synthesize an equality constraint for a nullable computed column.
+opt expect-not=GenerateLookupJoins
+SELECT m, k FROM small INNER LOOKUP JOIN shard ON small.m = shard.b
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── fd: (6)-->(1)
+ └── inner-join (hash)
+      ├── columns: m:1!null k:6!null b:8!null
+      ├── flags: force lookup join (into right side)
+      ├── fd: (6)-->(8), (1)==(8), (8)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      ├── scan shard@shard_b_null_idx
+      │    ├── columns: k:6!null b:8
+      │    ├── key: (6)
+      │    └── fd: (6)-->(8)
+      └── filters
+           └── m:1 = b:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+exec-ddl
+DROP INDEX shard_b_null_idx
+----
 
 # Regression test for #59615. Ensure that invalid lookup joins are not created
 # for left and anti joins.
@@ -2983,6 +3040,10 @@ left-join (lookup lookup_expr [as=t])
  │    └── filters (true)
  └── filters (true)
 
+exec-ddl
+DROP INDEX idx_vrw
+----
+
 # The OR filter gets converted to an IN expression in the lookup expression
 # filters.
 # TODO(rytaft): The OR filter shouldn't get re-applied as an additional filter
@@ -3064,7 +3125,7 @@ left-join (lookup t59738_ab)
  ├── key columns: [8] = [8]
  ├── lookup columns are key
  ├── fd: (6)~~>(7)
- ├── left-join (lookup t59738_ab@secondary)
+ ├── left-join (lookup t59738_ab@t59738_ab_a_idx)
  │    ├── columns: c:1 d:2 a:6 t59738_ab.rowid:8
  │    ├── flags: force lookup join (into right side)
  │    ├── key columns: [1] = [6]
@@ -3087,7 +3148,7 @@ left-join (lookup t59738_ab)
 opt expect=GenerateLookupJoinsWithFilter
 SELECT a,b,n,m FROM small JOIN abcd ON a=m AND b>1
 ----
-inner-join (lookup abcd@secondary)
+inner-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6!null b:7!null n:2 m:1!null
  ├── lookup expression
  │    └── filters
@@ -3102,7 +3163,7 @@ inner-join (lookup abcd@secondary)
 opt expect=GenerateLookupJoinsWithFilter
 SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>1
 ----
-left-join (lookup abcd@secondary)
+left-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6 b:7 n:2 m:1
  ├── lookup expression
  │    └── filters
@@ -3121,7 +3182,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null
  │    ├── lookup expression
  │    │    └── filters
@@ -3141,7 +3202,7 @@ left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── left-join (lookup abcd@secondary)
+ ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
  │    ├── lookup expression
  │    │    └── filters
@@ -3162,7 +3223,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2!null a:6!null b:7!null abcd.rowid:9!null
  │    ├── lookup expression
  │    │    └── filters
@@ -3183,7 +3244,7 @@ left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
  ├── key columns: [9] = [9]
  ├── lookup columns are key
- ├── left-join (lookup abcd@secondary)
+ ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
  │    ├── lookup expression
  │    │    └── filters
@@ -3205,7 +3266,7 @@ inner-join (lookup abcd)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null
  │    ├── lookup expression
  │    │    └── filters
@@ -3219,23 +3280,27 @@ inner-join (lookup abcd)
       └── c:8 > n:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 # Non-covering case, extra filter not bound by index, left join.
-# In this case, we can't yet convert to a lookup join (see
-# the GenerateLookupJoins custom func).
-opt expect-not=GenerateLookupJoinsWithFilter
+# In this case, we can generate lookup joins as paired-joins.
+opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n AND b>1
 ----
-right-join (hash)
+left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
- ├── select
- │    ├── columns: a:6 b:7!null c:8
- │    ├── scan abcd
- │    │    └── columns: a:6 b:7 c:8
- │    └── filters
- │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
- ├── scan small
- │    └── columns: m:1 n:2
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── left-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9 continuation:12
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    ├── first join in paired joiner; continuation column: continuation:12
+ │    ├── fd: (9)-->(6,7,12)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
  └── filters
-      ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── c:8 > n:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 # Constant columns are projected and used by lookup joiner.
@@ -3247,7 +3312,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
  │    ├── key columns: [1 14] = [6 7]
  │    ├── fd: ()-->(7), (11)-->(6,8), (1)==(6), (6)==(1)
@@ -3270,7 +3335,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(8), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7 c:8!null abcde.rowid:11!null
  │    ├── key columns: [1] = [6]
  │    ├── fd: ()-->(8), (11)-->(6,7), (1)==(6), (6)==(1)
@@ -3289,7 +3354,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(7,8), (11)-->(6), (1)==(6), (6)==(1)
@@ -3313,7 +3378,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
  │    ├── key columns: [1 14] = [6 7]
  │    ├── fd: (11)-->(6-8), (1)==(6), (6)==(1)
@@ -3343,7 +3408,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
  │    ├── flags: force lookup join (into right side)
  │    ├── key columns: [1 14] = [6 7]
@@ -3373,7 +3438,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(8), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(8), (11)-->(6,7), (1)==(6), (6)==(1)
@@ -3406,7 +3471,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: (11)-->(6-8), (1)==(6), (6)==(1)
@@ -3442,7 +3507,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7-9), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(7,8), (11)-->(6), (1)==(6), (6)==(1)
@@ -3467,7 +3532,7 @@ inner-join (lookup abcde)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcde@secondary)
+ ├── inner-join (lookup abcde@abcde_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
  │    ├── lookup expression
  │    │    └── filters
@@ -3487,7 +3552,7 @@ SELECT a, b, c FROM small INNER LOOKUP JOIN abcde ON m=b AND a=10 AND c=10
 project
  ├── columns: a:6!null b:7!null c:8!null
  ├── fd: ()-->(6,8)
- └── inner-join (lookup abcde@secondary)
+ └── inner-join (lookup abcde@abcde_a_b_c_idx)
       ├── columns: m:1!null a:6!null b:7!null c:8!null
       ├── flags: force lookup join (into right side)
       ├── key columns: [14 1 15] = [6 7 8]
@@ -3516,7 +3581,7 @@ inner-join (lookup bool_col)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
- ├── inner-join (lookup bool_col@secondary)
+ ├── inner-join (lookup bool_col@bool_col_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null bool_col.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(7,8), (11)-->(6), (1)==(6), (6)==(1)
@@ -3539,7 +3604,7 @@ inner-join (lookup bool_col)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
- ├── inner-join (lookup bool_col@secondary)
+ ├── inner-join (lookup bool_col@bool_col_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null bool_col.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(7,8), (11)-->(6), (1)==(6), (6)==(1)
@@ -3562,7 +3627,7 @@ inner-join (lookup bool_col)
  ├── key columns: [11] = [11]
  ├── lookup columns are key
  ├── fd: ()-->(7,8), (1)==(6), (6)==(1)
- ├── inner-join (lookup bool_col@secondary)
+ ├── inner-join (lookup bool_col@bool_col_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null bool_col.rowid:11!null
  │    ├── key columns: [1 14 15] = [6 7 8]
  │    ├── fd: ()-->(7,8), (11)-->(6), (1)==(6), (6)==(1)
@@ -3582,6 +3647,17 @@ exec-ddl
 CREATE TABLE abcd_check (a INT, b INT NOT NULL, c INT, d INT, CHECK (b IN (10, 20)), INDEX (a, b, c))
 ----
 
+exec-ddl
+ALTER TABLE abcd_check INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+----
+
 opt expect=GenerateLookupJoins
 SELECT * FROM small INNER JOIN abcd_check ON a=m
 ----
@@ -3590,7 +3666,7 @@ inner-join (lookup abcd_check)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd_check@secondary)
+ ├── inner-join (lookup abcd_check@abcd_check_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcd_check.rowid:10!null
  │    ├── key columns: [1 13] = [6 7]
  │    ├── fd: (10)-->(6-8), (1)==(6), (6)==(1)
@@ -3616,7 +3692,7 @@ inner-join (lookup abcd_check)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: ()-->(8), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd_check@secondary)
+ ├── inner-join (lookup abcd_check@abcd_check_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcd_check.rowid:10!null
  │    ├── key columns: [1 13 14] = [6 7 8]
  │    ├── fd: ()-->(8), (10)-->(6,7), (1)==(6), (6)==(1)
@@ -3652,7 +3728,7 @@ inner-join (lookup abcd_comp)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: ()-->(7,9), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd_comp@secondary)
+ ├── inner-join (lookup abcd_comp@abcd_comp_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcd_comp.rowid:10!null
  │    ├── key columns: [1 13] = [6 7]
  │    ├── fd: ()-->(7), (10)-->(6,8), (1)==(6), (6)==(1)
@@ -3675,7 +3751,7 @@ inner-join (lookup abcd_comp)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── fd: ()-->(7-9), (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd_comp@secondary)
+ ├── inner-join (lookup abcd_comp@abcd_comp_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcd_comp.rowid:10!null
  │    ├── key columns: [1 13 14] = [6 7 8]
  │    ├── fd: ()-->(7,8), (10)-->(6), (1)==(6), (6)==(1)
@@ -3719,7 +3795,7 @@ project
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(1,2,4,5)
-      │    │    └── scan t@secondary
+      │    │    └── scan t@t_col2_key
       │    │         ├── columns: pk:1!null col2:4!null
       │    │         ├── constraint: /4: [/1 - /1]
       │    │         ├── cardinality: [0 - 1]
@@ -3736,7 +3812,7 @@ project
       │    │    ├── columns: col0:9 col2:11
       │    │    ├── lax-key: (9,11)
       │    │    ├── fd: ()-->(11), (11)~~>(9)
-      │    │    └── scan t@secondary
+      │    │    └── scan t@t_col2_key
       │    │         ├── columns: pk:8!null col2:11
       │    │         ├── constraint: /11: [/NULL - /NULL]
       │    │         ├── key: (8)
@@ -3749,7 +3825,7 @@ project
 opt expect=GenerateLookupJoinsWithFilter
 SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND a > b)
 ----
-semi-join (lookup abcd@secondary)
+semi-join (lookup abcd@abcd_a_b_idx)
  ├── columns: m:1 n:2
  ├── key columns: [1] = [6]
  ├── scan small
@@ -3757,29 +3833,33 @@ semi-join (lookup abcd@secondary)
  └── filters
       └── a:6 > b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
 
-# We should not generate a lookup semi-join when the index is non-covering.
-opt expect-not=GenerateLookupJoinsWithFilter
+# We can generate a lookup semi-join when the index is non-covering using
+# paired-joins.
+opt expect=GenerateLookupJoinsWithFilter
 SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c AND a > b)
 ----
-semi-join (hash)
+semi-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── scan small
- │    └── columns: m:1 n:2
- ├── select
- │    ├── columns: a:6!null b:7!null c:8
- │    ├── scan abcd
- │    │    └── columns: a:6 b:7 c:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null continuation:13
+ │    ├── key columns: [1] = [6]
+ │    ├── first join in paired joiner; continuation column: continuation:13
+ │    ├── fd: (9)-->(6,7,13), (1)==(6), (6)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
  │    └── filters
  │         └── a:6 > b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
  └── filters
-      ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 # Lookup anti-join with covering index.
 opt expect=GenerateLookupJoinsWithFilter
 SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND a > b)
 ----
-anti-join (lookup abcd@secondary)
+anti-join (lookup abcd@abcd_a_b_idx)
  ├── columns: m:1 n:2
  ├── key columns: [1] = [6]
  ├── scan small
@@ -3787,22 +3867,26 @@ anti-join (lookup abcd@secondary)
  └── filters
       └── a:6 > b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
 
-# We should not generate a lookup semi-join when the index is non-covering.
-opt expect-not=GenerateLookupJoinsWithFilter
+# We can generate a lookup semi-join when the index is non-covering using
+# paired-joins.
+opt expect=GenerateLookupJoinsWithFilter
 SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c AND a > b)
 ----
-anti-join (hash)
+anti-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── scan small
- │    └── columns: m:1 n:2
- ├── select
- │    ├── columns: a:6!null b:7!null c:8
- │    ├── scan abcd
- │    │    └── columns: a:6 b:7 c:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── left-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9 continuation:13
+ │    ├── key columns: [1] = [6]
+ │    ├── first join in paired joiner; continuation column: continuation:13
+ │    ├── fd: (9)-->(6,7,13)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
  │    └── filters
  │         └── a:6 > b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
  └── filters
-      ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 # --------------------------------------------------
@@ -3991,30 +4075,28 @@ project
       │    └── columns: m:1 n:2
       └── filters (true)
 
-# We should not generate a lookup semi-join when the index does not cover "s"
-# which is referenced in the remaining filter.
-opt expect-not=GenerateLookupJoinsWithFilter
+# We can generate a lookup semi-join when the index does not cover "s",
+# which is referenced in the remaining filter, by using paired-joins.
+opt expect=GenerateLookupJoinsWithFilter
 SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
 ----
 project
  ├── columns: m:1
- └── semi-join (hash)
+ └── semi-join (lookup partial_tab)
       ├── columns: m:1 n:2
-      ├── scan small
-      │    └── columns: m:1 n:2
-      ├── select
-      │    ├── columns: i:7 s:8!null
-      │    ├── fd: ()-->(8)
-      │    ├── index-join partial_tab
-      │    │    ├── columns: i:7 s:8
-      │    │    └── scan partial_tab@partial_idx,partial
-      │    │         ├── columns: k:6!null i:7
-      │    │         ├── key: (6)
-      │    │         └── fd: (6)-->(7)
-      │    └── filters
-      │         └── s:8 = 'foo' [outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── second join in paired joiner
+      ├── inner-join (lookup partial_tab@partial_idx,partial)
+      │    ├── columns: m:1 n:2!null k:6!null i:7!null continuation:12
+      │    ├── key columns: [2] = [7]
+      │    ├── first join in paired joiner; continuation column: continuation:12
+      │    ├── fd: (6)-->(7,12), (2)==(7), (7)==(2)
+      │    ├── scan small
+      │    │    └── columns: m:1 n:2
+      │    └── filters (true)
       └── filters
-           └── n:2 = i:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+           └── s:8 = 'foo' [outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
 
 # Generate a lookup anti-join when the index does not cover "s", but the
 # reference to "s" no longer exists in the filters.
@@ -4030,30 +4112,28 @@ project
       │    └── columns: m:1 n:2
       └── filters (true)
 
-# We should not generate a lookup anti-join when the index does not cover "s"
-# which is referenced in the remaining filter.
-opt expect-not=GenerateLookupJoinsWithFilter
+# We can generate a lookup anti-join when the index does not cover "s",
+# which is referenced in the remaining filter, by using paired-joins.
+opt expect=GenerateLookupJoinsWithFilter
 SELECT m FROM small WHERE NOT EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
 ----
 project
  ├── columns: m:1
- └── anti-join (hash)
+ └── anti-join (lookup partial_tab)
       ├── columns: m:1 n:2
-      ├── scan small
-      │    └── columns: m:1 n:2
-      ├── select
-      │    ├── columns: i:7 s:8!null
-      │    ├── fd: ()-->(8)
-      │    ├── index-join partial_tab
-      │    │    ├── columns: i:7 s:8
-      │    │    └── scan partial_tab@partial_idx,partial
-      │    │         ├── columns: k:6!null i:7
-      │    │         ├── key: (6)
-      │    │         └── fd: (6)-->(7)
-      │    └── filters
-      │         └── s:8 = 'foo' [outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── second join in paired joiner
+      ├── left-join (lookup partial_tab@partial_idx,partial)
+      │    ├── columns: m:1 n:2 k:6 i:7 continuation:12
+      │    ├── key columns: [2] = [7]
+      │    ├── first join in paired joiner; continuation column: continuation:12
+      │    ├── fd: (6)-->(7,12)
+      │    ├── scan small
+      │    │    └── columns: m:1 n:2
+      │    └── filters (true)
       └── filters
-           └── n:2 = i:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+           └── s:8 = 'foo' [outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
 
 # A lookup semi-join on a partial index should have the same cost as a lookup
 # semi-join on a non-partial index.
@@ -4066,14 +4146,14 @@ SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE n = i)
 ----
 project
  ├── columns: m:1
- ├── cost: 255.826
+ ├── cost: 255.356
  └── semi-join (lookup partial_tab@full_idx)
       ├── columns: m:1 n:2
       ├── key columns: [2] = [7]
-      ├── cost: 255.716
+      ├── cost: 255.236
       ├── scan small
       │    ├── columns: m:1 n:2
-      │    └── cost: 35.51
+      │    └── cost: 35.02
       └── filters (true)
 
 opt format=show-cost
@@ -4081,14 +4161,14 @@ SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', '
 ----
 project
  ├── columns: m:1
- ├── cost: 255.826
+ ├── cost: 255.356
  └── semi-join (lookup partial_tab@partial_idx,partial)
       ├── columns: m:1 n:2
       ├── key columns: [2] = [7]
-      ├── cost: 255.716
+      ├── cost: 255.236
       ├── scan small
       │    ├── columns: m:1 n:2
-      │    └── cost: 35.51
+      │    └── cost: 35.02
       └── filters (true)
 
 exec-ddl
@@ -4133,6 +4213,67 @@ exec-ddl
 DROP INDEX partial_idx
 ----
 
+exec-ddl
+CREATE INDEX i_partial ON virt (i) WHERE v1 > 0
+----
+
+# Covering case with partial index predicate that references a virtual column.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.i AND v1 > 0
+----
+project
+ ├── columns: m:1!null v1:9!null
+ ├── immutable
+ ├── fd: (1)-->(9)
+ └── project
+      ├── columns: v1:9!null m:1!null i:7!null
+      ├── immutable
+      ├── fd: (7)-->(9), (1)==(7), (7)==(1)
+      ├── inner-join (lookup virt@i_partial,partial)
+      │    ├── columns: m:1!null i:7!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [7]
+      │    ├── fd: (1)==(7), (7)==(1)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── projections
+           └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+
+# Non-covering case with partial index predicate that references a virtual
+# column.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m, virt.j, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.i AND v1 > 0
+----
+project
+ ├── columns: m:1!null j:8!null v1:9!null
+ ├── immutable
+ ├── fd: (1)-->(9)
+ └── project
+      ├── columns: v1:9!null m:1!null i:7!null j:8!null
+      ├── immutable
+      ├── fd: (7)-->(9), (1)==(7), (7)==(1)
+      ├── inner-join (lookup virt)
+      │    ├── columns: m:1!null i:7!null j:8!null
+      │    ├── key columns: [6] = [6]
+      │    ├── lookup columns are key
+      │    ├── fd: (1)==(7), (7)==(1)
+      │    ├── inner-join (lookup virt@i_partial,partial)
+      │    │    ├── columns: m:1!null k:6!null i:7!null
+      │    │    ├── flags: force lookup join (into right side)
+      │    │    ├── key columns: [1] = [7]
+      │    │    ├── fd: (6)-->(7), (1)==(7), (7)==(1)
+      │    │    ├── scan small
+      │    │    │    └── columns: m:1
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── projections
+           └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+
+exec-ddl
+DROP INDEX i_partial
+----
+
 # Regression test for #63735. Ensure that the constant filter which maximally
 # constrains the lookup table is chosen when there is more than one option.
 # Here, the CHECK constraint establishes an implicit filter that constrains the
@@ -4157,7 +4298,8 @@ inner-join (lookup t63735)
  ├── lookup columns are key
  ├── fd: ()-->(1,2,6,7), (2)==(7), (7)==(2)
  ├── project
- │    ├── columns: "lookup_join_const_col_@6":10!null m:1!null n:2!null
+ │    ├── columns: x_eq:10!null m:1!null n:2!null
+ │    ├── immutable
  │    ├── fd: ()-->(1,2,10)
  │    ├── select
  │    │    ├── columns: m:1!null n:2!null
@@ -4168,7 +4310,7 @@ inner-join (lookup t63735)
  │    │         ├── n:2 = 15 [outer=(2), constraints=(/2: [/15 - /15]; tight), fd=()-->(2)]
  │    │         └── m:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
  │    └── projections
- │         └── 30 [as="lookup_join_const_col_@6":10]
+ │         └── n:2 * 2 [as=x_eq:10, outer=(2), immutable]
  └── filters
       └── y:7 = 15 [outer=(7), constraints=(/7: [/15 - /15]; tight), fd=()-->(7)]
 
@@ -4203,9 +4345,41 @@ project
       │    └── columns: m:1
       └── filters (true)
 
+# Covering case. Join on virtual column expression but do not produce it.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.k FROM small INNER LOOKUP JOIN virt ON m = virt.i + 10
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── immutable
+ ├── fd: (6)-->(1)
+ └── inner-join (lookup virt@v1)
+      ├── columns: m:1!null k:6!null v1:9!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [9]
+      ├── immutable
+      ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters (true)
+
 # Covering case. Produce virtual column.
 opt expect=GenerateLookupJoinsWithVirtualCols
 SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1
+----
+inner-join (lookup virt@v1)
+ ├── columns: m:1!null k:6!null v1:9!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Covering case. Join on virtual column expression and produce it.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.i + 10
 ----
 inner-join (lookup virt@v1)
  ├── columns: m:1!null k:6!null v1:9!null
@@ -4237,32 +4411,25 @@ inner-join (lookup virt)
  │    └── filters (true)
  └── filters (true)
 
-# Non-covering. Extra filter on non-covered column. We do not support this yet.
-# TODO(mgartner): Generate lookup joins with virtual columns and extra filters
-# by handling the (Project (Select (Scan))) pattern on the right side of the
-# join.
-opt format=hide-all
-SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND i > 0
+# Non-covering. Join on virtual column expression.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.i + 10
 ----
-inner-join (hash)
- ├── flags: force lookup join (into right side)
- ├── scan small
- ├── project
- │    ├── select
- │    │    ├── scan virt
- │    │    │    ├── check constraint expressions
- │    │    │    │    └── j IN (10, 20, 30)
- │    │    │    └── computed column expressions
- │    │    │         ├── v1
- │    │    │         │    └── i + 10
- │    │    │         └── v2
- │    │    │              └── i + 100
- │    │    └── filters
- │    │         └── i > 0
- │    └── projections
- │         └── i + 10
- └── filters
-      └── m = v1
+inner-join (lookup virt)
+ ├── columns: m:1!null i:7 v1:9!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)-->(9), (1)==(9), (9)==(1)
+ ├── inner-join (lookup virt@v1)
+ │    ├── columns: m:1!null k:6!null v1:9!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
 
 # Do not generate a lookup join when the right side projects a column that is
 # not a virtual computed column.
@@ -4273,29 +4440,34 @@ FROM small INNER LOOKUP JOIN (
 ) tmp ON m = tmp.v1
 ----
 project
- ├── columns: m:1!null p:13
+ ├── columns: m:1!null p:16
  ├── immutable
  └── inner-join (hash)
-      ├── columns: m:1!null v1:9!null p:13
+      ├── columns: m:1!null v1:9!null p:16
       ├── flags: force lookup join (into right side)
       ├── immutable
       ├── fd: (1)==(9), (9)==(1)
       ├── scan small
       │    └── columns: m:1
       ├── project
-      │    ├── columns: p:13 v1:9
+      │    ├── columns: p:16 v1:9
       │    ├── immutable
       │    ├── scan virt
       │    │    ├── columns: i:7
       │    │    ├── check constraint expressions
-      │    │    │    └── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+      │    │    │    ├── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+      │    │    │    └── v4:12 IN (1, 2, 3) [outer=(12), constraints=(/12: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
       │    │    └── computed column expressions
       │    │         ├── v1:9
       │    │         │    └── i:7 + 10
-      │    │         └── v2:10
-      │    │              └── i:7 + 100
+      │    │         ├── v2:10
+      │    │         │    └── i:7 + 100
+      │    │         ├── v3:11
+      │    │         │    └── i:7 + j:8
+      │    │         └── v4:12
+      │    │              └── i:7 + 1
       │    └── projections
-      │         ├── i:7 + 5 [as=p:13, outer=(7), immutable]
+      │         ├── i:7 + 5 [as=p:16, outer=(7), immutable]
       │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
       └── filters
            └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
@@ -4318,79 +4490,97 @@ inner-join (hash)
  │    ├── scan virt
  │    │    ├── columns: i:7
  │    │    ├── check constraint expressions
- │    │    │    └── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │    │    ├── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │    │    └── v4:12 IN (1, 2, 3) [outer=(12), constraints=(/12: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
  │    │    └── computed column expressions
  │    │         ├── v1:9
  │    │         │    └── i:7 + 10
- │    │         └── v2:10
- │    │              └── i:7 + 100
+ │    │         ├── v2:10
+ │    │         │    └── i:7 + 100
+ │    │         ├── v3:11
+ │    │         │    └── i:7 + j:8
+ │    │         └── v4:12
+ │    │              └── i:7 + 1
  │    └── projections
  │         ├── i:7 + 10 [as=v1:9, outer=(7), immutable]
  │         └── i:7 + 100 [as=v2:10, outer=(7), immutable]
  └── filters
       └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
 
-# Do not generate lookup joins with virtual columns for left joins.
-opt expect-not=GenerateLookupJoinsWithVirtualCols format=hide-all
+# Left join, covering case. Join on virtual column but do not produce it.
+opt expect=GenerateLookupJoinsWithVirtualCols
 SELECT m, virt.k FROM small LEFT LOOKUP JOIN virt ON m = virt.v1
 ----
 project
- └── left-join (hash)
+ ├── columns: m:1 k:6
+ ├── immutable
+ └── left-join (lookup virt@v1)
+      ├── columns: m:1 k:6 v1:9
       ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [9]
+      ├── immutable
+      ├── fd: (6)-->(9)
       ├── scan small
-      ├── project
-      │    ├── scan virt
-      │    │    ├── check constraint expressions
-      │    │    │    └── j IN (10, 20, 30)
-      │    │    └── computed column expressions
-      │    │         ├── v1
-      │    │         │    └── i + 10
-      │    │         └── v2
-      │    │              └── i + 100
-      │    └── projections
-      │         └── i + 10
-      └── filters
-           └── m = v1
+      │    └── columns: m:1
+      └── filters (true)
 
-# Do not generate lookup joins with virtual columns for semi-joins.
-opt expect-not=GenerateLookupJoinsWithVirtualCols format=hide-all
+# Left join, covering case. Join on virtual column and produce it.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.k, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1
+----
+left-join (lookup virt@v1)
+ ├── columns: m:1 k:6 v1:9
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── fd: (6)-->(9)
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Left join, Non-covering.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.i, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1
+----
+left-join (lookup virt)
+ ├── columns: m:1 i:7 v1:9
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)~~>(9)
+ ├── left-join (lookup virt@v1)
+ │    ├── columns: m:1 k:6 v1:9
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+# Generate lookup joins with virtual columns for semi-joins.
+opt expect=GenerateLookupJoinsWithVirtualCols
 SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v1)
 ----
-semi-join (hash)
+semi-join (lookup virt@v1)
+ ├── columns: m:1
+ ├── key columns: [1] = [9]
+ ├── immutable
  ├── scan small
- ├── project
- │    ├── scan virt
- │    │    ├── check constraint expressions
- │    │    │    └── j IN (10, 20, 30)
- │    │    └── computed column expressions
- │    │         ├── v1
- │    │         │    └── i + 10
- │    │         └── v2
- │    │              └── i + 100
- │    └── projections
- │         └── i + 10
- └── filters
-      └── m = column13
+ │    └── columns: m:1
+ └── filters (true)
 
-# Do not generate lookup joins with virtual columns for anti-joins.
-opt expect-not=GenerateLookupJoinsWithVirtualCols format=hide-all
+# Generate lookup joins with virtual columns for anti-joins.
+opt expect=GenerateLookupJoinsWithVirtualCols
 SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.v1)
 ----
-anti-join (hash)
+anti-join (lookup virt@v1)
+ ├── columns: m:1
+ ├── key columns: [1] = [9]
+ ├── immutable
  ├── scan small
- ├── project
- │    ├── scan virt
- │    │    ├── check constraint expressions
- │    │    │    └── j IN (10, 20, 30)
- │    │    └── computed column expressions
- │    │         ├── v1
- │    │         │    └── i + 10
- │    │         └── v2
- │    │              └── i + 100
- │    └── projections
- │         └── i + 10
- └── filters
-      └── m = column13
+ │    └── columns: m:1
+ └── filters (true)
 
 exec-ddl
 DROP INDEX v1
@@ -4436,6 +4626,94 @@ project
       │    └── columns: m:1 n:2
       └── filters (true)
 
+# Covering case. Left join with single key column in index with multiple virtual
+# columns.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.k, virt.v1, virt.v2 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1
+----
+left-join (lookup virt@v1_v2)
+ ├── columns: m:1 k:6 v1:9 v2:10
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── fd: (6)-->(9,10)
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Covering case. Left join with multiple key columns in index with multiple
+# virtual columns.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.k, virt.v1, virt.v2 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND n = virt.v2
+----
+project
+ ├── columns: m:1 k:6 v1:9 v2:10
+ ├── immutable
+ ├── fd: (6)-->(9,10)
+ └── left-join (lookup virt@v1_v2)
+      ├── columns: m:1 n:2 k:6 v1:9 v2:10
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1 2] = [9 10]
+      ├── immutable
+      ├── fd: (6)-->(9,10)
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# Semi-join with single key column in index with multiple virtual columns.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v1)
+----
+semi-join (lookup virt@v1_v2)
+ ├── columns: m:1
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Semi-join with multiple virtual key columns.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v1 AND n = virt.v2)
+----
+project
+ ├── columns: m:1
+ ├── immutable
+ └── semi-join (lookup virt@v1_v2)
+      ├── columns: m:1 n:2
+      ├── key columns: [1 2] = [9 10]
+      ├── immutable
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# Anti-join with single key column in index with multiple virtual columns.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.v1)
+----
+anti-join (lookup virt@v1_v2)
+ ├── columns: m:1
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Anti-join with multiple virtual key columns.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.v1 AND n = virt.v2)
+----
+project
+ ├── columns: m:1
+ ├── immutable
+ └── anti-join (lookup virt@v1_v2)
+      ├── columns: m:1 n:2
+      ├── key columns: [1 2] = [9 10]
+      ├── immutable
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
 exec-ddl
 DROP INDEX v1_v2
 ----
@@ -4466,24 +4744,30 @@ project
       │    └── columns: m:1 n:2
       └── filters (true)
 
-# Covering case. A non-virtual column is the lookup column and the virtual
-# column can be produced.
-opt expect=GenerateLookupJoinsWithVirtualCols
+# Do not generate an inner lookup join when the filter does not reference
+# virtual columns. HoistProjectFromInnerJoin and GenerateLookupJoins can produce
+# a lookup join in this case.
+opt expect-not=GenerateLookupJoinsWithVirtualCols
 SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.i
 ----
 project
  ├── columns: m:1!null k:6!null v1:9
  ├── immutable
  ├── fd: (6)-->(1,9), (1)-->(9)
- └── inner-join (lookup virt@i_v1)
-      ├── columns: m:1!null k:6!null i:7!null v1:9
-      ├── flags: force lookup join (into right side)
-      ├── key columns: [1] = [7]
+ └── project
+      ├── columns: v1:9 m:1!null k:6!null i:7!null
       ├── immutable
       ├── fd: (6)-->(7), (7)-->(9), (1)==(7), (7)==(1)
-      ├── scan small
-      │    └── columns: m:1
-      └── filters (true)
+      ├── inner-join (lookup virt@i_v1)
+      │    ├── columns: m:1!null k:6!null i:7!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [7]
+      │    ├── fd: (6)-->(7), (1)==(7), (7)==(1)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── projections
+           └── i:7 + 10 [as=v1:9, outer=(7), immutable]
 
 # Covering case. A virtual column is the lookup column and the non-virtual
 # column can be produced.
@@ -4500,35 +4784,61 @@ inner-join (lookup virt@v2_i)
  │    └── columns: m:1
  └── filters (true)
 
-# Covering case with a cross join for multiple constant values for the leading
-# lookup column. We do not support this yet.
-# TODO(mgartner): Generate lookup joins with virtual columns and extra filters
-# by handling the (Project (Select (Scan))) pattern on the right side of the
-# join.
-opt
-SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON virt.i IN (1, 2, 3) AND m = virt.v1
+# Left join, covering case. One of the lookup columns is a virtual column.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.k, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.i AND n = virt.v1
 ----
-inner-join (hash)
- ├── columns: m:1!null k:6!null v1:9!null
- ├── flags: force lookup join (into right side)
+project
+ ├── columns: m:1 k:6 v1:9
  ├── immutable
- ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ └── left-join (lookup virt@i_v1)
+      ├── columns: m:1 n:2 k:6 i:7 v1:9
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1 2] = [7 9]
+      ├── immutable
+      ├── fd: (6)-->(7), (7)~~>(9)
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# Do not generate a inner lookup join when the filter does not reference virtual
+# columns. HoistProjectFromInnerJoin and GenerateLookupJoins can produce a
+# lookup join in this case.
+opt expect-not=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.k, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.i
+----
+project
+ ├── columns: m:1 k:6 v1:9
+ ├── immutable
+ └── project
+      ├── columns: v1:9 m:1 k:6 i:7
+      ├── immutable
+      ├── fd: (6)-->(7), (7)~~>(9)
+      ├── left-join (lookup virt@i_v1)
+      │    ├── columns: m:1 k:6 i:7
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [7]
+      │    ├── fd: (6)-->(7)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── projections
+           └── CASE k:6 IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE i:7 + 10 END [as=v1:9, outer=(6,7), immutable]
+
+# Left join, covering case. A virtual column is the lookup column and the
+# non-virtual column can be produced.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.i, virt.v2 FROM small LEFT LOOKUP JOIN virt ON m = virt.v2
+----
+left-join (lookup virt@v2_i)
+ ├── columns: m:1 i:7 v2:10
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [10]
+ ├── immutable
+ ├── fd: (7)~~>(10)
  ├── scan small
  │    └── columns: m:1
- ├── project
- │    ├── columns: v1:9!null k:6!null
- │    ├── immutable
- │    ├── key: (6)
- │    ├── fd: (6)-->(9)
- │    ├── scan virt@i_v1
- │    │    ├── columns: k:6!null i:7!null
- │    │    ├── constraint: /7/9/6: [/1 - /3]
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
- │    └── projections
- │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
- └── filters
-      └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ └── filters (true)
 
 exec-ddl
 DROP INDEX i_v1
@@ -4536,6 +4846,141 @@ DROP INDEX i_v1
 
 exec-ddl
 DROP INDEX v2_i
+----
+
+exec-ddl
+CREATE INDEX v4_i ON virt (v4, i)
+----
+
+# Do not generate an inner lookup join when the filter does not reference
+# virtual columns.
+opt expect-not=GenerateLookupJoinsWithVirtualCols
+SELECT m, i, v4 FROM small INNER LOOKUP JOIN virt ON m = virt.i
+----
+project
+ ├── columns: m:1!null i:7!null v4:12
+ ├── immutable
+ ├── fd: (7)-->(12), (1)==(7), (7)==(1)
+ ├── inner-join (lookup virt@v4_i)
+ │    ├── columns: m:1!null i:7!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [16 1] = [12 7]
+ │    ├── fd: (1)==(7), (7)==(1)
+ │    ├── project
+ │    │    ├── columns: v4_eq:16 m:1
+ │    │    ├── immutable
+ │    │    ├── fd: (1)-->(16)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1
+ │    │    └── projections
+ │    │         └── m:1 + 1 [as=v4_eq:16, outer=(1), immutable]
+ │    └── filters (true)
+ └── projections
+      └── i:7 + 1 [as=v4:12, outer=(7), immutable]
+
+# Do not generate a left lookup join when the filter does not reference virtual
+# columns.
+opt expect-not=GenerateLookupJoinsWithVirtualCols
+SELECT m, i, v4 FROM small LEFT LOOKUP JOIN virt ON m = virt.i
+----
+project
+ ├── columns: m:1 i:7 v4:12
+ ├── immutable
+ ├── fd: (7)~~>(12)
+ ├── left-join (lookup virt@v4_i)
+ │    ├── columns: m:1 i:7
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [16 1] = [12 7]
+ │    ├── project
+ │    │    ├── columns: v4_eq:16 m:1
+ │    │    ├── immutable
+ │    │    ├── fd: (1)-->(16)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1
+ │    │    └── projections
+ │    │         └── m:1 + 1 [as=v4_eq:16, outer=(1), immutable]
+ │    └── filters (true)
+ └── projections
+      └── CASE i:7 IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE i:7 + 1 END [as=v4:12, outer=(7), immutable]
+
+exec-ddl
+DROP INDEX v4_i
+----
+
+exec-ddl
+CREATE INDEX l_v1 ON virt (l, v1)
+----
+
+exec-ddl
+CREATE INDEX v2_l ON virt (v2, l)
+----
+
+# Semi-join with non-virtual and virtual key columns.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.l AND n = virt.v1)
+----
+project
+ ├── columns: m:1
+ ├── immutable
+ └── semi-join (lookup virt@l_v1)
+      ├── columns: m:1 n:2
+      ├── key columns: [1 2] = [13 9]
+      ├── immutable
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# Semi-join with virtual and non-virtual key columns.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v2 AND n = virt.l)
+----
+project
+ ├── columns: m:1
+ ├── immutable
+ └── semi-join (lookup virt@v2_l)
+      ├── columns: m:1 n:2
+      ├── key columns: [1 2] = [10 13]
+      ├── immutable
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# Anti-join with non-virtual and virtual key columns.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.l AND n = virt.v1)
+----
+project
+ ├── columns: m:1
+ ├── immutable
+ └── anti-join (lookup virt@l_v1)
+      ├── columns: m:1 n:2
+      ├── key columns: [1 2] = [13 9]
+      ├── immutable
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+# Anti-join with virtual and non-virtual key columns.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.v2 AND n = virt.l)
+----
+project
+ ├── columns: m:1
+ ├── immutable
+ └── anti-join (lookup virt@v2_l)
+      ├── columns: m:1 n:2
+      ├── key columns: [1 2] = [10 13]
+      ├── immutable
+      ├── scan small
+      │    └── columns: m:1 n:2
+      └── filters (true)
+
+exec-ddl
+DROP INDEX l_v1
+----
+
+exec-ddl
+DROP INDEX v2_l
 ----
 
 exec-ddl
@@ -4550,16 +4995,16 @@ SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1
 inner-join (lookup virt@j_v1)
  ├── columns: m:1!null k:6!null v1:9!null
  ├── flags: force lookup join (into right side)
- ├── key columns: [13 1] = [8 9]
+ ├── key columns: [16 1] = [8 9]
  ├── immutable
  ├── fd: (6)-->(9), (1)==(9), (9)==(1)
  ├── inner-join (cross)
- │    ├── columns: m:1 "lookup_join_const_col_@8":13!null
+ │    ├── columns: m:1 "lookup_join_const_col_@8":16!null
  │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    ├── scan small
  │    │    └── columns: m:1
  │    ├── values
- │    │    ├── columns: "lookup_join_const_col_@8":13!null
+ │    │    ├── columns: "lookup_join_const_col_@8":16!null
  │    │    ├── cardinality: [3 - 3]
  │    │    ├── (10,)
  │    │    ├── (20,)
@@ -4581,15 +5026,15 @@ inner-join (lookup virt)
  ├── inner-join (lookup virt@j_v1)
  │    ├── columns: m:1!null k:6!null v1:9!null
  │    ├── flags: force lookup join (into right side)
- │    ├── key columns: [13 1] = [8 9]
+ │    ├── key columns: [16 1] = [8 9]
  │    ├── fd: (6)-->(1,9), (1)==(9), (9)==(1)
  │    ├── inner-join (cross)
- │    │    ├── columns: m:1 "lookup_join_const_col_@8":13!null
+ │    │    ├── columns: m:1 "lookup_join_const_col_@8":16!null
  │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
  │    │    ├── scan small
  │    │    │    └── columns: m:1
  │    │    ├── values
- │    │    │    ├── columns: "lookup_join_const_col_@8":13!null
+ │    │    │    ├── columns: "lookup_join_const_col_@8":16!null
  │    │    │    ├── cardinality: [3 - 3]
  │    │    │    ├── (10,)
  │    │    │    ├── (20,)
@@ -4598,87 +5043,1614 @@ inner-join (lookup virt)
  │    └── filters (true)
  └── filters (true)
 
+# Left join, covering case with multiple constant values based on optional
+# filters.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.k, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1
+----
+project
+ ├── columns: m:1 k:6 v1:9
+ ├── immutable
+ ├── fd: (6)-->(9)
+ └── left-join (lookup virt@j_v1)
+      ├── columns: m:1 k:6 j:8 v1:9
+      ├── flags: force lookup join (into right side)
+      ├── lookup expression
+      │    └── filters
+      │         ├── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+      │         └── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+      ├── fd: (6)-->(8,9)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters (true)
+
+# Left join, non-covering case with multiple constant values based on optional
+# filters.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.i, virt.k, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1
+----
+left-join (lookup virt)
+ ├── columns: m:1 i:7 k:6 v1:9
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (6)-->(7), (7)~~>(9)
+ ├── left-join (lookup virt@j_v1)
+ │    ├── columns: m:1 k:6 j:8 v1:9
+ │    ├── flags: force lookup join (into right side)
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │         └── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    ├── fd: (6)-->(8,9)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+# Semi-join with a cross join for multiple constant values based on optional
+# filters.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v1)
+----
+semi-join (lookup virt@j_v1)
+ ├── columns: m:1
+ ├── key columns: [16 1] = [8 9]
+ ├── immutable
+ ├── inner-join (cross)
+ │    ├── columns: m:1 "lookup_join_const_col_@8":16!null
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    ├── values
+ │    │    ├── columns: "lookup_join_const_col_@8":16!null
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── (10,)
+ │    │    ├── (20,)
+ │    │    └── (30,)
+ │    └── filters (true)
+ └── filters (true)
+
+# Anti-join with multiple constant values based on optional filters.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.v1)
+----
+anti-join (lookup virt@j_v1)
+ ├── columns: m:1
+ ├── lookup expression
+ │    └── filters
+ │         ├── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │         └── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
 exec-ddl
 DROP INDEX j_v1
 ----
+
+
+# --------------------------------------------------
+# GenerateLookupJoinsWithVirtualColsAndFilter
+# --------------------------------------------------
 
 exec-ddl
 CREATE INDEX v1_storing_i ON virt (v1) STORING (i)
 ----
 
 # Covering case. Virtual column is the lookup column and there is an extra
-# filter on the non-virtual column. We do not support this yet.
-# TODO(mgartner): Generate lookup joins with virtual columns and extra filters
-# by handling the (Project (Select (Scan))) pattern on the right side of the
-# join.
-opt format=hide-all
-SELECT m, virt.i, virt.v2 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND i > 0
+# filter on the non-virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND i > 0
 ----
 project
- └── inner-join (hash)
+ ├── columns: m:1!null i:7!null
+ ├── immutable
+ ├── fd: (7)-->(1)
+ └── inner-join (lookup virt@v1_storing_i)
+      ├── columns: m:1!null i:7!null v1:9!null
       ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [9]
+      ├── immutable
+      ├── fd: (7)-->(9), (1)==(9), (9)==(1)
       ├── scan small
-      ├── project
-      │    ├── select
-      │    │    ├── scan virt
-      │    │    │    ├── check constraint expressions
-      │    │    │    │    └── j IN (10, 20, 30)
-      │    │    │    └── computed column expressions
-      │    │    │         ├── v1
-      │    │    │         │    └── i + 10
-      │    │    │         └── v2
-      │    │    │              └── i + 100
-      │    │    └── filters
-      │    │         └── i > 0
-      │    └── projections
-      │         ├── i + 10
-      │         └── i + 100
+      │    └── columns: m:1
       └── filters
-           └── m = v1
+           └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+
+# Covering case. Join on virtual column expression with an extra filter on the
+# non-virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i FROM small INNER LOOKUP JOIN virt ON m = virt.i + 10 AND i > 0
+----
+project
+ ├── columns: m:1!null i:7!null
+ ├── immutable
+ ├── fd: (7)-->(1)
+ └── inner-join (lookup virt@v1_storing_i)
+      ├── columns: m:1!null i:7!null v1:9!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [9]
+      ├── immutable
+      ├── fd: (7)-->(9), (1)==(9), (9)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters
+           └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+
+# Covering case. Virtual column is the lookup column and there is an extra
+# filter on the non-virtual column, but the column is not selected. We do not
+# handle this case yet.
+# TODO(mgartner): We could handle this by wrapping the lookup join in an
+# IndexJoin to fetch i and filter by it, then wrapping the index join in a
+# Project that removes i.
+opt
+SELECT m, virt.k FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND i > 0
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── immutable
+ ├── fd: (6)-->(1)
+ └── inner-join (hash)
+      ├── columns: m:1!null k:6!null v1:9!null
+      ├── flags: force lookup join (into right side)
+      ├── immutable
+      ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      ├── project
+      │    ├── columns: v1:9!null k:6!null
+      │    ├── immutable
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(9)
+      │    ├── select
+      │    │    ├── columns: k:6!null i:7!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7)
+      │    │    ├── scan virt@v1_storing_i
+      │    │    │    ├── columns: k:6!null i:7
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7)
+      │    │    └── filters
+      │    │         └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+      │    └── projections
+      │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+      └── filters
+           └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Non-covering case. Virtual column is the lookup column and there is an extra
+# filter on a column not in the index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND j > 0
+----
+project
+ ├── columns: m:1!null j:8!null
+ ├── immutable
+ └── inner-join (lookup virt)
+      ├── columns: m:1!null j:8!null v1:9!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (1)==(9), (9)==(1)
+      ├── inner-join (lookup virt@v1_storing_i)
+      │    ├── columns: m:1!null k:6!null v1:9!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [9]
+      │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── filters
+           └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+
+# Non-covering case. Join on virtual column expression with an extra filter on the
+# non-virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j FROM small INNER LOOKUP JOIN virt ON m = virt.i + 10 AND j > 0
+----
+project
+ ├── columns: m:1!null j:8!null
+ ├── immutable
+ └── inner-join (lookup virt)
+      ├── columns: m:1!null j:8!null v1:9!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (1)==(9), (9)==(1)
+      ├── inner-join (lookup virt@v1_storing_i)
+      │    ├── columns: m:1!null k:6!null v1:9!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [9]
+      │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── filters
+           └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+
+# Non-covering case. Virtual column is the lookup column and there is an extra
+# filter on a column not in the index, but the column is not selected. We do not
+# handle this case yet.
+# TODO(mgartner): We could handle this by wrapping the lookup join in an
+# IndexJoin to fetch i and filter by it, then wrapping the index join in a
+# Project that removes i.
+opt
+SELECT m, virt.k FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND j > 0
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── immutable
+ ├── fd: (6)-->(1)
+ └── inner-join (hash)
+      ├── columns: m:1!null k:6!null v1:9!null
+      ├── flags: force lookup join (into right side)
+      ├── immutable
+      ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      ├── project
+      │    ├── columns: v1:9 k:6!null
+      │    ├── immutable
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(9)
+      │    ├── select
+      │    │    ├── columns: k:6!null i:7 j:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7,8)
+      │    │    ├── scan virt
+      │    │    │    ├── columns: k:6!null i:7 j:8!null
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    ├── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+      │    │    │    │    └── v4:12 IN (1, 2, 3) [outer=(12), constraints=(/12: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── v1:9
+      │    │    │    │    │    └── i:7 + 10
+      │    │    │    │    ├── v2:10
+      │    │    │    │    │    └── i:7 + 100
+      │    │    │    │    ├── v3:11
+      │    │    │    │    │    └── i:7 + j:8
+      │    │    │    │    └── v4:12
+      │    │    │    │         └── i:7 + 1
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7,8)
+      │    │    └── filters
+      │    │         └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │    └── projections
+      │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+      └── filters
+           └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Left join, covering case. Virtual column is the lookup column and there is an
+# extra filter on the non-virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND i > 0
+----
+project
+ ├── columns: m:1 i:7
+ ├── immutable
+ └── left-join (lookup virt@v1_storing_i)
+      ├── columns: m:1 i:7 v1:9
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [9]
+      ├── immutable
+      ├── fd: (7)-->(9)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters
+           └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+
+# Left join, covering case. Virtual column is the lookup column and there is an
+# extra filter on the non-virtual column, but the column is not selected.
+# TODO(mgartner): We do not handle this case yet.
+opt
+SELECT m, virt.k FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND i > 0
+----
+project
+ ├── columns: m:1 k:6
+ ├── immutable
+ └── left-join (hash)
+      ├── columns: m:1 k:6 v1:9
+      ├── flags: force lookup join (into right side)
+      ├── immutable
+      ├── fd: (6)-->(9)
+      ├── scan small
+      │    └── columns: m:1
+      ├── project
+      │    ├── columns: v1:9!null k:6!null
+      │    ├── immutable
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(9)
+      │    ├── select
+      │    │    ├── columns: k:6!null i:7!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7)
+      │    │    ├── scan virt@v1_storing_i
+      │    │    │    ├── columns: k:6!null i:7
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7)
+      │    │    └── filters
+      │    │         └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+      │    └── projections
+      │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+      └── filters
+           └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Left join, non-covering case. Virtual column is the lookup column and there is
+# an extra filter on a column not in the index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND j > 0
+----
+project
+ ├── columns: m:1 j:8
+ ├── immutable
+ └── left-join (lookup virt)
+      ├── columns: m:1 j:8 v1:9
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── second join in paired joiner
+      ├── immutable
+      ├── left-join (lookup virt@v1_storing_i)
+      │    ├── columns: m:1 k:6 v1:9 continuation:16
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [9]
+      │    ├── first join in paired joiner; continuation column: continuation:16
+      │    ├── fd: (6)-->(9,16)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── filters
+           └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+
+# Left join, non-covering case. Virtual column is the lookup column and there is
+# an extra filter on a column not in the index, but the column is not selected.
+# TODO(mgartner): We do not handle this case yet.
+opt
+SELECT m, virt.k FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND j > 0
+----
+project
+ ├── columns: m:1 k:6
+ ├── immutable
+ └── left-join (hash)
+      ├── columns: m:1 k:6 v1:9
+      ├── flags: force lookup join (into right side)
+      ├── immutable
+      ├── fd: (6)-->(9)
+      ├── scan small
+      │    └── columns: m:1
+      ├── project
+      │    ├── columns: v1:9 k:6!null
+      │    ├── immutable
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(9)
+      │    ├── select
+      │    │    ├── columns: k:6!null i:7 j:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7,8)
+      │    │    ├── scan virt
+      │    │    │    ├── columns: k:6!null i:7 j:8!null
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    ├── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+      │    │    │    │    └── v4:12 IN (1, 2, 3) [outer=(12), constraints=(/12: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── v1:9
+      │    │    │    │    │    └── i:7 + 10
+      │    │    │    │    ├── v2:10
+      │    │    │    │    │    └── i:7 + 100
+      │    │    │    │    ├── v3:11
+      │    │    │    │    │    └── i:7 + j:8
+      │    │    │    │    └── v4:12
+      │    │    │    │         └── i:7 + 1
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7,8)
+      │    │    └── filters
+      │    │         └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │    └── projections
+      │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+      └── filters
+           └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
 
 exec-ddl
 DROP INDEX v1_storing_i
 ----
 
 exec-ddl
+CREATE INDEX i_v1 ON virt (i, v1)
+----
+
+# Covering case.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON virt.i = 1 AND m = virt.v1
+----
+inner-join (lookup virt@i_v1)
+ ├── columns: m:1!null k:6!null v1:9!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [16 1] = [7 9]
+ ├── immutable
+ ├── fd: ()-->(1,9), (1)==(9), (9)==(1)
+ ├── project
+ │    ├── columns: "lookup_join_const_col_@7":16!null m:1
+ │    ├── fd: ()-->(16)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── projections
+ │         └── 1 [as="lookup_join_const_col_@7":16]
+ └── filters (true)
+
+# Non-covering case.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j FROM small INNER LOOKUP JOIN virt ON virt.i = 1 AND m = virt.v1
+----
+project
+ ├── columns: m:1!null j:8!null
+ ├── immutable
+ ├── fd: ()-->(1)
+ └── inner-join (lookup virt)
+      ├── columns: m:1!null j:8!null v1:9!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: ()-->(1,9), (1)==(9), (9)==(1)
+      ├── inner-join (lookup virt@i_v1)
+      │    ├── columns: m:1!null k:6!null v1:9!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [16 1] = [7 9]
+      │    ├── fd: ()-->(1,9), (1)==(9), (9)==(1)
+      │    ├── project
+      │    │    ├── columns: "lookup_join_const_col_@7":16!null m:1
+      │    │    ├── fd: ()-->(16)
+      │    │    ├── scan small
+      │    │    │    └── columns: m:1
+      │    │    └── projections
+      │    │         └── 1 [as="lookup_join_const_col_@7":16]
+      │    └── filters (true)
+      └── filters (true)
+
+# Covering case with a cross join for multiple constant values for the leading
+# lookup column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON virt.i IN (1, 2, 3) AND m = virt.v1
+----
+inner-join (lookup virt@i_v1)
+ ├── columns: m:1!null k:6!null v1:9!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [16 1] = [7 9]
+ ├── immutable
+ ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ ├── inner-join (cross)
+ │    ├── columns: m:1 "lookup_join_const_col_@7":16!null
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    ├── values
+ │    │    ├── columns: "lookup_join_const_col_@7":16!null
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── (1,)
+ │    │    ├── (2,)
+ │    │    └── (3,)
+ │    └── filters (true)
+ └── filters (true)
+
+# Non-covering case with a cross join for multiple constant values for the
+# leading lookup column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j, virt.v1 FROM small INNER LOOKUP JOIN virt ON virt.i IN (1, 2, 3) AND m = virt.v1
+----
+inner-join (lookup virt)
+ ├── columns: m:1!null j:8!null v1:9!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (1)==(9), (9)==(1)
+ ├── inner-join (lookup virt@i_v1)
+ │    ├── columns: m:1!null k:6!null v1:9!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [16 1] = [7 9]
+ │    ├── fd: (6)-->(1,9), (1)==(9), (9)==(1)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: m:1 "lookup_join_const_col_@7":16!null
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1
+ │    │    ├── values
+ │    │    │    ├── columns: "lookup_join_const_col_@7":16!null
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── (1,)
+ │    │    │    ├── (2,)
+ │    │    │    └── (3,)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── filters (true)
+
+# Left join, covering case.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.v1 FROM small LEFT LOOKUP JOIN virt ON virt.i = 1 AND m = virt.v1
+----
+left-join (lookup virt@i_v1)
+ ├── columns: m:1 k:6 v1:9
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [16 1] = [7 9]
+ ├── immutable
+ ├── project
+ │    ├── columns: "lookup_join_const_col_@7":16!null m:1
+ │    ├── fd: ()-->(16)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── projections
+ │         └── 1 [as="lookup_join_const_col_@7":16]
+ └── filters (true)
+
+# Left join, non-covering case.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j FROM small LEFT LOOKUP JOIN virt ON virt.i = 1 AND m = virt.v1
+----
+project
+ ├── columns: m:1 j:8
+ ├── immutable
+ └── left-join (lookup virt)
+      ├── columns: m:1 j:8 v1:9
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── left-join (lookup virt@i_v1)
+      │    ├── columns: m:1 k:6 v1:9
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [16 1] = [7 9]
+      │    ├── fd: (6)-->(9)
+      │    ├── project
+      │    │    ├── columns: "lookup_join_const_col_@7":16!null m:1
+      │    │    ├── fd: ()-->(16)
+      │    │    ├── scan small
+      │    │    │    └── columns: m:1
+      │    │    └── projections
+      │    │         └── 1 [as="lookup_join_const_col_@7":16]
+      │    └── filters (true)
+      └── filters (true)
+
+# Left join, covering case with multiple constant values for the leading lookup
+# column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.v1 FROM small LEFT LOOKUP JOIN virt ON virt.i IN (1, 2, 3) AND m = virt.v1
+----
+project
+ ├── columns: m:1 k:6 v1:9
+ ├── immutable
+ ├── fd: (6)-->(9)
+ └── left-join (lookup virt@i_v1)
+      ├── columns: m:1 k:6 i:7 v1:9
+      ├── flags: force lookup join (into right side)
+      ├── lookup expression
+      │    └── filters
+      │         ├── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+      │         └── i:7 IN (1, 2, 3) [outer=(7), constraints=(/7: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+      ├── fd: (6)-->(7,9), (7)~~>(9)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters (true)
+
+# Left join, non-covering case with multiple constant values for the leading
+# lookup column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j, virt.v1 FROM small LEFT LOOKUP JOIN virt ON virt.i IN (1, 2, 3) AND m = virt.v1
+----
+left-join (lookup virt)
+ ├── columns: m:1 j:8 v1:9
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── left-join (lookup virt@i_v1)
+ │    ├── columns: m:1 k:6 i:7 v1:9
+ │    ├── flags: force lookup join (into right side)
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │         └── i:7 IN (1, 2, 3) [outer=(7), constraints=(/7: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    ├── fd: (6)-->(7,9), (7)~~>(9)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+# Do not generate a lookup join when the right side projects a column that is
+# not a virtual computed column.
+opt expect-not=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, tmp.p
+FROM small INNER LOOKUP JOIN (
+  SELECT v1, i, i + 5 AS p FROM virt
+) tmp ON tmp.i = 1 AND m = tmp.v1
+----
+project
+ ├── columns: m:1!null p:16!null
+ ├── immutable
+ ├── fd: ()-->(1,16)
+ └── inner-join (hash)
+      ├── columns: m:1!null v1:9!null p:16!null
+      ├── flags: force lookup join (into right side)
+      ├── immutable
+      ├── fd: ()-->(1,9,16), (1)==(9), (9)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      ├── project
+      │    ├── columns: p:16!null v1:9!null
+      │    ├── immutable
+      │    ├── fd: ()-->(9,16)
+      │    ├── scan virt@i_v1
+      │    │    ├── columns: i:7!null
+      │    │    ├── constraint: /7/9/6: [/1/11 - /1/11]
+      │    │    └── fd: ()-->(7)
+      │    └── projections
+      │         ├── i:7 + 5 [as=p:16, outer=(7), immutable]
+      │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+      └── filters
+           └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Do not generate a lookup join when all the projected virtual columns cannot
+# be produced from a single index.
+opt expect-not=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.v1, virt.v2 FROM small INNER LOOKUP JOIN virt ON virt.i = 1 AND m = virt.v1
+----
+inner-join (hash)
+ ├── columns: m:1!null v1:9!null v2:10!null
+ ├── flags: force lookup join (into right side)
+ ├── immutable
+ ├── fd: ()-->(1,9,10), (1)==(9), (9)==(1)
+ ├── scan small
+ │    └── columns: m:1
+ ├── project
+ │    ├── columns: v1:9!null v2:10!null
+ │    ├── immutable
+ │    ├── fd: ()-->(9,10)
+ │    ├── scan virt@i_v1
+ │    │    ├── columns: i:7!null
+ │    │    ├── constraint: /7/9/6: [/1/11 - /1/11]
+ │    │    └── fd: ()-->(7)
+ │    └── projections
+ │         ├── i:7 + 10 [as=v1:9, outer=(7), immutable]
+ │         └── i:7 + 100 [as=v2:10, outer=(7), immutable]
+ └── filters
+      └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+exec-ddl
+CREATE INDEX l_v1 ON virt (l, v1)
+----
+
+# Generate lookup joins with virtual columns for semi-joins.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE virt.l = 1 AND m = virt.v1)
+----
+semi-join (lookup virt@l_v1)
+ ├── columns: m:1
+ ├── key columns: [16 1] = [13 9]
+ ├── immutable
+ ├── project
+ │    ├── columns: "lookup_join_const_col_@13":16!null m:1
+ │    ├── fd: ()-->(16)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── projections
+ │         └── 1 [as="lookup_join_const_col_@13":16]
+ └── filters (true)
+
+# Semi-join with multiple constant values for the leading lookup column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE virt.l IN (1, 2, 3) AND m = virt.v1)
+----
+semi-join (lookup virt@l_v1)
+ ├── columns: m:1
+ ├── key columns: [16 1] = [13 9]
+ ├── immutable
+ ├── inner-join (cross)
+ │    ├── columns: m:1 "lookup_join_const_col_@13":16!null
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    ├── values
+ │    │    ├── columns: "lookup_join_const_col_@13":16!null
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── (1,)
+ │    │    ├── (2,)
+ │    │    └── (3,)
+ │    └── filters (true)
+ └── filters (true)
+
+# Semi-join with multiple constant values for the leading lookup column and a
+# filter on a column not in the index.
+# TODO(mgartner): We do not handle this case yet.
+opt
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE virt.l = 1 AND m = virt.v1 AND j > 0)
+----
+semi-join (hash)
+ ├── columns: m:1
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ ├── project
+ │    ├── columns: v1:9
+ │    ├── immutable
+ │    ├── select
+ │    │    ├── columns: i:7 j:8!null l:13!null
+ │    │    ├── fd: ()-->(13)
+ │    │    ├── index-join virt
+ │    │    │    ├── columns: i:7 j:8!null l:13
+ │    │    │    ├── fd: ()-->(13)
+ │    │    │    └── scan virt@l_v1
+ │    │    │         ├── columns: k:6!null l:13!null
+ │    │    │         ├── constraint: /13/9/6: [/1 - /1]
+ │    │    │         ├── key: (6)
+ │    │    │         └── fd: ()-->(13)
+ │    │    └── filters
+ │    │         └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+ │    └── projections
+ │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+ └── filters
+      └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Generate lookup joins with virtual columns for anti-joins.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE virt.l = 1 AND m = virt.v1)
+----
+anti-join (lookup virt@l_v1)
+ ├── columns: m:1
+ ├── key columns: [16 1] = [13 9]
+ ├── immutable
+ ├── project
+ │    ├── columns: "lookup_join_const_col_@13":16!null m:1
+ │    ├── fd: ()-->(16)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── projections
+ │         └── 1 [as="lookup_join_const_col_@13":16]
+ └── filters (true)
+
+# Anti-join with multiple constant values for the leading lookup column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE virt.l IN (1, 2, 3) AND m = virt.v1)
+----
+anti-join (lookup virt@l_v1)
+ ├── columns: m:1
+ ├── lookup expression
+ │    └── filters
+ │         ├── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │         └── l:13 IN (1, 2, 3) [outer=(13), constraints=(/13: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Anti-join with multiple constant values for the leading lookup column and a
+# filter on a column not in the index.
+# TODO(mgartner): We do not handle this case yet.
+opt
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE virt.l = 2 AND m = virt.v1 AND j > 0)
+----
+anti-join (hash)
+ ├── columns: m:1
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ ├── project
+ │    ├── columns: v1:9
+ │    ├── immutable
+ │    ├── select
+ │    │    ├── columns: i:7 j:8!null l:13!null
+ │    │    ├── fd: ()-->(13)
+ │    │    ├── index-join virt
+ │    │    │    ├── columns: i:7 j:8!null l:13
+ │    │    │    ├── fd: ()-->(13)
+ │    │    │    └── scan virt@l_v1
+ │    │    │         ├── columns: k:6!null l:13!null
+ │    │    │         ├── constraint: /13/9/6: [/2 - /2]
+ │    │    │         ├── key: (6)
+ │    │    │         └── fd: ()-->(13)
+ │    │    └── filters
+ │    │         └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+ │    └── projections
+ │         └── i:7 + 10 [as=v1:9, outer=(7), immutable]
+ └── filters
+      └── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+exec-ddl
+DROP INDEX l_v1
+----
+
+exec-ddl
+DROP INDEX i_v1
+----
+
+exec-ddl
 CREATE INDEX v1_partial ON virt (v1) WHERE k > 0
 ----
 
-# Covering case with partial index. We do not support this yet.
-# TODO(mgartner): Generate lookup joins with virtual columns indexed by partial
-# indexes by handling the (Project (Select (Scan))) pattern on the right side of
-# the join.
-opt format=hide-all
+# Covering case with partial index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
 SELECT m, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND k > 0
 ----
-inner-join (hash)
+inner-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1!null v1:9!null
  ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── fd: (1)==(9), (9)==(1)
  ├── scan small
- ├── project
- │    ├── scan virt
- │    │    └── constraint: /6: [/1 - ]
- │    └── projections
- │         └── i + 10
- └── filters
-      └── m = v1
+ │    └── columns: m:1
+ └── filters (true)
 
-# Non-covering case with partial index. We do not support this yet.
-# TODO(mgartner): Generate lookup joins with virtual columns indexed by partial
-# indexes by handling the (Project (Select (Scan))) pattern on the right side of
-# the join.
-opt format=hide-all
+# Non-covering case with partial index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
 SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND k > 0
 ----
-inner-join (hash)
+inner-join (lookup virt)
+ ├── columns: m:1!null i:7 v1:9!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)-->(9), (1)==(9), (9)==(1)
+ ├── inner-join (lookup virt@v1_partial,partial)
+ │    ├── columns: m:1!null k:6!null v1:9!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+# Left join, covering case with partial index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND k > 0
+----
+left-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1 v1:9
  ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
  ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Left join, non-covering case with partial index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND k > 0
+----
+left-join (lookup virt)
+ ├── columns: m:1 i:7 v1:9
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)~~>(9)
+ ├── left-join (lookup virt@v1_partial,partial)
+ │    ├── columns: m:1 k:6 v1:9
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+# Semi-join with partial index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v1 AND k > 0)
+----
+semi-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Anti-join with partial index.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.v1 AND k > 0)
+----
+anti-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+exec-ddl
+DROP INDEX v1_partial
+----
+
+exec-ddl
+CREATE INDEX v1_partial ON virt (v1) WHERE v1 > 0
+----
+
+# Covering case with partial index predicate that references the indexed virtual
+# column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND v1 > 0
+----
+inner-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1!null v1:9!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── fd: (1)==(9), (9)==(1)
+ ├── select
+ │    ├── columns: m:1!null
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters
+ │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ └── filters (true)
+
+# Non-covering case with partial index predicate that references the indexed
+# virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND v1 > 0
+----
+inner-join (lookup virt)
+ ├── columns: m:1!null i:7!null v1:9!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)-->(9), (1)==(9), (9)==(1)
+ ├── inner-join (lookup virt@v1_partial,partial)
+ │    ├── columns: m:1!null k:6!null v1:9!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ │    ├── select
+ │    │    ├── columns: m:1!null
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1
+ │    │    └── filters
+ │    │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    └── filters (true)
+ └── filters (true)
+
+# Left-join, covering case with partial index predicate that references the
+# indexed virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND v1 > 0
+----
+left-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1 v1:9
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Left-join, non-covering case with partial index predicate that references the
+# indexed virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND v1 > 0
+----
+left-join (lookup virt)
+ ├── columns: m:1 i:7 v1:9
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)-->(9)
+ ├── left-join (lookup virt@v1_partial,partial)
+ │    ├── columns: m:1 k:6 v1:9
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+# Semi-join with partial index predicate that references the indexed virtual
+# column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v1 AND v1 > 0)
+----
+semi-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Anti-join with partial index predicate that references the indexed virtual
+# column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.v1 AND v1 > 0)
+----
+anti-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+exec-ddl
+DROP INDEX v1_partial
+----
+
+exec-ddl
+CREATE INDEX v1_partial ON virt (v1) WHERE v2 > 0
+----
+
+# Covering case with partial index predicate that references another virtual
+# column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND v2 > 0
+----
+inner-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1!null v1:9!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── fd: (1)==(9), (9)==(1)
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Non-covering case with partial index predicate that references another virtual
+# column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND v2 > 0
+----
+inner-join (lookup virt)
+ ├── columns: m:1!null i:7!null v1:9!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)-->(9), (1)==(9), (9)==(1)
+ ├── inner-join (lookup virt@v1_partial,partial)
+ │    ├── columns: m:1!null k:6!null v1:9!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+# Left join, covering case with partial index predicate that references another
+# virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND v2 > 0
+----
+left-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1 v1:9
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Left join, non-covering case with partial index predicate that references
+# another virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i, virt.v1 FROM small LEFT LOOKUP JOIN virt ON m = virt.v1 AND v2 > 0
+----
+left-join (lookup virt)
+ ├── columns: m:1 i:7 v1:9
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)-->(9)
+ ├── left-join (lookup virt@v1_partial,partial)
+ │    ├── columns: m:1 k:6 v1:9
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+# Semi-join with partial index predicate that references another virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v1 AND v2 > 0)
+----
+semi-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+# Anti-join with partial index predicate that references another virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.v1 AND v2 > 0)
+----
+anti-join (lookup virt@v1_partial,partial)
+ ├── columns: m:1
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
+exec-ddl
+DROP INDEX v1_partial
+----
+
+exec-ddl
+CREATE INDEX v3_partial ON virt (v3) WHERE v3 > 0
+----
+
+# Covering case with a more complex partial index predicate that references the
+# indexed virtual column.
+opt
+SELECT m, virt.k, virt.v3 FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0 AND m > 0
+----
+inner-join (lookup virt@v3_partial,partial)
+ ├── columns: m:1!null k:6!null v3:11!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [11]
+ ├── immutable
+ ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+ ├── select
+ │    ├── columns: m:1!null
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters
+ │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ └── filters (true)
+
+# Non-covering case with a more complex partial index predicate that references
+# the indexed virtual column.
+opt
+SELECT m, virt.i, virt.v3 FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0 AND m > 0
+----
+inner-join (lookup virt)
+ ├── columns: m:1!null i:7 v3:11!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (1)==(11), (11)==(1)
+ ├── inner-join (lookup virt@v3_partial,partial)
+ │    ├── columns: m:1!null k:6!null v3:11!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [11]
+ │    ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+ │    ├── select
+ │    │    ├── columns: m:1!null
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1
+ │    │    └── filters
+ │    │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    └── filters (true)
+ └── filters (true)
+
+exec-ddl
+DROP INDEX v3_partial
+----
+
+exec-ddl
+CREATE INDEX v3_partial ON virt (v3) STORING (i) WHERE i > 0 OR j > 0 OR virt.v2 > 0 OR virt.v3 > 0
+----
+
+# We can generate a lookup join with filters remaining after partial index
+# implication if the index contains columns in the remaining filter and those
+# columns are output by the Project.
+# projected.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.i FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND i > 0
+----
+project
+ ├── columns: m:1!null k:6!null i:7!null
+ ├── immutable
+ ├── fd: (6)-->(1,7)
+ └── inner-join (lookup virt@v3_partial,partial)
+      ├── columns: m:1!null k:6!null i:7!null v3:11!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [11]
+      ├── immutable
+      ├── fd: (6)-->(7,11), (1)==(11), (11)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters
+           └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+
+# Left join, same case as above.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.i FROM small LEFT LOOKUP JOIN virt ON m = virt.v3 AND i > 0
+----
+project
+ ├── columns: m:1 k:6 i:7
+ ├── immutable
+ ├── fd: (6)-->(7)
+ └── left-join (lookup virt@v3_partial,partial)
+      ├── columns: m:1 k:6 i:7 v3:11
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [11]
+      ├── immutable
+      ├── fd: (6)-->(7,11)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters
+           └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+
+# Semi-join, same case as above.
+# TODO(mgartner): We don't currently handle this case, but we should be able to.
+opt
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v3 AND i > 0)
+----
+semi-join (hash)
+ ├── columns: m:1
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
  ├── project
- │    ├── scan virt
- │    │    └── constraint: /6: [/1 - ]
+ │    ├── columns: v3:11!null
+ │    ├── immutable
+ │    ├── select
+ │    │    ├── columns: i:7!null j:8!null
+ │    │    ├── scan virt
+ │    │    │    ├── columns: i:7 j:8!null
+ │    │    │    ├── check constraint expressions
+ │    │    │    │    ├── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │    │    │    └── v4:12 IN (1, 2, 3) [outer=(12), constraints=(/12: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    │    │    ├── computed column expressions
+ │    │    │    │    ├── v1:9
+ │    │    │    │    │    └── i:7 + 10
+ │    │    │    │    ├── v2:10
+ │    │    │    │    │    └── i:7 + 100
+ │    │    │    │    ├── v3:11
+ │    │    │    │    │    └── i:7 + j:8
+ │    │    │    │    └── v4:12
+ │    │    │    │         └── i:7 + 1
+ │    │    │    └── partial index predicates
+ │    │    │         └── v3_partial: filters
+ │    │    │              └── (((i:7 > 0) OR (j:8 > 0)) OR (i:7 > -100)) OR ((i:7 + j:8) > 0) [outer=(7,8), immutable]
+ │    │    └── filters
+ │    │         └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
  │    └── projections
- │         └── i + 10
+ │         └── i:7 + j:8 [as=v3:11, outer=(7,8), immutable]
  └── filters
-      └── m = v1
+      └── m:1 = v3:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+
+# Anti-join, same case as above.
+# TODO(mgartner): We don't currently handle this case, but we should be able to.
+opt
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.v3 AND i > 0)
+----
+anti-join (hash)
+ ├── columns: m:1
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ ├── project
+ │    ├── columns: v3:11!null
+ │    ├── immutable
+ │    ├── select
+ │    │    ├── columns: i:7!null j:8!null
+ │    │    ├── scan virt
+ │    │    │    ├── columns: i:7 j:8!null
+ │    │    │    ├── check constraint expressions
+ │    │    │    │    ├── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │    │    │    └── v4:12 IN (1, 2, 3) [outer=(12), constraints=(/12: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    │    │    ├── computed column expressions
+ │    │    │    │    ├── v1:9
+ │    │    │    │    │    └── i:7 + 10
+ │    │    │    │    ├── v2:10
+ │    │    │    │    │    └── i:7 + 100
+ │    │    │    │    ├── v3:11
+ │    │    │    │    │    └── i:7 + j:8
+ │    │    │    │    └── v4:12
+ │    │    │    │         └── i:7 + 1
+ │    │    │    └── partial index predicates
+ │    │    │         └── v3_partial: filters
+ │    │    │              └── (((i:7 > 0) OR (j:8 > 0)) OR (i:7 > -100)) OR ((i:7 + j:8) > 0) [outer=(7,8), immutable]
+ │    │    └── filters
+ │    │         └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+ │    └── projections
+ │         └── i:7 + j:8 [as=v3:11, outer=(7,8), immutable]
+ └── filters
+      └── m:1 = v3:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+
+# We can generate a lookup join with filters remaining after partial index
+# implication if the index does not contain columns in the remaining filter,
+# as long as those columns are output by the Project.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.j FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND j > 0
+----
+project
+ ├── columns: m:1!null k:6!null j:8!null
+ ├── immutable
+ ├── fd: (6)-->(1,8)
+ └── inner-join (lookup virt)
+      ├── columns: m:1!null k:6!null j:8!null v3:11!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (6)-->(8,11), (1)==(11), (11)==(1)
+      ├── inner-join (lookup virt@v3_partial,partial)
+      │    ├── columns: m:1!null k:6!null v3:11!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [11]
+      │    ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── filters
+           └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+
+# Left join, same case as above.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.j FROM small LEFT LOOKUP JOIN virt ON m = virt.v3 AND j > 0
+----
+project
+ ├── columns: m:1 k:6 j:8
+ ├── immutable
+ ├── fd: (6)-->(8)
+ └── left-join (lookup virt)
+      ├── columns: m:1 k:6 j:8 v3:11
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── second join in paired joiner
+      ├── immutable
+      ├── fd: (6)-->(8,11)
+      ├── left-join (lookup virt@v3_partial,partial)
+      │    ├── columns: m:1 k:6 v3:11 continuation:16
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [11]
+      │    ├── first join in paired joiner; continuation column: continuation:16
+      │    ├── fd: (6)-->(11,16)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── filters
+           └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+
+# Semi-join, same case as above.
+# TODO(mgartner): We don't currently handle this case, but we should be able to.
+opt
+SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v3 AND j > 0)
+----
+semi-join (hash)
+ ├── columns: m:1
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ ├── project
+ │    ├── columns: v3:11
+ │    ├── immutable
+ │    ├── select
+ │    │    ├── columns: i:7 j:8!null
+ │    │    ├── scan virt
+ │    │    │    ├── columns: i:7 j:8!null
+ │    │    │    ├── check constraint expressions
+ │    │    │    │    ├── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │    │    │    └── v4:12 IN (1, 2, 3) [outer=(12), constraints=(/12: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    │    │    ├── computed column expressions
+ │    │    │    │    ├── v1:9
+ │    │    │    │    │    └── i:7 + 10
+ │    │    │    │    ├── v2:10
+ │    │    │    │    │    └── i:7 + 100
+ │    │    │    │    ├── v3:11
+ │    │    │    │    │    └── i:7 + j:8
+ │    │    │    │    └── v4:12
+ │    │    │    │         └── i:7 + 1
+ │    │    │    └── partial index predicates
+ │    │    │         └── v3_partial: filters
+ │    │    │              └── (((i:7 > 0) OR (j:8 > 0)) OR (i:7 > -100)) OR ((i:7 + j:8) > 0) [outer=(7,8), immutable]
+ │    │    └── filters
+ │    │         └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+ │    └── projections
+ │         └── i:7 + j:8 [as=v3:11, outer=(7,8), immutable]
+ └── filters
+      └── m:1 = v3:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+
+# Anti-join, same case as above.
+# TODO(mgartner): We don't currently handle this case, but we should be able to.
+opt
+SELECT m FROM small WHERE NOT EXISTS (SELECT * FROM virt WHERE m = virt.v3 AND j > 0)
+----
+anti-join (hash)
+ ├── columns: m:1
+ ├── immutable
+ ├── scan small
+ │    └── columns: m:1
+ ├── project
+ │    ├── columns: v3:11
+ │    ├── immutable
+ │    ├── select
+ │    │    ├── columns: i:7 j:8!null
+ │    │    ├── scan virt
+ │    │    │    ├── columns: i:7 j:8!null
+ │    │    │    ├── check constraint expressions
+ │    │    │    │    ├── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │    │    │    └── v4:12 IN (1, 2, 3) [outer=(12), constraints=(/12: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    │    │    ├── computed column expressions
+ │    │    │    │    ├── v1:9
+ │    │    │    │    │    └── i:7 + 10
+ │    │    │    │    ├── v2:10
+ │    │    │    │    │    └── i:7 + 100
+ │    │    │    │    ├── v3:11
+ │    │    │    │    │    └── i:7 + j:8
+ │    │    │    │    └── v4:12
+ │    │    │    │         └── i:7 + 1
+ │    │    │    └── partial index predicates
+ │    │    │         └── v3_partial: filters
+ │    │    │              └── (((i:7 > 0) OR (j:8 > 0)) OR (i:7 > -100)) OR ((i:7 + j:8) > 0) [outer=(7,8), immutable]
+ │    │    └── filters
+ │    │         └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+ │    └── projections
+ │         └── i:7 + j:8 [as=v3:11, outer=(7,8), immutable]
+ └── filters
+      └── m:1 = v3:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+
+# We can generate a lookup join with filters remaining after partial index
+# implication that contain a virtual column if the columns referenced in the
+# virtual column expression are output by the Project.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.i, virt.j FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0
+----
+project
+ ├── columns: m:1!null k:6!null i:7 j:8!null
+ ├── immutable
+ ├── fd: (6)-->(7,8), (7,8)-->(1)
+ └── inner-join (lookup virt)
+      ├── columns: m:1!null k:6!null i:7 j:8!null v3:11!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (6)-->(7,8), (7,8)-->(11), (1)==(11), (11)==(1)
+      ├── inner-join (lookup virt@v3_partial,partial)
+      │    ├── columns: m:1!null k:6!null i:7 v3:11!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [11]
+      │    ├── fd: (6)-->(7,11), (1)==(11), (11)==(1)
+      │    ├── select
+      │    │    ├── columns: m:1!null
+      │    │    ├── scan small
+      │    │    │    └── columns: m:1
+      │    │    └── filters
+      │    │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+      │    └── filters (true)
+      └── filters
+           └── (i:7 + j:8) > 0 [outer=(7,8), immutable]
+
+# Left join, same case as above.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.k, virt.i, virt.j FROM small LEFT LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0
+----
+project
+ ├── columns: m:1 k:6 i:7 j:8
+ ├── immutable
+ ├── fd: (6)-->(7,8)
+ └── left-join (lookup virt)
+      ├── columns: m:1 k:6 i:7 j:8 v3:11
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── second join in paired joiner
+      ├── immutable
+      ├── fd: (6)-->(7,8), (7,8)-->(11)
+      ├── left-join (lookup virt@v3_partial,partial)
+      │    ├── columns: m:1 k:6 i:7 v3:11 continuation:16
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [11]
+      │    ├── first join in paired joiner; continuation column: continuation:16
+      │    ├── fd: (6)-->(7,11,16)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── filters
+           └── (i:7 + j:8) > 0 [outer=(7,8), immutable]
+
+# We cannot currently generate a lookup join with filters remaining after
+# partial index implication that contain a virtual column if the columns
+# referenced in the virtual column expression are not output by the Project.
+# TODO(mgartner): We could handle this by wrapping the lookup join in an index
+# join to fetch i and j, and filter by them, then wrapping the index join in a
+# Project that removes i.
+opt
+SELECT m, virt.k, virt.v3 FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND v3 > 0
+----
+inner-join (hash)
+ ├── columns: m:1!null k:6!null v3:11!null
+ ├── flags: force lookup join (into right side)
+ ├── immutable
+ ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+ ├── select
+ │    ├── columns: m:1!null
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters
+ │         └── m:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ ├── project
+ │    ├── columns: v3:11 k:6!null
+ │    ├── immutable
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(11)
+ │    ├── select
+ │    │    ├── columns: k:6!null i:7 j:8!null
+ │    │    ├── immutable
+ │    │    ├── key: (6)
+ │    │    ├── fd: (6)-->(7,8)
+ │    │    ├── scan virt
+ │    │    │    ├── columns: k:6!null i:7 j:8!null
+ │    │    │    ├── check constraint expressions
+ │    │    │    │    ├── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │    │    │    └── v4:12 IN (1, 2, 3) [outer=(12), constraints=(/12: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    │    │    ├── computed column expressions
+ │    │    │    │    ├── v1:9
+ │    │    │    │    │    └── i:7 + 10
+ │    │    │    │    ├── v2:10
+ │    │    │    │    │    └── i:7 + 100
+ │    │    │    │    ├── v3:11
+ │    │    │    │    │    └── i:7 + j:8
+ │    │    │    │    └── v4:12
+ │    │    │    │         └── i:7 + 1
+ │    │    │    ├── partial index predicates
+ │    │    │    │    └── v3_partial: filters
+ │    │    │    │         └── (((i:7 > 0) OR (j:8 > 0)) OR (i:7 > -100)) OR ((i:7 + j:8) > 0) [outer=(7,8), immutable]
+ │    │    │    ├── key: (6)
+ │    │    │    └── fd: (6)-->(7,8)
+ │    │    └── filters
+ │    │         └── (i:7 + j:8) > 0 [outer=(7,8), immutable]
+ │    └── projections
+ │         └── i:7 + j:8 [as=v3:11, outer=(7,8), immutable]
+ └── filters
+      └── m:1 = v3:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+
+# We cannot currently generate a lookup join with filters remaining after
+# partial index implication if the columns in the remaining filter are not
+# output by the Project.
+# TODO(mgartner): We could handle this by wrapping the lookup join in an index
+# join to fetch i and filter by it, then wrapping the IndexJoin in a Project
+# that removes i.
+opt
+SELECT m, virt.k FROM small INNER LOOKUP JOIN virt ON m = virt.v3 AND i > 0
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── immutable
+ ├── fd: (6)-->(1)
+ └── inner-join (hash)
+      ├── columns: m:1!null k:6!null v3:11!null
+      ├── flags: force lookup join (into right side)
+      ├── immutable
+      ├── fd: (6)-->(11), (1)==(11), (11)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      ├── project
+      │    ├── columns: v3:11!null k:6!null
+      │    ├── immutable
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(11)
+      │    ├── select
+      │    │    ├── columns: k:6!null i:7!null j:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: (6)-->(7,8)
+      │    │    ├── scan virt
+      │    │    │    ├── columns: k:6!null i:7 j:8!null
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    ├── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+      │    │    │    │    └── v4:12 IN (1, 2, 3) [outer=(12), constraints=(/12: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── v1:9
+      │    │    │    │    │    └── i:7 + 10
+      │    │    │    │    ├── v2:10
+      │    │    │    │    │    └── i:7 + 100
+      │    │    │    │    ├── v3:11
+      │    │    │    │    │    └── i:7 + j:8
+      │    │    │    │    └── v4:12
+      │    │    │    │         └── i:7 + 1
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── v3_partial: filters
+      │    │    │    │         └── (((i:7 > 0) OR (j:8 > 0)) OR (i:7 > -100)) OR ((i:7 + j:8) > 0) [outer=(7,8), immutable]
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7,8)
+      │    │    └── filters
+      │    │         └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+      │    └── projections
+      │         └── i:7 + j:8 [as=v3:11, outer=(7,8), immutable]
+      └── filters
+           └── m:1 = v3:11 [outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+
+exec-ddl
+DROP INDEX v3_partial
+----
 
 
 # -------------------------------------------------------
@@ -4767,7 +6739,7 @@ GROUP BY n.name, n.geom
 project
  ├── columns: name:16!null popn_per_sqkm:22
  ├── immutable
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: name:16!null n.geom:17!null sum:21
  │    ├── grouping columns: name:16!null n.geom:17!null
  │    ├── immutable
@@ -4810,47 +6782,47 @@ WHERE n.name = 'Upper West Side'
 OR n.name = 'Upper East Side'
 GROUP BY n.name, n.geom
 ----
-memo (optimized, ~28KB, required=[presentation: name:16,popn_per_sqkm:22])
+memo (optimized, ~34KB, required=[presentation: name:16,popn_per_sqkm:22])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:16,popn_per_sqkm:22]
  │         ├── best: (project G2 G3 name)
- │         └── cost: 7333.54
+ │         └── cost: 7332.90
  ├── G2: (group-by G4 G5 cols=(16,17))
  │    └── []
  │         ├── best: (group-by G4 G5 cols=(16,17))
- │         └── cost: 7333.49
+ │         └── cost: 7332.84
  ├── G3: (projections G6)
  ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G10 G11 nyc_neighborhoods [as=n],keyCols=[23],outCols=(3,9,10,15-17)) (lookup-join G12 G9 nyc_census_blocks [as=c],keyCols=[30],outCols=(3,9,10,15-17))
  │    └── []
  │         ├── best: (lookup-join G12 G9 nyc_census_blocks [as=c],keyCols=[30],outCols=(3,9,10,15-17))
- │         └── cost: 7327.37
+ │         └── cost: 7326.71
  ├── G5: (aggregations G13)
  ├── G6: (div G14 G15)
  ├── G7: (scan nyc_census_blocks [as=c],cols=(3,9,10))
  │    └── []
  │         ├── best: (scan nyc_census_blocks [as=c],cols=(3,9,10))
- │         └── cost: 43863.83
+ │         └── cost: 43862.54
  ├── G8: (select G16 G17)
  │    └── []
  │         ├── best: (select G16 G17)
- │         └── cost: 164.75
+ │         └── cost: 164.07
  ├── G9: (filters G18 G19)
  ├── G10: (inverted-join G7 G20 nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
  │    └── []
  │         ├── best: (inverted-join G7 G20 nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
- │         └── cost: 921834.13
+ │         └── cost: 921832.85
  ├── G11: (filters G18 G19 G21)
  ├── G12: (inverted-join G8 G20 nyc_census_blocks@nyc_census_blocks_geo_idx [as=c])
  │    └── []
  │         ├── best: (inverted-join G8 G20 nyc_census_blocks@nyc_census_blocks_geo_idx [as=c])
- │         └── cost: 1787.56
+ │         └── cost: 1786.89
  ├── G13: (sum G22)
  ├── G14: (variable sum)
  ├── G15: (div G23 G24)
  ├── G16: (scan nyc_neighborhoods [as=n],cols=(15-17))
  │    └── []
  │         ├── best: (scan nyc_neighborhoods [as=n],cols=(15-17))
- │         └── cost: 163.44
+ │         └── cost: 162.75
  ├── G17: (filters G21)
  ├── G18: (function G25 st_intersects)
  ├── G19: (eq G26 G27)
@@ -5365,7 +7337,7 @@ with &1 (q)
  └── project
       ├── columns: count:43 count_rows:31!null
       ├── immutable
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: n.boroname:25 count_rows:31!null
       │    ├── grouping columns: n.boroname:25
       │    ├── immutable
@@ -6503,7 +8475,7 @@ project
       ├── lookup columns are key
       ├── immutable
       ├── fd: (7)-->(9)
-      ├── inner-join (inverted json_check@secondary [as=t1])
+      ├── inner-join (inverted json_check@json_check_i_j_idx [as=t1])
       │    ├── columns: t2.j:3 t1.k:14!null i:15!null
       │    ├── flags: force inverted join (into right side)
       │    ├── prefix key columns: [13] = [15]
@@ -7022,7 +8994,7 @@ ON b.k = 1 AND b.j @> a.j AND b.i = a.k
 project
  └── inner-join (lookup t59859_b [as=b])
       ├── lookup columns are key
-      ├── inner-join (inverted t59859_b@secondary [as=b])
+      ├── inner-join (inverted t59859_b@t59859_b_k_j_idx [as=b])
       │    ├── flags: force inverted join (into right side)
       │    ├── inverted-expr
       │    │    └── b.j @> a.j
@@ -7065,7 +9037,7 @@ ON a.k = 15 AND b.j @> a.j AND b.y = a.k
 ----
 inner-join (lookup t63735_b [as=b])
  ├── lookup columns are key
- ├── inner-join (inverted t63735_b@secondary [as=b])
+ ├── inner-join (inverted t63735_b@t63735_b_x_y_j_idx [as=b])
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
  │    │    └── b.j @> a.j
@@ -7578,11 +9550,22 @@ inner-join-apply
  │    └── key: (1-3)
  ├── inner-join (merge)
  │    ├── columns: p:6!null q:7!null r:8 pqr.s:9 pqr.t:10 a:13!null b:14 c:15 "?column?":19
- │    ├── left ordering: +7
- │    ├── right ordering: +13
+ │    ├── left ordering: +13
+ │    ├── right ordering: +7
  │    ├── outer: (1)
  │    ├── immutable
  │    ├── fd: (6)-->(7-10), (13)-->(19), (7)==(13), (13)==(7)
+ │    ├── project
+ │    │    ├── columns: "?column?":19 a:13 b:14 c:15
+ │    │    ├── outer: (1)
+ │    │    ├── immutable
+ │    │    ├── fd: (13)-->(19)
+ │    │    ├── ordering: +13
+ │    │    ├── scan abc@ab
+ │    │    │    ├── columns: a:13 b:14 c:15
+ │    │    │    └── ordering: +13
+ │    │    └── projections
+ │    │         └── a:13 * stu.s:1 [as="?column?":19, outer=(1,13), immutable]
  │    ├── index-join pqr
  │    │    ├── columns: p:6!null q:7 r:8 pqr.s:9 pqr.t:10
  │    │    ├── cardinality: [0 - 5]
@@ -7595,17 +9578,6 @@ inner-join-apply
  │    │         ├── key: (6)
  │    │         ├── fd: (6)-->(7)
  │    │         └── ordering: +7
- │    ├── project
- │    │    ├── columns: "?column?":19 a:13 b:14 c:15
- │    │    ├── outer: (1)
- │    │    ├── immutable
- │    │    ├── fd: (13)-->(19)
- │    │    ├── ordering: +13
- │    │    ├── scan abc@ab
- │    │    │    ├── columns: a:13 b:14 c:15
- │    │    │    └── ordering: +13
- │    │    └── projections
- │    │         └── a:13 * stu.s:1 [as="?column?":19, outer=(1,13), immutable]
  │    └── filters (true)
  └── filters (true)
 
@@ -7669,7 +9641,7 @@ SELECT 1 FROM (VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true
 UNION ALL
 SELECT 1 FROM (VALUES (1), (1), (1)) JOIN (VALUES (1), (1)) ON true
 ----
-memo (optimized, ~18KB, required=[presentation: ?column?:7])
+memo (optimized, ~21KB, required=[presentation: ?column?:7])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: ?column?:7]
  │         ├── best: (union-all G2 G3)
@@ -7917,7 +9889,7 @@ project
  ├── columns: m:1!null n:2 a:6!null "?column?":12
  ├── immutable
  ├── fd: (1)==(6), (6)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7
  │    ├── key columns: [1] = [6]
  │    ├── fd: (1)==(6), (6)==(1)
@@ -7935,7 +9907,7 @@ project
  ├── columns: a:1!null "?column?":7 m:8!null n:9
  ├── immutable
  ├── fd: (1)==(8), (8)==(1)
- ├── inner-join (lookup abcd@secondary)
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: a:1!null b:2 m:8!null n:9
  │    ├── key columns: [8] = [1]
  │    ├── fd: (1)==(8), (8)==(1)
@@ -7957,7 +9929,7 @@ inner-join (hash)
  ├── project
  │    ├── columns: "?column?":12 a:6
  │    ├── immutable
- │    ├── scan abcd@secondary
+ │    ├── scan abcd@abcd_a_b_idx
  │    │    └── columns: a:6 b:7
  │    └── projections
  │         └── a:6 + b:7 [as="?column?":12, outer=(6,7), immutable]
@@ -7981,7 +9953,7 @@ inner-join (merge)
  │    ├── columns: "?column?":12 random:13 a:6
  │    ├── volatile
  │    ├── ordering: +6
- │    ├── scan abcd@secondary
+ │    ├── scan abcd@abcd_a_b_idx
  │    │    ├── columns: a:6 b:7
  │    │    └── ordering: +6
  │    └── projections
@@ -8025,7 +9997,7 @@ SELECT * FROM small LEFT JOIN (SELECT a, a+b FROM abcd) ON a=m
 project
  ├── columns: m:1 n:2 a:6 "?column?":12
  ├── immutable
- ├── left-join (lookup abcd@secondary)
+ ├── left-join (lookup abcd@abcd_a_b_idx)
  │    ├── columns: m:1 n:2 a:6 b:7
  │    ├── key columns: [1] = [6]
  │    ├── scan small
@@ -8063,7 +10035,7 @@ right-join (cross)
  ├── project
  │    ├── columns: "?column?":12 a:6
  │    ├── immutable
- │    ├── scan abcd@secondary
+ │    ├── scan abcd@abcd_a_b_idx
  │    │    └── columns: a:6 b:7
  │    └── projections
  │         └── a:6 + b:7 [as="?column?":12, outer=(6,7), immutable]
@@ -8083,7 +10055,7 @@ right-join (hash)
  ├── project
  │    ├── columns: "?column?":12 a:6
  │    ├── immutable
- │    ├── scan abcd@secondary
+ │    ├── scan abcd@abcd_a_b_idx
  │    │    └── columns: a:6 b:7
  │    └── projections
  │         └── a:6 + b:7 [as="?column?":12, outer=(6,7), immutable]
@@ -8150,21 +10122,21 @@ CREATE TABLE abc_part (
 ----
 
 exec-ddl
-ALTER PARTITION "east" OF INDEX abc_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "east" OF INDEX abc_part@abc_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=east: 2}',
   lease_preferences = '[[+region=east]]'
 ----
 
 exec-ddl
-ALTER PARTITION "west" OF INDEX abc_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "west" OF INDEX abc_part@abc_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=west: 2}',
   lease_preferences = '[[+region=west]]';
 ----
 
 exec-ddl
-ALTER PARTITION "central" OF INDEX abc_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "central" OF INDEX abc_part@abc_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=central: 2}',
   lease_preferences = '[[+region=central]]';
@@ -8239,21 +10211,21 @@ CREATE TABLE def_part (
 ----
 
 exec-ddl
-ALTER PARTITION "east" OF INDEX def_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "east" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=east: 2}',
   lease_preferences = '[[+region=east]]'
 ----
 
 exec-ddl
-ALTER PARTITION "west" OF INDEX def_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "west" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=west: 2}',
   lease_preferences = '[[+region=west]]';
 ----
 
 exec-ddl
-ALTER PARTITION "central" OF INDEX def_part@primary CONFIGURE ZONE USING
+ALTER PARTITION "central" OF INDEX def_part@def_part_pkey CONFIGURE ZONE USING
   num_voters = 5,
   voter_constraints = '{+region=central: 2}',
   lease_preferences = '[[+region=central]]';
@@ -8315,6 +10287,7 @@ anti-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -8325,6 +10298,7 @@ anti-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8332,6 +10306,7 @@ anti-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/1 - /'east'/1]
@@ -8363,6 +10338,7 @@ anti-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: west
  ├── anti-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -8373,6 +10349,7 @@ anti-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: west
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8380,6 +10357,7 @@ anti-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: west
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'west'/1 - /'west'/1]
@@ -8411,6 +10389,7 @@ anti-join (lookup abc_part@b_idx)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part@b_idx)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -8421,6 +10400,7 @@ anti-join (lookup abc_part@b_idx)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8428,6 +10408,7 @@ anti-join (lookup abc_part@b_idx)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -8459,6 +10440,7 @@ anti-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -8469,6 +10451,7 @@ anti-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8476,6 +10459,7 @@ anti-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/1 - /'east'/1]
@@ -8499,38 +10483,44 @@ anti-join (lookup abc_part)
 opt locality=(region=east) expect=GenerateLocalityOptimizedAntiJoin
 SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE e = a) AND f = 10
 ----
-anti-join (lookup abc_part)
+distribute
  ├── columns: r:1!null d:2!null e:3 f:4!null
- ├── lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
- ├── lookup columns are key
  ├── key: (2)
  ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
- ├── anti-join (lookup abc_part)
- │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
- │    ├── lookup expression
- │    │    └── filters
- │    │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │    │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
- │    ├── lookup columns are key
- │    ├── key: (2)
- │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
- │    ├── index-join def_part
- │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
- │    │    ├── key: (2)
- │    │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
- │    │    └── scan def_part@f_idx
- │    │         ├── columns: def_part.r:1!null d:2!null f:4!null
- │    │         ├── constraint: /1/4/2
- │    │         │    ├── [/'central'/10 - /'central'/10]
- │    │         │    ├── [/'east'/10 - /'east'/10]
- │    │         │    └── [/'west'/10 - /'west'/10]
- │    │         ├── key: (2)
- │    │         └── fd: ()-->(4), (2)-->(1)
- │    └── filters (true)
- └── filters (true)
+ ├── distribution: east
+ ├── input distribution: central,east,west
+ └── anti-join (lookup abc_part)
+      ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
+      ├── lookup expression
+      │    └── filters
+      │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+      ├── lookup columns are key
+      ├── key: (2)
+      ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+      ├── anti-join (lookup abc_part)
+      │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
+      │    ├── lookup expression
+      │    │    └── filters
+      │    │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      │    │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
+      │    ├── lookup columns are key
+      │    ├── key: (2)
+      │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+      │    ├── index-join def_part
+      │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
+      │    │    ├── key: (2)
+      │    │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+      │    │    └── scan def_part@f_idx
+      │    │         ├── columns: def_part.r:1!null d:2!null f:4!null
+      │    │         ├── constraint: /1/4/2
+      │    │         │    ├── [/'central'/10 - /'central'/10]
+      │    │         │    ├── [/'east'/10 - /'east'/10]
+      │    │         │    └── [/'west'/10 - /'west'/10]
+      │    │         ├── key: (2)
+      │    │         └── fd: ()-->(4), (2)-->(1)
+      │    └── filters (true)
+      └── filters (true)
 
 # Optimization applies even though the lookup join may have more than one
 # matching row.
@@ -8546,6 +10536,7 @@ anti-join (lookup abc_part@c_idx)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part@c_idx)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -8555,6 +10546,7 @@ anti-join (lookup abc_part@c_idx)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8562,6 +10554,7 @@ anti-join (lookup abc_part@c_idx)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -8578,6 +10571,60 @@ anti-join (lookup abc_part@c_idx)
  │    │         └── fd: ()-->(19-22)
  │    └── filters (true)
  └── filters (true)
+
+# Optimization applies even though the lookup join may have more than one
+# matching row and there's and ON condition.
+opt locality=(region=east) expect=GenerateLocalityOptimizedAntiJoin
+SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE f = c AND e % a = 0) AND d = 10
+----
+anti-join (lookup abc_part@c_idx)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── f:4 = c:10 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+ │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── distribution: east
+ ├── anti-join (lookup abc_part@c_idx)
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── f:4 = c:10 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+ │    │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
+ │    ├── cardinality: [0 - 1]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
+ │    │    ├── right columns: def_part.r:19 d:20 e:21 f:22
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
+ │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(13-16)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:19!null d:20!null e:21 f:22
+ │    │         ├── constraint: /19/20
+ │    │         │    ├── [/'central'/10 - /'central'/10]
+ │    │         │    └── [/'west'/10 - /'west'/10]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(19-22)
+ │    └── filters
+ │         └── (e:3 % a:8) = 0 [outer=(3,8), immutable]
+ └── filters
+      └── (e:3 % a:8) = 0 [outer=(3,8), immutable]
 
 # Optimization does not apply for semi join.
 opt locality=(region=central) expect-not=GenerateLocalityOptimizedAntiJoin
@@ -8597,6 +10644,7 @@ semi-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: central
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8604,6 +10652,7 @@ semi-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: central
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'central'/1 - /'central'/1]
@@ -8642,6 +10691,7 @@ inner-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4,7-10), (8)==(3), (3)==(8)
+ ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8649,6 +10699,7 @@ inner-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'east'/1 - /'east'/1]
@@ -8683,6 +10734,7 @@ left-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4,7-10)
+ ├── distribution: west
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8690,6 +10742,7 @@ left-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: west
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'west'/1 - /'west'/1]
@@ -8724,6 +10777,7 @@ semi-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: central
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8731,6 +10785,7 @@ semi-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: central
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'central'/1 - /'central'/1]
@@ -8747,6 +10802,50 @@ semi-join (lookup abc_part)
  │         └── fd: ()-->(19-22)
  └── filters (true)
 
+# Locality optimized semi join, with an extra ON filter.
+opt locality=(region=west) expect=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM def_part WHERE EXISTS (SELECT * FROM abc_part WHERE e = a AND f > b) AND d = 1
+----
+semi-join (lookup abc_part)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+ │         └── abc_part.r:7 = 'west' [outer=(7), constraints=(/7: [/'west' - /'west']; tight), fd=()-->(7)]
+ ├── remote lookup expression
+ │    └── filters
+ │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+ │         └── abc_part.r:7 IN ('central', 'east') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east']; tight)]
+ ├── lookup columns are key
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── distribution: west
+ ├── locality-optimized-search
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── left columns: def_part.r:13 d:14 e:15 f:16
+ │    ├── right columns: def_part.r:19 d:20 e:21 f:22
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── distribution: west
+ │    ├── scan def_part
+ │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
+ │    │    ├── constraint: /13/14: [/'west'/1 - /'west'/1]
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(13-16)
+ │    └── scan def_part
+ │         ├── columns: def_part.r:19!null d:20!null e:21 f:22
+ │         ├── constraint: /19/20
+ │         │    ├── [/'central'/1 - /'central'/1]
+ │         │    └── [/'east'/1 - /'east'/1]
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         └── fd: ()-->(19-22)
+ └── filters
+      └── f:4 > b:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ])]
+
 # Locality optimized inner join, different join condition.
 opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
 SELECT * FROM def_part INNER JOIN abc_part ON f = b WHERE d = 10
@@ -8758,6 +10857,7 @@ inner-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4,7-10), (9)==(4), (4)==(9)
+ ├── distribution: east
  ├── inner-join (lookup abc_part@b_idx)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null abc_part.r:7!null a:8!null b:9!null
  │    ├── lookup expression
@@ -8772,6 +10872,7 @@ inner-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4,7-9), (9)==(4), (4)==(9)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8779,6 +10880,7 @@ inner-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -8814,6 +10916,7 @@ inner-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4,7-10), (8)==(3), (3)==(8)
+ ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8821,6 +10924,7 @@ inner-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'east'/1 - /'east'/1]
@@ -8842,32 +10946,38 @@ inner-join (lookup abc_part)
 opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
 SELECT * FROM def_part INNER JOIN abc_part ON e = a WHERE f = 10
 ----
-inner-join (lookup abc_part)
+distribute
  ├── columns: r:1!null d:2!null e:3!null f:4!null r:7!null a:8!null b:9 c:10
- ├── lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
- ├── remote lookup expression
- │    └── filters
- │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
- │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
- ├── lookup columns are key
  ├── key: (2)
  ├── fd: ()-->(4), (2)-->(1,3), (3)-->(1,2), (8)-->(7,9,10), (9)~~>(7,8,10), (3)==(8), (8)==(3)
- ├── index-join def_part
- │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
- │    ├── key: (2)
- │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
- │    └── scan def_part@f_idx
- │         ├── columns: def_part.r:1!null d:2!null f:4!null
- │         ├── constraint: /1/4/2
- │         │    ├── [/'central'/10 - /'central'/10]
- │         │    ├── [/'east'/10 - /'east'/10]
- │         │    └── [/'west'/10 - /'west'/10]
- │         ├── key: (2)
- │         └── fd: ()-->(4), (2)-->(1)
- └── filters (true)
+ ├── distribution: east
+ ├── input distribution: central,east,west
+ └── inner-join (lookup abc_part)
+      ├── columns: def_part.r:1!null d:2!null e:3!null f:4!null abc_part.r:7!null a:8!null b:9 c:10
+      ├── lookup expression
+      │    └── filters
+      │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      │         └── abc_part.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
+      ├── remote lookup expression
+      │    └── filters
+      │         ├── e:3 = a:8 [outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
+      │         └── abc_part.r:7 IN ('central', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'west' - /'west']; tight)]
+      ├── lookup columns are key
+      ├── key: (2)
+      ├── fd: ()-->(4), (2)-->(1,3), (3)-->(1,2), (8)-->(7,9,10), (9)~~>(7,8,10), (3)==(8), (8)==(3)
+      ├── index-join def_part
+      │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
+      │    ├── key: (2)
+      │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+      │    └── scan def_part@f_idx
+      │         ├── columns: def_part.r:1!null d:2!null f:4!null
+      │         ├── constraint: /1/4/2
+      │         │    ├── [/'central'/10 - /'central'/10]
+      │         │    ├── [/'east'/10 - /'east'/10]
+      │         │    └── [/'west'/10 - /'west'/10]
+      │         ├── key: (2)
+      │         └── fd: ()-->(4), (2)-->(1)
+      └── filters (true)
 
 # Optimization applies for a semi join even though the lookup join may have more
 # than one matching row.
@@ -8887,6 +10997,7 @@ semi-join (lookup abc_part@c_idx)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── locality-optimized-search
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8894,6 +11005,7 @@ semi-join (lookup abc_part@c_idx)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── scan def_part
  │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -8910,6 +11022,47 @@ semi-join (lookup abc_part@c_idx)
  │         └── fd: ()-->(19-22)
  └── filters (true)
 
+# Optimization does not apply for a semi join that may have more than one
+# matching row when there is an ON condition.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM def_part WHERE EXISTS (SELECT * FROM abc_part WHERE f = c AND e % a = 0) AND d = 10
+----
+semi-join (lookup abc_part@c_idx)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── f:4 = c:10 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+ │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── distribution: east
+ ├── locality-optimized-search
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── left columns: def_part.r:13 d:14 e:15 f:16
+ │    ├── right columns: def_part.r:19 d:20 e:21 f:22
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
+ │    ├── scan def_part
+ │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
+ │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(13-16)
+ │    └── scan def_part
+ │         ├── columns: def_part.r:19!null d:20!null e:21 f:22
+ │         ├── constraint: /19/20
+ │         │    ├── [/'central'/10 - /'central'/10]
+ │         │    └── [/'west'/10 - /'west'/10]
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         └── fd: ()-->(19-22)
+ └── filters
+      └── (e:3 % a:8) = 0 [outer=(3,8), immutable]
+
 # Optimization does not apply for an inner join since the lookup join may have more than one
 # matching row.
 opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin
@@ -8921,6 +11074,7 @@ inner-join (lookup abc_part)
  ├── lookup columns are key
  ├── key: (8)
  ├── fd: ()-->(1-4,10), (8)-->(7,9), (9)~~>(7,8), (4)==(10), (10)==(4)
+ ├── distribution: east
  ├── inner-join (lookup abc_part@c_idx)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null abc_part.r:7!null a:8!null c:10!null
  │    ├── lookup expression
@@ -8929,6 +11083,7 @@ inner-join (lookup abc_part)
  │    │         └── abc_part.r:7 IN ('central', 'east', 'west') [outer=(7), constraints=(/7: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
  │    ├── key: (8)
  │    ├── fd: ()-->(1-4,10), (8)-->(7), (4)==(10), (10)==(4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8936,6 +11091,7 @@ inner-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/10 - /'east'/10]
@@ -8967,6 +11123,7 @@ anti-join (lookup abc_part)
  ├── cardinality: [0 - 1]
  ├── key: ()
  ├── fd: ()-->(1-4)
+ ├── distribution: east
  ├── anti-join (lookup abc_part)
  │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    ├── lookup expression
@@ -8977,6 +11134,7 @@ anti-join (lookup abc_part)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
+ │    ├── distribution: east
  │    ├── locality-optimized-search
  │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
  │    │    ├── left columns: def_part.r:13 d:14 e:15 f:16
@@ -8984,6 +11142,7 @@ anti-join (lookup abc_part)
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
+ │    │    ├── distribution: east
  │    │    ├── scan def_part
  │    │    │    ├── columns: def_part.r:13!null d:14!null e:15 f:16
  │    │    │    ├── constraint: /13/14: [/'east'/1 - /'east'/1]
@@ -9159,3 +11318,36 @@ left-join (lookup metric_values)
  │    └── fd: (1)-->(2)
  └── filters
       └── name:2 = 'cpu' [outer=(2), constraints=(/2: [/'cpu' - /'cpu']; tight), fd=()-->(2)]
+
+# Regression test for #68975. Ensure that findJoinFilterRange does not panic
+# from trying to access the 0-th constraint in an empty constraint set.
+exec-ddl
+CREATE TABLE t68975 (
+    s STRING,
+    i INT CHECK (false),
+    INDEX (s DESC)
+);
+----
+
+opt
+SELECT NULL
+FROM t68975 AS t1 JOIN t68975 AS t2
+ON t1.s = t2.s;
+----
+project
+ ├── columns: "?column?":11
+ ├── fd: ()-->(11)
+ ├── inner-join (merge)
+ │    ├── columns: t1.s:1!null t2.s:6!null
+ │    ├── left ordering: -1
+ │    ├── right ordering: -6
+ │    ├── fd: (1)==(6), (6)==(1)
+ │    ├── scan t68975@t68975_s_idx [as=t1]
+ │    │    ├── columns: t1.s:1
+ │    │    └── ordering: -1
+ │    ├── scan t68975@t68975_s_idx [as=t2]
+ │    │    ├── columns: t2.s:6
+ │    │    └── ordering: -6
+ │    └── filters (true)
+ └── projections
+      └── NULL [as="?column?":11]

@@ -35,6 +35,7 @@ func TestSplitHostPort(t *testing.T) {
 		{"[::1]:456", "123", "::1", "456", ""},
 		{"::1", "", "", "", "invalid address format: \"::1\""},
 		{"[123", "", "", "", `address \[123:: missing ']' in address`},
+		{":", "123", "", "123", ""},
 	}
 
 	for _, test := range testData {

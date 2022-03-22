@@ -896,12 +896,14 @@ concat [type=int[]]
 build-scalar
 ARRAY['"foo"'::jsonb]
 ----
-error: unimplemented: arrays of jsonb not allowed
+array: [type=jsonb[]]
+ └── const: '"foo"' [type=jsonb]
 
 build-scalar
 ARRAY['"foo"'::json]
 ----
-error: unimplemented: arrays of jsonb not allowed
+array: [type=jsonb[]]
+ └── const: '"foo"' [type=jsonb]
 
 opt
 SELECT -((-9223372036854775808):::int)
@@ -1030,7 +1032,15 @@ project
 build
 SELECT ARRAY(VALUES ('{}'::JSONB))
 ----
-error (0A000): unimplemented: arrays of jsonb not allowed
+project
+ ├── columns: array:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── array-flatten [as=array:2]
+           └── values
+                ├── columns: column1:1!null
+                └── ('{}',)
 
 build
 SELECT ARRAY(SELECT 1, 2)
@@ -1251,7 +1261,21 @@ project
 build
 SELECT ARRAY(SELECT (y, 2) FROM u ORDER BY x) FROM v
 ----
-error (0A000): unimplemented: can't execute a correlated ARRAY(...) over tuple{int[], int}
+project
+ ├── columns: array:10
+ ├── scan v
+ │    └── columns: y:1 v.rowid:2!null v.crdb_internal_mvcc_timestamp:3 v.tableoid:4
+ └── projections
+      └── array-flatten col=9 [as=array:10]
+           └── sort
+                ├── columns: "?column?":9  [hidden: x:5]
+                ├── ordering: +5
+                └── project
+                     ├── columns: "?column?":9 x:5
+                     ├── scan u
+                     │    └── columns: x:5 u.rowid:6!null u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+                     └── projections
+                          └── (y:1, 2) [as="?column?":9]
 
 build
 SELECT ARRAY(SELECT y FROM u ORDER BY x) FROM v
@@ -1461,3 +1485,56 @@ is [type=bool]
  │    │         └── null [type=unknown]
  │    └── array: [type=string[]]
  └── null [type=unknown]
+
+# Regression test for #75365. Do not create invalid casts when building CASE
+# expressions. We build a Select expressions here instead of a scalar so that
+# logical properties are generated, which is required to reproduce the bug.
+# TODO(#75103): We should be more permissive with casts of arrays of tuples.
+# These tests should be successful, not user-facing errors.
+build
+SELECT CASE WHEN false THEN ARRAY[('', 0)] ELSE ARRAY[]::RECORD[] END
+----
+error (42804): CASE ELSE type tuple[] cannot be matched to WHEN type tuple{string, int}[]
+
+build
+SELECT CASE WHEN false THEN ARRAY[('', 0)] WHEN true THEN ARRAY[]::RECORD[] ELSE ARRAY[('', 0)] END
+----
+error (42804): CASE WHEN types tuple[] and tuple{string, int}[] cannot be matched
+
+# Regression test for #76807. Do not create invalid casts when building COALESCE
+# and IF expressions.
+build
+SELECT COALESCE(t.v, ARRAY[]:::RECORD[])
+FROM (VALUES (ARRAY[(1, 'foo')])) AS t(v)
+----
+error (42804): COALESCE types tuple[] and tuple{int, string}[] cannot be matched
+
+build
+SELECT COALESCE(ARRAY[]:::RECORD[], t.v)
+FROM (VALUES (ARRAY[(1, 'foo')])) AS t(v)
+----
+project
+ ├── columns: coalesce:2
+ ├── values
+ │    ├── columns: column1:1
+ │    └── (ARRAY[(1, 'foo')],)
+ └── projections
+      └── COALESCE(ARRAY[], column1:1::RECORD[]) [as=coalesce:2]
+
+build
+SELECT IF(true, t.v, ARRAY[]:::RECORD[])
+FROM (VALUES (ARRAY[(1, 'foo')])) AS t(v)
+----
+error (42804): IF types tuple[] and tuple{int, string}[] cannot be matched
+
+build
+SELECT IF(true, ARRAY[]:::RECORD[], t.v)
+FROM (VALUES (ARRAY[(1, 'foo')])) AS t(v)
+----
+project
+ ├── columns: if:2
+ ├── values
+ │    ├── columns: column1:1
+ │    └── (ARRAY[(1, 'foo')],)
+ └── projections
+      └── CASE WHEN true THEN ARRAY[] ELSE column1:1::RECORD[] END [as=if:2]

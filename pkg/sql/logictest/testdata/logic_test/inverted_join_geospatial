@@ -125,7 +125,7 @@ ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.ge
 # Run the same two queries with the primary index to verify that we get the
 # same results.
 query II
-SELECT lk, rk FROM ltable JOIN rtable@primary
+SELECT lk, rk FROM ltable JOIN rtable@rtable_pkey
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
 ----
 1  13
@@ -136,7 +136,7 @@ ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.g
 3  16
 
 query II
-SELECT lk, rk FROM ltable JOIN rtable@primary
+SELECT lk, rk FROM ltable JOIN rtable@rtable_pkey
 ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
 ----
 1  12
@@ -409,7 +409,7 @@ INSERT INTO g VALUES
 
 # This query performs an inverted join.
 query II
-SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
+SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
 1  1
 1  2
@@ -417,7 +417,7 @@ SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2 WHERE ST_Contains(g1.geo
 
 # This query performs a cross join followed by a filter.
 query II
-SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
+SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
 1  1
 1  2
@@ -427,9 +427,9 @@ SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2 WHERE ST_Contains(g1.geo
 # There should be no rows output.
 query IIII
 SELECT * FROM
-(SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom)) AS inv_join(k1, k2)
+(SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom)) AS inv_join(k1, k2)
 FULL OUTER JOIN
-(SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2 WHERE ST_Contains(g1.geom, g2.geom)) AS cross_join(k1, k2)
+(SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom)) AS cross_join(k1, k2)
 ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
 WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
 ----
@@ -437,7 +437,7 @@ WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
 # Regression test for #55648.
 # This query performs an inverted join with an additional filter.
 query II
-SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2
+SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2
 WHERE ST_Contains(g1.geom, g2.geom)
   AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
   AND g2.k < 20
@@ -448,7 +448,7 @@ ORDER BY g1.k, g2.k
 
 # This query performs a cross join followed by a filter.
 query II
-SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2
+SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2
 WHERE ST_Contains(g1.geom, g2.geom)
   AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
   AND g2.k < 20
@@ -462,14 +462,14 @@ ORDER BY g1.k, g2.k
 query IIII
 SELECT * FROM
 (
-  SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@primary AS g2
+  SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2
   WHERE ST_Contains(g1.geom, g2.geom)
   AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
   AND g2.k < 20
 ) AS inv_join(k1, k2)
 FULL OUTER JOIN
 (
-  SELECT g1.k, g2.k FROM g@primary AS g1, g@primary AS g2
+  SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2
   WHERE ST_Contains(g1.geom, g2.geom)
   AND ST_Contains(g1.geom, ST_MakePolygon('LINESTRING(0 0, 0 5, 5 5, 5 0, 0 0)'::geometry))
   AND g2.k < 20

@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 type splitAndScatterer interface {
@@ -186,8 +190,10 @@ type splitAndScatterProcessor struct {
 	spec    execinfrapb.SplitAndScatterSpec
 	output  execinfra.RowReceiver
 
-	scatterer      splitAndScatterer
-	stopScattering context.CancelFunc
+	scatterer splitAndScatterer
+	// cancelScatterAndWaitForWorker cancels the scatter goroutine and waits for
+	// it to finish.
+	cancelScatterAndWaitForWorker func()
 
 	doneScatterCh chan entryNode
 	// A cache for routing datums, so only 1 is allocated per node.
@@ -204,21 +210,23 @@ func newSplitAndScatterProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
+
+	if spec.Validation != jobspb.RestoreValidation_DefaultRestore {
+		return nil, errors.New("Split and Scatter Processor does not support validation yet")
+	}
+
 	numEntries := 0
 	for _, chunk := range spec.Chunks {
 		numEntries += len(chunk.Entries)
 	}
 
 	db := flowCtx.Cfg.DB
-	kr, err := makeKeyRewriterFromRekeys(flowCtx.Codec(), spec.Rekeys)
+	kr, err := makeKeyRewriterFromRekeys(flowCtx.Codec(), spec.TableRekeys, spec.TenantRekeys)
 	if err != nil {
 		return nil, err
 	}
 
-	var scatterer splitAndScatterer = makeSplitAndScatterer(db, kr)
-	if !flowCtx.Cfg.Codec.ForSystemTenant() {
-		scatterer = noopSplitAndScatterer{}
-	}
+	scatterer := makeSplitAndScatterer(db, kr)
 	ssp := &splitAndScatterProcessor{
 		flowCtx:   flowCtx,
 		spec:      spec,
@@ -243,17 +251,30 @@ func newSplitAndScatterProcessor(
 
 // Start is part of the RowSource interface.
 func (ssp *splitAndScatterProcessor) Start(ctx context.Context) {
+	ctx = logtags.AddTag(ctx, "job", ssp.spec.JobID)
 	ctx = ssp.StartInternal(ctx, splitAndScatterProcessorName)
-	go func() {
-		// Note that the loop over doneScatterCh in Next should prevent this
-		// goroutine from leaking when there are no errors. However, if that loop
-		// needs to exit early, runSplitAndScatter's context will be canceled.
-		scatterCtx, stopScattering := context.WithCancel(ctx)
-		ssp.stopScattering = stopScattering
-
-		defer close(ssp.doneScatterCh)
-		ssp.scatterErr = ssp.runSplitAndScatter(scatterCtx, ssp.flowCtx, &ssp.spec, ssp.scatterer)
-	}()
+	// Note that the loop over doneScatterCh in Next should prevent the goroutine
+	// below from leaking when there are no errors. However, if that loop needs to
+	// exit early, runSplitAndScatter's context will be canceled.
+	scatterCtx, cancel := context.WithCancel(ctx)
+	workerDone := make(chan struct{})
+	ssp.cancelScatterAndWaitForWorker = func() {
+		cancel()
+		<-workerDone
+	}
+	if err := ssp.flowCtx.Stopper().RunAsyncTaskEx(scatterCtx, stop.TaskOpts{
+		TaskName: "splitAndScatter-worker",
+		SpanOpt:  stop.ChildSpan,
+	}, func(ctx context.Context) {
+		ssp.scatterErr = runSplitAndScatter(scatterCtx, ssp.flowCtx, &ssp.spec, ssp.scatterer, ssp.doneScatterCh)
+		cancel()
+		close(ssp.doneScatterCh)
+		close(workerDone)
+	}); err != nil {
+		ssp.scatterErr = err
+		cancel()
+		close(workerDone)
+	}
 }
 
 type entryNode struct {
@@ -279,7 +300,7 @@ func (ssp *splitAndScatterProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		// The routing datums informs the router which output stream should be used.
 		routingDatum, ok := ssp.routingDatumCache[scatteredEntry.node]
 		if !ok {
-			routingDatum, _ = routingDatumsForNode(scatteredEntry.node)
+			routingDatum, _ = routingDatumsForSQLInstance(base.SQLInstanceID(scatteredEntry.node))
 			ssp.routingDatumCache[scatteredEntry.node] = routingDatum
 		}
 
@@ -309,11 +330,8 @@ func (ssp *splitAndScatterProcessor) ConsumerClosed() {
 // runs into an error and stops consuming scattered entries to make sure we
 // don't leak goroutines.
 func (ssp *splitAndScatterProcessor) close() {
-	if ssp.InternalClose() {
-		if ssp.stopScattering != nil {
-			ssp.stopScattering()
-		}
-	}
+	ssp.cancelScatterAndWaitForWorker()
+	ssp.InternalClose()
 }
 
 // scatteredChunk is the entries of a chunk of entries to process along with the
@@ -323,11 +341,12 @@ type scatteredChunk struct {
 	entries     []execinfrapb.RestoreSpanEntry
 }
 
-func (ssp *splitAndScatterProcessor) runSplitAndScatter(
+func runSplitAndScatter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.SplitAndScatterSpec,
 	scatterer splitAndScatterer,
+	doneScatterCh chan<- entryNode,
 ) error {
 	g := ctxgroup.WithContext(ctx)
 
@@ -393,7 +412,7 @@ func (ssp *splitAndScatterProcessor) runSplitAndScatter(
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
-					case ssp.doneScatterCh <- scatteredEntry:
+					case doneScatterCh <- scatteredEntry:
 					}
 				}
 			}
@@ -404,18 +423,20 @@ func (ssp *splitAndScatterProcessor) runSplitAndScatter(
 	return g.Wait()
 }
 
-func routingDatumsForNode(nodeID roachpb.NodeID) (rowenc.EncDatum, rowenc.EncDatum) {
-	routingBytes := roachpb.Key(fmt.Sprintf("node%d", nodeID))
+func routingDatumsForSQLInstance(
+	sqlInstanceID base.SQLInstanceID,
+) (rowenc.EncDatum, rowenc.EncDatum) {
+	routingBytes := roachpb.Key(fmt.Sprintf("node%d", sqlInstanceID))
 	startDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
 	endDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
 	return startDatum, endDatum
 }
 
-// routingSpanForNode provides the mapping to be used during distsql planning
+// routingSpanForSQLInstance provides the mapping to be used during distsql planning
 // when setting up the output router.
-func routingSpanForNode(nodeID roachpb.NodeID) ([]byte, []byte, error) {
-	var alloc rowenc.DatumAlloc
-	startDatum, endDatum := routingDatumsForNode(nodeID)
+func routingSpanForSQLInstance(sqlInstanceID base.SQLInstanceID) ([]byte, []byte, error) {
+	var alloc tree.DatumAlloc
+	startDatum, endDatum := routingDatumsForSQLInstance(sqlInstanceID)
 
 	startBytes, endBytes := make([]byte, 0), make([]byte, 0)
 	startBytes, err := startDatum.Encode(splitAndScatterOutputTypes[0], &alloc, descpb.DatumEncoding_ASCENDING_KEY, startBytes)

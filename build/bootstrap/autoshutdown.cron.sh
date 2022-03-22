@@ -27,7 +27,7 @@ FILE=/dev/shm/autoshutdown-count
 COUNT=0
 
 
-if [ -f /.active ] || w -hs | grep pts | grep -vq "pts/[0-9]* *tmux" || pgrep unison; then
+if [ -f /.active ] || w -hs | grep pts | grep -vq "pts/[0-9]* *tmux" || pgrep unison || pgrep -f remote-dev-server.sh; then
   # Auto-shutdown is disabled (via /.active) or there is a remote session.
   echo 0 > $FILE
   exit 0

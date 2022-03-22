@@ -1,0 +1,86 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+let $gist
+EXPLAIN (GIST) SELECT * FROM t
+
+query T
+SELECT * FROM crdb_internal.decode_plan_gist('$gist')
+----
+• scan
+  table: t@t_pkey
+  spans: FULL SCAN
+
+query T
+SELECT crdb_internal.decode_plan_gist('$gist')
+----
+• scan
+  table: t@t_pkey
+  spans: FULL SCAN
+
+# Test that EXPLAIN (GIST) still works if automatic gists are disabled.
+statement ok
+SET disable_plan_gists = 'true'
+
+let $gist
+EXPLAIN (GIST) SELECT count(*) FROM t
+
+query T
+SELECT * FROM crdb_internal.decode_plan_gist('$gist')
+----
+• group (scalar)
+│
+└── • scan
+      table: t@t_pkey
+      spans: FULL SCAN
+
+query T
+SELECT crdb_internal.decode_plan_gist('$gist')
+----
+• group (scalar)
+│
+└── • scan
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement error pq: unknown signature: crdb_internal\.decode_plan_gist\(int\)
+SELECT * FROM crdb_internal.decode_plan_gist(10)
+
+statement error pq: unknown signature: crdb_internal\.decode_plan_gist\(int\)
+SELECT crdb_internal.decode_plan_gist(10)
+
+statement error pq: illegal base64 data at input byte 0
+SELECT crdb_internal.decode_plan_gist('a')
+
+# ConstructOpaque
+let $gist
+EXPLAIN (GIST) ALTER TABLE t SCATTER FROM (0) TO (1)
+
+query T
+SELECT crdb_internal.decode_plan_gist('$gist')
+----
+• <unknown>
+
+# Regression test for #76800
+statement ok
+CREATE TABLE t2 (a int, b int, c int, d int, e int)
+
+let $gist
+EXPLAIN (GIST) SELECT * FROM t2
+
+# To hit bug requires deleting lots of columns because of hidden columns.
+statement ok
+ALTER TABLE t2 DROP COLUMN b;
+ALTER TABLE t2 DROP COLUMN c;
+ALTER TABLE t2 DROP COLUMN a;
+ALTER TABLE t2 DROP COLUMN d;
+ALTER TABLE t2 DROP COLUMN e
+
+query T
+SELECT crdb_internal.decode_plan_gist('$gist')
+----
+• scan
+  table: t2@t2_pkey
+  spans: FULL SCAN

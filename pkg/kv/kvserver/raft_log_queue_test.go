@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -33,7 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
-	"go.etcd.io/etcd/raft/v3"
+	"github.com/stretchr/testify/require"
+	raft "go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
@@ -423,8 +423,9 @@ func TestNewTruncateDecisionMaxSize(t *testing.T) {
 	cfg := TestStoreConfig(hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond))
 	const exp = 1881
 	cfg.RaftLogTruncationThreshold = exp
+	ctx := context.Background()
 	store := createTestStoreWithConfig(
-		t, stopper, testStoreOpts{createSystemRanges: true}, &cfg,
+		ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg,
 	)
 
 	repl, err := store.GetReplica(1)
@@ -432,7 +433,6 @@ func TestNewTruncateDecisionMaxSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := context.Background()
 	td, err := newTruncateDecision(ctx, repl)
 	if err != nil {
 		t.Fatal(err)
@@ -451,9 +451,10 @@ func TestNewTruncateDecision(t *testing.T) {
 
 	skip.WithIssue(t, 38584)
 
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	store, _ := createTestStore(t,
+	defer stopper.Stop(ctx)
+	store, _ := createTestStore(ctx, t,
 		testStoreOpts{
 			// This test was written before test stores could start with more than one
 			// range and was not adapted.
@@ -468,7 +469,7 @@ func TestNewTruncateDecision(t *testing.T) {
 	}
 
 	getIndexes := func() (uint64, int, uint64, error) {
-		d, err := newTruncateDecision(context.Background(), r)
+		d, err := newTruncateDecision(ctx, r)
 		if err != nil {
 			return 0, 0, 0, err
 		}
@@ -487,7 +488,7 @@ func TestNewTruncateDecision(t *testing.T) {
 	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
 		key := roachpb.Key(fmt.Sprintf("key%02d", i))
 		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
-		if _, err := kv.SendWrapped(context.Background(), store.TestSender(), &args); err != nil {
+		if _, err := kv.SendWrapped(ctx, store.TestSender(), &args); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -580,17 +581,18 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 		{1, RaftLogQueueStaleSize},
 	}
 	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
+		testutils.RunTrueAndFalse(t, "loosely-coupled", func(t *testing.T, looselyCoupled bool) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			store, _ := createTestStore(t,
+			store, _ := createTestStore(ctx, t,
 				testStoreOpts{
 					// This test was written before test stores could start with more than one
 					// range and was not adapted.
 					createSystemRanges: false,
 				},
 				stopper)
-
+			st := store.ClusterSettings()
+			looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 			// Note that turning off the replica scanner does not prevent the queues
 			// from processing entries (in this case specifically the raftLogQueue),
 			// just that the scanner will not try to push all replicas onto the queues.
@@ -618,6 +620,10 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 			// fairly quickly, there is a slight race between this check and the
 			// truncation, especially when under stress.
 			testutils.SucceedsSoon(t, func() error {
+				if looselyCoupled {
+					// Flush the engine to advance durability, which triggers truncation.
+					require.NoError(t, store.engine.Flush())
+				}
 				newFirstIndex, err := r.GetFirstIndex()
 				if err != nil {
 					t.Fatal(err)
@@ -702,107 +708,105 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 func TestTruncateLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	cfg := TestStoreConfig(nil)
-	cfg.TestingKnobs.DisableRaftLogQueue = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	testutils.RunTrueAndFalse(t, "loosely-coupled", func(t *testing.T, looselyCoupled bool) {
+		tc := testContext{}
+		ctx := context.Background()
+		cfg := TestStoreConfig(nil)
+		cfg.TestingKnobs.DisableRaftLogQueue = true
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+		st := tc.store.ClusterSettings()
+		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 
-	// Populate the log with 10 entries. Save the LastIndex after each write.
-	var indexes []uint64
-	for i := 0; i < 10; i++ {
-		args := incrementArgs([]byte("a"), int64(i))
+		// Populate the log with 10 entries. Save the LastIndex after each write.
+		var indexes []uint64
+		for i := 0; i < 10; i++ {
+			args := incrementArgs([]byte("a"), int64(i))
 
-		if _, pErr := tc.SendWrapped(args); pErr != nil {
+			if _, pErr := tc.SendWrapped(args); pErr != nil {
+				t.Fatal(pErr)
+			}
+			idx, err := tc.repl.GetLastIndex()
+			if err != nil {
+				t.Fatal(err)
+			}
+			indexes = append(indexes, idx)
+		}
+
+		rangeID := tc.repl.RangeID
+
+		// Discard the first half of the log.
+		truncateArgs := truncateLogArgs(indexes[5], rangeID)
+		if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &truncateArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
-		idx, err := tc.repl.GetLastIndex()
+
+		waitForTruncationForTesting(t, tc.repl, indexes[5], looselyCoupled)
+
+		// We can still get what remains of the log.
+		tc.repl.mu.Lock()
+		entries, err := tc.repl.raftEntriesLocked(indexes[5], indexes[9], math.MaxUint64)
+		tc.repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
 		}
-		indexes = append(indexes, idx)
-	}
+		if len(entries) != int(indexes[9]-indexes[5]) {
+			t.Errorf("expected %d entries, got %d", indexes[9]-indexes[5], len(entries))
+		}
 
-	rangeID := tc.repl.RangeID
+		// But any range that includes the truncated entries returns an error.
+		tc.repl.mu.Lock()
+		_, err = tc.repl.raftEntriesLocked(indexes[4], indexes[9], math.MaxUint64)
+		tc.repl.mu.Unlock()
+		if !errors.Is(err, raft.ErrCompacted) {
+			t.Errorf("expected ErrCompacted, got %s", err)
+		}
 
-	// Discard the first half of the log.
-	truncateArgs := truncateLogArgs(indexes[5], rangeID)
-	if _, pErr := tc.SendWrappedWith(roachpb.Header{RangeID: 1}, &truncateArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+		// The term of the last truncated entry is still available.
+		tc.repl.mu.Lock()
+		term, err := tc.repl.raftTermRLocked(indexes[4])
+		tc.repl.mu.Unlock()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if term == 0 {
+			t.Errorf("invalid term 0 for truncated entry")
+		}
 
-	// FirstIndex has changed.
-	firstIndex, err := tc.repl.GetFirstIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if firstIndex != indexes[5] {
-		t.Errorf("expected firstIndex == %d, got %d", indexes[5], firstIndex)
-	}
+		// The terms of older entries are gone.
+		tc.repl.mu.Lock()
+		_, err = tc.repl.raftTermRLocked(indexes[3])
+		tc.repl.mu.Unlock()
+		if !errors.Is(err, raft.ErrCompacted) {
+			t.Errorf("expected ErrCompacted, got %s", err)
+		}
 
-	// We can still get what remains of the log.
-	tc.repl.mu.Lock()
-	entries, err := tc.repl.raftEntriesLocked(indexes[5], indexes[9], math.MaxUint64)
-	tc.repl.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != int(indexes[9]-indexes[5]) {
-		t.Errorf("expected %d entries, got %d", indexes[9]-indexes[5], len(entries))
-	}
+		// Truncating logs that have already been truncated should not return an
+		// error.
+		truncateArgs = truncateLogArgs(indexes[3], rangeID)
+		if _, pErr := tc.SendWrapped(&truncateArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 
-	// But any range that includes the truncated entries returns an error.
-	tc.repl.mu.Lock()
-	_, err = tc.repl.raftEntriesLocked(indexes[4], indexes[9], math.MaxUint64)
-	tc.repl.mu.Unlock()
-	if !errors.Is(err, raft.ErrCompacted) {
-		t.Errorf("expected ErrCompacted, got %s", err)
-	}
+		// Truncating logs that have the wrong rangeID included should not return
+		// an error but should not truncate any logs.
+		truncateArgs = truncateLogArgs(indexes[9], rangeID+1)
+		if _, pErr := tc.SendWrapped(&truncateArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 
-	// The term of the last truncated entry is still available.
-	tc.repl.mu.Lock()
-	term, err := tc.repl.raftTermRLocked(indexes[4])
-	tc.repl.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if term == 0 {
-		t.Errorf("invalid term 0 for truncated entry")
-	}
-
-	// The terms of older entries are gone.
-	tc.repl.mu.Lock()
-	_, err = tc.repl.raftTermRLocked(indexes[3])
-	tc.repl.mu.Unlock()
-	if !errors.Is(err, raft.ErrCompacted) {
-		t.Errorf("expected ErrCompacted, got %s", err)
-	}
-
-	// Truncating logs that have already been truncated should not return an
-	// error.
-	truncateArgs = truncateLogArgs(indexes[3], rangeID)
-	if _, pErr := tc.SendWrapped(&truncateArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Truncating logs that have the wrong rangeID included should not return
-	// an error but should not truncate any logs.
-	truncateArgs = truncateLogArgs(indexes[9], rangeID+1)
-	if _, pErr := tc.SendWrapped(&truncateArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	tc.repl.mu.Lock()
-	// The term of the last truncated entry is still available.
-	term, err = tc.repl.raftTermRLocked(indexes[4])
-	tc.repl.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if term == 0 {
-		t.Errorf("invalid term 0 for truncated entry")
-	}
+		tc.repl.mu.Lock()
+		// The term of the last truncated entry is still available.
+		term, err = tc.repl.raftTermRLocked(indexes[4])
+		tc.repl.mu.Unlock()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if term == 0 {
+			t.Errorf("invalid term 0 for truncated entry")
+		}
+	})
 }
 
 func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
@@ -857,25 +861,12 @@ func TestTruncateLogRecompute(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-
-	eng, err := storage.Open(ctx,
-		storage.Filesystem(dir),
-		storage.CacheSize(1<<20 /* 1 MiB */))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer eng.Close()
-
-	tc := testContext{
-		engine: eng,
-	}
+	tc := testContext{}
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.StartWithStoreConfig(t, stopper, cfg)
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	key := roachpb.Key("a")
 	repl := tc.store.LookupReplica(keys.MustAddr(key))
@@ -924,4 +915,29 @@ func TestTruncateLogRecompute(t *testing.T) {
 		assert.True(t, trusted())
 		put() // make sure we remain trusted and in sync
 	}
+}
+
+func waitForTruncationForTesting(
+	t *testing.T, r *Replica, newFirstIndex uint64, looselyCoupled bool,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		if looselyCoupled {
+			// Flush the engine to advance durability, which triggers truncation.
+			require.NoError(t, r.Engine().Flush())
+		}
+		// FirstIndex should have changed.
+		firstIndex, err := r.GetFirstIndex()
+		require.NoError(t, err)
+		if firstIndex != newFirstIndex {
+			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
+		}
+		// Some low-level tests also look at the raftEntryCache or sideloaded
+		// storage, which are updated after, and non-atomically with the change to
+		// first index (latter holds Replica.mu). Since the raftLogTruncator holds Replica.raftMu
+		// for the duration of its work, we can, by acquiring and releasing raftMu here, ensure
+		// that we have waited for it to finish.
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		return nil
+	})
 }

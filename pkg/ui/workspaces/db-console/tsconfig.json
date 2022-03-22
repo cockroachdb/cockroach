@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "alwaysStrict": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "lib": ["esnext", "dom"],
+    "moduleResolution": "node",
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": false,
+    "noImplicitThis": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strictNullChecks": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "outDir": "./dist/types",
+    "target": "es6",
+    "baseUrl": ".",
+    "paths": {
+      "oss/*": ["*"],
+      "*": [
+        "ccl/*",
+        "*",
+        "node_modules/*"
+      ]
+    }
+  },
+  "exclude": [
+    "cypress",
+    "cluster-ui",
+    "dist"
+  ]
+}

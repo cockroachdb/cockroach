@@ -1,0 +1,38 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.sessiondatapb;
+option go_package = "sessiondatapb";
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+// SessionRevivalToken is an opaque piece of data that can be used to
+// authenticate a new SQL session for the user who created this token.
+message SessionRevivalToken {
+  // Payload is defined as a separate type so that it’s easier to sign.
+  message Payload {
+    // The SQL user who can use this token to authenticate.
+    string user = 1;
+    // The algorithm used to sign the payload. Can be either Ed25519 or RSA.
+    string algorithm = 2;
+    // The time that this token is no longer considered valid.
+    google.protobuf.Timestamp expires_at = 3;
+    // The time that this token was created.
+    google.protobuf.Timestamp issued_at = 4;
+  }
+
+  // The payload to sign. This uses raw bytes so the data being signed is
+  // deterministic and not dependent on the proto version.
+  bytes payload = 1;
+  // The signature of the payload, signed using the new signing key.
+  bytes signature = 2;
+}

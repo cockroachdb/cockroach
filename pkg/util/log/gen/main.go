@@ -149,7 +149,7 @@ func readInput(protoName string) (chans []info, sevs []info, err error) {
 				NameLower:  strings.ToLower(key),
 			})
 		}
-		if inChans {
+		if inChans && key != "CHANNEL_MAX" {
 			comment := "// The `" + key + "` channel" + strings.TrimPrefix(rawComment, "// "+key)
 			chans = append(chans, info{
 				RawComment: rawComment,

@@ -30,7 +30,11 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 		}
 
 		// RESET ALL
-		if err := resetSessionVars(ctx, p.sessionDataMutator); err != nil {
+		if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(
+			func(m sessionDataMutator) error {
+				return resetSessionVars(ctx, m)
+			},
+		); err != nil {
 			return nil, err
 		}
 
@@ -42,15 +46,31 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 	return newZeroNode(nil /* columns */), nil
 }
 
-func resetSessionVars(ctx context.Context, m *sessionDataMutator) error {
+func resetSessionVars(ctx context.Context, m sessionDataMutator) error {
+	// Always do intervalstyle_enabled and datestyle_enabled first so that
+	// IntervalStyle and DateStyle which depend on these flags are correctly
+	// configured.
+	if err := resetSessionVar(ctx, m, "datestyle_enabled"); err != nil {
+		return err
+	}
+	if err := resetSessionVar(ctx, m, "intervalstyle_enabled"); err != nil {
+		return err
+	}
 	for _, varName := range varNames {
-		v := varGen[varName]
-		if v.Set != nil {
-			hasDefault, defVal := getSessionVarDefaultString(varName, v, m)
-			if hasDefault {
-				if err := v.Set(ctx, m, defVal); err != nil {
-					return err
-				}
+		if err := resetSessionVar(ctx, m, varName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func resetSessionVar(ctx context.Context, m sessionDataMutator, varName string) error {
+	v := varGen[varName]
+	if v.Set != nil {
+		hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
+		if hasDefault {
+			if err := v.Set(ctx, m, defVal); err != nil {
+				return err
 			}
 		}
 	}

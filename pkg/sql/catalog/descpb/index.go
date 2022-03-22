@@ -14,13 +14,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	types "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
-
-// IsInterleaved returns whether the index is interleaved or not.
-func (desc *IndexDescriptor) IsInterleaved() bool {
-	return len(desc.Interleave.Ancestors) > 0 || len(desc.InterleavedBy) > 0
-}
 
 // IsSharded returns whether the index is hash sharded or not.
 func (desc *IndexDescriptor) IsSharded() bool {
@@ -35,10 +31,11 @@ func (desc *IndexDescriptor) IsPartial() bool {
 // ExplicitColumnStartIdx returns the start index of any explicit columns.
 func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
 	start := int(desc.Partitioning.NumImplicitColumns)
-	// We do not currently handle implicit columns along with hash sharded indexes.
-	// Thus, safe to override this to 1.
+	// Currently, we only allow implicit partitioning on hash sharded index. When
+	// that happens, the shard column always comes after implicit partition
+	// columns.
 	if desc.IsSharded() {
-		start = 1
+		start++
 	}
 	return start
 }
@@ -70,13 +67,27 @@ func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
 	return !desc.IsPartial() && ColumnIDs(desc.KeyColumnIDs).HasPrefix(originColIDs)
 }
 
+// explicitColumnIDsWithoutShardColumn returns explicit column ids of the index
+// excluding the shard column.
+func (desc *IndexDescriptor) explicitColumnIDsWithoutShardColumn() ColumnIDs {
+	explicitColIDs := desc.KeyColumnIDs[desc.ExplicitColumnStartIdx():]
+	explicitColNames := desc.KeyColumnNames[desc.ExplicitColumnStartIdx():]
+	colIDs := make(ColumnIDs, 0, len(explicitColIDs))
+	for i := range explicitColNames {
+		if !desc.IsSharded() || explicitColNames[i] != desc.Sharded.Name {
+			colIDs = append(colIDs, explicitColIDs[i])
+		}
+	}
+	return colIDs
+}
+
 // IsValidReferencedUniqueConstraint  is part of the UniqueConstraint interface.
 // It returns whether the index can serve as a referenced index for a foreign
 // key constraint with the provided set of referencedColumnIDs.
 func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
 	return desc.Unique &&
 		!desc.IsPartial() &&
-		ColumnIDs(desc.KeyColumnIDs[desc.Partitioning.NumImplicitColumns:]).PermutationOf(referencedColIDs)
+		desc.explicitColumnIDsWithoutShardColumn().PermutationOf(referencedColIDs)
 }
 
 // GetName is part of the UniqueConstraint interface.
@@ -102,4 +113,15 @@ func (desc *IndexDescriptor) InvertedColumnName() string {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return desc.KeyColumnNames[len(desc.KeyColumnNames)-1]
+}
+
+// InvertedColumnKeyType returns the type of the data element that is encoded
+// as the inverted index key. This is currently always EncodedKey.
+//
+// Panics if the index is not inverted.
+func (desc *IndexDescriptor) InvertedColumnKeyType() *types.T {
+	if desc.Type != IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	return types.EncodedKey
 }

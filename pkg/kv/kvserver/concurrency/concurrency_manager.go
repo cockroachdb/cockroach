@@ -56,6 +56,7 @@ import (
 // utilization and runaway queuing for misbehaving clients, a role it is well
 // positioned to serve.
 var MaxLockWaitQueueLength = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"kv.lock_table.maximum_lock_wait_queue_length",
 	"the maximum length of a lock wait-queue that read-write requests are willing "+
 		"to enter and wait in. The setting can be used to ensure some level of quality-of-service "+
@@ -88,6 +89,7 @@ var MaxLockWaitQueueLength = settings.RegisterIntSetting(
 // discoveredCount > 100,000, caused by stats collection, where we definitely
 // want to avoid adding these locks to the lock table, if possible.
 var DiscoveredLocksThresholdToConsultFinalizedTxnCache = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"kv.lock_table.discovered_locks_threshold_for_consulting_finalized_txn_cache",
 	"the maximum number of discovered locks by a waiter, above which the finalized txn cache"+
 		"is consulted and resolvable locks are not added to the lock table -- this should be a small"+
@@ -126,7 +128,6 @@ type Config struct {
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
-	OnContentionEvent func(*roachpb.ContentionEvent) // may be nil; allowed to mutate the event
 	TxnWaitKnobs      txnwait.TestingKnobs
 }
 
@@ -140,7 +141,7 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := newLockTable(cfg.MaxLockTableSize)
+	lt := newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock)
 	*m = managerImpl{
 		st: cfg.Settings,
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
@@ -160,7 +161,6 @@ func NewManager(cfg Config) Manager {
 			ir:                cfg.IntentResolver,
 			lt:                lt,
 			disableTxnPushing: cfg.DisableTxnPushing,
-			onContentionEvent: cfg.OnContentionEvent,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.
@@ -200,7 +200,7 @@ func (m *managerImpl) SequenceReq(
 		case OptimisticEval:
 			panic("optimistic eval cannot happen when re-sequencing")
 		case PessimisticAfterFailedOptimisticEval:
-			if shouldAcquireLatches(g.Req) {
+			if !shouldIgnoreLatches(g.Req) {
 				g.AssertLatches()
 			}
 			log.Event(ctx, "re-sequencing request after optimistic sequencing failed")
@@ -218,9 +218,16 @@ func (m *managerImpl) SequenceReq(
 
 func (m *managerImpl) sequenceReqWithGuard(ctx context.Context, g *Guard) (Response, *Error) {
 	// Some requests don't need to acquire latches at all.
-	if !shouldAcquireLatches(g.Req) {
+	if shouldIgnoreLatches(g.Req) {
 		log.Event(ctx, "not acquiring latches")
 		return nil, nil
+	}
+
+	// Check if this is a request that waits on latches, but does not acquire
+	// them.
+	if shouldWaitOnLatchesWithoutAcquiring(g.Req) {
+		log.Event(ctx, "waiting on latches without acquiring")
+		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans, g.Req.PoisonPolicy)
 	}
 
 	// Provide the manager with an opportunity to intercept the request. It
@@ -346,22 +353,39 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 	return nil, nil
 }
 
-// shouldAcquireLatches determines whether the request should acquire latches
+// shouldIgnoreLatches determines whether the request should ignore latches
 // before proceeding to evaluate. Latches are used to synchronize with other
 // conflicting requests, based on the Spans collected for the request. Most
-// request types will want to acquire latches.
-func shouldAcquireLatches(req Request) bool {
+// request types will want to acquire latches. Requests that return true for
+// shouldWaitOnLatchesWithoutAcquiring will not completely ignore latches as
+// they could wait on them, even if they don't acquire latches.
+func shouldIgnoreLatches(req Request) bool {
 	switch {
 	case req.ReadConsistency != roachpb.CONSISTENT:
 		// Only acquire latches for consistent operations.
-		return false
+		return true
 	case req.isSingle(roachpb.RequestLease):
-		// Do not acquire latches for lease requests. These requests are run on
-		// replicas that do not hold the lease, so acquiring latches wouldn't
-		// help synchronize with other requests.
-		return false
+		// Ignore latches for lease requests. These requests are run on replicas
+		// that do not hold the lease, so acquiring latches wouldn't help
+		// synchronize with other requests.
+		return true
 	}
-	return true
+	return false
+}
+
+// shouldWaitOnLatchesWithoutAcquiring determines if this is a request that
+// only waits on existing latches without acquiring any new ones.
+func shouldWaitOnLatchesWithoutAcquiring(req Request) bool {
+	return req.isSingle(roachpb.Barrier)
+}
+
+// PoisonReq implements the RequestSequencer interface.
+func (m *managerImpl) PoisonReq(g *Guard) {
+	// NB: g.lg == nil is the case for requests that ignore latches, see
+	// shouldIgnoreLatches.
+	if g.lg != nil {
+		m.lm.Poison(g.lg)
+	}
 }
 
 // FinishReq implements the RequestSequencer interface.
@@ -401,11 +425,27 @@ func (m *managerImpl) HandleWriterIntentError(
 	}
 
 	// Add a discovered lock to lock-table for each intent and enter each lock's
-	// wait-queue. If the lock-table is disabled and one or more of the intents
-	// are ignored then we immediately wait on all intents.
+	// wait-queue.
+	//
+	// If the lock-table is disabled and one or more of the intents are ignored
+	// then we proceed without the intent being added to the lock table. In such
+	// cases, we know that this replica is no longer the leaseholder. One of two
+	// things can happen next.
+	// 1) if the request cannot be served on this follower replica according to
+	//    the closed timestamp then it will be redirected to the leaseholder on
+	//    its next evaluation attempt, where it may discover the same intent and
+	//    wait in the new leaseholder's lock table.
+	// 2) if the request can be served on this follower replica according to the
+	//    closed timestamp then it will likely re-encounter the same intent on its
+	//    next evaluation attempt. The WriteIntentError will then be mapped to an
+	//    InvalidLeaseError in maybeAttachLease, which will indicate that the
+	//    request cannot be served as a follower read after all and cause the
+	//    request to be redirected to the leaseholder.
+	//
+	// Either way, there is no possibility of the request entering an infinite
+	// loop without making progress.
 	consultFinalizedTxnCache :=
 		int64(len(t.Intents)) > DiscoveredLocksThresholdToConsultFinalizedTxnCache.Get(&m.st.SV)
-	wait := false
 	for i := range t.Intents {
 		intent := &t.Intents[i]
 		added, err := m.lt.AddDiscoveredLock(intent, seq, consultFinalizedTxnCache, g.ltg)
@@ -413,7 +453,9 @@ func (m *managerImpl) HandleWriterIntentError(
 			log.Fatalf(ctx, "%v", err)
 		}
 		if !added {
-			wait = true
+			log.VEventf(ctx, 2,
+				"intent on %s discovered but not added to disabled lock table",
+				intent.Key.String())
 		}
 	}
 
@@ -423,23 +465,12 @@ func (m *managerImpl) HandleWriterIntentError(
 	// Guard. This is analogous to iterating through the loop in SequenceReq.
 	m.lm.Release(g.moveLatchGuard())
 
-	// If the lockTable was disabled then we need to immediately wait on the
-	// intents to ensure that they are resolved and moved out of the request's
-	// way.
-	if wait {
-		for i := range t.Intents {
-			intent := &t.Intents[i]
-			if err := m.ltw.WaitOnLock(ctx, g.Req, intent); err != nil {
-				m.FinishReq(g)
-				return nil, err
-			}
-		}
-	} else {
-		if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
-			if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
-				m.FinishReq(g)
-				return nil, err
-			}
+	// If the discovery process collected a set of intents to resolve before the
+	// next evaluation attempt, do so.
+	if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
+		if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
+			m.FinishReq(g)
+			return nil, err
 		}
 	}
 
@@ -473,6 +504,13 @@ func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate)
 	if err := m.lt.UpdateLocks(up); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
+}
+
+// QueryLockTableState implements the LockManager interface.
+func (m *managerImpl) QueryLockTableState(
+	ctx context.Context, span roachpb.Span, opts QueryLockTableOptions,
+) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
+	return m.lt.QueryLockTableState(span, opts)
 }
 
 // OnTransactionUpdated implements the TransactionManager interface.
@@ -562,6 +600,11 @@ func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
 	return m.twq.(*txnwait.Queue)
 }
 
+// TestingSetMaxLocks implements the TestingAccessor interface.
+func (m *managerImpl) TestingSetMaxLocks(maxLocks int64) {
+	m.lt.(*lockTableImpl).setMaxLocks(maxLocks)
+}
+
 func (r *Request) txnMeta() *enginepb.TxnMeta {
 	if r.Txn == nil {
 		return nil
@@ -604,12 +647,6 @@ func (g *Guard) LatchSpans() *spanset.SpanSet {
 	return g.Req.LatchSpans
 }
 
-// LockSpans returns the maximal set of lock spans that the request will access.
-// The returned spanset is not safe for use after the guard has been finished.
-func (g *Guard) LockSpans() *spanset.SpanSet {
-	return g.Req.LockSpans
-}
-
 // TakeSpanSets transfers ownership of the Guard's LatchSpans and LockSpans
 // SpanSets to the caller, ensuring that the SpanSets are not destroyed with the
 // Guard. The method is only safe if called immediately before passing the Guard
@@ -628,7 +665,7 @@ func (g *Guard) HoldingLatches() bool {
 // AssertLatches asserts that the guard is non-nil and holding latches, if the
 // request is supposed to hold latches while evaluating in the first place.
 func (g *Guard) AssertLatches() {
-	if shouldAcquireLatches(g.Req) && !g.HoldingLatches() {
+	if !shouldIgnoreLatches(g.Req) && !shouldWaitOnLatchesWithoutAcquiring(g.Req) && !g.HoldingLatches() {
 		panic("expected latches held, found none")
 	}
 }
@@ -638,6 +675,26 @@ func (g *Guard) AssertNoLatches() {
 	if g.HoldingLatches() {
 		panic("unexpected latches held")
 	}
+}
+
+// IsolatedAtLaterTimestamps returns whether the request holding the guard would
+// continue to be isolated from other requests / transactions even if it were to
+// increase its request timestamp while evaluating. If the method returns false,
+// the concurrency guard must be dropped and re-acquired with the new timestamp
+// before the request can evaluate at that later timestamp.
+func (g *Guard) IsolatedAtLaterTimestamps() bool {
+	// If the request acquired any read latches with bounded (MVCC) timestamps
+	// then it can not trivially bump its timestamp without dropping and
+	// re-acquiring those latches. Doing so could allow the request to read at an
+	// unprotected timestamp. We only look at global latch spans because local
+	// latch spans always use unbounded (NonMVCC) timestamps.
+	return len(g.Req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) == 0 &&
+		// Similarly, if the request declared any global or local read lock spans
+		// then it can not trivially bump its timestamp without dropping its
+		// lockTableGuard and re-scanning the lockTable. Doing so could allow the
+		// request to conflict with locks that it previously did not conflict with.
+		len(g.Req.LockSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) == 0 &&
+		len(g.Req.LockSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanLocal)) == 0
 }
 
 // CheckOptimisticNoConflicts checks that the {latch,lock}SpansRead do not

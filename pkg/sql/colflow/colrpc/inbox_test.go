@@ -70,7 +70,7 @@ func TestInboxCancellation(t *testing.T) {
 		err = colexecerror.CatchVectorizedRuntimeError(func() { inbox.Init(ctx) })
 		require.True(t, testutils.IsError(err, "context canceled"), err)
 		// Now, the remote stream arrives.
-		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{}, make(<-chan struct{}))
+		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{})
 		// We expect no error from the stream handler since we canceled it
 		// ourselves (a graceful termination).
 		require.Nil(t, err)
@@ -202,7 +202,7 @@ func TestInboxShutdown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var (
-		rng, _ = randutil.NewPseudoRand()
+		rng, _ = randutil.NewTestRand()
 		// infiniteBatches will influence whether or not we're likely to test a
 		// graceful shutdown (since other shutdown mechanisms might happen before
 		// we reach the end of the data stream). If infiniteBatches is true,

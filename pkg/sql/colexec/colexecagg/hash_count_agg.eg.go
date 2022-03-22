@@ -28,21 +28,14 @@ func newCountRowsHashAggAlloc(
 // countRowsHashAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countRowsHashAgg struct {
 	unorderedAggregateFuncBase
-	col    []int64
 	curAgg int64
 }
 
 var _ AggregateFunc = &countRowsHashAgg{}
 
-func (a *countRowsHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
-
 func (a *countRowsHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	var oldCurAggSize uintptr
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		{
 			{
@@ -55,14 +48,11 @@ func (a *countRowsHashAgg) Compute(
 		}
 	},
 	)
-	var newCurAggSize uintptr
-	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
-	}
 }
 
 func (a *countRowsHashAgg) Flush(outputIdx int) {
-	a.col[outputIdx] = a.curAgg
+	col := a.vec.Int64()
+	col[outputIdx] = a.curAgg
 }
 
 func (a *countRowsHashAgg) Reset() {
@@ -102,21 +92,14 @@ func newCountHashAggAlloc(
 // countHashAgg supports either COUNT(*) or COUNT(col) aggregate.
 type countHashAgg struct {
 	unorderedAggregateFuncBase
-	col    []int64
 	curAgg int64
 }
 
 var _ AggregateFunc = &countHashAgg{}
 
-func (a *countHashAgg) SetOutput(vec coldata.Vec) {
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	a.col = vec.Int64()
-}
-
 func (a *countHashAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	var oldCurAggSize uintptr
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
@@ -143,14 +126,11 @@ func (a *countHashAgg) Compute(
 		}
 	},
 	)
-	var newCurAggSize uintptr
-	if newCurAggSize != oldCurAggSize {
-		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
-	}
 }
 
 func (a *countHashAgg) Flush(outputIdx int) {
-	a.col[outputIdx] = a.curAgg
+	col := a.vec.Int64()
+	col[outputIdx] = a.curAgg
 }
 
 func (a *countHashAgg) Reset() {

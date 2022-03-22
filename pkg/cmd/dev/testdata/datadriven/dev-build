@@ -1,0 +1,68 @@
+exec
+dev build cockroach-short
+----
+bazel build //pkg/cmd/cockroach-short:cockroach-short
+bazel info workspace --color=no
+mkdir crdb-checkout/bin
+bazel info bazel-bin --color=no
+rm crdb-checkout/cockroach-short
+ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
+rm crdb-checkout/cockroach
+ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
+
+exec
+dev build cockroach-short --cpus=12
+----
+bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short:cockroach-short
+bazel info workspace --color=no
+mkdir crdb-checkout/bin
+bazel info bazel-bin --color=no
+rm crdb-checkout/cockroach-short
+ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
+rm crdb-checkout/cockroach
+ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
+
+exec
+dev build --debug short
+----
+bazel build //pkg/cmd/cockroach-short:cockroach-short
+bazel info workspace --color=no
+mkdir crdb-checkout/bin
+bazel info bazel-bin --color=no
+rm crdb-checkout/cockroach-short
+ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
+rm crdb-checkout/cockroach
+ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
+
+exec
+dev build short -- -s
+----
+bazel build //pkg/cmd/cockroach-short:cockroach-short -s
+bazel info workspace --color=no
+mkdir crdb-checkout/bin
+bazel info bazel-bin --color=no
+rm crdb-checkout/cockroach-short
+ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
+rm crdb-checkout/cockroach
+ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
+
+exec
+dev build -- --verbose_failures --sandbox_debug
+----
+bazel run @nodejs//:yarn -- --check-files --cwd pkg/ui --offline
+bazel build //pkg/cmd/cockroach:cockroach --config=with_ui --verbose_failures --sandbox_debug
+bazel info workspace --color=no
+mkdir crdb-checkout/bin
+bazel info bazel-bin --color=no
+rm crdb-checkout/cockroach
+ln -s sandbox/pkg/cmd/cockroach/cockroach_/cockroach crdb-checkout/cockroach
+
+exec
+dev build stress
+----
+bazel build @com_github_cockroachdb_stress//:stress
+bazel info workspace --color=no
+mkdir crdb-checkout/bin
+bazel info bazel-bin --color=no
+rm crdb-checkout/bin/stress
+ln -s sandbox/external/com_github_cockroachdb_stress/stress_/stress crdb-checkout/bin/stress

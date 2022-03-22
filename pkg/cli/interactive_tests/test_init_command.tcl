@@ -61,7 +61,7 @@ expect {
 }
 
 interrupt
-interrupt
+send_eof
 eexpect eof
 
 end_test

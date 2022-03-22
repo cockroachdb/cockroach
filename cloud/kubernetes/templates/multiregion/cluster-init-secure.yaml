@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cluster-init-secure
+  labels:
+    app: cockroachdb
+spec:
+  template:
+    spec:
+      serviceAccountName: cockroachdb
+      containers:
+      - name: cluster-init
+        image: cockroachdb/cockroach:@VERSION@
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: client-certs
+          mountPath: /cockroach-certs
+        command:
+          - "/cockroach/cockroach"
+          - "init"
+          - "--certs-dir=/cockroach-certs"
+          - "--host=cockroachdb-0.cockroachdb"
+      restartPolicy: OnFailure
+      volumes:
+      - name: client-certs
+        secret:
+          secretName: cockroachdb.client.root
+          defaultMode: 256

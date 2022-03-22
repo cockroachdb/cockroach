@@ -72,7 +72,7 @@ There are two scenarios of interest:
   For these the following process is required:
 
   1. restart (possibly with a version upgrade to 19.2) every node in a
-     rolling fashion, specifyfing both `--cluster-name`
+     rolling fashion, specifying both `--cluster-name`
      `--disable-cluster-name-verification` on the command line.
   2. perform another rolling restart, removing `--disable-cluster-name-verification`
      from every node.
@@ -130,7 +130,7 @@ There are two scenarios of interest:
 The design as proposed makes the cluster name consistent across all nodes.
 
 Once the cluster name has been set to a new value, it becomes harder to change it.
-The RFC as-is enables the following procedure to change the cluter name:
+The RFC as-is enables the following procedure to change the cluster name:
 
 1. restart all nodes in rolling fashion, adding the parameter
    `--disable-cluster-name-verification` and changing `--cluster-name` to the new value.
@@ -145,7 +145,7 @@ This manual procedure could be further automated to prevent restarting the nodes
 
 ## Detailed design
 
-How: new CLI flag, populates `server.Config`, used in hearbeat checks.
+How: new CLI flag, populates `server.Config`, used in heartbeat checks.
 
 Optionally picked up by the `Nodes()` status RPC and `crdb_internal.gossip_nodes`.
 

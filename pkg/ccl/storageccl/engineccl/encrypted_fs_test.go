@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,6 +38,7 @@ func TestEncryptedFS(t *testing.T) {
 
 	memFS := vfs.NewMem()
 
+	require.NoError(t, memFS.MkdirAll("/bar", os.ModePerm))
 	fileRegistry := &storage.PebbleFileRegistry{FS: memFS, DBDir: "/bar"}
 	require.NoError(t, fileRegistry.Load())
 
@@ -246,6 +248,7 @@ func TestPebbleEncryption(t *testing.T) {
 			StorageConfig: base.StorageConfig{
 				Attrs:             roachpb.Attributes{},
 				MaxSize:           512 << 20,
+				Settings:          cluster.MakeTestingClusterSettings(),
 				UseFileRegistry:   true,
 				EncryptionOptions: encOptionsBytes,
 			},

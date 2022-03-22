@@ -423,6 +423,155 @@ DROP INDEX partial_idx
 ----
 
 # --------------------------------------------------
+# DeduplicateSelectFilters
+# --------------------------------------------------
+
+exprnorm expect=DeduplicateSelectFilters disable=(InlineConstVar,SimplifySelectFilters,ConsolidateSelectFilters)
+(Select
+    (Scan [ (Table "uv") (Cols "u,v") ])
+    [
+        (Eq (Var "u") (Const 10 "int"))
+        (Eq (Var "u") (Const 10 "int"))
+    ]
+)
+----
+select
+ ├── columns: u:1!null v:2
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan uv
+ │    ├── columns: u:1!null v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── u:1 = 10 [outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+
+exprnorm expect=DeduplicateSelectFilters disable=(InlineConstVar,SimplifySelectFilters,ConsolidateSelectFilters)
+(Select
+    (Scan [ (Table "uv") (Cols "u,v") ])
+    [
+        (Eq (Var "u") (Const 10 "int"))
+        (Eq (Var "u") (Const 20 "int"))
+        (Eq (Var "v") (Const 20 "int"))
+        (Eq (Var "v") (Const 30 "int"))
+        (Eq (Var "u") (Const 10 "int"))
+        (Eq (Var "v") (Const 30 "int"))
+        (Eq (Var "v") (Const 20 "int"))
+    ]
+)
+----
+select
+ ├── columns: u:1!null v:2!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan uv
+ │    ├── columns: u:1!null v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      ├── u:1 = 10 [outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+      ├── u:1 = 20 [outer=(1), constraints=(/1: [/20 - /20]; tight), fd=()-->(1)]
+      ├── v:2 = 20 [outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
+      └── v:2 = 30 [outer=(2), constraints=(/2: [/30 - /30]; tight), fd=()-->(2)]
+
+exprnorm expect=DeduplicateSelectFilters disable=(InlineConstVar,SimplifySelectFilters,ConsolidateSelectFilters)
+(Select
+    (Scan [ (Table "uv") (Cols "u,v") ])
+    [
+        (Or (Eq (Var "u") (Const 10 "int")) (Eq (Var "u") (Const 20 "int")))
+        (Eq (Plus (Var "u") (Var "v")) (Const 10 "int"))
+        (Or (Eq (Var "u") (Const 10 "int")) (Eq (Var "u") (Const 20 "int")))
+        (Eq (Plus (Var "u") (Var "v")) (Const 10 "int"))
+    ]
+)
+----
+select
+ ├── columns: u:1!null v:2
+ ├── cardinality: [0 - 2]
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan uv
+ │    ├── columns: u:1!null v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      ├── (u:1 = 10) OR (u:1 = 20) [outer=(1), constraints=(/1: [/10 - /10] [/20 - /20]; tight)]
+      └── (u:1 + v:2) = 10 [outer=(1,2), immutable]
+
+# Does not fire when there are no duplicates.
+exprnorm expect-not=DeduplicateSelectFilters disable=(InlineConstVar,SimplifySelectFilters,ConsolidateSelectFilters)
+(Select
+    (Scan [ (Table "uv") (Cols "u,v") ])
+    [
+        (Eq (Plus (Var "u") (Var "v")) (Const 10 "int"))
+        (Eq (Var "u") (Const 10 "int"))
+        (Or (Eq (Var "u") (Const 10 "int")) (Eq (Var "u") (Const 20 "int")))
+    ]
+)
+----
+select
+ ├── columns: u:1!null v:2
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── scan uv
+ │    ├── columns: u:1!null v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      ├── (u:1 + v:2) = 10 [outer=(1,2), immutable]
+      ├── u:1 = 10 [outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
+      └── (u:1 = 10) OR (u:1 = 20) [outer=(1), constraints=(/1: [/10 - /10] [/20 - /20]; tight)]
+
+# Does not deduplicate logically equivalent expressions with different orders.
+exprnorm expect-not=DeduplicateSelectFilters disable=(InlineConstVar,SimplifySelectFilters,ConsolidateSelectFilters)
+(Select
+    (Scan [ (Table "uv") (Cols "u,v") ])
+    [
+        (Or (Eq (Var "u") (Const 10 "int")) (Eq (Var "v") (Const 20 "int")))
+        (Or (Eq (Var "v") (Const 20 "int")) (Eq (Var "u") (Const 10 "int")))
+    ]
+)
+----
+select
+ ├── columns: u:1!null v:2
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan uv
+ │    ├── columns: u:1!null v:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      ├── (u:1 = 10) OR (v:2 = 20) [outer=(1,2)]
+      └── (v:2 = 20) OR (u:1 = 10) [outer=(1,2)]
+
+# Regression test for #71002. DeduplicateSelectFilters should not remove filters
+# that are not duplicated.
+exec-ddl
+create table t71002 (
+  a BOOL,
+  b BOOL,
+  c BOOL
+)
+----
+
+assign-placeholders-norm query-args=(false)
+SELECT * FROM t71002 WHERE a AND (b OR ($1 OR c))
+----
+select
+ ├── columns: a:1!null b:2 c:3
+ ├── fd: ()-->(1)
+ ├── scan t71002
+ │    └── columns: a:1 b:2 c:3
+ └── filters
+      ├── a:1 [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      └── b:2 OR c:3 [outer=(2,3)]
+
+# --------------------------------------------------
 # MergeSelects
 # --------------------------------------------------
 norm expect=MergeSelects
@@ -554,7 +703,7 @@ project
  │    ├── columns: i:2 f:3 sum:8!null
  │    ├── key: (2,3)
  │    ├── fd: ()-->(8)
- │    ├── group-by
+ │    ├── group-by (hash)
  │    │    ├── columns: i:2 f:3 sum:8
  │    │    ├── grouping columns: i:2 f:3
  │    │    ├── key: (2,3)
@@ -1117,7 +1266,7 @@ inner-join (hash)
 norm expect=PushSelectIntoGroupBy
 SELECT * FROM (SELECT i, count(*) FROM a GROUP BY i) a WHERE i=1
 ----
-group-by
+group-by (streaming)
  ├── columns: i:2!null count:8!null
  ├── cardinality: [0 - 1]
  ├── key: ()
@@ -1162,7 +1311,7 @@ select
  ├── columns: k:1!null i:2!null m:8!null
  ├── key: (1)
  ├── fd: ()-->(8), (1)==(2), (2)==(1), (1)-->(2)
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: k:1!null i:2!null max:8
  │    ├── grouping columns: k:1!null
  │    ├── key: (1)

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/gogo/protobuf/proto"
@@ -65,7 +66,97 @@ func TestValidateNoRepeatKeysInZone(t *testing.T) {
 	}
 }
 
-func TestValidateZoneAttrsAndLocalities(t *testing.T) {
+func TestValidateZoneAttrsAndLocalitiesForSecondaryTenants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	getRegions := func(ctx context.Context, request *serverpb.RegionsRequest) (*serverpb.RegionsResponse, error) {
+		return &serverpb.RegionsResponse{
+			Regions: map[string]*serverpb.RegionsResponse_Region{
+				"us-east1": {
+					Zones: []string{"us-east1-a", "us-east1-b"},
+				},
+				"us-east2": {
+					Zones: []string{"us-east2-a", "us-east2-b"},
+				},
+			},
+		}, nil
+	}
+
+	testCases := []struct {
+		cfg   string
+		errRe string
+	}{
+		{
+			cfg:   `constraints: ["+region=us-east1"]`,
+			errRe: "",
+		},
+		{
+			cfg:   `constraints: ["+zone=us-east2-a"]`,
+			errRe: "",
+		},
+		{
+			cfg:   `lease_preferences: [["+zone=us-east2-b"]]`,
+			errRe: "",
+		},
+		{
+			cfg:   `voter_constraints: ["+region=us-east2"]`,
+			errRe: "",
+		},
+		{
+			cfg:   `voter_constraints: ["+zone=us-east1-a"]`,
+			errRe: "",
+		},
+		{
+			cfg:   `constraints: ["+zone=does-not-exist"]`,
+			errRe: `zone "does-not-exist" not found`,
+		},
+		{
+			cfg:   `voter_constraints: ["+region=does-not-exist"]`,
+			errRe: `region "does-not-exist" not found`,
+		},
+		{
+			cfg:   `constraints: ["-zone=does-not-exist"]`,
+			errRe: `zone "does-not-exist" not found`,
+		},
+		{
+			cfg:   `voter_constraints: ["-region=does-not-exist"]`,
+			errRe: `region "does-not-exist" not found`,
+		},
+		{
+			cfg:   `constraints: ["+rack=us-east1"]`,
+			errRe: `invalid constraint attribute: "rack"`,
+		},
+		{
+			cfg:   `constraints: ["-rack=us-east1"]`,
+			errRe: `invalid constraint attribute: "rack"`,
+		},
+		{
+			cfg:   `constraints: ["+ssd"]`,
+			errRe: `invalid constraint attribute: ""`,
+		},
+		{
+			cfg:   `constraints: ["-ssd"]`,
+			errRe: `invalid constraint attribute: ""`,
+		},
+	}
+
+	for _, tc := range testCases {
+		var zone zonepb.ZoneConfig
+		err := yaml.UnmarshalStrict([]byte(tc.cfg), &zone)
+		require.NoError(t, err)
+
+		err = validateZoneLocalitiesForSecondaryTenants(context.Background(), getRegions, &zone)
+		if tc.errRe == "" {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+			require.True(t, testutils.IsError(err, tc.errRe), "expected %s; got %s", tc.errRe, err.Error())
+		}
+	}
+}
+
+func TestValidateZoneAttrsAndLocalitiesForSystemTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -210,7 +301,7 @@ func TestValidateZoneAttrsAndLocalities(t *testing.T) {
 			t.Fatalf("#%d: expected parse err for %q; got success", i, tc.cfg)
 		}
 
-		err = validateZoneAttrsAndLocalities(context.Background(), tc.nodes, &zone)
+		err = validateZoneAttrsAndLocalitiesForSystemTenant(context.Background(), tc.nodes, &zone)
 		if err != nil && tc.expectErr == expectSuccess {
 			t.Errorf("#%d: expected success for %q; got %v", i, tc.cfg, err)
 		} else if err == nil && tc.expectErr == expectValidateErr {

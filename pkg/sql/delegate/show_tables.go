@@ -21,6 +21,7 @@ import (
 )
 
 var showEstimatedRowCountClusterSetting = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.show_tables.estimated_row_count.enabled",
 	"whether the estimated_row_count is shown on SHOW TABLES. Turning this off "+
 		"will improve SHOW TABLES performance.",
@@ -50,7 +51,7 @@ func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, erro
 	if name.ExplicitSchema {
 		schema := lexbase.EscapeSQLString(name.Schema())
 		if name.Schema() == catconstants.PgTempSchemaName {
-			schema = lexbase.EscapeSQLString(d.evalCtx.SessionData.SearchPath.GetTemporarySchemaName())
+			schema = lexbase.EscapeSQLString(d.evalCtx.SessionData().SearchPath.GetTemporarySchemaName())
 		}
 		schemaClause = fmt.Sprintf("AND ns.nspname = %s", schema)
 	} else {

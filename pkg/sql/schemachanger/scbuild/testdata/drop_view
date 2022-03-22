@@ -9,18 +9,69 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 build
 DROP VIEW defaultdb.v1
 ----
-- DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
-  state: PUBLIC
+- [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    dependedOn: 53
-    tableId: 52
-- DROP View:{DescID: 53}
-  state: PUBLIC
+    columnId: 1
+    tableId: 105
+- [[ColumnComment:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 52
-    tableId: 53
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 105
+- [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: name
+    tableId: 105
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 105
+- [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  details:
+    databaseId: 100
+    descriptorId: 105
+    name: v1
+    schemaId: 101
+- [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  details:
+    objectId: 105
+    parentSchemaId: 101
+- [[Owner:{DescID: 105}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 105
+    owner: root
+- [[TableComment:{DescID: 105}, ABSENT], PUBLIC]
+  details:
+    comment: __placeholder_comment__
+    tableId: 105
+- [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 105
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 105
+    userName: public
+- [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 105
+    privileges: 2
+    userName: root
+- [[View:{DescID: 105}, ABSENT], PUBLIC]
+  details:
+    usesRelationIds:
+    - 104
+    viewId: 105
 
 create-view
 CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1)
@@ -45,84 +96,450 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 build
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- DROP RelationDependedOnBy:{DescID: 52, ReferencedDescID: 53}
-  state: PUBLIC
+- [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    dependedOn: 53
-    tableId: 52
-- DROP RelationDependedOnBy:{DescID: 53, ReferencedDescID: 54}
-  state: PUBLIC
+    columnId: 1
+    tableId: 105
+- [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    dependedOn: 54
-    tableId: 53
-- DROP RelationDependedOnBy:{DescID: 53, ReferencedDescID: 55}
-  state: PUBLIC
+    columnId: 1
+    tableId: 106
+- [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
   details:
-    dependedOn: 55
-    tableId: 53
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}
-  state: PUBLIC
+    columnId: 2
+    tableId: 106
+- [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    dependedOn: 55
-    tableId: 54
-- DROP RelationDependedOnBy:{DescID: 54, ReferencedDescID: 56}
-  state: PUBLIC
+    columnId: 1
+    tableId: 107
+- [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC]
   details:
-    dependedOn: 56
-    tableId: 54
-- DROP RelationDependedOnBy:{DescID: 56, ReferencedDescID: 59}
-  state: PUBLIC
+    columnId: 2
+    tableId: 107
+- [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    dependedOn: 59
-    tableId: 56
-- DROP TypeReference:{DescID: 59, ReferencedDescID: 57}
-  state: PUBLIC
+    columnId: 1
+    tableId: 108
+- [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC]
   details:
-    descriptorId: 59
-    typeId: 57
-- DROP TypeReference:{DescID: 59, ReferencedDescID: 58}
-  state: PUBLIC
+    columnId: 2
+    tableId: 108
+- [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    descriptorId: 59
-    typeId: 58
-- DROP View:{DescID: 53}
-  state: PUBLIC
+    columnId: 1
+    tableId: 111
+- [[Column:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC]
   details:
-    dependedOnBy:
-    - 54
-    - 55
-    dependsOn:
-    - 52
-    tableId: 53
-- DROP View:{DescID: 54}
-  state: PUBLIC
+    columnId: 2
+    tableId: 111
+- [[Column:{DescID: 111, ColumnID: 3}, ABSENT], PUBLIC]
   details:
-    dependedOnBy:
-    - 55
-    - 56
-    dependsOn:
-    - 53
-    tableId: 54
-- DROP View:{DescID: 55}
-  state: PUBLIC
+    columnId: 3
+    tableId: 111
+- [[ColumnComment:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 53
-    - 54
-    tableId: 55
-- DROP View:{DescID: 56}
-  state: PUBLIC
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 105
+- [[ColumnComment:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC]
   details:
-    dependedOnBy:
-    - 59
-    dependsOn:
-    - 54
-    tableId: 56
-- DROP View:{DescID: 59}
-  state: PUBLIC
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 106
+- [[ColumnComment:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
   details:
-    dependedOnBy: []
-    dependsOn:
-    - 56
-    tableId: 59
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 106
+- [[ColumnComment:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 107
+- [[ColumnComment:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 107
+- [[ColumnComment:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 108
+- [[ColumnComment:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 108
+- [[ColumnComment:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 111
+- [[ColumnComment:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 111
+- [[ColumnComment:{DescID: 111, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    comment: __placeholder_comment__
+    tableId: 111
+- [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: name
+    tableId: 105
+- [[ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: n1
+    tableId: 106
+- [[ColumnName:{DescID: 106, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    name: n2
+    tableId: 106
+- [[ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    name: n1
+    tableId: 107
+- [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: name
+    tableId: 107
+- [[ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    name: n1
+    tableId: 108
+- [[ColumnName:{DescID: 108, Name: n2, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: n2
+    tableId: 108
+- [[ColumnName:{DescID: 111, Name: k, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    name: k
+    tableId: 111
+- [[ColumnName:{DescID: 111, Name: n1, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    name: n1
+    tableId: 111
+- [[ColumnName:{DescID: 111, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    name: n2
+    tableId: 111
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 105
+- [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 106
+- [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 106
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 107
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 107
+- [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 108
+- [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 108
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 25
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 111
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 111
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 1043
+        visibleType: 7
+        width: 256
+    isNullable: true
+    isRelationBeingDropped: true
+    tableId: 111
+- [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  details:
+    databaseId: 100
+    descriptorId: 105
+    name: v1
+    schemaId: 101
+- [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  details:
+    databaseId: 100
+    descriptorId: 106
+    name: v2
+    schemaId: 101
+- [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  details:
+    databaseId: 100
+    descriptorId: 107
+    name: v3
+    schemaId: 101
+- [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  details:
+    databaseId: 100
+    descriptorId: 108
+    name: v4
+    schemaId: 101
+- [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  details:
+    databaseId: 100
+    descriptorId: 111
+    name: v5
+    schemaId: 101
+- [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  details:
+    objectId: 105
+    parentSchemaId: 101
+- [[ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  details:
+    objectId: 106
+    parentSchemaId: 101
+- [[ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  details:
+    objectId: 107
+    parentSchemaId: 101
+- [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  details:
+    objectId: 108
+    parentSchemaId: 101
+- [[ObjectParent:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  details:
+    objectId: 111
+    parentSchemaId: 101
+- [[Owner:{DescID: 105}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 105
+    owner: root
+- [[Owner:{DescID: 106}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 106
+    owner: root
+- [[Owner:{DescID: 107}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 107
+    owner: root
+- [[Owner:{DescID: 108}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 108
+    owner: root
+- [[Owner:{DescID: 111}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 111
+    owner: root
+- [[TableComment:{DescID: 105}, ABSENT], PUBLIC]
+  details:
+    comment: __placeholder_comment__
+    tableId: 105
+- [[TableComment:{DescID: 106}, ABSENT], PUBLIC]
+  details:
+    comment: __placeholder_comment__
+    tableId: 106
+- [[TableComment:{DescID: 107}, ABSENT], PUBLIC]
+  details:
+    comment: __placeholder_comment__
+    tableId: 107
+- [[TableComment:{DescID: 108}, ABSENT], PUBLIC]
+  details:
+    comment: __placeholder_comment__
+    tableId: 108
+- [[TableComment:{DescID: 111}, ABSENT], PUBLIC]
+  details:
+    comment: __placeholder_comment__
+    tableId: 111
+- [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 105
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 105
+    userName: public
+- [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 105
+    privileges: 2
+    userName: root
+- [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 106
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 106
+    userName: public
+- [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 106
+    privileges: 2
+    userName: root
+- [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 107
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 107
+    userName: public
+- [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 107
+    privileges: 2
+    userName: root
+- [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 108
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 108, Name: public}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 108
+    userName: public
+- [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 108
+    privileges: 2
+    userName: root
+- [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 111
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 111
+    userName: public
+- [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 111
+    privileges: 2
+    userName: root
+- [[View:{DescID: 105}, ABSENT], PUBLIC]
+  details:
+    usesRelationIds:
+    - 104
+    viewId: 105
+- [[View:{DescID: 106}, ABSENT], PUBLIC]
+  details:
+    usesRelationIds:
+    - 105
+    viewId: 106
+- [[View:{DescID: 107}, ABSENT], PUBLIC]
+  details:
+    usesRelationIds:
+    - 105
+    - 106
+    viewId: 107
+- [[View:{DescID: 108}, ABSENT], PUBLIC]
+  details:
+    usesRelationIds:
+    - 106
+    viewId: 108
+- [[View:{DescID: 111}, ABSENT], PUBLIC]
+  details:
+    usesRelationIds:
+    - 108
+    usesTypeIds:
+    - 109
+    - 110
+    viewId: 111

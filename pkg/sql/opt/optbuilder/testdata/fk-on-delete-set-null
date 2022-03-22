@@ -15,7 +15,7 @@ root
  │    ├── fetch columns: p:4
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent
+ │    │    └── child_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
@@ -143,7 +143,7 @@ root
  │    ├── fetch columns: p:4
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent_partial
+ │    │    └── child_partial_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_partial
@@ -167,9 +167,9 @@ root
                 │    │    ├── scan child_partial
                 │    │    │    ├── columns: c:12!null child_partial.p:13 i:14
                 │    │    │    └── partial index predicates
-                │    │    │         ├── secondary: filters
+                │    │    │         ├── child_partial_p_idx: filters
                 │    │    │         │    └── i:14 > 0
-                │    │    │         └── secondary: filters
+                │    │    │         └── child_partial_i_idx: filters
                 │    │    │              └── child_partial.p:13 > 0
                 │    │    ├── with-scan &1
                 │    │    │    ├── columns: p:17!null
@@ -206,7 +206,7 @@ root
  │    ├── fetch columns: p:4
  │    ├── input binding: &1
  │    ├── cascades
- │    │    └── fk_p_ref_parent_virt
+ │    │    └── child_virt_p_fkey
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_virt

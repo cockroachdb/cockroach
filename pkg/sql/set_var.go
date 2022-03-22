@@ -15,8 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -27,20 +28,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
-// setVarNode represents a SET SESSION statement.
+// setVarNode represents a SET {SESSION | LOCAL} statement.
 type setVarNode struct {
-	name string
-	v    sessionVar
+	name  string
+	local bool
+	v     sessionVar
 	// typedValues == nil means RESET.
 	typedValues []tree.TypedExpr
 }
+
+// resetAllNode represents a RESET ALL statement.
+type resetAllNode struct{}
 
 // SetVar sets session variables.
 // Privileges: None.
 //   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
 func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) {
+	if n.ResetAll {
+		return &resetAllNode{}, nil
+	}
 	if n.Name == "" {
 		// A client has sent the reserved internal syntax SET ROW ...,
 		// or the user entered `SET "" = foo`. Reject it.
@@ -52,6 +61,15 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	_, v, err := getSessionVar(name, false /* missingOk */)
 	if err != nil {
 		return nil, err
+	}
+	if _, ok := settings.Lookup(name, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant()); ok {
+		p.BufferClientNotice(
+			ctx,
+			errors.WithHint(
+				pgnotice.Newf("setting custom variable %q", name),
+				"did you mean SET CLUSTER SETTING?",
+			),
+		)
 	}
 
 	var typedValues []tree.TypedExpr
@@ -75,14 +93,14 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 				typedValue, err := p.analyzeExpr(
 					ctx, expr, nil, dummyHelper, types.String, false, "SET SESSION "+name)
 				if err != nil {
-					return nil, wrapSetVarError(name, expr.String(), "%v", err)
+					return nil, wrapSetVarError(err, name, expr.String())
 				}
 				typedValues[i] = typedValue
 			}
 		}
 	}
 
-	if v.Set == nil && v.RuntimeSet == nil {
+	if v.Set == nil && v.RuntimeSet == nil && v.SetWithPlanner == nil {
 		return nil, newCannotChangeParameterError(name)
 	}
 
@@ -90,12 +108,12 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 		// Statement is RESET. Do we have a default available?
 		// We do not use getDefaultString here because we need to delay
 		// the computation of the default to the execute phase.
-		if _, ok := p.sessionDataMutator.defaults[name]; !ok && v.GlobalDefault == nil {
+		if _, ok := p.sessionDataMutatorIterator.defaults[name]; !ok && v.GlobalDefault == nil {
 			return nil, newCannotChangeParameterError(name)
 		}
 	}
 
-	return &setVarNode{name: name, v: v, typedValues: typedValues}, nil
+	return &setVarNode{name: name, local: n.Local, v: v, typedValues: typedValues}, nil
 }
 
 func (n *setVarNode) startExec(params runParams) error {
@@ -128,23 +146,44 @@ func (n *setVarNode) startExec(params runParams) error {
 		}
 	} else {
 		// Statement is RESET and we already know we have a default. Find it.
-		_, strVal = getSessionVarDefaultString(n.name, n.v, params.p.sessionDataMutator)
+		_, strVal = getSessionVarDefaultString(
+			n.name,
+			n.v,
+			params.p.sessionDataMutatorIterator.sessionDataMutatorBase,
+		)
 	}
 
-	if n.v.RuntimeSet != nil {
-		return n.v.RuntimeSet(params.ctx, params.extendedEvalCtx, strVal)
+	return params.p.SetSessionVar(params.ctx, n.name, strVal, n.local)
+}
+
+// applyOnSessionDataMutators applies the given function on the relevant
+// sessionDataMutators.
+func (p *planner) applyOnSessionDataMutators(
+	ctx context.Context, local bool, applyFunc func(m sessionDataMutator) error,
+) error {
+	if local {
+		// We don't allocate a new SessionData object on implicit transactions.
+		// This no-ops in postgres with a warning, so copy accordingly.
+		if p.EvalContext().TxnImplicit {
+			p.BufferClientNotice(
+				ctx,
+				pgnotice.NewWithSeverityf(
+					"WARNING",
+					"SET LOCAL can only be used in transaction blocks",
+				),
+			)
+			return nil
+		}
+		return p.sessionDataMutatorIterator.applyOnTopMutator(applyFunc)
 	}
-	if n.v.SetWithPlanner != nil {
-		return n.v.SetWithPlanner(params.ctx, params.p, strVal)
-	}
-	return n.v.Set(params.ctx, params.p.sessionDataMutator, strVal)
+	return p.sessionDataMutatorIterator.applyOnEachMutatorError(applyFunc)
 }
 
 // getSessionVarDefaultString retrieves a string suitable to pass to a
 // session var's Set() method. First return value is false if there is
 // no default.
 func getSessionVarDefaultString(
-	varName string, v sessionVar, m *sessionDataMutator,
+	varName string, v sessionVar, m sessionDataMutatorBase,
 ) (bool, string) {
 	if defVal, ok := m.defaults[varName]; ok {
 		return true, defVal
@@ -159,6 +198,45 @@ func (n *setVarNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setVarNode) Values() tree.Datums            { return nil }
 func (n *setVarNode) Close(_ context.Context)        {}
 
+func (n *resetAllNode) startExec(params runParams) error {
+	for varName, v := range varGen {
+		if v.Set == nil && v.RuntimeSet == nil && v.SetWithPlanner == nil {
+			continue
+		}
+		// For Postgres compatibility, Don't reset `role` here.
+		if varName == "role" {
+			continue
+		}
+		_, defVal := getSessionVarDefaultString(
+			varName,
+			v,
+			params.p.sessionDataMutatorIterator.sessionDataMutatorBase,
+		)
+		if err := params.p.SetSessionVar(params.ctx, varName, defVal, false /* isLocal */); err != nil {
+			return err
+		}
+	}
+	for varName := range params.SessionData().CustomOptions {
+		_, v, err := getSessionVar(varName, false /* missingOK */)
+		if err != nil {
+			return err
+		}
+		_, defVal := getSessionVarDefaultString(
+			varName,
+			v,
+			params.p.sessionDataMutatorIterator.sessionDataMutatorBase,
+		)
+		if err := params.p.SetSessionVar(params.ctx, varName, defVal, false /* isLocal */); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (n *resetAllNode) Next(_ runParams) (bool, error) { return false, nil }
+func (n *resetAllNode) Values() tree.Datums            { return nil }
+func (n *resetAllNode) Close(_ context.Context)        {}
+
 func getStringVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (string, error) {
 	if len(values) != 1 {
 		return "", newSingleArgVarError(name)
@@ -171,6 +249,13 @@ func getIntVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) 
 		return 0, newSingleArgVarError(name)
 	}
 	return paramparse.DatumAsInt(evalCtx, name, values[0])
+}
+
+func getFloatVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (float64, error) {
+	if len(values) != 1 {
+		return 0, newSingleArgVarError(name)
+	}
+	return paramparse.DatumAsFloat(evalCtx, name, values[0])
 }
 
 func timeZoneVarGetStringVal(
@@ -194,14 +279,13 @@ func timeZoneVarGetStringVal(
 			timeutil.TimeZoneStringToLocationISO8601Standard,
 		)
 		if err != nil {
-			return "", wrapSetVarError("timezone", values[0].String(),
-				"cannot find time zone %q: %v", location, err)
+			return "", wrapSetVarError(errors.Wrapf(err, "cannot find time zone %q", location), "timezone", values[0].String())
 		}
 
 	case *tree.DInterval:
 		offset, _, _, err = v.Duration.Encode()
 		if err != nil {
-			return "", wrapSetVarError("timezone", values[0].String(), "%v", err)
+			return "", wrapSetVarError(err, "timezone", values[0].String())
 		}
 		offset /= int64(time.Second)
 
@@ -218,27 +302,26 @@ func timeZoneVarGetStringVal(
 		ed.Mul(sixty, sixty, &v.Decimal)
 		offset = ed.Int64(sixty)
 		if ed.Err() != nil {
-			return "", wrapSetVarError("timezone", values[0].String(),
-				"time zone value %s would overflow an int64", sixty)
+			return "", wrapSetVarError(errors.Newf("time zone value %s would overflow an int64", sixty), "timezone", values[0].String())
 		}
 
 	default:
 		return "", newVarValueError("timezone", values[0].String())
 	}
 	if loc == nil {
-		loc = timeutil.FixedOffsetTimeZoneToLocation(int(offset), d.String())
+		loc = timeutil.TimeZoneOffsetToLocation(int(offset))
 	}
 
 	return loc.String(), nil
 }
 
-func timeZoneVarSet(_ context.Context, m *sessionDataMutator, s string) error {
+func timeZoneVarSet(_ context.Context, m sessionDataMutator, s string) error {
 	loc, err := timeutil.TimeZoneStringToLocation(
 		s,
 		timeutil.TimeZoneStringToLocationISO8601Standard,
 	)
 	if err != nil {
-		return wrapSetVarError("TimeZone", s, "%v", err)
+		return wrapSetVarError(err, "TimeZone", s)
 	}
 
 	m.SetLocation(loc)
@@ -267,7 +350,7 @@ func makeTimeoutVarGetter(
 		case *tree.DInterval:
 			timeout, err = intervalToDuration(v)
 			if err != nil {
-				return "", wrapSetVarError(varName, values[0].String(), "%v", err)
+				return "", wrapSetVarError(err, varName, values[0].String())
 			}
 		case *tree.DInt:
 			timeout = time.Duration(*v) * time.Millisecond
@@ -289,22 +372,21 @@ func validateTimeoutVar(
 		},
 	)
 	if err != nil {
-		return 0, wrapSetVarError(varName, timeString, "%v", err)
+		return 0, wrapSetVarError(err, varName, timeString)
 	}
 	timeout, err := intervalToDuration(interval)
 	if err != nil {
-		return 0, wrapSetVarError(varName, timeString, "%v", err)
+		return 0, wrapSetVarError(err, varName, timeString)
 	}
 
 	if timeout < 0 {
-		return 0, wrapSetVarError(varName, timeString,
-			"%v cannot have a negative duration", varName)
+		return 0, wrapSetVarError(errors.Newf("%v cannot have a negative duration", redact.SafeString(varName)), varName, timeString)
 	}
 
 	return timeout, nil
 }
 
-func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+func stmtTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
 		s,
@@ -318,7 +400,21 @@ func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) err
 	return nil
 }
 
-func idleInSessionTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+func lockTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
+	timeout, err := validateTimeoutVar(
+		m.data.GetIntervalStyle(),
+		s,
+		"lock_timeout",
+	)
+	if err != nil {
+		return err
+	}
+
+	m.SetLockTimeout(timeout)
+	return nil
+}
+
+func idleInSessionTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
 		s,
@@ -333,7 +429,7 @@ func idleInSessionTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s st
 }
 
 func idleInTransactionSessionTimeoutVarSet(
-	ctx context.Context, m *sessionDataMutator, s string,
+	ctx context.Context, m sessionDataMutator, s string,
 ) error {
 	timeout, err := validateTimeoutVar(
 		m.data.GetIntervalStyle(),
@@ -361,10 +457,14 @@ func newSingleArgVarError(varName string) error {
 		"SET %s takes only one argument", varName)
 }
 
-func wrapSetVarError(varName, actualValue string, fmt string, args ...interface{}) error {
-	err := pgerror.Newf(pgcode.InvalidParameterValue,
-		"invalid value for parameter %q: %q", varName, actualValue)
-	return errors.WithDetailf(err, fmt, args...)
+func wrapSetVarError(cause error, varName, actualValue string) error {
+	return pgerror.Wrapf(
+		cause,
+		pgcode.InvalidParameterValue,
+		"invalid value for parameter %q: %q",
+		redact.SafeString(varName),
+		actualValue,
+	)
 }
 
 func newVarValueError(varName, actualVal string, allowedVals ...string) (err error) {

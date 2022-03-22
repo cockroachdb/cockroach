@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ParallelScanResultThreshold is the number of results up to which, if the
@@ -86,17 +86,32 @@ type Builder struct {
 	// IsDDL is set to true if the statement contains DDL.
 	IsDDL bool
 
-	// containsFullTableScan is set to true if the statement contains a primary
-	// index scan.
+	// ContainsFullTableScan is set to true if the statement contains an
+	// unconstrained primary index scan. This could be a full scan of any
+	// cardinality.
 	ContainsFullTableScan bool
 
-	// containsFullIndexScan is set to true if the statement contains a secondary
-	// index scan.
+	// ContainsFullIndexScan is set to true if the statement contains an
+	// unconstrained non-partial secondary index scan. This could be a full scan
+	// of any cardinality.
 	ContainsFullIndexScan bool
+
+	// ContainsLargeFullTableScan is set to true if the statement contains an
+	// unconstrained primary index scan estimated to read more than
+	// large_full_scan_rows (or without available stats).
+	ContainsLargeFullTableScan bool
+
+	// ContainsLargeFullIndexScan is set to true if the statement contains an
+	// unconstrained non-partial secondary index scan estimated to read more than
+	// large_full_scan_rows (or without without available stats).
+	ContainsLargeFullIndexScan bool
 
 	// containsBoundedStalenessScan is true if the query uses bounded
 	// staleness and contains a scan.
 	containsBoundedStalenessScan bool
+
+	// ContainsMutation is set to true if the whole plan contains any mutations.
+	ContainsMutation bool
 }
 
 // New constructs an instance of the execution node builder using the
@@ -106,9 +121,9 @@ type Builder struct {
 // catalog is only needed if the statement contains an EXPLAIN (OPT, CATALOG).
 //
 // If allowAutoCommit is true, mutation operators can pass the auto commit flag
-// to the factory (when the optimizer determines it is correct to do so). It
-// should be false if the statement is executed as part of an explicit
-// transaction.
+// to the factory (when the optimizer determines it is correct to do so and
+// `transaction_rows_read_err` guardrail is disabled.). It should be false if
+// the statement is executed as part of an explicit transaction.
 func New(
 	factory exec.Factory,
 	optimizer *xform.Optimizer,
@@ -129,10 +144,23 @@ func New(
 		initialAllowAutoCommit: allowAutoCommit,
 	}
 	if evalCtx != nil {
-		if evalCtx.SessionData.SaveTablesPrefix != "" {
-			b.nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
+		sd := evalCtx.SessionData()
+		if sd.SaveTablesPrefix != "" {
+			b.nameGen = memo.NewExprNameGenerator(sd.SaveTablesPrefix)
 		}
-		b.allowInsertFastPath = evalCtx.SessionData.InsertFastPath
+		// If we have the limits on the number of rows read by a single txn, we
+		// cannot auto commit if the query is not internal.
+		//
+		// Note that we don't impose such a requirement on the number of rows
+		// written by a single txn because Builder.canAutoCommit ensures that we
+		// try to auto commit iff there is a single mutation in the query, and
+		// in such a scenario tableWriterBase.finalize is responsible for making
+		// sure that the rows written limit is not reached before the auto
+		// commit.
+		prohibitAutoCommit := sd.TxnRowsReadErr != 0 && !sd.Internal
+		b.allowAutoCommit = b.allowAutoCommit && !prohibitAutoCommit
+		b.initialAllowAutoCommit = b.allowAutoCommit
+		b.allowInsertFastPath = sd.InsertFastPath
 	}
 	return b
 }
@@ -144,7 +172,9 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks)
+
+	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Stats.RowCountIfAvailable())
+	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
 }
 
 func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
@@ -165,7 +195,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 	rel, ok := e.(memo.RelExpr)
 	if !ok {
 		return execPlan{}, errors.AssertionFailedf(
-			"building execution for non-relational operator %s", log.Safe(e.Op()),
+			"building execution for non-relational operator %s", redact.Safe(e.Op()),
 		)
 	}
 
@@ -185,7 +215,7 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 func (b *Builder) BuildScalar() (tree.TypedExpr, error) {
 	scalar, ok := b.e.(opt.ScalarExpr)
 	if !ok {
-		return nil, errors.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", log.Safe(b.e.Op()))
+		return nil, errors.AssertionFailedf("BuildScalar cannot be called for non-scalar operator %s", redact.Safe(b.e.Op()))
 	}
 	var ctx buildScalarCtx
 	md := b.mem.Metadata()

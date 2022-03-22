@@ -340,12 +340,12 @@ func (n *Nulls) SetNullBitmap(bm []byte, size int) {
 
 // Or returns a new Nulls vector where NullAt(i) iff n1.NullAt(i) or
 // n2.NullAt(i).
-func (n *Nulls) Or(n2 *Nulls) *Nulls {
+func (n Nulls) Or(n2 Nulls) Nulls {
 	// For simplicity, enforce that len(n.nulls) <= len(n2.nulls).
 	if len(n.nulls) > len(n2.nulls) {
 		n, n2 = n2, n
 	}
-	res := &Nulls{
+	res := Nulls{
 		maybeHasNulls: n.maybeHasNulls || n2.maybeHasNulls,
 		nulls:         make([]byte, len(n2.nulls)),
 	}

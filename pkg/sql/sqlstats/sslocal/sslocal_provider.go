@@ -12,16 +12,16 @@ package sslocal
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -38,35 +38,26 @@ func New(
 	curMemoryBytesCount *metric.Gauge,
 	maxMemoryBytesHist *metric.Histogram,
 	pool *mon.BytesMonitor,
-	resetInterval *settings.DurationSetting,
 	reportingSink Sink,
+	knobs *sqlstats.TestingKnobs,
 ) *SQLStats {
 	return newSQLStats(settings, maxStmtFingerprints, maxTxnFingerprints,
-		curMemoryBytesCount, maxMemoryBytesHist, pool, resetInterval, reportingSink)
+		curMemoryBytesCount, maxMemoryBytesHist, pool,
+		reportingSink, knobs)
 }
 
 var _ sqlstats.Provider = &SQLStats{}
 
 // GetController returns a sqlstats.Controller responsible for the current
 // SQLStats.
-func (s *SQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
+func (s *SQLStats) GetController(
+	server serverpb.SQLStatusServer, db *kv.DB, ie sqlutil.InternalExecutor,
+) *Controller {
 	return NewController(s, server)
 }
 
 // Start implements sqlstats.Provider interface.
 func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
-	if s.resetInterval != nil {
-		s.periodicallyClearSQLStats(ctx, stopper, s.resetInterval)
-	}
-	// Start a loop to clear SQL stats at the max reset interval. This is
-	// to ensure that we always have some worker clearing SQL stats to avoid
-	// continually allocating space for the SQL stats.
-	s.periodicallyClearSQLStats(ctx, stopper, sqlstats.MaxSQLStatReset)
-}
-
-func (s *SQLStats) periodicallyClearSQLStats(
-	ctx context.Context, stopper *stop.Stopper, resetInterval *settings.DurationSetting,
-) {
 	// We run a periodic async job to clean up the in-memory stats.
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-clearer", func(ctx context.Context) {
 		var timer timeutil.Timer
@@ -75,13 +66,13 @@ func (s *SQLStats) periodicallyClearSQLStats(
 			last := s.mu.lastReset
 			s.mu.Unlock()
 
-			next := last.Add(resetInterval.Get(&s.st.SV))
+			next := last.Add(sqlstats.MaxSQLStatReset.Get(&s.st.SV))
 			wait := next.Sub(timeutil.Now())
 			if wait < 0 {
 				err := s.Reset(ctx)
 				if err != nil {
 					if log.V(1) {
-						log.Warningf(ctx, "reported SQL stats memory limit has been exceeded, some fingerprints stats are discarded: %s", err)
+						log.Warningf(ctx, "unexpected error: %s", err)
 					}
 				}
 			} else {
@@ -97,8 +88,8 @@ func (s *SQLStats) periodicallyClearSQLStats(
 	})
 }
 
-// GetWriterForApplication implements sqlstats.Provider interface.
-func (s *SQLStats) GetWriterForApplication(appName string) sqlstats.Writer {
+// GetApplicationStats implements sqlstats.Provider interface.
+func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if a, ok := s.mu.apps[appName]; ok {
@@ -111,6 +102,8 @@ func (s *SQLStats) GetWriterForApplication(appName string) sqlstats.Writer {
 		&s.atomic.uniqueStmtFingerprintCount,
 		&s.atomic.uniqueTxnFingerprintCount,
 		s.mu.mon,
+		appName,
+		s.knobs,
 	)
 	s.mu.apps[appName] = a
 	return a
@@ -127,39 +120,48 @@ func (s *SQLStats) GetLastReset() time.Time {
 func (s *SQLStats) IterateStatementStats(
 	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
 ) error {
-	appNames := s.getAppNames(options.SortedAppNames)
+	iter := s.StmtStatsIterator(options)
 
-	for _, appName := range appNames {
-		statsContainer := s.getStatsForApplication(appName)
-
-		err := statsContainer.IterateStatementStats(ctx, appName, options.SortedKey, visitor)
-		if err != nil {
-			return fmt.Errorf("sql stats iteration abort: %s", err)
+	for iter.Next() {
+		if err := visitor(ctx, iter.Cur()); err != nil {
+			return err
 		}
 	}
+
 	return nil
+}
+
+// StmtStatsIterator returns an instance of sslocal.StmtStatsIterator for
+// the current SQLStats.
+func (s *SQLStats) StmtStatsIterator(options *sqlstats.IteratorOptions) *StmtStatsIterator {
+	return NewStmtStatsIterator(s, options)
 }
 
 // IterateTransactionStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateTransactionStats(
 	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
 ) error {
-	appNames := s.getAppNames(options.SortedAppNames)
+	iter := s.TxnStatsIterator(options)
 
-	for _, appName := range appNames {
-		statsContainer := s.getStatsForApplication(appName)
-
-		err := statsContainer.IterateTransactionStats(ctx, appName, options.SortedKey, visitor)
-		if err != nil {
-			return fmt.Errorf("sql stats iteration abort: %s", err)
+	for iter.Next() {
+		stats := iter.Cur()
+		if err := visitor(ctx, stats); err != nil {
+			return err
 		}
 	}
+
 	return nil
+}
+
+// TxnStatsIterator returns an instance of sslocal.TxnStatsIterator for
+// the current SQLStats.
+func (s *SQLStats) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStatsIterator {
+	return NewTxnStatsIterator(s, options)
 }
 
 // IterateAggregatedTransactionStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateAggregatedTransactionStats(
-	_ context.Context,
+	ctx context.Context,
 	options *sqlstats.IteratorOptions,
 	visitor sqlstats.AggregatedTransactionVisitor,
 ) error {
@@ -168,37 +170,13 @@ func (s *SQLStats) IterateAggregatedTransactionStats(
 	for _, appName := range appNames {
 		statsContainer := s.getStatsForApplication(appName)
 
-		err := statsContainer.IterateAggregatedTransactionStats(appName, visitor)
+		err := statsContainer.IterateAggregatedTransactionStats(ctx, options, visitor)
 		if err != nil {
-			return fmt.Errorf("sql stats iteration abort: %s", err)
+			return errors.Wrap(err, "sql stats iteration abort")
 		}
 	}
 
 	return nil
-}
-
-// GetStatementStats implements sqlstats.Provider interface.
-func (s *SQLStats) GetStatementStats(
-	key *roachpb.StatementStatisticsKey,
-) (*roachpb.CollectedStatementStatistics, error) {
-	statsContainer := s.getStatsForApplication(key.App)
-	if statsContainer == nil {
-		return nil, errors.Errorf("no stats found for appName: %s", key.App)
-	}
-
-	return statsContainer.GetStatementStats(key)
-}
-
-// GetTransactionStats implements sqlstats.Provider interface.
-func (s *SQLStats) GetTransactionStats(
-	appName string, key roachpb.TransactionFingerprintID,
-) (*roachpb.CollectedTransactionStatistics, error) {
-	statsContainer := s.getStatsForApplication(appName)
-	if statsContainer == nil {
-		return nil, errors.Errorf("no stats found for appName: %s", appName)
-	}
-
-	return statsContainer.GetTransactionStats(appName, key)
 }
 
 // Reset implements sqlstats.Provider interface.

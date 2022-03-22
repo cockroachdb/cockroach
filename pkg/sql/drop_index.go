@@ -15,7 +15,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -124,9 +125,23 @@ func (n *dropIndexNode) startExec(params runParams) error {
 			shardColName = idx.GetShardColumnName()
 		}
 
-		// Drop inaccessible indexed columns. They are created for expression
-		// indexes. They cannot be referenced in constraints, computed columns,
-		// or other indexes, so they are safe to drop.
+		// keyColumnOfOtherIndex returns true if the given column is a key
+		// column of an index in the table other than idx.
+		keyColumnOfOtherIndex := func(colID descpb.ColumnID) bool {
+			for _, otherIdx := range tableDesc.AllIndexes() {
+				if otherIdx.GetID() == idx.GetID() {
+					continue
+				}
+				if otherIdx.CollectKeyColumnIDs().Contains(colID) {
+					return true
+				}
+			}
+			return false
+		}
+
+		// Drop expression index columns if they are not key columns in any
+		// other index. They cannot be referenced in constraints, computed
+		// columns, or other indexes, so they are safe to drop.
 		columnsDropped := false
 		if idx != nil {
 			for i, count := 0, idx.NumKeyColumns(); i < count; i++ {
@@ -135,7 +150,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				if col.IsExpressionIndexColumn() {
+				if col.IsExpressionIndexColumn() && !keyColumnOfOtherIndex(col.GetID()) {
 					n.queueDropColumn(tableDesc, col)
 					columnsDropped = true
 				}
@@ -245,7 +260,8 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 // finalizeDropColumn finalizes the dropping of one or more columns. It should
 // only be called if queueDropColumn has been called at least once.
 func (n *dropIndexNode) finalizeDropColumn(params runParams, tableDesc *tabledesc.Mutable) error {
-	if err := tableDesc.AllocateIDs(params.ctx); err != nil {
+	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+	if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
 		return err
 	}
 	mutationID := tableDesc.ClusterVersion.NextMutationID
@@ -321,32 +337,30 @@ func (p *planner) dropIndexByName(
 		)
 	}
 
-	// Check if requires CCL binary for eventual zone config removal. Only
-	// necessary for the system tenant, because secondary tenants do not have
-	// zone configs for individual objects.
-	if p.ExecCfg().Codec.ForSystemTenant() {
-		_, zone, _, err := GetZoneConfigInTxn(ctx, p.txn, config.SystemTenantObjectID(tableDesc.ID), nil /* index */, "", false)
-		if err != nil {
-			return err
-		}
+	// Check if requires CCL binary for eventual zone config removal.
+	_, zone, _, err := GetZoneConfigInTxn(
+		ctx, p.txn, p.ExecCfg().Codec, tableDesc.ID, nil /* index */, "", false,
+	)
+	if err != nil {
+		return err
+	}
 
-		for _, s := range zone.Subzones {
-			if s.IndexID != uint32(idx.GetID()) {
-				_, err = GenerateSubzoneSpans(
-					p.ExecCfg().Settings,
-					p.ExecCfg().ClusterID(),
-					p.ExecCfg().Codec,
-					tableDesc,
-					zone.Subzones,
-					false, /* newSubzones */
-				)
-				if sqlerrors.IsCCLRequiredError(err) {
-					return sqlerrors.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
-						"because table %q has at least one remaining index or partition with a zone config",
-						tableDesc.Name))
-				}
-				break
+	for _, s := range zone.Subzones {
+		if s.IndexID != uint32(idx.GetID()) {
+			_, err = GenerateSubzoneSpans(
+				p.ExecCfg().Settings,
+				p.ExecCfg().ClusterID(),
+				p.ExecCfg().Codec,
+				tableDesc,
+				zone.Subzones,
+				false, /* newSubzones */
+			)
+			if sqlerrors.IsCCLRequiredError(err) {
+				return sqlerrors.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
+					"because table %q has at least one remaining index or partition with a zone config",
+					tableDesc.Name))
 			}
+			break
 		}
 	}
 
@@ -418,17 +432,6 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 
-	if idx.NumInterleaveAncestors() > 0 {
-		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
-			return err
-		}
-	}
-	for i := 0; i < idx.NumInterleavedBy(); i++ {
-		if err := p.removeInterleave(ctx, idx.GetInterleavedBy(i)); err != nil {
-			return err
-		}
-	}
-
 	var droppedViews []string
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == idx.GetID() {
@@ -494,7 +497,11 @@ func (p *planner) dropIndexByName(
 	// automatically merged by the merge queue. Gate this on being the
 	// system tenant because secondary tenants aren't allowed to scan
 	// the meta ranges directly.
-	if p.ExecCfg().Codec.ForSystemTenant() {
+	// TODO(Chengxiong): Remove this range unsplitting in 22.2
+	st := p.EvalContext().Settings
+	if p.ExecCfg().Codec.ForSystemTenant() &&
+		!st.Version.IsActive(ctx, clusterversion.UnsplitRangesInAsyncGCJobs) {
+
 		span := tableDesc.IndexSpan(p.ExecCfg().Codec, idxEntry.ID)
 		txn := p.ExecCfg().DB.NewTxn(ctx, "scan-ranges-for-index-drop")
 		ranges, err := kvclient.ScanMetaKVs(ctx, txn, span)
@@ -524,12 +531,18 @@ func (p *planner) dropIndexByName(
 	// contain the same field any more due to other schema changes
 	// intervening since the initial lookup. So we send the recent
 	// copy idxEntry for drop instead.
-	if err := tableDesc.AddIndexMutation(&idxEntry, descpb.DescriptorMutation_DROP); err != nil {
+	if err := tableDesc.AddDropIndexMutation(&idxEntry); err != nil {
 		return err
 	}
 	tableDesc.RemovePublicNonPrimaryIndex(idxOrdinal)
 
-	if err := p.removeIndexComment(ctx, tableDesc.ID, idxDesc.ID); err != nil {
+	commentUpdater := p.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
+		ctx,
+		p.txn,
+		p.SessionData(),
+	)
+	if err := commentUpdater.DeleteDescriptorComment(
+		int64(tableDesc.ID), int64(idxDesc.ID), keys.IndexCommentType); err != nil {
 		return err
 	}
 

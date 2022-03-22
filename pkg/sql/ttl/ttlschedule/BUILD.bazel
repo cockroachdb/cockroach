@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ttlschedule",
+    srcs = ["ttlschedule.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/scheduledjobs",
+        "//pkg/security",
+        "//pkg/sql",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/metric",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+    ],
+)

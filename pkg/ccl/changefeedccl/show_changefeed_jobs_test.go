@@ -10,8 +10,15 @@ package changefeedccl
 
 import (
 	"context"
+	gosql "database/sql"
+	"fmt"
+	"net/url"
+	"sort"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -58,6 +65,68 @@ func waitForJobStatus(
 	})
 }
 
+func TestShowChangefeedJobsBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+
+		type row struct {
+			id             jobspb.JobID
+			SinkURI        string
+			FullTableNames []uint8
+			format         string
+			topics         string
+		}
+
+		var out row
+
+		query := `SELECT job_id, sink_uri, full_table_names, format, IFNULL(topics, '') FROM [SHOW CHANGEFEED JOBS] ORDER BY sink_uri`
+		rowResults := sqlDB.Query(t, query)
+
+		if !rowResults.Next() {
+			err := rowResults.Err()
+			if err != nil {
+				t.Fatalf("Error encountered while querying the next row: %v", err)
+			} else {
+				t.Fatalf("Expected more rows when querying and none found for query: %s", query)
+			}
+		}
+		err := rowResults.Scan(&out.id, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if testFeed, ok := foo.(cdctest.EnterpriseTestFeed); ok {
+			details, err := testFeed.Details()
+			require.NoError(t, err)
+			sinkURI := details.SinkURI
+			jobID := testFeed.JobID()
+
+			require.Equal(t, jobID, out.id, "Expected id:%d but found id:%d", jobID, out.id)
+			require.Equal(t, sinkURI, out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", sinkURI, out.SinkURI)
+
+			u, err := url.Parse(sinkURI)
+			require.NoError(t, err)
+			if u.Scheme == changefeedbase.SinkSchemeKafka {
+				require.Equal(t, "foo", out.topics, "Expected topics:%s but found format:%s", "foo", out.topics)
+			}
+		}
+		require.Equal(t, "{d.public.foo}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{d.public.foo}", string(out.FullTableNames))
+		require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+	}
+
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
+}
+
 func TestShowChangefeedJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -77,6 +146,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 		FullTableNames []uint8
 		format         string
 		description    string
+		topics         string
 		DescriptorIDs  []descpb.ID
 	}
 
@@ -122,15 +192,16 @@ func TestShowChangefeedJobs(t *testing.T) {
 
 	var out row
 
-	query = `SELECT job_id, sink_uri, full_table_names, format FROM [SHOW CHANGEFEED JOB $1]`
-	sqlDB.QueryRow(t, query, multiChangefeedID).Scan(&out.id, &out.SinkURI, &out.FullTableNames, &out.format)
+	query = `SELECT job_id, sink_uri, full_table_names, format, IFNULL(topics, '') FROM [SHOW CHANGEFEED JOB $1]`
+	sqlDB.QueryRow(t, query, multiChangefeedID).Scan(&out.id, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
 
 	require.Equal(t, multiChangefeedID, out.id, "Expected id:%d but found id:%d", multiChangefeedID, out.id)
 	require.Equal(t, "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
 	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+	require.Equal(t, "", out.topics, "Expected topics to be empty")
 
-	query = `SELECT job_id, description, sink_uri, full_table_names, format FROM [SHOW CHANGEFEED JOBS] ORDER BY sink_uri`
+	query = `SELECT job_id, description, sink_uri, full_table_names, format, IFNULL(topics, '') FROM [SHOW CHANGEFEED JOBS] ORDER BY sink_uri`
 	rowResults := sqlDB.Query(t, query)
 
 	if !rowResults.Next() {
@@ -141,7 +212,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 			t.Fatalf("Expected more rows when querying and none found for query: %s", query)
 		}
 	}
-	err := rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format)
+	err := rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,6 +221,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 	require.Equal(t, "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "experimental-s3://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=redacted", out.SinkURI)
 	require.Equal(t, "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo,defaultdb.public.bar}", string(out.FullTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+	require.Equal(t, "", out.topics, "Expected topics to be empty")
 
 	if !rowResults.Next() {
 		err := rowResults.Err()
@@ -159,7 +231,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 			t.Fatalf("Expected more rows when querying and none found for query: %s", query)
 		}
 	}
-	err = rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format)
+	err = rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,6 +241,7 @@ func TestShowChangefeedJobs(t *testing.T) {
 	require.Equal(t, "webhook-https://fake-http-sink:8081", out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", "webhook-https://fake-http-sink:8081", out.SinkURI)
 	require.Equal(t, "{defaultdb.public.foo}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{defaultdb.public.foo}", string(out.FullTableNames))
 	require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+	require.Equal(t, "", out.topics, "Expected topics to be empty")
 
 	hasNext := rowResults.Next()
 	require.Equal(t, false, hasNext, "Expected no more rows for query:%s", query)
@@ -272,4 +345,100 @@ func TestShowChangefeedJobsNoResults(t *testing.T) {
 	if rowResults.Next() || rowResults.Err() != nil {
 		t.Fatalf("Expected no results for query:%s", query)
 	}
+}
+
+func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+
+		feed, ok := foo.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		jobID := feed.JobID()
+		details, err := feed.Details()
+		require.NoError(t, err)
+		sinkURI := details.SinkURI
+
+		type row struct {
+			id             jobspb.JobID
+			description    string
+			SinkURI        string
+			FullTableNames []uint8
+			format         string
+			topics         string
+		}
+
+		obtainJobRowFn := func() row {
+			var out row
+
+			query := fmt.Sprintf(
+				`SELECT job_id, description, sink_uri, full_table_names, format, IFNULL(topics, '') FROM [SHOW CHANGEFEED JOB %d]`,
+				jobID,
+			)
+
+			rowResults := sqlDB.Query(t, query)
+			if !rowResults.Next() {
+				err := rowResults.Err()
+				if err != nil {
+					t.Fatalf("Error encountered while querying the next row: %v", err)
+				} else {
+					t.Fatalf("Expected more rows when querying and none found for query: %s", query)
+				}
+			}
+			err := rowResults.Scan(&out.id, &out.description, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			return out
+		}
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		waitForJobStatus(sqlDB, t, jobID, `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, jobID))
+
+		out := obtainJobRowFn()
+
+		topicsArr := strings.Split(out.topics, ",")
+		sort.Strings(topicsArr)
+		sortedTopics := strings.Join(topicsArr, ",")
+		require.Equal(t, jobID, out.id, "Expected id:%d but found id:%d", jobID, out.id)
+		require.Equal(t, sinkURI, out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", sinkURI, out.SinkURI)
+		require.Equal(t, "bar,foo", sortedTopics, "Expected topics:%s but found topics:%s", "bar,foo", sortedTopics)
+		require.Equal(t, "{d.public.foo,d.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{d.public.foo,d.public.bar}", string(out.FullTableNames))
+		require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP foo`, feed.JobID()))
+
+		out = obtainJobRowFn()
+
+		require.Equal(t, jobID, out.id, "Expected id:%d but found id:%d", jobID, out.id)
+		require.Equal(t, "CREATE CHANGEFEED FOR TABLE bar INTO 'kafka://does.not.matter/' WITH envelope = 'wrapped', format = 'json', on_error = 'fail', schema_change_events = 'default', schema_change_policy = 'backfill', virtual_columns = 'omitted'", out.description, "Expected description:%s but found description:%s", "CREATE CHANGEFEED FOR TABLE bar INTO 'kafka://does.not.matter/'", out.description)
+		require.Equal(t, sinkURI, out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", sinkURI, out.SinkURI)
+		require.Equal(t, "bar", out.topics, "Expected topics:%s but found topics:%s", "bar", sortedTopics)
+		require.Equal(t, "{d.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{d.public.bar}", string(out.FullTableNames))
+		require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET resolved = '5s'`, feed.JobID()))
+
+		out = obtainJobRowFn()
+
+		require.Equal(t, jobID, out.id, "Expected id:%d but found id:%d", jobID, out.id)
+		require.Equal(t, "CREATE CHANGEFEED FOR TABLE bar INTO 'kafka://does.not.matter/' WITH envelope = 'wrapped', format = 'json', on_error = 'fail', resolved = '5s', schema_change_events = 'default', schema_change_policy = 'backfill', virtual_columns = 'omitted'", out.description, "Expected description:%s but found description:%s", "CREATE CHANGEFEED FOR TABLE bar INTO 'kafka://does.not.matter/'", out.description)
+		require.Equal(t, sinkURI, out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", sinkURI, out.SinkURI)
+		require.Equal(t, "bar", out.topics, "Expected topics:%s but found topics:%s", "bar", sortedTopics)
+		require.Equal(t, "{d.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{d.public.bar}", string(out.FullTableNames))
+		require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
 }

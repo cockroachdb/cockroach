@@ -10,6 +10,14 @@ exec-ddl
 CREATE TABLE abcd (a INT, b INT, c INT, d INT)
 ----
 
+exec-ddl
+CREATE TABLE u (u UUID PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE c (c CHAR PRIMARY KEY)
+----
+
 # --------------------------------------------------
 # CommuteVar
 # --------------------------------------------------
@@ -164,7 +172,7 @@ exprnorm expect=EliminateCast
 (Root
   (Project
     (Scan [ (Table "a") (Cols "i,s,arr") ])
-    [ 
+    [
       (ProjectionsItem (Cast (Var "i") "int")                                  (NewColumn "c1" "int"))
       (ProjectionsItem (Cast (Var "arr") "int[]")                              (NewColumn "c2" "int[]"))
       (ProjectionsItem (Cast (Cast (Const "[1, 2]" "string") "jsonb") "json")  (NewColumn "c3" "json"))
@@ -204,7 +212,7 @@ FROM a
 ----
 project
  ├── columns: i:8 arr:9 s:10 s:11 i:12 s:13 array:14 array:15
- ├── stable
+ ├── immutable
  ├── scan a
  │    └── columns: a.i:2 a.s:4 a.arr:5
  └── projections
@@ -214,7 +222,7 @@ project
       ├── a.s:4::VARCHAR(2) [as=s:11, outer=(4), immutable]
       ├── a.i:2::INT2::INT8 [as=i:12, outer=(2), immutable]
       ├── a.s:4::CHAR::VARCHAR [as=s:13, outer=(4), immutable]
-      ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:14, outer=(2), stable]
+      ├── ARRAY[a.i:2, 2]::OIDVECTOR [as=array:14, outer=(2), immutable]
       └── ARRAY[a.i:2, 2]::INT2VECTOR [as=array:15, outer=(2), immutable]
 
 # --------------------------------------------------
@@ -1154,16 +1162,16 @@ SELECT k FROM e WHERE i IS NOT DISTINCT FROM NULL::FLOAT
 ----
 project
  ├── columns: k:1(int!null)
- ├── stats: [rows=10.0000001]
- ├── cost: 24.9200001
+ ├── stats: [rows=10]
+ ├── cost: 24.5400002
  ├── key: (1)
  ├── prune: (1)
  ├── interesting orderings: (+1)
- └── scan t.public.e@secondary
+ └── scan t.public.e@e_i_idx
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int)
       ├── constraint: /2/1: [/NULL - /NULL]
-      ├── stats: [rows=10.0000001, distinct(2)=1, null(2)=10]
-      ├── cost: 24.8100001
+      ├── stats: [rows=10, distinct(2)=1, null(2)=10, avgsize(2)=4]
+      ├── cost: 24.4200002
       ├── key: (1)
       ├── fd: ()-->(2)
       ├── prune: (1)
@@ -1175,15 +1183,15 @@ SELECT k FROM e WHERE i IS DISTINCT FROM NULL::FLOAT
 project
  ├── columns: k:1(int!null)
  ├── stats: [rows=990]
- ├── cost: 1053.92
+ ├── cost: 1053.54
  ├── key: (1)
  ├── prune: (1)
  ├── interesting orderings: (+1)
- └── scan t.public.e@secondary
+ └── scan t.public.e@e_i_idx
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int!null)
       ├── constraint: /2/1: (/NULL - ]
-      ├── stats: [rows=990, distinct(2)=100, null(2)=0]
-      ├── cost: 1044.01
+      ├── stats: [rows=990, distinct(2)=100, null(2)=0, avgsize(2)=4]
+      ├── cost: 1043.62
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1)
@@ -1215,7 +1223,7 @@ project
       ├── stable
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── scan e@secondary
+      ├── scan e@e_tz_idx
       │    ├── columns: k:1!null tz:4!null
       │    ├── constraint: /4/1: (/NULL - ]
       │    ├── key: (1)
@@ -1229,7 +1237,7 @@ SELECT k FROM e WHERE tz > '2017-11-12 07:35:01+00:00'::TIMESTAMP
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── scan e@secondary
+ └── scan e@e_tz_idx
       ├── columns: k:1!null tz:4!null
       ├── constraint: /4/1: [/'2017-11-12 07:35:01.000001+00:00' - ]
       ├── key: (1)
@@ -1243,7 +1251,7 @@ SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w'::INTERV
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── scan e@secondary
+ └── scan e@e_d_idx
       ├── columns: k:1!null d:5!null
       ├── constraint: /5/1: [/'2018-07-02' - /'2018-07-07']
       ├── key: (1)
@@ -1263,7 +1271,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(5)
-      ├── scan e@secondary
+      ├── scan e@e_d_idx
       │    ├── columns: k:1!null d:5!null
       │    ├── constraint: /5/1: [/'2018-07-02' - ]
       │    ├── key: (1)
@@ -1278,7 +1286,7 @@ SELECT k FROM e WHERE tz IS NOT NULL
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── scan e@secondary
+ └── scan e@e_tz_idx
       ├── columns: k:1!null tz:4!null
       ├── constraint: /4/1: (/NULL - ]
       ├── key: (1)
@@ -1291,7 +1299,7 @@ SELECT k FROM e WHERE d - '1w'::INTERVAL > '2018-07-01'::DATE
 project
  ├── columns: k:1!null
  ├── key: (1)
- └── scan e@secondary
+ └── scan e@e_d_idx
       ├── columns: k:1!null d:5!null
       ├── constraint: /5/1: [/'2018-07-09' - ]
       ├── key: (1)
@@ -1562,7 +1570,7 @@ SELECT ARRAY(SELECT k FROM a WHERE a.k = b.k) FROM a AS b
 ----
 project
  ├── columns: array:16
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: b.k:1!null a.k:8!null array_agg:17!null
  │    ├── grouping columns: b.k:1!null
  │    ├── key: (8)
@@ -1594,7 +1602,7 @@ SELECT ARRAY(SELECT k FROM a WHERE a.i = b.i ORDER BY a.k) FROM a AS b
 ----
 project
  ├── columns: array:16
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: b.k:1!null a.k:8 array_agg:17
  │    ├── grouping columns: b.k:1!null
  │    ├── internal-ordering: +8 opt(9)
@@ -1633,7 +1641,7 @@ SELECT ARRAY(SELECT generate_series(1, a.k) ORDER BY 1 DESC) FROM a
 project
  ├── columns: array:10
  ├── immutable
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: k:1!null canary:11 array_agg:12
  │    ├── grouping columns: k:1!null
  │    ├── internal-ordering: -8
@@ -1682,7 +1690,7 @@ SELECT ARRAY(SELECT ARRAY(SELECT k FROM a)[1] FROM a as b WHERE b.k = c.k) FROM 
 ----
 project
  ├── columns: array:24
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: c.k:1!null canary:25!null array_agg:26
  │    ├── grouping columns: c.k:1!null
  │    ├── key: (1)
@@ -1726,7 +1734,7 @@ SELECT ARRAY(SELECT ARRAY(SELECT k FROM a WHERE a.k = b.k)[1] FROM a as b WHERE 
 ----
 project
  ├── columns: array:26
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: c.k:1!null canary:27 array_agg:28
  │    ├── grouping columns: c.k:1!null
  │    ├── key: (1)
@@ -1744,7 +1752,7 @@ project
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
  │    │    │    ├── fd: ()-->(23,27)
- │    │    │    ├── group-by
+ │    │    │    ├── group-by (streaming)
  │    │    │    │    ├── columns: a.k:15!null array_agg:24!null
  │    │    │    │    ├── outer: (1)
  │    │    │    │    ├── cardinality: [0 - 1]
@@ -1863,7 +1871,7 @@ project
  │    ├── columns: rel.oid:1 inhrelid:32 array_agg:71
  │    ├── scan pg_class [as=rel]
  │    │    └── columns: rel.oid:1
- │    ├── group-by
+ │    ├── group-by (streaming)
  │    │    ├── columns: inhrelid:32 array_agg:71
  │    │    ├── internal-ordering: +34 opt(32)
  │    │    ├── outer: (1)

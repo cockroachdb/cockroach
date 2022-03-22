@@ -18,12 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -35,7 +37,7 @@ type writer interface {
 
 // provider implements the sqlinstance.Provider interface for access to the sqlinstance subsystem.
 type provider struct {
-	sqlinstance.AddressResolver
+	*instancestorage.Reader
 	storage      writer
 	stopper      *stop.Stopper
 	instanceAddr string
@@ -43,7 +45,12 @@ type provider struct {
 	initOnce     sync.Once
 	initialized  chan struct{}
 	instanceID   base.SQLInstanceID
+	sessionID    sqlliveness.SessionID
 	initError    error
+	mu           struct {
+		syncutil.Mutex
+		started bool
+	}
 }
 
 // New constructs a new Provider.
@@ -53,35 +60,66 @@ func New(
 	codec keys.SQLCodec,
 	slProvider sqlliveness.Provider,
 	addr string,
+	f *rangefeed.Factory,
+	clock *hlc.Clock,
 ) sqlinstance.Provider {
 	storage := instancestorage.NewStorage(db, codec, slProvider)
-	reader := instancestorage.NewReader(storage, slProvider)
+	reader := instancestorage.NewReader(storage, slProvider.CachedReader(), f, codec, clock, stopper)
 	p := &provider{
-		storage:         storage,
-		stopper:         stopper,
-		AddressResolver: reader,
-		session:         slProvider,
-		instanceAddr:    addr,
-		initialized:     make(chan struct{}),
+		storage:      storage,
+		stopper:      stopper,
+		Reader:       reader,
+		session:      slProvider,
+		instanceAddr: addr,
+		initialized:  make(chan struct{}),
 	}
 	return p
 }
 
-// Instance returns the instance ID for the current SQL instance.
-func (p *provider) Instance(ctx context.Context) (_ base.SQLInstanceID, err error) {
+// Start implements the sqlinstance.Provider interface.
+func (p *provider) Start(ctx context.Context) error {
+	if p.started() {
+		return p.initError
+	}
+	if err := p.Reader.Start(ctx); err != nil {
+		p.initOnce.Do(func() {
+			p.initError = err
+			close(p.initialized)
+		})
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.started = true
+	return p.initError
+}
+
+func (p *provider) started() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.mu.started
+}
+
+// Instance implements the sqlinstance.Provider interface.
+func (p *provider) Instance(
+	ctx context.Context,
+) (_ base.SQLInstanceID, _ sqlliveness.SessionID, err error) {
+	if !p.started() {
+		return base.SQLInstanceID(0), "", sqlinstance.NotStartedError
+	}
+
 	p.maybeInitialize()
 	select {
 	case <-ctx.Done():
-		return base.SQLInstanceID(0), ctx.Err()
+		return base.SQLInstanceID(0), "", ctx.Err()
 	case <-p.stopper.ShouldQuiesce():
-		return base.SQLInstanceID(0), stop.ErrUnavailable
+		return base.SQLInstanceID(0), "", stop.ErrUnavailable
 	case <-p.initialized:
 		if p.initError == nil {
 			log.Ops.Infof(ctx, "created SQL instance %d", p.instanceID)
 		} else {
 			log.Ops.Warningf(ctx, "error creating SQL instance: %s", p.initError)
 		}
-		return p.instanceID, p.initError
+		return p.instanceID, p.sessionID, p.initError
 	}
 }
 
@@ -108,13 +146,26 @@ func (p *provider) initialize(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	p.sessionID = session.ID()
 	p.instanceID = instanceID
-	session.RegisterCallbackForSessionExpiry(p.shutdownSQLInstance)
+
+	session.RegisterCallbackForSessionExpiry(func(_ context.Context) {
+		// Stop the instance asynchronously. This callback runs in a stopper task,
+		// so it can't do the shutdown (as the shutdown stops the stopper).
+		go func() {
+			ctx, sp := p.stopper.Tracer().StartSpanCtx(context.Background(), "instance shutdown")
+			defer sp.Finish()
+			p.shutdownSQLInstance(ctx)
+		}()
+	})
 	return nil
 }
 
 // shutdownSQLInstance shuts down the SQL instance.
 func (p *provider) shutdownSQLInstance(ctx context.Context) {
+	if !p.started() {
+		return
+	}
 	// Initialize initError if shutdownSQLInstance is called
 	// before initialization of the instance ID
 	go func() {

@@ -1,0 +1,163 @@
+parse
+ALTER CHANGEFEED 123 ADD foo
+----
+ALTER CHANGEFEED 123 ADD TABLE foo -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo) -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _ -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 DROP foo
+----
+ALTER CHANGEFEED 123 DROP TABLE foo -- normalized!
+ALTER CHANGEFEED (123) DROP TABLE (foo) -- fully parenthesized
+ALTER CHANGEFEED _ DROP TABLE foo -- literals removed
+ALTER CHANGEFEED 123 DROP TABLE _ -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 ADD foo DROP bar
+----
+ALTER CHANGEFEED 123 ADD TABLE foo  DROP TABLE bar -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo)  DROP TABLE (bar) -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo  DROP TABLE bar -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _  DROP TABLE _ -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 DROP foo ADD bar
+----
+ALTER CHANGEFEED 123 DROP TABLE foo  ADD TABLE bar -- normalized!
+ALTER CHANGEFEED (123) DROP TABLE (foo)  ADD TABLE (bar) -- fully parenthesized
+ALTER CHANGEFEED _ DROP TABLE foo  ADD TABLE bar -- literals removed
+ALTER CHANGEFEED 123 DROP TABLE _  ADD TABLE _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo, bar
+----
+ALTER CHANGEFEED 123 ADD TABLE foo, TABLE bar -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo), TABLE (bar) -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo, TABLE bar -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _, TABLE _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 DROP foo, bar ADD baz, qux
+----
+ALTER CHANGEFEED 123 DROP TABLE foo, TABLE bar  ADD TABLE baz, TABLE qux -- normalized!
+ALTER CHANGEFEED (123) DROP TABLE (foo), TABLE (bar)  ADD TABLE (baz), TABLE (qux) -- fully parenthesized
+ALTER CHANGEFEED _ DROP TABLE foo, TABLE bar  ADD TABLE baz, TABLE qux -- literals removed
+ALTER CHANGEFEED 123 DROP TABLE _, TABLE _  ADD TABLE _, TABLE _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo DROP bar ADD baz, qux DROP quux
+----
+ALTER CHANGEFEED 123 ADD TABLE foo  DROP TABLE bar  ADD TABLE baz, TABLE qux  DROP TABLE quux -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo)  DROP TABLE (bar)  ADD TABLE (baz), TABLE (qux)  DROP TABLE (quux) -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo  DROP TABLE bar  ADD TABLE baz, TABLE qux  DROP TABLE quux -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _  DROP TABLE _  ADD TABLE _, TABLE _  DROP TABLE _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 SET foo = 'bar'
+----
+ALTER CHANGEFEED 123 SET foo = 'bar'
+ALTER CHANGEFEED (123) SET foo = ('bar') -- fully parenthesized
+ALTER CHANGEFEED _ SET foo = '_' -- literals removed
+ALTER CHANGEFEED 123 SET _ = 'bar' -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 ADD foo SET bar = 'baz', qux = 'quux'
+----
+ALTER CHANGEFEED 123 ADD TABLE foo  SET bar = 'baz', qux = 'quux' -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo)  SET bar = ('baz'), qux = ('quux') -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo  SET bar = '_', qux = '_' -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _  SET _ = 'baz', _ = 'quux' -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 DROP foo SET bar = 'baz', qux = 'quux'
+----
+ALTER CHANGEFEED 123 DROP TABLE foo  SET bar = 'baz', qux = 'quux' -- normalized!
+ALTER CHANGEFEED (123) DROP TABLE (foo)  SET bar = ('baz'), qux = ('quux') -- fully parenthesized
+ALTER CHANGEFEED _ DROP TABLE foo  SET bar = '_', qux = '_' -- literals removed
+ALTER CHANGEFEED 123 DROP TABLE _  SET _ = 'baz', _ = 'quux' -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 SET foo = 'bar' ADD baz DROP qux
+----
+ALTER CHANGEFEED 123 SET foo = 'bar'  ADD TABLE baz  DROP TABLE qux -- normalized!
+ALTER CHANGEFEED (123) SET foo = ('bar')  ADD TABLE (baz)  DROP TABLE (qux) -- fully parenthesized
+ALTER CHANGEFEED _ SET foo = '_'  ADD TABLE baz  DROP TABLE qux -- literals removed
+ALTER CHANGEFEED 123 SET _ = 'bar'  ADD TABLE _  DROP TABLE _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo SET bar = 'baz', qux = 'quux' DROP corge
+----
+ALTER CHANGEFEED 123 ADD TABLE foo  SET bar = 'baz', qux = 'quux'  DROP TABLE corge -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo)  SET bar = ('baz'), qux = ('quux')  DROP TABLE (corge) -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo  SET bar = '_', qux = '_'  DROP TABLE corge -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _  SET _ = 'baz', _ = 'quux'  DROP TABLE _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 UNSET foo
+----
+ALTER CHANGEFEED 123 UNSET foo
+ALTER CHANGEFEED (123) UNSET foo -- fully parenthesized
+ALTER CHANGEFEED _ UNSET foo -- literals removed
+ALTER CHANGEFEED 123 UNSET _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo UNSET bar, baz
+----
+ALTER CHANGEFEED 123 ADD TABLE foo  UNSET bar, baz -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo)  UNSET bar, baz -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo  UNSET bar, baz -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _  UNSET _, _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 UNSET foo, bar ADD baz DROP qux
+----
+ALTER CHANGEFEED 123 UNSET foo, bar  ADD TABLE baz  DROP TABLE qux -- normalized!
+ALTER CHANGEFEED (123) UNSET foo, bar  ADD TABLE (baz)  DROP TABLE (qux) -- fully parenthesized
+ALTER CHANGEFEED _ UNSET foo, bar  ADD TABLE baz  DROP TABLE qux -- literals removed
+ALTER CHANGEFEED 123 UNSET _, _  ADD TABLE _  DROP TABLE _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo DROP bar SET baz = 'qux' UNSET quux, corge
+----
+ALTER CHANGEFEED 123 ADD TABLE foo  DROP TABLE bar  SET baz = 'qux'  UNSET quux, corge -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo)  DROP TABLE (bar)  SET baz = ('qux')  UNSET quux, corge -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo  DROP TABLE bar  SET baz = '_'  UNSET quux, corge -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _  DROP TABLE _  SET _ = 'qux'  UNSET _, _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo WITH opt
+----
+ALTER CHANGEFEED 123 ADD TABLE foo WITH opt -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo) WITH opt -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo WITH opt -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _ WITH _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo, bar, baz WITH opt
+----
+ALTER CHANGEFEED 123 ADD TABLE foo, TABLE bar, TABLE baz WITH opt -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo), TABLE (bar), TABLE (baz) WITH opt -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo, TABLE bar, TABLE baz WITH opt -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _, TABLE _, TABLE _ WITH _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo, bar WITH opt ADD baz WITH opt2
+----
+ALTER CHANGEFEED 123 ADD TABLE foo, TABLE bar WITH opt  ADD TABLE baz WITH opt2 -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo), TABLE (bar) WITH opt  ADD TABLE (baz) WITH opt2 -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo, TABLE bar WITH opt  ADD TABLE baz WITH opt2 -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _, TABLE _ WITH _  ADD TABLE _ WITH _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo, bar, baz WITH opt SET qux = 'quux' DROP corge
+----
+ALTER CHANGEFEED 123 ADD TABLE foo, TABLE bar, TABLE baz WITH opt  SET qux = 'quux'  DROP TABLE corge -- normalized!
+ALTER CHANGEFEED (123) ADD TABLE (foo), TABLE (bar), TABLE (baz) WITH opt  SET qux = ('quux')  DROP TABLE (corge) -- fully parenthesized
+ALTER CHANGEFEED _ ADD TABLE foo, TABLE bar, TABLE baz WITH opt  SET qux = '_'  DROP TABLE corge -- literals removed
+ALTER CHANGEFEED 123 ADD TABLE _, TABLE _, TABLE _ WITH _  SET _ = 'quux'  DROP TABLE _ -- identifiers removed

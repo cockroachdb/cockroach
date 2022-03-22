@@ -15,10 +15,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -97,6 +101,8 @@ type Txn struct {
 
 // NewTxn returns a new RootTxn.
 // Note: for SQL usage, prefer NewTxnWithSteppingEnabled() below.
+// Note: for KV usage that should be subject to admission control, prefer
+// NewTxnRootKV() below.
 //
 // If the transaction is used to send any operations, CommitOrCleanup() or
 // CleanupOnError() should eventually be called to commit/rollback the
@@ -125,6 +131,7 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 		roachpb.NormalUserPriority,
 		now.ToTimestamp(),
 		db.clock.MaxOffset().Nanoseconds(),
+		int32(db.ctx.NodeID.SQLInstanceID()),
 	)
 
 	return NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
@@ -133,14 +140,37 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 // NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL. Note
 // that this initializes Txn.admissionHeader to specify that the source is
 // FROM_SQL.
-func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+// qualityOfService is the QoSLevel level to use in admission control, whose
+// value also corresponds exactly with the admission.WorkPriority to use.
+func NewTxnWithSteppingEnabled(
+	ctx context.Context,
+	db *DB,
+	gatewayNodeID roachpb.NodeID,
+	qualityOfService sessiondatapb.QoSLevel,
+) *Txn {
 	txn := NewTxn(ctx, db, gatewayNodeID)
 	txn.admissionHeader = roachpb.AdmissionHeader{
-		Priority:   int32(admission.NormalPri),
+		Priority:   int32(qualityOfService),
 		CreateTime: timeutil.Now().UnixNano(),
 		Source:     roachpb.AdmissionHeader_FROM_SQL,
 	}
 	_ = txn.ConfigureStepping(ctx, SteppingEnabled)
+	return txn
+}
+
+// NewTxnRootKV is like NewTxn but specifically represents a transaction
+// originating within KV and that is at the root of the tree of requests. For KV
+// usage that should be subject to admission control. Do not use this for
+// executing transactions originating in SQL. This distinction only causes this
+// transaction to undergo admission control. See AdmissionHeader_Source for more
+// details.
+func NewTxnRootKV(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+	txn := NewTxn(ctx, db, gatewayNodeID)
+	txn.admissionHeader = roachpb.AdmissionHeader{
+		Priority:   int32(admission.NormalPri),
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     roachpb.AdmissionHeader_ROOT_KV,
+	}
 	return txn
 }
 
@@ -213,20 +243,31 @@ func (txn *Txn) Epoch() enginepb.TxnEpoch {
 	return txn.mu.sender.Epoch()
 }
 
-// status returns the txn proto status field.
-func (txn *Txn) status() roachpb.TransactionStatus {
+// statusLocked returns the txn proto status field.
+func (txn *Txn) statusLocked() roachpb.TransactionStatus {
 	return txn.mu.sender.TxnStatus()
 }
 
 // IsCommitted returns true iff the transaction has the committed status.
 func (txn *Txn) IsCommitted() bool {
-	return txn.status() == roachpb.COMMITTED
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.COMMITTED
+}
+
+// IsAborted returns true iff the transaction has the aborted status.
+func (txn *Txn) IsAborted() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.ABORTED
 }
 
 // IsOpen returns true iff the transaction is in the open state where
 // it can accept further commands.
 func (txn *Txn) IsOpen() bool {
-	return txn.status() == roachpb.PENDING
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.statusLocked() == roachpb.PENDING
 }
 
 // SetUserPriority sets the transaction's user priority. Transactions default to
@@ -353,16 +394,16 @@ func (txn *Txn) RequiredFrontier() hlc.Timestamp {
 	return txn.mu.sender.RequiredFrontier()
 }
 
-// SetSystemConfigTrigger sets the system db trigger to true on this transaction.
+// DeprecatedSetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTxnRequest. Note that this method takes a boolean
 // argument indicating whether this transaction is intended for the system
 // tenant. Only transactions for the system tenant need to set the system config
 // trigger which is used to gossip updates to the system config to KV servers.
 // The KV servers need access to an up-to-date system config in order to
 // determine split points and zone configurations.
-func (txn *Txn) SetSystemConfigTrigger(forSystemTenant bool) error {
+func (txn *Txn) DeprecatedSetSystemConfigTrigger(forSystemTenant bool) error {
 	if txn.typ != RootTxn {
-		return errors.AssertionFailedf("SetSystemConfigTrigger() called on leaf txn")
+		return errors.AssertionFailedf("DeprecatedSetSystemConfigTrigger() called on leaf txn")
 	}
 	if !forSystemTenant {
 		return nil
@@ -394,7 +435,7 @@ func (txn *Txn) DisablePipelining() error {
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
-	return &Batch{txn: txn, AdmissionHeader: txn.admissionHeader}
+	return &Batch{txn: txn, AdmissionHeader: txn.AdmissionHeader()}
 }
 
 // Get retrieves the value for a key, returning the retrieved key/value or an
@@ -615,14 +656,18 @@ func (txn *Txn) Del(ctx context.Context, keys ...interface{}) error {
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).
 //
-// The returned Result will contain 0 rows and Result.Err will indicate success
-// or failure.
+// The returned []roachpb.Key will contain the keys deleted if the returnKeys
+// parameter is true, or will be nil if the parameter is false, and Result.Err
+// will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) DelRange(ctx context.Context, begin, end interface{}) error {
+func (txn *Txn) DelRange(
+	ctx context.Context, begin, end interface{}, returnKeys bool,
+) ([]roachpb.Key, error) {
 	b := txn.NewBatch()
-	b.DelRange(begin, end, false)
-	return getOneErr(txn.Run(ctx, b), b)
+	b.DelRange(begin, end, returnKeys)
+	r, err := getOneResult(txn.Run(ctx, b), b)
+	return r.Keys, err
 }
 
 // Run executes the operations queued up within a batch. Before executing any
@@ -637,7 +682,7 @@ func (txn *Txn) DelRange(ctx context.Context, begin, end interface{}) error {
 // operation. The order of the results matches the order the operations were
 // added to the batch.
 func (txn *Txn) Run(ctx context.Context, b *Batch) error {
-	if err := b.prepare(); err != nil {
+	if err := b.validate(); err != nil {
 		return err
 	}
 	return sendAndFill(ctx, txn.Send, b)
@@ -648,8 +693,8 @@ func (txn *Txn) commit(ctx context.Context) error {
 	// to reduce contention by releasing locks. In multi-tenant settings, it
 	// will be subject to admission control, and the zero CreateTime will give
 	// it preference within the tenant.
-	var ba roachpb.BatchRequest
-	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
+	et := endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger)
+	ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 	_, pErr := txn.Send(ctx, ba)
 	if pErr == nil {
 		for _, t := range txn.commitTriggers {
@@ -669,7 +714,7 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 		panic(errors.WithContextTags(errors.AssertionFailedf("CleanupOnError() called with nil error"), ctx))
 	}
 	if replyErr := txn.rollback(ctx); replyErr != nil {
-		if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.status() == roachpb.ABORTED {
+		if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.IsAborted() {
 			log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		} else {
 			log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
@@ -704,7 +749,9 @@ func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	if txn != b.txn {
 		return errors.Errorf("a batch b can only be committed by b.txn")
 	}
-	b.appendReqs(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
+	et := endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger)
+	b.growReqs(1)
+	b.reqs[len(b.reqs)-1].Value = &et.union
 	b.initResult(1 /* calls */, 0, b.raw, nil)
 	return txn.Run(ctx, b)
 }
@@ -749,6 +796,53 @@ func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) erro
 	return nil
 }
 
+// DeadlineLikelySufficient returns true if there currently is a deadline and
+// that deadline is earlier than either the ProvisionalCommitTimestamp or
+// the current reading of the node's HLC clock. The second condition is a
+// conservative optimization to deal with the fact that the provisional
+// commit timestamp may not represent  the true commit timestamp; the
+// transaction may have been pushed but not yet discovered that fact.
+// Transactions that write from now on can still get pushed, versus
+// transactions which are done writing where it will be less clear
+// how those get pushed.
+// Deadlines, in general, should not commonly be at risk of expiring near
+// the current time, except in extraordinary circumstances. In cases where
+// considering it helps, it helps a lot. In cases where considering it
+// does not help, it does not hurt much.
+func (txn *Txn) DeadlineLikelySufficient(sv *settings.Values) bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	// Instead of using the current HLC clock we will
+	// use the current time with a fudge factor because:
+	// 1) The clocks are desynchronized, so we may have
+	//		been pushed above the current time.
+	// 2) There is a potential to race against concurrent pushes,
+	//    which a future timestamp will help against.
+	// 3) If we are writing to non-blocking ranges than any
+	//    push will be into the future.
+	getTargetTS := func() hlc.Timestamp {
+		now := txn.db.Clock().NowAsClockTimestamp()
+		maxClockOffset := txn.db.Clock().MaxOffset()
+		lagTargetDuration := closedts.TargetDuration.Get(sv)
+		leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(sv)
+		sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(sv)
+		return closedts.TargetForPolicy(now, maxClockOffset,
+			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval,
+			roachpb.LEAD_FOR_GLOBAL_READS).Add(int64(time.Second), 0)
+	}
+
+	return txn.mu.deadline != nil &&
+		!txn.mu.deadline.IsEmpty() &&
+		// Avoid trying to get get the txn mutex again by directly
+		// invoking ProvisionalCommitTimestamp versus calling
+		// ProvisionalCommitTimestampLocked on the Txn.
+		(txn.mu.deadline.Less(txn.mu.sender.ProvisionalCommitTimestamp()) ||
+			// In case the transaction gets pushed and the push is not observed,
+			// we cautiously also indicate that the deadline maybe expired if
+			// the current HLC clock (with a fudge factor) exceeds the deadline.
+			txn.mu.deadline.Less(getTargetTS()))
+}
+
 // resetDeadlineLocked resets the deadline.
 func (txn *Txn) resetDeadlineLocked() {
 	txn.mu.deadline = nil
@@ -775,8 +869,8 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// order to reduce contention by releasing locks. In multi-tenant
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
-		var ba roachpb.BatchRequest
-		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+		et := endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */)
+		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_, pErr := txn.Send(ctx, ba)
 		if pErr == nil {
 			return nil
@@ -801,8 +895,8 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// order to reduce contention by releasing locks. In multi-tenant
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
-		var ba roachpb.BatchRequest
-		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
+		et := endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */)
+		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
 			func(ctx context.Context) error {
 				if _, pErr := txn.Send(ctx, ba); pErr != nil {
@@ -836,19 +930,27 @@ func (txn *Txn) AddCommitTrigger(trigger func(ctx context.Context)) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
-func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) roachpb.Request {
-	req := &roachpb.EndTxnRequest{
-		Commit:   commit,
-		Deadline: deadline,
-	}
+// endTxnReqAlloc is used to batch the heap allocations of an EndTxn request.
+type endTxnReqAlloc struct {
+	req      roachpb.EndTxnRequest
+	union    roachpb.RequestUnion_EndTxn
+	unionArr [1]roachpb.RequestUnion
+}
+
+func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) *endTxnReqAlloc {
+	alloc := new(endTxnReqAlloc)
+	alloc.req.Commit = commit
+	alloc.req.Deadline = deadline
 	if hasTrigger {
-		req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
+		alloc.req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
 				SystemConfigSpan: true,
 			},
 		}
 	}
-	return req
+	alloc.union.EndTxn = &alloc.req
+	alloc.unionArr[0].Value = &alloc.union
+	return alloc
 }
 
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
@@ -880,9 +982,9 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		// Commit on success, unless the txn has already been committed by the
 		// closure. We allow that, as closure might want to run 1PC transactions.
 		if err == nil {
-			if txn.status() != roachpb.COMMITTED {
+			if !txn.IsCommitted() {
 				err = txn.Commit(ctx)
-				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\n", err)
+				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v", err)
 				if err != nil {
 					if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
 						// We can't retry, so let the caller know we tried to
@@ -894,47 +996,56 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		}
 
 		var retryable bool
-		if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
-			if txn.typ == RootTxn {
-				// We sent transactional requests, so the TxnCoordSender was supposed to
-				// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
-				// applies only in the case where this is the root transaction.
-				log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
+		if err != nil {
+			if errors.HasType(err, (*roachpb.UnhandledRetryableError)(nil)) {
+				if txn.typ == RootTxn {
+					// We sent transactional requests, so the TxnCoordSender was supposed to
+					// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
+					// applies only in the case where this is the root transaction.
+					log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
+				}
+			} else if t := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
+				if !txn.IsRetryableErrMeantForTxn(*t) {
+					// Make sure the txn record that err carries is for this txn.
+					// If it's not, we terminate the "retryable" character of the error. We
+					// might get a TransactionRetryWithProtoRefreshError if the closure ran another
+					// transaction internally and let the error propagate upwards.
+					return errors.Wrapf(err, "retryable error from another txn")
+				}
+				retryable = true
 			}
-
-		} else if t := (*roachpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
-			if !txn.IsRetryableErrMeantForTxn(*t) {
-				// Make sure the txn record that err carries is for this txn.
-				// If it's not, we terminate the "retryable" character of the error. We
-				// might get a TransactionRetryWithProtoRefreshError if the closure ran another
-				// transaction internally and let the error propagate upwards.
-				return errors.Wrapf(err, "retryable error from another txn")
-			}
-			retryable = true
 		}
 
 		if !retryable {
 			break
 		}
 
-		txn.PrepareForRetry(ctx, err)
+		txn.PrepareForRetry(ctx)
 	}
 
 	return err
 }
 
-// PrepareForRetry needs to be called before an retry to perform some
-// book-keeping.
-//
-// TODO(andrei): I think this is called in the wrong place. See #18170.
-func (txn *Txn) PrepareForRetry(ctx context.Context, err error) {
-	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(errors.NewAssertionErrorWithWrappedErrf(err, "PrepareForRetry() called on leaf txn"), ctx))
-	}
-
+// PrepareForRetry needs to be called before a retry to perform some
+// book-keeping and clear errors when possible.
+func (txn *Txn) PrepareForRetry(ctx context.Context) {
+	// TODO(andrei): I think commit triggers are reset in the wrong place. See #18170.
 	txn.commitTriggers = nil
-	log.VEventf(ctx, 2, "automatically retrying transaction: %s because of error: %s",
-		txn.DebugName(), err)
+
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
+	retryErr := txn.mu.sender.GetTxnRetryableErr(ctx)
+	if retryErr == nil {
+		return
+	}
+	if txn.typ != RootTxn {
+		panic(errors.WithContextTags(errors.NewAssertionErrorWithWrappedErrf(
+			retryErr, "PrepareForRetry() called on leaf txn"), ctx))
+	}
+	log.VEventf(ctx, 2, "retrying transaction: %s because of a retryable error: %s",
+		txn.debugNameLocked(), retryErr)
+	txn.handleRetryableErrLocked(ctx, retryErr)
 }
 
 // IsRetryableErrMeantForTxn returns true if err is a retryable
@@ -979,11 +1090,19 @@ func (txn *Txn) Send(
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
 	}
 
+	// Requests with a bounded staleness header should use NegotiateAndSend.
+	if ba.BoundedStaleness != nil {
+		return nil, roachpb.NewError(errors.AssertionFailedf(
+			"bounded staleness header passed to Txn.Send: %s", ba.String()))
+	}
+
 	// Some callers have not initialized ba using a Batch constructed using
 	// Txn.NewBatch. So we fallback to partially overwriting here.
-	noMem := ba.AdmissionHeader.NoMemoryReservedAtSource
-	ba.AdmissionHeader = txn.admissionHeader
-	ba.AdmissionHeader.NoMemoryReservedAtSource = noMem
+	if ba.AdmissionHeader.CreateTime == 0 {
+		noMem := ba.AdmissionHeader.NoMemoryReservedAtSource
+		ba.AdmissionHeader = txn.AdmissionHeader()
+		ba.AdmissionHeader.NoMemoryReservedAtSource = noMem
+	}
 
 	txn.mu.Lock()
 	requestTxnID := txn.mu.ID
@@ -1002,30 +1121,173 @@ func (txn *Txn) Send(
 				"requestTxnID: %s, retryErr.TxnID: %s. retryErr: %s",
 				requestTxnID, retryErr.TxnID, retryErr)
 		}
-		if txn.typ == RootTxn {
-			// On root senders, we bump the sender's identity upon retry errors.
-			txn.mu.Lock()
-			txn.handleErrIfRetryableLocked(ctx, retryErr)
-			txn.mu.Unlock()
-		}
 	}
 	return br, pErr
 }
 
-func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
-	var retryErr *roachpb.TransactionRetryWithProtoRefreshError
-	if !errors.As(err, &retryErr) {
-		return
-	}
+func (txn *Txn) handleRetryableErrLocked(
+	ctx context.Context, retryErr *roachpb.TransactionRetryWithProtoRefreshError,
+) {
 	txn.resetDeadlineLocked()
 	txn.replaceRootSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
+}
+
+// NegotiateAndSend is a specialized version of Send that is capable of
+// orchestrating a bounded-staleness read through the transaction, given a
+// read-only BatchRequest with a min_timestamp_bound set in its Header.
+//
+// Bounded-staleness orchestration consists of two phases - negotiation and
+// execution. Negotiation determines the timestamp to run the query at in order
+// to ensure that the read will not block on replication or on conflicting
+// transactions. Execution then configures the transaction to use this timestamp
+// and runs the read request in the context of the transaction.
+//
+// The transaction must not have been used before. If the call returns
+// successfully, the transaction will have been given a fixed timestamp equal to
+// the timestamp that the read-only request was evaluated at.
+//
+// If the read-only request hits a key or byte limit and returns a resume span,
+// meaning that it was paginated and did not return all desired results, the
+// transaction's timestamp will have still been fixed to a timestamp that was
+// negotiated over the entire set of read spans in the provided batch. As such,
+// it is safe for callers to resume reading at the bounded-staleness timestamp
+// by using Send. Future calls to Send must not include a BoundedStaleness
+// header, but may still specify the same routing policy.
+//
+// The method accepts requests with min_timestamp_bound_strict set to either
+// true or false, which dictates whether a bounded staleness read whose
+// min_timestamp_bound cannot be satisfied by the first replica it visits
+// (subject to routing_policy) without blocking should be rejected with a
+// MinTimestampBoundUnsatisfiableError or will be redirected to the leaseholder
+// and permitted to block on conflicting transactions. If the flag is true,
+// blocking is never permitted and callers should be prepared to handle
+// MinTimestampBoundUnsatisfiableErrors. If the flag is false, blocking is
+// permitted and MinTimestampBoundUnsatisfiableErrors will never be returned.
+//
+// The method accepts requests with either a LEASEHOLDER or a NEAREST routing
+// policy, which dictates whether the request uses the leaseholder(s) of its
+// target range(s) to negotiate a timestamp and perform the read or whether it
+// uses the nearest replica(s) of its target range(s) to negotiate a timestamp
+// and perform the read. Callers can use this flexibility to trade off increased
+// staleness for reduced latency.
+func (txn *Txn) NegotiateAndSend(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	if err := txn.checkNegotiateAndSendPreconditions(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	if err := txn.applyDeadlineToBoundedStaleness(ctx, ba.BoundedStaleness); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	// Attempt to hit the server-side negotiation fast-path. This fast-path
+	// allows a bounded staleness read request that lands on a single range
+	// to perform its negotiation phase and execution phase in a single RPC.
+	//
+	// The server-side negotiation fast-path provides two benefits:
+	// 1. it avoids two network hops in the common-case where a bounded
+	//    staleness read is targeting a single range. This in an important
+	//    performance optimization for single-row point lookups.
+	// 2. it provides stronger guarantees around minimizing staleness during
+	//    bounded staleness reads. Bounded staleness reads that hit the
+	//    server-side fast-path use their target replica's most up-to-date
+	//    resolved timestamp, so they are as fresh as possible. Bounded
+	//    staleness reads that miss the fast-path and perform explicit
+	//    negotiation (see below) consult a cache, so they may use an
+	//    out-of-date, suboptimal resolved timestamp, as long as it is fresh
+	//    enough to satisfy the staleness bound of the request.
+	//
+	// To achieve this, we issue the batch as a non-transactional request
+	// with a MinTimestampBound field set (enforced above). We send the
+	// request through the TxnSenderFactory's wrapped non-transactional
+	// sender, so that we not only avoid passing through our TxnCoordSender,
+	// but also through the CrossRangeTxnWrapperSender. If the request spans
+	// ranges, we want to hear about it.
+	br, pErr := txn.DB().GetFactory().NonTransactionalSender().Send(ctx, ba)
+	if pErr == nil {
+		// Fix the transaction's timestamp at the result of the server-side
+		// timestamp negotiation.
+		if err := txn.SetFixedTimestamp(ctx, br.Timestamp); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		// Note that we do not need to inform the TxnCoordSender about the
+		// non-transactional reads that we issued on behalf of it. Now that the
+		// transaction's timestamp is fixed, it won't be able to refresh anyway.
+		return br, nil
+	}
+	if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); !ok {
+		return nil, pErr
+	}
+
+	// The read spans ranges, so bounded-staleness orchestration will need to be
+	// performed in two distinct phases - negotiation and execution. First we'll
+	// use the BoundedStalenessNegotiator to determines the timestamp to perform
+	// the read at and fix the transaction's timestamp to this result. Then we'll
+	// issue the request through the transaction, which will use the negotiated
+	// read timestamp from the previous phase to execute the read.
+	//
+	// TODO(nvanbenschoten): implement this. #67554.
+
+	return nil, roachpb.NewError(unimplemented.NewWithIssue(67554,
+		"cross-range bounded staleness reads not yet implemented"))
+}
+
+// checks preconditions on BatchRequest and Txn for NegotiateAndSend.
+func (txn *Txn) checkNegotiateAndSendPreconditions(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (err error) {
+	assert := func(b bool, s string) {
+		if !b {
+			err = errors.CombineErrors(err,
+				errors.WithContextTags(errors.AssertionFailedf(
+					"%s: ba=%s, txn=%s", s, ba.String(), txn.String()), ctx),
+			)
+		}
+	}
+	if cfg := ba.BoundedStaleness; cfg == nil {
+		assert(false, "bounded_staleness configuration must be set")
+	} else {
+		assert(!cfg.MinTimestampBound.IsEmpty(), "min_timestamp_bound must be set")
+		assert(cfg.MaxTimestampBound.IsEmpty() || cfg.MinTimestampBound.Less(cfg.MaxTimestampBound),
+			"max_timestamp_bound, if set, must be greater than min_timestamp_bound")
+	}
+	assert(ba.Timestamp.IsEmpty(), "timestamp must not be set")
+	assert(ba.Txn == nil, "txn must not be set")
+	assert(ba.ReadConsistency == roachpb.CONSISTENT, "read consistency must be set to CONSISTENT")
+	assert(ba.IsReadOnly(), "batch must be read-only")
+	assert(!ba.IsLocking(), "batch must not be locking")
+	assert(txn.typ == RootTxn, "txn must be root")
+	assert(!txn.CommitTimestampFixed(), "txn commit timestamp must not be fixed")
+	return err
+}
+
+// applyDeadlineToBoundedStaleness modifies the bounded staleness header to
+// ensure that the negotiated timestamp respects the transaction deadline.
+func (txn *Txn) applyDeadlineToBoundedStaleness(
+	ctx context.Context, bs *roachpb.BoundedStalenessHeader,
+) error {
+	d := txn.deadline()
+	if d == nil {
+		return nil
+	}
+	if d.LessEq(bs.MinTimestampBound) {
+		return errors.WithContextTags(errors.AssertionFailedf(
+			"transaction deadline %s equal to or below min_timestamp_bound %s",
+			*d, bs.MinTimestampBound), ctx)
+	}
+	if bs.MaxTimestampBound.IsEmpty() {
+		bs.MaxTimestampBound = *d
+	} else {
+		bs.MaxTimestampBound.Backward(*d)
+	}
+	return nil
 }
 
 // GetLeafTxnInputState returns the LeafTxnInputState information for this
 // transaction for use with InitializeLeafTxn(), when distributing
 // the state of the current transaction to multiple distributed
 // transaction coordinators.
-func (txn *Txn) GetLeafTxnInputState(ctx context.Context) roachpb.LeafTxnInputState {
+func (txn *Txn) GetLeafTxnInputState(ctx context.Context) *roachpb.LeafTxnInputState {
 	if txn.typ != RootTxn {
 		panic(errors.WithContextTags(errors.AssertionFailedf("GetLeafTxnInputState() called on leaf txn"), ctx))
 	}
@@ -1047,18 +1309,21 @@ func (txn *Txn) GetLeafTxnInputState(ctx context.Context) roachpb.LeafTxnInputSt
 // retryable errors, it acts like Send()).
 func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 	ctx context.Context,
-) (roachpb.LeafTxnInputState, error) {
+) (*roachpb.LeafTxnInputState, error) {
 	if txn.typ != RootTxn {
-		return roachpb.LeafTxnInputState{},
-			errors.WithContextTags(errors.AssertionFailedf("GetLeafTxnInputStateOrRejectClient() called on leaf txn"), ctx)
+		return nil, errors.WithContextTags(
+			errors.AssertionFailedf("GetLeafTxnInputStateOrRejectClient() called on leaf txn"), ctx)
 	}
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	tfs, err := txn.mu.sender.GetLeafTxnInputState(ctx, OnlyPending)
 	if err != nil {
-		txn.handleErrIfRetryableLocked(ctx, err)
-		return roachpb.LeafTxnInputState{}, err
+		var retryErr *roachpb.TransactionRetryWithProtoRefreshError
+		if errors.As(err, &retryErr) {
+			txn.handleRetryableErrLocked(ctx, retryErr)
+		}
+		return nil, err
 	}
 	return tfs, nil
 }
@@ -1067,21 +1332,19 @@ func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 // transaction for use with UpdateRootWithLeafFinalState(), when combining the
 // impact of multiple distributed transaction coordinators that are
 // all operating on the same transaction.
-func (txn *Txn) GetLeafTxnFinalState(ctx context.Context) (roachpb.LeafTxnFinalState, error) {
+func (txn *Txn) GetLeafTxnFinalState(ctx context.Context) (*roachpb.LeafTxnFinalState, error) {
 	if txn.typ != LeafTxn {
-		return roachpb.LeafTxnFinalState{},
-			errors.WithContextTags(
-				errors.AssertionFailedf("GetLeafTxnFinalState() called on root txn"), ctx)
+		return nil, errors.WithContextTags(
+			errors.AssertionFailedf("GetLeafTxnFinalState() called on root txn"), ctx)
 	}
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	tfs, err := txn.mu.sender.GetLeafTxnFinalState(ctx, AnyTxnStatus)
 	if err != nil {
-		return roachpb.LeafTxnFinalState{},
-			errors.WithContextTags(
-				errors.NewAssertionErrorWithWrappedErrf(err,
-					"unexpected error from GetLeafTxnFinalState(AnyTxnStatus)"), ctx)
+		return nil, errors.WithContextTags(
+			errors.NewAssertionErrorWithWrappedErrf(err,
+				"unexpected error from GetLeafTxnFinalState(AnyTxnStatus)"), ctx)
 	}
 	return tfs, nil
 }
@@ -1153,8 +1416,9 @@ func (txn *Txn) replaceRootSenderIfTxnAbortedLocked(
 		return
 	}
 	if !retryErr.PrevTxnAborted() {
-		// We don't need a new transaction as a result of this error. Nothing more
-		// to do.
+		// We don't need a new transaction as a result of this error, but we may
+		// have a retryable error that should be cleared.
+		txn.mu.sender.ClearTxnRetryableErr(ctx)
 		return
 	}
 
@@ -1165,11 +1429,10 @@ func (txn *Txn) replaceRootSenderIfTxnAbortedLocked(
 	// transaction, even once the proto is reset.
 	txn.recordPreviousTxnIDLocked(txn.mu.ID)
 	txn.mu.ID = newTxn.ID
-	// Create a new txn sender. We need to preserve the stepping mode,
-	// if any.
-	// prevSteppingMode := txn.mu.sender.GetSteppingMode(ctx)
+	// Create a new txn sender. We need to preserve the stepping mode, if any.
+	prevSteppingMode := txn.mu.sender.GetSteppingMode(ctx)
 	txn.mu.sender = txn.db.factory.RootTransactionalSender(newTxn, txn.mu.userPriority)
-	// txn.mu.sender.ConfigureStepping(ctx, prevSteppingMode)
+	txn.mu.sender.ConfigureStepping(ctx, prevSteppingMode)
 }
 
 func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
@@ -1216,16 +1479,7 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 	now := txn.db.clock.NowAsClockTimestamp()
 	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now.ToTimestamp())
 	txn.resetDeadlineLocked()
-	return roachpb.NewTransactionRetryWithProtoRefreshError(
-		msg,
-		txn.mu.ID,
-		roachpb.MakeTransaction(
-			txn.debugNameLocked(),
-			nil, // baseKey
-			txn.mu.userPriority,
-			now.ToTimestamp(),
-			txn.db.clock.MaxOffset().Nanoseconds(),
-		))
+	return txn.mu.sender.PrepareRetryableError(ctx, msg)
 }
 
 // PrepareRetryableError returns a
@@ -1323,6 +1577,13 @@ func (txn *Txn) Step(ctx context.Context) error {
 	return txn.mu.sender.Step(ctx)
 }
 
+// SetReadSeqNum sets the read sequence number for this transaction.
+func (txn *Txn) SetReadSeqNum(seq enginepb.TxnSeq) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.SetReadSeqNum(seq)
+}
+
 // ConfigureStepping configures step-wise execution in the
 // transaction.
 func (txn *Txn) ConfigureStepping(ctx context.Context, mode SteppingMode) (prevMode SteppingMode) {
@@ -1396,5 +1657,30 @@ func (txn *Txn) DeferCommitWait(ctx context.Context) func(context.Context) error
 // AdmissionHeader returns the admission header for work done in the context
 // of this transaction.
 func (txn *Txn) AdmissionHeader() roachpb.AdmissionHeader {
-	return txn.admissionHeader
+	h := txn.admissionHeader
+	if txn.mu.sender.IsLocking() {
+		// Assign higher priority to requests by txns that are locking, so that
+		// they release locks earlier. Note that this is a crude approach, and is
+		// worse than priority inheritance used for locks in realtime systems. We
+		// do this because admission control does not have visibility into the
+		// exact locks held by waiters in the admission queue, and cannot compare
+		// that with priorities of waiting requests in the various lock table
+		// queues. This crude approach has shown some benefit in tpcc with 3000
+		// warehouses, where it halved the number of lock waiters, and increased
+		// the transaction throughput by 10+%. In that experiment 40% of the
+		// BatchRequests evaluated by KV had been assigned high priority due to
+		// locking.
+		h.Priority = int32(admission.LockingPri)
+	}
+	return h
+}
+
+// OnePCNotAllowedError signifies that a request had the Require1PC flag set,
+// but 1PC evaluation was not possible for one reason or another.
+type OnePCNotAllowedError struct{}
+
+var _ error = OnePCNotAllowedError{}
+
+func (OnePCNotAllowedError) Error() string {
+	return "could not commit in one phase as requested"
 }

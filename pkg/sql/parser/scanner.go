@@ -56,6 +56,21 @@ func Tokens(sql string) (tokens []TokenString, ok bool) {
 	return tokens, true
 }
 
+// TokensIgnoreErrors decomposes the input into lexical tokens and
+// ignores errors.
+func TokensIgnoreErrors(sql string) (tokens []TokenString) {
+	s := makeScanner(sql)
+	for {
+		var lval = &sqlSymType{}
+		s.Scan(lval)
+		if lval.ID() == 0 {
+			break
+		}
+		tokens = append(tokens, TokenString{TokenID: lval.ID(), Str: lval.Str()})
+	}
+	return tokens
+}
+
 // TokenString is the unit value returned by Tokens.
 type TokenString struct {
 	TokenID int32

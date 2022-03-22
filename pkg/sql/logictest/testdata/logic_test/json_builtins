@@ -1218,3 +1218,146 @@ select
 query error pq: jsonb_exists_any\(\): could not parse "id" as type int: strconv\.ParseInt: parsing "id": invalid syntax
 select
     jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array['id',1]);
+
+# json_populate_record
+query FIII colnames
+SELECT *, c FROM json_populate_record(((1.01, 2, 3) AS d, c, a), '{"a": 3, "c": 10, "d": 11.001}')
+----
+d       c   a c
+11.001  10  3 10
+
+query BTT colnames
+SELECT * FROM json_populate_record(((true, ARRAY[1], ARRAY['f']) AS a, b, c), '{"a": true, "b": [1,2], "c": ["a", "b"]}')
+----
+a     b      c
+true  {1,2}  {a,b}
+
+query BT colnames
+SELECT * FROM json_populate_record(((true, ((1, 'bar', ARRAY['a']) AS x, y, z)) AS a, b), '{"a": true, "b": {"x": "3", "y": "foo", "z": ["a", "b"]}}')
+----
+a     b
+true  (3,foo,"{a,b}")
+
+query BI colnames
+SELECT * FROM json_populate_record(((true, 3) AS a, b), '{"a": null, "b": null}')
+----
+a     b
+NULL  NULL
+
+query T colnames
+SELECT json_populate_record(((1.01, 2, 3) AS d, c, a), '{"a": 3, "c": 10, "d": 11.001}')
+----
+json_populate_record
+(11.001,10,3)
+
+query T colnames
+SELECT json_populate_record(((1.01, 2) AS a, b), '{"a": "1.2345", "b": "33"}')
+----
+json_populate_record
+(1.2345,33)
+
+query F colnames
+SELECT (json_populate_record(((1.01, 2, 3) AS d, c, a), '{"a": 3, "c": 10, "d": 11.001}')).d
+----
+d
+11.001
+
+statement ok
+CREATE TABLE testtab (
+	i	int,
+	ia	int[],
+	t	text,
+	ta	text[],
+	ts	timestamp,
+	j	jsonb
+)
+
+query ITTTTT
+SELECT * FROM json_populate_record(NULL::testtab, '{"i": 3, "ia": [1,2,3], "t": "foo", "ta": ["a", "b"], "ts": "2017-01-01 00:00", "j": {"a": "b", "c": 3, "d": [1,false,true,null,{"1":"2"}]}}'::JSON)
+----
+3  {1,2,3}  foo  {a,b}  2017-01-01 00:00:00 +0000 +0000  {"a": "b", "c": 3, "d": [1, false, true, null, {"1": "2"}]}
+
+query T
+SELECT json_populate_record(NULL::testtab, '{"i": 3, "ia": [1,2,3], "t": "foo", "ta": ["a", "b"], "ts": "2017-01-01 00:00", "j": {"a": "b", "c": 3, "d": [1,false,true,null,{"1":"2"}]}}'::JSON)
+----
+(3,"{1,2,3}",foo,"{a,b}","2017-01-01 00:00:00","{""a"": ""b"", ""c"": 3, ""d"": [1, false, true, null, {""1"": ""2""}]}")
+
+query ITTTTT
+SELECT * FROM json_populate_record(NULL::testtab, NULL)
+----
+NULL  NULL  NULL  NULL  NULL  NULL
+
+query error could not parse \"foo\" as type int
+SELECT json_populate_record(((3,) AS a), '{"a": "foo"}')
+
+query error anonymous records cannot be used with json{b}_populate_record{set}
+SELECT * FROM json_populate_record((1,2,3,4), '{"a": 3, "c": 10, "d": 11.001}')
+
+query error anonymous records cannot be used with json{b}_populate_record{set}
+SELECT * FROM json_populate_record(NULL, '{"a": 3, "c": 10, "d": 11.001}')
+
+query error first argument of json{b}_populate_record{set} must be a record type
+SELECT * FROM json_populate_record(1, '{"a": 3, "c": 10, "d": 11.001}')
+
+query error first argument of json{b}_populate_record{set} must be a record type
+SELECT * FROM json_populate_record(NULL::INT, '{"a": 3, "c": 10, "d": 11.001}')
+
+query error anonymous records cannot be used with json{b}_populate_record{set}
+SELECT * FROM json_populate_record(NULL::record, '{"a": 3, "c": 10, "d": 11.001}')
+
+query error anonymous records cannot be used with json{b}_populate_record{set}
+SELECT * FROM json_populate_recordset(NULL, '[{"a": 3, "c": 10, "d": 11.001}, {}]')
+
+query error first argument of json{b}_populate_record{set} must be a record type
+SELECT * FROM json_populate_recordset(NULL::INT, '[{"a": 3, "c": 10, "d": 11.001}, {}]')
+
+query I
+SELECT * FROM json_populate_record(((3,) AS a), NULL)
+----
+3
+
+query FIII colnames
+SELECT *, c FROM json_populate_recordset(((1.01, 2, 3) AS d, c, a), '[{"a": 3, "c": 10, "d": 11.001}, {}]')
+----
+d       c   a  c
+11.001  10  3  10
+1.01    2   3  2
+
+query FITI colnames
+SELECT *, c FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '[{"a": 3, "c": 10, "d": 11.001}, {}]')
+----
+d       c   a  c
+11.001  10  3  10
+NULL    2   3  2
+
+query FIT
+SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), NULL)
+----
+
+query FIT
+SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '[]')
+----
+
+query error argument of json_populate_recordset must be an array
+SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '{"foo": "bar"}')
+
+query error argument of json_populate_recordset must be an array
+SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), 'true')
+
+query error argument of json_populate_recordset must be an array
+SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '0')
+
+query error argument of json_populate_recordset must be an array
+SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), 'null')
+
+query error argument of json_populate_recordset must be an array of objects
+SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '[null]')
+
+query error argument of json_populate_recordset must be an array of objects
+SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '[{"foo":"bar"}, 3]')
+
+query ITTTTT
+SELECT * FROM json_populate_recordset(NULL::testtab, '[{"i": 3, "ia": [1,2,3], "t": "foo", "ta": ["a", "b"], "ts": "2017-01-01 00:00", "j": {"a": "b", "c": 3, "d": [1,false,true,null,{"1":"2"}]}}, {}]'::JSON)
+----
+3     {1,2,3}  foo   {a,b}  2017-01-01 00:00:00 +0000 +0000  {"a": "b", "c": 3, "d": [1, false, true, null, {"1": "2"}]}
+NULL  NULL     NULL  NULL   NULL                             NULL

@@ -18,13 +18,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
-
-const testGlob = "../cli/interactive_tests/test*.tcl"
-const containerPath = "/go/src/github.com/cockroachdb/cockroach/cli/interactive_tests"
 
 var cmdBase = []string{
 	"/usr/bin/env",
@@ -46,6 +44,7 @@ func TestDockerCLI(t *testing.T) {
 		skip.IgnoreLintf(t, `TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
 
+	testGlob := "../cli/interactive_tests/test*.tcl"
 	paths, err := filepath.Glob(testGlob)
 	if err != nil {
 		t.Fatal(err)
@@ -54,6 +53,10 @@ func TestDockerCLI(t *testing.T) {
 		t.Fatalf("no testfiles found (%v)", testGlob)
 	}
 
+	containerPath := "/go/src/github.com/cockroachdb/cockroach/cli/interactive_tests"
+	if bazel.BuiltWithBazel() {
+		containerPath = "/mnt/interactive_tests"
+	}
 	for _, p := range paths {
 		testFile := filepath.Base(p)
 		testPath := filepath.Join(containerPath, testFile)

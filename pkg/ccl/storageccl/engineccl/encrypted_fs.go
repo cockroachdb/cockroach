@@ -192,12 +192,38 @@ func (fs *encryptedFS) Remove(name string) error {
 	return fs.fileRegistry.MaybeDeleteEntry(name)
 }
 
-// Rename implements vfs.FS.Rename.
+// Rename implements vfs.FS.Rename. A rename operation needs to both
+// move the file's file registry entry and move the files on the
+// physical filesystem. These operations cannot be done atomically. The
+// encryptedFS's Rename operation provides atomicity only if the
+// destination path does not exist.
+//
+// Rename will first copy the old path's file registry entry to the
+// new path. If the destination exists, a crash after this copy will
+// leave the file at the new path unreadable.
+//
+// Rename then performs a filesystem rename of the actual file. If a
+// crash occurs after the rename, the file at the new path will be
+// readable. The file at the old path won't exist, but the file registry
+// will contain a dangling entry for the old path. The dangling entry
+// will be elided when the file registry is loaded again.
 func (fs *encryptedFS) Rename(oldname, newname string) error {
+	// First copy the metadata from the old name to the new name. If a
+	// file exists at newname, this copy action will make the file at
+	// newname unlegible, because the encryption-at-rest metadata will
+	// not match the file's encryption. This is what makes Rename
+	// non-atomic. If no file exists at newname, the dangling copied
+	// entry has no effect.
+	if err := fs.fileRegistry.MaybeCopyEntry(oldname, newname); err != nil {
+		return err
+	}
+	// Perform the filesystem rename. After the filesystem rename, the
+	// new path is guaranteed to be readable.
 	if err := fs.FS.Rename(oldname, newname); err != nil {
 		return err
 	}
-	return fs.fileRegistry.MaybeRenameEntry(oldname, newname)
+	// Remove the old name's metadata.
+	return fs.fileRegistry.MaybeDeleteEntry(oldname)
 }
 
 // ReuseForWrite implements vfs.FS.ReuseForWrite.
@@ -279,13 +305,13 @@ func init() {
 // See the comment at the top of this file for the structure of this environment.
 func newEncryptedEnv(
 	fs vfs.FS, fr *storage.PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
-) (vfs.FS, storage.EncryptionStatsHandler, error) {
+) (*storage.EncryptionEnv, error) {
 	options := &baseccl.EncryptionOptions{}
 	if err := protoutil.Unmarshal(optionBytes, options); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if options.KeySource != baseccl.EncryptionKeySource_KeyFiles {
-		return nil, nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
+		return nil, fmt.Errorf("unknown encryption key source: %d", options.KeySource)
 	}
 	storeKeyManager := &StoreKeyManager{
 		fs:                fs,
@@ -293,7 +319,7 @@ func newEncryptedEnv(
 		oldKeyFilename:    options.KeyFiles.OldKey,
 	}
 	if err := storeKeyManager.Load(context.TODO()); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	storeFS := &encryptedFS{
 		FS:           fs,
@@ -307,9 +333,10 @@ func newEncryptedEnv(
 		fs:             storeFS,
 		dbDir:          dbDir,
 		rotationPeriod: options.DataKeyRotationPeriod,
+		readOnly:       readOnly,
 	}
 	if err := dataKeyManager.Load(context.TODO()); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	dataFS := &encryptedFS{
 		FS:           fs,
@@ -323,13 +350,21 @@ func newEncryptedEnv(
 	if !readOnly {
 		key, err := storeKeyManager.ActiveKey(context.TODO())
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if err := dataKeyManager.SetActiveStoreKeyInfo(context.TODO(), key.Info); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
-	return dataFS, &encryptionStatsHandler{storeKM: storeKeyManager, dataKM: dataKeyManager}, nil
+
+	return &storage.EncryptionEnv{
+		Closer: dataKeyManager,
+		FS:     dataFS,
+		StatsHandler: &encryptionStatsHandler{
+			storeKM: storeKeyManager,
+			dataKM:  dataKeyManager,
+		},
+	}, nil
 }
 
 func canRegistryElide(entry *enginepb.FileEntry) bool {

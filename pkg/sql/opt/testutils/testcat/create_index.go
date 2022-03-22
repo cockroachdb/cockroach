@@ -37,7 +37,6 @@ func (tc *Catalog) CreateIndex(stmt *tree.CreateIndex, version descpb.IndexDescr
 		Columns:          stmt.Columns,
 		Sharded:          stmt.Sharded,
 		Storing:          stmt.Storing,
-		Interleave:       stmt.Interleave,
 		Inverted:         stmt.Inverted,
 		PartitionByIndex: stmt.PartitionByIndex,
 		Predicate:        stmt.Predicate,

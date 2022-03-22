@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"gopkg.in/yaml.v2"
@@ -91,7 +92,7 @@ func TestLocalityMatchScore(t *testing.T) {
 			}
 		}
 
-		actual := math.Round(localityMatchScore(zone, locality)*100) / 100
+		actual := math.Round(localityMatchScore(cat.AsZone(zone), locality)*100) / 100
 		if actual != tc.expected {
 			t.Errorf("locality=%v, constraints=%v, leasePrefs=%v: expected %v, got %v",
 				tc.locality, tc.constraints, tc.leasePrefs, tc.expected, actual)

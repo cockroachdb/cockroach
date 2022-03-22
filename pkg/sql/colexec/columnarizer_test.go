@@ -109,7 +109,7 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 
 			if tc.consumerClosed {
 				// Closing the Columnarizer should call ConsumerClosed on the processor.
-				require.NoError(t, c.Close())
+				require.NoError(t, c.Close(ctx))
 				require.Equal(t, execinfra.ConsumerClosed, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)
 			} else {
 				// Calling DrainMeta from the vectorized execution engine should propagate to
@@ -126,7 +126,6 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 }
 
 func BenchmarkColumnarize(b *testing.B) {
-	defer log.Scope(b).Close(b)
 	types := []*types.T{types.Int, types.Int}
 	nRows := 10000
 	nCols := 2

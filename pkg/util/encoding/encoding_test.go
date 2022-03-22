@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -321,6 +321,17 @@ func TestEncodeDecodeUvarint(t *testing.T) {
 		{math.MaxUint64, []byte{0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
 	}
 	testCustomEncodeUint64(testCases, EncodeUvarintAscending, t)
+}
+
+func TestEncodedLengthUvarintAscending(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		v := rand.Uint64()
+		exp := len(EncodeUvarintAscending(nil, v))
+		actual := EncodedLengthUvarintAscending(v)
+		if actual != exp {
+			t.Fatalf("incorrect encoded length for %d: %d (expected %d)", v, actual, exp)
+		}
+	}
 }
 
 func TestEncodeDecodeUvarintDescending(t *testing.T) {
@@ -753,7 +764,7 @@ func TestEncodeBitArray(t *testing.T) {
 				0, 0xc8}},
 	}
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	var lastEncoded []byte
 	dirNames := []string{"", "asc", "desc"}
@@ -823,7 +834,7 @@ func TestEncodeBitArray(t *testing.T) {
 }
 
 func TestKeyEncodeDecodeBitArrayRand(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	rd := randData{rng}
 	tests := make([]bitarray.BitArray, 1000)
 	for i := range tests {
@@ -953,28 +964,6 @@ func TestEncodeDecodeNull(t *testing.T) {
 
 	if remaining, isNull := DecodeIfNull([]byte("\x00" + hello)); !isNull {
 		t.Fatalf("expected isNull=true, but found isNull=%v", isNull)
-	} else if hello != string(remaining) {
-		t.Fatalf("expected %q, but found %q", hello, remaining)
-	}
-}
-
-func TestEncodeDecodeInterleavedSentinel(t *testing.T) {
-	const hello = "hello"
-
-	buf := EncodeInterleavedSentinel([]byte(hello))
-	expected := []byte(hello + "\xfe")
-	if !bytes.Equal(expected, buf) {
-		t.Fatalf("expected %q, but found %q", expected, buf)
-	}
-
-	if remaining, isSentinel := DecodeIfInterleavedSentinel([]byte(hello)); isSentinel {
-		t.Fatalf("expected isSentinel=false, but found isSentinel=%v", isSentinel)
-	} else if hello != string(remaining) {
-		t.Fatalf("expected %q, but found %q", hello, remaining)
-	}
-
-	if remaining, isSentinel := DecodeIfNull([]byte("\x00" + hello)); !isSentinel {
-		t.Fatalf("expected isSentinel=true, but found isSentinel=%v", isSentinel)
 	} else if hello != string(remaining) {
 		t.Fatalf("expected %q, but found %q", hello, remaining)
 	}
@@ -1467,7 +1456,6 @@ func TestPeekType(t *testing.T) {
 		{EncodeNotNullAscending(nil), NotNull},
 		{EncodeNullDescending(nil), Null},
 		{EncodeNotNullDescending(nil), NotNull},
-		{EncodeInterleavedSentinel(nil), NotNull},
 		{EncodeVarintAscending(nil, 0), Int},
 		{EncodeVarintDescending(nil, 0), Int},
 		{EncodeUvarintAscending(nil, 0), Int},
@@ -1548,7 +1536,7 @@ func (rd randData) ipAddr() ipaddr.IPAddr {
 }
 
 func BenchmarkEncodeUint32(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]uint32, 10000)
 	for i := range vals {
@@ -1564,7 +1552,7 @@ func BenchmarkEncodeUint32(b *testing.B) {
 }
 
 func BenchmarkDecodeUint32(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1578,7 +1566,7 @@ func BenchmarkDecodeUint32(b *testing.B) {
 }
 
 func BenchmarkEncodeUint64(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]uint64, 10000)
 	for i := range vals {
@@ -1594,7 +1582,7 @@ func BenchmarkEncodeUint64(b *testing.B) {
 }
 
 func BenchmarkDecodeUint64(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1608,7 +1596,7 @@ func BenchmarkDecodeUint64(b *testing.B) {
 }
 
 func BenchmarkEncodeVarint(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]int64, 10000)
 	for i := range vals {
@@ -1624,7 +1612,7 @@ func BenchmarkEncodeVarint(b *testing.B) {
 }
 
 func BenchmarkDecodeVarint(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1638,7 +1626,7 @@ func BenchmarkDecodeVarint(b *testing.B) {
 }
 
 func BenchmarkPeekLengthVarint(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1652,7 +1640,7 @@ func BenchmarkPeekLengthVarint(b *testing.B) {
 }
 
 func BenchmarkEncodeUvarint(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]uint64, 10000)
 	for i := range vals {
@@ -1668,7 +1656,7 @@ func BenchmarkEncodeUvarint(b *testing.B) {
 }
 
 func BenchmarkDecodeUvarint(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1682,7 +1670,7 @@ func BenchmarkDecodeUvarint(b *testing.B) {
 }
 
 func BenchmarkPeekLengthUvarint(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1696,7 +1684,7 @@ func BenchmarkPeekLengthUvarint(b *testing.B) {
 }
 
 func BenchmarkEncodeBytes(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1712,7 +1700,7 @@ func BenchmarkEncodeBytes(b *testing.B) {
 }
 
 func BenchmarkEncodeBytesDescending(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1728,7 +1716,7 @@ func BenchmarkEncodeBytesDescending(b *testing.B) {
 }
 
 func BenchmarkDecodeBytes(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1744,7 +1732,7 @@ func BenchmarkDecodeBytes(b *testing.B) {
 }
 
 func BenchmarkPeekLengthBytes(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1758,7 +1746,7 @@ func BenchmarkPeekLengthBytes(b *testing.B) {
 }
 
 func BenchmarkDecodeBytesDescending(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1774,7 +1762,7 @@ func BenchmarkDecodeBytesDescending(b *testing.B) {
 }
 
 func BenchmarkPeekLengthBytesDescending(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1788,7 +1776,7 @@ func BenchmarkPeekLengthBytesDescending(b *testing.B) {
 }
 
 func BenchmarkEncodeString(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]string, 10000)
 	for i := range vals {
@@ -1804,7 +1792,7 @@ func BenchmarkEncodeString(b *testing.B) {
 }
 
 func BenchmarkEncodeStringDescending(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]string, 10000)
 	for i := range vals {
@@ -1820,7 +1808,7 @@ func BenchmarkEncodeStringDescending(b *testing.B) {
 }
 
 func BenchmarkDecodeUnsafeString(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1836,7 +1824,7 @@ func BenchmarkDecodeUnsafeString(b *testing.B) {
 }
 
 func BenchmarkDecodeUnsafeStringDescending(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -1852,7 +1840,7 @@ func BenchmarkDecodeUnsafeStringDescending(b *testing.B) {
 }
 
 func BenchmarkEncodeDuration(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([]duration.Duration, 10000)
@@ -1871,7 +1859,7 @@ func BenchmarkEncodeDuration(b *testing.B) {
 }
 
 func BenchmarkDecodeDuration(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([][]byte, 10000)
@@ -1891,7 +1879,7 @@ func BenchmarkDecodeDuration(b *testing.B) {
 }
 
 func BenchmarkPeekLengthDuration(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([][]byte, 10000)
@@ -1925,7 +1913,7 @@ func TestValueEncodeDecodeBool(t *testing.T) {
 }
 
 func TestValueEncodeDecodeInt(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	tests := append(int64TestCases[0:], randPowDistributedInt63s(rng, 1000)...)
 	for _, test := range tests {
 		buf := EncodeIntValue(nil, NoColumnID, test)
@@ -1940,7 +1928,7 @@ func TestValueEncodeDecodeInt(t *testing.T) {
 }
 
 func TestValueEncodeDecodeFloat(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	tests := make([]float64, 1000)
 	for i := range tests {
 		tests[i] = rng.NormFloat64()
@@ -1958,7 +1946,7 @@ func TestValueEncodeDecodeFloat(t *testing.T) {
 }
 
 func TestValueEncodeDecodeBytes(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	tests := make([][]byte, 1000)
 	for i := range tests {
 		tests[i] = randutil.RandBytes(rng, 100)
@@ -1976,7 +1964,7 @@ func TestValueEncodeDecodeBytes(t *testing.T) {
 }
 
 func TestValueEncodeDecodeDecimal(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	rd := randData{rng}
 	tests := make([]*apd.Decimal, 1000)
 	for i := range tests {
@@ -1995,7 +1983,7 @@ func TestValueEncodeDecodeDecimal(t *testing.T) {
 }
 
 func TestValueEncodeDecodeTime(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	rd := randData{rng}
 	tests := make([]time.Time, 1000)
 	for i := range tests {
@@ -2014,7 +2002,7 @@ func TestValueEncodeDecodeTime(t *testing.T) {
 }
 
 func TestValueEncodeDecodeTimeTZ(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	rd := randData{rng}
 	tests := make([]timetz.TimeTZ, 1000)
 	for i := range tests {
@@ -2033,7 +2021,7 @@ func TestValueEncodeDecodeTimeTZ(t *testing.T) {
 }
 
 func TestValueEncodeDecodeBitArray(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	rd := randData{rng}
 	tests := make([]bitarray.BitArray, 1000)
 	for i := range tests {
@@ -2055,7 +2043,7 @@ func TestValueEncodeDecodeBitArray(t *testing.T) {
 }
 
 func TestValueEncodeDecodeDuration(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	rd := randData{rng}
 	tests := make([]duration.Duration, 1000)
 	for i := range tests {
@@ -2075,7 +2063,7 @@ func TestValueEncodeDecodeDuration(t *testing.T) {
 
 func BenchmarkEncodeNonsortingVarint(b *testing.B) {
 	bytes := make([]byte, 0, b.N*MaxNonsortingVarintLen)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		bytes = EncodeNonsortingStdlibVarint(bytes, rng.Int63())
@@ -2084,7 +2072,7 @@ func BenchmarkEncodeNonsortingVarint(b *testing.B) {
 
 func BenchmarkDecodeNonsortingVarint(b *testing.B) {
 	buf := make([]byte, 0, b.N*MaxNonsortingVarintLen)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingStdlibVarint(buf, rng.Int63())
 	}
@@ -2148,7 +2136,7 @@ func testNonsortingUvarint(t *testing.T, i uint64) {
 }
 
 func TestNonsortingUVarint(t *testing.T) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	for _, test := range edgeCaseUint64s() {
 		testNonsortingUvarint(t, test)
@@ -2159,7 +2147,7 @@ func TestNonsortingUVarint(t *testing.T) {
 }
 
 func TestPeekLengthNonsortingUVarint(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 
 	var buf []byte
 	var lengths []int
@@ -2188,7 +2176,7 @@ func TestPeekLengthNonsortingUVarint(t *testing.T) {
 
 func BenchmarkEncodeNonsortingUvarint(b *testing.B) {
 	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
@@ -2197,7 +2185,7 @@ func BenchmarkEncodeNonsortingUvarint(b *testing.B) {
 
 func BenchmarkDecodeNonsortingUvarint(b *testing.B) {
 	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
 	}
@@ -2213,7 +2201,7 @@ func BenchmarkDecodeNonsortingUvarint(b *testing.B) {
 
 func BenchmarkDecodeOneByteNonsortingUvarint(b *testing.B) {
 	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()%(1<<7)))
 	}
@@ -2229,7 +2217,7 @@ func BenchmarkDecodeOneByteNonsortingUvarint(b *testing.B) {
 
 func BenchmarkPeekLengthNonsortingUvarint(b *testing.B) {
 	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
 	}
@@ -2284,7 +2272,7 @@ func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, i
 }
 
 func TestValueEncodingPeekLength(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	rd := randData{rng}
 
 	var buf []byte
@@ -2335,7 +2323,7 @@ func TestValueEncodingPeekLength(t *testing.T) {
 }
 
 func TestValueEncodingTags(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 
 	tests := make([]struct {
 		colID  uint32
@@ -2387,7 +2375,7 @@ func TestValueEncodingTags(t *testing.T) {
 }
 
 func TestValueEncodingRand(t *testing.T) {
-	rng, seed := randutil.NewPseudoRand()
+	rng, seed := randutil.NewTestRand()
 	rd := randData{rng}
 
 	var buf []byte
@@ -2522,7 +2510,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 }
 
 func BenchmarkEncodeBoolValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([]bool, 10000)
@@ -2539,7 +2527,7 @@ func BenchmarkEncodeBoolValue(b *testing.B) {
 }
 
 func BenchmarkDecodeBoolValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([][]byte, 10000)
@@ -2556,7 +2544,7 @@ func BenchmarkDecodeBoolValue(b *testing.B) {
 }
 
 func BenchmarkEncodeIntValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]int64, 10000)
 	for i := range vals {
@@ -2572,7 +2560,7 @@ func BenchmarkEncodeIntValue(b *testing.B) {
 }
 
 func BenchmarkDecodeIntValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -2588,7 +2576,7 @@ func BenchmarkDecodeIntValue(b *testing.B) {
 }
 
 func BenchmarkEncodeFloatValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([]float64, 10000)
 	for i := range vals {
@@ -2604,7 +2592,7 @@ func BenchmarkEncodeFloatValue(b *testing.B) {
 }
 
 func BenchmarkDecodeFloatValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -2620,7 +2608,7 @@ func BenchmarkDecodeFloatValue(b *testing.B) {
 }
 
 func BenchmarkEncodeBytesValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -2636,7 +2624,7 @@ func BenchmarkEncodeBytesValue(b *testing.B) {
 }
 
 func BenchmarkDecodeBytesValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -2652,7 +2640,7 @@ func BenchmarkDecodeBytesValue(b *testing.B) {
 }
 
 func BenchmarkEncodeTimeValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([]time.Time, 10000)
@@ -2669,7 +2657,7 @@ func BenchmarkEncodeTimeValue(b *testing.B) {
 }
 
 func BenchmarkDecodeTimeValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([][]byte, 10000)
@@ -2686,7 +2674,7 @@ func BenchmarkDecodeTimeValue(b *testing.B) {
 }
 
 func BenchmarkEncodeTimeTZValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([]timetz.TimeTZ, 10000)
@@ -2703,7 +2691,7 @@ func BenchmarkEncodeTimeTZValue(b *testing.B) {
 }
 
 func BenchmarkDecodeTimeTZValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([][]byte, 10000)
@@ -2720,7 +2708,7 @@ func BenchmarkDecodeTimeTZValue(b *testing.B) {
 }
 
 func BenchmarkEncodeIPAddrValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([]ipaddr.IPAddr, 10000)
@@ -2737,7 +2725,7 @@ func BenchmarkEncodeIPAddrValue(b *testing.B) {
 }
 
 func BenchmarkDecodeIPAddrValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([][]byte, 10000)
@@ -2754,7 +2742,7 @@ func BenchmarkDecodeIPAddrValue(b *testing.B) {
 }
 
 func BenchmarkEncodeDecimalValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([]*apd.Decimal, 10000)
@@ -2771,7 +2759,7 @@ func BenchmarkEncodeDecimalValue(b *testing.B) {
 }
 
 func BenchmarkDecodeDecimalValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([][]byte, 10000)
@@ -2788,7 +2776,7 @@ func BenchmarkDecodeDecimalValue(b *testing.B) {
 }
 
 func BenchmarkEncodeDurationValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([]duration.Duration, 10000)
@@ -2805,7 +2793,7 @@ func BenchmarkEncodeDurationValue(b *testing.B) {
 }
 
 func BenchmarkDecodeDurationValue(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	rd := randData{rng}
 
 	vals := make([][]byte, 10000)

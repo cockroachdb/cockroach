@@ -25,6 +25,7 @@ type DistSQLMetrics struct {
 	FlowsActive           *metric.Gauge
 	FlowsTotal            *metric.Counter
 	FlowsQueued           *metric.Gauge
+	FlowsScheduled        *metric.Counter
 	QueueWaitHist         *metric.Histogram
 	MaxBytesHist          *metric.Histogram
 	CurBytesCount         *metric.Gauge
@@ -75,6 +76,12 @@ var (
 	metaFlowsQueued = metric.Metadata{
 		Name:        "sql.distsql.flows.queued",
 		Help:        "Number of distributed SQL flows currently queued",
+		Measurement: "Flows",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaFlowsScheduled = metric.Metadata{
+		Name:        "sql.distsql.flows.scheduled",
+		Help:        "Number of distributed SQL flows scheduled",
 		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -147,6 +154,7 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		FlowsActive:           metric.NewGauge(metaFlowsActive),
 		FlowsTotal:            metric.NewCounter(metaFlowsTotal),
 		FlowsQueued:           metric.NewGauge(metaFlowsQueued),
+		FlowsScheduled:        metric.NewCounter(metaFlowsScheduled),
 		QueueWaitHist:         metric.NewLatency(metaQueueWaitHist, histogramWindow),
 		MaxBytesHist:          metric.NewHistogram(metaMemMaxBytes, histogramWindow, log10int64times1000, 3),
 		CurBytesCount:         metric.NewGauge(metaMemCurBytes),

@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build bazel
 // +build bazel
 
 package main
@@ -87,7 +88,7 @@ func run() error {
 	sort.Strings(keys)
 	var sortedSinkInfos []*sinkInfo
 	for _, k := range keys {
-		if k == "CommonSinkConfig" || strings.HasSuffix(k, "Defaults") {
+		if strings.HasPrefix(k, "Common") || strings.HasSuffix(k, "Defaults") {
 			// We don't want the common configuration to appear as a sink in
 			// the output doc.
 			continue
@@ -98,8 +99,9 @@ func run() error {
 	// Render the template.
 	var src bytes.Buffer
 	if err := tmpl.Execute(&src, struct {
-		Sinks []*sinkInfo
-	}{sortedSinkInfos}); err != nil {
+		Sinks     []*sinkInfo
+		Buffering *sinkInfo
+	}{sortedSinkInfos, info["CommonBufferSinkConfig"]}); err != nil {
 		return err
 	}
 
@@ -315,7 +317,7 @@ Configuration options shared across all sink types:
 | Field | Description |
 |--|--|
 {{range .CommonFields -}}
-| ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }} |
+| ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }}{{- if eq .FieldName "buffering" }} See the [common buffering configuration](#buffering-config) section for details. {{end}} |
 {{end}}
 {{- end}}
 
@@ -328,10 +330,23 @@ Configuration options shared across all sink types:
 Each sink can select multiple channels. The names of selected channels can
 be specified as a YAML array or as a string.
 
+Additionally, severity filters can be applied separately for
+different groups of channels.
+
 Example configurations:
 
     # Select just these two channels. Space is important.
+    # This uses the severity filter set by the separate 'filter' attribute
+    # in the sink configuration.
     channels: [OPS, HEALTH]
+
+    # Select PERF at severity INFO, and HEALTH and OPS at severity WARNING.
+    # The 'filter' attribute in the sink configuration is ignored.
+    channels: {INFO: [PERF], WARNING: [HEALTH, OPS]}
+
+    # The brackets are optional when selecting a single channel.
+    channels: OPS
+    channels: {INFO: PERF}
 
     # The selection is case-insensitive.
     channels: [ops, HeAlTh]
@@ -348,6 +363,13 @@ Example configurations:
     - OPS
     - HEALTH
 
+    channels:
+      INFO:
+      - PERF
+      WARNING:
+      - OPS
+      - HEALTH
+
 It is also possible to select all channels, using the "all" keyword.
 For example:
 
@@ -355,6 +377,12 @@ For example:
     channels: 'all'
     channels: [all]
     channels: ['all']
+
+Likewise:
+
+    channels: {INFO: all}
+
+etc.
 
 It is also possible to select all channels except for a subset, using the
 "all except" keyword prefix. This makes it possible to define sinks
@@ -364,4 +392,27 @@ that capture "everything else". For example:
     channels: all except [ops,health]
     channels: 'all except ops, health'
     channels: 'all except [ops, health]'
+
+Likewise:
+
+    channels: {INFO: all except ops,health}
+
+etc.
+
+{{if .Buffering}}
+
+<a name="buffering-config">
+
+## {{ .Buffering.Name }}
+
+{{ .Buffering.Comment }}
+
+{{if .Buffering.Fields -}}
+| Field | Description |
+|--|--|
+{{range .Buffering.Fields -}}
+| ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }} |
+{{end}}
+{{- end}}
+{{end}}
 `

@@ -36,10 +36,27 @@ const (
 	DefaultClass ConnectionClass = iota
 	// SystemClass is the ConnectionClass used for system traffic.
 	SystemClass
+	// RangefeedClass is the ConnectionClass used for rangefeeds.
+	RangefeedClass
 
 	// NumConnectionClasses is the number of valid ConnectionClass values.
 	NumConnectionClasses int = iota
 )
+
+// connectionClassName maps classes to their name.
+var connectionClassName = map[ConnectionClass]string{
+	DefaultClass:   "default",
+	SystemClass:    "system",
+	RangefeedClass: "rangefeed",
+}
+
+// String implements the fmt.Stringer interface.
+func (c ConnectionClass) String() string {
+	return connectionClassName[c]
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (ConnectionClass) SafeValue() {}
 
 var systemClassKeyPrefixes = []roachpb.RKey{
 	roachpb.RKey(keys.Meta1Prefix),

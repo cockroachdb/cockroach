@@ -15,11 +15,36 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/redact"
 	types "github.com/gogo/protobuf/types"
 )
 
-// LogMessageField is the field name used for the opentracing.Span.LogFields()
-// for a log message.
+// TraceID is a probabilistically-unique id, shared by all spans in a trace.
+type TraceID uint64
+
+// SpanID is a probabilistically-unique span id.
+type SpanID uint64
+
+// Recording represents a group of RecordedSpans rooted at a fixed root span, as
+// returned by GetRecording. Spans are sorted by StartTime.
+type Recording []RecordedSpan
+
+// Less implements sort.Interface.
+func (r Recording) Less(i, j int) bool {
+	return r[i].StartTime.Before(r[j].StartTime)
+}
+
+// Swap implements sort.Interface.
+func (r Recording) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
+// Len implements sort.Interface.
+func (r Recording) Len() int {
+	return len(r)
+}
+
+// LogMessageField is the field name used for the log message in a LogRecord.
 const LogMessageField = "event"
 
 func (s *RecordedSpan) String() string {
@@ -34,16 +59,6 @@ func (s *RecordedSpan) String() string {
 // Structured visits the data passed to RecordStructured for the Span from which
 // the RecordedSpan was created.
 func (s *RecordedSpan) Structured(visit func(*types.Any, time.Time)) {
-	// Check if the RecordedSpan is from a node running a version less than 21.2.
-	// If it is, we set the "recorded at" time to the StartTime of the span.
-	// TODO(adityamaru): Remove this code in 22.1 since all RecordedSpans will
-	// have StructuredRecords in 21.2+ nodes.
-	if s.StructuredRecords == nil {
-		for _, item := range s.DeprecatedInternalStructured {
-			visit(item, s.StartTime)
-		}
-		return
-	}
 	for _, sr := range s.StructuredRecords {
 		visit(sr.Payload, sr.Time)
 	}
@@ -51,15 +66,34 @@ func (s *RecordedSpan) Structured(visit func(*types.Any, time.Time)) {
 
 // Msg extracts the message of the LogRecord, which is either in an "event" or
 // "error" field.
-func (l LogRecord) Msg() string {
-	for _, f := range l.Fields {
+func (l LogRecord) Msg() redact.RedactableString {
+	if l.Message != "" {
+		return l.Message
+	}
+
+	// Compatibility with 21.2: look at l.DeprecatedFields.
+	for _, f := range l.DeprecatedFields {
 		key := f.Key
 		if key == LogMessageField {
 			return f.Value
 		}
 		if key == "error" {
-			return fmt.Sprint("error:", f.Value)
+			return redact.Sprintf("error: %s", f.Value)
 		}
 	}
 	return ""
+}
+
+// MemorySize implements the sizable interface.
+func (l *LogRecord) MemorySize() int {
+	return 3*8 + // 3 words for time.Time
+		2*8 + // 2 words for StringHeader
+		len(l.Message)
+}
+
+// MemorySize implements the sizable interface.
+func (r *StructuredRecord) MemorySize() int {
+	return 3*8 + // 3 words for time.Time
+		1*8 + // 1 words for *Any
+		r.Payload.Size() // TODO(andrei): this is the encoded size, not the mem size
 }

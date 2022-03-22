@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "protoreflect",
-    srcs = ["utils.go"],
+    srcs = [
+        "redact.go",
+        "utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/protoreflect",
     visibility = ["//visibility:public"],
     deps = [
@@ -27,7 +30,9 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/protoreflect/test",
         "//pkg/sql/types",
+        "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",

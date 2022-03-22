@@ -18,16 +18,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
-	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
+	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -48,6 +52,8 @@ import (
 var testTypes = make(map[string]*types.T)
 var testTypeResolver = tree.MakeTestingMapTypeResolver(testTypes)
 
+const primary = descpb.FamilyID(0)
+
 func makeTestSemaCtx() tree.SemaContext {
 	testSemaCtx := tree.MakeSemaContext()
 	testSemaCtx.TypeResolver = testTypeResolver
@@ -65,15 +71,22 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
 	}
 	st := cluster.MakeTestingClusterSettings()
-	const parentID = descpb.ID(keys.MaxReservedDescID + 1)
-	const tableID = descpb.ID(keys.MaxReservedDescID + 2)
+	parentID := descpb.ID(bootstrap.TestingUserDescID(0))
+	tableID := descpb.ID(bootstrap.TestingUserDescID(1))
 	semaCtx := makeTestSemaCtx()
-	mutDesc, err := importccl.MakeTestingSimpleTableDescriptor(
-		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
+	mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
+		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err
 	}
-	return mutDesc, catalog.ValidateSelf(mutDesc)
+	columnNames := make([]string, len(mutDesc.PublicColumns()))
+	for i, col := range mutDesc.PublicColumns() {
+		columnNames[i] = col.GetName()
+	}
+	mutDesc.Families = []descpb.ColumnFamilyDescriptor{
+		{ID: primary, Name: "primary", ColumnIDs: mutDesc.PublicColumnIDs(), ColumnNames: columnNames},
+	}
+	return mutDesc, descbuilder.ValidateSelf(mutDesc, clusterversion.TestingClusterVersion)
 }
 
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {
@@ -126,7 +139,7 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 	tableDesc := descpb.TableDescriptor{
 		Name: AvroNameToSQLName(s.Name),
 	}
-	for _, f := range s.Fields {
+	for i, f := range s.Fields {
 		// s.Fields[idx] has `Name` and `SchemaType` set but nothing else.
 		// They're needed for serialization/deserialization, so fake out a
 		// column descriptor so that we can reuse columnToAvroSchema to get
@@ -135,9 +148,19 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 		if err != nil {
 			return nil, err
 		}
+		colDesc.ID = descpb.ColumnID(i)
 		tableDesc.Columns = append(tableDesc.Columns, *colDesc)
 	}
-	return tableToAvroSchema(tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), avroSchemaNoSuffix, "")
+	columnNames := make([]string, len(tableDesc.Columns))
+	columnIDs := make([]descpb.ColumnID, len(tableDesc.Columns))
+	for i, col := range tableDesc.Columns {
+		columnNames[i] = col.Name
+		columnIDs[i] = col.ID
+	}
+	tableDesc.Families = []descpb.ColumnFamilyDescriptor{
+		{ID: primary, Name: "primary", ColumnIDs: columnIDs, ColumnNames: columnNames},
+	}
+	return tableToAvroSchema(tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
 }
 
 func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, error) {
@@ -148,8 +171,11 @@ func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, erro
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
 	ctx := context.Background()
 	semaCtx := makeTestSemaCtx()
-	col, _, _, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, &tree.EvalContext{})
-	return col, err
+	cdd, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, &tree.EvalContext{})
+	if err != nil {
+		return nil, err
+	}
+	return cdd.ColumnDescriptor, err
 }
 
 // randTime generates a random time.Time whose .UnixNano result doesn't
@@ -192,7 +218,7 @@ func createEnum(enumLabels tree.EnumValueList, typeName tree.TypeName) *types.T 
 func TestAvroSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	type test struct {
 		name   string
@@ -357,7 +383,7 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.schema))
 			require.NoError(t, err)
-			origSchema, err := tableToAvroSchema(tableDesc, avroSchemaNoSuffix, "")
+			origSchema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
 			require.NoError(t, err)
 			jsonSchema := origSchema.codec.Schema()
 			roundtrippedSchema, err := parseAvroSchema(jsonSchema)
@@ -370,7 +396,9 @@ func TestAvroSchema(t *testing.T) {
 			require.NoError(t, err)
 
 			for _, row := range rows {
-				evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{}}
+				evalCtx := &tree.EvalContext{
+					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+				}
 				serialized, err := origSchema.textualFromRow(row)
 				require.NoError(t, err)
 				roundtripped, err := roundtrippedSchema.rowFromTextual(serialized)
@@ -391,7 +419,7 @@ func TestAvroSchema(t *testing.T) {
 	t.Run("escaping", func(t *testing.T) {
 		tableDesc, err := parseTableDesc(`CREATE TABLE "☃" (🍦 INT PRIMARY KEY)`)
 		require.NoError(t, err)
-		tableSchema, err := tableToAvroSchema(tableDesc, avroSchemaNoSuffix, "")
+		tableSchema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+
@@ -598,7 +626,7 @@ func TestAvroSchema(t *testing.T) {
 			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
-			schema, err := tableToAvroSchema(tableDesc, avroSchemaNoSuffix, "")
+			schema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
 			require.NoError(t, err)
 			textual, err := schema.textualFromRow(rows[0])
 			require.NoError(t, err)
@@ -648,7 +676,7 @@ func TestAvroSchema(t *testing.T) {
 			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
-			schema, err := tableToAvroSchema(tableDesc, avroSchemaNoSuffix, "")
+			schema, err := tableToAvroSchema(tableDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
 			require.NoError(t, err)
 			textual, err := schema.textualFromRow(rows[0])
 			require.NoError(t, err)
@@ -751,12 +779,12 @@ func TestAvroMigration(t *testing.T) {
 			writerDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.writerSchema))
 			require.NoError(t, err)
-			writerSchema, err := tableToAvroSchema(writerDesc, avroSchemaNoSuffix, "")
+			writerSchema, err := tableToAvroSchema(writerDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
 			require.NoError(t, err)
 			readerDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.readerSchema))
 			require.NoError(t, err)
-			readerSchema, err := tableToAvroSchema(readerDesc, avroSchemaNoSuffix, "")
+			readerSchema, err := tableToAvroSchema(readerDesc, primary, avroSchemaNoSuffix, "", string(changefeedbase.OptVirtualColumnsOmitted))
 			require.NoError(t, err)
 
 			writerRows, err := parseValues(writerDesc, `VALUES `+test.writerValues)
@@ -812,7 +840,7 @@ func TestDecimalRatRoundtrip(t *testing.T) {
 		require.EqualError(t, err, "cannot convert Infinite form decimal")
 	})
 	t.Run(`rand`, func(t *testing.T) {
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 		precision := rng.Int31n(10) + 1
 		scale := rng.Int31n(precision + 1)
 		coeff := rng.Int63n(int64(math.Pow10(int(precision))))
@@ -833,7 +861,7 @@ func benchmarkEncodeType(b *testing.B, typ *types.T, encRow rowenc.EncDatumRow) 
 	tableDesc, err := parseTableDesc(
 		fmt.Sprintf(`CREATE TABLE bench_table (bench_field %s)`, typ.SQLString()))
 	require.NoError(b, err)
-	schema, err := tableToAvroSchema(tableDesc, "suffix", "namespace")
+	schema, err := tableToAvroSchema(tableDesc, primary, "suffix", "namespace", string(changefeedbase.OptVirtualColumnsOmitted))
 	require.NoError(b, err)
 
 	b.ReportAllocs()
@@ -850,7 +878,7 @@ func benchmarkEncodeType(b *testing.B, typ *types.T, encRow rowenc.EncDatumRow) 
 func randEncDatumRow(typ *types.T) rowenc.EncDatumRow {
 	const allowNull = true
 	const notNull = false
-	rnd, _ := randutil.NewTestPseudoRand()
+	rnd, _ := randutil.NewTestRand()
 	return rowenc.EncDatumRow{
 		rowenc.DatumToEncDatum(typ, randgen.RandDatum(rnd, typ, allowNull)),
 		rowenc.DatumToEncDatum(types.Int, randgen.RandDatum(rnd, types.Int, notNull)),
@@ -915,7 +943,7 @@ func BenchmarkEncodeString(b *testing.B) {
 	benchmarkEncodeType(b, types.String, randEncDatumRow(types.String))
 }
 
-var collatedStringType *types.T = types.MakeCollatedString(types.String, `fr`)
+var collatedStringType = types.MakeCollatedString(types.String, `fr`)
 
 func BenchmarkEncodeCollatedString(b *testing.B) {
 	benchmarkEncodeType(b, collatedStringType, randEncDatumRow(collatedStringType))

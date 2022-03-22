@@ -1,0 +1,35 @@
+# This config file demonstrates how to connect to the CockroachDB StatefulSet
+# defined in bring-your-own-certs-statefulset.yaml that uses certificates
+# created outside of Kubernetes. See that file for why you may want to use it.
+# You should be able to adapt the core ideas to deploy your own custom
+# applications and connect them to the database similarly.
+#
+# The pod that this file defines will sleep in the cluster not using any
+# resources. After creating the pod, you can use it to open up a SQL shell to
+# the database by running:
+#
+# kubectl exec -it cockroachdb-client-secure -- ./cockroach sql --url="postgres://root@cockroachdb-public:26257/?sslmode=verify-full&sslcert=/cockroach-certs/client.root.crt&sslkey=/cockroach-certs/client.root.key&sslrootcert=/cockroach-certs/ca.crt"
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cockroachdb-client-secure
+  labels:
+    app: cockroachdb-client
+spec:
+  serviceAccountName: cockroachdb
+  containers:
+  - name: cockroachdb-client
+    image: cockroachdb/cockroach:@VERSION@
+    # Keep a pod open indefinitely so kubectl exec can be used to get a shell to it
+    # and run cockroach client commands, such as cockroach sql, cockroach node status, etc.
+    command:
+    - sleep
+    - "2147483648" # 2^31
+    volumeMounts:
+    - name: client-certs
+      mountPath: /cockroach-certs
+  volumes:
+  - name: client-certs
+    secret:
+      secretName: cockroachdb.client.root
+      defaultMode: 256

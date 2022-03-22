@@ -9,9 +9,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/encoding",
@@ -19,6 +20,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
@@ -29,7 +31,7 @@ go_test(
     srcs = ["initial_test.go"],
     embed = [":stateloader"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/util/leaktest",

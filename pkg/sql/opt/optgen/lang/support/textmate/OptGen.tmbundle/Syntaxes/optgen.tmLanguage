@@ -175,6 +175,7 @@
                         UnaryMinus |
                         UnaryComplement |
                         Cast |
+                        AssignmentCast |
                         Case |
                         When |
                         Array |
@@ -183,7 +184,6 @@
                         FunctionPrivate |
                         Coalesce |
                         ColumnAccess |
-                        UnsupportedExpr |
                         Avg |
                         BoolAnd |
                         BoolOr |

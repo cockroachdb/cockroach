@@ -28,10 +28,6 @@ type ExprContext interface {
 
 	// IsLocal returns true if the current plan is local.
 	IsLocal() bool
-
-	// EvaluateSubqueries returns true if subqueries should be evaluated before
-	// creating the execinfrapb.Expression.
-	EvaluateSubqueries() bool
 }
 
 // fakeExprContext is a fake implementation of ExprContext that always behaves
@@ -46,10 +42,6 @@ func (fakeExprContext) EvalContext() *tree.EvalContext {
 
 func (fakeExprContext) IsLocal() bool {
 	return false
-}
-
-func (fakeExprContext) EvaluateSubqueries() bool {
-	return true
 }
 
 // MakeExpression creates a execinfrapb.Expression.
@@ -72,22 +64,21 @@ func MakeExpression(
 		ctx = &fakeExprContext{}
 	}
 
+	// Always replace the subqueries with their results (they must have been
+	// executed before the main query).
 	evalCtx := ctx.EvalContext()
 	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
 		evalCtx: evalCtx,
 	}
-
-	if ctx.EvaluateSubqueries() {
-		outExpr, _ := tree.WalkExpr(subqueryVisitor, expr)
-		if subqueryVisitor.err != nil {
-			return execinfrapb.Expression{}, subqueryVisitor.err
-		}
-		expr = outExpr.(tree.TypedExpr)
+	outExpr, _ := tree.WalkExpr(subqueryVisitor, expr)
+	if subqueryVisitor.err != nil {
+		return execinfrapb.Expression{}, subqueryVisitor.err
 	}
+	expr = outExpr.(tree.TypedExpr)
 
 	if indexVarMap != nil {
 		// Remap our indexed vars.
-		expr = remapIVarsInTypedExpr(expr, indexVarMap)
+		expr = RemapIVarsInTypedExpr(expr, indexVarMap)
 	}
 	expression := execinfrapb.Expression{LocalExpr: expr}
 	if ctx.IsLocal() {
@@ -132,9 +123,9 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 
 func (evalAndReplaceSubqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
-// remapIVarsInTypedExpr remaps tree.IndexedVars in expr using indexVarMap.
+// RemapIVarsInTypedExpr remaps tree.IndexedVars in expr using indexVarMap.
 // Note that a new expression is returned.
-func remapIVarsInTypedExpr(expr tree.TypedExpr, indexVarMap []int) tree.TypedExpr {
+func RemapIVarsInTypedExpr(expr tree.TypedExpr, indexVarMap []int) tree.TypedExpr {
 	v := &ivarRemapper{indexVarMap: indexVarMap}
 	newExpr, _ := tree.WalkExpr(v, expr)
 	return newExpr.(tree.TypedExpr)

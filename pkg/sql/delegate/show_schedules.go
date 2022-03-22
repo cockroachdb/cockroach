@@ -20,7 +20,7 @@ import (
 )
 
 // commandColumn converts executor execution arguments into jsonb representation.
-const commandColumn = `crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args)->'args'`
+const commandColumn = `crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args, false, true)->'args'`
 
 func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Schedules)
@@ -55,6 +55,9 @@ WHERE status='%s' AND created_by_type='%s' AND created_by_id=schedule_id
 			"executor_type = '%s'", tree.ScheduledBackupExecutor.InternalName()))
 		columnExprs = append(columnExprs, fmt.Sprintf(
 			"%s->>'backup_statement' AS command", commandColumn))
+	case tree.ScheduledSQLStatsCompactionExecutor:
+		whereExprs = append(whereExprs, fmt.Sprintf(
+			"executor_type = '%s'", tree.ScheduledSQLStatsCompactionExecutor.InternalName()))
 	default:
 		// Strip out '@type' tag from the ExecutionArgs.args, and display what's left.
 		columnExprs = append(columnExprs, fmt.Sprintf("%s #-'{@type}' AS command", commandColumn))
@@ -69,7 +72,6 @@ WHERE status='%s' AND created_by_type='%s' AND created_by_id=schedule_id
 	if len(whereExprs) > 0 {
 		whereClause = fmt.Sprintf("WHERE (%s)", strings.Join(whereExprs, " AND "))
 	}
-
 	return parse(fmt.Sprintf(
 		"SELECT %s FROM system.scheduled_jobs %s",
 		strings.Join(columnExprs, ","),

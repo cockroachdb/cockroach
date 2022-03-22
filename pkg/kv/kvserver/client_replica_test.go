@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -37,7 +38,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
@@ -62,9 +67,9 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// TestReplicaClockUpdates verifies that the leaseholder and followers both
-// update their clocks when executing a command to the command's timestamp, as
-// long as the request timestamp is from a clock (i.e. is not synthetic).
+// TestReplicaClockUpdates verifies that the leaseholder updates its clocks
+// when executing a command to the command's timestamp, as long as the
+// request timestamp is from a clock (i.e. is not synthetic).
 func TestReplicaClockUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -123,43 +128,14 @@ func TestReplicaClockUpdates(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// If writing, wait for that command to execute on all the replicas.
-		// Consensus is asynchronous outside of the majority quorum, and Raft
-		// application is asynchronous on all nodes.
-		if write {
-			testutils.SucceedsSoon(t, func() error {
-				var values []int64
-				for i := range tc.Servers {
-					val, _, err := storage.MVCCGet(ctx,
-						tc.GetFirstStoreFromServer(t, i).Engine(), reqKey, reqTS,
-						storage.MVCCGetOptions{})
-					if err != nil {
-						return err
-					}
-					values = append(values, mustGetInt(val))
-				}
-				if !reflect.DeepEqual(values, []int64{5, 5, 5}) {
-					return errors.Errorf("expected (5, 5, 5), got %v", values)
-				}
-				return nil
-			})
-		}
-
-		// Verify that clocks were updated as expected. Check all clocks if we
-		// issued a write, but only the leaseholder's if we issued a read. In
-		// theory, we should be able to assert that _only_ the leaseholder's
-		// clock is updated by a read, but in practice an assertion against
-		// followers' clocks being updated is very difficult to make without
-		// being flaky because it's difficult to prevent other channels
-		// (background work, etc.) from carrying the clock update.
+		// Verify that clocks were updated as expected. Only the leaseholder should
+		// have updated its clock for either a read or a write. In theory, we should
+		// be able to assert that _only_ the leaseholder's clock is updated, but in
+		// practice an assertion against followers' clocks being updated is very
+		// difficult to make without being flaky because it's difficult to prevent
+		// other channels (background work, etc.) from carrying the clock update.
 		expUpdated := !synthetic
-		clocksToCheck := clocks
-		if !write {
-			clocksToCheck = clocks[:1]
-		}
-		for _, c := range clocksToCheck {
-			require.Equal(t, expUpdated, reqTS.Less(c.Now()))
-		}
+		require.Equal(t, expUpdated, reqTS.Less(clocks[0].Now()))
 	}
 
 	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
@@ -167,68 +143,6 @@ func TestReplicaClockUpdates(t *testing.T) {
 			run(t, write, synthetic)
 		})
 	})
-}
-
-// TestFollowersDontRejectClockUpdateWithJump verifies that followers update
-// their clocks when executing a command, even if the leaseholder's clock is
-// far in the future.
-func TestFollowersDontRejectClockUpdateWithJump(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const numNodes = 3
-	var manuals []*hlc.HybridManualClock
-	var clocks []*hlc.Clock
-	for i := 0; i < numNodes; i++ {
-		manuals = append(manuals, hlc.NewHybridManualClock())
-	}
-	serverArgs := make(map[int]base.TestServerArgs)
-	for i := 0; i < numNodes; i++ {
-		serverArgs[i] = base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					ClockSource: manuals[i].UnixNano,
-				},
-			},
-		}
-	}
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, numNodes,
-		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: serverArgs,
-		})
-	defer tc.Stopper().Stop(ctx)
-
-	store := tc.GetFirstStoreFromServer(t, 0)
-	reqKey := roachpb.Key("a")
-	tc.SplitRangeOrFatal(t, reqKey)
-	tc.AddVotersOrFatal(t, reqKey, tc.Targets(1, 2)...)
-
-	for i, s := range tc.Servers {
-		clocks = append(clocks, s.Clock())
-		manuals[i].Pause()
-	}
-	// Advance the lease holder's clock ahead of the followers (by more than
-	// MaxOffset but less than the range lease) and execute a command.
-	manuals[0].Increment(int64(500 * time.Millisecond))
-	incArgs := incrementArgs(reqKey, 5)
-	ts := clocks[0].Now()
-	if _, err := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
-		t.Fatal(err)
-	}
-	// Wait for that command to execute on all the followers.
-	tc.WaitForValues(t, reqKey, []int64{5, 5, 5})
-
-	// Verify that all the followers have accepted the clock update from
-	// node 0 even though it comes from outside the usual max offset.
-	now := clocks[0].Now()
-	for i, clock := range clocks {
-		// Only compare the WallTimes: it's normal for clock 0 to be a few logical ticks ahead.
-		if clock.Now().WallTime < now.WallTime {
-			t.Errorf("clock %d is behind clock 0: %s vs %s", i, clock.Now(), now)
-		}
-	}
 }
 
 // TestLeaseholdersRejectClockUpdateWithJump verifies that leaseholders reject
@@ -497,6 +411,380 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// TestTxnReadWithinUncertaintyInterval tests cases where a transaction observes
+// a committed value below its global uncertainty limit while performing a read.
+//
+// In one variant of the test, the transaction does not have an observed
+// timestamp from the KV node serving the read, so its uncertainty interval
+// during its read extends all the way to its global uncertainty limit. As a
+// result, it observes the committed value in its uncertain future and receives
+// a ReadWithinUncertaintyIntervalError.
+//
+// In a second variant of the test, the transaction does have an observed
+// timestamp from the KV node serving the read, so its uncertainty interval
+// during its read extends only up to this observed timestamp. This observed
+// timestamp is below the committed value's timestamp. As a result, the
+// transaction observes the committed value in its certain future, allowing it
+// to avoid the ReadWithinUncertaintyIntervalError.
+func TestTxnReadWithinUncertaintyInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "observedTS", func(t *testing.T, observedTS bool) {
+		ctx := context.Background()
+		manual := hlc.NewHybridManualClock()
+		srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource: manual.UnixNano,
+				},
+			},
+		})
+		s := srv.(*server.TestServer)
+		defer s.Stopper().Stop(ctx)
+		store, err := s.Stores().GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+
+		// Split off a scratch range.
+		key, err := s.ScratchRange()
+		require.NoError(t, err)
+
+		// Pause the server's clocks going forward.
+		manual.Pause()
+
+		// Create a new transaction.
+		now := s.Clock().Now()
+		maxOffset := s.Clock().MaxOffset().Nanoseconds()
+		require.NotZero(t, maxOffset)
+		txn := roachpb.MakeTransaction("test", key, 1, now, maxOffset, int32(s.SQLInstanceID()))
+		require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
+		require.Len(t, txn.ObservedTimestamps, 0)
+
+		// If the test variant wants an observed timestamp from the server at a
+		// timestamp below the value, collect one now.
+		if observedTS {
+			get := getArgs(key)
+			resp, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, get)
+			require.Nil(t, pErr)
+			txn.Update(resp.Header().Txn)
+			require.Len(t, txn.ObservedTimestamps, 1)
+		}
+
+		// Perform a non-txn write. This will grab a timestamp from the clock.
+		put := putArgs(key, []byte("val"))
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), put)
+		require.Nil(t, pErr)
+
+		// Perform another read on the same key. Depending on whether or not the txn
+		// had collected an observed timestamp, it may or may not observe the value
+		// in its uncertainty interval and throw an error.
+		get := getArgs(key)
+		_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, get)
+		if observedTS {
+			require.Nil(t, pErr)
+		} else {
+			require.NotNil(t, pErr)
+			require.IsType(t, &roachpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
+		}
+	})
+}
+
+// TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer tests a case where a
+// transaction observes a committed value in its uncertainty interval that was
+// written under a previous leaseholder. In the test, the transaction does
+// collect an observed timestamp from the KV node that eventually serves the
+// read, but this observed timestamp is not allowed to be used to constrain its
+// local uncertainty limit below the lease start time and avoid the uncertainty
+// error. As a result, it observes the committed value in its uncertain future
+// and receives a ReadWithinUncertaintyIntervalError, which avoids a stale read.
+//
+// See TestRangeLocalUncertaintyLimitAfterNewLease for a similar test.
+func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numNodes = 2
+	var manuals []*hlc.HybridManualClock
+	var clocks []*hlc.Clock
+	for i := 0; i < numNodes; i++ {
+		manuals = append(manuals, hlc.NewHybridManualClock())
+	}
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource: manuals[i].UnixNano,
+				},
+			},
+		}
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: serverArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Split off two scratch ranges.
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	tc.SplitRangeOrFatal(t, keyA)
+	keyADesc, keyBDesc := tc.SplitRangeOrFatal(t, keyB)
+	// Place key A's sole replica on node 1 and key B's sole replica on node 2.
+	tc.AddVotersOrFatal(t, keyB, tc.Target(1))
+	tc.TransferRangeLeaseOrFatal(t, keyBDesc, tc.Target(1))
+	tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+
+	// Pause the servers' clocks going forward.
+	var maxNanos int64
+	for i, m := range manuals {
+		m.Pause()
+		if cur := m.UnixNano(); cur > maxNanos {
+			maxNanos = cur
+		}
+		clocks = append(clocks, tc.Servers[i].Clock())
+	}
+	// After doing so, perfectly synchronize them.
+	for _, m := range manuals {
+		m.Increment(maxNanos - m.UnixNano())
+	}
+
+	// Create a new transaction using the second node as the gateway.
+	now := clocks[1].Now()
+	maxOffset := clocks[1].MaxOffset().Nanoseconds()
+	require.NotZero(t, maxOffset)
+	txn := roachpb.MakeTransaction("test", keyB, 1, now, maxOffset, int32(tc.Servers[1].SQLInstanceID()))
+	require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
+	require.Len(t, txn.ObservedTimestamps, 0)
+
+	// Collect an observed timestamp in that transaction from node 2.
+	getB := getArgs(keyB)
+	resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSender(), roachpb.Header{Txn: &txn}, getB)
+	require.Nil(t, pErr)
+	txn.Update(resp.Header().Txn)
+	require.Len(t, txn.ObservedTimestamps, 1)
+
+	// Advance the clock on the first node.
+	manuals[0].Increment(100)
+
+	// Perform a non-txn write on node 1. This will grab a timestamp from node 1's
+	// clock, which leads the clock on node 2.
+	//
+	// NOTE: we perform the clock increment and write _after_ creating the
+	// transaction and collecting an observed timestamp. Ideally, we would write
+	// this test such that we did this before beginning the transaction on node 2,
+	// so that the absence of an uncertainty error would be a true "stale read".
+	// However, doing so causes the test to be flaky because background operations
+	// can leak the clock signal from node 1 to node 2 between the time that we
+	// write and the time that the transaction begins. If we had a way to disable
+	// all best-effort HLC clock stabilization channels and only propagate clock
+	// signals when strictly necessary then it's possible that we could avoid
+	// flakiness. For now, we just re-order the operations and assert that we
+	// receive an uncertainty error even though its absence would not be a true
+	// stale read.
+	ba := roachpb.BatchRequest{}
+	ba.Add(putArgs(keyA, []byte("val")))
+	br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	writeTs := br.Timestamp
+
+	// The transaction has a read timestamp beneath the write's commit timestamp
+	// but a global uncertainty limit above the write's commit timestamp. The
+	// observed timestamp collected is also beneath the write's commit timestamp.
+	require.True(t, txn.ReadTimestamp.Less(writeTs))
+	require.True(t, writeTs.Less(txn.GlobalUncertaintyLimit))
+	require.True(t, txn.ObservedTimestamps[0].Timestamp.ToTimestamp().Less(writeTs))
+
+	// Add a replica for key A's range to node 2. Transfer the lease.
+	tc.AddVotersOrFatal(t, keyA, tc.Target(1))
+	tc.TransferRangeLeaseOrFatal(t, keyADesc, tc.Target(1))
+
+	// Perform another read in the transaction, this time on key A. This will be
+	// routed to node 2, because it now holds the lease for key A. Even though the
+	// transaction has collected an observed timestamp from node 2, it cannot use
+	// it to constrain its local uncertainty limit below the lease start time and
+	// avoid the uncertainty error. This is a good thing, as doing so would allow
+	// for a stale read.
+	getA := getArgs(keyA)
+	_, pErr = kv.SendWrappedWith(ctx, tc.Servers[1].DistSender(), roachpb.Header{Txn: &txn}, getA)
+	require.NotNil(t, pErr)
+	require.IsType(t, &roachpb.ReadWithinUncertaintyIntervalError{}, pErr.GetDetail())
+}
+
+// TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer tests a case where
+// a non-transactional request defers its timestamp allocation to a replica that
+// does not hold the lease at the time of receiving the request, but does by the
+// time that the request consults the lease. In the test, a value is written on
+// the previous leaseholder at a higher timestamp than that assigned to the non-
+// transactional request. After the lease transfer, the non-txn request is
+// required by uncertainty.ComputeInterval to forward its local uncertainty
+// limit to the new lease start time. This prevents the read from ignoring the
+// previous write, which avoids a stale read. Instead, the non-txn read hits an
+// uncertainty error, performs a server-side retry, and re-evaluates with a
+// timestamp above the write.
+//
+// This test exercises the hazard described in "reason #1" of uncertainty.D7.
+func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Inject a request filter, which intercepts the server-assigned timestamp
+	// of a non-transactional request and then blocks that request until after
+	// the lease has been transferred to the server.
+	type nonTxnGetKey struct{}
+	nonTxnOrigTsC := make(chan hlc.Timestamp, 1)
+	nonTxnBlockerC := make(chan struct{})
+	requestFilter := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		if ctx.Value(nonTxnGetKey{}) != nil {
+			// Give the test the server-assigned timestamp.
+			require.NotNil(t, ba.TimestampFromServerClock)
+			nonTxnOrigTsC <- ba.Timestamp
+			// Wait for the test to give the go-ahead.
+			select {
+			case <-nonTxnBlockerC:
+			case <-ctx.Done():
+			case <-time.After(testutils.DefaultSucceedsSoonDuration):
+			}
+		}
+		return nil
+	}
+	var uncertaintyErrs int32
+	concurrencyRetryFilter := func(ctx context.Context, _ roachpb.BatchRequest, pErr *roachpb.Error) {
+		if ctx.Value(nonTxnGetKey{}) != nil {
+			if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
+				atomic.AddInt32(&uncertaintyErrs, 1)
+			}
+		}
+	}
+
+	const numNodes = 2
+	var manuals []*hlc.HybridManualClock
+	for i := 0; i < numNodes; i++ {
+		manuals = append(manuals, hlc.NewHybridManualClock())
+	}
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource: manuals[i].UnixNano,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter:          requestFilter,
+					TestingConcurrencyRetryFilter: concurrencyRetryFilter,
+				},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: serverArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Split off a scratch range and upreplicate to node 2.
+	key := tc.ScratchRange(t)
+	desc := tc.LookupRangeOrFatal(t, key)
+	tc.AddVotersOrFatal(t, key, tc.Target(1))
+
+	// Pause the servers' clocks going forward.
+	var maxNanos int64
+	for _, m := range manuals {
+		m.Pause()
+		if cur := m.UnixNano(); cur > maxNanos {
+			maxNanos = cur
+		}
+	}
+	// After doing so, perfectly synchronize them.
+	for _, m := range manuals {
+		m.Increment(maxNanos - m.UnixNano())
+	}
+
+	// Initiate a non-txn read on node 2. The request will be intercepted after
+	// the request has received a server-assigned timestamp, but before it has
+	// consulted the lease. We'll transfer the lease to node 2 before the request
+	// checks, so that it ends up evaluating on node 2.
+	type resp struct {
+		*roachpb.BatchResponse
+		*roachpb.Error
+	}
+	nonTxnRespC := make(chan resp, 1)
+	_ = tc.Stopper().RunAsyncTask(ctx, "non-txn get", func(ctx context.Context) {
+		ctx = context.WithValue(ctx, nonTxnGetKey{}, "foo")
+		ba := roachpb.BatchRequest{}
+		ba.RangeID = desc.RangeID
+		ba.Add(getArgs(key))
+		br, pErr := tc.GetFirstStoreFromServer(t, 1).Send(ctx, ba)
+		nonTxnRespC <- resp{br, pErr}
+	})
+
+	// Wait for the non-txn read to get stuck.
+	var nonTxnOrigTs hlc.Timestamp
+	select {
+	case nonTxnOrigTs = <-nonTxnOrigTsC:
+	case nonTxnResp := <-nonTxnRespC:
+		t.Fatalf("unexpected response %+v", nonTxnResp)
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatalf("timeout")
+	}
+
+	// Advance the clock on node 1.
+	manuals[0].Increment(100)
+
+	// Perform a non-txn write on node 1. This will grab a timestamp from node 1's
+	// clock, which leads the clock on node 2 and the timestamp assigned to the
+	// non-txn read.
+	//
+	// NOTE: we perform the clock increment and write _after_ sending the non-txn
+	// read. Ideally, we would write this test such that we did this before
+	// beginning the read on node 2, so that the absence of an uncertainty error
+	// would be a true "stale read". However, doing so causes the test to be flaky
+	// because background operations can leak the clock signal from node 1 to node
+	// 2 between the time that we write and the time that the non-txn read request
+	// is sent. If we had a way to disable all best-effort HLC clock stabilization
+	// channels and only propagate clock signals when strictly necessary then it's
+	// possible that we could avoid flakiness. For now, we just re-order the
+	// operations and assert that we observe an uncertainty error even though its
+	// absence would not be a true stale read.
+	ba := roachpb.BatchRequest{}
+	ba.Add(putArgs(key, []byte("val")))
+	br, pErr := tc.Servers[0].DistSender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	writeTs := br.Timestamp
+	require.True(t, nonTxnOrigTs.Less(writeTs))
+
+	// Then transfer the lease to node 2. The new lease should end up with a start
+	// time above the timestamp assigned to the non-txn read.
+	var lease roachpb.Lease
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+	testutils.SucceedsSoon(t, func() error {
+		repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(desc.StartKey)
+		lease, _ = repl.GetLease()
+		if lease.Replica.NodeID != repl.NodeID() {
+			return errors.Errorf("expected lease transfer to node 2: %s", lease)
+		}
+		return nil
+	})
+	require.True(t, nonTxnOrigTs.Less(lease.Start.ToTimestamp()))
+
+	// Let the non-txn read proceed. It should complete, but only after hitting a
+	// ReadWithinUncertaintyInterval, performing a server-side retry, reading
+	// again at a higher timestamp, and returning the written value.
+	close(nonTxnBlockerC)
+	nonTxnResp := <-nonTxnRespC
+	require.Nil(t, nonTxnResp.Error)
+	br = nonTxnResp.BatchResponse
+	require.NotNil(t, br)
+	require.True(t, nonTxnOrigTs.Less(br.Timestamp))
+	require.True(t, writeTs.LessEq(br.Timestamp))
+	require.Len(t, br.Responses, 1)
+	require.NotNil(t, br.Responses[0].GetGet())
+	require.NotNil(t, br.Responses[0].GetGet().Value)
+	require.Equal(t, writeTs, br.Responses[0].GetGet().Value.Timestamp)
+	require.Equal(t, int32(1), atomic.LoadInt32(&uncertaintyErrs))
 }
 
 // TestRangeLookupUseReverse tests whether the results and the results count
@@ -989,7 +1277,7 @@ func TestLeaseExpirationBasedDrainTransfer(t *testing.T) {
 	// caught up to replica0 as draining code doesn't transfer leases to
 	// behind replicas.
 	l.ensureLeaderAndRaftState(t, l.replica0, l.replica1Desc)
-	l.tc.GetFirstStoreFromServer(t, 0).SetDraining(true, nil /* reporter */)
+	l.tc.GetFirstStoreFromServer(t, 0).SetDraining(true, nil /* reporter */, false /* verbose */)
 
 	// Check that replica0 doesn't serve reads any more.
 	pErr := l.sendRead(t, 0)
@@ -1005,7 +1293,7 @@ func TestLeaseExpirationBasedDrainTransfer(t *testing.T) {
 	// Check that replica1 now has the lease.
 	l.checkHasLease(t, 1)
 
-	l.tc.GetFirstStoreFromServer(t, 0).SetDraining(false, nil /* reporter */)
+	l.tc.GetFirstStoreFromServer(t, 0).SetDraining(false, nil /* reporter */, false /* verbose */)
 }
 
 // TestLeaseExpirationBasedDrainTransferWithExtension verifies that
@@ -1042,7 +1330,7 @@ func TestLeaseExpirationBasedDrainTransferWithExtension(t *testing.T) {
 
 	// Drain node 1 with an extension in progress.
 	go func() {
-		l.tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */)
+		l.tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */, false /* verbose */)
 	}()
 	// Now unblock the extension.
 	extensionSem <- struct{}{}
@@ -1174,7 +1462,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	}
 
 	// Start a transaction using node2 as a gateway.
-	txn := roachpb.MakeTransaction("test", keyA, 1, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */)
+	txn := roachpb.MakeTransaction("test", keyA, 1 /* userPriority */, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */, int32(tc.Servers[1].SQLInstanceID()))
 	// Simulate a read to another range on node2 by setting the observed timestamp.
 	txn.UpdateObservedTimestamp(2, tc.Servers[1].Clock().NowAsClockTimestamp())
 
@@ -1530,17 +1818,65 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		readBlocked <- struct{}{}
 	}
 }
+func validateLeaseholderSoon(
+	t *testing.T, db *kv.DB, key roachpb.Key, replica roachpb.ReplicaDescriptor, isTarget bool,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		leaseInfo := getLeaseInfoOrFatal(t, context.Background(), db, key)
+		if isTarget && leaseInfo.Lease.Replica != replica {
+			return fmt.Errorf("lease holder should be replica %+v, but is: %+v",
+				replica, leaseInfo.Lease.Replica)
+		} else if !isTarget && leaseInfo.Lease.Replica == replica {
+			return fmt.Errorf("lease holder still on replica: %+v", replica)
+		}
+		return nil
+	})
+}
 
-func getLeaseInfo(
-	ctx context.Context, db *kv.DB, key roachpb.Key,
-) (*roachpb.LeaseInfoResponse, error) {
-	header := roachpb.Header{ReadConsistency: roachpb.INCONSISTENT}
+func getLeaseInfoOrFatal(
+	t *testing.T, ctx context.Context, db *kv.DB, key roachpb.Key,
+) *roachpb.LeaseInfoResponse {
+	header := roachpb.Header{
+		// INCONSISTENT read with a NEAREST routing policy, since we want to make
+		// sure that the node used to send this is the one that processes the
+		// command, regardless of whether it is the leaseholder.
+		ReadConsistency: roachpb.INCONSISTENT,
+		RoutingPolicy:   roachpb.RoutingPolicy_NEAREST,
+	}
 	leaseInfoReq := &roachpb.LeaseInfoRequest{RequestHeader: roachpb.RequestHeader{Key: key}}
 	reply, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, leaseInfoReq)
 	if pErr != nil {
-		return nil, pErr.GoError()
+		t.Fatal(pErr)
 	}
-	return reply.(*roachpb.LeaseInfoResponse), nil
+	return reply.(*roachpb.LeaseInfoResponse)
+}
+
+func TestRemoveLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(context.Background())
+	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
+
+	// We start with having the range under test on (1,2,3).
+	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+
+	// Make sure the lease is on 1.
+	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(0))
+	leaseHolder, err := tc.FindRangeLeaseHolder(rhsDesc, nil)
+	require.NoError(t, err)
+	require.Equal(t, tc.Target(0), leaseHolder)
+
+	// Remove server 1.
+	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0))
+
+	// Check that the lease moved away from 1.
+	leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, tc.Target(0), leaseHolder)
 }
 
 func TestLeaseInfoRequest(t *testing.T) {
@@ -1550,7 +1886,6 @@ func TestLeaseInfoRequest(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	kvDB0 := tc.Servers[0].DB()
-	kvDB1 := tc.Servers[1].DB()
 
 	key := []byte("a")
 	rangeDesc, err := tc.LookupRange(key)
@@ -1565,13 +1900,6 @@ func TestLeaseInfoRequest(t *testing.T) {
 			t.Fatalf("expected to find replica in server %d", i)
 		}
 	}
-	mustGetLeaseInfo := func(db *kv.DB) *roachpb.LeaseInfoResponse {
-		resp, err := getLeaseInfo(context.Background(), db, rangeDesc.StartKey.AsRawKey())
-		if err != nil {
-			t.Fatal(err)
-		}
-		return resp
-	}
 
 	// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
 	// there might be already a lease owned by a random node.
@@ -1580,16 +1908,8 @@ func TestLeaseInfoRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Now test the LeaseInfo. We might need to loop until the node we query has
-	// applied the lease.
-	testutils.SucceedsSoon(t, func() error {
-		leaseHolderReplica := mustGetLeaseInfo(kvDB0).Lease.Replica
-		if leaseHolderReplica != replicas[0] {
-			return fmt.Errorf("lease holder should be replica %+v, but is: %+v",
-				replicas[0], leaseHolderReplica)
-		}
-		return nil
-	})
+	// Now test the LeaseInfo. We might need to loop until the node we query has applied the lease.
+	validateLeaseholderSoon(t, kvDB0, rangeDesc.StartKey.AsRawKey(), replicas[0], true)
 
 	// Transfer the lease to Server 1 and check that LeaseInfoRequest gets the
 	// right answer.
@@ -1600,26 +1920,19 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// An inconsistent LeaseInfoReqeust on the old lease holder should give us the
 	// right answer immediately, since the old holder has definitely applied the
 	// transfer before TransferRangeLease returned.
-	leaseHolderReplica := mustGetLeaseInfo(kvDB0).Lease.Replica
-	if !leaseHolderReplica.Equal(replicas[1]) {
+	leaseInfo := getLeaseInfoOrFatal(t, context.Background(), kvDB0, rangeDesc.StartKey.AsRawKey())
+	if !leaseInfo.Lease.Replica.Equal(replicas[1]) {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v",
-			replicas[1], leaseHolderReplica)
+			replicas[1], leaseInfo.Lease.Replica)
 	}
 
 	// A read on the new lease holder does not necessarily succeed immediately,
 	// since it might take a while for it to apply the transfer.
-	testutils.SucceedsSoon(t, func() error {
-		// We can't reliably do a CONSISTENT read here, even though we're reading
-		// from the supposed lease holder, because this node might initially be
-		// unaware of the new lease and so the request might bounce around for a
-		// while (see #8816).
-		leaseHolderReplica = mustGetLeaseInfo(kvDB1).Lease.Replica
-		if !leaseHolderReplica.Equal(replicas[1]) {
-			return errors.Errorf("lease holder should be replica %+v, but is: %+v",
-				replicas[1], leaseHolderReplica)
-		}
-		return nil
-	})
+	// We can't reliably do a CONSISTENT read here, even though we're reading
+	// from the supposed lease holder, because this node might initially be
+	// unaware of the new lease and so the request might bounce around for a
+	// while (see #8816).
+	validateLeaseholderSoon(t, kvDB0, rangeDesc.StartKey.AsRawKey(), replicas[1], true)
 
 	// Transfer the lease to Server 2 and check that LeaseInfoRequest gets the
 	// right answer.
@@ -1651,10 +1964,9 @@ func TestLeaseInfoRequest(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	resp := *(reply.(*roachpb.LeaseInfoResponse))
-	leaseHolderReplica = resp.Lease.Replica
 
-	if !leaseHolderReplica.Equal(replicas[2]) {
-		t.Fatalf("lease holder should be replica %s, but is: %s", replicas[2], leaseHolderReplica)
+	if !resp.Lease.Replica.Equal(replicas[2]) {
+		t.Fatalf("lease holder should be replica %s, but is: %s", replicas[2], resp.Lease.Replica)
 	}
 
 	// TODO(andrei): test the side-effect of LeaseInfoRequest when there's no
@@ -1805,9 +2117,9 @@ func TestDrainRangeRejection(t *testing.T) {
 	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
 
 	drainingIdx := 1
-	tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */)
+	tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */, false /* verbose */)
 	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(drainingIdx))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 }
@@ -1827,7 +2139,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 
 	oldGeneration := repl.Desc().Generation
 	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+2)
@@ -1835,7 +2147,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	oldGeneration = repl.Desc().Generation
 	oldDesc := repl.Desc()
 	chgs[0].ChangeType = roachpb.REMOVE_VOTER
-	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs)
+	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1867,6 +2179,9 @@ func TestSystemZoneConfigs(t *testing.T) {
 					DisableLoadBasedSplitting: true,
 				},
 			},
+			// This test was written for the gossip-backed SystemConfigSpan
+			// infrastructure.
+			DisableSpanConfigs: true,
 			// Scan like a bat out of hell to ensure replication and replica GC
 			// happen in a timely manner.
 			ScanInterval: 50 * time.Millisecond,
@@ -1892,7 +2207,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	waitForReplicas := func() error {
 		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
 		for _, s := range tc.Servers {
-			if err := kvserver.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) error {
+			if err := kvserver.IterateRangeDescriptorsFromDisk(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) error {
 				if len(desc.Replicas().LearnerDescriptors()) > 0 {
 					return fmt.Errorf("descriptor contains learners: %v", desc)
 				}
@@ -1985,15 +2300,15 @@ func TestClearRange(t *testing.T) {
 			t.Fatal(err)
 		}
 		var actualKeys []roachpb.Key
-		for _, kv := range kvs {
-			actualKeys = append(actualKeys, kv.Key.Key)
+		for _, keyValue := range kvs {
+			actualKeys = append(actualKeys, keyValue.Key.Key)
 		}
 		if !reflect.DeepEqual(expectedKeys, actualKeys) {
 			t.Fatalf("expected %v, but got %v", expectedKeys, actualKeys)
 		}
 	}
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	// Write four keys with values small enough to use individual deletions
 	// (sm1-sm4) and four keys with values large enough to require a range
@@ -2100,7 +2415,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		// ensures that that when node 2 comes back up it will require a snapshot
 		// from Raft.
 		funcs := noopRaftHandlerFuncs()
-		funcs.dropReq = func(*kvserver.RaftMessageRequest) bool {
+		funcs.dropReq = func(*kvserverpb.RaftMessageRequest) bool {
 			return true
 		}
 		tc.Servers[2].RaftTransport().Listen(store2.StoreID(), &unreliableRaftHandler{
@@ -2247,13 +2562,18 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 	const actors = 10
-	errors := make([]error, actors)
+	errs := make([]error, actors)
 	var wg sync.WaitGroup
 	key := roachpb.Key("a")
 	db := tc.Servers[0].DB()
-	require.Nil(t, db.AdminRelocateRange(
-		ctx, key, makeReplicationTargets(1, 2, 3), nil,
-	))
+	require.Nil(
+		t,
+		db.AdminRelocateRange(
+			ctx, key, makeReplicationTargets(1, 2, 3),
+			nil,  /* nonVoterTargets */
+			true, /* transferLeaseToFirstVoter */
+		),
+	)
 	// Random targets consisting of a random number of nodes from the set of nodes
 	// in the cluster which currently do not have a replica.
 	pickTargets := func() []roachpb.ReplicationTarget {
@@ -2282,11 +2602,11 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	}
 	wg.Add(actors)
 	for i := 0; i < actors; i++ {
-		go func(i int) { errors[i] = addReplicas(); wg.Done() }(i)
+		go func(i int) { errs[i] = addReplicas(); wg.Done() }(i)
 	}
 	wg.Wait()
 	var gotSuccess bool
-	for _, err := range errors {
+	for _, err := range errs {
 		if err != nil {
 			require.Truef(t, kvserver.IsRetriableReplicationChangeError(err), "%s; desc: %v", err, rangeInfo.Desc)
 		} else if gotSuccess {
@@ -2312,7 +2632,7 @@ func TestChangeReplicasSwapVoterWithNonVoter(t *testing.T) {
 	key := tc.ScratchRange(t)
 	// NB: The test cluster starts with firstVoter having a voting replica (and
 	// the lease) for all ranges.
-	firstVoter, secondVoter, nonVoter := tc.Target(0), tc.Target(1), tc.Target(3)
+	firstVoter, nonVoter := tc.Target(0), tc.Target(1)
 	firstStore, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(tc.Server(0).GetFirstStoreID())
 	require.NoError(t, err)
 	firstRepl := firstStore.LookupReplica(roachpb.RKey(key))
@@ -2320,17 +2640,8 @@ func TestChangeReplicasSwapVoterWithNonVoter(t *testing.T) {
 		" replica for the ScratchRange")
 
 	tc.AddNonVotersOrFatal(t, key, nonVoter)
-	// TODO(aayush): Trying to swap the last voting replica with a non-voter hits
-	// the safeguard inside Replica.propose() as the last voting replica is always
-	// the leaseholder. There are a bunch of subtleties around getting a
-	// leaseholder to remove itself without another voter to immediately transfer
-	// the lease to. See #40333.
-	_, err = tc.SwapVoterWithNonVoter(key, firstVoter, nonVoter)
-	require.Regexp(t, "received invalid ChangeReplicasTrigger", err)
-
-	tc.AddVotersOrFatal(t, key, secondVoter)
-
-	tc.SwapVoterWithNonVoterOrFatal(t, key, secondVoter, nonVoter)
+	// Swap the only voting replica (leaseholder) with a non-voter
+	tc.SwapVoterWithNonVoterOrFatal(t, key, firstVoter, nonVoter)
 }
 
 // TestReplicaTombstone ensures that tombstones are written when we expect
@@ -2376,7 +2687,7 @@ func TestReplicaTombstone(t *testing.T) {
 		// it rather than receiving a ReplicaTooOldError.
 		store, _ := getFirstStoreReplica(t, tc.Server(1), key)
 		funcs := noopRaftHandlerFuncs()
-		funcs.dropResp = func(*kvserver.RaftMessageResponse) bool {
+		funcs.dropResp = func(*kvserverpb.RaftMessageResponse) bool {
 			return true
 		}
 		tc.Servers[1].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
@@ -2423,7 +2734,7 @@ func TestReplicaTombstone(t *testing.T) {
 		// ReplicaTooOldError.
 		sawTooOld := make(chan struct{}, 1)
 		raftFuncs := noopRaftHandlerFuncs()
-		raftFuncs.dropResp = func(resp *kvserver.RaftMessageResponse) bool {
+		raftFuncs.dropResp = func(resp *kvserverpb.RaftMessageResponse) bool {
 			if pErr, ok := resp.Union.GetValue().(*roachpb.Error); ok {
 				if _, isTooOld := pErr.GetDetail().(*roachpb.ReplicaTooOldError); isTooOld {
 					select {
@@ -2434,7 +2745,7 @@ func TestReplicaTombstone(t *testing.T) {
 			}
 			return false
 		}
-		raftFuncs.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+		raftFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			return req.ToReplica.StoreID == store.StoreID()
 		}
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
@@ -2444,7 +2755,7 @@ func TestReplicaTombstone(t *testing.T) {
 		})
 		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		testutils.SucceedsSoon(t, func() error {
-			repl.UnquiesceAndWakeLeader()
+			repl.MaybeUnquiesceAndWakeLeader()
 			if len(sawTooOld) == 0 {
 				return errors.New("still haven't seen ReplicaTooOldError")
 			}
@@ -2607,17 +2918,17 @@ func TestReplicaTombstone(t *testing.T) {
 			rangeID:            desc.RangeID,
 			RaftMessageHandler: store,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropResp: func(*kvserver.RaftMessageResponse) bool {
+				dropResp: func(*kvserverpb.RaftMessageResponse) bool {
 					return true
 				},
-				dropReq: func(*kvserver.RaftMessageRequest) bool {
+				dropReq: func(*kvserverpb.RaftMessageRequest) bool {
 					return true
 				},
-				dropHB: func(hb *kvserver.RaftHeartbeat) bool {
+				dropHB: func(hb *kvserverpb.RaftHeartbeat) bool {
 					recordHeartbeat(hb.ToReplicaID)
 					return false
 				},
-				snapErr: func(*kvserver.SnapshotRequest_Header) error {
+				snapErr: func(*kvserverpb.SnapshotRequest_Header) error {
 					waitForSnapshot()
 					return errors.New("boom")
 				},
@@ -2709,7 +3020,7 @@ func TestReplicaTombstone(t *testing.T) {
 		var partActive atomic.Value
 		partActive.Store(false)
 		raftFuncs := noopRaftHandlerFuncs()
-		raftFuncs.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+		raftFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			return partActive.Load().(bool) && req.Message.Type == raftpb.MsgApp
 		}
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
@@ -2805,8 +3116,13 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 
 	key := roachpb.Key("a")
 	assert.Nil(t, db.AdminRelocateRange(
-		ctx, key, makeReplicationTargets(1, 2, 3), makeReplicationTargets(),
-	))
+		ctx,
+		key,
+		makeReplicationTargets(1, 2, 3),
+		makeReplicationTargets(),
+		true, /* transferLeaseToFirstVoter */
+	),
+	)
 	rangeInfo, err := getRangeInfo(ctx, db, key)
 	assert.Nil(t, err)
 	assert.Len(t, rangeInfo.Desc.InternalReplicas, 3)
@@ -2838,11 +3154,15 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	change := func() {
 		<-seenAdd
 		chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, makeReplicationTargets(2)...)
-		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, kvserver.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
+		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, kvserverpb.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
 	}
 	relocate := func() {
 		relocateErr = db.AdminRelocateRange(
-			ctx, key, makeReplicationTargets(1, 2, 4), makeReplicationTargets(),
+			ctx,
+			key,
+			makeReplicationTargets(1, 2, 4),
+			makeReplicationTargets(),
+			true, /* transferLeaseToFirstVoter */
 		)
 	}
 	useSeenAdd.Store(true)
@@ -3146,8 +3466,27 @@ func TestStrictGCEnforcement(t *testing.T) {
 	}
 	ctx := context.Background()
 
+	var mu struct {
+		syncutil.Mutex
+		blockOnTimestampUpdate func()
+	}
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{
+						OnTimestampAdvance: func(timestamp hlc.Timestamp) {
+							mu.Lock()
+							defer mu.Unlock()
+							if mu.blockOnTimestampUpdate != nil {
+								mu.blockOnTimestampUpdate()
+							}
+						},
+					},
+				},
+			},
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 
@@ -3165,11 +3504,12 @@ func TestStrictGCEnforcement(t *testing.T) {
 		tenSecondsAgo hlc.Timestamp // written in setup
 		tableKey      = keys.SystemSQLCodec.TablePrefix(tableID)
 		tableSpan     = roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+		tableTarget   = ptpb.MakeSchemaObjectsTarget([]descpb.ID{descpb.ID(tableID)})
 		mkRecord      = func() ptpb.Record {
 			return ptpb.Record{
-				ID:        uuid.MakeV4(),
+				ID:        uuid.MakeV4().GetBytes(),
 				Timestamp: tenSecondsAgo.Add(-10*time.Second.Nanoseconds(), 0),
-				Spans:     []roachpb.Span{tableSpan},
+				Target:    tableTarget,
 			}
 		}
 		mkStaleTxn = func() *kv.Txn {
@@ -3194,22 +3534,6 @@ func TestStrictGCEnforcement(t *testing.T) {
 			t.Helper()
 			require.NoError(t, performScan())
 		}
-		// Make sure the cache has been updated. Once it has then we know it won't
-		// be for minutes. It should read on startup.
-		waitForCacheAfter = func(t *testing.T, min hlc.Timestamp) {
-			t.Helper()
-			testutils.SucceedsSoon(t, func() error {
-				for i := 0; i < tc.NumServers(); i++ {
-					ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-					if ptp.Iterate(ctx, tableKey, tableKey, func(record *ptpb.Record) (wantMore bool) {
-						return false
-					}).Less(min) {
-						return errors.Errorf("not yet read")
-					}
-				}
-				return nil
-			})
-		}
 		setGCTTL = func(t *testing.T, object string, exp int) {
 			t.Helper()
 			testutils.SucceedsSoon(t, func() error {
@@ -3217,12 +3541,12 @@ func TestStrictGCEnforcement(t *testing.T) {
 				for i := 0; i < tc.NumServers(); i++ {
 					s := tc.Server(i)
 					_, r := getFirstStoreReplica(t, s, tableKey)
-					if _, z := r.DescAndZone(); z.GC.TTLSeconds != int32(exp) {
+					if c := r.SpanConfig(); c.TTL().Seconds() != (time.Duration(exp) * time.Second).Seconds() {
 						_, sysCfg := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
 						sysCfg.RaftLock()
 						require.NoError(t, sysCfg.MaybeGossipSystemConfigRaftMuLocked(ctx))
 						sysCfg.RaftUnlock()
-						return errors.Errorf("expected %d, got %d", exp, z.GC.TTLSeconds)
+						return errors.Errorf("expected %d, got %f", exp, c.TTL().Seconds())
 					}
 				}
 				return nil
@@ -3255,11 +3579,37 @@ func TestStrictGCEnforcement(t *testing.T) {
 		}
 		refreshPastLeaseStart = func(t *testing.T) {
 			for i := 0; i < tc.NumServers(); i++ {
-				ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+				ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
 				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
 				l, _ := r.GetLease()
-				require.NoError(t, ptp.Refresh(ctx, l.Start.ToTimestamp().Next()))
-				r.ReadProtectedTimestamps(ctx)
+				require.NoError(
+					t,
+					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, l.Start.ToTimestamp().Next()),
+				)
+				err := r.ReadProtectedTimestamps(ctx)
+				require.NoError(t, err)
+			}
+		}
+		// waitForProtectionAndReadProtectedTimestamps waits until the
+		// `protectionTimestamp` has been reconciled to KV, and then updates the
+		// replica's view of the protections that apply on it.
+		waitForProtectionAndReadProtectedTimestamps = func(t *testing.T, nodeID roachpb.NodeID,
+			protectionTimestamp hlc.Timestamp, span roachpb.Span) {
+			for i := 0; i < tc.NumServers(); i++ {
+				if tc.Server(i).NodeID() != nodeID {
+					continue
+				}
+				ptsReader := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().ProtectedTimestampReader
+				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
+				testutils.SucceedsSoon(t, func() error {
+					if err := verifyProtectionTimestampExistsOnSpans(ctx, t, tc, ptsReader, protectionTimestamp,
+						[]roachpb.Span{span}); err != nil {
+						return errors.Newf("protection timestamp %s does not exist on span %s",
+							protectionTimestamp, span)
+					}
+					return nil
+				})
+				require.NoError(t, r.ReadProtectedTimestamps(ctx))
 			}
 		}
 	)
@@ -3274,8 +3624,8 @@ func TestStrictGCEnforcement(t *testing.T) {
 		require.NoError(t, err)
 
 		setTableGCTTL(t, 1)
-		waitForCacheAfter(t, hlc.Timestamp{})
 
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
 		defer sqlDB.Exec(t, `SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = DEFAULT`)
 		setStrictGC(t, true)
 		tenSecondsAgo = tc.Server(0).Clock().Now().Add(-10*time.Second.Nanoseconds(), 0)
@@ -3304,24 +3654,46 @@ func TestStrictGCEnforcement(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("protected timestamps are respected", func(t *testing.T) {
-		waitForCacheAfter(t, hlc.Timestamp{})
+		// Block the KVSubscriber rangefeed from progressing.
+		blockKVSubscriberCh := make(chan struct{})
+		var isBlocked syncutil.AtomicBool
+		isBlocked.Set(false)
+		mu.Lock()
+		mu.blockOnTimestampUpdate = func() {
+			isBlocked.Set(true)
+			<-blockKVSubscriberCh
+		}
+		mu.Unlock()
+
+		// Ensure that the KVSubscriber has been blocked.
+		testutils.SucceedsSoon(t, func() error {
+			if !isBlocked.Get() {
+				return errors.New("kvsubscriber not blocked yet")
+			}
+			return nil
+		})
+
 		ptp := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		assertScanRejected(t)
-		// Create a protected timestamp, don't verify it, make sure it's not
-		// respected.
+		// Create a protected timestamp, and make sure it's not respected since the
+		// KVSubscriber is blocked.
 		rec := mkRecord()
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return ptp.Protect(ctx, txn, &rec)
 		}))
 		assertScanRejected(t)
 
-		require.NoError(t, ptp.Verify(ctx, rec.ID))
+		// Unblock the KVSubscriber and wait for the PTS record to reach KV.
+		close(blockKVSubscriberCh)
+		desc, err := tc.LookupRange(tableKey)
+		require.NoError(t, err)
+		target, err := tc.FindRangeLeaseHolder(desc, nil)
+		require.NoError(t, err)
+		waitForProtectionAndReadProtectedTimestamps(t, target.NodeID, rec.Timestamp, tableSpan)
 		assertScanOk(t)
 
 		// Transfer the lease and demonstrate that the query succeeds because we're
 		// cautious in the face of lease transfers.
-		desc, err := tc.LookupRange(tableKey)
-		require.NoError(t, err)
 		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
 		assertScanOk(t)
 	})
@@ -3367,7 +3739,12 @@ func TestProposalOverhead(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{TestingProposalFilter: filter},
+				Store: &kvserver.StoreTestingKnobs{
+					TestingProposalFilter: filter,
+				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ConfigureScratchRange: true,
+				},
 			},
 		},
 	})
@@ -3387,6 +3764,16 @@ func TestProposalOverhead(t *testing.T) {
 	)
 	t.Run("user-key overhead", func(t *testing.T) {
 		userKey := tc.ScratchRange(t)
+		testutils.SucceedsSoon(t, func() error {
+			repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(userKey))
+			if repl == nil {
+				return errors.New("scratch range replica not found")
+			}
+			if repl.SpanConfig().RangefeedEnabled {
+				return errors.New("waiting for span configs to apply")
+			}
+			return nil
+		})
 		k := roachpb.Key(encoding.EncodeStringAscending(userKey, "foo"))
 		key.Store(k)
 		require.NoError(t, db.Put(ctx, k, "v"))
@@ -3616,7 +4003,7 @@ func TestTenantID(t *testing.T) {
 	t.Run("(1) initial set", func(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
-			_, repl := getFirstStoreReplica(t, tc.Server(0), keys.UserTableDataMin)
+			_, repl := getFirstStoreReplica(t, tc.Server(0), bootstrap.TestingUserTableDataMin())
 			ri := repl.State(ctx)
 			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
 		}
@@ -3639,10 +4026,10 @@ func TestTenantID(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					BeforeSnapshotSSTIngestion: func(
 						snapshot kvserver.IncomingSnapshot,
-						request_type kvserver.SnapshotRequest_Type,
+						request_type kvserverpb.SnapshotRequest_Type,
 						strings []string,
 					) error {
-						if snapshot.State.Desc.RangeID == repl.RangeID {
+						if snapshot.Desc.RangeID == repl.RangeID {
 							select {
 							case sawSnapshot <- struct{}{}:
 							default:
@@ -3695,6 +4082,85 @@ func TestTenantID(t *testing.T) {
 
 }
 
+// TestUninitializedMetric ensures that uninitialized replicas are reflected in the UninitializedCount store metric.
+func TestUninitializedMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      base.TestServerArgs{Insecure: true},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	_, repl := getFirstStoreReplica(t, tc.Server(0), scratchKey)
+	sawSnapshot := make(chan struct{}, 1)
+	blockSnapshot := make(chan struct{})
+	tc.AddAndStartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				BeforeSnapshotSSTIngestion: func(
+					snapshot kvserver.IncomingSnapshot,
+					_ kvserverpb.SnapshotRequest_Type,
+					_ []string,
+				) error {
+					if snapshot.Desc.RangeID == repl.RangeID {
+						select {
+						case sawSnapshot <- struct{}{}:
+						default:
+						}
+						<-blockSnapshot
+					}
+					return nil
+				},
+			},
+		},
+	})
+
+	// We're going to block the snapshot. We need to retry adding the replica
+	// to the second node as under stressrace, failures can occur due to
+	// networking handshake timeouts.
+	addReplicaErr := make(chan error)
+	addReplica := func() {
+		_, err := tc.AddVoters(scratchKey, tc.Target(1))
+		addReplicaErr <- err
+	}
+	go addReplica()
+	if err := retry.ForDuration(3*time.Minute, func() error {
+		select {
+		case <-sawSnapshot:
+			return nil
+		case err := <-addReplicaErr:
+			go addReplica()
+			return err
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	targetStore := tc.GetFirstStoreFromServer(t, 1)
+
+	// Force the store to compute the replica metrics
+	require.NoError(t, targetStore.ComputeMetrics(ctx, 0))
+
+	// Blocked snapshot on the second server (1) should realize 1 uninitialized replica.
+	require.Equal(t, int64(1), targetStore.Metrics().UninitializedCount.Value())
+
+	// Unblock snapshot on the second server (1), this should initialize replica.
+	close(blockSnapshot)
+	require.NoError(t, <-addReplicaErr)
+
+	// Again force the store to compute metrics, increment tick counter 0 -> 1
+	require.NoError(t, targetStore.ComputeMetrics(ctx, 1))
+
+	// There should now be no uninitialized replicas in the recorded metrics
+	require.Equal(t, int64(0), targetStore.Metrics().UninitializedCount.Value())
+}
+
 // TestRangeMigration tests the below-raft migration infrastructure. It checks
 // to see that the version recorded as part of the in-memory ReplicaState
 // is up to date, and in-sync with the persisted state. It also checks to see
@@ -3716,7 +4182,7 @@ func TestRangeMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startV,
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 			},
 		},
@@ -3861,6 +4327,7 @@ func TestOptimisticEvalRetry(t *testing.T) {
 			require.True(t, removedLocks)
 			done = true
 		case <-timer.C:
+			timer.Read = true
 			require.NoError(t, txn1.Commit(ctx))
 			removedLocks = true
 		}

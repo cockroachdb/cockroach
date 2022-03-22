@@ -202,7 +202,7 @@ using timestamp `SC`:
 The schema change operation only scans the leases with the previous
 version so as to not cause a lot of aborted transactions trying to
 acquire leases on the new version of the table. The above schema change
-transaction is retried in a loop until it suceeds.
+transaction is retried in a loop until it succeeds.
 
 Note that the updating of the table descriptor will cause the table
 version to be gossiped alerting nodes to the new version and causing

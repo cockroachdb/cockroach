@@ -19,25 +19,34 @@ type ModuleTestingKnobs interface {
 // TestingKnobs contains facilities for controlling various parts of the
 // system for testing.
 type TestingKnobs struct {
-	Store                   ModuleTestingKnobs
-	KVClient                ModuleTestingKnobs
-	RangeFeed               ModuleTestingKnobs
-	SQLExecutor             ModuleTestingKnobs
-	SQLLeaseManager         ModuleTestingKnobs
-	SQLSchemaChanger        ModuleTestingKnobs
-	SQLNewSchemaChanger     ModuleTestingKnobs
-	SQLTypeSchemaChanger    ModuleTestingKnobs
-	GCJob                   ModuleTestingKnobs
-	PGWireTestingKnobs      ModuleTestingKnobs
-	StartupMigrationManager ModuleTestingKnobs
-	DistSQL                 ModuleTestingKnobs
-	SQLEvalContext          ModuleTestingKnobs
-	NodeLiveness            ModuleTestingKnobs
-	Server                  ModuleTestingKnobs
-	TenantTestingKnobs      ModuleTestingKnobs
-	JobsTestingKnobs        ModuleTestingKnobs
-	BackupRestore           ModuleTestingKnobs
-	MigrationManager        ModuleTestingKnobs
-	IndexUsageStatsKnobs    ModuleTestingKnobs
-	SQLStatsKnobs           ModuleTestingKnobs
+	Store                        ModuleTestingKnobs
+	KVClient                     ModuleTestingKnobs
+	RangeFeed                    ModuleTestingKnobs
+	SQLExecutor                  ModuleTestingKnobs
+	SQLLeaseManager              ModuleTestingKnobs
+	SQLSchemaChanger             ModuleTestingKnobs
+	SQLDeclarativeSchemaChanger  ModuleTestingKnobs
+	SQLTypeSchemaChanger         ModuleTestingKnobs
+	GCJob                        ModuleTestingKnobs
+	PGWireTestingKnobs           ModuleTestingKnobs
+	StartupMigrationManager      ModuleTestingKnobs
+	DistSQL                      ModuleTestingKnobs
+	SQLEvalContext               ModuleTestingKnobs
+	NodeLiveness                 ModuleTestingKnobs
+	Server                       ModuleTestingKnobs
+	TenantTestingKnobs           ModuleTestingKnobs
+	JobsTestingKnobs             ModuleTestingKnobs
+	BackupRestore                ModuleTestingKnobs
+	TTL                          ModuleTestingKnobs
+	Streaming                    ModuleTestingKnobs
+	MigrationManager             ModuleTestingKnobs
+	IndexUsageStatsKnobs         ModuleTestingKnobs
+	SQLStatsKnobs                ModuleTestingKnobs
+	SpanConfig                   ModuleTestingKnobs
+	SQLLivenessKnobs             ModuleTestingKnobs
+	TelemetryLoggingKnobs        ModuleTestingKnobs
+	DialerKnobs                  ModuleTestingKnobs
+	ProtectedTS                  ModuleTestingKnobs
+	CapturedIndexUsageStatsKnobs ModuleTestingKnobs
+	AdmissionControl             ModuleTestingKnobs
 }

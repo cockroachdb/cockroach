@@ -22,6 +22,7 @@ import (
 // NoticesEnabled is the cluster setting that allows users
 // to enable notices.
 var NoticesEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.notices.enabled",
 	"enable notices in the server/client protocol being sent",
 	true,
@@ -43,7 +44,7 @@ func (p *planner) BufferClientNotice(ctx context.Context, notice pgnotice.Notice
 		noticeSeverity = pgnotice.DisplaySeverityNotice
 	}
 	if p.noticeSender == nil ||
-		noticeSeverity > p.SessionData().NoticeDisplaySeverity ||
+		noticeSeverity > pgnotice.DisplaySeverity(p.SessionData().NoticeDisplaySeverity) ||
 		!NoticesEnabled.Get(&p.execCfg.Settings.SV) {
 		// Notice cannot flow to the client - because of one of these conditions:
 		// * there is no client

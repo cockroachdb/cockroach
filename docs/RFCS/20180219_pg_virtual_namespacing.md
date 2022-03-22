@@ -641,7 +641,7 @@ hold:
   `b` for the aforementioned columns, then a query of the form
   `select * from a.b` must work.
 
-- if `information_schema.schematas` contains a row with values
+- if `information_schema.schemata` contains a row with values
   `unused`, `a` for the catalog and schema name columns, then a
   statement of the form `create table a.b (...)` must work.
 
@@ -654,7 +654,7 @@ constructed:
   `c` for the aforementioned columns, then a query of the form
   `select * from a.b.c` must work.
 
-- if `information_schema.schematas` contains a row with values `a`,
+- if `information_schema.schemata` contains a row with values `a`,
   `b` for the catalog and schema name columns, then a statement of the
   form `create table a.b.c (...)` must work.
 
@@ -678,7 +678,7 @@ specifically defined to be *schema names*.  Also they are very much
 defined to designate *virtual schemas* that *must exist in every
 catalog*.
 
-The working intution is that the virtual tables in the virtual schemas
+The working intuition is that the virtual tables in the virtual schemas
 only contain rows pertaining to the catalog in which they are
 (virtually) contained:
 
@@ -703,7 +703,7 @@ tables in the right position.  For example, the word
 
 ### Separate resolution rules for persistent objects, columns and sub-parts of complex values
 
-Four separate rules (set of algoritms) apply to the different
+Four separate rules (set of algorithms) apply to the different
 syntactic constructs for names in SQL:
 
 1. **resolution of persistent objects:** (algorithms A1 & A2 in the [reference-level explanation](#reference-level-explanation))
@@ -713,7 +713,7 @@ syntactic constructs for names in SQL:
    - the naming of in-db objects in CREATE, DROP, ALTER RENAME, etc.
 
 2. **resolution of column references:** (algorithm B in the reference-level explanation)
-   - a column reference is always composed of an optional persisent object name as prefix, followed by
+   - a column reference is always composed of an optional persistent object name as prefix, followed by
      a mandatory column identifier.
 
 3. **resolution of sub-parts inside a complex value**, when the engine supports
@@ -781,7 +781,7 @@ The resolution rules are very well specified across all SQL engines:
 
     For example, `SELECT (a.b.c.d).e.f` in the query above.
 
-    In constrast, `SELECT a.b.c.d.e.f` would not be allowed, because
+    In contrast, `SELECT a.b.c.d.e.f` would not be allowed, because
      it is ambiguous: it could refer either to `.b.c.d.e.f` in column
      `a` of some implicit table, or `.c.d.e.f` in column `b` of table
      `a`, or `.d.e.f` in column `c` of table `b` in schema `a`, etc.

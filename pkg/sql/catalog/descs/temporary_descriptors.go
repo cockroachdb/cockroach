@@ -13,65 +13,105 @@ package descs
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 type temporaryDescriptors struct {
-	codec       keys.SQLCodec
-	sessionData *sessiondata.SessionData
+	settings *cluster.Settings
+	codec    keys.SQLCodec
+	tsp      TemporarySchemaProvider
 }
 
 func makeTemporaryDescriptors(
-	codec keys.SQLCodec, data *sessiondata.SessionData,
+	settings *cluster.Settings, codec keys.SQLCodec, temporarySchemaProvider TemporarySchemaProvider,
 ) temporaryDescriptors {
 	return temporaryDescriptors{
-		codec:       codec,
-		sessionData: data,
+		settings: settings,
+		codec:    codec,
+		tsp:      temporarySchemaProvider,
 	}
+}
+
+// TemporarySchemaProvider is an interface that provides temporary schema
+// details on the current session.
+type TemporarySchemaProvider interface {
+	GetTemporarySchemaName() string
+	GetTemporarySchemaIDForDB(descpb.ID) (descpb.ID, bool)
+	MaybeGetDatabaseForTemporarySchemaID(descpb.ID) (descpb.ID, bool)
+}
+
+type temporarySchemaProviderImpl sessiondata.Stack
+
+var _ TemporarySchemaProvider = (*temporarySchemaProviderImpl)(nil)
+
+// NewTemporarySchemaProvider creates a TemporarySchemaProvider.
+func NewTemporarySchemaProvider(sds *sessiondata.Stack) TemporarySchemaProvider {
+	return (*temporarySchemaProviderImpl)(sds)
+}
+
+// GetTemporarySchemaName implements the TemporarySchemaProvider interface.
+func (impl *temporarySchemaProviderImpl) GetTemporarySchemaName() string {
+	return (*sessiondata.Stack)(impl).Top().SearchPath.GetTemporarySchemaName()
+}
+
+// GetTemporarySchemaIDForDB implements the TemporarySchemaProvider interface.
+func (impl *temporarySchemaProviderImpl) GetTemporarySchemaIDForDB(id descpb.ID) (descpb.ID, bool) {
+	ret, found := (*sessiondata.Stack)(impl).Top().GetTemporarySchemaIDForDB(uint32(id))
+	return descpb.ID(ret), found
+}
+
+// MaybeGetDatabaseForTemporarySchemaID implements the TemporarySchemaProvider interface.
+func (impl *temporarySchemaProviderImpl) MaybeGetDatabaseForTemporarySchemaID(
+	id descpb.ID,
+) (descpb.ID, bool) {
+	ret, found := (*sessiondata.Stack)(impl).Top().MaybeGetDatabaseForTemporarySchemaID(uint32(id))
+	return descpb.ID(ret), found
 }
 
 // getSchemaByName assumes that the schema name carries the `pg_temp` prefix.
 // It will exhaustively search for the schema, first checking the local session
 // data and then consulting the namespace table to discover if this schema
 // exists as a part of another session.
-//
-// TODO(ajwerner): Understand and rationalize the namespace lookup given the
-// schema lookup by ID path only returns descriptors owned by this session.
-// TODO(ajwerner):
+// If it did not find a schema, it also returns a boolean flag indicating
+// whether the search is known to have been exhaustive or not.
 func (td *temporaryDescriptors) getSchemaByName(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string,
-) (refuseFurtherLookup bool, _ catalog.SchemaDescriptor, _ error) {
+	ctx context.Context, dbID descpb.ID, schemaName string,
+) (avoidFurtherLookups bool, _ catalog.SchemaDescriptor) {
 	// If a temp schema is requested, check if it's for the current session, or
 	// else fall back to reading from the store.
-	if td.sessionData != nil {
-		if schemaName == catconstants.PgTempSchemaName ||
-			schemaName == td.sessionData.SearchPath.GetTemporarySchemaName() {
-			schemaID, found := td.sessionData.GetTemporarySchemaIDForDb(uint32(dbID))
-			if found {
-				return true, schemadesc.NewTemporarySchema(
-					td.sessionData.SearchPath.GetTemporarySchemaName(),
-					descpb.ID(schemaID),
-					dbID,
-				), nil
+	if tsp := td.tsp; tsp != nil {
+		if schemaName == catconstants.PgTempSchemaName || schemaName == tsp.GetTemporarySchemaName() {
+			schemaID, found := tsp.GetTemporarySchemaIDForDB(dbID)
+			if !found {
+				return true, nil
 			}
+			return true, schemadesc.NewTemporarySchema(
+				tsp.GetTemporarySchemaName(),
+				schemaID,
+				dbID,
+			)
 		}
 	}
-	exists, schemaID, err := catalogkv.ResolveSchemaID(ctx, txn, td.codec, dbID, schemaName)
-	if !exists || err != nil {
-		return true, nil, err
+	if !td.settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		// Try to use the system name resolution bypass. Avoids a hotspot by explicitly
+		// checking for public schema.
+		if schemaName == tree.PublicSchema {
+			return true, schemadesc.NewTemporarySchema(
+				schemaName,
+				keys.PublicSchemaID,
+				dbID,
+			)
+		}
 	}
-	return true, schemadesc.NewTemporarySchema(
-		schemaName,
-		schemaID,
-		dbID,
-	), nil
+	return false, nil
 }
 
 // getSchemaByID returns the schema descriptor if it is temporary and belongs
@@ -79,16 +119,15 @@ func (td *temporaryDescriptors) getSchemaByName(
 func (td *temporaryDescriptors) getSchemaByID(
 	ctx context.Context, schemaID descpb.ID,
 ) catalog.SchemaDescriptor {
-	if td.sessionData == nil {
+	tsp := td.tsp
+	if tsp == nil {
 		return nil
 	}
-	if dbID, exists := td.sessionData.MaybeGetDatabaseForTemporarySchemaID(
-		uint32(schemaID),
-	); exists {
+	if dbID, exists := tsp.MaybeGetDatabaseForTemporarySchemaID(schemaID); exists {
 		return schemadesc.NewTemporarySchema(
-			td.sessionData.SearchPath.GetTemporarySchemaName(),
+			tsp.GetTemporarySchemaName(),
 			schemaID,
-			descpb.ID(dbID),
+			dbID,
 		)
 	}
 	return nil

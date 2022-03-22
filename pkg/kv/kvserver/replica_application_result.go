@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -91,11 +90,15 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// replica state for this batch.
 	if haveState := r.State != nil; haveState {
 		r.State.Stats = nil
+		// Reset the signal used to execute the AddRaftAppliedIndexTermMigration.
+		r.State.RaftAppliedIndexTerm = 0
 		if *r.State == (kvserverpb.ReplicaState{}) {
 			r.State = nil
 		}
 	}
 	r.Delta = enginepb.MVCCStatsDelta{}
+	// Rangefeeds have been disconnected prior to application.
+	r.MVCCHistoryMutation = nil
 }
 
 // prepareLocalResult is performed after the command has been committed to the
@@ -205,21 +208,15 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 		return nil
 	}
 
-	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-	defer untrack(ctx, 0, 0, 0) // covers all error paths below
-
 	// We need to track the request again in order to protect its timestamp until
 	// it gets reproposed.
 	// TODO(andrei): Only track if the request consults the ts cache. Some
 	// requests (e.g. EndTxn) don't care about closed timestamps.
-	minTS2, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, p.Request.WriteTimestamp())
+	minTS, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, p.Request.WriteTimestamp())
 	defer tok.DoneIfNotMoved(ctx)
-	minTS.Forward(minTS2)
 
 	// NB: p.Request.Timestamp reflects the action of ba.SetActiveTimestamp.
-	// The IsIntentWrite condition matches the similar logic for caring
-	// about the closed timestamp cache in applyTimestampCache().
-	if p.Request.IsIntentWrite() && p.Request.WriteTimestamp().LessEq(minTS) {
+	if p.Request.AppliesTimestampCache() && p.Request.WriteTimestamp().LessEq(minTS) {
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
@@ -234,15 +231,11 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
 
-	maxLeaseIndex, pErr := r.propose(ctx, p, tok.Move(ctx))
+	pErr := r.propose(ctx, p, tok.Move(ctx))
 	if pErr != nil {
 		return pErr
 	}
-	// NB: The caller already promises that the lease check succeeded, meaning
-	// the sequence numbers match, implying that the lease epoch hasn't changed
-	// from what it was under the proposal-time lease.
-	untrack(ctx, ctpb.Epoch(r.mu.state.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
-	log.VEventf(ctx, 2, "reproposed command %x at maxLeaseIndex=%d", cmd.idKey, maxLeaseIndex)
+	log.VEventf(ctx, 2, "reproposed command %x", cmd.idKey)
 	return nil
 }
 
@@ -288,9 +281,11 @@ func (r *Replica) handleLeaseResult(
 }
 
 func (r *Replica) handleTruncatedStateResult(
-	ctx context.Context, t *roachpb.RaftTruncatedState,
-) (raftLogDelta int64) {
+	ctx context.Context, t *roachpb.RaftTruncatedState, expectedFirstIndexPreTruncation uint64,
+) (raftLogDelta int64, expectedFirstIndexWasAccurate bool) {
 	r.mu.Lock()
+	expectedFirstIndexWasAccurate =
+		r.mu.state.TruncatedState.Index+1 == expectedFirstIndexPreTruncation
 	r.mu.state.TruncatedState = t
 	r.mu.Unlock()
 
@@ -301,6 +296,9 @@ func (r *Replica) handleTruncatedStateResult(
 	// Truncate the sideloaded storage. Note that this is safe only if the new truncated state
 	// is durably on disk (i.e.) synced. This is true at the time of writing but unfortunately
 	// could rot.
+	// TODO(sumeer): once we remove the legacy caller of
+	// handleTruncatedStateResult, stop calculating the size of the removed
+	// files and the remaining files.
 	log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", t.Index)
 	size, _, err := r.raftMu.sideloaded.TruncateTo(ctx, t.Index+1)
 	if err != nil {
@@ -308,7 +306,7 @@ func (r *Replica) handleTruncatedStateResult(
 		// loud error, but keep humming along.
 		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
 	}
-	return -size
+	return -size, expectedFirstIndexWasAccurate
 }
 
 func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Timestamp) {
@@ -326,12 +324,6 @@ func (r *Replica) handleVersionResult(ctx context.Context, version *roachpb.Vers
 	}
 	r.mu.Lock()
 	r.mu.state.Version = version
-	r.mu.Unlock()
-}
-
-func (r *Replica) handleUsingAppliedStateKeyResult(ctx context.Context) {
-	r.mu.Lock()
-	r.mu.state.UsingAppliedStateKey = true
 	r.mu.Unlock()
 }
 
@@ -364,6 +356,13 @@ func (r *Replica) handleChangeReplicasResult(
 		log.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
 	}
 
+	if _, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
+		// We destroyed the data when the batch committed so don't destroy it again.
+		DestroyData: false,
+	}); err != nil {
+		log.Fatalf(ctx, "failed to remove replica: %v", err)
+	}
+
 	// NB: postDestroyRaftMuLocked requires that the batch which removed the data
 	// be durably synced to disk, which we have.
 	// See replicaAppBatch.ApplyToStateMachine().
@@ -371,26 +370,10 @@ func (r *Replica) handleChangeReplicasResult(
 		log.Fatalf(ctx, "failed to run Replica postDestroy: %v", err)
 	}
 
-	if err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{
-		// We destroyed the data when the batch committed so don't destroy it again.
-		DestroyData: false,
-	}); err != nil {
-		log.Fatalf(ctx, "failed to remove replica: %v", err)
-	}
 	return true
 }
 
-func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.raftLogSize += delta
-	r.mu.raftLogLastCheckSize += delta
-	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
-	// between server restarts.
-	if r.mu.raftLogSize < 0 {
-		r.mu.raftLogSize = 0
-	}
-	if r.mu.raftLogLastCheckSize < 0 {
-		r.mu.raftLogLastCheckSize = 0
-	}
+// TODO(sumeer): remove method when all truncation is loosely coupled.
+func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64, isDeltaTrusted bool) {
+	(*raftTruncatorReplica)(r).setTruncationDeltaAndTrusted(delta, isDeltaTrusted)
 }

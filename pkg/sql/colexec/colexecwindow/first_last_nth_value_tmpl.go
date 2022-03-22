@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for first_value.eg.go, last_value.eg.go,
 // and nth_value.eg.go. It's formatted in a special way, so it's both valid Go
@@ -64,6 +66,7 @@ func New_UPPERCASE_NAMEOperator(
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
 	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
+	mainMemLimit := args.MemoryLimit - bufferMemLimit
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
 		args.FdSemaphore, args.InputTypes, args.DiskAcc, colsToStore...)
@@ -87,7 +90,7 @@ func New_UPPERCASE_NAMEOperator(
 			// {{if .IsNthValue}}
 			windower.nColIdx = argIdxs[1]
 			// {{end}}
-			return newBufferedWindowOperator(args, windower, argType), nil
+			return newBufferedWindowOperator(args, windower, argType, mainMemLimit), nil
 			// {{end}}
 		}
 		// {{end}}
@@ -198,9 +201,9 @@ func (b *_OP_NAMEBase) Init(ctx context.Context) {
 }
 
 // Close implements the bufferedWindower interface.
-func (b *_OP_NAMEBase) Close() {
+func (b *_OP_NAMEBase) Close(ctx context.Context) {
 	if !b.CloserHelper.Close() {
 		return
 	}
-	b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(ctx)
 }

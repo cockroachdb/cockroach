@@ -4,6 +4,7 @@ go_library(
     name = "colexecargs",
     srcs = [
         "expr.go",
+        "monitor_registry.go",
         "op_creation.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs",
@@ -15,12 +16,12 @@ go_library(
         "//pkg/sql/colexecop",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
-        "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/mon",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_marusama_semaphore//:semaphore",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
@@ -28,5 +29,6 @@ go_test(
     name = "colexecargs_test",
     srcs = ["dep_test.go"],
     embed = [":colexecargs"],
+    tags = ["no-remote"],
     deps = ["//pkg/testutils/buildutil"],
 )

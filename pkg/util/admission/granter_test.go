@@ -13,15 +13,18 @@ package admission
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
@@ -84,12 +87,13 @@ func (tr *testRequester) getAdmittedCount() uint64 {
 // return-grant work=<kind>
 // took-without-permission work=<kind>
 // continue-grant-chain work=<kind>
-// cpu-load runnable=<int> procs=<int>
+// cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
 // set-io-tokens tokens=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	var ambientCtx log.AmbientContext
 	var requesters [numWorkKinds]*testRequester
 	var coord *GrantCoordinator
 	var buf strings.Builder
@@ -101,7 +105,7 @@ func TestGranterBasic(t *testing.T) {
 	}
 	settings := cluster.MakeTestingClusterSettings()
 	KVSlotAdjusterOverloadThreshold.Override(context.Background(), &settings.SV, 1)
-	datadriven.RunTest(t, "testdata/granter", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "granter"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init-grant-coordinator":
 			var opts Options
@@ -113,19 +117,20 @@ func TestGranterBasic(t *testing.T) {
 			d.ScanArgs(t, "sql-leaf", &opts.SQLStatementLeafStartWorkSlots)
 			d.ScanArgs(t, "sql-root", &opts.SQLStatementRootStartWorkSlots)
 			opts.makeRequesterFunc = func(
-				workKind WorkKind, granter granter, usesTokens bool, tiedToRange bool,
-				_ *cluster.Settings) requester {
+				_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
+				opts workQueueOptions) requester {
 				req := &testRequester{
 					workKind:   workKind,
 					granter:    granter,
-					usesTokens: usesTokens,
+					usesTokens: opts.usesTokens,
 					buf:        &buf,
 				}
 				requesters[workKind] = req
 				return req
 			}
 			delayForGrantChainTermination = 0
-			coord, _ = NewGrantCoordinator(opts)
+			coords, _ := NewGrantCoordinators(ambientCtx, opts)
+			coord = coords.Regular
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -160,7 +165,15 @@ func TestGranterBasic(t *testing.T) {
 			var runnable, procs int
 			d.ScanArgs(t, "runnable", &runnable)
 			d.ScanArgs(t, "procs", &procs)
-			coord.CPULoad(runnable, procs)
+			infrequent := false
+			if d.HasArg("infrequent") {
+				d.ScanArgs(t, "infrequent", &infrequent)
+			}
+			samplePeriod := time.Millisecond
+			if infrequent {
+				samplePeriod = 250 * time.Millisecond
+			}
+			coord.CPULoad(runnable, procs, samplePeriod)
 			return flushAndReset()
 
 		case "set-io-tokens":
@@ -171,6 +184,7 @@ func TestGranterBasic(t *testing.T) {
 			coord.mu.Lock()
 			coord.granters[KVWork].(*kvGranter).setAvailableIOTokensLocked(int64(tokens))
 			coord.mu.Unlock()
+			coord.testingTryGrant()
 			return flushAndReset()
 
 		default:
@@ -197,12 +211,84 @@ func scanWorkKind(t *testing.T, d *datadriven.TestData) WorkKind {
 	panic("unknown WorkKind")
 }
 
-type testPebbleMetricsProvider struct {
-	metrics []*pebble.Metrics
+type testMetricsProvider struct {
+	metrics []StoreMetrics
 }
 
-func (m *testPebbleMetricsProvider) GetPebbleMetrics() []*pebble.Metrics {
+func (m *testMetricsProvider) GetPebbleMetrics() []StoreMetrics {
 	return m.metrics
+}
+
+func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble.Metrics) {
+	m.metrics = m.metrics[:0]
+	for _, s := range stores {
+		m.metrics = append(m.metrics, StoreMetrics{
+			StoreID: s,
+			Metrics: &metrics,
+		})
+	}
+}
+
+// TestStoreCoordinators tests only the setup of GrantCoordinators per store.
+// Testing of IO load functionality happens in TestIOLoadListener.
+func TestStoreCoordinators(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var ambientCtx log.AmbientContext
+	var buf strings.Builder
+	settings := cluster.MakeTestingClusterSettings()
+	// All the KVWork requesters. The first one is for all KVWork and the
+	// remaining are the per-store ones.
+	var requesters []*testRequester
+	opts := Options{
+		Settings: settings,
+		makeRequesterFunc: func(
+			_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
+			opts workQueueOptions) requester {
+			req := &testRequester{
+				workKind:   workKind,
+				granter:    granter,
+				usesTokens: opts.usesTokens,
+				buf:        &buf,
+			}
+			if workKind == KVWork {
+				requesters = append(requesters, req)
+			}
+			return req
+		},
+	}
+	coords, _ := NewGrantCoordinators(ambientCtx, opts)
+	// There is only 1 KVWork requester at this point in initialization, for the
+	// Regular GrantCoordinator.
+	require.Equal(t, 1, len(requesters))
+	storeCoords := coords.Stores
+	metrics := pebble.Metrics{}
+	mp := testMetricsProvider{}
+	mp.setMetricsForStores([]int32{10, 20}, metrics)
+	// Setting the metrics provider will cause the initialization of two
+	// GrantCoordinators for the two stores.
+	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp)
+	// Now we have 1+2 = 3 KVWork requesters.
+	require.Equal(t, 3, len(requesters))
+	// Confirm that the store IDs are as expected.
+	var actualStores []int32
+	for s := range storeCoords.gcMap {
+		actualStores = append(actualStores, s)
+	}
+	sort.Slice(actualStores, func(i, j int) bool { return actualStores[i] < actualStores[j] })
+	require.Equal(t, []int32{10, 20}, actualStores)
+	// Do tryGet on all requesters. The requester for the Regular
+	// GrantCoordinator will return false since it has 0 CPU slots. We are
+	// interested in the other ones, which have unlimited slots at this point in
+	// time, so will return true.
+	for i := range requesters {
+		requesters[i].tryGet()
+	}
+	require.Equal(t,
+		"kv: tryGet returned false\nkv: tryGet returned true\nkv: tryGet returned true\n",
+		buf.String())
+	coords.Close()
 }
 
 type testRequesterForIOLL struct {
@@ -222,28 +308,14 @@ func (r *testRequesterForIOLL) getAdmittedCount() uint64 {
 }
 
 type testGranterWithIOTokens struct {
-	buf         strings.Builder
-	tokensSetCh chan struct{}
+	buf strings.Builder
 }
 
 func (g *testGranterWithIOTokens) setAvailableIOTokensLocked(tokens int64) {
 	fmt.Fprintf(&g.buf, "setAvailableIOTokens: %s", tokensFor1sToString(tokens))
-	g.tokensSetCh <- struct{}{}
 }
 
-type testTicker struct {
-	ch chan time.Time
-}
-
-func (tt *testTicker) tickChannel() <-chan time.Time {
-	return tt.ch
-}
-
-func (tt *testTicker) stop() {
-	close(tt.ch)
-}
-
-func tokensFor60sToString(tokens int64) string {
+func tokensForIntervalToString(tokens int64) string {
 	if tokens == unlimitedTokens {
 		return "unlimited"
 	}
@@ -251,32 +323,23 @@ func tokensFor60sToString(tokens int64) string {
 }
 
 func tokensFor1sToString(tokens int64) string {
-	// ioLoadListener works with floats, so we just approximate the unlimited
-	// calculation here.
-	if tokens >= (unlimitedTokens/60 - 5) {
+	if tokens >= unlimitedTokens/adjustmentInterval {
 		return "unlimited"
 	}
 	return fmt.Sprintf("%d", tokens)
 }
 
 // TestIOLoadListener is a datadriven test with the following command that
-// sets the state for token calculation and then runs the timeTickerInterface 60 times to
-// cause tokens to be set in the testGranterWithIOTokens:
+// sets the state for token calculation and then ticks adjustmentInterval
+// times to cause tokens to be set in the testGranterWithIOTokens:
 // set-state admitted=<int> l0-bytes=<int> l0-added=<int> l0-files=<int> l0-sublevels=<int>
 func TestIOLoadListener(t *testing.T) {
-	pmp := &testPebbleMetricsProvider{}
 	req := &testRequesterForIOLL{}
-	kvGranter := &testGranterWithIOTokens{
-		tokensSetCh: make(chan struct{}, 1),
-	}
-	tickerCh := make(chan time.Time)
-	newTestTicker := func(d time.Duration) timeTickerInterface {
-		require.Equal(t, time.Second, d)
-		return &testTicker{ch: tickerCh}
-	}
+	kvGranter := &testGranterWithIOTokens{}
 	var ioll *ioLoadListener
-
-	datadriven.RunTest(t, "testdata/io_load_listener",
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	datadriven.RunTest(t, testutils.TestDataPath(t, "io_load_listener"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "set-state":
@@ -298,41 +361,28 @@ func TestIOLoadListener(t *testing.T) {
 				var l0SubLevels int
 				d.ScanArgs(t, "l0-sublevels", &l0SubLevels)
 				metrics.Levels[0].Sublevels = int32(l0SubLevels)
-				pmp.metrics = []*pebble.Metrics{&metrics}
-
-				created := false
 				if ioll == nil {
-					created = true
 					ioll = &ioLoadListener{
-						l0FileCountOverloadThreshold:     l0FileCountOverloadThreshold,
-						l0SubLevelCountOverloadThreshold: l0SubLevelCountOverloadThreshold,
-						pebbleMetricsProvider:            pmp,
-						kvRequester:                      req,
-						// The mutex is needed by ioLoadListener but is not useful in this
-						// test -- the channels provide synchronization and prevent this
-						// test code and the ioLoadListener from being concurrently
-						// active.
-						mu:        &syncutil.Mutex{},
-						kvGranter: kvGranter,
+						settings:    st,
+						kvRequester: req,
 					}
-					ioll.start(newTestTicker)
+					// The mutex is needed by ioLoadListener but is not useful in this
+					// test -- the channels provide synchronization and prevent this
+					// test code and the ioLoadListener from being concurrently
+					// active.
+					ioll.mu.Mutex = &syncutil.Mutex{}
+					ioll.mu.kvGranter = kvGranter
 				}
+				ioll.pebbleMetricsTick(ctx, metrics)
 				// Do the ticks until just before next adjustment.
 				var buf strings.Builder
+				fmt.Fprintf(&buf, "admitted: %d, bytes: %d, added-bytes: %d,\nsmoothed-removed: %d, "+
+					"smoothed-admit: %d,\ntokens: %s, tokens-allocated: %s\n", ioll.admittedCount,
+					ioll.l0Bytes, ioll.l0AddedBytes, ioll.smoothedBytesRemoved,
+					int64(ioll.smoothedNumAdmit), tokensForIntervalToString(ioll.totalTokens),
+					tokensFor1sToString(ioll.tokensAllocated))
 				for i := 0; i < adjustmentInterval; i++ {
-					if i != 0 || !created {
-						tickerCh <- timeutil.Now()
-					}
-					// Else, skip first tick for created ioLoadListener, since it reads
-					// state and sets tokens immediately.
-					<-kvGranter.tokensSetCh
-					if i == 0 {
-						fmt.Fprintf(&buf, "admitted: %d, bytes: %d, added-bytes: %d,\nsmoothed-removed: %d, "+
-							"smoothed-admit: %d,\ntokens: %s, tokens-allocated: %s\n", ioll.admittedCount,
-							ioll.l0Bytes, ioll.l0AddedBytes, ioll.smoothedBytesRemoved,
-							int64(ioll.smoothedNumAdmit), tokensFor60sToString(ioll.totalTokens),
-							tokensFor1sToString(ioll.tokensAllocated))
-					}
+					ioll.allocateTokensTick()
 					fmt.Fprintf(&buf, "tick: %d, %s\n", i, kvGranter.buf.String())
 					kvGranter.buf.Reset()
 				}
@@ -341,7 +391,80 @@ func TestIOLoadListener(t *testing.T) {
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
-	ioll.close()
+}
+
+func TestIOLoadListenerOverflow(t *testing.T) {
+	req := &testRequesterForIOLL{}
+	kvGranter := &testGranterWithIOTokens{}
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	ioll := ioLoadListener{
+		settings:    st,
+		kvRequester: req,
+	}
+	ioll.mu.Mutex = &syncutil.Mutex{}
+	ioll.mu.kvGranter = kvGranter
+	// Bug 1: overflow when totalTokens is too large.
+	for i := int64(0); i < adjustmentInterval; i++ {
+		// Override the totalTokens manually to trigger the overflow bug.
+		ioll.totalTokens = math.MaxInt64 - i
+		ioll.tokensAllocated = 0
+		for j := 0; j < adjustmentInterval; j++ {
+			ioll.allocateTokensTick()
+		}
+	}
+	// Bug2: overflow when bytes added delta is 0.
+	m := pebble.Metrics{}
+	m.Levels[0] = pebble.LevelMetrics{
+		Sublevels: 100,
+		NumFiles:  10000,
+	}
+	ioll.pebbleMetricsTick(ctx, m)
+	ioll.pebbleMetricsTick(ctx, m)
+	ioll.allocateTokensTick()
+}
+
+type testGranterNonNegativeTokens struct {
+	t *testing.T
+}
+
+func (g *testGranterNonNegativeTokens) setAvailableIOTokensLocked(tokens int64) {
+	require.LessOrEqual(g.t, int64(0), tokens)
+}
+
+// TestBadIOLoadListenerStats tests that bad stats (non-monotonic cumulative
+// stats and negative values) don't cause panics or tokens to be negative.
+func TestBadIOLoadListenerStats(t *testing.T) {
+	var m pebble.Metrics
+	req := &testRequesterForIOLL{}
+	ctx := context.Background()
+
+	randomValues := func() {
+		// Use uints, and cast so that we get bad negative values.
+		m.Levels[0].Sublevels = int32(rand.Uint32())
+		m.Levels[0].NumFiles = int64(rand.Uint64())
+		m.Levels[0].Size = int64(rand.Uint64())
+		m.Levels[0].BytesFlushed = rand.Uint64()
+		m.Levels[0].BytesIngested = rand.Uint64()
+		req.admittedCount = rand.Uint64()
+	}
+	kvGranter := &testGranterNonNegativeTokens{t: t}
+	st := cluster.MakeTestingClusterSettings()
+	ioll := ioLoadListener{
+		settings:    st,
+		kvRequester: req,
+	}
+	ioll.mu.Mutex = &syncutil.Mutex{}
+	ioll.mu.kvGranter = kvGranter
+	for i := 0; i < 100; i++ {
+		randomValues()
+		ioll.pebbleMetricsTick(ctx, m)
+		for j := 0; j < adjustmentInterval; j++ {
+			ioll.allocateTokensTick()
+			require.LessOrEqual(t, int64(0), ioll.totalTokens)
+			require.LessOrEqual(t, int64(0), ioll.tokensAllocated)
+		}
+	}
 }
 
 // TODO(sumeer):

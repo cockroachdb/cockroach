@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -71,8 +72,9 @@ func TestStorage(t *testing.T) {
 			return timeSource.Now().UnixNano()
 		}, base.DefaultMaxClockOffset)
 		settings := cluster.MakeTestingClusterSettings()
-		stopper := stop.NewStopper()
-		storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+		stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
+		var ambientCtx log.AmbientContext
+		storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
 			tableID, timeSource.NewTimer)
 		return clock, timeSource, settings, stopper, storage
 	}
@@ -241,6 +243,7 @@ func TestStorage(t *testing.T) {
 			require.True(t, isAlive)
 			require.Equal(t, int64(1), metrics.IsAliveCacheMisses.Count())
 			require.Equal(t, int64(0), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(0), metrics.SessionsDeleted.Count())
 		}
 		// Advance to the point where the session is expired.
 		timeSource.Advance(time.Second + time.Nanosecond)
@@ -251,6 +254,7 @@ func TestStorage(t *testing.T) {
 			require.False(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
 			require.Equal(t, int64(0), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(1), metrics.SessionsDeleted.Count())
 		}
 		// Ensure that the fact that it is no longer alive is cached.
 		{
@@ -259,6 +263,7 @@ func TestStorage(t *testing.T) {
 			require.False(t, isAlive)
 			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
 			require.Equal(t, int64(1), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(1), metrics.SessionsDeleted.Count())
 		}
 		// Ensure it cannot be updated.
 		{
@@ -324,10 +329,11 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 		return timeSource.Now().UnixNano()
 	}, base.DefaultMaxClockOffset)
 	settings := cluster.MakeTestingClusterSettings()
-	stopper := stop.NewStopper()
+	stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
-	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+	var ambientCtx log.AmbientContext
+	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
 		tableID, timeSource.NewTimer)
 	storage.Start(ctx)
 
@@ -491,7 +497,8 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
-	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, keys.SystemSQLCodec, settings,
+	var ambientCtx log.AmbientContext
+	storage := slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
 		tableID, timeSource.NewTimer)
 	storage.Start(ctx)
 
@@ -644,6 +651,96 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 			return nil
 		})
 	})
+}
+
+// TestDeleteMidUpdateFails ensures that a session removed while it attempts to
+// update itself fails.
+func TestDeleteMidUpdateFails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	type filterFunc = func(context.Context, roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
+	var respFilter atomic.Value
+	respFilter.Store(filterFunc(nil))
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingResponseFilter: func(
+					ctx context.Context, request roachpb.BatchRequest, resp *roachpb.BatchResponse,
+				) *roachpb.Error {
+					if f := respFilter.Load().(filterFunc); f != nil {
+						return f(ctx, request, resp)
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Set up a fake storage implementation using a separate table.
+	dbName := t.Name()
+	tdb.Exec(t, `CREATE DATABASE "`+dbName+`"`)
+	schema := strings.Replace(systemschema.SqllivenessTableSchema,
+		`CREATE TABLE system.sqlliveness`,
+		`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
+	tdb.Exec(t, schema)
+	tableID := getTableID(t, tdb, dbName, "sqlliveness")
+
+	storage := slstorage.NewTestingStorage(
+		s.DB().AmbientContext,
+		s.Stopper(), s.Clock(), kvDB, keys.SystemSQLCodec, s.ClusterSettings(),
+		tableID, timeutil.DefaultTimeSource{}.NewTimer,
+	)
+
+	// Insert a session.
+	ID := sqlliveness.SessionID("foo")
+	require.NoError(t, storage.Insert(ctx, ID, s.Clock().Now()))
+
+	// Install a filter which will send on this channel when we attempt
+	// to perform an update after the get has evaluated.
+	getChan := make(chan chan struct{})
+	respFilter.Store(func(
+		ctx context.Context, request roachpb.BatchRequest, _ *roachpb.BatchResponse,
+	) *roachpb.Error {
+		if get, ok := request.GetArg(roachpb.Get); !ok || !bytes.HasPrefix(
+			get.(*roachpb.GetRequest).Key,
+			keys.SystemSQLCodec.TablePrefix(uint32(tableID)),
+		) {
+			return nil
+		}
+		respFilter.Store(filterFunc(nil))
+		unblock := make(chan struct{})
+		getChan <- unblock
+		<-unblock
+		return nil
+	})
+
+	// Launch the update.
+	type result struct {
+		exists bool
+		err    error
+	}
+	resCh := make(chan result)
+	go func() {
+		var res result
+		res.exists, res.err = storage.Update(ctx, ID, s.Clock().Now())
+		resCh <- res
+	}()
+
+	// Wait for the update to block.
+	unblock := <-getChan
+
+	// Delete the session being updated.
+	tdb.Exec(t, `DELETE FROM "`+dbName+`".sqlliveness WHERE true`)
+
+	// Unblock the update and ensure that it saw that its session was deleted.
+	close(unblock)
+	res := <-resCh
+	require.False(t, res.exists)
+	require.NoError(t, res.err)
 }
 
 func getTableID(

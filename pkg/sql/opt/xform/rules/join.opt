@@ -93,7 +93,7 @@
 
 # ConvertSemiToInnerJoin applies in the cases where CommuteSemiJoin does not:
 # when the ON condition is not a simple equality. In this case, we must perform
-# a DisinctOn operation *after* the inner join, followed by a project to remove
+# a DistinctOn operation *after* the inner join, followed by a project to remove
 # the right-side columns.
 #
 # Similar to CommuteSemiJoin, this rule allows semi joins to be commuted. This
@@ -212,14 +212,12 @@
 # applies when the input is a Project that produces virtual computed columns.
 # See the GenerateLookupJoinsWithVirtualCols custom function for more details.
 #
-# TODO(mgartner): Generate lookup joins with virtual columns for semi- and
-# anti-joins. This may also be possible for left joins, but could be tricky.
-#
-# TODO(mgartner): Generate lookup joins with virtual columns and additional
-# filters where the right side is of the form (Project (Select (Scan))). This
-# will enable lookup joins into partial indexes on virtual columns.
+# This rule only matches when the join filters reference virtual columns. This
+# prevents creating a cycle in the memo when a combination of this rule and
+# HoistProjectFromInnerJoin/HoistProjectFromLeftJoin + GenerateLookupJoins
+# generate identical lookup joins.
 [GenerateLookupJoinsWithVirtualCols, Explore]
-(InnerJoin
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     $project:(Project
             (Scan $scanPrivate:*) &
@@ -233,7 +231,11 @@
             $projectedVirtualCols:(ProjectionCols $projections)
             $virtualCols
         )
-    $on:*
+    $on:* &
+        (ColsIntersect
+            $projectedVirtualCols
+            (FilterOuterCols $on)
+        )
     $private:*
 )
 =>
@@ -244,6 +246,51 @@
     $projectedVirtualCols
     $scanPrivate
     $on
+    $private
+)
+
+# GenerateLookupJoinsWithVirtualColsAndFilter is similar to
+# GenerateLookupJoinsWithVirtualCols but matches a (Project (Select (Scan))) on
+# the right side. The Select filter is merged with the ON condition. This rule
+# is necessary in order to generate lookup joins on indexes with virtual columns
+# when a non-virtual column filter has been pushed down to the right side of the
+# join. This is also necessary for generating lookup joins on partial indexes
+# with virtual columns.
+[GenerateLookupJoinsWithVirtualColsAndFilter, Explore]
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
+    $left:*
+    $project:(Project
+            (Select
+                (Scan $scanPrivate:*) &
+                    (IsCanonicalScan $scanPrivate) &
+                    ^(ColsAreEmpty
+                        $virtualCols:(VirtualColumns
+                            $scanPrivate
+                        )
+                    )
+                $filters:*
+            )
+            $projections:*
+        ) &
+        (ColsAreSubset
+            $projectedVirtualCols:(ProjectionCols $projections)
+            $virtualCols
+        )
+    $on:* &
+        (ColsIntersect
+            $projectedVirtualCols
+            (FilterOuterCols $on)
+        )
+    $private:*
+)
+=>
+(GenerateLookupJoinsWithVirtualCols
+    (OpName)
+    $left
+    (OutputCols $project)
+    $projectedVirtualCols
+    $scanPrivate
+    (ConcatFilters $on $filters)
     $private
 )
 
@@ -452,10 +499,7 @@
                 $localExpr
                 $remoteExpr
                 $ok
-            ):(GetLocalityOptimizedLookupJoinExprs
-                $input
-                $private
-            )
+            ):(GetLocalityOptimizedLookupJoinExprs $on $private)
             $ok
         )
 )
@@ -566,10 +610,7 @@
                 $localExpr
                 $remoteExpr
                 $ok
-            ):(GetLocalityOptimizedLookupJoinExprs
-                $input
-                $private
-            )
+            ):(GetLocalityOptimizedLookupJoinExprs $on $private)
             $ok
         )
 )

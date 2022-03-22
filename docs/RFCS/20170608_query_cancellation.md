@@ -60,7 +60,7 @@ Due to the interdependent nature of these different levels of cancellation, and 
 technical overlap between each feature, query cancellation will be the first feature to be implemented.
 Query cancellation by itself solves the fewest number of use-cases compared to transaction
 or session cancellation, but once it has been implemented well, its mechanism can be easily
-levereged for transaction and session cancellation.
+leveraged for transaction and session cancellation.
 
 This RFC currently only describes query cancellation in detail; it will be expanded with details
 about transaction and session cancellation once query cancellation has been implemented.
@@ -81,7 +81,7 @@ those changes will be out of scope for this project.
 
 Query identifiers will be stored as 128-bit unsigned integers (two `uint64`s) - composed of the
 96-bit HLC timestamp plus 32 bits of node ID. [There already is a uint128 type in the code
-base](https://github.com/cockroachdb/cockroach/tree/master/pkg/util/uint128) that can be levereged.
+base](https://github.com/cockroachdb/cockroach/tree/master/pkg/util/uint128) that can be leveraged.
 Using the full HLC timestamp along with the node ID makes this ID unique across the cluster.
 
 Query IDs will be presented in the output of `SHOW QUERIES` as 32-character hex strings.

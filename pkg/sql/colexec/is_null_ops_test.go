@@ -126,7 +126,7 @@ func TestIsNullProjOp(t *testing.T) {
 		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int},
-				fmt.Sprintf("@1 %s", c.projExpr), false /* canFallbackToRowexec */, testMemAcc,
+				fmt.Sprintf("@1 %s", c.projExpr), testMemAcc,
 			)
 		}
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)

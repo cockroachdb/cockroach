@@ -15,6 +15,7 @@ go_library(
         "//pkg/col/typeconv",  # keep
         "//pkg/server/telemetry",  # keep
         "//pkg/sql/colconv",  # keep
+        "//pkg/sql/colexec/colexecbase",  # keep
         "//pkg/sql/colexec/colexeccmp",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
@@ -23,11 +24,13 @@ go_library(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",  # keep
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",  # keep
+        "//pkg/sql/sem/tree/treecmp",  # keep
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
         "//pkg/util/duration",  # keep
         "//pkg/util/json",  # keep
-        "@com_github_cockroachdb_apd_v2//:apd",  # keep
+        "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -42,6 +45,7 @@ go_test(
         "projection_ops_test.go",
     ],
     embed = [":colexecproj"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
@@ -56,8 +60,9 @@ go_test(
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
-        "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/skip",

@@ -17,9 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -70,7 +72,7 @@ func (p *planner) AlterTableLocality(
 		p.txn,
 		tableDesc.GetParentID(),
 		tree.DatabaseLookupFlags{
-			AvoidCached: true,
+			AvoidLeased: true,
 			Required:    true,
 		},
 	)
@@ -79,9 +81,11 @@ func (p *planner) AlterTableLocality(
 	}
 
 	if !dbDesc.IsMultiRegion() {
-		return nil, pgerror.Newf(
+		return nil, errors.WithHint(pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"cannot alter a table's LOCALITY if its database is not multi-region enabled",
+		),
+			"database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>",
 		)
 	}
 
@@ -101,7 +105,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 ) error {
 	if !n.tableDesc.IsLocalityGlobal() {
 		f := params.p.EvalContext().FmtCtx(tree.FmtSimple)
-		if err := tabledesc.FormatTableLocalityConfig(n.tableDesc.LocalityConfig, f); err != nil {
+		if err := multiregion.FormatTableLocalityConfig(n.tableDesc.LocalityConfig, f); err != nil {
 			// While we're in an error path and generally it's bad to return a
 			// different error in an error path, we will only get an error here if the
 			// locality is corrupted, in which case, it's probably the right error
@@ -236,10 +240,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		primaryIndexColIdxStart = int(n.tableDesc.PrimaryIndex.Partitioning.NumImplicitColumns)
 	}
 
-	if n.tableDesc.IsInterleaved() {
-		return interleaveOnRegionalByRowError()
-	}
-
 	for _, idx := range n.tableDesc.AllIndexes() {
 		if idx.IsSharded() {
 			return pgerror.Newf(
@@ -318,6 +318,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			ColumnDef: regionalByRowDefaultColDef(
 				enumOID,
 				regionalByRowRegionDefaultExpr(enumOID, tree.Name(primaryRegion)),
+				maybeRegionalByRowOnUpdateExpr(params.EvalContext(), enumOID),
 			),
 		}
 		tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
@@ -344,7 +345,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		mutationIdxAllowedInSameTxn = &mutationIdx
 		newColumnName = &partColName
 
-		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+		if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
 			return err
 		}
 
@@ -387,7 +389,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 // SET LOCALITY where the before OR after state is REGIONAL BY ROW.
 func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	params runParams,
-	newLocalityConfig descpb.TableDescriptor_LocalityConfig,
+	newLocalityConfig catpb.LocalityConfig,
 	mutationIdxAllowedInSameTxn *int,
 	newColumnName *tree.Name,
 	newColumnID *descpb.ColumnID,
@@ -475,7 +477,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	// Look at the existing locality, and implement any changes required to move to
 	// the new locality.
 	switch existingLocality.Locality.(type) {
-	case *descpb.TableDescriptor_LocalityConfig_Global_:
+	case *catpb.LocalityConfig_Global_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
 			if err := n.alterTableLocalityToGlobal(params); err != nil {
@@ -495,7 +497,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)
 		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+	case *catpb.LocalityConfig_RegionalByTable_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
 			if err := n.alterTableLocalityToGlobal(params); err != nil {
@@ -515,7 +517,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)
 		}
-	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+	case *catpb.LocalityConfig_RegionalByRow_:
 		explicitColStart := n.tableDesc.PrimaryIndex.Partitioning.NumImplicitColumns
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
@@ -648,7 +650,7 @@ func setNewLocalityConfig(
 	desc *tabledesc.Mutable,
 	txn *kv.Txn,
 	b *kv.Batch,
-	config descpb.TableDescriptor_LocalityConfig,
+	config catpb.LocalityConfig,
 	kvTrace bool,
 	descsCol *descs.Collection,
 ) error {

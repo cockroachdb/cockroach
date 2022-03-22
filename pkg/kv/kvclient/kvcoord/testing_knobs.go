@@ -19,6 +19,12 @@ type ClientTestingKnobs struct {
 	// testing purposes.
 	TransportFactory TransportFactory
 
+	// DontConsiderConnHealth, if set, makes the GRPCTransport not take into
+	// consideration the connection health when deciding the ordering for
+	// replicas. When not set, replicas on nodes with unhealthy connections are
+	// deprioritized.
+	DontConsiderConnHealth bool
+
 	// The maximum number of times a txn will attempt to refresh its
 	// spans for a single transactional batch.
 	// 0 means use a default. -1 means disable refresh.
@@ -35,8 +41,13 @@ type ClientTestingKnobs struct {
 	LatencyFunc LatencyFunc
 
 	// If set, the DistSender will try the replicas in the order they appear in
-	// the descriptor, instead of trying to reorder them by latency.
+	// the descriptor, instead of trying to reorder them by latency. The knob
+	// only applies to requests sent with the LEASEHOLDER routing policy.
 	DontReorderReplicas bool
+
+	// DisableCommitSanityCheck allows "setting" the DisableCommitSanityCheck to
+	// true without actually overriding the variable.
+	DisableCommitSanityCheck bool
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

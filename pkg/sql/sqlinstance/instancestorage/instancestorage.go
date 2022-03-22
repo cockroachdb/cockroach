@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -78,6 +79,7 @@ func (s *Storage) CreateInstance(
 	if len(sessionID) == 0 {
 		return base.SQLInstanceID(0), errors.New("no session information for instance")
 	}
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Set the transaction deadline to the session expiration to
 		// ensure transaction commits before the session expires.
@@ -152,6 +154,7 @@ func (s *Storage) getInstanceData(
 	ctx context.Context, instanceID base.SQLInstanceID,
 ) (instanceData instancerow, _ error) {
 	k := makeInstanceKey(s.codec, s.tableID, instanceID)
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	row, err := s.db.Get(ctx, k)
 	if err != nil {
 		return instancerow{}, errors.Wrapf(err, "could not fetch instance %d", instanceID)
@@ -159,7 +162,7 @@ func (s *Storage) getInstanceData(
 	if row.Value == nil {
 		return instancerow{}, sqlinstance.NonExistentInstanceError
 	}
-	_, addr, sessionID, timestamp, err := s.rowcodec.decodeRow(row)
+	_, addr, sessionID, timestamp, _, err := s.rowcodec.decodeRow(row)
 	if err != nil {
 		return instancerow{}, errors.Wrapf(err, "could not decode data for instance %d", instanceID)
 	}
@@ -174,6 +177,7 @@ func (s *Storage) getInstanceData(
 
 // getAllInstancesData retrieves instance information on all instances for the tenant.
 func (s *Storage) getAllInstancesData(ctx context.Context) (instances []instancerow, err error) {
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		instances, err = s.getAllInstanceRows(ctx, txn)
 		return err
@@ -200,7 +204,7 @@ func (s *Storage) getAllInstanceRows(
 		return nil, err
 	}
 	for i := range rows {
-		instanceID, addr, sessionID, timestamp, err := s.rowcodec.decodeRow(rows[i])
+		instanceID, addr, sessionID, timestamp, _, err := s.rowcodec.decodeRow(rows[i])
 		if err != nil {
 			log.Warningf(ctx, "failed to decode row %v: %v", rows[i].Key, err)
 			return nil, err
@@ -220,6 +224,7 @@ func (s *Storage) getAllInstanceRows(
 // The instance ID can be reused by another SQL pod of the same tenant.
 func (s *Storage) ReleaseInstanceID(ctx context.Context, id base.SQLInstanceID) error {
 	key := makeInstanceKey(s.codec, s.tableID, id)
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.db.Del(ctx, key); err != nil {
 		return errors.Wrapf(err, "could not delete instance %d", id)
 	}

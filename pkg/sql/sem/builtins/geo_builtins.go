@@ -1185,7 +1185,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 		},
 	),
 	"st_box2dfromgeohash": makeBuiltin(
-		defProps(),
+		tree.FunctionProperties{NullableArgs: true},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"geohash", types.String},
@@ -1193,9 +1193,20 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+
 				g := tree.MustBeDString(args[0])
-				p := tree.MustBeDInt(args[1])
-				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(g), int(p))
+
+				// Precision is allowed to be NULL, in that case treat it as if the
+				// argument had not been passed in at all
+				p := len(string(g))
+				if args[1] != tree.DNull {
+					p = int(tree.MustBeDInt(args[1]))
+				}
+
+				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(g), p)
 				if err != nil {
 					return nil, err
 				}
@@ -1212,6 +1223,9 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDString(args[0])
 				p := len(string(g))
 				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(g), p)
@@ -4584,6 +4598,32 @@ The paths themselves are given in the direction of the first geometry.`,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"delta_x", types.Float},
+				{"delta_y", types.Float},
+				{"delta_z", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				deltaX := float64(tree.MustBeDFloat(args[1]))
+				deltaY := float64(tree.MustBeDFloat(args[2]))
+				deltaZ := float64(tree.MustBeDFloat(args[3]))
+
+				ret, err := geomfn.Translate(g.Geometry, []float64{deltaX, deltaY, deltaZ})
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry translated by the given deltas.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_affine": makeBuiltin(
 		defProps(),
@@ -5835,15 +5875,15 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 					switch bGeomT := bGeomT.(type) {
 					case *geom.Point:
 						if aGeomT.Empty() || bGeomT.Empty() {
-							return nil, errors.Newf("cannot use POINT EMPTY")
+							return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot use POINT EMPTY")
 						}
 						bbox := a.CartesianBoundingBox().Combine(b.CartesianBoundingBox())
 						return tree.NewDBox2D(*bbox), nil
 					default:
-						return nil, errors.Newf("second argument is not a POINT")
+						return nil, pgerror.Newf(pgcode.InvalidParameterValue, "second argument is not a POINT")
 					}
 				default:
-					return nil, errors.Newf("first argument is not a POINT")
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "first argument is not a POINT")
 				}
 			},
 			types.Box2D,
@@ -6420,9 +6460,6 @@ The parent_only boolean is always ignored.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"geometry", types.Geometry}},
 			ReturnType: tree.FixedReturnType(minimumBoundingRadiusReturnType),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return nil, newUnsuitableUseOfGeneratorError()
-			},
 			Generator:  makeMinimumBoundGenerator,
 			Info:       "Returns a record containing the center point and radius of the smallest circle that can fully contains the given geometry.",
 			Volatility: tree.VolatilityImmutable,
@@ -7317,7 +7354,7 @@ func stAsGeoJSONFromTuple(
 		}
 		tupleJSON, err := tree.AsJSON(
 			d,
-			ctx.SessionData.DataConversionConfig,
+			ctx.SessionData().DataConversionConfig,
 			ctx.GetLocation(),
 		)
 		if err != nil {
@@ -7454,7 +7491,7 @@ func applyGeoindexConfigStorageParams(
 		return geoindex.Config{}, errors.Newf("invalid storage parameters specified: %s", params)
 	}
 	semaCtx := tree.MakeSemaContext()
-	if err := paramparse.ApplyStorageParameters(
+	if err := paramparse.SetStorageParameters(
 		evalCtx.Context,
 		&semaCtx,
 		evalCtx,

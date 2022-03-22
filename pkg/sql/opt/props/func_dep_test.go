@@ -1192,6 +1192,22 @@ func TestFuncDeps_MakeLeftOuter(t *testing.T) {
 	verifyFD(t, &loj, "(1)-->(2-5), (2,3)~~>(1,4,5), (1,12,13)-->(14)")
 	loj.MakeLeftOuter(abcde, &props.FuncDepSet{}, preservedCols, nullExtendedCols, c(1))
 	verifyFD(t, &loj, "(1)-->(2-5), (2,3)~~>(1,4,5)")
+
+	// Special case where left side has at most one row.
+	abcde = makeAbcdeFD(t)
+	abcde.MakeMax1Row(abcde.ColSet())
+	verifyFD(t, abcde, "key(); ()-->(1-5)")
+	mnpq = makeMnpqFD(t)
+	verifyFD(t, mnpq, "key(10,11); (10,11)-->(12,13)")
+	filterFDs := &props.FuncDepSet{}
+	filterFDs.AddEquivalency(2, 12)
+	filterFDs.AddSynthesizedCol(c(1, 2, 3), 13)
+	loj.CopyFrom(abcde)
+	loj.MakeProduct(mnpq)
+	verifyFD(t, &loj, "key(10,11); ()-->(1-5), (10,11)-->(12,13)")
+	loj.MakeLeftOuter(abcde, filterFDs, abcde.ColSet(), mnpq.ColSet(), c())
+	// 12 and 13 should be constant columns.
+	verifyFD(t, &loj, "key(10,11); ()-->(1-5,12,13)")
 }
 
 func TestFuncDeps_MakeFullOuter(t *testing.T) {

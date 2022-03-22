@@ -11,7 +11,6 @@
 package rangefeed
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -19,12 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -40,6 +36,32 @@ type Stream interface {
 	Send(*roachpb.RangeFeedEvent) error
 }
 
+// Shared event is an entry stored in registration channel. Each entry is
+// specific to registration but allocation is shared between all registrations
+// to track memory budgets. event itself could either be shared or not in case
+// we optimized unused fields in it based on registration options.
+type sharedEvent struct {
+	event      *roachpb.RangeFeedEvent
+	allocation *SharedBudgetAllocation
+}
+
+var sharedEventSyncPool = sync.Pool{
+	New: func() interface{} {
+		return new(sharedEvent)
+	},
+}
+
+func getPooledSharedEvent(e sharedEvent) *sharedEvent {
+	ev := sharedEventSyncPool.Get().(*sharedEvent)
+	*ev = e
+	return ev
+}
+
+func putPooledSharedEvent(e *sharedEvent) {
+	*e = sharedEvent{}
+	sharedEventSyncPool.Put(e)
+}
+
 // registration is an instance of a rangefeed subscriber who has
 // registered to receive updates for a specific range of keys.
 // Updates are delivered to its stream until one of the following
@@ -53,11 +75,19 @@ type Stream interface {
 // has finished.
 type registration struct {
 	// Input.
-	span                   roachpb.Span
-	catchupTimestamp       hlc.Timestamp
-	catchupIterConstructor func() storage.SimpleMVCCIterator
-	withDiff               bool
-	metrics                *Metrics
+	span             roachpb.Span
+	catchUpTimestamp hlc.Timestamp
+	withDiff         bool
+	metrics          *Metrics
+
+	// catchUpIterConstructor is used to construct the catchUpIter if necessary.
+	// The reason this constructor is plumbed down is to make sure that the
+	// iterator does not get constructed too late in server shutdown. However,
+	// it must also be stored in the struct to ensure that it is not constructed
+	// too late, after the raftMu has been dropped. Thus, this function, if
+	// non-nil, will be used to populate mu.catchUpIter while the registration
+	// is being registered by the processor.
+	catchUpIterConstructor CatchUpIteratorConstructor
 
 	// Output.
 	stream Stream
@@ -66,7 +96,7 @@ type registration struct {
 	// Internal.
 	id   int64
 	keys interval.Range
-	buf  chan *roachpb.RangeFeedEvent
+	buf  chan *sharedEvent
 
 	mu struct {
 		sync.Locker
@@ -80,13 +110,18 @@ type registration struct {
 		// Management of the output loop goroutine, used to ensure proper teardown.
 		outputLoopCancelFn func()
 		disconnected       bool
+
+		// catchUpIter is populated on the Processor's goroutine while the
+		// Replica.raftMu is still held. If it is non-nil at the time that
+		// disconnect is called, it is closed by disconnect.
+		catchUpIter *CatchUpIterator
 	}
 }
 
 func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchupIterConstructor func() storage.SimpleMVCCIterator,
+	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,
@@ -95,13 +130,13 @@ func newRegistration(
 ) registration {
 	r := registration{
 		span:                   span,
-		catchupTimestamp:       startTS,
-		catchupIterConstructor: catchupIterConstructor,
+		catchUpTimestamp:       startTS,
+		catchUpIterConstructor: catchUpIterConstructor,
 		withDiff:               withDiff,
 		metrics:                metrics,
 		stream:                 stream,
 		errC:                   errC,
-		buf:                    make(chan *roachpb.RangeFeedEvent, bufferSz),
+		buf:                    make(chan *sharedEvent, bufferSz),
 	}
 	r.mu.Locker = &syncutil.Mutex{}
 	r.mu.caughtUp = true
@@ -110,25 +145,29 @@ func newRegistration(
 
 // publish attempts to send a single event to the output buffer for this
 // registration. If the output buffer is full, the overflowed flag is set,
-// indicating that live events were lost and a catchup scan should be initiated.
+// indicating that live events were lost and a catch-up scan should be initiated.
 // If overflowed is already set, events are ignored and not written to the
 // buffer.
-func (r *registration) publish(event *roachpb.RangeFeedEvent) {
+func (r *registration) publish(
+	ctx context.Context, event *roachpb.RangeFeedEvent, allocation *SharedBudgetAllocation,
+) {
 	r.validateEvent(event)
-	event = r.maybeStripEvent(event)
+	e := getPooledSharedEvent(sharedEvent{event: r.maybeStripEvent(event), allocation: allocation})
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.overflowed {
 		return
 	}
+	allocation.Use()
 	select {
-	case r.buf <- event:
+	case r.buf <- e:
 		r.mu.caughtUp = false
 	default:
 		// Buffer exceeded and we are dropping this event. Registration will need
 		// a catch-up scan.
 		r.mu.overflowed = true
+		allocation.Release(ctx)
 	}
 }
 
@@ -149,6 +188,16 @@ func (r *registration) validateEvent(event *roachpb.RangeFeedEvent) {
 	case *roachpb.RangeFeedCheckpoint:
 		if t.Span.Key == nil {
 			panic(fmt.Sprintf("unexpected empty RangeFeedCheckpoint.Span.Key: %v", t))
+		}
+	case *roachpb.RangeFeedSSTable:
+		if len(t.Data) == 0 {
+			panic(fmt.Sprintf("unexpected empty RangeFeedSSTable.Data: %v", t))
+		}
+		if len(t.Span.Key) == 0 {
+			panic(fmt.Sprintf("unexpected empty RangeFeedSSTable.Span: %v", t))
+		}
+		if t.WriteTS.IsEmpty() {
+			panic(fmt.Sprintf("unexpected empty RangeFeedSSTable.Timestamp: %v", t))
 		}
 	default:
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
@@ -196,6 +245,9 @@ func (r *registration) maybeStripEvent(event *roachpb.RangeFeedEvent) *roachpb.R
 			t = copyOnWrite().(*roachpb.RangeFeedCheckpoint)
 			t.Span = r.span
 		}
+	case *roachpb.RangeFeedSSTable:
+		// SSTs are always sent in their entirety, it is up to the caller to
+		// filter out irrelevant entries.
 	default:
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}
@@ -210,6 +262,10 @@ func (r *registration) disconnect(pErr *roachpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.mu.disconnected {
+		if r.mu.catchUpIter != nil {
+			r.mu.catchUpIter.Close()
+			r.mu.catchUpIter = nil
+		}
 		if r.mu.outputLoopCancelFn != nil {
 			r.mu.outputLoopCancelFn()
 		}
@@ -232,7 +288,7 @@ func (r *registration) disconnect(pErr *roachpb.Error) {
 // have been emitted.
 func (r *registration) outputLoop(ctx context.Context) error {
 	// If the registration has a catch-up scan, run it.
-	if err := r.maybeRunCatchupScan(); err != nil {
+	if err := r.maybeRunCatchUpScan(); err != nil {
 		err = errors.Wrap(err, "catch-up scan failed")
 		log.Errorf(ctx, "%v", err)
 		return err
@@ -253,7 +309,10 @@ func (r *registration) outputLoop(ctx context.Context) error {
 
 		select {
 		case nextEvent := <-r.buf:
-			if err := r.stream.Send(nextEvent); err != nil {
+			err := r.stream.Send(nextEvent.event)
+			nextEvent.allocation.Release(ctx)
+			putPooledSharedEvent(nextEvent)
+			if err != nil {
 				return err
 			}
 		case <-ctx.Done():
@@ -266,153 +325,56 @@ func (r *registration) outputLoop(ctx context.Context) error {
 
 func (r *registration) runOutputLoop(ctx context.Context, _forStacks roachpb.RangeID) {
 	r.mu.Lock()
+	if r.mu.disconnected {
+		// The registration has already been disconnected.
+		r.mu.Unlock()
+		return
+	}
 	ctx, r.mu.outputLoopCancelFn = context.WithCancel(ctx)
 	r.mu.Unlock()
 	err := r.outputLoop(ctx)
 	r.disconnect(roachpb.NewError(err))
 }
 
-// maybeRunCatchupScan starts a catchup scan which will output entries for all
-// recorded changes in the replica that are newer than the catchupTimestamp.
+// drainAllocations should be done after registration is disconnected from
+// processor to release all memory budget that its pending events hold.
+func (r *registration) drainAllocations(ctx context.Context) {
+	for {
+		select {
+		case e, ok := <-r.buf:
+			if !ok {
+				return
+			}
+			e.allocation.Release(ctx)
+			putPooledSharedEvent(e)
+		default:
+			return
+		}
+	}
+}
+
+// maybeRunCatchUpScan starts a catch-up scan which will output entries for all
+// recorded changes in the replica that are newer than the catchUpTimestamp.
 // This uses the iterator provided when the registration was originally created;
 // after the scan completes, the iterator will be closed.
 //
 // If the registration does not have a catchUpIteratorConstructor, this method
 // is a no-op.
-func (r *registration) maybeRunCatchupScan() error {
-	if r.catchupIterConstructor == nil {
+func (r *registration) maybeRunCatchUpScan() error {
+	catchUpIter := r.detachCatchUpIter()
+	if catchUpIter == nil {
 		return nil
 	}
-	catchupIter := r.catchupIterConstructor()
-	r.catchupIterConstructor = nil
 	start := timeutil.Now()
 	defer func() {
-		catchupIter.Close()
-		r.metrics.RangeFeedCatchupScanNanos.Inc(timeutil.Since(start).Nanoseconds())
+		catchUpIter.Close()
+		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	var a bufalloc.ByteAllocator
 	startKey := storage.MakeMVCCMetadataKey(r.span.Key)
 	endKey := storage.MakeMVCCMetadataKey(r.span.EndKey)
 
-	// MVCCIterator will encounter historical values for each key in
-	// reverse-chronological order. To output in chronological order, store
-	// events for the same key until a different key is encountered, then output
-	// the encountered values in reverse. This also allows us to buffer events
-	// as we fill in previous values.
-	var lastKey roachpb.Key
-	reorderBuf := make([]roachpb.RangeFeedEvent, 0, 5)
-	addPrevToLastEvent := func(val []byte) {
-		if l := len(reorderBuf); l > 0 {
-			if reorderBuf[l-1].Val.PrevValue.IsPresent() {
-				panic("RangeFeedValue.PrevVal unexpectedly set")
-			}
-			reorderBuf[l-1].Val.PrevValue.RawBytes = val
-		}
-	}
-	outputEvents := func() error {
-		for i := len(reorderBuf) - 1; i >= 0; i-- {
-			e := reorderBuf[i]
-			if err := r.stream.Send(&e); err != nil {
-				return err
-			}
-		}
-		reorderBuf = reorderBuf[:0]
-		return nil
-	}
-
-	// Iterate though all keys using Next. We want to publish all committed
-	// versions of each key that are after the registration's startTS, so we
-	// can't use NextKey.
-	var meta enginepb.MVCCMetadata
-	catchupIter.SeekGE(startKey)
-	for {
-		if ok, err := catchupIter.Valid(); err != nil {
-			return err
-		} else if !ok || !catchupIter.UnsafeKey().Less(endKey) {
-			break
-		}
-
-		unsafeKey := catchupIter.UnsafeKey()
-		unsafeVal := catchupIter.UnsafeValue()
-		if !unsafeKey.IsValue() {
-			// Found a metadata key.
-			if err := protoutil.Unmarshal(unsafeVal, &meta); err != nil {
-				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
-			}
-			if !meta.IsInline() {
-				// This is an MVCCMetadata key for an intent. The catchup scan
-				// only cares about committed values, so ignore this and skip
-				// past the corresponding provisional key-value. To do this,
-				// scan to the timestamp immediately before (i.e. the key
-				// immediately after) the provisional key.
-				//
-				// Make a copy since should not pass an unsafe key from the iterator
-				// that provided it, when asking it to seek.
-				a, unsafeKey.Key = a.Copy(unsafeKey.Key, 0)
-				catchupIter.SeekGE(storage.MVCCKey{
-					Key:       unsafeKey.Key,
-					Timestamp: meta.Timestamp.ToTimestamp().Prev(),
-				})
-				continue
-			}
-
-			// If write is inline, it doesn't have a timestamp so we don't
-			// filter on the registration's starting timestamp. Instead, we
-			// return all inline writes.
-			unsafeVal = meta.RawBytes
-		}
-
-		// Determine whether the iterator moved to a new key.
-		sameKey := bytes.Equal(unsafeKey.Key, lastKey)
-		if !sameKey {
-			// If so, output events for the last key encountered.
-			if err := outputEvents(); err != nil {
-				return err
-			}
-			a, lastKey = a.Copy(unsafeKey.Key, 0)
-		}
-		key := lastKey
-		ts := unsafeKey.Timestamp
-
-		// Ignore the version if it's not inline and its timestamp is at
-		// or before the registration's (exclusive) starting timestamp.
-		ignore := !(ts.IsEmpty() || r.catchupTimestamp.Less(ts))
-		if ignore && !r.withDiff {
-			// Skip all the way to the next key.
-			// NB: fast-path to avoid value copy when !r.withDiff.
-			catchupIter.NextKey()
-			continue
-		}
-
-		var val []byte
-		a, val = a.Copy(unsafeVal, 0)
-		if r.withDiff {
-			// Update the last version with its previous value (this version).
-			addPrevToLastEvent(val)
-		}
-
-		if ignore {
-			// Skip all the way to the next key.
-			catchupIter.NextKey()
-		} else {
-			// Move to the next version of this key.
-			catchupIter.Next()
-
-			var event roachpb.RangeFeedEvent
-			event.MustSetValue(&roachpb.RangeFeedValue{
-				Key: key,
-				Value: roachpb.Value{
-					RawBytes:  val,
-					Timestamp: ts,
-				},
-			})
-			reorderBuf = append(reorderBuf, event)
-		}
-	}
-
-	// Output events for the last key encountered.
-	return outputEvents()
+	return catchUpIter.CatchUpScan(startKey, endKey, r.catchUpTimestamp, r.withDiff, r.stream.Send)
 }
 
 // ID implements interval.Interface.
@@ -426,7 +388,7 @@ func (r *registration) Range() interval.Range {
 }
 
 func (r registration) String() string {
-	return fmt.Sprintf("[%s @ %s+]", r.span, r.catchupTimestamp)
+	return fmt.Sprintf("[%s @ %s+]", r.span, r.catchUpTimestamp)
 }
 
 // registry holds a set of registrations and manages their lifecycle.
@@ -468,15 +430,20 @@ func (reg *registry) nextID() int64 {
 
 // PublishToOverlapping publishes the provided event to all registrations whose
 // range overlaps the specified span.
-func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.RangeFeedEvent) {
+func (reg *registry) PublishToOverlapping(
+	ctx context.Context,
+	span roachpb.Span,
+	event *roachpb.RangeFeedEvent,
+	allocation *SharedBudgetAllocation,
+) {
 	// Determine the earliest starting timestamp that a registration
 	// can have while still needing to hear about this event.
 	var minTS hlc.Timestamp
 	switch t := event.GetValue().(type) {
 	case *roachpb.RangeFeedValue:
-		// Only publish values to registrations with starting
-		// timestamps equal to or greater than the value's timestamp.
 		minTS = t.Value.Timestamp
+	case *roachpb.RangeFeedSSTable:
+		minTS = t.WriteTS
 	case *roachpb.RangeFeedCheckpoint:
 		// Always publish checkpoint notifications, regardless of a registration's
 		// starting timestamp.
@@ -491,8 +458,8 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 	reg.forOverlappingRegs(span, func(r *registration) (bool, *roachpb.Error) {
 		// Don't publish events if they are equal to or less
 		// than the registration's starting timestamp.
-		if r.catchupTimestamp.Less(minTS) {
-			r.publish(event)
+		if r.catchUpTimestamp.Less(minTS) {
+			r.publish(ctx, event, allocation)
 		}
 		return false, nil
 	})
@@ -501,10 +468,14 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 // Unregister removes a registration from the registry. It is assumed that the
 // registration has already been disconnected, this is intended only to clean
 // up the registry.
-func (reg *registry) Unregister(r *registration) {
+// We also drain all pending events for the sake of memory accounting. To do
+// that we rely on a fact that caller is not going to post any more events
+// concurrently or after this function is called.
+func (reg *registry) Unregister(ctx context.Context, r *registration) {
 	if err := reg.tree.Delete(r, false /* fast */); err != nil {
 		panic(err)
 	}
+	r.drainAllocations(ctx)
 }
 
 // Disconnect disconnects all registrations that overlap the specified span with
@@ -580,6 +551,30 @@ func (r *registration) waitForCaughtUp() error {
 		}
 	}
 	return errors.Errorf("registration %v failed to empty in time", r.Range())
+}
+
+// maybeConstructCatchUpIter calls the catchUpIterConstructor and attaches
+// the catchUpIter to be detached in the catchUpScan or closed on disconnect.
+func (r *registration) maybeConstructCatchUpIter() {
+	if r.catchUpIterConstructor == nil {
+		return
+	}
+
+	catchUpIter := r.catchUpIterConstructor()
+	r.catchUpIterConstructor = nil
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.catchUpIter = catchUpIter
+}
+
+// detachCatchUpIter detaches the catchUpIter that was previously attached.
+func (r *registration) detachCatchUpIter() *CatchUpIterator {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	catchUpIter := r.mu.catchUpIter
+	r.mu.catchUpIter = nil
+	return catchUpIter
 }
 
 // waitForCaughtUp waits for all registrations overlapping the given span to

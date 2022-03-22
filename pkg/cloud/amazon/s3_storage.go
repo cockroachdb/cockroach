@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -58,6 +59,10 @@ const (
 	// KMS ID to be used for server side encryption.
 	AWSServerSideEncryptionKMSID = "AWS_SERVER_KMS_ID"
 
+	// S3StorageClassParam is the query parameter used in S3 URIs to configure the
+	// storage class for written objects.
+	S3StorageClassParam = "S3_STORAGE_CLASS"
+
 	// S3RegionParam is the query parameter for the 'endpoint' in an S3 URI.
 	S3RegionParam = "AWS_REGION"
 
@@ -83,6 +88,7 @@ type s3Client struct {
 }
 
 var reuseSession = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"cloudstorage.s3.session_reuse.enabled",
 	"persist the last opened s3 session and re-use it when opening a new session with the same arguments",
 	true,
@@ -144,6 +150,7 @@ func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 	setIf(cloud.AuthParam, conf.Auth)
 	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
 	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
+	setIf(S3StorageClassParam, conf.StorageClass)
 
 	s3URL := url.URL{
 		Scheme:   "s3",
@@ -169,6 +176,7 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 		Auth:          uri.Query().Get(cloud.AuthParam),
 		ServerEncMode: uri.Query().Get(AWSServerSideEncryptionMode),
 		ServerKMSID:   uri.Query().Get(AWSServerSideEncryptionKMSID),
+		StorageClass:  uri.Query().Get(S3StorageClassParam),
 		/* NB: additions here should also update s3QueryParams() serializer */
 	}
 	conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
@@ -392,16 +400,15 @@ func (s *s3Storage) Settings() *cluster.Settings {
 }
 
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "s3.Writer")
-	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))})
-
 	uploader, err := s.getUploader(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	ctx, sp := tracing.ChildSpan(ctx, "s3.Writer")
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))})
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		defer sp.Finish()
 		// Upload the file to S3.
 		// TODO(dt): test and tune the uploader parameters.
 		_, err := uploader.UploadWithContext(ctx, &s3manager.UploadInput{
@@ -410,6 +417,7 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 			Body:                 r,
 			ServerSideEncryption: nilIfEmpty(s.conf.ServerEncMode),
 			SSEKMSKeyId:          nilIfEmpty(s.conf.ServerKMSID),
+			StorageClass:         nilIfEmpty(s.conf.StorageClass),
 		})
 		return errors.Wrap(err, "upload failed")
 	}), nil
@@ -433,7 +441,12 @@ func (s *s3Storage) openStreamAt(
 			switch aerr.Code() {
 			// Relevant 404 errors reported by AWS.
 			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
-				return nil, errors.Wrapf(cloud.ErrFileDoesNotExist, "s3 object does not exist: %s", err.Error())
+				// nolint:errwrap
+				return nil, errors.Wrapf(
+					errors.Wrap(cloud.ErrFileDoesNotExist, "s3 object does not exist"),
+					"%v",
+					err.Error(),
+				)
 			}
 		}
 		return nil, errors.Wrap(err, "failed to get s3 object")
@@ -442,7 +455,7 @@ func (s *s3Storage) openStreamAt(
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
-func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (s *s3Storage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
 	reader, _, err := s.ReadFileAt(ctx, basename, 0)
 	return reader, err
 }
@@ -450,7 +463,7 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 // ReadFileAt opens a reader at the requested offset.
 func (s *s3Storage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.ReadFileAt")
 	defer sp.Finish()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.ReadFileAt: %s", path.Join(s.prefix, basename))})

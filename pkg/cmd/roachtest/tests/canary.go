@@ -24,7 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
 
 // This file contains common elements for all 3rd party test suite roachtests.
@@ -65,8 +68,10 @@ func (b blocklistsForVersion) getLists(version string) (string, blocklist, strin
 	return "", nil, "", nil
 }
 
-func fetchCockroachVersion(ctx context.Context, c cluster.Cluster, nodeIndex int) (string, error) {
-	db, err := c.ConnE(ctx, nodeIndex)
+func fetchCockroachVersion(
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, nodeIndex int,
+) (string, error) {
+	db, err := c.ConnE(ctx, l, nodeIndex)
 	if err != nil {
 		return "", err
 	}
@@ -130,40 +135,40 @@ func repeatRunE(
 		}
 		return nil
 	}
-	return fmt.Errorf("all attempts failed for %s due to error: %s", operation, lastError)
+	return errors.Wrapf(lastError, "all attempts failed for %s", operation)
 }
 
-// repeatRunWithBuffer is the same function as c.RunWithBuffer but with an
+// repeatRunWithDetailsSingleNode is the same function as c.RunWithDetailsSingleNode but with an
 // automatic retry loop.
-func repeatRunWithBuffer(
+func repeatRunWithDetailsSingleNode(
 	ctx context.Context,
 	c cluster.Cluster,
 	t test.Test,
 	node option.NodeListOption,
 	operation string,
 	args ...string,
-) ([]byte, error) {
+) (install.RunResultDetails, error) {
 	var (
-		lastResult []byte
+		lastResult install.RunResultDetails
 		lastError  error
 	)
 	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return lastResult, ctx.Err()
 		}
 		if t.Failed() {
-			return nil, fmt.Errorf("test has failed")
+			return lastResult, fmt.Errorf("test has failed")
 		}
 		attempt++
 		t.L().Printf("attempt %d - %s", attempt, operation)
-		lastResult, lastError = c.RunWithBuffer(ctx, t.L(), node, args...)
+		lastResult, lastError = c.RunWithDetailsSingleNode(ctx, t.L(), node, args...)
 		if lastError != nil {
-			t.L().Printf("error - retrying: %s\n%s", lastError, string(lastResult))
+			t.L().Printf("error - retrying: %s", lastError)
 			continue
 		}
 		return lastResult, nil
 	}
-	return nil, fmt.Errorf("all attempts failed for %s, with error: %s\n%s", operation, lastError, lastResult)
+	return lastResult, errors.Wrapf(lastError, "all attempts failed for %s", operation)
 }
 
 // repeatGitCloneE is the same function as c.GitCloneE but with an automatic
@@ -192,7 +197,7 @@ func repeatGitCloneE(
 		}
 		return nil
 	}
-	return fmt.Errorf("could not clone %s due to error: %s", src, lastError)
+	return errors.Wrapf(lastError, "could not clone %s", src)
 }
 
 // repeatGetLatestTag fetches the latest (sorted) tag from a github repo.
@@ -289,5 +294,28 @@ func repeatGetLatestTag(
 
 		return releaseTags[len(releaseTags)-1].tag, nil
 	}
-	return "", fmt.Errorf("could not get tags from %s, due to error: %s", url, lastError)
+	return "", errors.Wrapf(lastError, "could not get tags from %s", url)
+}
+
+// gitCloneWithRecurseSubmodules clones a git repo from src into dest and checks out origin's
+// version of the given branch, but with a --recurse-submodules flag.
+// The src, dest, and branch arguments must not contain shell special characters.
+func gitCloneWithRecurseSubmodules(
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	src, dest, branch string,
+	node option.NodeListOption,
+) error {
+	cmd := []string{"bash", "-e", "-c", fmt.Sprintf(`'
+		if ! test -d %[1]s; then
+	  		git clone --recurse-submodules -b %[2]s --depth 1 %[3]s %[1]s
+		else
+	  		cd %[1]s
+	  		git fetch origin
+	  		git checkout origin/%[2]s
+		fi
+	'`, dest, branch, src),
+	}
+	return errors.Wrap(c.RunE(ctx, node, cmd...), "gitCloneWithRecurseSubmodules")
 }

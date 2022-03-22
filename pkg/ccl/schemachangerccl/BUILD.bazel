@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_test(
+    name = "schemachangerccl_test",
+    size = "large",
+    srcs = [
+        "main_test.go",
+        "schemachanger_ccl_test.go",
+    ],
+    data = glob(["testdata/**"]) + [
+        "//pkg/sql/schemachanger:testdata",
+    ],
+    embed = [":schemachangerccl"],
+    shard_count = 16,
+    deps = [
+        "//pkg/base",
+        "//pkg/build/bazel",
+        "//pkg/ccl",
+        "//pkg/ccl/multiregionccl/multiregionccltestutils",
+        "//pkg/ccl/utilccl",
+        "//pkg/jobs",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/schemachanger/scrun",
+        "//pkg/sql/schemachanger/sctest",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+    ],
+)
+
+go_library(
+    name = "schemachangerccl",
+    srcs = ["doc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/schemachangerccl",
+    visibility = ["//visibility:public"],
+)

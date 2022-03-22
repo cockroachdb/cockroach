@@ -236,13 +236,16 @@ func (p *planner) dropViewImpl(
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
-
-			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, queueJob, "dropping dependent view", behavior)
-			if err != nil {
-				return cascadeDroppedViews, err
+			// Check if the dependency was already marked as dropped,
+			// while dealing with any earlier dependent views.
+			if !dependentDesc.Dropped() {
+				cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, queueJob, "dropping dependent view", behavior)
+				if err != nil {
+					return cascadeDroppedViews, err
+				}
+				cascadeDroppedViews = append(cascadeDroppedViews, cascadedViews...)
+				cascadeDroppedViews = append(cascadeDroppedViews, qualifiedView.FQString())
 			}
-			cascadeDroppedViews = append(cascadeDroppedViews, cascadedViews...)
-			cascadeDroppedViews = append(cascadeDroppedViews, qualifiedView.FQString())
 		}
 	}
 
@@ -251,7 +254,7 @@ func (p *planner) dropViewImpl(
 		return cascadeDroppedViews, err
 	}
 
-	if err := p.initiateDropTable(ctx, viewDesc, queueJob, jobDesc, true /* drainName */); err != nil {
+	if err := p.initiateDropTable(ctx, viewDesc, queueJob, jobDesc); err != nil {
 		return cascadeDroppedViews, err
 	}
 

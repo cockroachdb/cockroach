@@ -75,7 +75,7 @@ SELECT 'f'::blah
 ----
 SELECT 'f'::blah
 SELECT (('f')::blah) -- fully parenthesized
-SELECT _::blah -- literals removed
+SELECT '_'::blah -- literals removed
 SELECT 'f'::_ -- identifiers removed
 
 ## Test various cases of qualified and not statically known types.

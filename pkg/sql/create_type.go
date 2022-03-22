@@ -16,11 +16,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -81,7 +82,7 @@ func (n *createTypeNode) startExec(params runParams) error {
 	// Check if a type with the same name exists already.
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
 		Required:    false,
-		AvoidCached: true,
+		AvoidLeased: true,
 	}}
 	found, _, err := params.p.Descriptors().GetImmutableTypeByName(params.ctx, params.p.Txn(), n.typeName, flags)
 	if err != nil {
@@ -164,10 +165,9 @@ func getCreateTypeParams(
 		sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
 	}
 
-	err = catalogkv.CheckObjectCollision(
+	err = params.p.Descriptors().Direct().CheckObjectCollision(
 		params.ctx,
 		params.p.txn,
-		params.ExecCfg().Codec,
 		db.GetID(),
 		schema.GetID(),
 		name,
@@ -184,24 +184,21 @@ func getCreateTypeParams(
 // a collision. findFreeArrayTypeName performs this logic to find a free name
 // for the array type based off of a type with the input name.
 func findFreeArrayTypeName(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID, schemaID descpb.ID, name string,
+	ctx context.Context,
+	txn *kv.Txn,
+	col *descs.Collection,
+	parentID, schemaID descpb.ID,
+	name string,
 ) (string, error) {
 	arrayName := "_" + name
 	for {
 		// See if there is a collision with the current name.
-		exists, _, err := catalogkv.LookupObjectID(
-			ctx,
-			txn,
-			codec,
-			parentID,
-			schemaID,
-			arrayName,
-		)
+		objectID, err := col.Direct().LookupObjectID(ctx, txn, parentID, schemaID, arrayName)
 		if err != nil {
 			return "", err
 		}
 		// If we found an empty spot, then break out.
-		if !exists {
+		if objectID == descpb.InvalidID {
 			break
 		}
 		// Otherwise, append another "_" to the front of the name.
@@ -259,7 +256,7 @@ func (p *planner) createArrayType(
 	arrayTypeName, err := findFreeArrayTypeName(
 		params.ctx,
 		params.p.txn,
-		params.ExecCfg().Codec,
+		params.p.Descriptors(),
 		db.GetID(),
 		schemaID,
 		typ.Type(),
@@ -270,7 +267,7 @@ func (p *planner) createArrayType(
 	arrayTypeKey := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, db.GetID(), schemaID, arrayTypeName)
 
 	// Generate the stable ID for the array type.
-	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
+	id, err := descidgen.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
 	if err != nil {
 		return 0, err
 	}
@@ -293,7 +290,6 @@ func (p *planner) createArrayType(
 		arrayTypeKey,
 		id,
 		arrayTypDesc,
-		params.EvalContext().Settings,
 		jobStr,
 	); err != nil {
 		return 0, err
@@ -303,7 +299,7 @@ func (p *planner) createArrayType(
 
 func (p *planner) createUserDefinedEnum(params runParams, n *createTypeNode) error {
 	// Generate a stable ID for the new type.
-	id, err := catalogkv.GenerateUniqueDescID(
+	id, err := descidgen.GenerateUniqueDescID(
 		params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec,
 	)
 	if err != nil {
@@ -345,14 +341,14 @@ func CreateEnumTypeDesc(
 		}
 	}
 
-	privs := descpb.CreatePrivilegesFromDefaultPrivileges(
-		dbDesc.GetID(), dbDesc.GetDefaultPrivileges(),
-		params.p.User(), tree.Types, dbDesc.GetPrivileges(),
+	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		dbDesc.GetDefaultPrivilegeDescriptor(),
+		schema.GetDefaultPrivilegeDescriptor(),
+		dbDesc.GetID(),
+		params.SessionData().User(),
+		tree.Types,
+		dbDesc.GetPrivileges(),
 	)
-
-	// TODO(richardjcai): Remove this once we figure out the migration from
-	//   our current "inheritance" model to default privileges.
-	inheritUsagePrivilegeFromSchema(schema, privs)
 
 	enumKind := descpb.TypeDescriptor_ENUM
 	var regionConfig *descpb.TypeDescriptor_RegionConfig
@@ -421,7 +417,6 @@ func (p *planner) createEnumWithID(
 		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), schema.GetID(), typeName.Type()),
 		id,
 		typeDesc,
-		params.EvalContext().Settings,
 		typeName.String(),
 	); err != nil {
 		return err
@@ -439,35 +434,3 @@ func (n *createTypeNode) Next(params runParams) (bool, error) { return false, ni
 func (n *createTypeNode) Values() tree.Datums                 { return tree.Datums{} }
 func (n *createTypeNode) Close(ctx context.Context)           {}
 func (n *createTypeNode) ReadingOwnWrites()                   {}
-
-// TODO(richardjcai): Instead of inheriting the privilege when creating the
-// descriptor, we can check the parent of type for usage privilege as well,
-// this seems to be how Postgres does it.
-// Add a test for this when we support granting privileges to schemas #50879.
-func inheritUsagePrivilegeFromSchema(
-	schema catalog.SchemaDescriptor, privs *descpb.PrivilegeDescriptor,
-) {
-
-	switch kind := schema.SchemaKind(); kind {
-	case catalog.SchemaPublic:
-		// If the type is in the public schema, the public role has USAGE on it.
-		privs.Grant(security.PublicRoleName(), privilege.List{privilege.USAGE})
-	case catalog.SchemaTemporary, catalog.SchemaVirtual:
-		// No types should be created in a temporary schema or a virtual schema.
-		panic(errors.AssertionFailedf(
-			"type being created in schema kind %d with id %d",
-			kind, schema.GetID()))
-	case catalog.SchemaUserDefined:
-		schemaPrivs := schema.GetPrivileges()
-
-		// Look for all users that have USAGE on the schema and add it to the
-		// privilege descriptor.
-		for _, u := range schemaPrivs.Users {
-			if u.Privileges&privilege.USAGE.Mask() == 1 {
-				privs.Grant(u.User(), privilege.List{privilege.USAGE})
-			}
-		}
-	default:
-		panic(errors.AssertionFailedf("unknown schema kind %d", kind))
-	}
-}

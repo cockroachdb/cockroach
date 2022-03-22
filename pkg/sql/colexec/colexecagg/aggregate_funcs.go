@@ -13,7 +13,7 @@ package colexecagg
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -438,6 +438,8 @@ type aggAllocBase struct {
 
 // ProcessAggregations processes all aggregate functions specified in
 // aggregations.
+//
+// evalCtx will not be mutated.
 func ProcessAggregations(
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,

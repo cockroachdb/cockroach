@@ -108,7 +108,8 @@ func interestingOrderingsForScan(scan *memo.ScanExpr) props.OrderingSet {
 		// the table's indexes. Add orderings for all of them.
 		ord = make(props.OrderingSet, 0, tab.IndexCount())
 		for i := 0; i < tab.IndexCount(); i++ {
-			addIndexOrdering(i, &scan.Relational().FuncDeps, scan.ExactPrefix)
+			// IsCanonical implies no constraints so exactPrefix is 0.
+			addIndexOrdering(i, &scan.Relational().FuncDeps, 0)
 		}
 	} else {
 		// This scan is not canonical, so we can only use the ordering implied by
@@ -191,9 +192,16 @@ func interestingOrderingsForSetOp(rel memo.RelExpr) props.OrderingSet {
 		// LocalityOptimizedSearchOp does not support passing through orderings.
 		return nil
 	}
-	ordLeft := DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr))
-	ordRight := DeriveInterestingOrderings(rel.Child(1).(memo.RelExpr))
+	leftChild := rel.Child(0).(memo.RelExpr)
+	rightChild := rel.Child(1).(memo.RelExpr)
+	ordLeft := DeriveInterestingOrderings(leftChild)
+	ordRight := DeriveInterestingOrderings(rightChild)
 	private := rel.Private().(*memo.SetPrivate)
+
+	// We can only keep orderings on output columns.
+	ordLeft.RestrictToCols(private.LeftCols.ToSet(), &leftChild.Relational().FuncDeps)
+	ordRight.RestrictToCols(private.RightCols.ToSet(), &rightChild.Relational().FuncDeps)
+
 	ordLeft = ordLeft.RemapColumns(private.LeftCols, private.OutCols)
 	ordRight = ordRight.RemapColumns(private.RightCols, private.OutCols)
 

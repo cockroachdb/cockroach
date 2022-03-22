@@ -58,7 +58,7 @@ vectorized: true
     └── • scan
           columns: ()
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -111,7 +111,7 @@ vectorized: true
     └── • scan
           columns: (k int, v int, s string)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 # Aggregate functions trigger aggregation and computation when there is no source.
@@ -194,7 +194,7 @@ EXPLAIN (TYPES) SELECT count(*), k FROM kv GROUP BY 2
 distribution: local
 vectorized: true
 ·
-• group
+• group (streaming)
 │ columns: (count int, k int)
 │ estimated row count: 1,000 (missing stats)
 │ aggregate 0: count_rows()
@@ -205,7 +205,7 @@ vectorized: true
       columns: (k int)
       ordering: +k
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 # Selecting and grouping on a more complex expression works.
@@ -215,7 +215,7 @@ EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 distribution: local
 vectorized: true
 ·
-• group
+• group (hash)
 │ columns: (count int, r int)
 │ estimated row count: 1,000 (missing stats)
 │ aggregate 0: count_rows()
@@ -229,7 +229,7 @@ vectorized: true
     └── • scan
           columns: (k int, v int)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
@@ -245,7 +245,7 @@ vectorized: true
 │ render r: ((k)[int] + (any_not_null)[int])[int]
 │ render count_rows: (count_rows)[int]
 │
-└── • group
+└── • group (streaming)
     │ columns: (k int, count_rows int, any_not_null int)
     │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: count_rows()
@@ -257,7 +257,7 @@ vectorized: true
           columns: (k int, v int)
           ordering: +k
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -274,7 +274,7 @@ vectorized: true
 └── • scan
       columns: ()
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 query T
@@ -293,7 +293,7 @@ vectorized: true
 └── • scan
       columns: (k int)
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 query T
@@ -315,7 +315,7 @@ vectorized: true
 └── • scan
       columns: (v)
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 query T
@@ -346,13 +346,13 @@ vectorized: true
             ├── • scan
             │     columns: (k, v, w, s)
             │     estimated row count: 1,000 (missing stats)
-            │     table: kv@primary
+            │     table: kv@kv_pkey
             │     spans: FULL SCAN
             │
             └── • scan
                   columns: ()
                   estimated row count: 1,000 (missing stats)
-                  table: kv@primary
+                  table: kv@kv_pkey
                   spans: FULL SCAN
 
 query T
@@ -365,7 +365,7 @@ vectorized: true
 │ columns: (min)
 │ estimated row count: 1,000 (missing stats)
 │
-└── • group
+└── • group (hash)
     │ columns: (k, min)
     │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: min(k)
@@ -378,13 +378,13 @@ vectorized: true
         ├── • scan
         │     columns: (k)
         │     estimated row count: 1,000 (missing stats)
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (k)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 query T
@@ -397,7 +397,7 @@ vectorized: true
 │ columns: (min)
 │ estimated row count: 1,000 (missing stats)
 │
-└── • group
+└── • group (hash)
     │ columns: (k, min)
     │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: min(k)
@@ -410,13 +410,13 @@ vectorized: true
         ├── • scan
         │     columns: (k)
         │     estimated row count: 1,000 (missing stats)
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (k)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 # A useful optimization: naked tuple expansion in GROUP BY clause.
@@ -430,7 +430,7 @@ vectorized: true
 │ columns: (min)
 │ estimated row count: 1,000 (missing stats)
 │
-└── • group
+└── • group (hash)
     │ columns: (k, min)
     │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: min(k)
@@ -443,13 +443,13 @@ vectorized: true
         ├── • scan
         │     columns: (k)
         │     estimated row count: 1,000 (missing stats)
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (k)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 # Show reuse of renders expression inside an expansion.
@@ -475,13 +475,13 @@ vectorized: true
         ├── • scan
         │     columns: (v, w, s)
         │     estimated row count: 1,000 (missing stats)
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: ()
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 statement ok
@@ -506,9 +506,46 @@ vectorized: true
 └── • scan
       columns: (a char)
       estimated row count: 1 (missing stats)
-      table: abc@primary
+      table: abc@abc_pkey
       spans: LIMITED SCAN
       limit: 1
+
+query T
+EXPLAIN SELECT min(a), max(a) FROM abc
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: abc@abc_pkey
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • revscan
+              missing stats
+              table: abc@abc_pkey
+              spans: LIMITED SCAN
+              limit: 1
 
 statement ok
 CREATE TABLE xyz (
@@ -690,7 +727,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /xyz/zyx/3.0/2/1 -> NULL
+fetched: /xyz/zyx/3.0/2/1 -> <undecoded>
 output row: [1]
 
 query T
@@ -714,6 +751,327 @@ vectorized: true
           spans: /3/2-/3/3
           limit: 1
 
+# MULTIPLE MIN/MAX
+
+query T
+EXPLAIN SELECT min(x), max(z) FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@xy
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • revscan
+              missing stats
+              table: xyz@zyx
+              spans: (/NULL - ]
+              limit: 1
+
+# The SUM disables ReplaceScalarMinMaxWithScalarSubqueries.
+query T
+EXPLAIN SELECT min(x), max(z), sum(x) FROM xyz
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+# We don't yet support the optimization to convert multiple aggregates to
+# subqueries with limit 1 when there is a filter.
+query T
+EXPLAIN SELECT min(y), max(y) FROM xyz WHERE x in (0, 4, 7)
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@xy
+      spans: [/0 - /0] [/4 - /4] [/7 - /7]
+
+query T
+EXPLAIN SELECT min(x), max(x) FROM xyz WHERE x = 1
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@xy
+      spans: [/1 - /1]
+
+# MULTIPLE MIN/MAX WITH FILTER
+
+query T
+EXPLAIN SELECT min(z), max(y) FROM xyz WHERE z in (3.0, 6.0, 8.0)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@zyx
+│             spans: [/3.0 - /3.0] [/6.0 - /6.0] [/8.0 - /8.0]
+│             limit: 1
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • union all
+                │
+                ├── • union all
+                │   │
+                │   ├── • revscan
+                │   │     missing stats
+                │   │     table: xyz@zyx
+                │   │     spans: (/3.0/NULL - /3.0]
+                │   │     limit: 1
+                │   │
+                │   └── • revscan
+                │         missing stats
+                │         table: xyz@zyx
+                │         spans: (/6.0/NULL - /6.0]
+                │         limit: 1
+                │
+                └── • revscan
+                      missing stats
+                      table: xyz@zyx
+                      spans: (/8.0/NULL - /8.0]
+                      limit: 1
+
+# The COUNT disables ReplaceFilteredScalarMinMaxWithSubqueries.
+query T
+EXPLAIN SELECT min(z), max(y), count(x) FROM xyz WHERE z in (3.0, 6.0, 8.0)
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: xyz@zyx
+      spans: [/3.0 - /3.0] [/6.0 - /6.0] [/8.0 - /8.0]
+
+# Filter on derived table is supported.
+query T
+EXPLAIN SELECT max(z), min(x) FROM (SELECT x,y,z FROM xyz a) dt WHERE dt.y > 0
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • filter
+│               │ filter: y > 0
+│               │
+│               └── • revscan
+│                     missing stats
+│                     table: xyz@zyx
+│                     spans: (/NULL - ]
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • filter
+                │ filter: y > 0
+                │
+                └── • scan
+                      missing stats
+                      table: xyz@xy
+                      spans: FULL SCAN
+
+# Scalar subquery in filter is supported.
+query T
+EXPLAIN SELECT max(z), min(x) FROM xyz WHERE (z,x) = (SELECT max(z), min(x) FROM xyz)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • values
+│     size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • revscan
+│             missing stats
+│             table: xyz@zyx
+│             spans: (/NULL - ]
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S2
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@xy
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S3
+│   │ original sql: (SELECT max(z), min(x) FROM xyz)
+│   │ exec mode: one row
+│   │
+│   └── • render
+│       │
+│       └── • values
+│             size: 2 columns, 1 row
+│
+├── • subquery
+│   │ id: @S4
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • limit
+│           │ count: 1
+│           │
+│           └── • filter
+│               │ filter: (z, x) = @S3
+│               │
+│               └── • revscan
+│                     missing stats
+│                     table: xyz@zyx
+│                     spans: (/NULL - ]
+│
+├── • subquery
+│   │ id: @S5
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • revscan
+│             missing stats
+│             table: xyz@zyx
+│             spans: (/NULL - ]
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S6
+│   │ original sql: <unknown>
+│   │ exec mode: one row
+│   │
+│   └── • group (scalar)
+│       │
+│       └── • scan
+│             missing stats
+│             table: xyz@xy
+│             spans: LIMITED SCAN
+│             limit: 1
+│
+├── • subquery
+│   │ id: @S7
+│   │ original sql: (SELECT max(z), min(x) FROM xyz)
+│   │ exec mode: one row
+│   │
+│   └── • render
+│       │
+│       └── • values
+│             size: 2 columns, 1 row
+│
+└── • subquery
+    │ id: @S8
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • group (scalar)
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • filter
+                │ filter: (z, x) = @S7
+                │
+                └── • scan
+                      missing stats
+                      table: xyz@xyz_pkey
+                      spans: FULL SCAN
+
 # VARIANCE/STDDEV
 
 statement ok
@@ -724,14 +1082,14 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /xyz/primary/1 -> NULL
-fetched: /xyz/primary/1/y -> 2
-fetched: /xyz/primary/1/z -> 3.0
-fetched: /xyz/primary/4 -> NULL
-fetched: /xyz/primary/4/y -> 5
-fetched: /xyz/primary/4/z -> 6.0
-fetched: /xyz/primary/7 -> NULL
-fetched: /xyz/primary/7/z -> 8.0
+fetched: /xyz/xyz_pkey/1 -> <undecoded>
+fetched: /xyz/xyz_pkey/1/y -> 2
+fetched: /xyz/xyz_pkey/1/z -> 3.0
+fetched: /xyz/xyz_pkey/4 -> <undecoded>
+fetched: /xyz/xyz_pkey/4/y -> 5
+fetched: /xyz/xyz_pkey/4/z -> 6.0
+fetched: /xyz/xyz_pkey/7 -> <undecoded>
+fetched: /xyz/xyz_pkey/7/z -> 8.0
 output row: [9 4.5 6.33333333333333]
 
 query T
@@ -822,7 +1180,7 @@ vectorized: true
 │ estimated row count: 100 (missing stats)
 │ order: +count_rows
 │
-└── • group
+└── • group (hash)
     │ columns: (v int, count_rows int)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: count_rows()
@@ -831,7 +1189,7 @@ vectorized: true
     └── • scan
           columns: (v int)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -846,7 +1204,7 @@ vectorized: true
 │ estimated row count: 100 (missing stats)
 │ order: +count_rows
 │
-└── • group
+└── • group (hash)
     │ columns: (v int, count_rows int)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: count_rows()
@@ -855,7 +1213,7 @@ vectorized: true
     └── • scan
           columns: (v int)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -873,7 +1231,7 @@ vectorized: true
     │ estimated row count: 100 (missing stats)
     │ order: +count_rows
     │
-    └── • group
+    └── • group (hash)
         │ columns: (v int, count int, count_rows int)
         │ estimated row count: 100 (missing stats)
         │ aggregate 0: count(column7)
@@ -889,7 +1247,7 @@ vectorized: true
             └── • scan
                   columns: (v int)
                   estimated row count: 1,000 (missing stats)
-                  table: kv@primary
+                  table: kv@kv_pkey
                   spans: FULL SCAN
 
 # Check that filters propagate through no-op aggregation.
@@ -899,7 +1257,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(NULL) FROM kv GROUP BY v) WHERE
 distribution: local
 vectorized: true
 ·
-• group
+• group (hash)
 │ columns: (v, count)
 │ estimated row count: 33 (missing stats)
 │ aggregate 0: count(column7)
@@ -919,7 +1277,7 @@ vectorized: true
         └── • scan
               columns: (v)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 # Verify that FILTER works.
@@ -942,7 +1300,7 @@ vectorized: true
 │ columns: (count, max)
 │ estimated row count: 100 (missing stats)
 │
-└── • group
+└── • group (hash)
     │ columns: (v, count, max)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: count(column7) FILTER (WHERE column8)
@@ -959,7 +1317,7 @@ vectorized: true
         └── • scan
               columns: (k, v)
               estimated row count: 1,000 (missing stats)
-              table: filter_test@primary
+              table: filter_test@filter_test_pkey
               spans: FULL SCAN
 
 query T
@@ -972,7 +1330,7 @@ vectorized: true
 │ columns: (count)
 │ estimated row count: 100 (missing stats)
 │
-└── • group
+└── • group (hash)
     │ columns: (v, count)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: count(column7) FILTER (WHERE column8)
@@ -988,7 +1346,7 @@ vectorized: true
         └── • scan
               columns: (k, v)
               estimated row count: 1,000 (missing stats)
-              table: filter_test@primary
+              table: filter_test@filter_test_pkey
               spans: FULL SCAN
 
 # Tests with * inside GROUP BY.
@@ -1006,7 +1364,7 @@ vectorized: true
 └── • scan
       columns: ()
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 query T
@@ -1019,7 +1377,7 @@ vectorized: true
 │ columns: (sum decimal)
 │ estimated row count: 1,000 (missing stats)
 │
-└── • group
+└── • group (hash)
     │ columns: (k int, sum decimal)
     │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: sum(d)
@@ -1033,13 +1391,13 @@ vectorized: true
         ├── • scan
         │     columns: (k int)
         │     estimated row count: 1,000 (missing stats)
-        │     table: kv@primary
+        │     table: kv@kv_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (d decimal)
               estimated row count: 1,000 (missing stats)
-              table: abc@primary
+              table: abc@abc_pkey
               spans: FULL SCAN
 
 # opt_test is used for tests around the single-row optimization for MIN/MAX.
@@ -1111,18 +1469,30 @@ vectorized: true
 • group (scalar)
 │ columns: (min int)
 │ estimated row count: 1 (missing stats)
-│ aggregate 0: min(column5)
+│ aggregate 0: any_not_null(column5)
 │
-└── • render
+└── • top-k
     │ columns: (column5 int)
-    │ estimated row count: 1,000 (missing stats)
-    │ render column5: ((v)[int] + (1)[int])[int]
+    │ ordering: +column5
+    │ estimated row count: 1 (missing stats)
+    │ order: +column5
+    │ k: 1
     │
-    └── • scan
-          columns: (v int)
-          estimated row count: 1,000 (missing stats)
-          table: opt_test@primary
-          spans: FULL SCAN
+    └── • render
+        │ columns: (column5 int)
+        │ estimated row count: 333 (missing stats)
+        │ render column5: ((v)[int] + (1)[int])[int]
+        │
+        └── • filter
+            │ columns: (v int)
+            │ estimated row count: 333 (missing stats)
+            │ filter: ((((v)[int] + (1)[int])[int]) IS NOT NULL)[bool]
+            │
+            └── • scan
+                  columns: (v int)
+                  estimated row count: 1,000 (missing stats)
+                  table: opt_test@opt_test_pkey
+                  spans: FULL SCAN
 
 # Verify that we don't use the optimization if there is a GROUP BY.
 query T
@@ -1135,7 +1505,7 @@ vectorized: true
 │ columns: (min int)
 │ estimated row count: 1,000 (missing stats)
 │
-└── • group
+└── • group (streaming)
     │ columns: (k int, min int)
     │ estimated row count: 1,000 (missing stats)
     │ aggregate 0: min(v)
@@ -1146,7 +1516,7 @@ vectorized: true
           columns: (k int, v int)
           ordering: +k
           estimated row count: 1,000 (missing stats)
-          table: opt_test@primary
+          table: opt_test@opt_test_pkey
           spans: FULL SCAN
 
 statement ok
@@ -1166,7 +1536,7 @@ vectorized: true
 └── • scan
       columns: (a int, b int)
       estimated row count: 1,000 (missing stats)
-      table: ab@primary
+      table: ab@ab_pkey
       spans: FULL SCAN
 
 query T
@@ -1181,7 +1551,7 @@ vectorized: true
 │ render r: (((any_not_null)[int], (a)[int]))[tuple{int, int}]
 │ render min: (min)[string]
 │
-└── • group
+└── • group (hash)
     │ columns: (a int, x string, min string, any_not_null int)
     │ estimated row count: 100,000 (missing stats)
     │ aggregate 0: min(y)
@@ -1195,13 +1565,13 @@ vectorized: true
         ├── • scan
         │     columns: (a int, b int)
         │     estimated row count: 1,000 (missing stats)
-        │     table: ab@primary
+        │     table: ab@ab_pkey
         │     spans: FULL SCAN
         │
         └── • scan
               columns: (x string, y string)
               estimated row count: 1,000 (missing stats)
-              table: xy@primary
+              table: xy@xy_pkey
               spans: FULL SCAN
 
 # Test that ordering on GROUP BY columns is maintained.
@@ -1349,7 +1719,7 @@ vectorized: true
             └── • scan
                   columns: (v int, w int)
                   estimated row count: 1,000 (missing stats)
-                  table: kv@primary
+                  table: kv@kv_pkey
                   spans: FULL SCAN
 
 statement ok
@@ -1366,7 +1736,7 @@ vectorized: true
 │ columns: (m)
 │ estimated row count: 100 (missing stats)
 │
-└── • group
+└── • group (hash)
     │ columns: (column7, min)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: min(a)
@@ -1381,7 +1751,7 @@ vectorized: true
         └── • scan
               columns: (a)
               estimated row count: 1,000 (missing stats)
-              table: foo@primary
+              table: foo@foo_pkey
               spans: FULL SCAN
 
 query T
@@ -1394,7 +1764,7 @@ vectorized: true
 │ columns: (m)
 │ estimated row count: 100 (missing stats)
 │
-└── • group
+└── • group (hash)
     │ columns: (column7, min)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: min(a)
@@ -1409,7 +1779,7 @@ vectorized: true
         └── • scan
               columns: (a, b)
               estimated row count: 1,000 (missing stats)
-              table: foo@primary
+              table: foo@foo_pkey
               spans: FULL SCAN
 
 query T
@@ -1432,7 +1802,7 @@ vectorized: true
     └── • scan
           columns: (v)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -1453,7 +1823,7 @@ vectorized: true
     └── • scan
           columns: (k, s)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -1471,7 +1841,7 @@ vectorized: true
       columns: (k, s)
       ordering: +k
       estimated row count: 1,000 (missing stats)
-      table: kv@primary
+      table: kv@kv_pkey
       spans: FULL SCAN
 
 query T
@@ -1494,7 +1864,7 @@ vectorized: true
     └── • scan
           columns: (k, s)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 query T
@@ -1520,7 +1890,7 @@ vectorized: true
           columns: (k, s)
           ordering: +k
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 # Verify that we project away all input columns for count(*).
@@ -1552,7 +1922,7 @@ vectorized: true
         └── • scan
               columns: (v)
               estimated row count: 1,000 (missing stats)
-              table: kv@primary
+              table: kv@kv_pkey
               spans: FULL SCAN
 
 
@@ -1567,7 +1937,7 @@ EXPLAIN (VERBOSE) SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER B
 distribution: local
 vectorized: true
 ·
-• group
+• group (streaming)
 │ columns: (u, v, s)
 │ estimated row count: 1,000 (missing stats)
 │ aggregate 0: array_agg(w)
@@ -1601,7 +1971,7 @@ vectorized: true
     └── • scan
           columns: (s)
           estimated row count: 1,000 (missing stats)
-          table: kv@primary
+          table: kv@kv_pkey
           spans: FULL SCAN
 
 statement ok
@@ -1631,7 +2001,7 @@ vectorized: true
 │ estimated row count: 100 (missing stats)
 │ order: +company_id
 │
-└── • group
+└── • group (hash)
     │ columns: (company_id, string_agg)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: string_agg(employee, column6)
@@ -1647,7 +2017,7 @@ vectorized: true
         └── • scan
               columns: (company_id, employee)
               estimated row count: 1,000 (missing stats)
-              table: string_agg_test@primary
+              table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
 
 query T
@@ -1670,7 +2040,7 @@ vectorized: true
 │ estimated row count: 100 (missing stats)
 │ order: +company_id
 │
-└── • group
+└── • group (hash)
     │ columns: (company_id, string_agg)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: string_agg(column6, column7)
@@ -1686,7 +2056,7 @@ vectorized: true
         └── • scan
               columns: (company_id, employee)
               estimated row count: 1,000 (missing stats)
-              table: string_agg_test@primary
+              table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
 
 query T
@@ -1709,7 +2079,7 @@ vectorized: true
 │ estimated row count: 100 (missing stats)
 │ order: +company_id
 │
-└── • group
+└── • group (hash)
     │ columns: (company_id, string_agg)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: string_agg(employee, column6)
@@ -1725,7 +2095,7 @@ vectorized: true
         └── • scan
               columns: (company_id, employee)
               estimated row count: 1,000 (missing stats)
-              table: string_agg_test@primary
+              table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN
 
 query T
@@ -1748,7 +2118,7 @@ vectorized: true
 │ estimated row count: 100 (missing stats)
 │ order: +company_id
 │
-└── • group
+└── • group (hash)
     │ columns: (company_id, string_agg)
     │ estimated row count: 100 (missing stats)
     │ aggregate 0: string_agg(column6, column7)
@@ -1764,5 +2134,5 @@ vectorized: true
         └── • scan
               columns: (company_id, employee)
               estimated row count: 1,000 (missing stats)
-              table: string_agg_test@primary
+              table: string_agg_test@string_agg_test_pkey
               spans: FULL SCAN

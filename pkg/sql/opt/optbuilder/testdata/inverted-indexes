@@ -27,9 +27,9 @@ TABLE kj
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── j_inverted_key jsonb not null [inverted]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX kj_pkey
  │    └── k int not null
- └── INVERTED INDEX secondary
+ └── INVERTED INDEX kj_j_idx
       ├── j_inverted_key jsonb not null [inverted]
       └── k int not null
 
@@ -54,8 +54,8 @@ build
 UPSERT INTO kj VALUES (1, '{"a": 2}')
 ----
 upsert kj
+ ├── arbiter indexes: kj_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: k:8
  ├── fetch columns: k:8 j:9
  ├── insert-mapping:
@@ -87,8 +87,8 @@ build
 INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO NOTHING
 ----
 insert kj
+ ├── arbiter indexes: kj_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── insert-mapping:
  │    ├── column1:6 => k:1
  │    └── column2:7 => j:2
@@ -112,8 +112,8 @@ build
 INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO UPDATE SET j = '{"a": 3}'
 ----
 upsert kj
+ ├── arbiter indexes: kj_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: k:8
  ├── fetch columns: k:8 j:9
  ├── insert-mapping:

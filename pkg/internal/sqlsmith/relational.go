@@ -13,7 +13,9 @@ package sqlsmith
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/lib/pq/oid"
 )
 
 func (s *Smither) makeStmt() (stmt tree.Statement, ok bool) {
@@ -122,11 +124,6 @@ var (
 		{1, makeValuesTable},
 		{2, makeSelectTable},
 	}
-	vectorizableTableExprs = []tableExprWeight{
-		{20, makeEquiJoinExpr},
-		{20, makeMergeJoinExpr},
-		{20, makeSchemaTable},
-	}
 	allTableExprs = append(mutatingTableExprs, nonMutatingTableExprs...)
 
 	selectStmts = []selectStatementWeight{
@@ -214,6 +211,10 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 	var available [][2]tree.TypedExpr
 	for _, leftCol := range leftRefs {
 		for _, rightCol := range rightRefs {
+			// You can't compare voids.
+			if leftCol.typ.Oid() == oid.T_void || rightCol.typ.Oid() == oid.T_void {
+				continue
+			}
 			if leftCol.typ.Equivalent(rightCol.typ) {
 				available = append(available, [2]tree.TypedExpr{
 					typedParen(leftCol.item, leftCol.typ),
@@ -235,7 +236,7 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 	for (cond == nil || s.coin()) && len(available) > 0 {
 		v := available[0]
 		available = available[1:]
-		expr := tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(tree.EQ), v[0], v[1])
+		expr := tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(treecmp.EQ), v[0], v[1])
 		if cond == nil {
 			cond = expr
 		} else {
@@ -249,7 +250,10 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 		Cond:  &tree.OnJoinCond{Expr: cond},
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
-	return joinExpr, joinRefs, true
+	// If we have a nil cond, then we didn't succeed in generating this join
+	// expr.
+	ok = cond != nil
+	return joinExpr, joinRefs, ok
 }
 
 func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -299,13 +303,19 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 					if !tree.MustBeStaticallyKnownType(rightCol.Type).Equivalent(tree.MustBeStaticallyKnownType(leftCol.Type)) {
 						break
 					}
+					leftType := tree.MustBeStaticallyKnownType(leftCol.Type)
+					rightType := tree.MustBeStaticallyKnownType(rightCol.Type)
+					// You can't compare voids.
+					if leftType.Oid() == oid.T_void || rightType.Oid() == oid.T_void {
+						break
+					}
 					cols = append(cols, [2]colRef{
 						{
-							typ:  tree.MustBeStaticallyKnownType(leftCol.Type),
+							typ:  leftType,
 							item: tree.NewColumnItem(leftAliasName, leftColElem.Column),
 						},
 						{
-							typ:  tree.MustBeStaticallyKnownType(rightCol.Type),
+							typ:  rightType,
 							item: tree.NewColumnItem(rightAliasName, rightColElem.Column),
 						},
 					})
@@ -337,7 +347,7 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 		v := cols[0]
 		cols = cols[1:]
 		expr := tree.NewTypedComparisonExpr(
-			tree.MakeComparisonOperator(tree.EQ),
+			treecmp.MakeComparisonOperator(treecmp.EQ),
 			typedParen(v[0].item, v[0].typ),
 			typedParen(v[1].item, v[1].typ),
 		)
@@ -359,7 +369,10 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 		},
 		Cond: &tree.OnJoinCond{Expr: cond},
 	}
-	return joinExpr, joinRefs, true
+	// If we have a nil cond, then we didn't succeed in generating this join
+	// expr.
+	ok = cond != nil
+	return joinExpr, joinRefs, ok
 }
 
 // STATEMENTS
@@ -445,21 +458,21 @@ func (s *Smither) randDropBehavior() tree.DropBehavior {
 	return dropBehaviors[s.rnd.Intn(len(dropBehaviors))]
 }
 
-var stringComparisons = []tree.ComparisonOperatorSymbol{
-	tree.Like,
-	tree.NotLike,
-	tree.ILike,
-	tree.NotILike,
-	tree.SimilarTo,
-	tree.NotSimilarTo,
-	tree.RegMatch,
-	tree.NotRegMatch,
-	tree.RegIMatch,
-	tree.NotRegIMatch,
+var stringComparisons = []treecmp.ComparisonOperatorSymbol{
+	treecmp.Like,
+	treecmp.NotLike,
+	treecmp.ILike,
+	treecmp.NotILike,
+	treecmp.SimilarTo,
+	treecmp.NotSimilarTo,
+	treecmp.RegMatch,
+	treecmp.NotRegMatch,
+	treecmp.RegIMatch,
+	treecmp.NotRegIMatch,
 }
 
-func (s *Smither) randStringComparison() tree.ComparisonOperator {
-	return tree.MakeComparisonOperator(stringComparisons[s.rnd.Intn(len(stringComparisons))])
+func (s *Smither) randStringComparison() treecmp.ComparisonOperator {
+	return treecmp.MakeComparisonOperator(stringComparisons[s.rnd.Intn(len(stringComparisons))])
 }
 
 // makeSelectTable returns a TableExpr of the form `(SELECT ...)`, which
@@ -513,7 +526,7 @@ func (s *Smither) makeSelectClause(
 
 	var fromRefs colRefs
 	// Sometimes generate a SELECT with no FROM clause.
-	requireFrom := s.vectorizable || s.d6() != 1
+	requireFrom := s.d6() != 1
 	for (requireFrom && len(clause.From.Tables) < 1) || s.canRecurse() {
 		var from tree.TableExpr
 		if len(withTables) == 0 || s.coin() {
@@ -553,10 +566,7 @@ func (s *Smither) makeSelectClause(
 		orderByRefs = fromRefs
 		selectListRefs = selectListRefs.extend(fromRefs...)
 
-		// TODO(mjibson): vec only supports GROUP BYs on fully-ordered
-		// columns, which we could support here. Also see #39240 which
-		// will support this more generally.
-		if !s.vectorizable && s.d6() <= 2 && s.canRecurse() {
+		if s.d6() <= 2 && s.canRecurse() {
 			// Enable GROUP BY. Choose some random subset of the
 			// fromRefs.
 			// TODO(mjibson): Refence handling and aggregation functions
@@ -601,17 +611,6 @@ func (s *Smither) makeSelectClause(
 		return nil, nil, nil, false
 	}
 	clause.Exprs = selectList
-
-	// TODO(mjibson): Vectorized only supports ordered distinct, and so
-	// this often produces queries that won't vec. However since it will
-	// also sometimes produce vec queries with the distinctChainOps node,
-	// we allow this here. Teach this how to correctly limit itself to
-	// distinct only on ordered columns.
-	if s.d100() == 1 {
-		clause.Distinct = true
-		// For SELECT DISTINCT, ORDER BY expressions must appear in select list.
-		orderByRefs = selectRefs
-	}
 
 	return clause, selectRefs, orderByRefs, true
 }

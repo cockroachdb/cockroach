@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ func TestMemoryAllocations(t *testing.T) {
 	poolAllocSizes := []int64{1, 2, 9, 10, 11, 100}
 	preBudgets := []int64{0, 1, 2, 9, 10, 11, 100}
 
-	rnd, seed := randutil.NewPseudoRand()
+	rnd, seed := randutil.NewTestRand()
 	t.Logf("random seed: %v", seed)
 
 	ctx := context.Background()
@@ -364,6 +365,24 @@ func TestMemoryAllocationEdgeCases(t *testing.T) {
 
 	a.Close(ctx)
 	m.Stop(ctx)
+}
+
+func TestMultiSharedGauge(t *testing.T) {
+	ctx := context.Background()
+	resourceGauge := metric.NewGauge(metric.Metadata{})
+	minAllocation := int64(1000)
+
+	parent := NewMonitor("root", MemoryResource, resourceGauge, nil, minAllocation, 0,
+		cluster.MakeTestingClusterSettings())
+	parent.Start(ctx, nil, MakeStandaloneBudget(100000))
+
+	child := NewMonitorInheritWithLimit("child", 20000, parent)
+	child.Start(ctx, parent, BoundAccount{})
+
+	acc := child.MakeBoundAccount()
+	require.NoError(t, acc.Grow(ctx, 100))
+
+	require.Equal(t, minAllocation, resourceGauge.Value(), "Metric")
 }
 
 func BenchmarkBoundAccountGrow(b *testing.B) {

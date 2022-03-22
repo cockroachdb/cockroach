@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -69,6 +70,13 @@ import (
 //       The expected output is the configuration after parsing
 //       and reloading in the server.
 //
+// set_identity_map
+// <identity map>
+//       Load the provided identity map via the cluster setting
+//       server.identity_map.configuration.
+//       The expected output is the configuration after parsing
+//       and reloading in the server.
+//
 // sql
 // <sql input>
 //       Execute the specified SQL statement using the default root
@@ -88,6 +96,7 @@ import (
 //            password - the password
 //            host - the server name/address
 //            port - the server port
+//            force_certs - force the use of baked-in certificates
 //            sslmode, sslrootcert, sslcert, sslkey - SSL parameters.
 //
 //       The order of k/v pairs matters: if the same key is specified
@@ -136,7 +145,11 @@ func makeSocketFile(t *testing.T) (socketDir, socketFile string, cleanupFn func(
 	//
 	// macOS has a tendency to produce very long temporary directory names, so
 	// we are careful to keep all the constants involved short.
-	tempDir, err := ioutil.TempDir("", "TestAuth")
+	baseTmpDir := ""
+	if runtime.GOOS == "darwin" || strings.Contains(runtime.GOOS, "bsd") {
+		baseTmpDir = "/tmp"
+	}
+	tempDir, err := ioutil.TempDir(baseTmpDir, "TestAuth")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +165,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		httpScheme = "https://"
 	}
 
-	datadriven.Walk(t, "testdata/auth", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "auth"), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 
 		maybeSocketDir, maybeSocketFile, cleanup := makeSocketFile(t)
@@ -173,7 +186,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 				FileDefaults: logconfig.FileDefaults{
 					CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
 				},
-				Channels: logconfig.ChannelList{Channels: []log.Channel{channel.SESSIONS}},
+				Channels: logconfig.SelectChannels(channel.SESSIONS),
 			}}
 		dir := sc.GetDirectory()
 		if err := cfg.Validate(&dir); err != nil {
@@ -193,19 +206,26 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		testServer := s.(*server.TestServer)
-		pgServer := s.(*server.TestServer).PGServer()
+		pgServer := s.(*server.TestServer).PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
 
-		httpClient, err := s.GetAdminAuthenticatedHTTPClient()
+		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
 			t.Fatal(err)
 		}
 		httpHBAUrl := httpScheme + s.HTTPAddr() + "/debug/hba_conf"
 
-		if _, err := conn.ExecContext(context.Background(), `CREATE USER $1`, security.TestUser); err != nil {
+		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, security.TestUser)); err != nil {
 			t.Fatal(err)
 		}
+
+		// This counter ensures that new log messages have become available
+		// between calls to the authlog command. It avoids the case where
+		// the last line from the previous authlog block also happens to
+		// match the regex for the current authlog block, leading to a
+		// desynchronization between the test script and the logfiles.
+		lastAuthLogCounter := uint64(0)
 
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			resultString, err := func() (string, error) {
@@ -248,10 +268,51 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						}
 					}
 					testutils.SucceedsSoon(t, func() error {
-						curConf := pgServer.GetAuthenticationConfiguration()
+						curConf, _ := pgServer.GetAuthenticationConfiguration()
 						if expConf.String() != curConf.String() {
 							return errors.Newf(
 								"HBA config not yet loaded\ngot:\n%s\nexpected:\n%s",
+								curConf, expConf)
+						}
+						return nil
+					})
+
+					// Verify the HBA configuration was processed properly by
+					// reporting the resulting cached configuration.
+					resp, err := httpClient.Get(httpHBAUrl)
+					if err != nil {
+						return "", err
+					}
+					defer resp.Body.Close()
+					body, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						return "", err
+					}
+					return string(body), nil
+
+				case "set_identity_map":
+					_, err := conn.ExecContext(context.Background(),
+						`SET CLUSTER SETTING server.identity_map.configuration = $1`, td.Input)
+					if err != nil {
+						return "", err
+					}
+
+					// Wait until the configuration has propagated back to the
+					// test client. We need to wait because the cluster setting
+					// change propagates asynchronously.
+					expConf := identmap.Empty()
+					if td.Input != "" {
+						expConf, err = identmap.From(strings.NewReader(td.Input))
+						if err != nil {
+							// The SET above succeeded so we don't expect a problem here.
+							t.Fatal(err)
+						}
+					}
+					testutils.SucceedsSoon(t, func() error {
+						_, curConf := pgServer.GetAuthenticationConfiguration()
+						if expConf.String() != curConf.String() {
+							return errors.Newf(
+								"identity map not yet loaded\ngot:\n%s\nexpected:\n%s",
 								curConf, expConf)
 						}
 						return nil
@@ -275,7 +336,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					return "ok", err
 
 				case "authlog":
-					if len(td.CmdArgs) < 0 {
+					if len(td.CmdArgs) < 1 {
 						t.Fatal("not enough arguments")
 					}
 					numEntries, err := strconv.Atoi(td.CmdArgs[0].Key)
@@ -342,6 +403,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 							if !re.MatchString(lastLogMsg) {
 								return errors.Newf("last entry does not match: %q", lastLogMsg)
 							}
+							if lastAuthLogCounter == entries[0].Counter {
+								return errors.Newf("log counter has not advanced beyond: %d", lastAuthLogCounter)
+							}
+							lastAuthLogCounter = entries[0].Counter
 						}
 						return nil
 					}); err != nil {
@@ -362,11 +427,18 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						td.ScanArgs(t, "user", &user)
 					}
 
+					// Allow connections for non-root, non-testuser to force the
+					// use of client certificates.
+					forceCerts := false
+					if td.HasArg("force_certs") {
+						forceCerts = true
+					}
+
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
 						t, s.ServingSQLAddr(), t.Name(), url.User(user),
-						user == security.RootUser || user == security.TestUser /* withClientCerts */)
+						forceCerts || user == security.RootUser || user == security.TestUser /* withClientCerts */)
 					defer cleanupFn()
 
 					var host, port string
@@ -497,7 +569,7 @@ func TestClientAddrOverride(t *testing.T) {
 	defer cleanupFunc()
 
 	// Ensure the test user exists.
-	if _, err := db.Exec(`CREATE USER $1`, security.TestUser); err != nil {
+	if _, err := db.Exec(fmt.Sprintf(`CREATE USER %s`, security.TestUser)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -505,7 +577,7 @@ func TestClientAddrOverride(t *testing.T) {
 	// We can't use the cluster settings to do this, because
 	// cluster settings for booleans propagate asynchronously.
 	testServer := s.(*server.TestServer)
-	pgServer := testServer.PGServer()
+	pgServer := testServer.PGServer().(*pgwire.Server)
 	pgServer.TestingEnableAuthLogging()
 
 	testCases := []struct {
@@ -545,7 +617,7 @@ func TestClientAddrOverride(t *testing.T) {
 				t.Fatal(err)
 			}
 			testutils.SucceedsSoon(t, func() error {
-				curConf := pgServer.GetAuthenticationConfiguration()
+				curConf, _ := pgServer.GetAuthenticationConfiguration()
 				if expConf.String() != curConf.String() {
 					return errors.Newf(
 						"HBA config not yet loaded\ngot:\n%s\nexpected:\n%s",
@@ -625,7 +697,7 @@ func TestClientAddrOverride(t *testing.T) {
 					t.Log(e.Tags)
 					if strings.Contains(e.Tags, "client=") {
 						seenClient = true
-						if !strings.Contains(e.Tags, "client="+string(redact.StartMarker())+tc.specialAddr+":"+tc.specialPort+string(redact.EndMarker())) {
+						if !strings.Contains(e.Tags, "client="+tc.specialAddr+":"+tc.specialPort) {
 							t.Fatalf("expected override addr in log tags, got %+v", e)
 						}
 					}

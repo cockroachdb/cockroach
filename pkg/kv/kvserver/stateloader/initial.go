@@ -13,6 +13,7 @@ package stateloader
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -29,6 +30,15 @@ import (
 const (
 	raftInitialLogIndex = 10
 	raftInitialLogTerm  = 5
+
+	// RaftLogTermSignalForAddRaftAppliedIndexTermMigration is never persisted
+	// in the state machine or in HardState. It is only used in
+	// AddRaftAppliedIndexTermMigration to signal to the below raft code that
+	// the migration should happen when applying the raft log entry that
+	// contains ReplicatedEvalResult.State.RaftAppliedIndexTerm equal to this
+	// value. It is less than raftInitialLogTerm since that ensures it will
+	// never be used under normal operation.
+	RaftLogTermSignalForAddRaftAppliedIndexTermMigration = 3
 )
 
 // WriteInitialReplicaState sets up a new Range, but without writing an
@@ -45,8 +55,8 @@ func WriteInitialReplicaState(
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
 	gcThreshold hlc.Timestamp,
-	truncStateType TruncatedStateType,
 	replicaVersion roachpb.Version,
+	writeRaftAppliedIndexTerm bool,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
 	var s kvserverpb.ReplicaState
@@ -55,6 +65,9 @@ func WriteInitialReplicaState(
 		Index: raftInitialLogIndex,
 	}
 	s.RaftAppliedIndex = s.TruncatedState.Index
+	if writeRaftAppliedIndexTerm {
+		s.RaftAppliedIndexTerm = s.TruncatedState.Term
+	}
 	s.Desc = &roachpb.RangeDescriptor{
 		RangeID: desc.RangeID,
 	}
@@ -63,9 +76,6 @@ func WriteInitialReplicaState(
 	s.GCThreshold = &gcThreshold
 	if (replicaVersion != roachpb.Version{}) {
 		s.Version = &replicaVersion
-	}
-	if truncStateType != TruncatedStateLegacyReplicatedAndNoAppliedKey {
-		s.UsingAppliedStateKey = true
 	}
 
 	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
@@ -86,7 +96,7 @@ func WriteInitialReplicaState(
 		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
-	newMS, err := rsl.Save(ctx, readWriter, s, truncStateType)
+	newMS, err := rsl.Save(ctx, readWriter, s)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -100,37 +110,29 @@ func WriteInitialRangeState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	desc roachpb.RangeDescriptor,
+	replicaID roachpb.ReplicaID,
 	replicaVersion roachpb.Version,
-) error {
-	const initialTruncStateType = TruncatedStateUnreplicated
-	return WriteInitialRangeStateWithTruncatedState(ctx, readWriter, desc, replicaVersion, initialTruncStateType)
-}
-
-// WriteInitialRangeStateWithTruncatedState is the same as
-// WriteInitialRangeState, but allows the caller to override the truncated state
-// type.
-//
-// TODO(irfansharif): This can be removed in the v21.2 cycle after we no longer
-// need to test the truncated state migration.
-func WriteInitialRangeStateWithTruncatedState(
-	ctx context.Context,
-	readWriter storage.ReadWriter,
-	desc roachpb.RangeDescriptor,
-	replicaVersion roachpb.Version,
-	truncState TruncatedStateType,
 ) error {
 	initialLease := roachpb.Lease{}
 	initialGCThreshold := hlc.Timestamp{}
 	initialMS := enginepb.MVCCStats{}
-	initialTruncStateType := truncState
 
+	writeRaftAppliedIndexTerm :=
+		clusterversion.ClusterVersion{Version: replicaVersion}.IsActiveVersion(
+			clusterversion.ByKey(clusterversion.AddRaftAppliedIndexTermMigration))
 	if _, err := WriteInitialReplicaState(
 		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold,
-		initialTruncStateType, replicaVersion,
+		replicaVersion, writeRaftAppliedIndexTerm,
 	); err != nil {
 		return err
 	}
-	if err := Make(desc.RangeID).SynthesizeRaftState(ctx, readWriter); err != nil {
+	sl := Make(desc.RangeID)
+	if err := sl.SynthesizeRaftState(ctx, readWriter); err != nil {
+		return err
+	}
+	// Maintain the invariant that any replica (uninitialized or initialized),
+	// with persistent state, has a RaftReplicaID.
+	if err := sl.SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
 		return err
 	}
 	return nil

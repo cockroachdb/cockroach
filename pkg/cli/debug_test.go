@@ -80,7 +80,7 @@ func TestOpenExistingStore(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("dir=%s", test.dir), func(t *testing.T) {
-			_, err := OpenExistingStore(test.dir, stopper, false /* readOnly */)
+			_, err := OpenExistingStore(test.dir, stopper, false /* readOnly */, false /* disableAutomaticCompactions */)
 			if !testutils.IsError(err, test.expErr) {
 				t.Errorf("wanted %s but got %v", test.expErr, err)
 			}
@@ -114,7 +114,7 @@ func TestOpenReadOnlyStore(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("readOnly=%t", test.readOnly), func(t *testing.T) {
-			db, err := OpenExistingStore(storePath, stopper, test.readOnly)
+			db, err := OpenExistingStore(storePath, stopper, test.readOnly, false /* disableAutomaticCompactions */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -132,7 +132,6 @@ func TestOpenReadOnlyStore(t *testing.T) {
 
 func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 50977, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// This test is pretty slow under race (200+ cpu-seconds) because it
@@ -235,7 +234,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 						t.Fatal(err)
 					}
 
-					// At this point the intent has been written to rocksdb but this
+					// At this point the intent has been written to Pebble but this
 					// write was not synced (only the raft log append was synced). We
 					// need to force another sync, but we're far from the storage
 					// layer here so the easiest thing to do is simply perform a
@@ -256,7 +255,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 					stopper := stop.NewStopper()
 					defer stopper.Stop(ctx)
 
-					db, err := OpenExistingStore(storePaths[idx], stopper, false /* readOnly */)
+					db, err := OpenExistingStore(storePaths[idx], stopper, false /* readOnly */, false /* disableAutomaticCompactions */)
 					if err != nil {
 						return err
 					}
@@ -344,7 +343,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 				}
 
 				if err := runDecommissionNodeImpl(
-					ctx, adminClient, nodeDecommissionWaitNone, deadNodes,
+					ctx, adminClient, nodeDecommissionWaitNone, deadNodes, tc.Server(0).NodeID(),
 				); err != nil {
 					t.Fatal(err)
 				}

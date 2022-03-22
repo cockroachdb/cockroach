@@ -85,7 +85,7 @@ vectorized: true
         │
         └── • scan
               missing stats
-              table: unindexed@primary
+              table: unindexed@unindexed_pkey
               spans: FULL SCAN
 
 # Check DELETE with LIMIT clause (MySQL extension)
@@ -107,7 +107,7 @@ vectorized: true
         │
         └── • scan
               missing stats
-              table: unindexed@primary
+              table: unindexed@unindexed_pkey
               spans: FULL SCAN
 
 # Check fast DELETE.
@@ -138,7 +138,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: unindexed@primary
+      table: unindexed@unindexed_pkey
       spans: [/1 - ]
       limit: 1
 
@@ -230,10 +230,10 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%DelRange%' OR message LIKE '%DelRng%'
 ----
-batch flow coordinator  DelRange /Table/57/1 - /Table/57/2
-dist sender send        r42: sending batch 1 DelRng to (n1,s1):1
-batch flow coordinator  DelRange /Table/57/1/601/0 - /Table/57/2
-dist sender send        r42: sending batch 1 DelRng to (n1,s1):1
+batch flow coordinator  DelRange /Table/110/1 - /Table/110/2
+dist sender send        r44: sending batch 1 DelRng to (n1,s1):1
+batch flow coordinator  DelRange /Table/110/1/601/0 - /Table/110/2
+dist sender send        r44: sending batch 1 DelRng to (n1,s1):1
 
 # Ensure that DelRange requests are autocommitted when DELETE FROM happens on a
 # chunk of fewer than 600 keys.
@@ -242,326 +242,81 @@ statement ok
 INSERT INTO a VALUES(5)
 
 statement ok
-SET tracing = on,kv; DELETE FROM a WHERE a = 5; SET tracing = off
+SET tracing = on,kv; DELETE FROM a WHERE a = 5;
+
+statement ok
+SET tracing = off
 
 query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%DelRange%' OR message LIKE '%sending batch%'
 ----
-batch flow coordinator  DelRange /Table/57/1/5 - /Table/57/1/5/#
-dist sender send        r42: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
-
-# Test use of fast path when there are interleaved tables.
+batch flow coordinator  DelRange /Table/110/1/5 - /Table/110/1/6
+dist sender send        r44: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
 statement ok
-CREATE TABLE parent (id INT PRIMARY KEY)
-
-# Delete range should be used.
-query T
-EXPLAIN DELETE FROM parent WHERE id > 10
-----
-distribution: local
-vectorized: true
-·
-• delete range
-  from: parent
-  spans: [/11 - ]
-
-statement ok
-CREATE TABLE child (
-  pid INT,
-  id INT,
-  PRIMARY KEY (pid, id),
-  FOREIGN KEY (pid) REFERENCES parent(id) ON DELETE CASCADE
-) INTERLEAVE IN PARENT parent(pid)
-
-# Delete range should be used.
-query T
-EXPLAIN DELETE FROM parent WHERE id > 10
-----
-distribution: local
-vectorized: true
-·
-• delete range
-  from: parent
-  spans: [/11 - ]
-
-# Delete range should not be used when deleting from the child.
-query T
-EXPLAIN DELETE FROM child WHERE id > 10
-----
-distribution: local
-vectorized: true
-·
-• delete
-│ from: child
-│ auto commit
-│
-└── • filter
-    │ filter: id > 10
-    │
-    └── • scan
-          missing stats
-          table: child@primary
-          spans: FULL SCAN
-
-statement ok
-CREATE TABLE sibling (
-  pid INT,
-  id INT,
-  PRIMARY KEY (pid, id),
-  FOREIGN KEY (pid) REFERENCES parent(id) ON DELETE CASCADE
-) INTERLEAVE IN PARENT parent(pid)
-
-# Delete range should be used.
-query T
-EXPLAIN DELETE FROM parent WHERE id > 10
-----
-distribution: local
-vectorized: true
-·
-• delete range
-  from: parent
-  spans: [/11 - ]
-
-statement ok
-CREATE TABLE grandchild (
-  gid INT,
-  pid INT,
-  id INT,
-  FOREIGN KEY (gid, pid) REFERENCES child(pid, id) ON DELETE CASCADE,
-  PRIMARY KEY(gid, pid, id)
-) INTERLEAVE IN PARENT child(gid, pid)
-
-# Delete range should be used.
-query T
-EXPLAIN DELETE FROM parent WHERE id > 10
-----
-distribution: local
-vectorized: true
-·
-• delete range
-  from: parent
-  spans: [/11 - ]
-
-statement ok
-CREATE TABLE external_ref (
-  id INT,
-  parent_id INT,
-  child_id INT,
-  FOREIGN KEY (parent_id, child_id) REFERENCES child(pid, id) ON DELETE CASCADE
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX (y)
 )
 
-# Delete range should not be used (external ref).
+# Ensure that we can use a hint to avoid a full table scan.
+
+# Without the hint, we plan a full table scan.
 query T
-EXPLAIN DELETE FROM parent WHERE id > 10
+EXPLAIN (VERBOSE) DELETE FROM xyz WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
 ----
 distribution: local
 vectorized: true
 ·
-• root
+• project
+│ columns: (z)
+│ estimated row count: 990 (missing stats)
 │
-├── • delete
-│   │ from: parent
-│   │
-│   └── • scan
-│         missing stats
-│         table: parent@primary
-│         spans: [/11 - ]
-│
-├── • fk-cascade
-│     fk: fk_pid_ref_parent
-│
-└── • fk-cascade
-      fk: fk_pid_ref_parent
-
-statement ok
-DROP TABLE external_ref
-
-statement ok
-CREATE TABLE child_with_index (
-  pid INT,
-  child_id INT,
-  other_field STRING,
-  PRIMARY KEY (pid, child_id),
-  FOREIGN KEY (pid) REFERENCES parent(id),
-  UNIQUE (other_field)
-) INTERLEAVE IN PARENT parent(pid)
-
-# Delete range should not be used (child with secondary index).
-query T
-EXPLAIN DELETE FROM parent WHERE id > 10
-----
-distribution: local
-vectorized: true
-·
-• root
-│
-├── • delete
-│   │ from: parent
-│   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • scan
-│             missing stats
-│             table: parent@primary
-│             spans: [/11 - ]
-│
-├── • fk-cascade
-│     fk: fk_pid_ref_parent
-│     input: buffer 1
-│
-├── • fk-cascade
-│     fk: fk_pid_ref_parent
-│     input: buffer 1
-│
-└── • constraint-check
+└── • delete
+    │ columns: (x, z)
+    │ estimated row count: 990 (missing stats)
+    │ from: xyz
+    │ auto commit
     │
-    └── • error if rows
+    └── • filter
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ filter: ((y > 0) AND (y < 1000)) OR ((y > 2000) AND (y < 3000))
         │
-        └── • hash join
-            │ equality: (id) = (pid)
-            │ left cols are key
-            │ right cols are key
-            │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • distinct
-                │ distinct on: pid
-                │ order key: pid
-                │
-                └── • scan
-                      missing stats
-                      table: child_with_index@primary
-                      spans: FULL SCAN
+        └── • scan
+              columns: (x, y, z)
+              estimated row count: 1,000 (missing stats)
+              table: xyz@xyz_pkey
+              spans: FULL SCAN
 
-statement ok
-DROP TABLE child_with_index
-
-statement ok
-CREATE TABLE child_without_cascade (
-  pid INT,
-  id INT,
-  PRIMARY KEY (pid, id),
-  FOREIGN KEY (pid) REFERENCES parent(id)
-) INTERLEAVE IN PARENT parent(pid)
-
-# Delete range should not be used (child without cascading FK).
+# With the hint, we use a constrained scan.
 query T
-EXPLAIN DELETE FROM parent WHERE id > 10
+EXPLAIN (VERBOSE) DELETE FROM xyz@{NO_FULL_SCAN} WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
 ----
 distribution: local
 vectorized: true
 ·
-• root
+• project
+│ columns: (z)
+│ estimated row count: 990 (missing stats)
 │
-├── • delete
-│   │ from: parent
-│   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • scan
-│             missing stats
-│             table: parent@primary
-│             spans: [/11 - ]
-│
-├── • fk-cascade
-│     fk: fk_pid_ref_parent
-│     input: buffer 1
-│
-├── • fk-cascade
-│     fk: fk_pid_ref_parent
-│     input: buffer 1
-│
-└── • constraint-check
+└── • delete
+    │ columns: (x, z)
+    │ estimated row count: 990 (missing stats)
+    │ from: xyz
+    │ auto commit
     │
-    └── • error if rows
+    └── • index join
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ table: xyz@xyz_pkey
+        │ key columns: x
         │
-        └── • hash join
-            │ equality: (id) = (pid)
-            │ left cols are key
-            │ right cols are key
-            │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • distinct
-                │ distinct on: pid
-                │ order key: pid
-                │
-                └── • scan
-                      missing stats
-                      table: child_without_cascade@primary
-                      spans: FULL SCAN
-
-statement ok
-DROP TABLE child_without_cascade
-
-statement ok
-CREATE TABLE child_without_fk (
-  pid INT,
-  id INT,
-  PRIMARY KEY (pid, id)
-) INTERLEAVE IN PARENT parent(pid)
-
-# Delete range should not be used (child without cascading FK).
-query T
-EXPLAIN DELETE FROM parent WHERE id > 10
-----
-distribution: local
-vectorized: true
-·
-• root
-│
-├── • delete
-│   │ from: parent
-│   │
-│   └── • scan
-│         missing stats
-│         table: parent@primary
-│         spans: [/11 - ]
-│
-├── • fk-cascade
-│     fk: fk_pid_ref_parent
-│
-└── • fk-cascade
-      fk: fk_pid_ref_parent
-
-statement ok
-DROP TABLE child_without_fk
-
-# Test case where we have a cascading FK but the columns are not in the right
-# order.
-statement ok
-CREATE TABLE ab (a INT, b INT, PRIMARY KEY (a, b))
-
-statement ok
-CREATE TABLE abc (
-  a INT, b INT, c INT,
-  FOREIGN KEY (b, a) REFERENCES ab(a, b) ON DELETE CASCADE,
-  PRIMARY KEY (a, b, c)
-) INTERLEAVE IN PARENT ab(a, b)
-
-
-# Delete range should not be used (FK columns are not in the right order).
-query T
-EXPLAIN DELETE FROM ab WHERE a = 1
-----
-distribution: local
-vectorized: true
-·
-• root
-│
-├── • delete
-│   │ from: ab
-│   │
-│   └── • scan
-│         missing stats
-│         table: ab@primary
-│         spans: [/1 - /1]
-│
-└── • fk-cascade
-      fk: fk_b_ref_ab
+        └── • scan
+              columns: (x, y)
+              estimated row count: 990 (missing stats)
+              table: xyz@xyz_y_idx
+              spans: /1-/1000 /2001-/3000

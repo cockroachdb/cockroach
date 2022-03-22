@@ -12,5 +12,5 @@ distribution: local
 vectorized: true
 ·
 • scan
-	table: a@primary
-	spans: 1 span
+  table: a@a_pkey
+  spans: 1 span

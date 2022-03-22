@@ -8,7 +8,7 @@ SELECT k, s FROM a
 scan a
  ├── columns: k:1!null s:3
  ├── stats: [rows=1000]
- ├── cost: 1085.21
+ ├── cost: 1084.62
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -25,9 +25,72 @@ ALTER TABLE a INJECT STATISTICS '[
     "created_at": "2019-02-08 04:10:40.001179+00:00",
     "row_count": 100000,
     "distinct_count": 100
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000
   }
 ]'
 ----
+
+# Scan with different row counts but default avg_size.
+opt
+SELECT k, s FROM a
+----
+scan a
+ ├── columns: k:1!null s:3
+ ├── stats: [rows=100000]
+ ├── cost: 106024.62
+ ├── key: (1)
+ └── fd: (1)-->(3)
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000,
+    "avg_size": 1
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100,
+    "avg_size": 2
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "avg_size": 11
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "avg_size": 3
+  }
+]'
+----
+
+# Scan with set avg_size values.
+opt
+SELECT k, s FROM a
+----
+scan a
+ ├── columns: k:1!null s:3
+ ├── stats: [rows=100000]
+ ├── cost: 107274.745
+ ├── key: (1)
+ └── fd: (1)-->(3)
 
 # The limit hint is propagated to the scan and the cost is slightly more than
 # the limit hint * 2 (the scan soft limit multiplier).
@@ -38,21 +101,21 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 162.811429
+ ├── cost: 173.545714
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
- │    ├── stats: [rows=4666.66667, distinct(1)=4666.66667, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=4666.66667, null(1,2)=0]
- │    ├── cost: 162.601429
+ │    ├── stats: [rows=4666.667, distinct(1)=4666.67, null(1)=0, avgsize(1)=1, distinct(2)=5, null(2)=0, avgsize(2)=2, distinct(1,2)=4666.67, null(1,2)=0, avgsize(1,2)=3]
+ │    ├── cost: 173.335714
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
  │    ├── scan a
  │    │    ├── columns: k:1!null i:2 s:3 d:4!null
  │    │    ├── constraint: /1: [/6 - ]
- │    │    ├── stats: [rows=33333.3333, distinct(1)=33333.3333, null(1)=0]
- │    │    ├── cost: 158.295714
+ │    │    ├── stats: [rows=33333.33, distinct(1)=33333.3, null(1)=0, avgsize(1)=1]
+ │    │    ├── cost: 169.02
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
  │    │    └── limit hint: 142.86
@@ -69,14 +132,14 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 32.6074033
+ ├── cost: 32.7179006
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── cardinality: [0 - 450]
- │    ├── stats: [rows=407.25, distinct(1)=407.25, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=407.25, null(1,2)=0]
- │    ├── cost: 32.3974033
+ │    ├── stats: [rows=407.25, distinct(1)=407.25, null(1)=0, avgsize(1)=1, distinct(2)=5, null(2)=0, avgsize(2)=2, distinct(1,2)=407.25, null(1,2)=0, avgsize(1,2)=3]
+ │    ├── cost: 32.5079006
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -84,8 +147,8 @@ limit
  │    │    ├── columns: k:1!null i:2 s:3 d:4!null
  │    │    ├── constraint: /1: [/1 - /450]
  │    │    ├── cardinality: [0 - 450]
- │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0]
- │    │    ├── cost: 27.8774033
+ │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0, avgsize(1)=1]
+ │    │    ├── cost: 27.9879006
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
  │    │    └── limit hint: 22.10
@@ -99,7 +162,8 @@ ALTER TABLE a INJECT STATISTICS '[
     "columns": ["k"],
     "created_at": "2019-02-08 04:10:40.001179+00:00",
     "row_count": 0,
-    "distinct_count": 0
+    "distinct_count": 0,
+    "avg_size": 0
   }
 ]'
 ----
@@ -111,7 +175,7 @@ SELECT * FROM a ORDER BY k DESC
 scan a,rev
  ├── columns: k:1!null i:2 s:3 d:4!null
  ├── stats: [rows=1]
- ├── cost: 26.69
+ ├── cost: 25.9
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── ordering: -1
@@ -122,43 +186,43 @@ CREATE TABLE speed_test (id INT PRIMARY KEY DEFAULT unique_rowid())
 ----
 
 opt
-SELECT id FROM speed_test@primary WHERE id BETWEEN 1 AND 1000 AND ((id % 16) = 0)
+SELECT id FROM speed_test@speed_test_pkey WHERE id BETWEEN 1 AND 1000 AND ((id % 16) = 0)
 ----
 select
  ├── columns: id:1!null
  ├── cardinality: [0 - 1000]
  ├── immutable
- ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0, avgsize(1)=4]
  ├── cost: 1034.03
  ├── key: (1)
  ├── scan speed_test
  │    ├── columns: id:1!null
  │    ├── constraint: /1: [/1 - /1000]
- │    ├── flags: force-index=primary
+ │    ├── flags: force-index=speed_test_pkey
  │    ├── cardinality: [0 - 1000]
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
  │    ├── cost: 1024.01
  │    └── key: (1)
  └── filters
       └── (id:1 % 16) = 0 [outer=(1), immutable]
 
 opt
-SELECT id FROM speed_test@primary WHERE id BETWEEN 1 AND 2000 AND ((id % 16) = 0)
+SELECT id FROM speed_test@speed_test_pkey WHERE id BETWEEN 1 AND 2000 AND ((id % 16) = 0)
 ----
 select
  ├── columns: id:1!null
  ├── cardinality: [0 - 2000]
  ├── immutable
- ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
- ├── cost: 1039.13
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0, avgsize(1)=4]
+ ├── cost: 1039.03
  ├── key: (1)
  ├── scan speed_test
  │    ├── columns: id:1!null
  │    ├── constraint: /1: [/1 - /2000]
- │    ├── flags: force-index=primary
+ │    ├── flags: force-index=speed_test_pkey
  │    ├── cardinality: [0 - 2000]
- │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1029.11
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
+ │    ├── cost: 1029.01
  │    └── key: (1)
  └── filters
       └── (id:1 % 16) = 0 [outer=(1), immutable]
@@ -286,10 +350,10 @@ scan t60493
  ├── constraint: /2/1
  │    ├── [/'useast' - /'useast']
  │    └── [/'uswest' - /'uswest']
- ├── stats: [rows=2, distinct(2)=2, null(2)=0]
+ ├── stats: [rows=2, distinct(2)=2, null(2)=0, avgsize(2)=4]
  │   histogram(2)=  0     1      0     1
  │                <--- 'useast' --- 'uswest'
- ├── cost: 20.49
+ ├── cost: 20.1
  └── key: (1,2)
 
 # Regression test for #64570. Ensure we always prefer bounded over unbounded scans.
@@ -407,8 +471,8 @@ opt
 UPSERT INTO t64570 VALUES (10, 10, 10)
 ----
 upsert t64570
+ ├── arbiter indexes: t64570_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── canary column: x:9
  ├── fetch columns: x:9 y:10 v:11
  ├── insert-mapping:
@@ -420,13 +484,13 @@ upsert t64570
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 5.14883333
+ ├── cost: 5.14483333
  └── left-join (cross)
       ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 v:11
       ├── cardinality: [1 - 1]
       ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       ├── stats: [rows=1]
-      ├── cost: 5.13883333
+      ├── cost: 5.13483333
       ├── key: ()
       ├── fd: ()-->(6-11)
       ├── values
@@ -441,8 +505,193 @@ upsert t64570
       │    ├── columns: x:9!null y:10!null v:11
       │    ├── constraint: /9/10: [/10/10 - /10/10]
       │    ├── cardinality: [0 - 1]
-      │    ├── stats: [rows=0.933333333, distinct(9)=0.933333333, null(9)=0, distinct(10)=0.933333333, null(10)=0, distinct(9,10)=0.933333333, null(9,10)=0]
-      │    ├── cost: 5.07
+      │    ├── stats: [rows=0.9333333, distinct(9)=0.933333, null(9)=0, avgsize(9)=4, distinct(10)=0.933333, null(10)=0, avgsize(10)=4, distinct(9,10)=0.933333, null(9,10)=0, avgsize(9,10)=8]
+      │    ├── cost: 5.066
       │    ├── key: ()
       │    └── fd: ()-->(9-11)
       └── filters (true)
+
+# Regression test for #68556.
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  INDEX abc (a, b) STORING (c),
+  INDEX bc (b) STORING (c)
+)
+----
+
+# Inject stats for 100k rows where the upper bound of both a and b is 10.
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "columns": [
+            "k"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 3,
+        "histo_col_type": "INT8",
+        "null_count": 0,
+        "row_count": 100000
+    },
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 100,
+        "histo_buckets": [
+            {"distinct_range": 0, "num_eq": 0, "num_range": 0, "upper_bound": "0"},
+            {"distinct_range": 100, "num_eq": 0, "num_range": 100000, "upper_bound": "10"}
+        ],
+        "histo_col_type": "INT8",
+        "null_count": 0,
+        "row_count": 100000
+    },
+    {
+        "columns": [
+            "b"
+        ],
+        "created_at": "2021-06-28 14:20:18.273949",
+        "distinct_count": 100,
+        "histo_buckets": [
+            {"distinct_range": 0, "num_eq": 0, "num_range": 0, "upper_bound": "0"},
+            {"distinct_range": 100, "num_eq": 0, "num_range": 100000, "upper_bound": "10"}
+        ],
+        "histo_col_type": "INT8",
+        "null_count": 0,
+        "row_count": 100000
+    }
+]'
+----
+
+# Query for values of a and b that are outside the histogram buckets. A scan on
+# the bc index with an additional filter and index join should not be chosen
+# over a scan on the abc index with no additional filter and no index join.
+opt
+SELECT * FROM t WHERE a = 11 AND b = 11
+----
+scan t@abc
+ ├── columns: k:1!null a:2!null b:3!null c:4
+ ├── constraint: /2/3/1: [/11/11 - /11/11]
+ ├── stats: [rows=2e-05, distinct(2)=2e-05, null(2)=0, avgsize(2)=4, distinct(3)=2e-05, null(3)=0, avgsize(3)=4, distinct(2,3)=2e-05, null(2,3)=0, avgsize(2,3)=8]
+ │   histogram(2)=
+ │   histogram(3)=
+ ├── cost: 14.0200216
+ ├── key: (1)
+ └── fd: ()-->(2,3), (1)-->(4)
+
+# Test that the NO_FULL_SCAN hint creates a huge cost for full scans.
+opt
+SELECT * FROM t@{NO_FULL_SCAN}
+----
+scan t
+ ├── columns: k:1!null a:2 b:3 c:4
+ ├── flags: no-full-scan
+ ├── stats: [rows=100000]
+ ├── cost: 1e+100
+ ├── key: (1)
+ └── fd: (1)-->(2-4)
+
+exec-ddl
+CREATE INDEX b_partial ON t(b) WHERE c > 0
+----
+
+# The hint only affects partial indexes if the partial index is forced.
+opt
+SELECT * FROM t@{NO_FULL_SCAN} WHERE c > 0
+----
+index-join t
+ ├── columns: k:1!null a:2 b:3 c:4!null
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0, avgsize(4)=4]
+ ├── cost: 234667.505
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t@b_partial,partial
+      ├── columns: k:1!null b:3
+      ├── flags: no-full-scan
+      ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0, avgsize(4)=4]
+      ├── cost: 34337.4524
+      ├── key: (1)
+      └── fd: (1)-->(3)
+
+opt
+SELECT * FROM t@{FORCE_INDEX=b_partial,NO_FULL_SCAN} WHERE c > 0
+----
+select
+ ├── columns: k:1!null a:2 b:3 c:4!null
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0, avgsize(4)=4]
+ ├── cost: 1e+100
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan t
+ │    ├── columns: k:1!null a:2 b:3 c:4
+ │    ├── partial index predicates
+ │    │    └── b_partial: filters
+ │    │         └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+ │    ├── flags: force-index=b_partial no-full-scan
+ │    ├── stats: [rows=100000, distinct(1)=3, null(1)=0, avgsize(1)=4, distinct(4)=10000, null(4)=1000, avgsize(4)=4]
+ │    ├── cost: 1e+100
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+
+exec-ddl
+CREATE TABLE b (x INT, y INT, z INT, s STRING, INDEX xs (x, s), INDEX xyz (x, y, z))
+----
+
+exec-ddl
+ALTER TABLE b INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "avg_size": 1
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["z"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "avg_size": 29
+  }
+]'
+----
+
+# Using the 3-column index has a lower cost than the 2-column index with a large
+# column.
+opt
+SELECT x FROM b
+----
+scan b@xyz
+ ├── columns: x:1
+ ├── stats: [rows=1000]
+ └── cost: 1051.795
+
+# The cost of using index xyz is still lowest for a constrained scan.
+opt
+SELECT x FROM b WHERE x < 13
+----
+scan b@xyz
+ ├── columns: x:1!null
+ ├── constraint: /1/2/3/5: (/NULL - /12]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0, avgsize(1)=1]
+ └── cost: 356.52

@@ -30,7 +30,7 @@ WITH payload AS (
     id, 
     crdb_internal.pb_to_json(
       'cockroach.sql.jobs.jobspb.Payload', 
-      payload
+      payload, false, true
     )->'changefeed' AS changefeed_details 
   FROM 
     system.jobs
@@ -62,6 +62,7 @@ SELECT
     WHERE 
       table_id = ANY (descriptor_ids)
   ) AS full_table_names, 
+  changefeed_details->'opts'->>'topics' AS topics,
   changefeed_details->'opts'->>'format' AS format 
 FROM 
   crdb_internal.jobs 

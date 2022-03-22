@@ -13,17 +13,14 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 //
@@ -38,33 +35,33 @@ import (
 func (p *planner) renameDatabase(
 	ctx context.Context, desc *dbdesc.Mutable, newName string, stmt string,
 ) error {
-	oldName := desc.GetName()
-	desc.SetName(newName)
+	oldNameKey := descpb.NameInfo{
+		ParentID:       desc.GetParentID(),
+		ParentSchemaID: desc.GetParentSchemaID(),
+		Name:           desc.GetName(),
+	}
 
-	if exists, _, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, newName); err == nil && exists {
+	// Check that the new name is available.
+	if dbID, err := p.Descriptors().Direct().LookupDatabaseID(ctx, p.txn, newName); err == nil && dbID != descpb.InvalidID {
 		return pgerror.Newf(pgcode.DuplicateDatabase,
 			"the new database name %q already exists", newName)
 	} else if err != nil {
 		return err
 	}
 
-	b := &kv.Batch{}
-	newKey := catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, newName)
-	descID := desc.GetID()
-	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, descID)
-	}
-	b.CPut(newKey, descID, nil)
+	// Update the descriptor with the new name.
+	desc.SetName(newName)
 
-	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
-		ParentID:       keys.RootNamespaceID,
-		ParentSchemaID: keys.RootNamespaceID,
-		Name:           oldName,
-	})
+	// Populate the namespace update batch.
+	b := p.txn.NewBatch()
+	p.renameNamespaceEntry(ctx, b, oldNameKey, desc)
+
+	// Write the updated database descriptor.
 	if err := p.writeNonDropDatabaseChange(ctx, desc, stmt); err != nil {
 		return err
 	}
 
+	// Run the namespace update batch.
 	return p.txn.Run(ctx, b)
 }
 
@@ -106,19 +103,26 @@ func (p *planner) forEachMutableTableInDatabase(
 	dbDesc catalog.DatabaseDescriptor,
 	fn func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error,
 ) error {
-	allDescs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
 
-	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil /* fallback */)
+	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), dbDesc)
 	for _, tbID := range lCtx.tbIDs {
 		desc := lCtx.tbDescs[tbID]
 		if desc.Dropped() {
 			continue
 		}
 		mutable := tabledesc.NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
-		if err := fn(ctx, lCtx.schemaNames[desc.GetParentSchemaID()], mutable); err != nil {
+		schemaName, found, err := lCtx.GetSchemaName(ctx, desc.GetParentSchemaID(), desc.GetParentID(), p.ExecCfg().Settings.Version)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return errors.AssertionFailedf("schema id %d not found", desc.GetParentSchemaID())
+		}
+		if err := fn(ctx, schemaName, mutable); err != nil {
 			return err
 		}
 	}

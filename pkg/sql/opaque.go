@@ -14,6 +14,7 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -48,12 +49,18 @@ func buildOpaque(
 
 	var plan planNode
 	if tree.CanModifySchema(stmt) {
-		scPlan, usePlan, err := p.SchemaChange(ctx, stmt)
-		if err != nil {
+		if err := p.checkNoConflictingCursors(stmt); err != nil {
 			return nil, err
 		}
-		if usePlan {
-			plan = scPlan
+		// TODO (Chengxiong): Remove this version gate in 22.2
+		if evalCtx.Settings.Version.IsActive(ctx, clusterversion.EnableDeclarativeSchemaChanger) {
+			scPlan, usePlan, err := p.SchemaChange(ctx, stmt)
+			if err != nil {
+				return nil, err
+			}
+			if usePlan {
+				plan = scPlan
+			}
 		}
 	}
 	if plan == nil {
@@ -84,8 +91,14 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterDatabaseDropRegion(ctx, n)
 	case *tree.AlterDatabasePrimaryRegion:
 		return p.AlterDatabasePrimaryRegion(ctx, n)
+	case *tree.AlterDatabasePlacement:
+		return p.AlterDatabasePlacement(ctx, n)
 	case *tree.AlterDatabaseSurvivalGoal:
 		return p.AlterDatabaseSurvivalGoal(ctx, n)
+	case *tree.AlterDatabaseAddSuperRegion:
+		return p.AlterDatabaseAddSuperRegion(ctx, n)
+	case *tree.AlterDatabaseDropSuperRegion:
+		return p.AlterDatabaseDropSuperRegion(ctx, n)
 	case *tree.AlterDefaultPrivileges:
 		return p.alterDefaultPrivileges(ctx, n)
 	case *tree.AlterIndex:
@@ -100,6 +113,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterTableOwner(ctx, n)
 	case *tree.AlterTableSetSchema:
 		return p.AlterTableSetSchema(ctx, n)
+	case *tree.AlterTenantSetClusterSetting:
+		return p.AlterTenantSetClusterSetting(ctx, n)
 	case *tree.AlterType:
 		return p.AlterType(ctx, n)
 	case *tree.AlterRole:
@@ -108,10 +123,16 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterRoleSet(ctx, n)
 	case *tree.AlterSequence:
 		return p.AlterSequence(ctx, n)
+	case *tree.CloseCursor:
+		return p.CloseCursor(ctx, n)
 	case *tree.CommentOnColumn:
 		return p.CommentOnColumn(ctx, n)
+	case *tree.CommentOnConstraint:
+		return p.CommentOnConstraint(ctx, n)
 	case *tree.CommentOnDatabase:
 		return p.CommentOnDatabase(ctx, n)
+	case *tree.CommentOnSchema:
+		return p.CommentOnSchema(ctx, n)
 	case *tree.CommentOnIndex:
 		return p.CommentOnIndex(ctx, n)
 	case *tree.CommentOnTable:
@@ -132,6 +153,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateExtension(ctx, n)
 	case *tree.Deallocate:
 		return p.Deallocate(ctx, n)
+	case *tree.DeclareCursor:
+		return p.DeclareCursor(ctx, n)
 	case *tree.Discard:
 		return p.Discard(ctx, n)
 	case *tree.DropDatabase:
@@ -152,10 +175,14 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropType(ctx, n)
 	case *tree.DropView:
 		return p.DropView(ctx, n)
+	case *tree.FetchCursor:
+		return p.FetchCursor(ctx, &n.CursorStmt, false /* isMove */)
 	case *tree.Grant:
 		return p.Grant(ctx, n)
 	case *tree.GrantRole:
 		return p.GrantRole(ctx, n)
+	case *tree.MoveCursor:
+		return p.FetchCursor(ctx, &n.CursorStmt, true /* isMove */)
 	case *tree.ReassignOwnedBy:
 		return p.ReassignOwnedBy(ctx, n)
 	case *tree.RefreshMaterializedView:
@@ -192,6 +219,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.SetSessionCharacteristics(n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
+	case *tree.ShowTenantClusterSetting:
+		return p.ShowTenantClusterSetting(ctx, n)
 	case *tree.ShowCreateSchedules:
 		return p.ShowCreateSchedule(ctx, n)
 	case *tree.ShowHistogram:
@@ -200,6 +229,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowTableStats(ctx, n)
 	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
+	case *tree.ShowVar:
+		return p.ShowVar(ctx, n)
 	case *tree.ShowZoneConfig:
 		return p.ShowZoneConfig(ctx, n)
 	case *tree.ShowFingerprints:
@@ -220,11 +251,15 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 
 func init() {
 	for _, stmt := range []tree.Statement{
+		&tree.AlterChangefeed{},
 		&tree.AlterDatabaseAddRegion{},
 		&tree.AlterDatabaseDropRegion{},
 		&tree.AlterDatabaseOwner{},
 		&tree.AlterDatabasePrimaryRegion{},
+		&tree.AlterDatabasePlacement{},
 		&tree.AlterDatabaseSurvivalGoal{},
+		&tree.AlterDatabaseAddSuperRegion{},
+		&tree.AlterDatabaseDropSuperRegion{},
 		&tree.AlterDefaultPrivileges{},
 		&tree.AlterIndex{},
 		&tree.AlterSchema{},
@@ -232,13 +267,17 @@ func init() {
 		&tree.AlterTableLocality{},
 		&tree.AlterTableOwner{},
 		&tree.AlterTableSetSchema{},
+		&tree.AlterTenantSetClusterSetting{},
 		&tree.AlterType{},
 		&tree.AlterSequence{},
 		&tree.AlterRole{},
 		&tree.AlterRoleSet{},
+		&tree.CloseCursor{},
 		&tree.CommentOnColumn{},
 		&tree.CommentOnDatabase{},
+		&tree.CommentOnSchema{},
 		&tree.CommentOnIndex{},
+		&tree.CommentOnConstraint{},
 		&tree.CommentOnTable{},
 		&tree.CreateDatabase{},
 		&tree.CreateExtension{},
@@ -248,6 +287,7 @@ func init() {
 		&tree.CreateType{},
 		&tree.CreateRole{},
 		&tree.Deallocate{},
+		&tree.DeclareCursor{},
 		&tree.Discard{},
 		&tree.DropDatabase{},
 		&tree.DropIndex{},
@@ -258,8 +298,10 @@ func init() {
 		&tree.DropTable{},
 		&tree.DropType{},
 		&tree.DropView{},
+		&tree.FetchCursor{},
 		&tree.Grant{},
 		&tree.GrantRole{},
+		&tree.MoveCursor{},
 		&tree.ReassignOwnedBy{},
 		&tree.RefreshMaterializedView{},
 		&tree.RenameColumn{},
@@ -278,15 +320,18 @@ func init() {
 		&tree.SetSessionAuthorizationDefault{},
 		&tree.SetSessionCharacteristics{},
 		&tree.ShowClusterSetting{},
+		&tree.ShowTenantClusterSetting{},
 		&tree.ShowCreateSchedules{},
 		&tree.ShowHistogram{},
 		&tree.ShowTableStats{},
 		&tree.ShowTraceForSession{},
 		&tree.ShowZoneConfig{},
 		&tree.ShowFingerprints{},
+		&tree.ShowVar{},
 		&tree.Truncate{},
 
 		// CCL statements (without Export which has an optimizer operator).
+		&tree.AlterBackup{},
 		&tree.Backup{},
 		&tree.ShowBackup{},
 		&tree.Restore{},

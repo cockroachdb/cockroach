@@ -8,9 +8,10 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
+        "//pkg/util/ioctx",
     ],
 )
 
@@ -21,7 +22,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",

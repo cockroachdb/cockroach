@@ -25,6 +25,7 @@ func TestTenantIDString(t *testing.T) {
 		MakeTenantID(999):            "999",
 		MakeTenantID(math.MaxUint64): "18446744073709551615",
 	} {
+		require.Equal(t, tID.InternalValue != 0, tID.IsSet())
 		require.Equal(t, expStr, tID.String())
 	}
 }

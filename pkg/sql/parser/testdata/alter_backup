@@ -1,0 +1,63 @@
+parse
+ALTER BACKUP 'foo' ADD NEW_KMS = 'a' WITH OLD_KMS = 'b'
+----
+ALTER BACKUP 'foo' ADD NEW_KMS='a' WITH OLD_KMS='b' -- normalized!
+ALTER BACKUP ('foo') ADD NEW_KMS=('a') WITH OLD_KMS=('b') -- fully parenthesized
+ALTER BACKUP '_' ADD NEW_KMS='_' WITH OLD_KMS='_' -- literals removed
+ALTER BACKUP 'foo' ADD NEW_KMS='a' WITH OLD_KMS='b' -- identifiers removed
+
+parse
+ALTER BACKUP 'foo' ADD NEW_KMS = ('a', 'b') WITH OLD_KMS = ('c', 'd')
+----
+ALTER BACKUP 'foo' ADD NEW_KMS=('a', 'b') WITH OLD_KMS=('c', 'd') -- normalized!
+ALTER BACKUP ('foo') ADD NEW_KMS=(('a'), ('b')) WITH OLD_KMS=(('c'), ('d')) -- fully parenthesized
+ALTER BACKUP '_' ADD NEW_KMS=('_', '_') WITH OLD_KMS=('_', '_') -- literals removed
+ALTER BACKUP 'foo' ADD NEW_KMS=('a', 'b') WITH OLD_KMS=('c', 'd') -- identifiers removed
+
+parse
+ALTER BACKUP 'foo' ADD NEW_KMS = ('a', 'b') WITH OLD_KMS = 'c'
+----
+ALTER BACKUP 'foo' ADD NEW_KMS=('a', 'b') WITH OLD_KMS='c' -- normalized!
+ALTER BACKUP ('foo') ADD NEW_KMS=(('a'), ('b')) WITH OLD_KMS=('c') -- fully parenthesized
+ALTER BACKUP '_' ADD NEW_KMS=('_', '_') WITH OLD_KMS='_' -- literals removed
+ALTER BACKUP 'foo' ADD NEW_KMS=('a', 'b') WITH OLD_KMS='c' -- identifiers removed
+
+parse
+ALTER BACKUP 'foo' ADD NEW_KMS = 'a' WITH OLD_KMS = ('b', 'c')
+----
+ALTER BACKUP 'foo' ADD NEW_KMS='a' WITH OLD_KMS=('b', 'c') -- normalized!
+ALTER BACKUP ('foo') ADD NEW_KMS=('a') WITH OLD_KMS=(('b'), ('c')) -- fully parenthesized
+ALTER BACKUP '_' ADD NEW_KMS='_' WITH OLD_KMS=('_', '_') -- literals removed
+ALTER BACKUP 'foo' ADD NEW_KMS='a' WITH OLD_KMS=('b', 'c') -- identifiers removed
+
+parse
+ALTER BACKUP 'foo' in 'bar' ADD NEW_KMS = 'a' WITH OLD_KMS = 'b'
+----
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS='a' WITH OLD_KMS='b' -- normalized!
+ALTER BACKUP ('foo') IN ('bar') ADD NEW_KMS=('a') WITH OLD_KMS=('b') -- fully parenthesized
+ALTER BACKUP '_' IN '_' ADD NEW_KMS='_' WITH OLD_KMS='_' -- literals removed
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS='a' WITH OLD_KMS='b' -- identifiers removed
+
+parse
+ALTER BACKUP 'foo' in 'bar' ADD NEW_KMS = ('a', 'b') WITH OLD_KMS = ('c', 'd')
+----
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS=('a', 'b') WITH OLD_KMS=('c', 'd') -- normalized!
+ALTER BACKUP ('foo') IN ('bar') ADD NEW_KMS=(('a'), ('b')) WITH OLD_KMS=(('c'), ('d')) -- fully parenthesized
+ALTER BACKUP '_' IN '_' ADD NEW_KMS=('_', '_') WITH OLD_KMS=('_', '_') -- literals removed
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS=('a', 'b') WITH OLD_KMS=('c', 'd') -- identifiers removed
+
+parse
+ALTER BACKUP 'foo' in 'bar' ADD NEW_KMS = ('a', 'b') WITH OLD_KMS = 'c'
+----
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS=('a', 'b') WITH OLD_KMS='c' -- normalized!
+ALTER BACKUP ('foo') IN ('bar') ADD NEW_KMS=(('a'), ('b')) WITH OLD_KMS=('c') -- fully parenthesized
+ALTER BACKUP '_' IN '_' ADD NEW_KMS=('_', '_') WITH OLD_KMS='_' -- literals removed
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS=('a', 'b') WITH OLD_KMS='c' -- identifiers removed
+
+parse
+ALTER BACKUP 'foo' in 'bar' ADD NEW_KMS = 'a' WITH OLD_KMS = ('b', 'c')
+----
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS='a' WITH OLD_KMS=('b', 'c') -- normalized!
+ALTER BACKUP ('foo') IN ('bar') ADD NEW_KMS=('a') WITH OLD_KMS=(('b'), ('c')) -- fully parenthesized
+ALTER BACKUP '_' IN '_' ADD NEW_KMS='_' WITH OLD_KMS=('_', '_') -- literals removed
+ALTER BACKUP 'foo' IN 'bar' ADD NEW_KMS='a' WITH OLD_KMS=('b', 'c') -- identifiers removed

@@ -4,27 +4,19 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "ctpb",
-    srcs = [
-        "client.go",
-        "entry.go",
-        "server.go",
-        "service.go",
-    ],
+    srcs = ["service.go"],
     embed = [":ctpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/timeutil",
     ],
 )
 
 proto_library(
     name = "ctpb_proto",
-    srcs = [
-        "entry.proto",
-        "service.proto",
-    ],
+    srcs = ["service.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
@@ -42,7 +34,7 @@ go_proto_library(
     proto = ":ctpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
         "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",

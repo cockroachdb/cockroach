@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -136,42 +135,6 @@ func (z *zipper) createRawOrError(s *zipReporter, name string, b []byte, e error
 		return z.createError(s, name, e)
 	}
 	return z.createRaw(s, name, b)
-}
-
-// fileNameEscaper is used to generate file names when the name of the
-// file is derived from a SQL identifier or other stored data. This is
-// necessary because not all characters in SQL identifiers and strings
-// can be used in file names.
-type fileNameEscaper struct {
-	counters map[string]int
-}
-
-// escape ensures that f is stripped of characters that
-// may be invalid in file names. The characters are also lowercased
-// to ensure proper normalization in case-insensitive filesystems.
-func (fne *fileNameEscaper) escape(f string) string {
-	f = strings.ToLower(f)
-	var out strings.Builder
-	for _, c := range f {
-		if c < 127 && (unicode.IsLetter(c) || unicode.IsDigit(c)) {
-			out.WriteRune(c)
-		} else {
-			out.WriteByte('_')
-		}
-	}
-	objName := out.String()
-	result := objName
-
-	if fne.counters == nil {
-		fne.counters = make(map[string]int)
-	}
-	cnt := fne.counters[objName]
-	if cnt > 0 {
-		result += fmt.Sprintf("-%d", cnt)
-	}
-	cnt++
-	fne.counters[objName] = cnt
-	return result
 }
 
 // nodeSelection is used to define a subset of the nodes on the command line.

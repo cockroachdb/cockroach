@@ -45,21 +45,21 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b, c, d, b, x, c, y)
 │ estimated row count: 1 (missing stats)
-│ table: cy@primary
+│ table: cy@cy_pkey
 │ equality: (c) = (c)
 │ equality cols are key
 │
 └── • lookup join (inner)
     │ columns: (a, b, c, d, b, x)
     │ estimated row count: 1 (missing stats)
-    │ table: bx@primary
+    │ table: bx@bx_pkey
     │ equality: (b) = (b)
     │ equality cols are key
     │
     └── • scan
           columns: (a, b, c, d)
           estimated row count: 1 (missing stats)
-          table: abc@primary
+          table: abc@abc_pkey
           spans: /1/0
 
 statement ok
@@ -74,19 +74,19 @@ vectorized: true
 • lookup join (inner)
 │ columns: (a, b, c, d, b, x, c, y)
 │ estimated row count: 1 (missing stats)
-│ table: cy@primary
+│ table: cy@cy_pkey
 │ equality: (c) = (c)
 │ equality cols are key
 │
 └── • lookup join (inner)
     │ columns: (a, b, c, d, b, x)
     │ estimated row count: 1 (missing stats)
-    │ table: bx@primary
+    │ table: bx@bx_pkey
     │ equality: (b) = (b)
     │ equality cols are key
     │
     └── • scan
           columns: (a, b, c, d)
           estimated row count: 1 (missing stats)
-          table: abc@primary
+          table: abc@abc_pkey
           spans: /1/0

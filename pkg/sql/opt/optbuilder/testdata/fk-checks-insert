@@ -36,8 +36,8 @@ build
 INSERT INTO child VALUES (100, 1), (200, 1) ON CONFLICT DO NOTHING
 ----
 insert child
+ ├── arbiter indexes: child_pkey
  ├── columns: <none>
- ├── arbiter indexes: primary
  ├── insert-mapping:
  │    ├── column1:5 => c:1
  │    └── column2:6 => child.p:2
@@ -168,7 +168,9 @@ insert child_nullable
 
 # In this case, we know that we are inserting *only* NULL values, so we don't
 # need to check any FKs.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of FK checks.
+norm
 INSERT INTO child_nullable VALUES (100, NULL), (200, NULL)
 ----
 insert child_nullable
@@ -178,8 +180,8 @@ insert child_nullable
  │    └── column2:6 => p:2
  └── values
       ├── columns: column1:5!null column2:6
-      ├── (100, NULL::INT8)
-      └── (200, NULL::INT8)
+      ├── (100, NULL)
+      └── (200, NULL)
 
 # Same as above.
 build
@@ -376,7 +378,9 @@ insert multi_col_child
                      └── r:13 = multi_col_parent.r:16
 
 # No FK check needed - we have only NULL values for a FK column.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of FK checks.
+norm
 INSERT INTO multi_col_child VALUES (1, 10, NULL, 10)
 ----
 insert multi_col_child
@@ -388,7 +392,7 @@ insert multi_col_child
  │    └── column4:10 => r:4
  └── values
       ├── columns: column1:7!null column2:8!null column3:9 column4:10!null
-      └── (1, 10, NULL::INT8, 10)
+      └── (1, 10, NULL, 10)
 
 exec-ddl
 CREATE TABLE multi_col_child_full  (
@@ -501,7 +505,9 @@ insert multi_col_child_full
                      └── r:13 = multi_col_parent.r:16
 
 # No FK check needed when all FK columns only have NULL values.
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of FK checks.
+norm
 INSERT INTO multi_col_child_full VALUES (1, NULL, NULL, NULL)
 ----
 insert multi_col_child_full
@@ -513,7 +519,7 @@ insert multi_col_child_full
  │    └── column4:10 => r:4
  └── values
       ├── columns: column1:7!null column2:8 column3:9 column4:10
-      └── (1, NULL::INT8, NULL::INT8, NULL::INT8)
+      └── (1, NULL, NULL, NULL)
 
 # But with MATCH FULL, the FK check is needed when only a subset of the columns
 # only have NULL values.
@@ -618,7 +624,9 @@ insert multi_ref_child
                      ├── b:16 = multi_ref_parent_bc.b:18
                      └── c:17 = multi_ref_parent_bc.c:19
 
-build
+# NOTE: We use the norm directive here so that assignment casts are eliminated
+# by normalization rules, allowing removal of FK checks.
+norm
 INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
 ----
 insert multi_ref_child
@@ -630,7 +638,7 @@ insert multi_ref_child
  │    └── column4:10 => c:4
  └── values
       ├── columns: column1:7!null column2:8 column3:9 column4:10
-      └── (1, NULL::INT8, NULL::INT8, NULL::INT8)
+      └── (1, NULL, NULL, NULL)
 
 # Verify that the join hint is set.
 build prefer-lookup-joins-for-fks

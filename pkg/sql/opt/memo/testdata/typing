@@ -385,7 +385,7 @@ project
  ├── columns: x:1(int!null) x:5(string!null) y:2(int!null)
  ├── select
  │    ├── columns: a.x:1(int!null) y:2(int!null) max:10(string!null)
- │    ├── group-by
+ │    ├── group-by (hash)
  │    │    ├── columns: a.x:1(int!null) y:2(int!null) max:10(string!null)
  │    │    ├── grouping columns: a.x:1(int!null)
  │    │    ├── inner-join (hash)
@@ -416,7 +416,7 @@ SELECT EXISTS(SELECT * FROM a WHERE expr<0) FROM (SELECT x+1 AS expr FROM a)
 ----
 project
  ├── columns: exists:10(bool!null)
- ├── group-by
+ ├── group-by (hash)
  │    ├── columns: true_agg:12(bool) rownum:14(int!null)
  │    ├── grouping columns: rownum:14(int!null)
  │    ├── left-join (cross)
@@ -466,3 +466,97 @@ project
       ├── b.z:2::DECIMAL(10,3) [as=z:5, type=decimal]
       ├── b.z:2::DECIMAL(10,1) [as=z:6, type=decimal]
       └── b.z:2::DECIMAL(10,4) [as=z:7, type=decimal]
+
+build
+SELECT ARRAY[1,2] IS NULL
+----
+project
+ ├── columns: "?column?":1(bool!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[1,2] IS NULL [as="?column?":1, type=bool]
+
+# Tests with enum types.
+exec-ddl
+CREATE TYPE color AS ENUM ('red', 'green', 'blue')
+----
+
+exec-ddl
+CREATE TABLE colortab (k INT PRIMARY KEY, c color)
+----
+
+build
+SELECT * FROM colortab WHERE c = 'red'
+----
+project
+ ├── columns: k:1(int!null) c:2(color!null)
+ └── select
+      ├── columns: k:1(int!null) c:2(color!null) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── scan colortab
+      │    └── columns: k:1(int!null) c:2(color) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      └── filters
+           └── c:2 = 'red' [type=bool]
+
+build
+SELECT ARRAY['red', 'green']::color[]
+----
+project
+ ├── columns: array:1(color[]!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY['red','green'] [as=array:1, type=color[]]
+
+norm
+SELECT ARRAY['red', 'green']::color[]
+----
+values
+ ├── columns: array:1(color[]!null)
+ └── (ARRAY['red','green'],) [type=tuple{color[]}]
+
+# Invalid label does not get folded.
+build
+SELECT ARRAY['foo']::color[]
+----
+error (22P02): invalid input value for enum color: "foo"
+
+norm
+SELECT ARRAY['foo']::color[]
+----
+error (22P02): invalid input value for enum color: "foo"
+
+# Regression tests for #68233.
+build
+SELECT (ARRAY[]::color[]) IS NULL
+----
+project
+ ├── columns: "?column?":1(bool!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[] IS NULL [as="?column?":1, type=bool]
+
+norm
+SELECT (ARRAY[]::color[]) IS NULL
+----
+values
+ ├── columns: "?column?":1(bool!null)
+ └── (false,) [type=tuple{bool}]
+
+build
+SELECT (ARRAY[]::color[]) IS NOT NULL
+----
+project
+ ├── columns: "?column?":1(bool!null)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      └── ARRAY[] IS NOT NULL [as="?column?":1, type=bool]
+
+norm
+SELECT (ARRAY[]::color[]) IS NOT NULL
+----
+values
+ ├── columns: "?column?":1(bool!null)
+ └── (true,) [type=tuple{bool}]

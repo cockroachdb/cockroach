@@ -1,0 +1,64 @@
+# Test splits for simple tables with indexes, dropping some and then adding
+# some new others.
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
+----
+
+# We should observe splits at the table start, index start, and start of
+# (non-existent) next index.
+splits database=db table=t
+----
++ 1  between start of table and start of 1st index
++ 1  for 1st index
++ 1  between end of 1st index and end of table
+= 3
+
+# Create a couple of indexes.
+exec-sql
+CREATE INDEX idx2 ON db.t (j);
+CREATE INDEX idx3 ON db.t (j);
+----
+
+# We should observe splits for each one, in addition to what we had earlier. We
+# should also observe gaps between indexes.
+splits database=db table=t
+----
++ 1  between start of table and start of 1st index
++ 1  for 1st index
++ 1  for 2nd index
++ 1  for 3rd index
++ 2  gap(s) between 3 indexes
++ 1  between end of 3rd index and end of table
+= 7
+
+# Drop an index to create a "gap" in the keyspace.
+exec-sql
+DROP INDEX db.t@idx2;
+----
+
+# The gap should appear. 
+splits database=db table=t
+----
++ 1  between start of table and start of 1st index
++ 1  for 1st index
++ 1  for 2nd index
++ 1  gap(s) between 2 indexes
++ 1  between end of 2nd index and end of table
+= 5
+
+# Create another index to make sure it appears as expected.
+exec-sql
+CREATE INDEX idx6 ON db.t (j);
+----
+
+splits database=db table=t
+----
++ 1  between start of table and start of 1st index
++ 1  for 1st index
++ 1  for 2nd index
++ 1  for 3rd index
++ 2  gap(s) between 3 indexes
++ 1  between end of 3rd index and end of table
+= 7

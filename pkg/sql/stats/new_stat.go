@@ -13,8 +13,9 @@ package stats
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -26,6 +27,7 @@ import (
 // system table.
 func InsertNewStats(
 	ctx context.Context,
+	settings *cluster.Settings,
 	executor sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	tableStats []*TableStatisticProto,
@@ -34,6 +36,7 @@ func InsertNewStats(
 	for _, statistic := range tableStats {
 		err = InsertNewStat(
 			ctx,
+			settings,
 			executor,
 			txn,
 			statistic.TableID,
@@ -42,6 +45,7 @@ func InsertNewStats(
 			int64(statistic.RowCount),
 			int64(statistic.DistinctCount),
 			int64(statistic.NullCount),
+			int64(statistic.AvgSize),
 			statistic.HistogramData,
 		)
 		if err != nil {
@@ -52,16 +56,18 @@ func InsertNewStats(
 }
 
 // InsertNewStat inserts a new statistic in the system table.
-// The caller is responsible for calling GossipTableStatAdded to notify the stat
-// caches.
+//
+// The stats cache will automatically update asynchronously (as well as the
+// stats caches on all other nodes).
 func InsertNewStat(
 	ctx context.Context,
+	settings *cluster.Settings,
 	executor sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	tableID descpb.ID,
 	name string,
 	columnIDs []descpb.ColumnID,
-	rowCount, distinctCount, nullCount int64,
+	rowCount, distinctCount, nullCount, avgSize int64,
 	h *HistogramData,
 ) error {
 	// We must pass a nil interface{} if we want to insert a NULL.
@@ -83,7 +89,28 @@ func InsertNewStat(
 			return err
 		}
 	}
-
+	if !settings.Version.IsActive(ctx, clusterversion.AlterSystemTableStatisticsAddAvgSizeCol) {
+		_, err := executor.Exec(
+			ctx, "insert-statistic", txn,
+			`INSERT INTO system.table_statistics (
+					"tableID",
+					"name",
+					"columnIDs",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					histogram
+				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			tableID,
+			nameVal,
+			columnIDsVal,
+			rowCount,
+			distinctCount,
+			nullCount,
+			histogramVal,
+		)
+		return err
+	}
 	_, err := executor.Exec(
 		ctx, "insert-statistic", txn,
 		`INSERT INTO system.table_statistics (
@@ -93,33 +120,17 @@ func InsertNewStat(
 					"rowCount",
 					"distinctCount",
 					"nullCount",
+					"avgSize",
 					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		tableID,
 		nameVal,
 		columnIDsVal,
 		rowCount,
 		distinctCount,
 		nullCount,
+		avgSize,
 		histogramVal,
 	)
 	return err
-}
-
-// GossipTableStatAdded causes the statistic caches for this table to be
-// invalidated.
-//
-// Note that we no longer use gossip to keep the cache up-to-date, but we still
-// send the updates for mixed-version clusters during upgrade.
-//
-// TODO(radu): remove this in 22.1.
-func GossipTableStatAdded(g *gossip.Gossip, tableID descpb.ID) error {
-	// TODO(radu): perhaps use a TTL here to avoid having a key per table floating
-	// around forever (we would need the stat cache to evict old entries
-	// automatically though).
-	return g.AddInfo(
-		gossip.MakeTableStatAddedKey(uint32(tableID)),
-		nil, /* value */
-		0,   /* ttl */
-	)
 }

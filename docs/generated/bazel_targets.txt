@@ -1,0 +1,12 @@
+This file lists all the targets you need to build to build all the generated
+documentation. Lines not beginning with // should be ignored.
+
+//docs/generated:gen-logging-md
+//docs/generated:gen-logsinks-md
+//docs/generated:gen-eventlog-md
+//docs/generated:gen-logformats-md
+//docs/generated/http
+//docs/generated/settings
+//docs/generated/settings:settings_for_tenants
+//docs/generated/sql
+//docs/generated/sql/bnf

@@ -52,7 +52,12 @@ func mockPutter(p s3putter) func() {
 	return f
 }
 
-func TestMain(t *testing.T) {
+// NB: the function name TestMain is special as it is expected to be a function
+// which takes a *testing.M as a parameter. Somehow `go test` allows TestMain to
+// also work if passed a *testing.T, in which case it acts like a normal test
+// function. Bazel prohibits this, so give this test function a name which
+// doesn't collide with TestMain.
+func TestMainF(t *testing.T) {
 	if !slow {
 		skip.IgnoreLint(t, "only to be run manually via `./build/builder.sh go test -tags slow -timeout 1h -v ./pkg/cmd/publish-artifacts`")
 	}
@@ -214,53 +219,11 @@ func TestMain(t *testing.T) {
 			Key:                     "cockroach/workload.LATEST",
 			WebsiteRedirectLocation: "/cockroach/workload." + shaStub,
 		},
-		{
-			Bucket: "binaries.cockroachdb.com",
-			Key:    "cockroach-v42.42.42.src.tgz",
-		},
-		{
-			Bucket:       "binaries.cockroachdb.com",
-			CacheControl: "no-cache",
-			Key:          "cockroach-latest.src.tgz",
-		},
-		{
-			Bucket: "binaries.cockroachdb.com",
-			Key:    "cockroach-v42.42.42.darwin-10.9-amd64.tgz",
-		},
-		{
-			Bucket:       "binaries.cockroachdb.com",
-			CacheControl: "no-cache",
-			Key:          "cockroach-latest.darwin-10.9-amd64.tgz",
-		},
-		{
-			Bucket: "binaries.cockroachdb.com",
-			Key:    "cockroach-v42.42.42.linux-amd64.tgz",
-		},
-		{
-			Bucket:       "binaries.cockroachdb.com",
-			CacheControl: "no-cache",
-			Key:          "cockroach-latest.linux-amd64.tgz",
-		},
-		{
-			Bucket: "binaries.cockroachdb.com",
-			Key:    "cockroach-v42.42.42.windows-6.2-amd64.zip",
-		},
-		{
-			Bucket:       "binaries.cockroachdb.com",
-			CacheControl: "no-cache",
-			Key:          "cockroach-latest.windows-6.2-amd64.zip",
-		},
 	}
 
 	if err := os.Setenv("TC_BUILD_BRANCH", "master"); err != nil {
 		t.Fatal(err)
 	}
-	main()
-
-	if err := os.Setenv("TC_BUILD_BRANCH", "v42.42.42"); err != nil {
-		t.Fatal(err)
-	}
-	*isRelease = true
 	main()
 
 	var acts []testCase

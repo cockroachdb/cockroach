@@ -30,7 +30,7 @@ software as complex as CockroachDB.
 * (maybe) Change the encoding of the `RaftAppliedIndexKey` and
   `LeaseAppliedIndexKey` keys (#9306) - this can be done on a store-by-store
   basis without requiring cluster-level coordination
-* Switch over to proposer-evaulated kv (#6290, #6166) - this is likely to be a
+* Switch over to proposer-evaluated kv (#6290, #6166) - this is likely to be a
   special case, where we force a stop-the-world event to make the switch
   sometime before 1.0
 

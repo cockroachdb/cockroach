@@ -26,6 +26,6 @@ eexpect "NOTICE: hello"
 eexpect "NOTICE: world"
 eexpect "WARNING: stay indoors"
 eexpect root@
-interrupt
+send_eof
 eexpect eof
 end_test

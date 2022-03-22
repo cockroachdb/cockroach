@@ -1,4 +1,6 @@
 pause_jobs_stmt ::=
 	'PAUSE' 'JOB' job_id
+	| 'PAUSE' 'JOB' job_id 'WITH' 'REASON' '=' string_or_placeholder
 	| 'PAUSE' 'JOBS' select_stmt
+	| 'PAUSE' 'JOBS' select_stmt 'WITH' 'REASON' '=' string_or_placeholder
 	| 'PAUSE' 'JOBS' for_schedules_clause

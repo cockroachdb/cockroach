@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 )
 
 func parseNullURL(_ cloud.ExternalStorageURIContext, _ *url.URL) (roachpb.ExternalStorage, error) {
@@ -60,14 +61,16 @@ func (n *nullSinkStorage) Settings() *cluster.Settings {
 	return nil
 }
 
-func (n *nullSinkStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (n *nullSinkStorage) ReadFile(
+	ctx context.Context, basename string,
+) (ioctx.ReadCloserCtx, error) {
 	reader, _, err := n.ReadFileAt(ctx, basename, 0)
 	return reader, err
 }
 
 func (n *nullSinkStorage) ReadFileAt(
 	_ context.Context, _ string, _ int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	return nil, 0, io.EOF
 }
 

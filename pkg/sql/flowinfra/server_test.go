@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -55,18 +57,17 @@ func TestServer(t *testing.T) {
 	r.Exec(t, `CREATE TABLE test.t (a INT PRIMARY KEY, b INT)`)
 	r.Exec(t, `INSERT INTO test.t VALUES (1, 10), (2, 20), (3, 30)`)
 
-	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	ts := execinfrapb.TableReaderSpec{
-		Table:         *td.TableDesc(),
-		IndexIdx:      0,
-		Reverse:       false,
-		Spans:         []execinfrapb.TableReaderSpan{{Span: td.PrimaryIndexSpan(keys.SystemSQLCodec)}},
-		NeededColumns: []uint32{0, 1},
+		Reverse: false,
+		Spans:   []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
 	}
-	post := execinfrapb.PostProcessSpec{
-		Projection:    true,
-		OutputColumns: []uint32{0, 1}, // a b
+	if err := rowenc.InitIndexFetchSpec(
+		&ts.FetchSpec, keys.SystemSQLCodec, td, td.GetPrimaryIndex(),
+		[]descpb.ColumnID{1, 2}, // a b
+	); err != nil {
+		t.Fatal(err)
 	}
 
 	txn := kv.NewTxn(ctx, kvDB, s.NodeID())
@@ -74,12 +75,11 @@ func TestServer(t *testing.T) {
 
 	req := &execinfrapb.SetupFlowRequest{
 		Version:           execinfra.Version,
-		LeafTxnInputState: &leafInputState,
+		LeafTxnInputState: leafInputState,
 	}
 	req.Flow = execinfrapb.FlowSpec{
 		Processors: []execinfrapb.ProcessorSpec{{
 			Core: execinfrapb.ProcessorCoreUnion{TableReader: &ts},
-			Post: post,
 			Output: []execinfrapb.OutputRouterSpec{{
 				Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
 				Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
@@ -149,7 +149,7 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 
 	var v execinfrapb.DistSQLVersionGossipInfo
 	if err := s.GossipI().(*gossip.Gossip).GetInfoProto(
-		gossip.MakeDistSQLNodeVersionKey(s.NodeID()), &v,
+		gossip.MakeDistSQLNodeVersionKey(base.SQLInstanceID(s.NodeID())), &v,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -165,6 +165,43 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 // errors is ignored.
 func runLocalFlow(
 	ctx context.Context, s serverutils.TestServerInterface, req *execinfrapb.SetupFlowRequest,
+) (rowenc.EncDatumRows, error) {
+	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	defer evalCtx.Stop(ctx)
+	var rowBuf distsqlutils.RowBuffer
+	flowCtx, flow, _, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.Mon, req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})
+	if err != nil {
+		return nil, err
+	}
+	flow.Run(flowCtx, func() {})
+	flow.Cleanup(flowCtx)
+
+	if !rowBuf.ProducerClosed() {
+		return nil, errors.New("output not closed")
+	}
+
+	var rows rowenc.EncDatumRows
+	for {
+		row, meta := rowBuf.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				return nil, meta.Err
+			}
+			continue
+		}
+		if row == nil {
+			break
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+// runLocalFlow takes in a SetupFlowRequest to setup a local sync flow that is
+// then run to completion. The result rows are returned. All metadata except for
+// errors is ignored.
+func runLocalFlowTenant(
+	ctx context.Context, s serverutils.TestTenantInterface, req *execinfrapb.SetupFlowRequest,
 ) (rowenc.EncDatumRows, error) {
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)

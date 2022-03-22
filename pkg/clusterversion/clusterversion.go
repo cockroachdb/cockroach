@@ -131,12 +131,20 @@ type Handle interface {
 	// node restarts when initializing the cluster version, as seen by this
 	// node.
 	SetActiveVersion(context.Context, ClusterVersion) error
+
+	// SetOnChange installs a callback that's invoked when the active cluster
+	// version changes. The callback should avoid doing long-running or blocking
+	// work; it's called on the same goroutine handling all cluster setting
+	// updates.
+	SetOnChange(fn func(ctx context.Context, newVersion ClusterVersion))
 }
 
 // handleImpl is a concrete implementation of Handle. It mostly relegates to the
 // underlying cluster version setting, though provides a way for callers to
 // override the binary and minimum supported versions (for tests usually).
 type handleImpl struct {
+	// setting is the version that this handle operates on.
+	setting *clusterVersionSetting
 	// sv captures the mutable state associated with usage of the otherwise
 	// immutable cluster version setting.
 	sv *settings.Values
@@ -167,9 +175,17 @@ func MakeVersionHandle(sv *settings.Values) Handle {
 func MakeVersionHandleWithOverride(
 	sv *settings.Values, binaryVersion, binaryMinSupportedVersion roachpb.Version,
 ) Handle {
-	return &handleImpl{
-		sv: sv,
+	return newHandleImpl(version, sv, binaryVersion, binaryMinSupportedVersion)
+}
 
+func newHandleImpl(
+	setting *clusterVersionSetting,
+	sv *settings.Values,
+	binaryVersion, binaryMinSupportedVersion roachpb.Version,
+) Handle {
+	return &handleImpl{
+		setting:                   setting,
+		sv:                        sv,
 		binaryVersion:             binaryVersion,
 		binaryMinSupportedVersion: binaryMinSupportedVersion,
 	}
@@ -177,12 +193,12 @@ func MakeVersionHandleWithOverride(
 
 // ActiveVersion implements the Handle interface.
 func (v *handleImpl) ActiveVersion(ctx context.Context) ClusterVersion {
-	return version.activeVersion(ctx, v.sv)
+	return v.setting.activeVersion(ctx, v.sv)
 }
 
 // ActiveVersionOrEmpty implements the Handle interface.
 func (v *handleImpl) ActiveVersionOrEmpty(ctx context.Context) ClusterVersion {
-	return version.activeVersionOrEmpty(ctx, v.sv)
+	return v.setting.activeVersionOrEmpty(ctx, v.sv)
 }
 
 // SetActiveVersion implements the Handle interface.
@@ -192,7 +208,7 @@ func (v *handleImpl) SetActiveVersion(ctx context.Context, cv ClusterVersion) er
 	// SETTING version` was originally called). The stricter form of validation
 	// happens there. SetActiveVersion is simply the cluster version bump that
 	// follows from it.
-	if err := version.validateBinaryVersions(cv.Version, v.sv); err != nil {
+	if err := v.setting.validateBinaryVersions(cv.Version, v.sv); err != nil {
 		return err
 	}
 
@@ -201,13 +217,20 @@ func (v *handleImpl) SetActiveVersion(ctx context.Context, cv ClusterVersion) er
 		return err
 	}
 
-	version.SetInternal(ctx, v.sv, encoded)
+	v.setting.SetInternal(ctx, v.sv, encoded)
 	return nil
+}
+
+// SetOnChange implements the Handle interface.
+func (v *handleImpl) SetOnChange(fn func(ctx context.Context, newVersion ClusterVersion)) {
+	v.setting.SetOnChange(v.sv, func(ctx context.Context) {
+		fn(ctx, v.ActiveVersion(ctx))
+	})
 }
 
 // IsActive implements the Handle interface.
 func (v *handleImpl) IsActive(ctx context.Context, key Key) bool {
-	return version.isActive(ctx, v.sv, key)
+	return v.setting.isActive(ctx, v.sv, key)
 }
 
 // BinaryVersion implements the Handle interface.

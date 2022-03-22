@@ -1,0 +1,11 @@
+diff -urN a/internal/invariants/BUILD.bazel b/internal/invariants/BUILD.bazel
+--- a/internal/invariants/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/internal/invariants/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -5,6 +5,7 @@
+     srcs = [
+         "finalizer_off.go",
+         "finalizer_on.go",
++        "off.go",
+         "on.go",
+         "race_off.go",
+         "race_on.go",

@@ -8,9 +8,25 @@ spawn $argv demo --insecure=true
 eexpect "Welcome"
 # Warn the user that they won't get persistence.
 eexpect "your changes to data stored in the demo session will not be saved!"
-# Inform the necessary URL.
+
+# Verify the URLs for both shared and tenant server.
+eexpect "system tenant"
 eexpect "(webui)"
-eexpect "http:"
+eexpect "http://"
+eexpect ":8081"
+eexpect "(sql)"
+eexpect "root"
+eexpect ":26258/defaultdb"
+eexpect "sslmode=disable"
+eexpect "(sql/unix)"
+eexpect "root:unused@/defaultdb"
+eexpect "=26258"
+eexpect "tenant 1"
+eexpect "(sql)"
+eexpect "root"
+eexpect ":26257/movr"
+eexpect "sslmode=disable"
+
 # Ensure same messages as cockroach sql.
 eexpect "Server version"
 eexpect "Cluster ID"
@@ -19,7 +35,7 @@ eexpect "brief introduction"
 eexpect root@
 # Ensure db is movr.
 eexpect "movr>"
-interrupt
+send_eof
 eexpect eof
 end_test
 
@@ -34,19 +50,25 @@ eexpect "defaultdb>"
 # Show the URLs.
 # Also check that the default port is used.
 send "\\demo ls\r"
+eexpect "system tenant"
 eexpect "(webui)"
 eexpect "http://"
-eexpect ":8080"
+eexpect ":8081"
+eexpect "(sql)"
+eexpect "root@"
+eexpect ":26258"
+eexpect "sslmode=disable"
+eexpect "(sql/unix)"
+eexpect "root:unused@"
+eexpect "=26258"
+eexpect "tenant 1"
 eexpect "(sql)"
 eexpect "root@"
 eexpect ":26257"
 eexpect "sslmode=disable"
-eexpect "(sql/unix)"
-eexpect "root:unused@"
-eexpect "=26257"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 # With command-line override.
@@ -66,7 +88,7 @@ eexpect "(sql/unix)"
 eexpect "root:unused@"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 end_test
@@ -85,19 +107,25 @@ eexpect "defaultdb>"
 # Show the URLs.
 # Also check that the default port is used.
 send "\\demo ls\r"
+eexpect "system tenant"
 eexpect "(webui)"
 eexpect "http://"
-eexpect ":8080"
+eexpect ":8081"
+eexpect "(sql)"
+eexpect "demo:"
+eexpect ":26258"
+eexpect "sslmode=require"
+eexpect "(sql/unix)"
+eexpect "demo:"
+eexpect "=26258"
+eexpect "tenant 1"
 eexpect "(sql)"
 eexpect "demo:"
 eexpect ":26257"
 eexpect "sslmode=require"
-eexpect "(sql/unix)"
-eexpect "demo:"
-eexpect "=26257"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 # With command-line override.
@@ -118,7 +146,7 @@ eexpect "(sql/unix)"
 eexpect "demo:"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 end_test
@@ -178,14 +206,14 @@ eexpect "defaultdb>"
 # Show the URLs.
 send "\\demo ls\r"
 eexpect "http://"
-eexpect ":8000"
+eexpect ":8003"
 eexpect "http://"
-eexpect ":8001"
+eexpect ":8004"
 eexpect "http://"
-eexpect ":8002"
+eexpect ":8005"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 
 spawn $argv demo --no-example-database --nodes 3 --sql-port 23000
@@ -194,21 +222,60 @@ eexpect "defaultdb>"
 
 # Show the URLs.
 send "\\demo ls\r"
+eexpect "system tenant"
+eexpect "node 1"
+eexpect "(sql)"
+eexpect ":23003"
+eexpect "(sql/unix)"
+eexpect "=23003"
+eexpect "node 2"
+eexpect "(sql)"
+eexpect ":23004"
+eexpect "(sql/unix)"
+eexpect "=23004"
+eexpect "node 3"
+eexpect "(sql)"
+eexpect ":23005"
+eexpect "(sql/unix)"
+eexpect "=23005"
+eexpect "tenant 1"
 eexpect "(sql)"
 eexpect ":23000"
-eexpect "(sql/unix)"
-eexpect "=23000"
+eexpect "tenant 2"
 eexpect "(sql)"
 eexpect ":23001"
-eexpect "(sql/unix)"
-eexpect "=23001"
+eexpect "tenant 3"
 eexpect "(sql)"
 eexpect ":23002"
-eexpect "(sql/unix)"
-eexpect "=23002"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
+eexpect eof
+
+
+end_test
+
+start_test "Check that demo populates the connection URL in a configured file"
+
+spawn $argv demo --no-example-database --listening-url-file=test.url
+eexpect "Welcome"
+eexpect "defaultdb>"
+
+# Check the URL is valid. If the connection fails, the system command will fail too.
+system "$argv sql --url `cat test.url` -e 'select 1'"
+
+send_eof
+eexpect eof
+
+# Ditto, insecure
+spawn $argv demo --no-example-database --listening-url-file=test.url --insecure
+eexpect "Welcome"
+eexpect "defaultdb>"
+
+# Check the URL is valid. If the connection fails, the system command will fail too.
+system "$argv sql --url `cat test.url` -e 'select 1'"
+
+send_eof
 eexpect eof
 
 

@@ -19,20 +19,20 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 var DummyVars = map[string]sessionVar{
 	"enable_seqscan": makeDummyBooleanSessionVar(
 		"enable_seqscan",
-		func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData.EnableSeqScan)
+		func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSeqScan), nil
 		},
-		func(m *sessionDataMutator, v bool) {
+		func(m sessionDataMutator, v bool) {
 			m.SetEnableSeqScan(v)
 		},
 		func(sv *settings.Values) string { return "on" },
 	),
 	"synchronous_commit": makeDummyBooleanSessionVar(
 		"synchronous_commit",
-		func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData.SynchronousCommit)
+		func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().SynchronousCommit), nil
 		},
-		func(m *sessionDataMutator, v bool) {
+		func(m sessionDataMutator, v bool) {
 			m.SetSynchronousCommit(v)
 		},
 		func(sv *settings.Values) string { return "on" },
@@ -65,7 +65,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"array_nulls",
 	"backend_flush_after",
 	// "bytea_output",
-	"check_function_bodies",
+	// "check_function_bodies",
 	// "client_encoding",
 	// "client_min_messages",
 	"commit_delay",
@@ -86,7 +86,7 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"default_transaction_deferrable",
 	// "default_transaction_isolation",
 	// "default_transaction_read_only",
-	"default_with_oids",
+	// "default_with_oids",
 	"dynamic_library_path",
 	"effective_cache_size",
 	"enable_bitmapscan",
@@ -118,10 +118,10 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	// "idle_in_transaction_session_timeout",
 	"ignore_checksum_failure",
 	"join_collapse_limit",
-	"lc_messages",
-	"lc_monetary",
-	"lc_numeric",
-	"lc_time",
+	// "lc_messages",
+	// "lc_monetary",
+	// "lc_numeric",
+	// "lc_time",
 	"lo_compat_privileges",
 	"local_preload_libraries",
 	// "lock_timeout",
@@ -148,11 +148,11 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"operator_precedence_warning",
 	"parallel_setup_cost",
 	"parallel_tuple_cost",
-	"password_encryption",
+	// "password_encryption",
 	"quote_all_identifiers",
 	"random_page_cost",
 	"replacement_sort_tuples",
-	"role",
+	// "role",
 	// "row_security",
 	// "search_path",
 	"seed",
@@ -203,6 +203,6 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"wal_debug",
 	"work_mem",
 	"xmlbinary",
-	"xmloption",
+	// "xmloption",
 	"zero_damaged_pages",
 )

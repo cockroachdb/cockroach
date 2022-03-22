@@ -11,7 +11,6 @@
 package concurrency
 
 import (
-	"bytes"
 	"context"
 	"math"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -31,11 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // LockTableLivenessPushDelay sets the delay before pushing in order to detect
 // coordinator failures of conflicting transactions.
 var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.lock_table.coordinator_liveness_push_delay",
 	"the delay before pushing in order to detect coordinator failures of conflicting transactions",
 	// This is set to a short duration to ensure that we quickly detect failed
@@ -67,6 +69,7 @@ var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
 // LockTableDeadlockDetectionPushDelay sets the delay before pushing in order to
 // detect dependency cycles between transactions.
 var LockTableDeadlockDetectionPushDelay = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.lock_table.deadlock_detection_push_delay",
 	"the delay before pushing in order to detect dependency cycles between transactions",
 	// This is set to a medium duration to ensure that deadlock caused by
@@ -103,9 +106,8 @@ type lockTableWaiterImpl struct {
 	// When set, WriteIntentError are propagated instead of pushing
 	// conflicting transactions.
 	disableTxnPushing bool
-	// When set, called just before each ContentionEvent is emitted.
-	// Is allowed to mutate the event.
-	onContentionEvent func(ev *roachpb.ContentionEvent)
+	// When set, called just before each push timer event is processed.
+	onPushTimer func()
 }
 
 // IntentResolver is an interface used by lockTableWaiterImpl to push
@@ -138,12 +140,12 @@ func (w *lockTableWaiterImpl) WaitOn(
 	var timer *timeutil.Timer
 	var timerC <-chan time.Time
 	var timerWaitingState waitingState
+	// Used to enforce lock timeouts.
+	var lockDeadline time.Time
 
-	h := contentionEventHelper{
-		sp:      tracing.SpanFromContext(ctx),
-		onEvent: w.onContentionEvent,
-	}
-	defer h.emit()
+	tracer := newContentionEventTracer(tracing.SpanFromContext(ctx), w.clock)
+	// Make sure the contention time info is finalized when exiting the function.
+	defer tracer.notify(ctx, waitingState{kind: doneWaiting})
 
 	for {
 		select {
@@ -156,7 +158,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			timerC = nil
 			state := guard.CurState()
 			log.Eventf(ctx, "lock wait-queue event: %s", state)
-			h.emitAndInit(state)
+			tracer.notify(ctx, state)
 			switch state.kind {
 			case waitFor, waitForDistinguished:
 				if req.WaitPolicy == lock.WaitPolicy_Error {
@@ -170,7 +172,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 					if state.held {
 						err = w.pushLockTxn(ctx, req, state)
 					} else {
-						err = newWriteIntentErr(req, state)
+						err = newWriteIntentErr(req, state, reasonWaitPolicy)
 					}
 					if err != nil {
 						return err
@@ -213,9 +215,14 @@ func (w *lockTableWaiterImpl) WaitOn(
 					deadlockPush = false
 				}
 
-				// If the request doesn't want to perform a push for either
-				// reason, continue waiting.
-				if !livenessPush && !deadlockPush {
+				// For requests that have a lock timeout, push after the timeout to
+				// determine whether the lock is abandoned or whether its holder is
+				// still active.
+				timeoutPush := req.LockTimeout != 0
+
+				// If the request doesn't want to perform a delayed push for any
+				// reason, continue waiting without a timer.
+				if !livenessPush && !deadlockPush && !timeoutPush {
 					continue
 				}
 
@@ -230,6 +237,17 @@ func (w *lockTableWaiterImpl) WaitOn(
 				}
 				if deadlockPush {
 					delay = minDuration(delay, LockTableDeadlockDetectionPushDelay.Get(&w.st.SV))
+				}
+				if timeoutPush {
+					// Only reset the lock timeout deadline if this is the first time
+					// seeing this lock. Specifically, reset the deadline if this is a
+					// new key or if this is a new transaction for the same key.
+					oldState := timerWaitingState // empty on first pass
+					newLock := !oldState.key.Equal(state.key) || oldState.txn.ID != state.txn.ID
+					if newLock {
+						lockDeadline = w.clock.PhysicalTime().Add(req.LockTimeout)
+					}
+					delay = minDuration(delay, w.timeUntilDeadline(lockDeadline))
 				}
 
 				// However, if the pushee has the minimum priority or if the
@@ -272,6 +290,13 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// this completes, the request should stop waiting on this
 				// lockTableGuard, as it will no longer observe lock-table state
 				// transitions.
+				if req.LockTimeout != 0 {
+					return doWithTimeoutAndFallback(
+						ctx, req.LockTimeout,
+						func(ctx context.Context) *Error { return w.pushLockTxn(ctx, req, state) },
+						func(ctx context.Context) *Error { return w.pushLockTxnAfterTimeout(ctx, req, state) },
+					)
+				}
 				return w.pushLockTxn(ctx, req, state)
 
 			case waitSelf:
@@ -284,7 +309,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// The request attempted to wait in a lock wait-queue whose length was
 				// already equal to or exceeding the request's configured maximum. As a
 				// result, the request was rejected.
-				return newWriteIntentErr(req, state)
+				return newWriteIntentErr(req, state, reasonWaitQueueMaxLengthExceeded)
 
 			case doneWaiting:
 				// The request has waited for all conflicting locks to be released
@@ -320,40 +345,80 @@ func (w *lockTableWaiterImpl) WaitOn(
 			if timer != nil {
 				timer.Read = true
 			}
+			if w.onPushTimer != nil {
+				w.onPushTimer()
+			}
 
-			// If the request is conflicting with a held lock then it pushes its
-			// holder synchronously - there is no way it will be able to proceed
-			// until the lock's transaction undergoes a state transition (either
-			// completing or being pushed) and then updates the lock's state
-			// through intent resolution. The request has a dependency on the
-			// entire conflicting transaction.
-			//
-			// However, if the request is conflicting with another request (a
-			// reservation holder) then it pushes the reservation holder
-			// asynchronously while continuing to listen to state transition in
-			// the lockTable. This allows the request to cancel its push if the
-			// conflicting reservation exits the lock wait-queue without leaving
-			// behind a lock. In this case, the request has a dependency on the
-			// conflicting request but not necessarily the entire conflicting
-			// transaction.
-			if timerWaitingState.held {
-				err = w.pushLockTxn(ctx, req, timerWaitingState)
-			} else {
-				// It would be more natural to launch an async task for the push
-				// and continue listening on this goroutine for lockTable state
-				// transitions, but doing so is harder to test against. Instead,
-				// we launch an async task to listen to lockTable state and
-				// synchronously push. If the watcher goroutine detects a
-				// lockTable change, it cancels the context on the push.
+			// push with the option to wait on the conflict if active.
+			pushWait := func(ctx context.Context) *Error {
+				// If the request is conflicting with a held lock then it pushes its
+				// holder synchronously - there is no way it will be able to proceed
+				// until the lock's transaction undergoes a state transition (either
+				// completing or being pushed) and then updates the lock's state
+				// through intent resolution. The request has a dependency on the
+				// entire conflicting transaction.
+				//
+				// However, if the request is conflicting with another request (a
+				// reservation holder) then it pushes the reservation holder
+				// asynchronously while continuing to listen to state transition in
+				// the lockTable. This allows the request to cancel its push if the
+				// conflicting reservation exits the lock wait-queue without leaving
+				// behind a lock. In this case, the request has a dependency on the
+				// conflicting request but not necessarily the entire conflicting
+				// transaction.
+				if timerWaitingState.held {
+					return w.pushLockTxn(ctx, req, timerWaitingState)
+				}
+
+				// It would be more natural to launch an async task for the push and
+				// continue listening on this goroutine for lockTable state transitions,
+				// but doing so is harder to test against. Instead, we launch an async
+				// task to listen to lockTable state and synchronously push. If the
+				// watcher goroutine detects a lockTable change, it cancels the context
+				// on the push.
 				pushCtx, pushCancel := context.WithCancel(ctx)
-				go w.watchForNotifications(pushCtx, pushCancel, newStateC)
-				err = w.pushRequestTxn(pushCtx, req, timerWaitingState)
+				defer pushCancel()
+				go watchForNotifications(pushCtx, pushCancel, newStateC)
+				err := w.pushRequestTxn(pushCtx, req, timerWaitingState)
 				if errors.Is(pushCtx.Err(), context.Canceled) {
 					// Ignore the context canceled error. If this was for the
 					// parent context then we'll notice on the next select.
+					//
+					// NOTE: we look at pushCtx.Err() and not err to avoid the
+					// potential for bugs if context cancellation is not
+					// propagated correctly on some error paths.
 					err = nil
 				}
-				pushCancel()
+				return err
+			}
+
+			// push without the option to wait on the conflict if active.
+			pushNoWait := func(ctx context.Context) *Error {
+				// Resolve the conflict without waiting. If the conflict is a lock
+				// then push the lock holder's transaction using a PUSH_TOUCH to
+				// determine whether the lock is abandoned or whether its holder is
+				// still active. If the conflict is a reservation holder, raise an
+				// error immediately, we know the reservation holder is active.
+				if timerWaitingState.held {
+					return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState)
+				}
+				return newWriteIntentErr(req, timerWaitingState, reasonLockTimeout)
+			}
+
+			// We push with or without the option to wait on the conflict,
+			// depending on the state of the lock timeout, if one exists.
+			if !lockDeadline.IsZero() {
+				untilDeadline := w.timeUntilDeadline(lockDeadline)
+				if untilDeadline == 0 {
+					// Deadline already exceeded.
+					err = pushNoWait(ctx)
+				} else {
+					// Deadline not yet exceeded.
+					err = doWithTimeoutAndFallback(ctx, untilDeadline, pushWait, pushNoWait)
+				}
+			} else {
+				// No deadline.
+				err = pushWait(ctx)
 			}
 			if err != nil {
 				return err
@@ -368,35 +433,26 @@ func (w *lockTableWaiterImpl) WaitOn(
 	}
 }
 
-// WaitOnLock implements the lockTableWaiter interface.
-func (w *lockTableWaiterImpl) WaitOnLock(
-	ctx context.Context, req Request, intent *roachpb.Intent,
-) *Error {
-	sa, _, err := findAccessInSpans(intent.Key, req.LockSpans)
-	if err != nil {
-		return roachpb.NewError(err)
-	}
-	return w.pushLockTxn(ctx, req, waitingState{
-		kind:        waitFor,
-		txn:         &intent.Txn,
-		key:         intent.Key,
-		held:        true,
-		guardAccess: sa,
-	})
-}
-
 // pushLockTxn pushes the holder of the provided lock.
 //
-// The method blocks until the lock holder transaction experiences a state
-// transition such that it no longer conflicts with the pusher's request. The
-// method then synchronously updates the lock to trigger a state transition in
-// the lockTable that will free up the request to proceed. If the method returns
-// successfully then the caller can expect to have an updated waitingState.
+// If a Block wait policy is set on the request, method blocks until the lock
+// holder transaction experiences a state transition such that it no longer
+// conflicts with the pusher's request. The method then synchronously updates
+// the lock to trigger a state transition in the lockTable that will free up the
+// request to proceed. If the method returns successfully then the caller can
+// expect to have an updated waitingState.
+//
+// If an Error wait policy is set on the request, the method checks if the lock
+// holder transaction is abandoned. If so, the method synchronously updates the
+// lock to trigger a state transition in the lockTable that will free up the
+// request to proceed. If the method returns successfully then the caller can
+// expect to have an updated waitingState. Otherwise, the method returns with a
+// WriteIntentError and without blocking on the lock holder transaction.
 func (w *lockTableWaiterImpl) pushLockTxn(
 	ctx context.Context, req Request, ws waitingState,
 ) *Error {
 	if w.disableTxnPushing {
-		return newWriteIntentErr(req, ws)
+		return newWriteIntentErr(req, ws, reasonWaitPolicy)
 	}
 
 	// Construct the request header and determine which form of push to use.
@@ -438,7 +494,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// If pushing with an Error WaitPolicy and the push fails, then the lock
 		// holder is still active. Transform the error into a WriteIntentError.
 		if _, ok := err.GetDetail().(*roachpb.TransactionPushError); ok && req.WaitPolicy == lock.WaitPolicy_Error {
-			err = newWriteIntentErr(req, ws)
+			err = newWriteIntentErr(req, ws, reasonWaitPolicy)
 		}
 		return err
 	}
@@ -484,6 +540,22 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: ws.key})
 	opts := intentresolver.ResolveOptions{Poison: true}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
+}
+
+// pushLockTxnAfterTimeout is like pushLockTxn, but it sets the Error wait
+// policy on its request so that the request will not block on the lock holder
+// if it is still active. It is meant to be used after a lock timeout has been
+// elapsed, and returns a WriteIntentErrors with a LOCK_TIMEOUT reason if the
+// lock holder is not abandoned.
+func (w *lockTableWaiterImpl) pushLockTxnAfterTimeout(
+	ctx context.Context, req Request, ws waitingState,
+) *Error {
+	req.WaitPolicy = lock.WaitPolicy_Error
+	err := w.pushLockTxn(ctx, req, ws)
+	if _, ok := err.GetDetail().(*roachpb.WriteIntentError); ok {
+		err = newWriteIntentErr(req, ws, reasonLockTimeout)
+	}
+	return err
 }
 
 // pushRequestTxn pushes the owner of the provided request.
@@ -631,6 +703,21 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 	return h
 }
 
+// timeUntilDeadline computes the duration until the specified deadline is
+// reached. If the deadline has already been reached, the method returns 0. As
+// an optimization and as a convenience for tests, if the deadline is within a
+// threshold such that it does not make sense to begin an expensive operation
+// that is limited by the deadline, the method considers the deadline to have
+// already been reached.
+func (w *lockTableWaiterImpl) timeUntilDeadline(deadline time.Time) time.Duration {
+	dur := deadline.Sub(w.clock.PhysicalTime())
+	const soon = 250 * time.Microsecond
+	if dur <= soon {
+		return 0
+	}
+	return dur
+}
+
 // ResolveDeferredIntents implements the lockTableWaiter interface.
 func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 	ctx context.Context, deferredResolution []roachpb.LockUpdate,
@@ -643,12 +730,46 @@ func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 	return w.ir.ResolveIntents(ctx, deferredResolution, opts)
 }
 
+// doWithTimeoutAndFallback runs the withTimeout function with the specified
+// timeout. If the function completes before hitting the timeout, its result
+// is returned. Otherwise, the afterTimeout function is run without a timeout
+// and its result is returned.
+//
+// The function is called in a few locations to run a blocking push with a
+// timeout and then to fall back to a non-blocking push if that timeout is
+// reached. This pattern is used because on a timeout, we don't know whether a
+// blocking PUSH_TIMESTAMP / PUSH_ABORT push actually got to the point of
+// proving that the pushee was active and began waiting in its txnwait.Queue.
+// The push may have timed out before this point due to a slow network, slow
+// CPU, or for some other reason. But just like with WaitPolicy_Error, we don't
+// want to throw a WriteIntentError on abandoned locks. So on timeout, we issue
+// a PUSH_TOUCH request (like we do for WaitPolicy_Error) that is not subject to
+// the lock_timeout to check with certainty whether the conflict is active or
+// not, but without blocking if it happens to be active.
+func doWithTimeoutAndFallback(
+	ctx context.Context,
+	timeout time.Duration,
+	withTimeout, afterTimeout func(ctx context.Context) *Error,
+) *Error {
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, timeout) // nolint:context
+	defer timeoutCancel()
+	err := withTimeout(timeoutCtx)
+	if !errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+		// If the context deadline was not exceeded, return the result.
+		//
+		// NOTE: we look at timeoutCtx.Err() and not err to avoid the
+		// potential for bugs if context cancellation is not propagated
+		// correctly on some error paths.
+		return err
+	}
+	// Otherwise, run the fallback function without a timeout.
+	return afterTimeout(ctx)
+}
+
 // watchForNotifications selects on the provided channel and watches for any
 // updates. If the channel is ever notified, it calls the provided context
-// cancelation function and exits.
-func (w *lockTableWaiterImpl) watchForNotifications(
-	ctx context.Context, cancel func(), newStateC chan struct{},
-) {
+// cancellation function and exits.
+func watchForNotifications(ctx context.Context, cancel func(), newStateC chan struct{}) {
 	select {
 	case <-newStateC:
 		// Re-signal the channel.
@@ -718,78 +839,270 @@ func (c *txnCache) insertFrontLocked(txn *roachpb.Transaction) {
 	c.txns[0] = txn
 }
 
-// contentionEventHelper tracks and emits ContentionEvents.
-type contentionEventHelper struct {
+// tagContentionTracer is the tracing span tag that the *contentionEventTracer
+// lives under.
+const tagContentionTracer = "contention_tracer"
+
+// tagWaitKey is the tracing span tag indicating the key of the lock the request
+// is currently waiting on.
+const tagWaitKey = "lock_wait_key"
+
+// tagWaitStart is the tracing span tag indicating when the request started
+// waiting on the lock it's currently waiting on.
+const tagWaitStart = "lock_wait_start"
+
+// tagLockHolderTxn is the tracing span tag indicating the ID of the txn holding
+// the lock (or a reservation on the lock) that the request is currently waiting
+// on.
+const tagLockHolderTxn = "lock_holder_txn"
+
+// tagNumLocks is the tracing span tag indicating the number of locks that the
+// request has previously waited on. If the request is currently waiting on
+// a lock, that lock is included.
+const tagNumLocks = "lock_num"
+
+// tagWaited is the tracing span tag indicating the total time that the span has
+// waited on locks. If the span is currently waiting on a lock, the time it has
+// already waited on that lock is included.
+const tagWaited = "lock_wait"
+
+// contentionEventTracer adds lock contention information to the trace, in the
+// form of events and tags. The contentionEventTracer is associated with a
+// tracing span.
+type contentionEventTracer struct {
 	sp      *tracing.Span
 	onEvent func(event *roachpb.ContentionEvent) // may be nil
-
-	// Internal.
-	ev     *roachpb.ContentionEvent
-	tBegin time.Time
+	tag     contentionTag
 }
 
-// emit emits the open contention event, if any.
-func (h *contentionEventHelper) emit() {
-	if h.ev == nil {
+// contentionTag represents a lazy tracing span tag containing lock contention
+// information. The contentionTag is fed info from the parent
+// contentionEventTracer.
+type contentionTag struct {
+	clock *hlc.Clock
+	mu    struct {
+		syncutil.Mutex
+
+		// lockWait accumulates time waited for locks before the current waiting
+		// period (the current waiting period starts at waitStart).
+		lockWait time.Duration
+
+		// waiting is set if the contentionEventTracer has been notified of a lock
+		// that the underlying request is waiting on. The contentionEventTracer
+		// starts with waiting=false, and transitions to waiting=true on the first
+		// notify() call. It transitions back to waiting=false on terminal events,
+		// and can then continue transitioning back and forth (in case the request
+		// is sequenced again and encounters more locks).
+		waiting bool
+
+		// waitStart represents the timestamp when the request started waiting on
+		// locks in the current iteration of the contentionEventTracer. The wait
+		// time in previous iterations is accumulated in lockWait. When not waiting
+		// any more, timeutil.Since(waitStart) is added to lockWait.
+		waitStart time.Time
+
+		// curState is the current wait state, if any. It is overwritten every time
+		// the lock table notify()s the contentionEventTracer of a new state. It is
+		// not set if waiting is false.
+		curState waitingState
+
+		// numLocks counts the number of locks this contentionEventTracer has seen so
+		// far, including the one we're currently waiting on (if any).
+		numLocks int
+	}
+}
+
+// newContentionEventTracer creates a contentionEventTracer and associates it
+// with the provided tracing span. The contentionEventTracer will emit events to
+// the respective span and will also act as a lazy tag on the span.
+//
+// sp can be nil, in which case the tracer will not do anything.
+//
+// It is legal to create a tracer on a span that has previously had another
+// tracer. In that case, the new tracer will absorb the counters from the
+// previous one, and replace it as a span tag. However, it is illegal to create
+// a contentionEventTracer on a span that already has an "active"
+// contentionEventTracer; two tracers sharing a span concurrently doesn't work,
+// as they'd clobber each other. The expectation is that, if this span had a
+// tracer on it, that tracer should have been properly shutdown.
+func newContentionEventTracer(sp *tracing.Span, clock *hlc.Clock) *contentionEventTracer {
+	t := &contentionEventTracer{}
+	t.tag.clock = clock
+
+	// If the span had previously had contention info, we'll absorb the info into
+	// the new tracer/tag.
+	oldTag, ok := sp.GetLazyTag(tagContentionTracer)
+	if ok {
+		oldContentionTag := oldTag.(*contentionTag)
+		oldContentionTag.mu.Lock()
+		waiting := oldContentionTag.mu.waiting
+		if waiting {
+			oldContentionTag.mu.Unlock()
+			panic("span already contains contention tag in the waiting state")
+		}
+		t.tag.mu.numLocks = oldContentionTag.mu.numLocks
+		t.tag.mu.lockWait = oldContentionTag.mu.lockWait
+		oldContentionTag.mu.Unlock()
+	}
+
+	sp.SetLazyTag(tagContentionTracer, &t.tag)
+	t.sp = sp
+	return t
+}
+
+// SetOnContentionEvent registers a callback to be called before each event is
+// emitted. The callback may modify the event.
+func (h *contentionEventTracer) SetOnContentionEvent(f func(ev *roachpb.ContentionEvent)) {
+	h.onEvent = f
+}
+
+var _ tracing.LazyTag = &contentionTag{}
+
+// notify processes an event from the lock table.
+// compares the waitingState's active txn (if any) against the current
+// ContentionEvent (if any). If they match, we are continuing to handle the
+// same event and no action is taken. If they differ, the open event (if any) is
+// finalized and added to the Span, and a new event initialized from the inputs.
+func (h *contentionEventTracer) notify(ctx context.Context, s waitingState) {
+	if h.sp == nil {
+		// No span to manipulate - don't do any work.
 		return
 	}
-	h.ev.Duration = timeutil.Since(h.tBegin)
+
+	event := h.tag.notify(ctx, s)
+	if event != nil {
+		h.emit(event)
+	}
+}
+
+// emit records a ContentionEvent to the tracing span corresponding to the
+// current wait state (if any).
+func (h *contentionEventTracer) emit(event *roachpb.ContentionEvent) {
+	if event == nil {
+		return
+	}
 	if h.onEvent != nil {
 		// NB: this is intentionally above the call to RecordStructured so that
 		// this interceptor gets to mutate the event (used for test determinism).
-		h.onEvent(h.ev)
+		h.onEvent(event)
 	}
-	h.sp.RecordStructured(h.ev)
-	h.ev = nil
+	h.sp.RecordStructured(event)
 }
 
-// emitAndInit compares the waitingState's active txn (if any) against the current
-// ContentionEvent (if any). If the they match, we are continuing to handle the
-// same event and no action is taken. If they differ, the open event (if any) is
-// finalized and added to the Span, and a new event initialized from the inputs.
-func (h *contentionEventHelper) emitAndInit(s waitingState) {
-	if h.sp == nil {
-		// No span to attach payloads to - don't do any work.
-		//
-		// TODO(tbg): we could special case the noop span here too, but the plan is for
-		// nobody to use noop spans any more (trace.mode=background).
-		return
+func (tag *contentionTag) generateEventLocked() *roachpb.ContentionEvent {
+	if !tag.mu.waiting {
+		return nil
 	}
 
-	// If true, we want to emit the current event and possibly start a new one.
-	// Otherwise,
+	return &roachpb.ContentionEvent{
+		Key:      tag.mu.curState.key,
+		TxnMeta:  *tag.mu.curState.txn,
+		Duration: tag.clock.PhysicalTime().Sub(tag.mu.curState.lockWaitStart),
+	}
+}
+
+// See contentionEventTracer.notify.
+func (tag *contentionTag) notify(ctx context.Context, s waitingState) *roachpb.ContentionEvent {
+	tag.mu.Lock()
+	defer tag.mu.Unlock()
+
+	// Depending on the kind of notification, we check whether we're now waiting
+	// on a different key than we were previously. If we're now waiting on a
+	// different key, we'll return an event corresponding to the previous key.
 	switch s.kind {
-	case waitFor, waitForDistinguished, waitSelf:
+	case waitFor, waitForDistinguished, waitSelf, waitElsewhere:
 		// If we're tracking an event and see a different txn/key, the event is
 		// done and we initialize the new event tracking the new txn/key.
 		//
 		// NB: we're guaranteed to have `s.{txn,key}` populated here.
-		if h.ev != nil &&
-			(!h.ev.TxnMeta.ID.Equal(s.txn.ID) || !bytes.Equal(h.ev.Key, s.key)) {
-			h.emit() // h.ev is now nil
+		var differentLock bool
+		if !tag.mu.waiting {
+			differentLock = true
+		} else {
+			curLockHolder, curKey := tag.mu.curState.txn.ID, tag.mu.curState.key
+			differentLock = !curLockHolder.Equal(s.txn.ID) || !curKey.Equal(s.key)
 		}
-
-		if h.ev == nil {
-			h.ev = &roachpb.ContentionEvent{
-				Key:     s.key,
-				TxnMeta: *s.txn,
-			}
-			h.tBegin = timeutil.Now()
+		var res *roachpb.ContentionEvent
+		if differentLock {
+			res = tag.generateEventLocked()
 		}
-	case waitElsewhere, waitQueueMaxLengthExceeded, doneWaiting:
-		// If we have an event, emit it now and that's it - the case we're in
-		// does not give us a new transaction/key.
-		if h.ev != nil {
-			h.emit()
+		tag.mu.curState = s
+		tag.mu.waiting = true
+		if differentLock {
+			tag.mu.waitStart = tag.clock.PhysicalTime()
+			tag.mu.numLocks++
+			return res
 		}
+		return nil
+	case doneWaiting, waitQueueMaxLengthExceeded:
+		// There will be no more state updates; we're done waiting.
+		res := tag.generateEventLocked()
+		tag.mu.waiting = false
+		tag.mu.curState = waitingState{}
+		tag.mu.lockWait += tag.clock.PhysicalTime().Sub(tag.mu.waitStart)
+		// Accumulate the wait time.
+		tag.mu.waitStart = time.Time{}
+		return res
 	default:
-		panic("unhandled waitingState.kind")
+		kind := s.kind // escapes to the heap
+		log.Fatalf(ctx, "unhandled waitingState.kind: %v", kind)
 	}
+	panic("unreachable")
 }
 
-func newWriteIntentErr(req Request, ws waitingState) *Error {
+// Render implements the tracing.LazyTag interface.
+func (tag *contentionTag) Render() []attribute.KeyValue {
+	tag.mu.Lock()
+	defer tag.mu.Unlock()
+	tags := make([]attribute.KeyValue, 0, 4)
+	if tag.mu.numLocks > 0 {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagNumLocks,
+			Value: attribute.IntValue(tag.mu.numLocks),
+		})
+	}
+	// Compute how long the request has waited on locks by adding the prior wait
+	// time (if any) and the current wait time (if we're currently waiting).
+	lockWait := tag.mu.lockWait
+	if !tag.mu.waitStart.IsZero() {
+		lockWait += tag.clock.PhysicalTime().Sub(tag.mu.waitStart)
+	}
+	if lockWait != 0 {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagWaited,
+			Value: attribute.StringValue(string(humanizeutil.Duration(lockWait))),
+		})
+	}
+
+	if tag.mu.waiting {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagWaitKey,
+			Value: attribute.StringValue(tag.mu.curState.key.String()),
+		})
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagLockHolderTxn,
+			Value: attribute.StringValue(tag.mu.curState.txn.ID.String()),
+		})
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagWaitStart,
+			Value: attribute.StringValue(tag.mu.curState.lockWaitStart.Format("15:04:05.123")),
+		})
+	}
+	return tags
+}
+
+const (
+	reasonWaitPolicy                 = roachpb.WriteIntentError_REASON_WAIT_POLICY
+	reasonLockTimeout                = roachpb.WriteIntentError_REASON_LOCK_TIMEOUT
+	reasonWaitQueueMaxLengthExceeded = roachpb.WriteIntentError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED
+)
+
+func newWriteIntentErr(
+	req Request, ws waitingState, reason roachpb.WriteIntentError_Reason,
+) *Error {
 	err := roachpb.NewError(&roachpb.WriteIntentError{
 		Intents: []roachpb.Intent{roachpb.MakeIntent(ws.txn, ws.key)},
+		Reason:  reason,
 	})
 	// TODO(nvanbenschoten): setting an error index can assist the KV client in
 	// understanding which request hit an error. This is not necessary, but can

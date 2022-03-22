@@ -351,7 +351,7 @@ func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
 	if ob.flags.Redact.Has(RedactVolatile) {
 		delta = 10 * time.Microsecond
 	}
-	ob.AddTopLevelField("planning time", humanizeutil.Duration(delta))
+	ob.AddTopLevelField("planning time", string(humanizeutil.Duration(delta)))
 }
 
 // AddExecutionTime adds a top-level execution time field. Cannot be called
@@ -360,7 +360,7 @@ func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
 	if ob.flags.Redact.Has(RedactVolatile) {
 		delta = 100 * time.Microsecond
 	}
-	ob.AddTopLevelField("execution time", humanizeutil.Duration(delta))
+	ob.AddTopLevelField("execution time", string(humanizeutil.Duration(delta)))
 }
 
 // AddKVReadStats adds a top-level field for the bytes/rows read from KV.
@@ -372,7 +372,8 @@ func (ob *OutputBuilder) AddKVReadStats(rows, bytes int64) {
 
 // AddKVTime adds a top-level field for the cumulative time spent in KV.
 func (ob *OutputBuilder) AddKVTime(kvTime time.Duration) {
-	ob.AddRedactableTopLevelField(RedactVolatile, "cumulative time spent in KV", humanizeutil.Duration(kvTime))
+	ob.AddRedactableTopLevelField(
+		RedactVolatile, "cumulative time spent in KV", string(humanizeutil.Duration(kvTime)))
 }
 
 // AddContentionTime adds a top-level field for the cumulative contention time.
@@ -380,14 +381,14 @@ func (ob *OutputBuilder) AddContentionTime(contentionTime time.Duration) {
 	ob.AddRedactableTopLevelField(
 		RedactVolatile,
 		"cumulative time spent due to contention",
-		humanizeutil.Duration(contentionTime),
+		string(humanizeutil.Duration(contentionTime)),
 	)
 }
 
 // AddMaxMemUsage adds a top-level field for the memory used by the query.
 func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
 	ob.AddRedactableTopLevelField(
-		RedactVolatile, "maximum memory usage", humanizeutil.IBytes(bytes),
+		RedactVolatile, "maximum memory usage", string(humanizeutil.IBytes(bytes)),
 	)
 }
 
@@ -409,7 +410,7 @@ func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
 func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 	if !ob.flags.Redact.Has(RedactVolatile) && bytes > 0 {
 		ob.AddTopLevelField("max sql temp disk usage",
-			humanizeutil.IBytes(bytes))
+			string(humanizeutil.IBytes(bytes)))
 	}
 }
 

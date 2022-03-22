@@ -1,0 +1,312 @@
+setup
+CREATE TYPE greeting AS ENUM('hello', 'hi');
+CREATE TYPE salutation AS ENUM('bonjour', 'hi');
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  g greeting AS ('hi'::greeting) STORED,
+  s salutation AS ('hi'::salutation) VIRTUAL,
+  other greeting[],
+  name STRING NOT NULL,
+  CONSTRAINT mycheck CHECK (s::STRING = name),
+  INDEX partial (g) WHERE (g::STRING = 'hi')
+);
+----
+
+decompose
+greeting
+----
+BackReferencedIDs:
+  - 108
+ElementState:
+- EnumType:
+    arrayTypeId: 105
+    typeId: 104
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 104
+    name: greeting
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 104
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 512
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 104
+    parentSchemaId: 101
+  Status: PUBLIC
+
+decompose
+tbl
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 108
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 108
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    tableId: 108
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    tableId: 108
+  Status: PUBLIC
+- Column:
+    columnId: 3
+    tableId: 108
+  Status: PUBLIC
+- Column:
+    columnId: 4
+    tableId: 108
+  Status: PUBLIC
+- Column:
+    columnId: 5
+    tableId: 108
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      - 4
+      - 5
+      tableId: 108
+  Status: PUBLIC
+- SecondaryIndex:
+    embeddedIndex:
+      indexId: 2
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      keySuffixColumnIds:
+      - 1
+      tableId: 108
+  Status: PUBLIC
+- CheckConstraint:
+    columnIds:
+    - 3
+    - 5
+    constraintId: 2
+    embeddedExpr:
+      expr: s::STRING = name
+    tableId: 108
+  Status: PUBLIC
+- TableComment:
+    comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: id
+    tableId: 108
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: g
+    tableId: 108
+  Status: PUBLIC
+- ColumnName:
+    columnId: 3
+    name: s
+    tableId: 108
+  Status: PUBLIC
+- ColumnName:
+    columnId: 4
+    name: other
+    tableId: 108
+  Status: PUBLIC
+- ColumnName:
+    columnId: 5
+    name: name
+    tableId: 108
+  Status: PUBLIC
+- ColumnType:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 108
+  Status: PUBLIC
+- ColumnType:
+    columnId: 2
+    computeExpr:
+      expr: x'80':::@100104
+      usesTypeIds:
+      - 104
+      - 105
+    embeddedTypeT:
+      closedTypeIds:
+      - 104
+      - 105
+      type:
+        family: EnumFamily
+        oid: 100104
+        udtMetadata:
+          arrayTypeOid: 100105
+    isNullable: true
+    tableId: 108
+  Status: PUBLIC
+- ColumnType:
+    columnId: 3
+    computeExpr:
+      expr: x'80':::@100106
+      usesTypeIds:
+      - 106
+      - 107
+    embeddedTypeT:
+      closedTypeIds:
+      - 106
+      - 107
+      type:
+        family: EnumFamily
+        oid: 100106
+        udtMetadata:
+          arrayTypeOid: 100107
+    isNullable: true
+    isVirtual: true
+    tableId: 108
+  Status: PUBLIC
+- ColumnType:
+    columnId: 4
+    embeddedTypeT:
+      closedTypeIds:
+      - 104
+      - 105
+      type:
+        arrayContents:
+          family: EnumFamily
+          oid: 100104
+          udtMetadata:
+            arrayTypeOid: 100105
+        arrayElemType: EnumFamily
+        family: ArrayFamily
+        oid: 100105
+    isNullable: true
+    tableId: 108
+  Status: PUBLIC
+- ColumnType:
+    columnId: 5
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 25
+    tableId: 108
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 3
+    comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 4
+    comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 5
+    comment: __placeholder_comment__
+    tableId: 108
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: tbl_pkey
+    tableId: 108
+  Status: PUBLIC
+- IndexName:
+    indexId: 2
+    name: partial
+    tableId: 108
+  Status: PUBLIC
+- SecondaryIndexPartial:
+    embeddedExpr:
+      expr: g::STRING = 'hi':::STRING
+    indexId: 2
+    tableId: 108
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 1
+    tableId: 108
+  Status: PUBLIC
+- IndexComment:
+    comment: __placeholder_comment__
+    indexId: 2
+    tableId: 108
+  Status: PUBLIC
+- ConstraintName:
+    constraintId: 2
+    name: mycheck
+    tableId: 108
+  Status: PUBLIC
+- ConstraintComment:
+    comment: __placeholder_comment__
+    constraintId: 2
+    tableId: 108
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 108
+    name: tbl
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 108
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 108
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 108
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 108
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 108
+    parentSchemaId: 101
+  Status: PUBLIC

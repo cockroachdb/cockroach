@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,8 +24,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -143,7 +146,7 @@ func TestAddReplicaViaLearner(t *testing.T) {
 	blockUntilSnapshotCh := make(chan struct{})
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
-	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
 		close(blockUntilSnapshotCh)
 		select {
 		case <-blockSnapshotsCh:
@@ -310,11 +313,12 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t) // Takes 90s.
+	skip.UnderRace(t)
 
 	runTest := func(t *testing.T, replicaType roachpb.ReplicaType) {
 		var rejectSnapshots int64
 		knobs, ltk := makeReplicationTestKnobs()
-		ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
+		ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
 			if atomic.LoadInt64(&rejectSnapshots) > 0 {
 				return errors.New(`nope`)
 			}
@@ -356,15 +360,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	})
 }
 
-// TestNonVoterCatchesUpViaRaftSnapshotQueue ensures that a non-voting replica
-// in need of a snapshot will receive one via the raft snapshot queue. This is
-// also meant to test that a non-voting replica that is initialized via an
-// `INITIAL` snapshot during its addition is not ignored by the raft snapshot
-// queue for future snapshots.
-func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
+func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	skip.UnderShort(t, "this test sleeps for a few seconds")
 
 	var skipInitialSnapshot int64
@@ -385,6 +381,7 @@ func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
 	// Disable the raft snapshot queue, we will manually queue a replica into it
 	// below.
 	ltk.storeKnobs.DisableRaftSnapshotQueue = true
+
 	tc := testcluster.StartTestCluster(
 		t, 2, base.TestClusterArgs{
 			ServerArgs:      base.TestServerArgs{Knobs: knobs},
@@ -404,6 +401,8 @@ func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
 		return err
 	})
 
+	// Wait until we remove the lock that prevents the raft snapshot queue from
+	// sending this replica a snapshot.
 	select {
 	case <-nonVoterSnapLockRemoved:
 	case <-time.After(testutils.DefaultSucceedsSoonDuration):
@@ -418,17 +417,96 @@ func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
 	require.NotNil(t, leaseholderRepl)
 
 	time.Sleep(kvserver.RaftLogQueuePendingSnapshotGracePeriod)
-	// Manually enqueue the leaseholder replica into its store's raft snapshot
-	// queue. We expect it to pick up on the fact that the non-voter on its range
-	// needs a snapshot.
-	recording, pErr, err := leaseholderStore.ManuallyEnqueue(
-		ctx, "raftsnapshot", leaseholderRepl, false, /* skipShouldQueue */
-	)
-	require.NoError(t, pErr)
-	require.NoError(t, err)
-	trace := recording.String()
-	require.Regexp(t, "streamed VIA_SNAPSHOT_QUEUE snapshot.*to.*NON_VOTER", trace)
+
+	if drainReceivingNode {
+		// Draining nodes shouldn't reject raft snapshots, so this should have no
+		// effect on the outcome of this test.
+		const drainingServerIdx = 1
+		const drainingNodeID = drainingServerIdx + 1
+		client, err := tc.GetAdminClient(ctx, t, drainingServerIdx)
+		require.NoError(t, err)
+		drain(ctx, t, client, drainingNodeID)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		// Manually enqueue the leaseholder replica into its store's raft snapshot
+		// queue. We expect it to pick up on the fact that the non-voter on its range
+		// needs a snapshot.
+		recording, pErr, err := leaseholderStore.ManuallyEnqueue(
+			ctx, "raftsnapshot", leaseholderRepl, false, /* skipShouldQueue */
+		)
+		if pErr != nil {
+			return pErr
+		}
+		if err != nil {
+			return err
+		}
+		matched, err := regexp.MatchString("streamed VIA_SNAPSHOT_QUEUE snapshot.*to.*NON_VOTER", recording.String())
+		if err != nil {
+			return err
+		}
+		if !matched {
+			return errors.Errorf("the raft snapshot queue did not send a snapshot to the non-voter")
+		}
+		return nil
+	})
 	require.NoError(t, g.Wait())
+}
+
+func drain(ctx context.Context, t *testing.T, client serverpb.AdminClient, drainingNodeID int) {
+	stream, err := client.Drain(ctx, &serverpb.DrainRequest{
+		NodeId:  strconv.Itoa(drainingNodeID),
+		DoDrain: true,
+	})
+	require.NoError(t, err)
+
+	// Wait until the draining node acknowledges that it's draining.
+	_, err = stream.Recv()
+	require.NoError(t, err)
+}
+
+// TestSnapshotsToDrainingNodes tests that rebalancing snapshots to draining
+// receivers are rejected, but Raft snapshots aren't.
+func TestSnapshotsToDrainingNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("rebalancing snapshots", func(t *testing.T) {
+		ctx := context.Background()
+
+		// We set up a 2 node test cluster with the second node marked draining.
+		const drainingServerIdx = 1
+		const drainingNodeID = drainingServerIdx + 1
+		tc := testcluster.StartTestCluster(
+			t, 2, base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+			},
+		)
+		defer tc.Stopper().Stop(ctx)
+		client, err := tc.GetAdminClient(ctx, t, drainingServerIdx)
+		require.NoError(t, err)
+		drain(ctx, t, client, drainingNodeID)
+
+		// Now, we try to add a replica to it, we expect that to fail.
+		scratchKey := tc.ScratchRange(t)
+		_, err = tc.AddVoters(scratchKey, makeReplicationTargets(drainingNodeID)...)
+		require.Regexp(t, "store is draining", err)
+	})
+
+	t.Run("raft snapshots", func(t *testing.T) {
+		testRaftSnapshotsToNonVoters(t, true /* drainReceivingNode */)
+	})
+}
+
+// TestNonVoterCatchesUpViaRaftSnapshotQueue ensures that a non-voting replica
+// in need of a snapshot will receive one via the raft snapshot queue. This is
+// also meant to test that a non-voting replica that is initialized via an
+// `INITIAL` snapshot during its addition is not ignored by the raft snapshot
+// queue for future snapshots.
+func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testRaftSnapshotsToNonVoters(t, false /* drainReceivingNode */)
 }
 
 func TestSplitWithLearnerOrJointConfig(t *testing.T) {
@@ -593,7 +671,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.DisableRaftSnapshotQueue = true
-	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
 		select {
 		case <-blockSnapshotsCh:
 		case <-time.After(10 * time.Second):
@@ -655,7 +733,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	blockUntilSnapshotCh := make(chan struct{}, 2)
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
-	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
 		blockUntilSnapshotCh <- struct{}{}
 		<-blockSnapshotsCh
 		return nil
@@ -730,7 +808,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	// In this case we'll get a snapshot error from the replicate queue which
 	// will retry the up-replication with a new descriptor and succeed.
 	ltk.storeKnobs.DisableEagerReplicaRemoval = true
-	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
+	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
 		if atomic.LoadInt64(&skipReceiveSnapshotKnobAtomic) > 0 {
 			return nil
 		}
@@ -764,6 +842,8 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 				return err
 			}
 			if !strings.Contains(processErr.Error(), `descriptor changed`) {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf(`expected "descriptor changed" error got: %+v`, processErr)
 			}
 			formattedTrace := trace.String()
@@ -823,8 +903,8 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 	}
 }
 
-// TestJointConfigLease verifies that incoming and outgoing voters can't have the
-// lease transferred to them.
+// TestJointConfigLease verifies that incoming voters can have the
+// lease transferred to them, and outgoing voters cannot.
 func TestJointConfigLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -843,14 +923,14 @@ func TestJointConfigLease(t *testing.T) {
 	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
 
 	err := tc.TransferRangeLease(desc, tc.Target(1))
-	exp := `replica cannot hold lease`
-	require.True(t, testutils.IsError(err, exp), err)
+	require.NoError(t, err)
 
 	// NB: we don't have to transition out of the previous joint config first
 	// because this is done automatically by ChangeReplicas before it does what
 	// it's asked to do.
-	desc = tc.RemoveVotersOrFatal(t, k, tc.Target(1))
-	err = tc.TransferRangeLease(desc, tc.Target(1))
+	desc = tc.RemoveVotersOrFatal(t, k, tc.Target(0))
+	err = tc.TransferRangeLease(desc, tc.Target(0))
+	exp := `replica cannot hold lease`
 	require.True(t, testutils.IsError(err, exp), err)
 }
 
@@ -870,10 +950,10 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	tr := tc.Server(0).Tracer().(*tracing.Tracer)
+	tr := tc.Server(0).TracerI().(*tracing.Tracer)
 	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s'`,
 		testingTargetDuration))
-	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1`, testingCloseFraction)
+	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s'`, testingSideTransportInterval))
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
@@ -884,7 +964,7 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 
 	check := func() {
 		ts := tc.Server(0).Clock().Now()
-		txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0)
+		txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0, int32(tc.Server(0).SQLInstanceID()))
 		req := roachpb.BatchRequest{Header: roachpb.Header{
 			RangeID:   scratchDesc.RangeID,
 			Timestamp: ts,
@@ -898,15 +978,17 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			// Trace the Send call so we can verify that it hit the exact `learner
 			// replicas cannot serve follower reads` branch that we're trying to test.
-			sendCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "manual read request")
-			defer cancel()
+			sendCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "manual read request")
+			defer getRecAndFinish()
 			_, pErr := repl.Send(sendCtx, req)
 			err := pErr.GoError()
 			if !testutils.IsError(err, `not lease holder`) {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf(`expected "not lease holder" error got: %+v`, err)
 			}
 			const msg = `cannot serve follower reads`
-			formattedTrace := collect().String()
+			formattedTrace := getRecAndFinish().String()
 			if !strings.Contains(formattedTrace, msg) {
 				return errors.Errorf("expected a trace with `%s` got:\n%s", msg, formattedTrace)
 			}
@@ -958,7 +1040,11 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 
 	check := func(voterTargets []roachpb.ReplicationTarget) {
 		require.NoError(t, tc.Server(0).DB().AdminRelocateRange(
-			ctx, scratchStartKey, voterTargets, []roachpb.ReplicationTarget{},
+			ctx,
+			scratchStartKey,
+			voterTargets,
+			[]roachpb.ReplicationTarget{},
+			true, /* transferLeaseToFirstVoter */
 		))
 		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 		voters := desc.Replicas().VoterDescriptors()
@@ -1172,7 +1258,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
 
 		// Repeat the game, except now we start with two replicas and we're
-		// giving the RHS a VOTER_OUTGOING.
+		// giving the RHS a VOTER_DEMOTING_LEARNER.
 		desc = splitAndUnsplit()
 		ltk.withStopAfterJointConfig(func() {
 			descRight := tc.RemoveVotersOrFatal(t, desc.EndKey.AsRawKey(), tc.Target(1))

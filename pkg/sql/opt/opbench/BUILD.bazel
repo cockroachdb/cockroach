@@ -24,6 +24,7 @@ go_test(
     deps = [
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils/opttester",
+        "//pkg/testutils",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],

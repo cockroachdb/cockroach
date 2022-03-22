@@ -42,7 +42,19 @@ const (
 	USAGE      Kind = 9
 	ZONECONFIG Kind = 10
 	CONNECT    Kind = 11
+	RULE       Kind = 12
 )
+
+// Privilege represents a privilege parsed from an Access Privilege Inquiry
+// Function's privilege string argument.
+type Privilege struct {
+	Kind Kind
+	// Each privilege Kind has an optional "grant option" flag associated with
+	// it. A role can only grant a privilege on an object to others if it is the
+	// owner of the object or if it itself holds that privilege WITH GRANT OPTION
+	// on the object. This replaces the CockroachDB-specific GRANT privilege.
+	GrantOption bool
+}
 
 // ObjectType represents objects that can have privileges.
 type ObjectType string
@@ -65,7 +77,7 @@ var (
 	AllPrivileges    = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
 	ReadData         = List{GRANT, SELECT}
 	ReadWriteData    = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
-	DBPrivileges     = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	DBPrivileges     = List{ALL, CONNECT, CREATE, DROP, GRANT, ZONECONFIG}
 	TablePrivileges  = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
 	SchemaPrivileges = List{ALL, GRANT, CREATE, USAGE}
 	TypePrivileges   = List{ALL, GRANT, USAGE}
@@ -76,9 +88,14 @@ func (k Kind) Mask() uint32 {
 	return 1 << k
 }
 
+// IsSetIn returns true if this privilege kind is set in the supplied bitfield.
+func (k Kind) IsSetIn(bits uint32) bool {
+	return bits&k.Mask() != 0
+}
+
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
-	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT,
+	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE,
 }
 
 // ByName is a map of string -> kind value.
@@ -94,6 +111,7 @@ var ByName = map[string]Kind{
 	"UPDATE":     UPDATE,
 	"ZONECONFIG": ZONECONFIG,
 	"USAGE":      USAGE,
+	"RULE":       RULE,
 }
 
 // List is a list of privileges.
@@ -189,6 +207,26 @@ func ListFromBitField(m uint32, objectType ObjectType) List {
 	return ret
 }
 
+// PrivilegesFromBitFields takes a bitfield of privilege kinds, a bitfield of grant options, and an ObjectType
+// returns a List. It is ordered in increasing value of privilege.Kind.
+func PrivilegesFromBitFields(
+	kindBits uint32, grantOptionBits uint32, objectType ObjectType,
+) []Privilege {
+	var ret []Privilege
+
+	kinds := GetValidPrivilegesForObject(objectType)
+
+	for _, kind := range kinds {
+		if mask := kind.Mask(); kindBits&mask != 0 {
+			ret = append(ret, Privilege{
+				Kind:        kind,
+				GrantOption: grantOptionBits&mask != 0,
+			})
+		}
+	}
+	return ret
+}
+
 // ListFromStrings takes a list of strings and attempts to build a list of Kind.
 // We convert each string to uppercase and search for it in the ByName map.
 // If an entry is not found in ByName, an error is returned.
@@ -237,35 +275,46 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 	}
 }
 
+// privToACL is a map of privilege -> ACL character
+var privToACL = map[Kind]string{
+	CREATE:  "C",
+	SELECT:  "r",
+	INSERT:  "a",
+	DELETE:  "d",
+	UPDATE:  "w",
+	USAGE:   "U",
+	CONNECT: "c",
+}
+
+// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CUacdrw
+var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, SELECT, UPDATE}
+
 // ListToACL converts a list of privileges to a list of Postgres
 // ACL items.
 // See: https://www.postgresql.org/docs/13/ddl-priv.html#PRIVILEGE-ABBREVS-TABLE
 //     for privileges and their ACL abbreviations.
-func (pl List) ListToACL(objectType ObjectType) string {
+func (pl List) ListToACL(grantOptions List, objectType ObjectType) string {
 	privileges := pl
 	// If ALL is present, explode ALL into the underlying privileges.
 	if pl.Contains(ALL) {
 		privileges = GetValidPrivilegesForObject(objectType)
-	}
-	chars := make([]string, len(privileges))
-	for _, privilege := range privileges {
-		switch privilege {
-		case CREATE:
-			chars = append(chars, "C")
-		case SELECT:
-			chars = append(chars, "r")
-		case INSERT:
-			chars = append(chars, "a")
-		case DELETE:
-			chars = append(chars, "d")
-		case UPDATE:
-			chars = append(chars, "w")
-		case USAGE:
-			chars = append(chars, "U")
-		case CONNECT:
-			chars = append(chars, "c")
+		if grantOptions.Contains(ALL) {
+			grantOptions = GetValidPrivilegesForObject(objectType)
 		}
 	}
-	sort.Strings(chars)
+	chars := make([]string, len(privileges))
+	for _, privilege := range orderedPrivs {
+		if _, ok := privToACL[privilege]; !ok {
+			panic(errors.AssertionFailedf("unknown privilege type %s", privilege.String()))
+		}
+		if privileges.Contains(privilege) {
+			chars = append(chars, privToACL[privilege])
+		}
+		if grantOptions.Contains(privilege) {
+			chars = append(chars, "*")
+		}
+	}
+
 	return strings.Join(chars, "")
+
 }

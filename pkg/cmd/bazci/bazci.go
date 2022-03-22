@@ -10,18 +10,26 @@
 package main
 
 import (
+	"bytes"
+	"encoding/xml"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
 
+	"github.com/alessio/shellescape"
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
 const (
-	buildSubcmd = "build"
-	testSubcmd  = "test"
+	buildSubcmd         = "build"
+	runSubcmd           = "run"
+	testSubcmd          = "test"
+	mergeTestXMLsSubcmd = "merge-test-xmls"
+	mungeTestXMLSubcmd  = "munge-test-xml"
 )
 
 var (
@@ -58,7 +66,7 @@ func init() {
 	rootCmd.Flags().StringSliceVar(
 		&configs,
 		"config",
-		[]string{},
+		[]string{"ci"},
 		"list of build configs to apply to bazel calls")
 }
 
@@ -86,14 +94,15 @@ var errUsage = errors.New("At least 2 arguments required (e.g. `bazci build TARG
 // `argsLenAtDash`, should be the value returned by `cobra.Command.ArgsLenAtDash()`.
 func parseArgs(args []string, argsLenAtDash int) (*parsedArgs, error) {
 	// The minimum number of arguments needed is 2: the first is the
-	// subcommand to run (`build` or `test`), and the second is the
-	// first label (e.g. `//pkg/cmd/cockroach-short`). An arbitrary
-	// number of additional labels can follow.
+	// subcommand to run, and the second is the first label (e.g.
+	// `//pkg/cmd/cockroach-short`). An arbitrary number of additional
+	// labels can follow. If the subcommand is munge-test-xml, the list of
+	// labels is instead taken as a a list of XML files to munge.
 	if len(args) < 2 {
 		return nil, errUsage
 	}
-	if args[0] != buildSubcmd && args[0] != testSubcmd {
-		return nil, errors.Newf("First argument must be `build` or `test`; got %v", args[0])
+	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
+		return nil, errors.Newf("First argument must be `build`, `run`, `test`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
 	}
 	var splitLoc int
 	if argsLenAtDash < 0 {
@@ -130,11 +139,21 @@ type buildInfo struct {
 	// into their component tests and all put in this list, so this may be
 	// considerably longer than the argument list.
 	tests []string
+	// Expanded set of go_transition_test targets to be run. The map is the full test target
+	// name -> the location of the corresponding `bazel-testlogs` directory for this test.
+	transitionTests map[string]string
 }
 
 func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
 	if subcmd != "query" {
-		arg = append(configArgList(), arg...)
+		var configArgs []string
+		// The `test` config is implied in this case.
+		if subcmd == "cquery" {
+			configArgs = configArgList("test")
+		} else {
+			configArgs = configArgList()
+		}
+		arg = append(configArgs, arg...)
 		arg = append(arg, "-c", compilationMode)
 	}
 	arg = append([]string{subcmd}, arg...)
@@ -147,6 +166,9 @@ func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
 }
 
 func getBuildInfo(args parsedArgs) (buildInfo, error) {
+	if args.subcmd != buildSubcmd && args.subcmd != runSubcmd && args.subcmd != testSubcmd {
+		return buildInfo{}, errors.Newf("Unexpected subcommand %s. This is a bug!", args.subcmd)
+	}
 	binDir, err := runBazelReturningStdout("info", "bazel-bin")
 	if err != nil {
 		return buildInfo{}, err
@@ -157,8 +179,9 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 	}
 
 	ret := buildInfo{
-		binDir:      binDir,
-		testlogsDir: testlogsDir,
+		binDir:          binDir,
+		testlogsDir:     testlogsDir,
+		transitionTests: make(map[string]string),
 	}
 
 	for _, target := range args.targets {
@@ -177,12 +200,35 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 		switch targetKind {
 		case "cmake":
 			ret.cmakeTargets = append(ret.cmakeTargets, fullTarget)
-		case "genrule":
+		case "genrule", "batch_gen":
 			ret.genruleTargets = append(ret.genruleTargets, fullTarget)
 		case "go_binary":
 			ret.goBinaries = append(ret.goBinaries, fullTarget)
 		case "go_test":
 			ret.tests = append(ret.tests, fullTarget)
+		case "go_transition_test":
+			// These tests have their own special testlogs directory.
+			// We can find it by finding the location of the binary
+			// and munging it a bit.
+			args := []string{fullTarget, "-c", compilationMode, "--run_under=realpath"}
+			args = append(args, configArgList()...)
+			runOutput, err := runBazelReturningStdout("run", args...)
+			if err != nil {
+				return buildInfo{}, err
+			}
+			var binLocation string
+			for _, line := range strings.Split(runOutput, "\n") {
+				if strings.HasPrefix(line, "/") {
+					// NB: We want the last line in the output that starts with /.
+					binLocation = strings.TrimSpace(line)
+				}
+			}
+			componentsBinLocation := strings.Split(binLocation, "/")
+			componentsTestlogs := strings.Split(testlogsDir, "/")
+			// The second to last component will be the one we need
+			// to replace (it's the output directory for the configuration).
+			componentsTestlogs[len(componentsTestlogs)-2] = componentsBinLocation[len(componentsTestlogs)-2]
+			ret.transitionTests[fullTarget] = strings.Join(componentsTestlogs, "/")
 		case "test_suite":
 			// Expand the list of tests from the test suite with another query.
 			allTests, err := runBazelReturningStdout("query", "tests("+fullTarget+")")
@@ -204,6 +250,15 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Special case: munge-test-xml/merge-test-xmls don't require running Bazel at all.
+	// Perform the munge then exit immediately.
+	if parsedArgs.subcmd == mungeTestXMLSubcmd {
+		return mungeTestXMLs(*parsedArgs)
+	}
+	if parsedArgs.subcmd == mergeTestXMLsSubcmd {
+		return mergeTestXMLs(*parsedArgs)
+	}
+
 	info, err := getBuildInfo(*parsedArgs)
 	if err != nil {
 		return err
@@ -218,7 +273,7 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 		processArgs = append(processArgs, configArgList()...)
 		processArgs = append(processArgs, "-c", compilationMode)
 		processArgs = append(processArgs, parsedArgs.additional...)
-		fmt.Println("running bazel w/ args: ", processArgs)
+		fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(processArgs))
 		cmd := exec.Command("bazel", processArgs...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -233,10 +288,57 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 	return makeWatcher(completion, info).Watch()
 }
 
-func configArgList() []string {
+func mungeTestXMLs(args parsedArgs) error {
+	for _, file := range args.targets {
+		contents, err := ioutil.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		var buf bytes.Buffer
+		err = bazelutil.MungeTestXML(contents, &buf)
+		if err != nil {
+			return err
+		}
+		err = ioutil.WriteFile(file, buf.Bytes(), 0666)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func mergeTestXMLs(args parsedArgs) error {
+	var xmlsToMerge []bazelutil.TestSuites
+	for _, file := range args.targets {
+		contents, err := ioutil.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		var testSuites bazelutil.TestSuites
+		err = xml.Unmarshal(contents, &testSuites)
+		if err != nil {
+			return err
+		}
+		xmlsToMerge = append(xmlsToMerge, testSuites)
+	}
+	return bazelutil.MergeTestXMLs(xmlsToMerge, os.Stdout)
+}
+
+// Return a list of the form --config=$CONFIG for every $CONFIG in configs,
+// with the exception of every config in `exceptions`.
+func configArgList(exceptions ...string) []string {
 	ret := []string{}
 	for _, config := range configs {
-		ret = append(ret, "--config="+config)
+		keep := true
+		for _, exception := range exceptions {
+			if config == exception {
+				keep = false
+				break
+			}
+		}
+		if keep {
+			ret = append(ret, "--config="+config)
+		}
 	}
 	return ret
 }

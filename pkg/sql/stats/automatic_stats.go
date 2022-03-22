@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,6 +41,7 @@ const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	AutoStatsClusterSettingName,
 	"automatic statistics collection mode",
 	true,
@@ -47,6 +50,7 @@ var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 // MultiColumnStatisticsClusterMode controls the cluster setting for enabling
 // automatic collection of multi-column statistics.
 var MultiColumnStatisticsClusterMode = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"sql.stats.multi_column_collection.enabled",
 	"multi-column statistics collection mode",
 	true,
@@ -57,6 +61,7 @@ var MultiColumnStatisticsClusterMode = settings.RegisterBoolSetting(
 // statistics (in high load scenarios). This value can be tuned to trade off
 // the runtime vs performance impact of automatic stats.
 var AutomaticStatisticsMaxIdleTime = settings.RegisterFloatSetting(
+	settings.TenantWritable,
 	"sql.stats.automatic_collection.max_fraction_idle",
 	"maximum fraction of time that automatic statistics sampler processors are idle",
 	0.9,
@@ -75,6 +80,7 @@ var AutomaticStatisticsMaxIdleTime = settings.RegisterFloatSetting(
 // AutomaticStatisticsMinStaleRows.
 var AutomaticStatisticsFractionStaleRows = func() *settings.FloatSetting {
 	s := settings.RegisterFloatSetting(
+		settings.TenantWritable,
 		"sql.stats.automatic_collection.fraction_stale_rows",
 		"target fraction of stale rows per table that will trigger a statistics refresh",
 		0.2,
@@ -89,6 +95,7 @@ var AutomaticStatisticsFractionStaleRows = func() *settings.FloatSetting {
 // addition to the fraction AutomaticStatisticsFractionStaleRows.
 var AutomaticStatisticsMinStaleRows = func() *settings.IntSetting {
 	s := settings.RegisterIntSetting(
+		settings.TenantWritable,
 		"sql.stats.automatic_collection.min_stale_rows",
 		"target minimum number of stale rows per table that will trigger a statistics refresh",
 		500,
@@ -182,6 +189,7 @@ const (
 // sent.
 //
 type Refresher struct {
+	log.AmbientContext
 	st      *cluster.Settings
 	ex      sqlutil.InternalExecutor
 	cache   *TableStatisticsCache
@@ -215,6 +223,7 @@ type mutation struct {
 
 // MakeRefresher creates a new Refresher.
 func MakeRefresher(
+	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
 	ex sqlutil.InternalExecutor,
 	cache *TableStatisticsCache,
@@ -223,6 +232,7 @@ func MakeRefresher(
 	randSource := rand.NewSource(rand.Int63())
 
 	return &Refresher{
+		AmbientContext: ambientCtx,
 		st:             st,
 		ex:             ex,
 		cache:          cache,
@@ -240,7 +250,8 @@ func MakeRefresher(
 func (r *Refresher) Start(
 	ctx context.Context, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
-	_ = stopper.RunAsyncTask(context.Background(), "refresher", func(ctx context.Context) {
+	bgCtx := r.AnnotateCtx(context.Background())
+	_ = stopper.RunAsyncTask(bgCtx, "refresher", func(ctx context.Context) {
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
 		// subtract it from the refreshInterval.
 		refreshInterval -= r.asOfTime
@@ -323,11 +334,22 @@ func (r *Refresher) ensureAllTables(
 	// Use a historical read so as to disable txn contention resolution.
 	getAllTablesQuery := fmt.Sprintf(
 		`
-SELECT table_id FROM crdb_internal.tables AS OF SYSTEM TIME '-%s'
-WHERE database_name IS NOT NULL
-AND drop_time IS NULL
-`,
-		initialTableCollectionDelay)
+SELECT
+	tbl.table_id
+FROM
+	crdb_internal.tables AS tbl
+	INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+		AS OF SYSTEM TIME '-%s'
+WHERE
+	tbl.database_name IS NOT NULL
+	AND tbl.database_name <> '%s'
+	AND tbl.drop_time IS NULL
+	AND (
+			crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor, false)->'table'->>'viewQuery'
+		) IS NULL;`,
+		initialTableCollectionDelay,
+		systemschema.SystemDatabaseName,
+	)
 
 	it, err := r.ex.QueryIterator(
 		ctx,
@@ -340,10 +362,9 @@ AND drop_time IS NULL
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			row := it.Cur()
 			tableID := descpb.ID(*row[0].(*tree.DInt))
-			// Don't create statistics for system tables or virtual tables.
-			// TODO(rytaft): Don't add views here either. Unfortunately views are not
-			// identified differently from tables in crdb_internal.tables.
-			if !descpb.IsReservedID(tableID) && !descpb.IsVirtualTable(tableID) {
+			// Don't create statistics for virtual tables.
+			// The query already excludes views and system tables.
+			if !descpb.IsVirtualTable(tableID) {
 				r.mutationCounts[tableID] += 0
 			}
 		}
@@ -363,32 +384,26 @@ AND drop_time IS NULL
 // Refresher that a table has been mutated. It should be called after any
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
-func (r *Refresher) NotifyMutation(tableID descpb.ID, rowsAffected int) {
+func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
 	if !AutomaticStatisticsClusterMode.Get(&r.st.SV) {
 		// Automatic stats are disabled.
 		return
 	}
-
-	if descpb.IsReservedID(tableID) {
-		// Don't try to create statistics for system tables (most importantly,
-		// for table_statistics itself).
-		return
-	}
-	if descpb.IsVirtualTable(tableID) {
-		// Don't try to create statistics for virtual tables.
+	if !hasStatistics(table) {
+		// Don't collect stats for this kind of table: system, virtual, view, etc.
 		return
 	}
 
 	// Send mutation info to the refresher thread to avoid adding latency to
 	// the calling transaction.
 	select {
-	case r.mutations <- mutation{tableID: tableID, rowsAffected: rowsAffected}:
+	case r.mutations <- mutation{tableID: table.GetID(), rowsAffected: rowsAffected}:
 	default:
 		// Don't block if there is no room in the buffered channel.
 		if bufferedChanFullLogLimiter.ShouldLog() {
 			log.Warningf(context.TODO(),
-				"buffered channel is full. Unable to refresh stats for table %d with %d rows affected",
-				tableID, rowsAffected)
+				"buffered channel is full. Unable to refresh stats for table %q (%d) with %d rows affected",
+				table.GetName(), table.GetID(), rowsAffected)
 		}
 	}
 }
@@ -402,7 +417,7 @@ func (r *Refresher) maybeRefreshStats(
 	rowsAffected int64,
 	asOf time.Duration,
 ) {
-	tableStats, err := r.cache.GetTableStats(ctx, tableID)
+	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID)
 	if err != nil {
 		log.Errorf(ctx, "failed to get table statistics: %v", err)
 		return

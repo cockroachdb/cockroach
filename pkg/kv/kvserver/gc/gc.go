@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -50,8 +49,9 @@ const (
 // IntentAgeThreshold is the threshold after which an extant intent
 // will be resolved.
 var IntentAgeThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.gc.intent_age_threshold",
-	"intents older than this threshold will be resolved when encountered by the GC queue",
+	"intents older than this threshold will be resolved when encountered by the MVCC GC queue",
 	2*time.Hour,
 	func(d time.Duration) error {
 		if d < 2*time.Minute {
@@ -73,6 +73,7 @@ var IntentAgeThreshold = settings.RegisterDurationSetting(
 // of writing. This value is subject to tuning in real environment as we have
 // more data available.
 var MaxIntentsPerCleanupBatch = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"kv.gc.intent_cleanup_batch_size",
 	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
 	5000,
@@ -91,6 +92,7 @@ var MaxIntentsPerCleanupBatch = settings.RegisterIntSetting(
 // The default value is a conservative limit to prevent pending intent key sizes
 // from ballooning.
 var MaxIntentKeyBytesPerCleanupBatch = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"kv.gc.intent_cleanup_batch_byte_size",
 	"if non zero, gc will split found intents into batches of this size when trying to resolve them",
 	1e6,
@@ -99,15 +101,15 @@ var MaxIntentKeyBytesPerCleanupBatch = settings.RegisterIntSetting(
 
 // CalculateThreshold calculates the GC threshold given the policy and the
 // current view of time.
-func CalculateThreshold(now hlc.Timestamp, policy zonepb.GCPolicy) (threshold hlc.Timestamp) {
-	ttlNanos := int64(policy.TTLSeconds) * time.Second.Nanoseconds()
+func CalculateThreshold(now hlc.Timestamp, gcttl time.Duration) (threshold hlc.Timestamp) {
+	ttlNanos := gcttl.Nanoseconds()
 	return now.Add(-ttlNanos, 0)
 }
 
 // TimestampForThreshold inverts CalculateThreshold. It returns the timestamp
 // which should be used for now to arrive at the passed threshold.
-func TimestampForThreshold(threshold hlc.Timestamp, policy zonepb.GCPolicy) (ts hlc.Timestamp) {
-	ttlNanos := int64(policy.TTLSeconds) * time.Second.Nanoseconds()
+func TimestampForThreshold(threshold hlc.Timestamp, gcttl time.Duration) (ts hlc.Timestamp) {
+	ttlNanos := gcttl.Nanoseconds()
 	return threshold.Add(ttlNanos, 0)
 }
 
@@ -121,7 +123,7 @@ type PureGCer interface {
 	GC(context.Context, []roachpb.GCRequest_GCKey) error
 }
 
-// A GCer is an abstraction used by the GC queue to carry out chunked deletions.
+// A GCer is an abstraction used by the MVCC GC queue to carry out chunked deletions.
 type GCer interface {
 	Thresholder
 	PureGCer
@@ -148,8 +150,8 @@ type Threshold struct {
 type Info struct {
 	// Now is the timestamp used for age computations.
 	Now hlc.Timestamp
-	// Policy is the policy used for this garbage collection cycle.
-	Policy zonepb.GCPolicy
+	// GCTTL is the TTL this garbage collection cycle.
+	GCTTL time.Duration
 	// Stats about the userspace key-values considered, namely the number of
 	// keys with GC'able data, the number of "old" intents and the number of
 	// associated distinct transactions.
@@ -177,7 +179,7 @@ type Info struct {
 	// ResolveTotal is the total number of attempted intent resolutions in
 	// this cycle.
 	ResolveTotal int
-	// Threshold is the computed expiration timestamp. Equal to `Now - Policy`.
+	// Threshold is the computed expiration timestamp. Equal to `Now - GCTTL`.
 	Threshold hlc.Timestamp
 	// AffectedVersionsKeyBytes is the number of (fully encoded) bytes deleted from keys in the storage engine.
 	// Note that this does not account for compression that the storage engine uses to store data on disk. Real
@@ -231,7 +233,7 @@ func Run(
 	snap storage.Reader,
 	now, newThreshold hlc.Timestamp,
 	options RunOptions,
-	policy zonepb.GCPolicy,
+	gcTTL time.Duration,
 	gcer GCer,
 	cleanupIntentsFn CleanupIntentsFunc,
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
@@ -246,7 +248,7 @@ func Run(
 	}
 
 	info := Info{
-		Policy:    policy,
+		GCTTL:     gcTTL,
 		Now:       now,
 		Threshold: newThreshold,
 	}

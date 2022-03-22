@@ -17,10 +17,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -29,6 +34,7 @@ import (
 
 var enterpriseLicense = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
+		settings.TenantWritable,
 		"enterprise.license",
 		"the encoded cluster license",
 		"",
@@ -45,16 +51,13 @@ var enterpriseLicense = func() *settings.StringSetting {
 	return s
 }()
 
-// testingEnterprise determines whether the cluster is enabled
-// or disabled for the purposes of testing.
-// It should be loaded and stored using atomic as it can race with an
-// in progress kv reader during TestingDisableEnterprise /
-// TestingEnableEnterprise.
-var testingEnterprise int32
+// enterpriseStatus determines whether the cluster is enabled
+// for enterprise features or if enterprise status depends on the license.
+var enterpriseStatus int32 = deferToLicense
 
 const (
-	testingEnterpriseDisabled = 0
-	testingEnterpriseEnabled  = 1
+	deferToLicense    = 0
+	enterpriseEnabled = 1
 )
 
 // errEnterpriseRequired is returned by check() when the caller does
@@ -68,20 +71,36 @@ type licenseCacheKey string
 
 // TestingEnableEnterprise allows overriding the license check in tests.
 func TestingEnableEnterprise() func() {
-	before := atomic.LoadInt32(&testingEnterprise)
-	atomic.StoreInt32(&testingEnterprise, testingEnterpriseEnabled)
+	before := atomic.LoadInt32(&enterpriseStatus)
+	atomic.StoreInt32(&enterpriseStatus, enterpriseEnabled)
 	return func() {
-		atomic.StoreInt32(&testingEnterprise, before)
+		atomic.StoreInt32(&enterpriseStatus, before)
 	}
 }
 
 // TestingDisableEnterprise allows re-enabling the license check in tests.
 func TestingDisableEnterprise() func() {
-	before := atomic.LoadInt32(&testingEnterprise)
-	atomic.StoreInt32(&testingEnterprise, testingEnterpriseDisabled)
+	before := atomic.LoadInt32(&enterpriseStatus)
+	atomic.StoreInt32(&enterpriseStatus, deferToLicense)
 	return func() {
-		atomic.StoreInt32(&testingEnterprise, before)
+		atomic.StoreInt32(&enterpriseStatus, before)
 	}
+}
+
+// ApplyTenantLicense verifies the COCKROACH_TENANT_LICENSE environment variable
+// and enables enterprise features for the process. This is a bit of a hack and
+// should be replaced once it is possible to read the host cluster's
+// enterprise.license setting.
+func ApplyTenantLicense() error {
+	license, ok := envutil.EnvString("COCKROACH_TENANT_LICENSE", 0)
+	if !ok {
+		return nil
+	}
+	if _, err := decode(license); err != nil {
+		return errors.Wrap(err, "COCKROACH_TENANT_LICENSE encoding is invalid")
+	}
+	atomic.StoreInt32(&enterpriseStatus, enterpriseEnabled)
+	return nil
 }
 
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
@@ -107,28 +126,59 @@ func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, feature s
 func init() {
 	base.CheckEnterpriseEnabled = CheckEnterpriseEnabled
 	base.LicenseType = getLicenseType
-	base.TimeToEnterpriseLicenseExpiry = TimeToEnterpriseLicenseExpiry
+	base.UpdateMetricOnLicenseChange = UpdateMetricOnLicenseChange
+	server.ApplyTenantLicense = ApplyTenantLicense
 }
 
-// TimeToEnterpriseLicenseExpiry returns a Duration from `asOf` until the current
-// enterprise license expires. If a license does not exist, we return a
-// zero duration.
-func TimeToEnterpriseLicenseExpiry(
-	ctx context.Context, st *cluster.Settings, asOf time.Time,
-) (time.Duration, error) {
-	license, err := getLicense(st)
-	if err != nil || license == nil {
-		return 0, err
-	}
+var licenseMetricUpdateFrequency = 1 * time.Minute
 
-	expiration := timeutil.Unix(license.ValidUntilUnixSec, 0)
-	return expiration.Sub(asOf), nil
+// UpdateMetricOnLicenseChange starts a task to periodically update
+// the given metric with the seconds remaining until license expiry.
+func UpdateMetricOnLicenseChange(
+	ctx context.Context,
+	st *cluster.Settings,
+	metric *metric.Gauge,
+	ts timeutil.TimeSource,
+	stopper *stop.Stopper,
+) error {
+	enterpriseLicense.SetOnChange(&st.SV, func(ctx context.Context) {
+		updateMetricWithLicenseTTL(ctx, st, metric, ts)
+	})
+	return stopper.RunAsyncTask(ctx, "write-license-expiry-metric", func(ctx context.Context) {
+		ticker := time.NewTicker(licenseMetricUpdateFrequency)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				updateMetricWithLicenseTTL(ctx, st, metric, ts)
+			case <-stopper.ShouldQuiesce():
+				return
+			}
+		}
+	})
+}
+
+func updateMetricWithLicenseTTL(
+	ctx context.Context, st *cluster.Settings, metric *metric.Gauge, ts timeutil.TimeSource,
+) {
+	license, err := getLicense(st)
+	if err != nil {
+		log.Errorf(ctx, "unable to update license expiry metric: %v", err)
+		metric.Update(0)
+		return
+	}
+	if license == nil {
+		metric.Update(0)
+		return
+	}
+	sec := timeutil.Unix(license.ValidUntilUnixSec, 0).Sub(ts.Now()).Seconds()
+	metric.Update(int64(sec))
 }
 
 func checkEnterpriseEnabledAt(
 	st *cluster.Settings, at time.Time, cluster uuid.UUID, org, feature string, withDetails bool,
 ) error {
-	if atomic.LoadInt32(&testingEnterprise) == testingEnterpriseEnabled {
+	if atomic.LoadInt32(&enterpriseStatus) == enterpriseEnabled {
 		return nil
 	}
 	license, err := getLicense(st)

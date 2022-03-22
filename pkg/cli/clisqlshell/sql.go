@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -74,8 +75,9 @@ Informational
   \l                list all databases in the CockroachDB cluster.
   \dt               show the tables of the current schema in the current database.
   \dT               show the user defined types of the current database.
-  \du               list the users for all databases.
+  \du [USER]        list the specified user, or list the users for all databases if no user is specified.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
+  \dd TABLE         show details about constraints on the specified table.
 
 Formatting
   \x [on|off]       toggle records display format.
@@ -86,6 +88,10 @@ Operating System
 Configuration
   \set [NAME]       set a client-side flag or (without argument) print the current settings.
   \unset NAME       unset a flag.
+
+Statement diagnostics
+  \statement-diag list                               list available bundles.
+  \statement-diag download <bundle-id> [<filename>]  download bundle.
 
 %s
 More documentation about our SQL dialect and the CLI shell is available online:
@@ -127,6 +133,14 @@ type cliState struct {
 	ins readline.EditLine
 	// buf is used to read lines if isInteractive is false.
 	buf *bufio.Reader
+	// singleStatement is set to true when this state level
+	// is currently processing for runString(). In that mode:
+	// - a missing semicolon at the end of input is ignored:
+	//   runString("select 1") is valid.
+	// - errors are not printed by runStatement, since the
+	//   caller of runString() is responsible for processing/
+	//   printing the exitErr.
+	singleStatement bool
 
 	// levels is the number of inclusion recursion levels.
 	levels int
@@ -265,7 +279,11 @@ func (c *cliState) addHistory(line string) {
 	}
 }
 
-func (c *cliState) invalidSyntax(
+func (c *cliState) invalidSyntax(nextState cliStateEnum) cliStateEnum {
+	return c.invalidSyntaxf(nextState, `%s. Try \? for help.`, c.lastInputLine)
+}
+
+func (c *cliState) invalidSyntaxf(
 	nextState cliStateEnum, format string, args ...interface{},
 ) cliStateEnum {
 	fmt.Fprint(c.iCtx.stderr, "invalid syntax: ")
@@ -273,10 +291,6 @@ func (c *cliState) invalidSyntax(
 	fmt.Fprintln(c.iCtx.stderr)
 	c.exitErr = errInvalidSyntax
 	return nextState
-}
-
-func (c *cliState) invalidOptSet(nextState cliStateEnum, args []string) cliStateEnum {
-	return c.invalidSyntax(nextState, `\set %s. Try \? for help.`, strings.Join(args, " "))
 }
 
 func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliStateEnum {
@@ -472,7 +486,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 
 	opt, ok := options[args[0]]
 	if !ok {
-		return c.invalidOptSet(errState, args)
+		return c.invalidSyntax(errState)
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, args[0])
@@ -486,7 +500,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	case 2:
 		val = args[1]
 	default:
-		return c.invalidOptSet(errState, args)
+		return c.invalidSyntax(errState)
 	}
 
 	// Run the command.
@@ -494,7 +508,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	if !opt.isBoolean {
 		err = opt.set(c, val)
 	} else if b, e := clisqlclient.ParseBool(val); e != nil {
-		return c.invalidOptSet(errState, args)
+		return c.invalidSyntax(errState)
 	} else if b {
 		err = opt.set(c, "true")
 	} else {
@@ -513,11 +527,11 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 // handleUnset supports the \unset client-side command.
 func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) cliStateEnum {
 	if len(args) != 1 {
-		return c.invalidSyntax(errState, `\unset %s. Try \? for help.`, strings.Join(args, " "))
+		return c.invalidSyntax(errState)
 	}
 	opt, ok := options[args[0]]
 	if !ok {
-		return c.invalidSyntax(errState, `\unset %s. Try \? for help.`, strings.Join(args, " "))
+		return c.invalidSyntax(errState)
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, args[0])
@@ -539,7 +553,7 @@ func isEndOfStatement(lastTok int) bool {
 func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
 	// A demo cluster signifies the presence of `cockroach demo`.
 	if c.sqlCtx.DemoCluster == nil {
-		return c.invalidSyntax(errState, `\demo can only be run with cockroach demo`)
+		return c.invalidSyntaxf(errState, `\demo can only be run with cockroach demo`)
 	}
 
 	// The \demo command has one of three patterns:
@@ -555,7 +569,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 	}
 
 	if len(cmd) != 2 {
-		return c.invalidSyntax(errState, `\demo expects 2 parameters, but passed %v`, len(cmd))
+		return c.invalidSyntax(errState)
 	}
 
 	// Special case the add command it takes a string instead of a node number.
@@ -589,10 +603,10 @@ func (c *cliState) handleDemoNodeCommands(
 ) cliStateEnum {
 	nodeID, err := strconv.ParseInt(cmd[1], 10, 32)
 	if err != nil {
-		return c.invalidSyntax(
+		return c.invalidSyntaxf(
 			errState,
 			"%s",
-			errors.Wrapf(err, "cannot convert %s to string", cmd[1]),
+			errors.Wrapf(err, "%q is not a valid node ID", cmd[1]),
 		)
 	}
 
@@ -624,7 +638,7 @@ func (c *cliState) handleDemoNodeCommands(
 		fmt.Fprintf(c.iCtx.stdout, "node %d has been decommissioned\n", nodeID)
 		return nextState
 	}
-	return c.invalidSyntax(errState, `command not recognized: %s`, cmd[0])
+	return c.invalidSyntax(errState)
 }
 
 // handleHelp prints SQL help.
@@ -669,7 +683,7 @@ func (c *cliState) execSyscmd(command string) (string, error) {
 	cmd.Stderr = c.iCtx.stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("error in external command: %s", err)
+		return "", errors.Wrap(err, "error in external command")
 	}
 
 	return out.String(), nil
@@ -821,7 +835,9 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 func (c *cliState) refreshTransactionStatus() {
 	c.lastKnownTxnStatus = unknownTxnStatus
 
-	dbVal, dbColType, hasVal := c.conn.GetServerValue("transaction status", `SHOW TRANSACTION STATUS`)
+	dbVal, dbColType, hasVal := c.conn.GetServerValue(
+		context.Background(),
+		"transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
 		return
 	}
@@ -854,7 +870,9 @@ func (c *cliState) refreshDatabaseName() string {
 		return unknownDbName
 	}
 
-	dbVal, dbColType, hasVal := c.conn.GetServerValue("database name", `SHOW DATABASE`)
+	dbVal, dbColType, hasVal := c.conn.GetServerValue(
+		context.Background(),
+		"database name", `SHOW DATABASE`)
 	if !hasVal {
 		return unknownDbName
 	}
@@ -882,18 +900,35 @@ func (c *cliState) GetCompletions(_ string) []string {
 	sql, _ := c.ins.GetLineInfo()
 
 	if !strings.HasSuffix(sql, "??") {
-		fmt.Fprintf(c.iCtx.stdout,
-			"\ntab completion not supported; append '??' and press tab for contextual help\n\n")
-	} else {
-		helpText, err := c.serverSideParse(sql)
-		if helpText != "" {
-			// We have a completion suggestion. Use that.
-			fmt.Fprintf(c.iCtx.stdout, "\nSuggestion:\n%s\n", helpText)
-		} else if err != nil {
-			// Some other error. Display it.
-			fmt.Fprintln(c.iCtx.stdout)
+		query := fmt.Sprintf(`SHOW COMPLETIONS AT OFFSET %d FOR %s`, len(sql), lexbase.EscapeSQLString(sql))
+		var rows [][]string
+		var err error
+		err = c.runWithInterruptableCtx(func(ctx context.Context) error {
+			_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn,
+				clisqlclient.MakeQuery(query), true)
+			return err
+		})
+
+		if err != nil {
 			clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
 		}
+
+		var completions []string
+		for _, row := range rows {
+			completions = append(completions, row[0])
+		}
+
+		return completions
+	}
+
+	helpText, err := c.serverSideParse(sql)
+	if helpText != "" {
+		// We have a completion suggestion. Use that.
+		fmt.Fprintf(c.iCtx.stdout, "\nSuggestion:\n%s\n", helpText)
+	} else if err != nil {
+		// Some other error. Display it.
+		fmt.Fprintln(c.iCtx.stdout)
+		clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
 	}
 
 	// After the suggestion or error, re-display the prompt and current entry.
@@ -1004,9 +1039,11 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 			return cliStartLine
 		}
 
-		// Otherwise, also terminate with an interrupt error.
-		c.exitErr = err
-		return cliStop
+		// If a human is looking, tell them that quitting is done in another way.
+		if c.sqlExecCtx.TerminalOutput {
+			fmt.Fprintf(c.iCtx.stdout, "^C\nUse \\q or terminate input to exit.\n")
+		}
+		return cliStartLine
 
 	case errors.Is(err, io.EOF):
 		c.atEOF = true
@@ -1147,8 +1184,14 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return cliRunStatement
 
 	case `\du`:
-		c.concatLines = `SHOW USERS`
-		return cliRunStatement
+		if len(cmd) == 1 {
+			c.concatLines = `SHOW USERS`
+			return cliRunStatement
+		} else if len(cmd) == 2 {
+			c.concatLines = fmt.Sprintf(`SELECT * FROM [SHOW USERS] WHERE username = %s`, lexbase.EscapeSQLString(cmd[1]))
+			return cliRunStatement
+		}
+		return c.invalidSyntax(errState)
 
 	case `\d`:
 		if len(cmd) == 1 {
@@ -1158,8 +1201,13 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			c.concatLines = `SHOW COLUMNS FROM ` + cmd[1]
 			return cliRunStatement
 		}
-		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
-
+		return c.invalidSyntax(errState)
+	case `\dd`:
+		if len(cmd) == 2 {
+			c.concatLines = `SHOW CONSTRAINTS FROM ` + cmd[1] + ` WITH COMMENT`
+			return cliRunStatement
+		}
+		return c.invalidSyntax(errState)
 	case `\connect`, `\c`:
 		return c.handleConnect(cmd[1:], loopState, errState)
 
@@ -1173,14 +1221,14 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		case 2:
 			b, err := clisqlclient.ParseBool(cmd[1])
 			if err != nil {
-				return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+				return c.invalidSyntax(errState)
 			} else if b {
 				format = clisqlexec.TableDisplayRecords
 			} else {
 				format = clisqlexec.TableDisplayTable
 			}
 		default:
-			return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+			return c.invalidSyntax(errState)
 		}
 		c.sqlExecCtx.TableDisplayFormat = format
 		return loopState
@@ -1188,12 +1236,15 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\demo`:
 		return c.handleDemo(cmd[1:], loopState, errState)
 
+	case `\statement-diag`:
+		return c.handleStatementDiag(cmd[1:], loopState, errState)
+
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
 			// Unrecognized command for now, but we want to be helpful.
 			fmt.Fprint(c.iCtx.stderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
 		}
-		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+		return c.invalidSyntax(errState)
 	}
 
 	return loopState
@@ -1202,17 +1253,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 func (c *cliState) handleConnect(
 	cmd []string, loopState, errState cliStateEnum,
 ) (resState cliStateEnum) {
-	firstArgIsURL := len(cmd) > 0 &&
-		(strings.HasPrefix(cmd[0], "postgres://") ||
-			strings.HasPrefix(cmd[0], "postgresql://"))
-	if len(cmd) == 1 && !firstArgIsURL && strings.TrimSpace(cmd[0]) != "-" {
-		// Special case: just a database name.
-		// Handled entirely locally with the existing connection.
-		c.concatLines = `USE ` + cmd[0]
-		return cliRunStatement
-	}
-
-	if err := c.handleConnectInternal(cmd, firstArgIsURL); err != nil {
+	if err := c.handleConnectInternal(cmd); err != nil {
 		fmt.Fprintln(c.iCtx.stderr, err)
 		c.exitErr = err
 		return errState
@@ -1220,7 +1261,11 @@ func (c *cliState) handleConnect(
 	return loopState
 }
 
-func (c *cliState) handleConnectInternal(cmd []string, firstArgIsURL bool) error {
+func (c *cliState) handleConnectInternal(cmd []string) error {
+	firstArgIsURL := len(cmd) > 0 &&
+		(strings.HasPrefix(cmd[0], "postgres://") ||
+			strings.HasPrefix(cmd[0], "postgresql://"))
+
 	if len(cmd) == 1 && firstArgIsURL {
 		// Note: we use a custom URL parser here to inherit the complex
 		// custom logic from crdb's own handling of --url in `cockroach
@@ -1251,7 +1296,7 @@ func (c *cliState) handleConnectInternal(cmd []string, firstArgIsURL bool) error
 	}
 
 	// Extract the current config.
-	_, prevhost, prevport := currURL.GetNetworking()
+	prevproto, prevhost, prevport := currURL.GetNetworking()
 	tlsUsed, mode, caCertPath := currURL.GetTLSOptions()
 
 	// newURL will be our new connection URL past this point.
@@ -1264,6 +1309,11 @@ func (c *cliState) handleConnectInternal(cmd []string, firstArgIsURL bool) error
 		WithDefaultUsername(currURL.GetUsername())
 	if tlsUsed {
 		newURL.WithTransport(pgurl.TransportTLS(mode, caCertPath))
+	} else {
+		newURL.WithTransport(pgurl.TransportNone())
+	}
+	if err := newURL.AddOptions(currURL.GetExtraOptions()); err != nil {
+		return err
 	}
 
 	// Parse the arguments to \connect:
@@ -1311,6 +1361,29 @@ func (c *cliState) handleConnectInternal(cmd []string, firstArgIsURL bool) error
 		return errors.Newf(`unknown syntax: \c %s`, strings.Join(cmd, " "))
 	}
 
+	// If we are reconnecting to the same server with the same user, reuse
+	// the authentication credentials present inside the URL, if any.
+	// We do take care to avoid reusing the password however, for two separate
+	// reasons:
+	// - if the connection has just failed because of an invalid password,
+	//   we don't want to fix the invalid password in the URL.
+	// - the transport may be insecure, in which case we want to give
+	//   the user the opportunity to think twice about entering their
+	//   password over an untrusted link.
+	if proto, host, port := newURL.GetNetworking(); proto == prevproto &&
+		host == prevhost && port == prevport &&
+		newURL.GetUsername() == currURL.GetUsername() {
+		// Remove the password from the current URL.
+		currURL.ClearPassword()
+
+		// Migrate the details from the previous URL to the new one.
+		prevAuthn, err := currURL.GetAuthnOption()
+		if err != nil {
+			return err
+		}
+		newURL.WithAuthn(prevAuthn)
+	}
+
 	if err := newURL.Validate(); err != nil {
 		return errors.Wrap(err, "validating the new URL")
 	}
@@ -1339,7 +1412,7 @@ func (c *cliState) runInclude(
 	cmd []string, contState, errState cliStateEnum, relative bool,
 ) (resState cliStateEnum) {
 	if len(cmd) != 1 {
-		return c.invalidSyntax(errState, `%s. Try \? for help.`, c.lastInputLine)
+		return c.invalidSyntax(errState)
 	}
 
 	if c.levels >= maxRecursionLevels {
@@ -1349,7 +1422,7 @@ func (c *cliState) runInclude(
 	}
 
 	if len(c.partialLines) > 0 {
-		return c.invalidSyntax(errState, `cannot use \i during multi-line entry.`)
+		return c.invalidSyntax(errState)
 	}
 
 	filename := cmd[0]
@@ -1374,6 +1447,36 @@ func (c *cliState) runInclude(
 		}
 	}()
 
+	// Including a file: increase the recursion level.
+	newLevel := c.levels + 1
+
+	return c.runIncludeInternal(contState, errState,
+		filename, bufio.NewReader(f), newLevel, false /* singleStatement */)
+}
+
+func (c *cliState) runString(
+	contState, errState cliStateEnum, stmt string,
+) (resState cliStateEnum) {
+	r := strings.NewReader(stmt)
+	buf := bufio.NewReader(r)
+
+	// Running a string: don't increase the recursion level. We want
+	// that running sql -e '\i ...' gives access to the same maximum
+	// number of recursive includes as entering \i on the interactive
+	// prompt.
+	newLevel := c.levels
+
+	return c.runIncludeInternal(contState, errState,
+		"-e", buf, newLevel, true /* singleStatement */)
+}
+
+func (c *cliState) runIncludeInternal(
+	contState, errState cliStateEnum,
+	filename string,
+	input *bufio.Reader,
+	level int,
+	singleStatement bool,
+) (resState cliStateEnum) {
 	newState := cliState{
 		cliCtx:     c.cliCtx,
 		sqlConnCtx: c.sqlConnCtx,
@@ -1384,8 +1487,10 @@ func (c *cliState) runInclude(
 		conn:       c.conn,
 		includeDir: filepath.Dir(filename),
 		ins:        noLineEditor,
-		buf:        bufio.NewReader(f),
-		levels:     c.levels + 1,
+		buf:        input,
+		levels:     level,
+
+		singleStatement: singleStatement,
 	}
 
 	if err := newState.doRunShell(cliStartLine, nil, nil, nil); err != nil {
@@ -1413,7 +1518,6 @@ func (c *cliState) doPrepareStatementLine(
 	}
 
 	lastTok, ok := scanner.LastLexicalToken(c.concatLines)
-	endOfStmt := isEndOfStatement(lastTok)
 	if c.partialStmtsLen == 0 && !ok {
 		// More whitespace, or comments. Still nothing to do. However
 		// if the syntax was non-trivial to arrive here,
@@ -1422,6 +1526,12 @@ func (c *cliState) doPrepareStatementLine(
 			c.addHistory(c.lastInputLine)
 		}
 		return startState
+	}
+	endOfStmt := isEndOfStatement(lastTok)
+	if c.singleStatement && c.atEOF {
+		// We're always at the end of a statement if EOF is reached in the
+		// single statement mode.
+		endOfStmt = true
 	}
 	if c.atEOF {
 		// Definitely no more input expected.
@@ -1459,8 +1569,10 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			fmt.Fprintln(c.iCtx.stdout, helpText)
 		}
 
-		_ = c.invalidSyntax(cliStart, "statement ignored: %v",
-			clierror.NewFormattedError(err, false /*showSeverity*/, false /*verbose*/))
+		_ = c.invalidSyntaxf(
+			cliStart, "statement ignored: %v",
+			clierror.NewFormattedError(err, false /*showSeverity*/, false /*verbose*/),
+		)
 
 		// Stop here if exiterr is set.
 		if c.iCtx.errExit {
@@ -1498,9 +1610,13 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	if c.iCtx.autoTrace != "" {
 		// Clear the trace by disabling tracing, then restart tracing
 		// with the specified options.
-		c.exitErr = c.conn.Exec("SET tracing = off; SET tracing = "+c.iCtx.autoTrace, nil)
+		c.exitErr = c.conn.Exec(
+			context.Background(),
+			"SET tracing = off; SET tracing = "+c.iCtx.autoTrace)
 		if c.exitErr != nil {
-			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			if !c.singleStatement {
+				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			}
 			if c.iCtx.errExit {
 				return cliStop
 			}
@@ -1509,17 +1625,23 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	}
 
 	// Now run the statement/query.
-	c.exitErr = c.sqlExecCtx.RunQueryAndFormatResults(c.conn, c.iCtx.stdout, c.iCtx.stderr,
-		clisqlclient.MakeQuery(c.concatLines))
+	c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		return c.sqlExecCtx.RunQueryAndFormatResults(ctx,
+			c.conn, c.iCtx.stdout, c.iCtx.stderr,
+			clisqlclient.MakeQuery(c.concatLines))
+	})
 	if c.exitErr != nil {
-		clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		if !c.singleStatement {
+			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		}
 	}
 
 	// If we are tracing, stop tracing and display the trace. We do
 	// this even if there was an error: a trace on errors is useful.
 	if c.iCtx.autoTrace != "" {
 		// First, disable tracing.
-		if err := c.conn.Exec("SET tracing = off", nil); err != nil {
+		if err := c.conn.Exec(context.Background(),
+			"SET tracing = off"); err != nil {
 			// Print the error for the SET tracing statement. This will
 			// appear below the error for the main query above, if any,
 			clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
@@ -1537,8 +1659,11 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			if strings.Contains(c.iCtx.autoTrace, "kv") {
 				traceType = "kv"
 			}
-			if err := c.sqlExecCtx.RunQueryAndFormatResults(c.conn, c.iCtx.stdout, c.iCtx.stderr,
-				clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
+			if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
+				return c.sqlExecCtx.RunQueryAndFormatResults(ctx,
+					c.conn, c.iCtx.stdout, c.iCtx.stderr,
+					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType)))
+			}); err != nil {
 				clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
 					// Both the query and SET tracing had encountered no error
@@ -1600,6 +1725,9 @@ func NewShell(
 
 // RunInteractive implements the Shell interface.
 func (c *cliState) RunInteractive(cmdIn, cmdOut, cmdErr *os.File) (exitErr error) {
+	finalFn := c.maybeHandleInterrupt()
+	defer finalFn()
+
 	return c.doRunShell(cliStart, cmdIn, cmdOut, cmdErr)
 }
 
@@ -1789,21 +1917,8 @@ func (c *cliState) configurePreShellDefaults(
 func (c *cliState) runStatements(stmts []string) error {
 	for {
 		for i, stmt := range stmts {
-			// We do not use the logic from doRunStatement here
-			// because we need a different error handling mechanism:
-			// the error, if any, must not be printed to stderr if
-			// we are returning directly.
-			if strings.HasPrefix(stmt, `\`) {
-				// doHandleCliCmd takes its input from c.lastInputLine.
-				c.lastInputLine = stmt
-				if nextState := c.doHandleCliCmd(cliRunStatement, cliStop); nextState == cliStop && c.exitErr == nil {
-					// The client-side command failed with an error, but
-					// did not populate c.exitErr itself. Do it here.
-					c.exitErr = errors.New("error in client-side command")
-				}
-			} else {
-				c.exitErr = c.sqlExecCtx.RunQueryAndFormatResults(c.conn, c.iCtx.stdout, c.iCtx.stderr, clisqlclient.MakeQuery(stmt))
-			}
+			c.exitErr = nil
+			_ = c.runString(cliRunStatement, cliStop, stmt)
 			if c.exitErr != nil {
 				if !c.iCtx.errExit && i < len(stmts)-1 {
 					// Print the error now because we don't get a chance later.
@@ -1836,7 +1951,9 @@ func (c *cliState) runStatements(stmts []string) error {
 // decomposition in the first return value. If it is not, the function
 // extracts a help string if available.
 func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
-	cols, rows, err := c.sqlExecCtx.RunQuery(c.conn,
+	cols, rows, err := c.sqlExecCtx.RunQuery(
+		context.Background(),
+		c.conn,
 		clisqlclient.MakeQuery("SHOW SYNTAX "+lexbase.EscapeSQLString(sql)),
 		true)
 	if err != nil {
@@ -1873,7 +1990,7 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 		// the constant string parser.helpHintPrefix.
 		//
 		// However, we cannot include the 'parser' package here because it
-		// would incur a hughe dependency overhead.
+		// would incur a huge dependency overhead.
 		if strings.HasPrefix(message, "help token in input") && strings.HasPrefix(hint, "help:") {
 			// Yes: return it.
 			helpText = hint[6:]
@@ -1891,4 +2008,86 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 		return helpText, err
 	}
 	return "", nil
+}
+
+func (c *cliState) maybeHandleInterrupt() func() {
+	if !c.cliCtx.IsInteractive {
+		return func() {}
+	}
+	intCh := make(chan os.Signal, 1)
+	signal.Notify(intCh, os.Interrupt)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		for {
+			select {
+			case <-intCh:
+				c.iCtx.mu.Lock()
+				cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
+				c.iCtx.mu.Unlock()
+				if cancelFn == nil {
+					// No query currently executing; nothing to do.
+					continue
+				}
+
+				fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")
+				// Cancel the query's context, which should make the driver
+				// send a cancellation message.
+				cancelFn()
+
+				// Now wait for the shell to process the cancellation.
+				//
+				// If it takes too long (e.g. server has become unresponsive,
+				// or we're connected to a pre-22.1 server which does not
+				// support cancellation), fall back to the previous behavior
+				// which is to interrupt the shell altogether.
+				tooLongTimer := time.After(3 * time.Second)
+			wait:
+				for {
+					select {
+					case <-doneCh:
+						break wait
+					case <-tooLongTimer:
+						fmt.Fprintln(c.iCtx.stderr, "server does not respond to query cancellation; a second interrupt will stop the shell.")
+						signal.Reset(os.Interrupt)
+					}
+				}
+				// Re-arm the signal handler.
+				signal.Notify(intCh, os.Interrupt)
+
+			case <-ctx.Done():
+				// Shell is terminating.
+				return
+			}
+		}
+	}()
+	return cancel
+}
+
+func (c *cliState) runWithInterruptableCtx(fn func(ctx context.Context) error) error {
+	if !c.cliCtx.IsInteractive {
+		return fn(context.Background())
+	}
+	// The cancellation function can be used by the Ctrl+C handler
+	// to cancel this query.
+	ctx, cancel := context.WithCancel(context.Background())
+	// doneCh will be used on the return path to teach the Ctrl+C
+	// handler that the query has been cancelled successfully.
+	doneCh := make(chan struct{})
+	defer func() { close(doneCh) }()
+
+	// Inform the Ctrl+C handler that this query is executing.
+	c.iCtx.mu.Lock()
+	c.iCtx.mu.cancelFn = cancel
+	c.iCtx.mu.doneCh = doneCh
+	c.iCtx.mu.Unlock()
+	defer func() {
+		c.iCtx.mu.Lock()
+		c.iCtx.mu.cancelFn = nil
+		c.iCtx.mu.doneCh = nil
+		c.iCtx.mu.Unlock()
+	}()
+
+	// Now run the query.
+	err := fn(ctx)
+	return err
 }

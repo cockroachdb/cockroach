@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,16 +40,21 @@ func Scan(
 	var scanRes storage.MVCCScanResult
 	var err error
 
+	avoidExcess := cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx,
+		clusterversion.TargetBytesAvoidExcess)
 	opts := storage.MVCCScanOptions{
-		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:                   h.Txn,
-		LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
-		MaxKeys:               h.MaxSpanRequestKeys,
-		MaxIntents:            storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		TargetBytes:           h.TargetBytes,
-		FailOnMoreRecent:      args.KeyLocking != lock.None,
-		Reverse:               false,
-		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
+		Inconsistent:           h.ReadConsistency != roachpb.CONSISTENT,
+		Txn:                    h.Txn,
+		Uncertainty:            cArgs.Uncertainty,
+		MaxKeys:                h.MaxSpanRequestKeys,
+		MaxIntents:             storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		TargetBytes:            h.TargetBytes,
+		TargetBytesAvoidExcess: h.AllowEmpty || avoidExcess, // AllowEmpty takes precedence
+		AllowEmpty:             h.AllowEmpty,
+		WholeRowsOfSize:        h.WholeRowsOfSize,
+		FailOnMoreRecent:       args.KeyLocking != lock.None,
+		Reverse:                false,
+		MemoryAccount:          cArgs.EvalCtx.GetResponseMemoryAccount(),
 	}
 
 	switch args.ScanFormat {
@@ -75,7 +81,8 @@ func Scan(
 
 	if scanRes.ResumeSpan != nil {
 		reply.ResumeSpan = scanRes.ResumeSpan
-		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		reply.ResumeReason = scanRes.ResumeReason
+		reply.ResumeNextBytes = scanRes.ResumeNextBytes
 	}
 
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {

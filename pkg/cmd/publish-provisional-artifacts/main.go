@@ -13,15 +13,12 @@ package main
 import (
 	"bytes"
 	"flag"
-	"fmt"
-	"go/build"
 	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -80,31 +77,36 @@ func main() {
 	if err != nil {
 		log.Fatalf("Creating AWS S3 session: %s", err)
 	}
-	execFn := release.DefaultExecFn
 	branch, ok := os.LookupEnv(teamcityBuildBranchKey)
 	if !ok {
 		log.Fatalf("VCS branch environment variable %s is not set", teamcityBuildBranchKey)
 	}
-	pkg, err := build.Import("github.com/cockroachdb/cockroach", "", build.FindOnly)
+	pkg, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("unable to locate CRDB directory: %s", err)
 	}
+	// Make sure the WORKSPACE file is in the current working directory.
+	_, err = os.Stat(filepath.Join(pkg, "WORKSPACE"))
+	if err != nil {
+		log.Fatalf("unable to locate CRDB directory: %s", err)
+	}
+
 	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = pkg.Dir
+	cmd.Dir = pkg
 	log.Printf("%s %s", cmd.Env, cmd.Args)
 	shaOut, err := cmd.Output()
 	if err != nil {
 		log.Fatalf("%s: out=%q err=%s", cmd.Args, shaOut, err)
 	}
 
-	run(s3, execFn, runFlags{
+	run(s3, runFlags{
 		doProvisional: *doProvisionalF,
 		doBless:       *doBlessF,
 		isRelease:     *isReleaseF,
 		branch:        branch,
-		pkgDir:        pkg.Dir,
+		pkgDir:        pkg,
 		sha:           string(bytes.TrimSpace(shaOut)),
-	})
+	}, release.ExecFn{})
 }
 
 type runFlags struct {
@@ -114,7 +116,7 @@ type runFlags struct {
 	pkgDir                 string
 }
 
-func run(svc s3I, execFn release.ExecFn, flags runFlags) {
+func run(svc s3I, flags runFlags, execFn release.ExecFn) {
 	// TODO(dan): non-release builds currently aren't broken into the two
 	// phases. Instead, the provisional phase does them both.
 	if !flags.isRelease {
@@ -163,60 +165,27 @@ func run(svc s3I, execFn release.ExecFn, flags runFlags) {
 	log.Printf("Using S3 bucket: %s", bucketName)
 
 	var cockroachBuildOpts []opts
-	for _, target := range release.SupportedTargets {
-		for i, extraArgs := range []struct {
-			goflags string
-			suffix  string
-			tags    string
-		}{
-			{},
-			// TODO(tamird): re-enable deadlock builds. This really wants its
-			// own install suffix; it currently pollutes the normal release
-			// build cache.
-			//
-			// {suffix: ".deadlock", tags: "deadlock"},
-			//
-			// As of 2019-01-08, we don't really use this for anything, so save the build time.
-			// {suffix: ".race", goflags: "-race"},
-		} {
-			var o opts
-			o.PkgDir = flags.pkgDir
-			o.Branch = flags.branch
-			o.VersionStr = versionStr
-			o.BucketName = bucketName
-			o.BuildType = target.BuildType
-			o.GoFlags = extraArgs.goflags
-			o.Suffix = extraArgs.suffix + target.Suffix
-			o.Tags = extraArgs.tags
-			o.Base = "cockroach" + o.Suffix
+	for _, platform := range []release.Platform{release.PlatformLinux, release.PlatformMacOS, release.PlatformWindows} {
+		var o opts
+		o.Platform = platform
+		o.PkgDir = flags.pkgDir
+		o.Branch = flags.branch
+		o.VersionStr = versionStr
+		o.BucketName = bucketName
+		o.AbsolutePath = filepath.Join(flags.pkgDir, "cockroach"+release.SuffixFromPlatform(platform))
 
-			// TODO(tamird): build deadlock,race binaries for all targets?
-			if i > 0 && (flags.isRelease || !strings.HasSuffix(o.BuildType, "linux-gnu")) {
-				log.Printf("skipping auxiliary build: %s", pretty.Sprint(o))
-				continue
-			}
-
-			cockroachBuildOpts = append(cockroachBuildOpts, o)
-		}
-	}
-	archiveBuildOpts := opts{
-		PkgDir:     flags.pkgDir,
-		BucketName: bucketName,
-		VersionStr: versionStr,
+		cockroachBuildOpts = append(cockroachBuildOpts, o)
 	}
 
 	if flags.doProvisional {
 		for _, o := range cockroachBuildOpts {
-			buildCockroach(execFn, flags, o)
+			buildCockroach(flags, o, execFn)
 
 			if !flags.isRelease {
 				putNonRelease(svc, o)
 			} else {
 				putRelease(svc, o)
 			}
-		}
-		if flags.isRelease {
-			buildAndPutArchive(svc, execFn, archiveBuildOpts)
 		}
 	}
 	if flags.doBless {
@@ -227,76 +196,24 @@ func run(svc s3I, execFn release.ExecFn, flags runFlags) {
 			for _, o := range cockroachBuildOpts {
 				markLatestRelease(svc, o)
 			}
-			markLatestArchive(svc, archiveBuildOpts)
 		}
 	}
 }
 
-func buildAndPutArchive(svc s3I, execFn release.ExecFn, o opts) {
-	log.Printf("building archive %s", pretty.Sprint(o))
-	defer func() {
-		log.Printf("done building archive: %s", pretty.Sprint(o))
-	}()
-
-	archiveBase, srcArchive := s3KeyArchive(o)
-	cmd := exec.Command(
-		"make",
-		"archive",
-		fmt.Sprintf("ARCHIVE_BASE=%s", archiveBase),
-		fmt.Sprintf("ARCHIVE=%s", srcArchive),
-		fmt.Sprintf("BUILDINFO_TAG=%s", o.VersionStr),
-	)
-	cmd.Dir = o.PkgDir
-	cmd.Stderr = os.Stderr
-	log.Printf("%s %s", cmd.Env, cmd.Args)
-	if out, err := execFn(cmd); err != nil {
-		log.Fatalf("%s %s: %s\n\n%s", cmd.Env, cmd.Args, err, out)
-	}
-
-	absoluteSrcArchivePath := filepath.Join(o.PkgDir, srcArchive)
-	f, err := os.Open(absoluteSrcArchivePath)
-	if err != nil {
-		log.Fatalf("os.Open(%s): %s", absoluteSrcArchivePath, err)
-	}
-	log.Printf("Uploading to s3://%s/%s", o.BucketName, srcArchive)
-	putObjectInput := s3.PutObjectInput{
-		Bucket: &o.BucketName,
-		Key:    &srcArchive,
-		Body:   f,
-	}
-	if _, err := svc.PutObject(&putObjectInput); err != nil {
-		log.Fatalf("s3 upload %s: %s", absoluteSrcArchivePath, err)
-	}
-	if err := f.Close(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func buildCockroach(execFn release.ExecFn, flags runFlags, o opts) {
+func buildCockroach(flags runFlags, o opts, execFn release.ExecFn) {
 	log.Printf("building cockroach %s", pretty.Sprint(o))
 	defer func() {
 		log.Printf("done building cockroach: %s", pretty.Sprint(o))
 	}()
 
-	opts := []release.MakeReleaseOption{
-		release.WithMakeReleaseOptionExecFn(execFn),
-		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "GOFLAGS", o.GoFlags)),
-		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "TAGS", o.Tags)),
-		release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "BUILDCHANNEL", "official-binary")),
-	}
+	var buildOpts release.BuildOptions
+	buildOpts.ExecFn = execFn
 	if flags.isRelease {
-		opts = append(opts, release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "BUILDINFO_TAG", o.VersionStr)))
-		opts = append(opts, release.WithMakeReleaseOptionBuildArg(fmt.Sprintf("%s=%s", "BUILD_TAGGED_RELEASE", "true")))
+		buildOpts.Release = true
+		buildOpts.BuildTag = o.VersionStr
 	}
 
-	if err := release.MakeRelease(
-		release.SupportedTarget{
-			BuildType: o.BuildType,
-			Suffix:    o.Suffix,
-		},
-		o.PkgDir,
-		opts...,
-	); err != nil {
+	if err := release.MakeRelease(o.Platform, buildOpts, o.PkgDir); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -305,14 +222,11 @@ type opts struct {
 	VersionStr string
 	Branch     string
 
-	BuildType string
-	GoFlags   string
-	Suffix    string
-	Tags      string
+	Platform release.Platform
 
-	Base       string
-	BucketName string
-	PkgDir     string
+	AbsolutePath string
+	BucketName   string
+	PkgDir       string
 }
 
 func putNonRelease(svc s3I, o opts) {
@@ -322,33 +236,26 @@ func putNonRelease(svc s3I, o opts) {
 			Branch:     o.Branch,
 			BucketName: o.BucketName,
 			Files: append(
-				[]release.NonReleaseFile{release.MakeCRDBBinaryNonReleaseFile(o.Base, filepath.Join(o.PkgDir, o.Base), o.VersionStr)},
-				release.MakeCRDBLibraryNonReleaseFiles(o.PkgDir, o.BuildType, o.VersionStr, o.Suffix)...,
+				[]release.NonReleaseFile{release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr)},
+				release.MakeCRDBLibraryNonReleaseFiles(o.PkgDir, o.Platform, o.VersionStr)...,
 			),
 		},
 	)
 }
 
 func s3KeyRelease(o opts) (string, string) {
-	return release.S3KeyRelease(o.Suffix, o.BuildType, o.VersionStr)
-}
-
-func s3KeyArchive(o opts) (string, string) {
-	archiveBase := fmt.Sprintf("cockroach-%s", o.VersionStr)
-	srcArchive := fmt.Sprintf("%s.%s", archiveBase, "src.tgz")
-	return archiveBase, srcArchive
+	return release.S3KeyRelease(o.Platform, o.VersionStr)
 }
 
 func putRelease(svc s3I, o opts) {
 	release.PutRelease(svc, release.PutReleaseOptions{
 		BucketName: o.BucketName,
 		NoCache:    false,
-		Suffix:     o.Suffix,
-		BuildType:  o.BuildType,
+		Platform:   o.Platform,
 		VersionStr: o.VersionStr,
 		Files: append(
-			[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.Base, filepath.Join(o.PkgDir, o.Base))},
-			release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.BuildType)...,
+			[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath)},
+			release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.Platform)...,
 		),
 	})
 }
@@ -372,38 +279,6 @@ func markLatestRelease(svc s3I, o opts) {
 	oLatest := o
 	oLatest.VersionStr = latestStr
 	_, keyLatest := s3KeyRelease(oLatest)
-	log.Printf("Uploading to s3://%s/%s", o.BucketName, keyLatest)
-	putObjectInput := s3.PutObjectInput{
-		Bucket:       &o.BucketName,
-		Key:          &keyLatest,
-		Body:         bytes.NewReader(buf.Bytes()),
-		CacheControl: &release.NoCache,
-	}
-	if _, err := svc.PutObject(&putObjectInput); err != nil {
-		log.Fatalf("s3 upload %s: %s", keyLatest, err)
-	}
-}
-
-func markLatestArchive(svc s3I, o opts) {
-	_, keyRelease := s3KeyArchive(o)
-
-	log.Printf("Downloading from %s/%s", o.BucketName, keyRelease)
-	binary, err := svc.GetObject(&s3.GetObjectInput{
-		Bucket: &o.BucketName,
-		Key:    &keyRelease,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer binary.Body.Close()
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, binary.Body); err != nil {
-		log.Fatalf("downloading %s/%s: %s", o.BucketName, keyRelease, err)
-	}
-
-	oLatest := o
-	oLatest.VersionStr = latestStr
-	_, keyLatest := s3KeyArchive(oLatest)
 	log.Printf("Uploading to s3://%s/%s", o.BucketName, keyLatest)
 	putObjectInput := s3.PutObjectInput{
 		Bucket:       &o.BucketName,

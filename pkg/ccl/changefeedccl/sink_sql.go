@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -63,13 +64,16 @@ type sqlSink struct {
 	scratch bufalloc.ByteAllocator
 
 	targetNames map[descpb.ID]string
+	metrics     *sliMetrics
 }
 
 // TODO(dan): Make tableName configurable or based on the job ID or
 // something.
 const sqlSinkTableName = `sqlsink`
 
-func makeSQLSink(u sinkURL, tableName string, targets jobspb.ChangefeedTargets) (Sink, error) {
+func makeSQLSink(
+	u sinkURL, tableName string, targets []jobspb.ChangefeedTargetSpecification, m *sliMetrics,
+) (Sink, error) {
 	// Swap the changefeed prefix for the sql connection one that sqlSink
 	// expects.
 	u.Scheme = `postgres`
@@ -80,9 +84,9 @@ func makeSQLSink(u sinkURL, tableName string, targets jobspb.ChangefeedTargets) 
 
 	topics := make(map[string]struct{})
 	targetNames := make(map[descpb.ID]string)
-	for id, t := range targets {
+	for _, t := range targets {
 		topics[t.StatementTimeName] = struct{}{}
-		targetNames[id] = t.StatementTimeName
+		targetNames[t.TableID] = t.StatementTimeName
 	}
 
 	uri := u.String()
@@ -102,6 +106,7 @@ func makeSQLSink(u sinkURL, tableName string, targets jobspb.ChangefeedTargets) 
 		topics:      topics,
 		hasher:      fnv.New32a(),
 		targetNames: targetNames,
+		metrics:     m,
 	}, nil
 }
 
@@ -120,8 +125,15 @@ func (s *sqlSink) Dial() error {
 
 // EmitRow implements the Sink interface.
 func (s *sqlSink) EmitRow(
-	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context,
+	topicDescr TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
 ) error {
+	defer alloc.Release(ctx)
+	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
+
 	topic := s.targetNames[topicDescr.GetID()]
 	if _, ok := s.topics[topic]; !ok {
 		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
@@ -145,6 +157,8 @@ func (s *sqlSink) EmitRow(
 func (s *sqlSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
+	defer s.metrics.recordResolvedCallback()()
+
 	var noKey, noValue []byte
 	for topic := range s.topics {
 		payload, err := encoder.EncodeResolvedTimestamp(ctx, topic, resolved)
@@ -177,6 +191,8 @@ func (s *sqlSink) emit(
 
 // Flush implements the Sink interface.
 func (s *sqlSink) Flush(ctx context.Context) error {
+	defer s.metrics.recordFlushRequestCallback()()
+
 	if len(s.rowBuf) == 0 {
 		return nil
 	}

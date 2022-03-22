@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,6 +33,30 @@ func (s *instance) ReconfigureTokenBucket(
 	asOf time.Time,
 	asOfConsumedRequestUnits float64,
 ) error {
+	if err := s.checkTenantID(ctx, txn, tenantID); err != nil {
+		return err
+	}
+	h := makeSysTableHelper(ctx, s.executor, txn, tenantID)
+	state, err := h.readTenantState()
+	if err != nil {
+		return err
+	}
+	now := s.timeSource.Now()
+	state.update(now)
+	state.Bucket.Reconfigure(
+		ctx, tenantID, availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
+		now, state.Consumption.RU,
+	)
+	if err := h.updateTenantState(state); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTenantID verifies that the tenant exists and is active.
+func (s *instance) checkTenantID(
+	ctx context.Context, txn *kv.Txn, tenantID roachpb.TenantID,
+) error {
 	row, err := s.executor.QueryRowEx(
 		ctx, "check-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`SELECT active FROM system.tenants WHERE id = $1`, tenantID.ToUint64(),
@@ -46,18 +69,6 @@ func (s *instance) ReconfigureTokenBucket(
 	}
 	if active := *row[0].(*tree.DBool); !active {
 		return errors.Errorf("tenant %q is not active", tenantID)
-	}
-	h := makeSysTableHelper(ctx, s.executor, txn, tenantID)
-	state, err := h.readTenantState()
-	if err != nil {
-		return err
-	}
-	state.Bucket.Reconfigure(
-		availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
-		timeutil.Now(), state.Consumption.RU,
-	)
-	if err := h.updateTenantState(state); err != nil {
-		return err
 	}
 	return nil
 }

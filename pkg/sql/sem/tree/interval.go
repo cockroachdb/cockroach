@@ -67,8 +67,8 @@ func (l *intervalLexer) consumeNum() (int64, bool, float64) {
 		// Try to convert.
 		value, err := strconv.ParseFloat(l.str[start:l.offset], 64)
 		if err != nil {
-			l.err = pgerror.Newf(
-				pgcode.InvalidDatetimeFormat, "interval: %v", err)
+			l.err = pgerror.Wrap(
+				err, pgcode.InvalidDatetimeFormat, "interval")
 			return 0, false, 0
 		}
 		decPart = value
@@ -108,8 +108,8 @@ func (l *intervalLexer) consumeInt() int64 {
 
 	x, err := strconv.ParseInt(l.str[start:l.offset], 10, 64)
 	if err != nil {
-		l.err = pgerror.Newf(
-			pgcode.InvalidDatetimeFormat, "interval: %v", err)
+		l.err = pgerror.Wrap(
+			err, pgcode.InvalidDatetimeFormat, "interval")
 		return 0
 	}
 	if start == l.offset {

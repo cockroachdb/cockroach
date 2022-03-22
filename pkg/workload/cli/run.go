@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	gosql "database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -46,6 +47,7 @@ var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on er
 var maxRate = runFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
 var maxOps = runFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
+var countErrors = runFlags.Bool("count-errors", false, "If true, unsuccessful operations count towards --max-ops limit.")
 var duration = runFlags.Duration("duration", 0,
 	"The duration to run (in addition to --ramp). If 0, run forever.")
 var doInit = runFlags.Bool("init", false, "Automatically run init. DEPRECATED: Use workload init instead.")
@@ -240,7 +242,8 @@ func SetCmdDefaults(cmd *cobra.Command) *cobra.Command {
 	return cmd
 }
 
-// numOps keeps a global count of successful operations.
+// numOps keeps a global count of successful operations (if countErrors is
+// false) or of all operations (if countErrors is true).
 var numOps uint64
 
 // workerRun is an infinite loop in which the worker continuously attempts to
@@ -270,11 +273,18 @@ func workerRun(
 		}
 
 		if err := workFn(ctx); err != nil {
-			if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+			if ctx.Err() != nil && (errors.Is(err, ctx.Err()) || errors.Is(err, driver.ErrBadConn)) {
+				// lib/pq may return either the `context canceled` error or a
+				// `bad connection` error when performing an operation with a context
+				// that has been canceled. See https://github.com/lib/pq/pull/1000
 				return
 			}
 			errCh <- err
-			continue
+			if !*countErrors {
+				// Continue to the next iteration of the infinite loop only if
+				// we are not counting the errors.
+				continue
+			}
 		}
 
 		v := atomic.AddUint64(&numOps, 1)
@@ -432,7 +442,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}(prepareCtx); prepareErr != nil {
 		return prepareErr
 	}
-	log.Infof(ctx, "creating load generator... done (took %s)", timeutil.Now().Sub(prepareStart))
+	log.Infof(ctx, "creating load generator... done (took %s)", timeutil.Since(prepareStart))
 
 	start := timeutil.Now()
 	errCh := make(chan error)
@@ -460,14 +470,11 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		for i, workFn := range ops.WorkerFns {
 			go func(i int, workFn func(context.Context) error) {
 				// If a ramp period was specified, start all of the workers
-				// gradually with a new context.
+				// gradually.
 				if rampCtx != nil {
 					rampPerWorker := *ramp / time.Duration(len(ops.WorkerFns))
 					time.Sleep(time.Duration(i) * rampPerWorker)
-					workerRun(rampCtx, errCh, nil /* wg */, limiter, workFn)
 				}
-
-				// Start worker again, this time with the main context.
 				workerRun(workersCtx, errCh, &wg, limiter, workFn)
 			}(i, workFn)
 		}
@@ -505,6 +512,15 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			return err
 		}
 		jsonEnc = json.NewEncoder(jsonF)
+		defer func() {
+			if err := jsonF.Sync(); err != nil {
+				log.Warningf(ctx, "histogram: %v", err)
+			}
+
+			if err := jsonF.Close(); err != nil {
+				log.Warningf(ctx, "histogram: %v", err)
+			}
+		}()
 	}
 
 	everySecond := log.Every(*displayEvery)
@@ -525,7 +541,9 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			reg.Tick(func(t histogram.Tick) {
 				formatter.outputTick(startElapsed, t)
 				if jsonEnc != nil && rampDone == nil {
-					_ = jsonEnc.Encode(t.Snapshot())
+					if err := jsonEnc.Encode(t.Snapshot()); err != nil {
+						log.Warningf(ctx, "histogram: %v", err)
+					}
 				}
 			})
 
@@ -554,7 +572,9 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					// Note that we're outputting the delta from the last tick. The
 					// cumulative histogram can be computed by merging all of the
 					// per-tick histograms.
-					_ = jsonEnc.Encode(t.Snapshot())
+					if err := jsonEnc.Encode(t.Snapshot()); err != nil {
+						log.Warningf(ctx, "histogram: %v", err)
+					}
 				}
 				if ops.ResultHist == `` || ops.ResultHist == t.Name {
 					if resultTick.Cumulative == nil {

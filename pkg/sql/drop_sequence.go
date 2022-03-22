@@ -121,7 +121,7 @@ func (p *planner) dropSequenceImpl(
 			return err
 		}
 	}
-	return p.initiateDropTable(ctx, seqDesc, queueJob, jobDesc, true /* drainName */)
+	return p.initiateDropTable(ctx, seqDesc, queueJob, jobDesc)
 }
 
 // sequenceDependency error returns an error if the given sequence cannot be dropped because

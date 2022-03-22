@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "kvevent",
     srcs = [
+        "alloc.go",
         "blocking_buffer.go",
         "chan_buffer.go",
         "err_buffer.go",
@@ -16,27 +17,33 @@ go_library(
         "//pkg/ccl/changefeedccl/cdcutils",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs/jobspb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/log/logcrash",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "kvevent_test",
-    srcs = ["blocking_buffer_test.go"],
+    srcs = [
+        "alloc_test.go",
+        "blocking_buffer_test.go",
+    ],
+    embed = [":kvevent"],
     deps = [
-        ":kvevent",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/randgen",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/types",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",

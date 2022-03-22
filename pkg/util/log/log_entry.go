@@ -12,7 +12,9 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 	"github.com/petermattis/goid"
 )
 
@@ -60,6 +63,8 @@ type logEntry struct {
 	// The channel on which the entry was sent. This is not reported by
 	// formatters when the header boolean is set.
 	ch Channel
+	// The binary version with which the event was generated.
+	version string
 
 	// The goroutine where the event was generated.
 	gid int64
@@ -69,9 +74,6 @@ type logEntry struct {
 
 	// The entry counter. Populated by outputLogEntry().
 	counter uint64
-
-	// The logging tags.
-	tags *logtags.Buffer
 
 	// The stack trace(s), when processing e.g. a fatal event.
 	stacks []byte
@@ -83,10 +85,70 @@ type logEntry struct {
 	payload entryPayload
 }
 
-type entryPayload struct {
-	// Whether the payload is redactable or not.
-	redactable bool
+var _ redact.SafeFormatter = (*logEntry)(nil)
+var _ fmt.Stringer = (*logEntry)(nil)
 
+func (e *logEntry) SafeFormat(w interfaces.SafePrinter, _ rune) {
+	if len(e.file) != 0 {
+		// TODO(knz): The "canonical" way to represent a file/line prefix
+		// is: <file>:<line>: msg
+		// with a colon between the line number and the message.
+		// However, some location filter deep inside SQL doesn't
+		// understand a colon after the line number.
+		w.SafeString(redact.SafeString(e.file))
+		w.SafeRune(':')
+		w.SafeInt(redact.SafeInt(e.line))
+		w.SafeRune(' ')
+	}
+	if e.payload.tags != nil {
+		w.SafeRune('[')
+		e.payload.tags.formatToSafeWriter(w, e.payload.redactable)
+		w.SafeString("] ")
+	}
+
+	if !e.payload.redactable {
+		w.Print(e.payload.message)
+	} else {
+		w.Print(redact.RedactableString(e.payload.message))
+	}
+}
+
+// String is a faster implementation than `SafeFormat` which is why we
+// don't follow the usual convention of implementing `String` via a call
+// to `redact.StringWithoutMarkers()`. This implementation is still
+// around because it sits in the hot path of verbose tracing.
+func (e *logEntry) String() string {
+	entry := e.convertToLegacy()
+	if len(entry.Tags) == 0 && len(entry.File) == 0 && !entry.Redactable {
+		// Shortcut.
+		return entry.Message
+	}
+
+	var buf strings.Builder
+	if len(entry.File) != 0 {
+		buf.WriteString(entry.File)
+		buf.WriteByte(':')
+		buf.WriteString(strconv.FormatInt(entry.Line, 10))
+		buf.WriteByte(' ')
+	}
+	if len(entry.Tags) > 0 {
+		buf.WriteByte('[')
+		buf.WriteString(entry.Tags)
+		buf.WriteString("] ")
+	}
+	buf.WriteString(entry.Message)
+	msg := buf.String()
+
+	if entry.Redactable {
+		// This is true when eventInternal is called from logfDepth(),
+		// ie. a regular log call. In this case, the tags and message may contain
+		// redaction markers. We remove them here.
+		msg = redact.RedactableString(msg).StripMarkers()
+	}
+	return msg
+}
+
+type entryPayload struct {
 	// The actual payload string.
 	// For structured entries, this is the JSON
 	// representation of the payload fields, without the
@@ -97,29 +159,46 @@ type entryPayload struct {
 	// in disguise. If it is false, message is a flat string with
 	// no guarantees about content.
 	message string
+
+	// The tags, in a formattable representation.
+	//
+	// If redactable below is true, the value part of the
+	// formattableTags is encoded as a RedactableString. If redactable
+	// is false, the value part is raw and can contain redaction
+	// markers. (Same as message above.)
+	tags formattableTags
+
+	// Whether the payload message is redactable or not.
+	redactable bool
 }
 
-func makeRedactablePayload(m redact.RedactableString) entryPayload {
-	return entryPayload{redactable: true, message: string(m)}
+func makeRedactablePayload(ctx context.Context, m redact.RedactableString) entryPayload {
+	return entryPayload{
+		message:    string(m),
+		tags:       makeFormattableTags(ctx, true /* redactable */),
+		redactable: true,
+	}
 }
 
-func makeUnsafePayload(m string) entryPayload {
-	return entryPayload{redactable: false, message: m}
+func makeUnsafePayload(ctx context.Context, m string) entryPayload {
+	return entryPayload{
+		message:    m,
+		tags:       makeFormattableTags(ctx, false /* redactable */),
+		redactable: false,
+	}
 }
 
 // makeEntry creates a logEntry.
 func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEntry) {
-	logging.idMu.RLock()
-	ids := logging.idMu.idPayload
-	logging.idMu.RUnlock()
+	ids := getIdentificationPayload(ctx)
 
 	res = logEntry{
 		idPayload: ids,
 		ts:        timeutil.Now().UnixNano(),
 		sev:       s,
 		ch:        c,
+		version:   build.BinaryVersion(),
 		gid:       goid.Get(),
-		tags:      logtags.FromContext(ctx),
 	}
 
 	// Populate file/lineno.
@@ -136,7 +215,7 @@ func makeStructuredEntry(
 
 	res.structured = true
 	_, b := payload.AppendJSONFields(false, nil)
-	res.payload = makeRedactablePayload(b.ToString())
+	res.payload = makeRedactablePayload(ctx, b.ToString())
 	return res
 }
 
@@ -164,23 +243,23 @@ func makeUnstructuredEntry(
 		} else {
 			buf.Printf(format, args...)
 		}
-		res.payload = makeRedactablePayload(buf.RedactableString())
+		res.payload = makeRedactablePayload(ctx, buf.RedactableString())
 	} else {
 		var buf strings.Builder
 		formatArgs(&buf, format, args...)
-		res.payload = makeUnsafePayload(buf.String())
+		res.payload = makeUnsafePayload(ctx, buf.String())
 	}
 
 	return res
 }
 
-var configTagsBuffer = logtags.SingleTagBuffer("config", nil)
+var configTagsCtx = logtags.AddTag(context.Background(), "config", nil)
 
 // makeStartLine creates a formatted log entry suitable for the start
 // of a logging output using the canonical logging format.
 func makeStartLine(formatter logFormatter, format string, args ...interface{}) *buffer {
 	entry := makeUnstructuredEntry(
-		context.Background(),
+		configTagsCtx,
 		severity.UNKNOWN, /* header - ignored */
 		0,                /* header - ignored */
 		2,                /* depth */
@@ -188,7 +267,6 @@ func makeStartLine(formatter logFormatter, format string, args ...interface{}) *
 		format,
 		args...)
 	entry.header = true
-	entry.tags = configTagsBuffer
 	return formatter.formatEntry(entry)
 }
 
@@ -198,30 +276,15 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 	f := l.formatter
 	messages := make([]*buffer, 0, 6)
 	messages = append(messages,
-		makeStartLine(f, "file created at: %s", Safe(now.Format("2006/01/02 15:04:05"))),
-		makeStartLine(f, "running on machine: %s", host),
-		makeStartLine(f, "binary: %s", Safe(build.GetInfo().Short())),
+		makeStartLine(f, "file created at: %s", redact.Safe(now.Format("2006/01/02 15:04:05"))),
+		makeStartLine(f, "running on machine: %s", fullHostName),
+		makeStartLine(f, "binary: %s", redact.Safe(build.GetInfo().Short())),
 		makeStartLine(f, "arguments: %s", os.Args),
 	)
 
-	logging.idMu.RLock()
-	if logging.idMu.clusterID != "" {
-		messages = append(messages, makeStartLine(f, "clusterID: %s", logging.idMu.clusterID))
-	}
-	if logging.idMu.nodeID != 0 {
-		messages = append(messages, makeStartLine(f, "nodeID: n%d", logging.idMu.nodeID))
-	}
-	if logging.idMu.tenantID != "" {
-		messages = append(messages, makeStartLine(f, "tenantID: %s", logging.idMu.tenantID))
-	}
-	if logging.idMu.sqlInstanceID != 0 {
-		messages = append(messages, makeStartLine(f, "instanceID: %d", logging.idMu.sqlInstanceID))
-	}
-	logging.idMu.RUnlock()
-
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
-	messages = append(messages, makeStartLine(f, "log format (utf8=\u2713): %s", Safe(f.formatterName())))
+	messages = append(messages, makeStartLine(f, "log format (utf8=\u2713): %s", redact.Safe(f.formatterName())))
 
 	if strings.HasPrefix(f.formatterName(), "crdb-") {
 		// For the crdb file formats, suggest the structure of each log line.
@@ -245,8 +308,10 @@ func (e logEntry) convertToLegacy() (res logpb.Entry) {
 		Message:    e.payload.message,
 	}
 
-	if e.tags != nil {
-		res.Tags = renderTagsAsString(e.tags, e.payload.redactable)
+	if e.payload.tags != nil {
+		var buf buffer
+		e.payload.tags.formatToBuffer(&buf)
+		res.Tags = buf.String()
 	}
 
 	if e.structured {
@@ -267,15 +332,6 @@ func (e logEntry) convertToLegacy() (res logpb.Entry) {
 }
 
 const structuredEntryPrefix = "Structured entry: "
-
-func renderTagsAsString(tags *logtags.Buffer, redactable bool) string {
-	if redactable {
-		return string(renderTagsAsRedactable(tags))
-	}
-	var buf strings.Builder
-	tags.FormatToString(&buf)
-	return buf.String()
-}
 
 // MakeLegacyEntry creates an logpb.Entry.
 func MakeLegacyEntry(

@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
@@ -22,19 +23,46 @@ import (
 var (
 	ReadEnabled          = readEnabled
 	ReadInterval         = readInterval
+	WriteEnabled         = writeEnabled
+	WriteInterval        = writeInterval
 	NumStepsToPlanAtOnce = numStepsToPlanAtOnce
 )
 
-func (p *Prober) Probe(ctx context.Context, db dbGet) {
-	p.probe(ctx, db)
+func (p *Prober) ReadProbe(ctx context.Context, db *kv.DB) {
+	p.readProbe(ctx, db, p.readPlanner)
 }
 
-func (p *Prober) PlannerNext(ctx context.Context) (Step, error) {
-	return p.planner.next(ctx)
+func (p *Prober) WriteProbe(ctx context.Context, db *kv.DB) {
+	p.writeProbe(ctx, db, p.writePlanner)
 }
 
-func (p *Prober) SetPlanningRateLimit(d time.Duration) {
-	p.planner.(*meta2Planner).getRateLimit = func(settings *cluster.Settings) time.Duration {
+type recordingPlanner struct {
+	pl   planner
+	last Step
+}
+
+func (rp *recordingPlanner) next(ctx context.Context) (Step, error) {
+	s, err := rp.pl.next(ctx)
+	rp.last = s
+	return s, err
+}
+
+func (p *Prober) WriteProbeReturnLastStep(ctx context.Context, db *kv.DB) *Step {
+	rp := &recordingPlanner{}
+	rp.pl = p.writePlanner
+	p.writeProbe(ctx, db, rp)
+	return &rp.last
+}
+
+func (p *Prober) ReadPlannerNext(ctx context.Context) (Step, error) {
+	return p.readPlanner.next(ctx)
+}
+
+func (p *Prober) SetPlanningRateLimits(d time.Duration) {
+	p.readPlanner.(*meta2Planner).getRateLimit = func(_ time.Duration, _ *cluster.Settings) time.Duration {
+		return d
+	}
+	p.writePlanner.(*meta2Planner).getRateLimit = func(_ time.Duration, _ *cluster.Settings) time.Duration {
 		return d
 	}
 }

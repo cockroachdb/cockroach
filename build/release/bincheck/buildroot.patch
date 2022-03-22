@@ -1,0 +1,35 @@
+diff --git a/package/ncurses/Config.in b/package/ncurses/Config.in
+index 92be164..b3333f1 100644
+--- a/package/ncurses/Config.in
++++ b/package/ncurses/Config.in
+@@ -23,4 +23,9 @@ config BR2_PACKAGE_NCURSES_TARGET_PROGS
+ 	help
+ 	  Include ncurses programs in target (clear, reset, tput, ...)
+ 
++config BR2_PACKAGE_NCURSES_TERMLIB
++	bool "separate terminfo library"
++	help
++	  Build a separate terminfo library (libtinfo)
++
+ endif
+diff --git a/package/ncurses/ncurses.mk b/package/ncurses/ncurses.mk
+index 94c8c9a..c1b61aa 100644
+--- a/package/ncurses/ncurses.mk
++++ b/package/ncurses/ncurses.mk
+@@ -27,6 +27,7 @@ NCURSES_CONF_OPTS = \
+ 	--enable-pc-files \
+ 	--with-pkg-config-libdir="/usr/lib/pkgconfig" \
+ 	$(if $(BR2_PACKAGE_NCURSES_TARGET_PROGS),,--without-progs) \
++	$(if $(BR2_PACKAGE_NCURSES_TERMLIB),--with-termlib) \
+ 	--without-manpages
+ 
+ ifeq ($(BR2_STATIC_LIBS),y)
+@@ -65,7 +66,7 @@ NCURSES_TERMINFO_FILES = \
+ ifeq ($(BR2_PACKAGE_NCURSES_WCHAR),y)
+ NCURSES_CONF_OPTS += --enable-widec
+ NCURSES_LIB_SUFFIX = w
+-NCURSES_LIBS = ncurses menu panel form
++NCURSES_LIBS = ncurses menu panel form $(if $(BR2_PACKAGE_NCURSES_TERMLIB),tinfo)
+ 
+ define NCURSES_LINK_LIBS_STATIC
+ 	$(foreach lib,$(NCURSES_LIBS:%=lib%), \

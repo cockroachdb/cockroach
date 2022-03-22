@@ -12,9 +12,8 @@ package colexecagg
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -70,19 +69,15 @@ func newAvgOrderedAggAlloc(
 
 type avgInt16OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Decimals
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
 	curSum apd.Decimal
-	// curCount keeps track of the number of elements that we've seen
+	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt16OrderedAgg{}
@@ -95,10 +90,7 @@ func (a *avgInt16OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *avgInt16OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -117,7 +109,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -129,8 +121,6 @@ func (a *avgInt16OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -143,15 +133,14 @@ func (a *avgInt16OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -162,7 +151,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -174,7 +163,6 @@ func (a *avgInt16OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -187,15 +175,14 @@ func (a *avgInt16OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
@@ -208,7 +195,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -220,8 +207,6 @@ func (a *avgInt16OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -233,15 +218,14 @@ func (a *avgInt16OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -251,7 +235,7 @@ func (a *avgInt16OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -263,7 +247,6 @@ func (a *avgInt16OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -275,22 +258,21 @@ func (a *avgInt16OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
 		}
 	},
 	)
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -304,12 +286,13 @@ func (a *avgInt16OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	col := a.col
+	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -319,7 +302,6 @@ func (a *avgInt16OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
 }
 
 type avgInt16OrderedAggAlloc struct {
@@ -345,19 +327,15 @@ func (a *avgInt16OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type avgInt32OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Decimals
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
 	curSum apd.Decimal
-	// curCount keeps track of the number of elements that we've seen
+	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt32OrderedAgg{}
@@ -370,10 +348,7 @@ func (a *avgInt32OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *avgInt32OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -392,7 +367,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -404,8 +379,6 @@ func (a *avgInt32OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -418,15 +391,14 @@ func (a *avgInt32OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -437,7 +409,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -449,7 +421,6 @@ func (a *avgInt32OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -462,15 +433,14 @@ func (a *avgInt32OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
@@ -483,7 +453,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -495,8 +465,6 @@ func (a *avgInt32OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -508,15 +476,14 @@ func (a *avgInt32OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -526,7 +493,7 @@ func (a *avgInt32OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -538,7 +505,6 @@ func (a *avgInt32OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -550,22 +516,21 @@ func (a *avgInt32OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
 		}
 	},
 	)
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -579,12 +544,13 @@ func (a *avgInt32OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	col := a.col
+	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -594,7 +560,6 @@ func (a *avgInt32OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
 }
 
 type avgInt32OrderedAggAlloc struct {
@@ -620,19 +585,15 @@ func (a *avgInt32OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type avgInt64OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Decimals
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
 	curSum apd.Decimal
-	// curCount keeps track of the number of elements that we've seen
+	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
-	overloadHelper              execgen.OverloadHelper
 }
 
 var _ AggregateFunc = &avgInt64OrderedAgg{}
@@ -645,10 +606,7 @@ func (a *avgInt64OrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *avgInt64OrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	// In order to inline the templated code of overloads, we need to have a
-	// "_overloadHelper" local variable of type "overloadHelper".
-	_overloadHelper := a.overloadHelper
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -667,7 +625,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -679,8 +637,6 @@ func (a *avgInt64OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -693,15 +649,14 @@ func (a *avgInt64OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -712,7 +667,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -724,7 +679,6 @@ func (a *avgInt64OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -737,15 +691,14 @@ func (a *avgInt64OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
@@ -758,7 +711,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -770,8 +723,6 @@ func (a *avgInt64OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -783,15 +734,14 @@ func (a *avgInt64OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -801,7 +751,7 @@ func (a *avgInt64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -813,7 +763,6 @@ func (a *avgInt64OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -825,22 +774,21 @@ func (a *avgInt64OrderedAgg) Compute(
 
 						{
 
-							tmpDec := &_overloadHelper.TmpDec1
+							var tmpDec apd.Decimal //gcassert:noescape
 							tmpDec.SetInt64(int64(v))
-							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
+							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
 		}
 	},
 	)
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -854,12 +802,13 @@ func (a *avgInt64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	col := a.col
+	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -869,7 +818,6 @@ func (a *avgInt64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
 }
 
 type avgInt64OrderedAggAlloc struct {
@@ -895,18 +843,15 @@ func (a *avgInt64OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type avgDecimalOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Decimals
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
 	curSum apd.Decimal
-	// curCount keeps track of the number of elements that we've seen
+	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col []apd.Decimal
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &avgDecimalOrderedAgg{}
@@ -919,7 +864,7 @@ func (a *avgDecimalOrderedAgg) SetOutput(vec coldata.Vec) {
 func (a *avgDecimalOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
-	oldCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	oldCurSumSize := a.curSum.Size()
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
@@ -938,7 +883,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -950,8 +895,6 @@ func (a *avgDecimalOrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -971,7 +914,6 @@ func (a *avgDecimalOrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -982,7 +924,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -994,7 +936,6 @@ func (a *avgDecimalOrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -1014,7 +955,6 @@ func (a *avgDecimalOrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
@@ -1027,7 +967,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -1039,8 +979,6 @@ func (a *avgDecimalOrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -1059,7 +997,6 @@ func (a *avgDecimalOrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -1069,7 +1006,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 
@@ -1081,7 +1018,6 @@ func (a *avgDecimalOrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroDecimalValue
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -1100,14 +1036,13 @@ func (a *avgDecimalOrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
 		}
 	},
 	)
-	newCurSumSize := tree.SizeOfDecimal(&a.curSum)
+	newCurSumSize := a.curSum.Size()
 	if newCurSumSize != oldCurSumSize {
 		a.allocator.AdjustMemoryUsage(int64(newCurSumSize - oldCurSumSize))
 	}
@@ -1121,12 +1056,13 @@ func (a *avgDecimalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	col := a.col
+	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
 
-		a.col[outputIdx].SetInt64(a.curCount)
-		if _, err := tree.DecimalCtx.Quo(&a.col[outputIdx], &a.curSum, &a.col[outputIdx]); err != nil {
+		col[outputIdx].SetInt64(a.curCount)
+		if _, err := tree.DecimalCtx.Quo(&col[outputIdx], &a.curSum, &col[outputIdx]); err != nil {
 			colexecerror.InternalError(err)
 		}
 	}
@@ -1136,7 +1072,6 @@ func (a *avgDecimalOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroDecimalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
 }
 
 type avgDecimalOrderedAggAlloc struct {
@@ -1162,18 +1097,15 @@ func (a *avgDecimalOrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type avgFloat64OrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Float64s
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
 	curSum float64
-	// curCount keeps track of the number of elements that we've seen
+	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col []float64
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &avgFloat64OrderedAgg{}
@@ -1205,7 +1137,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum / float64(a.curCount)
@@ -1213,8 +1145,6 @@ func (a *avgFloat64OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroFloat64Value
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -1231,7 +1161,6 @@ func (a *avgFloat64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -1242,7 +1171,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum / float64(a.curCount)
@@ -1250,7 +1179,6 @@ func (a *avgFloat64OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroFloat64Value
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -1267,7 +1195,6 @@ func (a *avgFloat64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
@@ -1280,7 +1207,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum / float64(a.curCount)
@@ -1288,8 +1215,6 @@ func (a *avgFloat64OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroFloat64Value
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -1305,7 +1230,6 @@ func (a *avgFloat64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -1315,7 +1239,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum / float64(a.curCount)
@@ -1323,7 +1247,6 @@ func (a *avgFloat64OrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroFloat64Value
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -1339,7 +1262,6 @@ func (a *avgFloat64OrderedAgg) Compute(
 						}
 
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
@@ -1360,10 +1282,11 @@ func (a *avgFloat64OrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	col := a.col
+	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curSum / float64(a.curCount)
+		col[outputIdx] = a.curSum / float64(a.curCount)
 	}
 }
 
@@ -1371,7 +1294,6 @@ func (a *avgFloat64OrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroFloat64Value
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
 }
 
 type avgFloat64OrderedAggAlloc struct {
@@ -1397,18 +1319,15 @@ func (a *avgFloat64OrderedAggAlloc) newAggFunc() AggregateFunc {
 
 type avgIntervalOrderedAgg struct {
 	orderedAggregateFuncBase
+	// col points to the statically-typed output vector.
+	col coldata.Durations
 	// curSum keeps track of the sum of elements belonging to the current group,
 	// so we can index into the slice once per group, instead of on each
 	// iteration.
 	curSum duration.Duration
-	// curCount keeps track of the number of elements that we've seen
+	// curCount keeps track of the number of non-null elements that we've seen
 	// belonging to the current group.
 	curCount int64
-	// col points to the statically-typed output vector.
-	col []duration.Duration
-	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
-	// for the group that is currently being aggregated.
-	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &avgIntervalOrderedAgg{}
@@ -1440,7 +1359,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
@@ -1448,8 +1367,6 @@ func (a *avgIntervalOrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroIntervalValue
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -1461,7 +1378,6 @@ func (a *avgIntervalOrderedAgg) Compute(
 						v := col.Get(i)
 						a.curSum = a.curSum.Add(v)
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -1472,7 +1388,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
@@ -1480,7 +1396,6 @@ func (a *avgIntervalOrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroIntervalValue
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -1492,7 +1407,6 @@ func (a *avgIntervalOrderedAgg) Compute(
 						v := col.Get(i)
 						a.curSum = a.curSum.Add(v)
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
@@ -1505,7 +1419,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
@@ -1513,8 +1427,6 @@ func (a *avgIntervalOrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroIntervalValue
 							a.curCount = 0
-
-							a.foundNonNullForCurrentGroup = false
 						}
 						a.isFirstGroup = false
 					}
@@ -1525,7 +1437,6 @@ func (a *avgIntervalOrderedAgg) Compute(
 						v := col.Get(i)
 						a.curSum = a.curSum.Add(v)
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
@@ -1535,7 +1446,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 						if !a.isFirstGroup {
 							// If we encounter a new group, and we haven't found any non-nulls for the
 							// current group, the output for this group should be null.
-							if !a.foundNonNullForCurrentGroup {
+							if a.curCount == 0 {
 								a.nulls.SetNull(a.curIdx)
 							} else {
 								a.col[a.curIdx] = a.curSum.Div(int64(a.curCount))
@@ -1543,7 +1454,6 @@ func (a *avgIntervalOrderedAgg) Compute(
 							a.curIdx++
 							a.curSum = zeroIntervalValue
 							a.curCount = 0
-
 						}
 						a.isFirstGroup = false
 					}
@@ -1554,7 +1464,6 @@ func (a *avgIntervalOrderedAgg) Compute(
 						v := col.Get(i)
 						a.curSum = a.curSum.Add(v)
 						a.curCount++
-						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			}
@@ -1575,10 +1484,11 @@ func (a *avgIntervalOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
-	if !a.foundNonNullForCurrentGroup {
+	col := a.col
+	if a.curCount == 0 {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curSum.Div(int64(a.curCount))
+		col[outputIdx] = a.curSum.Div(int64(a.curCount))
 	}
 }
 
@@ -1586,7 +1496,6 @@ func (a *avgIntervalOrderedAgg) Reset() {
 	a.orderedAggregateFuncBase.Reset()
 	a.curSum = zeroIntervalValue
 	a.curCount = 0
-	a.foundNonNullForCurrentGroup = false
 }
 
 type avgIntervalOrderedAggAlloc struct {

@@ -19,9 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -36,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -174,14 +170,9 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "in test", nil)
 
 	log.Infof(ctx, "setting zone config to disable replication")
-	// Allow for inserting zone configs without having to go through (or
-	// duplicate the logic from) the CLI.
-	config.TestingSetupZoneConfigHook(tc.Stopper())
-	zoneConfig := zonepb.DefaultZoneConfig()
-	// Force just one replica per range to ensure that we can shut down
-	// nodes without endangering the liveness range.
-	zoneConfig.NumReplicas = proto.Int32(1)
-	config.TestingSetZoneConfig(keys.MetaRangesID, zoneConfig)
+	if _, err := tc.Conns[0].Exec(`ALTER RANGE meta CONFIGURE ZONE using num_replicas = 1`); err != nil {
+		t.Fatal(err)
+	}
 
 	log.Infof(ctx, "starting 3 more nodes")
 	tc.AddAndStartServer(t, serverArgs)

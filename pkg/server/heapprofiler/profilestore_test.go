@@ -34,7 +34,7 @@ func TestMakeFileName(t *testing.T) {
 
 	// Also check when the millisecond part is zero. This verifies that
 	// the .999 format is not used, which would cause the millisecond
-	// part to be (erronously) omitted.
+	// part to be (erroneously) omitted.
 	ts = time.Date(2020, 6, 15, 13, 19, 19, 00000000, time.UTC)
 	assert.Equal(t,
 		filepath.Join("mydir", "memprof.2020-06-15T13_19_19.000.123456.test"),
@@ -197,13 +197,7 @@ func TestCleanupLastRampup(t *testing.T) {
 	s := profileStore{prefix: HeapFileNamePrefix}
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			path, err := ioutil.TempDir("", "cleanup")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() { _ = os.RemoveAll(path) }()
-
-			files := populate(t, path, tc.startFiles)
+			files := populate(t, t.TempDir(), tc.startFiles)
 
 			cleaned := []string{}
 			cleanupFn := func(s string) error {

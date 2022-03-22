@@ -60,6 +60,7 @@ func main() {
 	f.StringVarP(&cfg.InputFile, cliflags.File.Name, cliflags.File.Shorthand, cfg.InputFile, cliflags.File.Description)
 	f.DurationVar(&cfg.ShellCtx.RepeatDelay, cliflags.Watch.Name, cfg.ShellCtx.RepeatDelay, cliflags.Watch.Description)
 	f.Var(&cfg.SafeUpdates, cliflags.SafeUpdates.Name, cliflags.SafeUpdates.Description)
+	f.BoolVar(&cfg.ReadOnly, cliflags.ReadOnly.Name, cfg.ReadOnly, cliflags.ReadOnly.Description)
 	f.Lookup(cliflags.SafeUpdates.Name).NoOptDefVal = "true" // allow the flag to not be given any value
 	f.BoolVar(&cfg.ConnCtx.DebugMode, cliflags.CliDebugMode.Name, cfg.ConnCtx.DebugMode, cliflags.CliDebugMode.Description)
 	f.BoolVar(&cfg.ConnCtx.Echo, cliflags.EchoSQL.Name, cfg.ConnCtx.Echo, cliflags.EchoSQL.Description)

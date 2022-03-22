@@ -12,9 +12,9 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -59,9 +59,9 @@ func (r *Replica) Metrics(
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
 	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
-	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
+	quiescent := r.mu.quiescent
 	desc := r.mu.state.Desc
-	zone := r.mu.zone
+	conf := r.mu.conf
 	raftLogSize := r.mu.raftLogSize
 	raftLogSizeTrusted := r.mu.raftLogSizeTrusted
 	r.mu.RUnlock()
@@ -77,7 +77,7 @@ func (r *Replica) Metrics(
 		ctx,
 		now.ToTimestamp(),
 		&r.store.cfg.RaftConfig,
-		zone,
+		conf,
 		livenessMap,
 		clusterNodes,
 		desc,
@@ -97,7 +97,7 @@ func calcReplicaMetrics(
 	_ context.Context,
 	_ hlc.Timestamp,
 	raftCfg *base.RaftConfig,
-	zone *zonepb.ZoneConfig,
+	conf roachpb.SpanConfig,
 	livenessMap liveness.IsLiveMap,
 	clusterNodes int,
 	desc *roachpb.RangeDescriptor,
@@ -126,7 +126,7 @@ func calcReplicaMetrics(
 	m.Ticking = ticking
 
 	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated = calcRangeCounter(
-		storeID, desc, leaseStatus, livenessMap, zone.GetNumVoters(), *zone.NumReplicas, clusterNodes)
+		storeID, desc, leaseStatus, livenessMap, conf.GetNumVoters(), conf.NumReplicas, clusterNodes)
 
 	const raftLogTooLargeMultiple = 4
 	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple*raftCfg.RaftLogTruncationThreshold) &&
@@ -249,10 +249,10 @@ func calcBehindCount(
 // A "Query" is a BatchRequest (regardless of its contents) arriving at the
 // leaseholder with a gateway node set in the header (i.e. excluding requests
 // that weren't sent through a DistSender, which in practice should be
-// practically none).
-func (r *Replica) QueriesPerSecond() float64 {
-	qps, _ := r.leaseholderStats.avgQPS()
-	return qps
+// practically none). See Replica.getBatchRequestQPS() for how this is
+// accounted for.
+func (r *Replica) QueriesPerSecond() (float64, time.Duration) {
+	return r.leaseholderStats.avgQPS()
 }
 
 // WritesPerSecond returns the range's average keys written per second. A
@@ -272,7 +272,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) needsMergeBySizeRLocked() bool {
-	return r.mu.state.Stats.Total() < *r.mu.zone.RangeMinBytes
+	return r.mu.state.Stats.Total() < r.mu.conf.RangeMinBytes
 }
 
 func (r *Replica) needsRaftLogTruncationLocked() bool {
@@ -280,7 +280,10 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 	// operation or even every operation which occurs after the Raft log exceeds
 	// RaftLogQueueStaleSize. The logic below queues the replica for possible
 	// Raft log truncation whenever an additional RaftLogQueueStaleSize bytes
-	// have been written to the Raft log.
+	// have been written to the Raft log. Note that it does not matter if some
+	// of the bytes in raftLogLastCheckSize are already part of pending
+	// truncations since this comparison is looking at whether the raft log has
+	// grown sufficiently.
 	checkRaftLog := r.mu.raftLogSize-r.mu.raftLogLastCheckSize >= RaftLogQueueStaleSize
 	if checkRaftLog {
 		r.mu.raftLogLastCheckSize = r.mu.raftLogSize
@@ -291,11 +294,11 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 // exceedsMultipleOfSplitSizeRLocked returns whether the current size of the
 // range exceeds the max size times mult. If so, the bytes overage is also
 // returned. Note that the max size is determined by either the current maximum
-// size as dictated by the zone config or a previous max size indicating that
+// size as dictated by the span config or a previous max size indicating that
 // the max size has changed relatively recently and thus we should not
 // backpressure for being over.
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool, bytesOver int64) {
-	maxBytes := *r.mu.zone.RangeMaxBytes
+	maxBytes := r.mu.conf.RangeMaxBytes
 	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
 		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
 	}

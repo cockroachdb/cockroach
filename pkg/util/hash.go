@@ -39,6 +39,11 @@ func MakeFNV64() FNV64 {
 	return FNV64{sum: fnvBase}
 }
 
+// Init initializes FNV64 to starting value.
+func (f *FNV64) Init() {
+	f.sum = fnvBase
+}
+
 // IsInitialized returns true if the hash struct was initialized, which happens
 // automatically when created through MakeFNV64 above.
 func (f *FNV64) IsInitialized() bool {

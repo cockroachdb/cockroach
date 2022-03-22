@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
@@ -40,6 +42,9 @@ func TryDelegate(
 	case *tree.ShowClusterSettingList:
 		return d.delegateShowClusterSettingList(t)
 
+	case *tree.ShowTenantClusterSettingList:
+		return d.delegateShowTenantClusterSettingList(t)
+
 	case *tree.ShowDatabases:
 		return d.delegateShowDatabases(t)
 
@@ -52,8 +57,14 @@ func TryDelegate(
 	case *tree.ShowCreate:
 		return d.delegateShowCreate(t)
 
+	case *tree.ShowCreateAllSchemas:
+		return d.delegateShowCreateAllSchemas()
+
 	case *tree.ShowCreateAllTables:
 		return d.delegateShowCreateAllTables()
+
+	case *tree.ShowCreateAllTypes:
+		return d.delegateShowCreateAllTypes()
 
 	case *tree.ShowDatabaseIndexes:
 		return d.delegateShowDatabaseIndexes(t)
@@ -133,8 +144,20 @@ func TryDelegate(
 	case *tree.ShowSchedules:
 		return d.delegateShowSchedules(t)
 
+	case *tree.ShowCompletions:
+		return d.delegateShowCompletions(t)
+
 	case *tree.ControlJobsForSchedules:
-		return d.delegateJobControl(t)
+		return d.delegateJobControl(ControlJobsDelegate{
+			Schedules: t.Schedules,
+			Command:   t.Command,
+		})
+
+	case *tree.ControlJobsOfType:
+		return d.delegateJobControl(ControlJobsDelegate{
+			Type:    t.Type,
+			Command: t.Command,
+		})
 
 	case *tree.ShowFullTableScans:
 		return d.delegateShowFullTableScans()
@@ -149,7 +172,15 @@ func TryDelegate(
 		)
 
 	case *tree.ShowSavepointStatus:
-		return nil, unimplemented.NewWithIssue(47333, "cannot use SHOW SAVEPOINT STATUS as a statement source")
+		return nil, unimplemented.NewWithIssue(
+			47333, "cannot use SHOW SAVEPOINT STATUS as a statement source")
+
+	// SHOW TRANSFER STATE cannot be rewritten as a low-level query due to
+	// the format of its output (e.g. transfer key echoed back, and errors are
+	// returned in the form of a SQL value).
+	case *tree.ShowTransferState:
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot use SHOW TRANSFER STATE as a statement source")
 
 	default:
 		return nil, nil

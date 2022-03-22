@@ -391,7 +391,7 @@ schemas indefinitely.
 
 ### Converting databases into schemas
 
-To preserve references betwen tables in different databases, we will need to
+To preserve references between tables in different databases, we will need to
 expose a way for users to convert their existing databases into schemas. Only
 databases with no user-defined schemas would be eligible to be converted.
 

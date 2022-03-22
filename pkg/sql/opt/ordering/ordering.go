@@ -14,9 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // CanProvide returns true if the given operator returns rows that can
@@ -25,7 +25,7 @@ func CanProvide(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	if required.Any() {
 		return true
 	}
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		checkRequired(expr, required)
 	}
 	return funcMap[expr.Op()].canProvideOrdering(expr, required)
@@ -38,7 +38,7 @@ func BuildChildRequired(
 	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
 ) props.OrderingChoice {
 	result := funcMap[parent.Op()].buildChildReqOrdering(parent, required, childIdx)
-	if util.CrdbTestBuild && !result.Any() {
+	if buildutil.CrdbTestBuild && !result.Any() {
 		checkRequired(parent.Child(childIdx).(memo.RelExpr), &result)
 	}
 	return result
@@ -65,7 +65,7 @@ func BuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Orderi
 	}
 	provided := funcMap[expr.Op()].buildProvidedOrdering(expr, required)
 
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		checkProvided(expr, required, provided)
 	}
 
@@ -174,6 +174,11 @@ func init() {
 		buildChildReqOrdering: limitOrOffsetBuildChildReqOrdering,
 		buildProvidedOrdering: limitOrOffsetBuildProvided,
 	}
+	funcMap[opt.TopKOp] = funcs{
+		canProvideOrdering:    topKCanProvideOrdering,
+		buildChildReqOrdering: topKBuildChildReqOrdering,
+		buildProvidedOrdering: topKBuildProvided,
+	}
 	funcMap[opt.ScalarGroupByOp] = funcs{
 		// ScalarGroupBy always has exactly one result; any required ordering should
 		// have been simplified to Any (unless normalization rules are disabled).
@@ -210,6 +215,11 @@ func init() {
 		canProvideOrdering:    nil, // should never get called
 		buildChildReqOrdering: sortBuildChildReqOrdering,
 		buildProvidedOrdering: sortBuildProvided,
+	}
+	funcMap[opt.DistributeOp] = funcs{
+		canProvideOrdering:    distributeCanProvideOrdering,
+		buildChildReqOrdering: distributeBuildChildReqOrdering,
+		buildProvidedOrdering: distributeBuildProvided,
 	}
 	funcMap[opt.InsertOp] = funcs{
 		canProvideOrdering:    mutationCanProvideOrdering,
@@ -251,6 +261,11 @@ func init() {
 		buildChildReqOrdering: alterTableRelocateBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
 	}
+	funcMap[opt.AlterRangeRelocateOp] = funcs{
+		canProvideOrdering:    canNeverProvideOrdering,
+		buildChildReqOrdering: alterRangeRelocateBuildChildReqOrdering,
+		buildProvidedOrdering: noProvidedOrdering,
+	}
 	funcMap[opt.ControlJobsOp] = funcs{
 		canProvideOrdering:    canNeverProvideOrdering,
 		buildChildReqOrdering: controlJobsBuildChildReqOrdering,
@@ -270,6 +285,11 @@ func init() {
 		canProvideOrdering:    canNeverProvideOrdering,
 		buildChildReqOrdering: exportBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
+	}
+	funcMap[opt.WithOp] = funcs{
+		canProvideOrdering:    withCanProvideOrdering,
+		buildChildReqOrdering: withBuildChildReqOrdering,
+		buildProvidedOrdering: withBuildProvided,
 	}
 }
 
@@ -323,7 +343,7 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 			equivCols := fds.ComputeEquivClosure(opt.MakeColSet(col))
 			remappedCol, ok := equivCols.Intersection(outCols).Next(0)
 			if !ok {
-				panic(errors.AssertionFailedf("no output column equivalent to %d", log.Safe(col)))
+				panic(errors.AssertionFailedf("no output column equivalent to %d", redact.Safe(col)))
 			}
 			if result == nil {
 				result = make(opt.Ordering, i, len(provided))
@@ -380,7 +400,7 @@ func checkRequired(expr memo.RelExpr, required *props.OrderingChoice) {
 
 	// Verify that the ordering only refers to output columns.
 	if !required.SubsetOfCols(rel.OutputCols) {
-		panic(errors.AssertionFailedf("required ordering refers to non-output columns (op %s)", log.Safe(expr.Op())))
+		panic(errors.AssertionFailedf("required ordering refers to non-output columns (op %s)", redact.Safe(expr.Op())))
 	}
 
 	// Verify that columns in a column group are equivalent.
@@ -428,7 +448,7 @@ func checkProvided(expr memo.RelExpr, required *props.OrderingChoice, provided o
 	fds := &expr.Relational().FuncDeps
 	if trimmed := trimProvided(provided, required, fds); len(trimmed) != len(provided) {
 		panic(errors.AssertionFailedf(
-			"provided %s can be trimmed to %s (FDs: %s)", log.Safe(provided), log.Safe(trimmed), log.Safe(fds),
+			"provided %s can be trimmed to %s (FDs: %s)", redact.Safe(provided), redact.Safe(trimmed), redact.Safe(fds),
 		))
 	}
 }

@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for rowstovec.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
@@ -20,7 +22,7 @@
 package colexec
 
 import (
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -45,7 +47,7 @@ var (
 // {{/*
 
 func _ROWS_TO_COL_VEC(
-	rows rowenc.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *rowenc.DatumAlloc,
+	rows rowenc.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *tree.DatumAlloc,
 ) { // */}}
 	// {{define "rowsToColVec" -}}
 	col := vec.TemplateType()
@@ -94,7 +96,7 @@ func EncDatumRowsToColVec(
 	vec coldata.Vec,
 	columnIdx int,
 	t *types.T,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 ) error {
 	var err error
 	allocator.PerformOperation(

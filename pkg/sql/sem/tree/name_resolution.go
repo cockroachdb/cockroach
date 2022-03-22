@@ -226,12 +226,15 @@ type CommonLookupFlags struct {
 	Required bool
 	// RequireMutable specifies whether to return a mutable descriptor.
 	RequireMutable bool
-	// if AvoidCached is set, lookup will avoid the cache (if any).
-	AvoidCached bool
+	// AvoidLeased, if set, avoid the leased (possibly stale) version of the
+	// descriptor. It must be set when callers want consistent reads.
+	AvoidLeased bool
 	// IncludeOffline specifies if offline descriptors should be visible.
 	IncludeOffline bool
 	// IncludeOffline specifies if dropped descriptors should be visible.
 	IncludeDropped bool
+	// AvoidSynthetic specifies if the any synthetic descriptors will be ignored.
+	AvoidSynthetic bool
 }
 
 // SchemaLookupFlags is the flag struct suitable for GetSchemaByName().

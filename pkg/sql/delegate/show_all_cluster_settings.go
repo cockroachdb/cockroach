@@ -15,19 +15,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 func (d *delegator) delegateShowClusterSettingList(
 	stmt *tree.ShowClusterSettingList,
 ) (tree.Statement, error) {
+	isAdmin, err := d.catalog.HasAdminRole(d.ctx)
+	if err != nil {
+		return nil, err
+	}
 	hasModify, err := d.catalog.HasRoleOption(d.ctx, roleoption.MODIFYCLUSTERSETTING)
 	if err != nil {
 		return nil, err
 	}
-	if !hasModify {
+	hasView, err := d.catalog.HasRoleOption(d.ctx, roleoption.VIEWCLUSTERSETTING)
+	if err != nil {
+		return nil, err
+	}
+	if !hasModify && !hasView && !isAdmin {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only users with the %s privilege are allowed to SHOW CLUSTER SETTINGS",
-			roleoption.MODIFYCLUSTERSETTING)
+			"only users with either %s or %s privileges are allowed to SHOW CLUSTER SETTINGS",
+			roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
 	}
 	if stmt.All {
 		return parse(
@@ -40,4 +49,11 @@ func (d *delegator) delegateShowClusterSettingList(
      FROM   crdb_internal.cluster_settings
      WHERE  public IS TRUE`,
 	)
+}
+
+func (d *delegator) delegateShowTenantClusterSettingList(
+	stmt *tree.ShowTenantClusterSettingList,
+) (tree.Statement, error) {
+	return nil, unimplemented.NewWithIssue(73857,
+		`unimplemented: tenant-level cluster settings not supported`)
 }

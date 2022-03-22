@@ -14,10 +14,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 	"golang.org/x/text/language"
@@ -92,6 +92,11 @@ func ValidateColumnDefType(t *types.T) error {
 			// Nested arrays are not supported as a column type.
 			return errors.Errorf("nested array unsupported as column type: %s", t.String())
 		}
+		if t.ArrayContents().Family() == types.JsonFamily {
+			// JSON arrays are not supported as a column type.
+			return unimplemented.NewWithIssueDetailf(23468, t.String(),
+				"arrays of JSON unsupported as column type")
+		}
 		if err := types.CheckArrayElementType(t.ArrayContents()); err != nil {
 			return err
 		}
@@ -147,50 +152,4 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		return true
 	}
 	return false
-}
-
-// GetColumnTypes populates the types of the columns with the given IDs into the
-// outTypes slice, returning it. You must use the returned slice, as this
-// function might allocate a new slice.
-func GetColumnTypes(
-	desc catalog.TableDescriptor, columnIDs []descpb.ColumnID, outTypes []*types.T,
-) ([]*types.T, error) {
-	if cap(outTypes) < len(columnIDs) {
-		outTypes = make([]*types.T, len(columnIDs))
-	} else {
-		outTypes = outTypes[:len(columnIDs)]
-	}
-	for i, id := range columnIDs {
-		col, err := desc.FindColumnWithID(id)
-		if err != nil {
-			return nil, err
-		}
-		if !col.Public() {
-			return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
-		}
-		outTypes[i] = col.GetType()
-	}
-	return outTypes, nil
-}
-
-// GetColumnTypesFromColDescs populates the types of the columns with the given
-// IDs into the outTypes slice, returning it. You must use the returned slice,
-// as this function might allocate a new slice.
-func GetColumnTypesFromColDescs(
-	cols []catalog.Column, columnIDs []descpb.ColumnID, outTypes []*types.T,
-) []*types.T {
-	if cap(outTypes) < len(columnIDs) {
-		outTypes = make([]*types.T, len(columnIDs))
-	} else {
-		outTypes = outTypes[:len(columnIDs)]
-	}
-	for i, id := range columnIDs {
-		for j := range cols {
-			if id == cols[j].GetID() {
-				outTypes[i] = cols[j].GetType()
-				break
-			}
-		}
-	}
-	return outTypes
 }

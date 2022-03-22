@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
 type resultBucket struct {
@@ -42,10 +44,10 @@ type resultBucket struct {
 }
 
 type result struct {
-	tableID                            int
-	name, colIDs                       string
-	rowCount, distinctCount, nullCount int
-	buckets                            []resultBucket
+	tableID                                     int
+	name, colIDs                                string
+	rowCount, distinctCount, nullCount, avgSize int
+	buckets                                     []resultBucket
 }
 
 // runSampleAggregator runs a full distsql sampling flow on a canned set of
@@ -62,7 +64,7 @@ func runSampleAggregator(
 	childNumSamples, childMinNumSamples uint32,
 	aggNumSamples, aggMinNumSamples uint32,
 	maxBuckets, expectedMaxBuckets uint32,
-	inputRows [][]int,
+	inputRows interface{},
 	expected []result,
 ) {
 	flowCtx := execinfra.FlowCtx{
@@ -89,6 +91,7 @@ func runSampleAggregator(
 		types.Int,   // sketch index
 		types.Int,   // num rows
 		types.Int,   // null vals
+		types.Int,   // size
 		types.Bytes, // sketch data
 		types.Int,   // inverted index column
 		types.Bytes, // inverted index data
@@ -109,17 +112,49 @@ func runSampleAggregator(
 		},
 	}
 
-	rng, _ := randutil.NewPseudoRand()
-	rowPartitions := make([][][]int, numSamplers)
-	for _, row := range inputRows {
-		j := rng.Intn(numSamplers)
-		rowPartitions[j] = append(rowPartitions[j], row)
+	rng, _ := randutil.NewTestRand()
+
+	// Randomly partition the inputRows for each sampler and encode them as
+	// EncDatum in a row buffer so the samplers can ingest them. Since encoding
+	// inputRows depends on their type, we handle each type separately.
+	in := make([]*distsqlutils.RowBuffer, numSamplers)
+	inLen := 0
+	histEncType := types.Int
+	switch t := inputRows.(type) {
+	case [][]int:
+		rowPartitions := make([][][]int, numSamplers)
+		inLen = len(inputRows.([][]int))
+		for _, row := range inputRows.([][]int) {
+			j := rng.Intn(numSamplers)
+			rowPartitions[j] = append(rowPartitions[j], row)
+		}
+		for i := 0; i < numSamplers; i++ {
+			rows := randgen.GenEncDatumRowsInt(rowPartitions[i])
+			in[i] = distsqlutils.NewRowBuffer(types.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
+		}
+
+	case [][]string:
+		rowPartitions := make([][][]string, numSamplers)
+		inLen = len(inputRows.([][]string))
+		histEncType = types.String
+		for _, row := range inputRows.([][]string) {
+			j := rng.Intn(numSamplers)
+			rowPartitions[j] = append(rowPartitions[j], row)
+		}
+		for i := 0; i < numSamplers; i++ {
+			rows := randgen.GenEncDatumRowsString(rowPartitions[i])
+			in[i] = distsqlutils.NewRowBuffer([]*types.T{types.String, types.String}, rows, distsqlutils.RowBufferArgs{})
+		}
+		// Override original columns in samplerOutTypes.
+		samplerOutTypes[0] = types.String
+		samplerOutTypes[1] = types.String
+
+	default:
+		panic(errors.AssertionFailedf("Type %T not supported for inputRows", t))
 	}
 
 	outputs := make([]*distsqlutils.RowBuffer, numSamplers)
 	for i := 0; i < numSamplers; i++ {
-		rows := randgen.GenEncDatumRowsInt(rowPartitions[i])
-		in := distsqlutils.NewRowBuffer(types.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
 		outputs[i] = distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 		spec := &execinfrapb.SamplerSpec{
@@ -128,7 +163,7 @@ func runSampleAggregator(
 			Sketches:      sketchSpecs,
 		}
 		p, err := newSamplerProcessor(
-			&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, outputs[i],
+			&flowCtx, 0 /* processorID */, spec, in[i], &execinfrapb.PostProcessSpec{}, outputs[i],
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -179,6 +214,7 @@ func runSampleAggregator(
 					 "rowCount",
 					 "distinctCount",
 					 "nullCount",
+					 "avgSize",
 					 histogram
 	  FROM system.table_statistics
   `)
@@ -196,7 +232,7 @@ func runSampleAggregator(
 		var name gosql.NullString
 		var r result
 		if err := rows.Scan(
-			&r.tableID, &name, &r.colIDs, &r.rowCount, &r.distinctCount, &r.nullCount, &histData,
+			&r.tableID, &name, &r.colIDs, &r.rowCount, &r.distinctCount, &r.nullCount, &r.avgSize, &histData,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -219,8 +255,8 @@ func runSampleAggregator(
 				if err != nil {
 					t.Fatal(err)
 				}
-				var d rowenc.DatumAlloc
-				if err := ed.EnsureDecoded(types.Int, &d); err != nil {
+				var d tree.DatumAlloc
+				if err := ed.EnsureDecoded(histEncType, &d); err != nil {
 					t.Fatal(err)
 				}
 				r.buckets = append(r.buckets, resultBucket{
@@ -233,7 +269,7 @@ func runSampleAggregator(
 			// If we collected fewer samples than rows, the generated histogram will
 			// be nondeterministic. Rather than checking for an exact match, verify
 			// some properties and then ignore it.
-			if childNumSamples < uint32(len(inputRows)) || aggNumSamples < uint32(len(inputRows)) {
+			if childNumSamples < uint32(inLen) || aggNumSamples < uint32(inLen) {
 				if uint32(len(r.buckets)) > expectedMaxBuckets {
 					t.Errorf(
 						"Expected at most %d buckets, got %d:\n  %v", expectedMaxBuckets, len(r.buckets), r,
@@ -243,10 +279,12 @@ func runSampleAggregator(
 				for _, bucket := range r.buckets {
 					count += bucket.numEq + bucket.numRange
 				}
-				if count != r.rowCount-r.nullCount {
+				targetCount := r.rowCount - r.nullCount
+				// Due to rounding errors, we may be within +/- 1 of the target.
+				if count < targetCount-1 && count > targetCount+1 {
 					t.Errorf(
 						"Expected %d rows counted in histogram, got %d:\n  %v",
-						r.rowCount-r.nullCount, count, r,
+						targetCount, count, r,
 					)
 				}
 				r.buckets = nil
@@ -281,7 +319,7 @@ func TestSampleAggregator(t *testing.T) {
 		childNumSamples, childMinNumSamples uint32
 		aggNumSamples, aggMinNumSamples     uint32
 		maxBuckets, expectedMaxBuckets      uint32
-		inputRows                           [][]int
+		inputRows                           interface{}
 		expected                            []result
 	}
 
@@ -307,6 +345,7 @@ func TestSampleAggregator(t *testing.T) {
 			rowCount:      11,
 			distinctCount: 3,
 			nullCount:     2,
+			avgSize:       7,
 		},
 		{
 			tableID:       13,
@@ -315,6 +354,7 @@ func TestSampleAggregator(t *testing.T) {
 			rowCount:      11,
 			distinctCount: 9,
 			nullCount:     1,
+			avgSize:       8,
 			buckets: []resultBucket{
 				{numEq: 2, numRange: 0, upper: 1},
 				{numEq: 2, numRange: 1, upper: 3},
@@ -328,7 +368,6 @@ func TestSampleAggregator(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		inputRowsB = append(inputRowsB, []int{i, i})
 	}
-
 	expectedB := []result{
 		{
 			tableID:       13,
@@ -337,6 +376,7 @@ func TestSampleAggregator(t *testing.T) {
 			rowCount:      1000,
 			distinctCount: 1000,
 			nullCount:     0,
+			avgSize:       8,
 		},
 		{
 			tableID:       13,
@@ -345,6 +385,7 @@ func TestSampleAggregator(t *testing.T) {
 			rowCount:      1000,
 			distinctCount: 1000,
 			nullCount:     0,
+			avgSize:       8,
 			buckets: []resultBucket{
 				// The "B" cases will always sample fewer than 100% of rows, so the
 				// expected histogram just needs to have one dummy bucket and will not
@@ -354,7 +395,35 @@ func TestSampleAggregator(t *testing.T) {
 		},
 	}
 
-	for _, tc := range []sampAggTestCase{
+	inputRowsC := [][]string{
+		{"123", "1"},
+		{"12345", "12345678"},
+		{"", "1234"},
+		{"1234", "123456"},
+		{"1234", "123456789"},
+	}
+	expectedC := []result{
+		{
+			tableID:       13,
+			name:          "a",
+			colIDs:        "{100}",
+			rowCount:      5,
+			distinctCount: 4,
+			nullCount:     1,
+			avgSize:       16,
+		},
+		{
+			tableID:       13,
+			name:          "<NULL>",
+			colIDs:        "{101}",
+			rowCount:      5,
+			distinctCount: 5,
+			nullCount:     0,
+			avgSize:       22,
+		},
+	}
+
+	for i, tc := range []sampAggTestCase{
 		// Sample all rows, check that stats match expected results exactly except
 		// with histograms disabled in cases when stats collection hits the memory
 		// limit.
@@ -368,21 +437,27 @@ func TestSampleAggregator(t *testing.T) {
 		// and the number of rows counted by the histogram. This also tests that
 		// sampleAggregator can dynamically shrink capacity if fed from a
 		// lower-capacity samplerProcessor.
-		{0, false, 2, 2, 2, 2, 2, 2, inputRowsA, expectedA},
-		{0, false, 2, 2, 2, 2, 4, 2, inputRowsA, expectedA},
-		{0, false, 100, 100, 2, 2, 4, 2, inputRowsA, expectedA},
-		{0, false, 2, 2, 100, 100, 4, 2, inputRowsA, expectedA},
+		{0, false, 2, 2, 2, 2, 2, 4, inputRowsA, expectedA},
+		{0, false, 2, 2, 2, 2, 4, 4, inputRowsA, expectedA},
+		{0, false, 100, 100, 2, 2, 4, 4, inputRowsA, expectedA},
+		{0, false, 2, 2, 100, 100, 4, 4, inputRowsA, expectedA},
 
 		// Sample some rows with dynamic shrinking due to memory limits. Check that
 		// stats match and that histograms have the right number of buckets and
 		// number of rows.
-		{1 << 15, false, 200, 20, 200, 20, 200, 50, inputRowsB, expectedB},
-		{1 << 16, false, 200, 20, 200, 20, 200, 200, inputRowsB, expectedB},
+		{1 << 15, false, 200, 20, 200, 20, 200, 52, inputRowsB, expectedB},
+		{1 << 16, false, 200, 20, 200, 20, 200, 202, inputRowsB, expectedB},
+
+		// Sample rows with variable length columns. Don't take samples since
+		// strings are not currently supported in the test.
+		{0, false, 0, 0, 0, 0, 4, 4, inputRowsC, expectedC},
 	} {
-		runSampleAggregator(
-			t, server, sqlDB, kvDB, st, &evalCtx, tc.memLimitBytes, tc.expectOutOfMemory,
-			tc.childNumSamples, tc.childMinNumSamples, tc.aggNumSamples, tc.aggMinNumSamples,
-			tc.maxBuckets, tc.expectedMaxBuckets, tc.inputRows, tc.expected,
-		)
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			runSampleAggregator(
+				t, server, sqlDB, kvDB, st, &evalCtx, tc.memLimitBytes, tc.expectOutOfMemory,
+				tc.childNumSamples, tc.childMinNumSamples, tc.aggNumSamples, tc.aggMinNumSamples,
+				tc.maxBuckets, tc.expectedMaxBuckets, tc.inputRows, tc.expected,
+			)
+		})
 	}
 }

@@ -15,17 +15,15 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
 
 const ordSyncTmpl = "pkg/sql/colexec/ordered_synchronizer_tmpl.go"
 
 func genOrderedSynchronizer(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
-
 		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
 		"_TYPE_WIDTH", typeWidthReplacement,
-		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
 		"_TYPE", "{{.VecMethod}}",
 	)
 	s := r.Replace(inputFileContents)
@@ -40,7 +38,7 @@ func genOrderedSynchronizer(inputFileContents string, wr io.Writer) error {
 	// It doesn't matter that we're passing in all overloads of Equality
 	// comparison operator - we simply need to iterate over all supported
 	// types.
-	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.EQ])
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[treecmp.EQ])
 }
 
 func init() {

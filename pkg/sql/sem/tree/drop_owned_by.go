@@ -10,11 +10,9 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/security"
-
 // DropOwnedBy represents a DROP OWNED BY command.
 type DropOwnedBy struct {
-	Roles        []security.SQLUsername
+	Roles        RoleSpecList
 	DropBehavior DropBehavior
 }
 
@@ -27,7 +25,7 @@ func (node *DropOwnedBy) Format(ctx *FmtCtx) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatUsername(node.Roles[i])
+		node.Roles[i].Format(ctx)
 	}
 	if node.DropBehavior != DropDefault {
 		ctx.WriteString(" ")

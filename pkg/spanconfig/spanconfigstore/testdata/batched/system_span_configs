@@ -1,0 +1,63 @@
+# Test batched operations performed on system span configurations, with
+# batches that combine both system span configurations and regular span configs.
+
+# apply a batch of system span configs + regular configs.
+apply
+set [a,f):A
+set {entire-keyspace}:X
+set {source=1,target=1}:Y
+set {source=10,target=10}:Z
+----
+added {entire-keyspace}:X
+added {source=1,target=1}:Y
+added {source=10,target=10}:Z
+added [a,f):A
+
+get key=b
+----
+conf=A+X+Y
+
+
+# Combine a regular span config update with a system span config update and
+# delete.
+apply
+set [c,d):B
+set {entire-keyspace}:W
+delete {source=1,target=1}
+----
+deleted {entire-keyspace}
+deleted {source=1,target=1}
+deleted [a,f)
+added {entire-keyspace}:W
+added [a,c):A
+added [c,d):B
+added [d,f):A
+
+get key=b
+----
+conf=A+W
+
+get key=c
+----
+conf=B+W
+
+# Combine a regular span config delete with a system span config delete and
+# update.
+
+apply
+delete [c,d)
+delete {entire-keyspace}
+set {source=10,target=10}:V
+----
+deleted {entire-keyspace}
+deleted {source=10,target=10}
+deleted [c,d)
+added {source=10,target=10}:V
+
+get key=b
+----
+conf=A
+
+get key=c
+----
+conf=FALLBACK

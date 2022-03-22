@@ -513,6 +513,24 @@
         }
       }
     },
+    "/rules/": {
+      "get": {
+        "description": "Endpoint to export recommended metric recording and alerting rules.\nThese rules are intended to be used as a guideline for aggregating\nand using metrics for alerting purposes. All rules are in the\nYAML format compatible with Prometheus recording and alerting\nrules. All recording rules are grouped under 'rules/recording'\nlabel while alerting rules are grouped under 'rules/alerts'.",
+        "produces": [
+          "text/plain"
+        ],
+        "summary": "Get metric recording and alerting rule templates",
+        "operationId": "rules",
+        "responses": {
+          "200": {
+            "description": "Recording and Alert Rules",
+            "schema": {
+              "$ref": "#/definitions/PrometheusRuleGroup"
+            }
+          }
+        }
+      }
+    },
     "/sessions/": {
       "get": {
         "security": [
@@ -618,10 +636,15 @@
           "type": "string",
           "x-go-name": "Sql"
         },
-        "sql_anon": {
+        "sql_no_constants": {
           "description": "The SQL statement fingerprint, compatible with StatementStatisticsKey.",
           "type": "string",
-          "x-go-name": "SqlAnon"
+          "x-go-name": "SqlNoConstants"
+        },
+        "sql_summary": {
+          "description": "A summarized version of the sql query.",
+          "type": "string",
+          "x-go-name": "SqlSummary"
         },
         "start": {
           "description": "Start timestamp of this query.",
@@ -906,6 +929,11 @@
           },
           "x-go-name": "Errors"
         },
+        "internal_app_name_prefix": {
+          "description": "If set and non-empty, indicates the prefix to application_name\nused for statements/queries issued internally by CockroachDB.",
+          "type": "string",
+          "x-go-name": "InternalAppNamePrefix"
+        },
         "sessions": {
           "description": "A list of sessions on this node or cluster.",
           "type": "array",
@@ -951,10 +979,64 @@
       },
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
     },
+    "PrometheusRuleGroup": {
+      "type": "object",
+      "title": "PrometheusRuleGroup is a list of recording and alerting rules.",
+      "properties": {
+        "Rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PrometheusRuleNode"
+          }
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/util/metric"
+    },
+    "PrometheusRuleNode": {
+      "type": "object",
+      "title": "PrometheusRuleNode represents an individual rule node within the YAML output.",
+      "properties": {
+        "Alert": {
+          "type": "string"
+        },
+        "Annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "Expr": {
+          "type": "string"
+        },
+        "For": {
+          "type": "string"
+        },
+        "Labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "Record": {
+          "type": "string"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/util/metric"
+    },
+    "RangeID": {
+      "type": "integer",
+      "format": "int64",
+      "title": "A RangeID is a unique ID associated to a Raft consensus group.",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
     "RangeProblems": {
       "type": "object",
       "title": "RangeProblems describes issues reported by a range. For internal use only.",
       "properties": {
+        "circuit_breaker_error": {
+          "type": "boolean",
+          "x-go-name": "CircuitBreakerError"
+        },
         "leader_not_lease_holder": {
           "type": "boolean",
           "x-go-name": "LeaderNotLeaseHolder"
@@ -1088,10 +1170,10 @@
           "type": "string",
           "x-go-name": "LastActiveQuery"
         },
-        "last_active_query_anon": {
+        "last_active_query_no_constants": {
           "description": "The SQL statement fingerprint of the last query executed on this session,\ncompatible with StatementStatisticsKey.",
           "type": "string",
-          "x-go-name": "LastActiveQueryAnon"
+          "x-go-name": "LastActiveQueryNoConstants"
         },
         "max_alloc_bytes": {
           "description": "High water mark of allocated bytes in the session memory monitor.",
@@ -1202,10 +1284,16 @@
           "x-go-name": "Indexes"
         },
         "range_count": {
-          "description": "range_count is the size of the table in ranges. This provides a rough\nestimate of the storage requirements for the table.\nTODO(mrtracy): The TableStats method also returns a range_count field which\nis more accurate than this one; TableDetails calculates this number using\na potentially faster method that is subject to cache staleness. We should\nconsider removing or renaming this field to reflect that difference. See\nGithub issue #5435 for more information.",
+          "description": "range_count is the size of the table in ranges. This provides a rough\nestimate of the storage requirements for the table.\nTODO(mrtracy): The TableStats method also returns a range_count field which\nis more accurate than this one; TableDetails calculates this number using\na potentially faster method that is subject to cache staleness. We should\nconsider removing or renaming this field to reflect that difference. See\nGitHub issue #5435 for more information.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "RangeCount"
+        },
+        "stats_last_created_at": {
+          "description": "stats_last_created_at is the time at which statistics were last created.",
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "StatsLastCreatedAt"
         },
         "zone_config": {
           "$ref": "#/definitions/ZoneConfig"
@@ -1411,6 +1499,10 @@
           "type": "string",
           "x-go-name": "Priority"
         },
+        "quality_of_service": {
+          "type": "string",
+          "x-go-name": "QualityOfService"
+        },
         "read_only": {
           "type": "boolean",
           "x-go-name": "ReadOnly"
@@ -1488,12 +1580,12 @@
           "format": "int32",
           "x-go-name": "Internal"
         },
-        "major_val": {
+        "major": {
           "type": "integer",
           "format": "int32",
           "x-go-name": "Major"
         },
-        "minor_val": {
+        "minor": {
           "type": "integer",
           "format": "int32",
           "x-go-name": "Minor"
@@ -1529,7 +1621,7 @@
           "x-go-name": "GlobalReads"
         },
         "inherited_constraints": {
-          "description": "InheritedContraints specifies if the value in the Constraints field was\ninherited from the zone's parent or specified explicitly by the user.\n\nNB: We need this extra field because the non-nullable nature of\n`constraints` means that there is no other way to disambiguate between an\nunset `constraints` attribute and an empty one.",
+          "description": "InheritedConstraints specifies if the value in the Constraints field was\ninherited from the zone's parent or specified explicitly by the user.\n\nNB: We need this extra field because the non-nullable nature of\n`constraints` means that there is no other way to disambiguate between an\nunset `constraints` attribute and an empty one.",
           "type": "boolean",
           "x-go-name": "InheritedConstraints"
         },
@@ -1702,6 +1794,54 @@
       },
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
     },
+    "hotRangeInfo": {
+      "description": "(ie its range ID, QPS, table name, etc.).",
+      "type": "object",
+      "title": "Hot range details struct describes common information about hot range,",
+      "properties": {
+        "database_name": {
+          "type": "string",
+          "x-go-name": "DatabaseName"
+        },
+        "index_name": {
+          "type": "string",
+          "x-go-name": "IndexName"
+        },
+        "leaseholder_node_id": {
+          "$ref": "#/definitions/NodeID"
+        },
+        "node_id": {
+          "$ref": "#/definitions/NodeID"
+        },
+        "qps": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "QPS"
+        },
+        "range_id": {
+          "$ref": "#/definitions/RangeID"
+        },
+        "replica_node_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/NodeID"
+          },
+          "x-go-name": "ReplicaNodeIDs"
+        },
+        "schema_name": {
+          "type": "string",
+          "x-go-name": "SchemaName"
+        },
+        "store_id": {
+          "$ref": "#/definitions/StoreID"
+        },
+        "table_name": {
+          "type": "string",
+          "x-go-name": "TableName"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
     "hotRangesResponse": {
       "type": "object",
       "title": "Response struct for listHotRanges.",
@@ -1711,15 +1851,12 @@
           "type": "string",
           "x-go-name": "Next"
         },
-        "ranges_by_node_id": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {
-              "$ref": "#/definitions/rangeDescriptorInfo"
-            }
+        "ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/hotRangeInfo"
           },
-          "x-go-name": "RangesByNodeID"
+          "x-go-name": "Ranges"
         },
         "response_error": {
           "type": "array",
@@ -1742,6 +1879,11 @@
             "$ref": "#/definitions/ListSessionsError"
           },
           "x-go-name": "Errors"
+        },
+        "internal_app_name_prefix": {
+          "description": "If set and non-empty, indicates the prefix to application_name\nused for statements/queries issued internally by CockroachDB.",
+          "type": "string",
+          "x-go-name": "InternalAppNamePrefix"
         },
         "next": {
           "description": "The continuation token, for use in the next paginated call in the `start`\nparameter.",
@@ -1775,7 +1917,7 @@
       "type": "object",
       "properties": {
         "logged_out": {
-          "description": "Indicates whether logout was succeessful.",
+          "description": "Indicates whether logout was successful.",
           "type": "boolean",
           "x-go-name": "LoggedOut"
         }

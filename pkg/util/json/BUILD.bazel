@@ -18,14 +18,14 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/keysbase",
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/encoding",
         "//pkg/util/syncutil",
         "//pkg/util/unique",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -34,6 +34,7 @@ go_test(
     name = "json_test",
     size = "small",
     srcs = [
+        "dep_test.go",
         "encode_test.go",
         "json_test.go",
     ],
@@ -43,11 +44,12 @@ go_test(
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/testutils",
+        "//pkg/testutils/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "//pkg/util/unique",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_stretchr_testify//require",
     ],
 )

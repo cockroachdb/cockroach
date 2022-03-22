@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -74,6 +75,7 @@ const serverHBAConfSetting = "server.host_based_authentication.configuration"
 // configuration.
 var connAuthConf = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
+		settings.TenantWritable,
 		serverHBAConfSetting,
 		"host-based authentication configuration to use during connection authentication",
 		"",
@@ -83,30 +85,31 @@ var connAuthConf = func() *settings.StringSetting {
 	return s
 }()
 
-// loadLocalAuthConfigUponRemoteSettingChange initializes the local
-// node's cache of the auth configuration each time the cluster
-// setting is updated.
-func loadLocalAuthConfigUponRemoteSettingChange(
+// loadLocalHBAConfigUponRemoteSettingChange initializes the local
+// node's cache of the HBA configuration each time the cluster setting
+// is updated.
+func loadLocalHBAConfigUponRemoteSettingChange(
 	ctx context.Context, server *Server, st *cluster.Settings,
 ) {
 	val := connAuthConf.Get(&st.SV)
 
 	// An empty HBA configuration is special and means "use the
 	// default".
-	conf := DefaultHBAConfig
+	hbaConfig := DefaultHBAConfig
 	if val != "" {
 		var err error
-		conf, err = ParseAndNormalize(val)
+		hbaConfig, err = ParseAndNormalize(val)
 		if err != nil {
 			// The default is also used if the node is unable to load the
 			// config from the cluster setting.
 			log.Ops.Warningf(ctx, "invalid %s: %v", serverHBAConfSetting, err)
-			conf = DefaultHBAConfig
+			hbaConfig = DefaultHBAConfig
 		}
 	}
+
 	server.auth.Lock()
 	defer server.auth.Unlock()
-	server.auth.conf = conf
+	server.auth.conf = hbaConfig
 }
 
 // checkHBASyntaxBeforeUpdatingSetting is run by the SQL gateway each
@@ -133,24 +136,11 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 			"To use the default configuration, assign the empty string ('').")
 	}
 
-	// Retrieve the cluster version handle. We'll need to check the current cluster version.
-	var vh clusterversion.Handle
-	if values != nil {
-		vh = values.Opaque().(clusterversion.Handle)
-	}
-
 	for _, entry := range conf.Entries {
 		switch entry.ConnType {
 		case hba.ConnHostAny:
 		case hba.ConnLocal:
 		case hba.ConnHostSSL, hba.ConnHostNoSSL:
-			if vh != nil &&
-				!vh.IsActive(context.TODO(), clusterversion.HBAForNonTLS) {
-				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					`authentication rule type 'hostssl'/'hostnossl' requires all nodes to be upgraded to %s`,
-					clusterversion.ByKey(clusterversion.HBAForNonTLS),
-				)
-			}
 
 		default:
 			return unimplemented.Newf("hba-type-"+entry.ConnType.String(),
@@ -193,7 +183,7 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 		}
 		// Run the per-method validation.
 		if check := hbaCheckHBAEntries[entry.Method.Value]; check != nil {
-			if err := check(entry); err != nil {
+			if err := check(values, entry); err != nil {
 				return err
 			}
 		}
@@ -214,7 +204,7 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 		return conf, err
 	}
 
-	if len(conf.Entries) == 0 || !conf.Entries[0].Equivalent(rootEntry) {
+	if len(conf.Entries) == 0 || !(conf.Entries[0].Equivalent(rootEntry) || conf.Entries[0].Equivalent(rootLocalEntry)) {
 		entries := make([]hba.Entry, 1, len(conf.Entries)+1)
 		entries[0] = rootEntry
 		entries = append(entries, conf.Entries...)
@@ -244,12 +234,28 @@ var insecureEntry = hba.Entry{
 	Method:   hba.String{Value: "--insecure"},
 }
 
+var sessionRevivalEntry = hba.Entry{
+	ConnType: hba.ConnHostAny,
+	User:     []hba.String{{Value: "all", Quoted: false}},
+	Address:  hba.AnyAddr{},
+	Method:   hba.String{Value: "session_revival_token"},
+}
+
 var rootEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
 	User:     []hba.String{{Value: security.RootUser, Quoted: false}},
 	Address:  hba.AnyAddr{},
 	Method:   hba.String{Value: "cert-password"},
 	Input:    "host  all root all cert-password # CockroachDB mandatory rule",
+}
+
+var _, localhostCidrBytes, _ = net.ParseCIDR("127.0.0.1/32")
+var rootLocalEntry = hba.Entry{
+	ConnType: hba.ConnHostAny,
+	User:     []hba.String{{Value: security.RootUser, Quoted: false}},
+	Address:  localhostCidrBytes,
+	Method:   hba.String{Value: "cert-password"},
+	Input:    "host all root 127.0.0.1/32 cert-password # Alternative to the CockroachDB mandatory rule",
 }
 
 // DefaultHBAConfig is used when the stored HBA configuration string
@@ -276,9 +282,10 @@ local all all      password      # built-in CockroachDB default
 //
 // The data returned by this method is also observable via the debug
 // endpoint /debug/hba_conf.
-func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
+func (s *Server) GetAuthenticationConfiguration() (*hba.Conf, *identmap.Conf) {
 	s.auth.RLock()
 	auth := s.auth.conf
+	idMap := s.auth.identityMap
 	s.auth.RUnlock()
 
 	if auth == nil {
@@ -286,7 +293,10 @@ func (s *Server) GetAuthenticationConfiguration() *hba.Conf {
 		// the cluster setting has ever been set.
 		auth = DefaultHBAConfig
 	}
-	return auth
+	if idMap == nil {
+		idMap = identmap.Empty()
+	}
+	return auth, idMap
 }
 
 // RegisterAuthMethod registers an AuthMethod for pgwire
@@ -340,7 +350,50 @@ type methodInfo struct {
 
 // CheckHBAEntry defines a method for validating an hba Entry upon
 // configuration of the cluster setting by a SQL client.
-type CheckHBAEntry func(hba.Entry) error
+type CheckHBAEntry func(*settings.Values, hba.Entry) error
+
+// NoOptionsAllowed is a CheckHBAEntry that returns an error if any
+// options are present in the entry.
+var NoOptionsAllowed CheckHBAEntry = func(sv *settings.Values, e hba.Entry) error {
+	if len(e.Options) != 0 {
+		return errors.Newf("the HBA method %q does not accept options", e.Method)
+	}
+	return nil
+}
+
+// chainOptions is an option that combines its argument options.
+func chainOptions(opts ...CheckHBAEntry) CheckHBAEntry {
+	return func(values *settings.Values, e hba.Entry) error {
+		for _, o := range opts {
+			if err := o(values, e); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+// requireClusterVersion is an HBA option check function that verifies
+// that the given cluster version key has been enabled before allowing
+// a client to use this authentication method.
+func requireClusterVersion(versionkey clusterversion.Key) CheckHBAEntry {
+	return func(values *settings.Values, e hba.Entry) error {
+		// Retrieve the cluster version handle. We'll need to check the current cluster version.
+		var vh clusterversion.Handle
+		if values != nil {
+			vh = values.Opaque().(clusterversion.Handle)
+		}
+		if vh != nil &&
+			!vh.IsActive(context.TODO(), versionkey) {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				`HBA authentication method %q requires all nodes to be upgraded to %s`,
+				e.Method,
+				clusterversion.ByKey(versionkey),
+			)
+		}
+		return nil
+	}
+}
 
 // HBADebugFn exposes the computed HBA configuration via the debug
 // interface, for inspection by tests.
@@ -348,9 +401,13 @@ func (s *Server) HBADebugFn() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-		auth := s.GetAuthenticationConfiguration()
+		auth, usernames := s.GetAuthenticationConfiguration()
 
 		_, _ = w.Write([]byte("# Active authentication configuration on this node:\n"))
 		_, _ = w.Write([]byte(auth.String()))
+		if !usernames.Empty() {
+			_, _ = w.Write([]byte("# Active identity mapping on this node:\n"))
+			_, _ = w.Write([]byte(usernames.String()))
+		}
 	}
 }

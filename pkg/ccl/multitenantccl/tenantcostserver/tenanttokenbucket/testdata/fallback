@@ -1,0 +1,31 @@
+# Tests for the fallback rate.
+
+init
+rate: 1000
+initial: 0
+----
+Current RUs: 0
+
+# Fallback rate should be just the base rate 1000.
+request
+ru: 10
+----
+Granted: 10 RU
+Trickle duration: 10ms
+Fallback rate: 1000 RU/s
+Current RUs: -10
+
+init
+rate: 500
+initial: 3600000
+----
+Current RUs: 3600000
+
+# Fallback rate should be the base rate 500 plus 1000.
+request
+ru: 10
+----
+Granted: 10 RU
+Trickle duration: 0s
+Fallback rate: 1500 RU/s
+Current RUs: 3599990
