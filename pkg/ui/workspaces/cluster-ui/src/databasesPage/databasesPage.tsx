@@ -12,7 +12,6 @@ import React from "react";
 import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
-import _ from "lodash";
 
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
@@ -175,12 +174,12 @@ export class DatabasesPage extends React.Component<
       return this.props.refreshDatabases();
     }
 
-    _.forEach(this.props.databases, database => {
+    this.props.databases.forEach(database => {
       if (!database.loaded && !database.loading) {
         return this.props.refreshDatabaseDetails(database.name);
       }
 
-      _.forEach(database.missingTables, table => {
+      database.missingTables.forEach(table => {
         if (!table.loading) {
           return this.props.refreshTableStats(database.name, table.name);
         }

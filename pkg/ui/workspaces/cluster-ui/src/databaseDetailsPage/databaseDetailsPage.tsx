@@ -12,8 +12,6 @@ import React from "react";
 import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
-import _ from "lodash";
-
 import { Breadcrumbs } from "src/breadcrumbs";
 import { Dropdown, DropdownOption } from "src/dropdown";
 import { CaretRight } from "src/icon/caretRight";
@@ -203,7 +201,7 @@ export class DatabaseDetailsPage extends React.Component<
       return this.props.refreshDatabaseDetails(this.props.name);
     }
 
-    _.forEach(this.props.tables, table => {
+    this.props.tables.forEach(table => {
       if (!table.details.loaded && !table.details.loading) {
         return this.props.refreshTableDetails(this.props.name, table.name);
       }
@@ -417,8 +415,8 @@ export class DatabaseDetailsPage extends React.Component<
             Roles
           </Tooltip>
         ),
-        cell: table => _.join(table.details.roles, ", "),
-        sort: table => _.join(table.details.roles, ", "),
+        cell: table => table.details.roles.join(", "),
+        sort: table => table.details.roles.join(", "),
         className: cx("database-table__col-roles"),
         name: "roles",
       },
@@ -428,8 +426,8 @@ export class DatabaseDetailsPage extends React.Component<
             Grants
           </Tooltip>
         ),
-        cell: table => _.join(table.details.grants, ", "),
-        sort: table => _.join(table.details.grants, ", "),
+        cell: table => table.details.grants.join(", "),
+        sort: table => table.details.grants.join(", "),
         className: cx("database-table__col-grants"),
         name: "grants",
       },
