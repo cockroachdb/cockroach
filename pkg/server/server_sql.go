@@ -958,6 +958,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.db,
 			jobRegistry,
 			cfg.circularInternalExecutor,
+			codec,
 			cfg.stopper,
 			cfg.Settings,
 			spanConfigReconciler,

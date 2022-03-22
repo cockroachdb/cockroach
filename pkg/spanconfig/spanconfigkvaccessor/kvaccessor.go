@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -28,6 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+)
+
+// tenantEnabledSetting determines whether secondary tenants are able to use the
+// KVAccessor.
+var tenantEnabledSetting = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"spanconfig.tenant_kvaccessor.enabled",
+	`enable use of the kvaccessor for secondary tenants`,
+	false,
 )
 
 // KVAccessor provides read/write access to all the span configurations for a
@@ -72,6 +82,10 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 func (k *KVAccessor) GetSpanConfigRecords(
 	ctx context.Context, targets []spanconfig.Target,
 ) (records []spanconfig.Record, retErr error) {
+	if err := k.validate(ctx); err != nil {
+		return nil, err
+	}
+
 	if len(targets) == 0 {
 		return records, nil
 	}
@@ -121,6 +135,10 @@ func (k *KVAccessor) GetSpanConfigRecords(
 func (k *KVAccessor) UpdateSpanConfigRecords(
 	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
 ) error {
+	if err := k.validate(ctx); err != nil {
+		return err
+	}
+
 	if k.optionalTxn != nil {
 		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, k.optionalTxn)
 	}
@@ -128,6 +146,15 @@ func (k *KVAccessor) UpdateSpanConfigRecords(
 	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, txn)
 	})
+}
+
+func (k *KVAccessor) validate(ctx context.Context) error {
+	if tenantID, ok := roachpb.TenantFromContext(ctx); ok && tenantID != roachpb.SystemTenantID {
+		if !tenantEnabledSetting.Get(&k.settings.SV) {
+			return errors.New("kvaccessor disabled for secondary tenants")
+		}
+	}
+	return nil
 }
 
 func newKVAccessor(
