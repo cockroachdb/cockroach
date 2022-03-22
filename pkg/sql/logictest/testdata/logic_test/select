@@ -732,9 +732,6 @@ true NULL
 
 # Tests for `disallow_full_table_scans`
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
-statement ok
 CREATE TABLE t_disallow_scans(a INT, b INT, INDEX b_idx(b), INDEX b_partial(b) WHERE a > 0);
 
 statement ok
@@ -842,7 +839,6 @@ SELECT * FROM t_disallow_scans@b_idx
 statement ok
 SET disallow_full_table_scans = false;
 RESET large_full_scan_rows;
-RESET CLUSTER SETTING sql.stats.automatic_collection.enabled;
 
 # Regression test for #58104.
 statement ok

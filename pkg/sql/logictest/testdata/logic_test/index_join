@@ -5,7 +5,6 @@
 # tests.
 
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 CREATE TABLE lineitem
 (
     l_orderkey int PRIMARY KEY,

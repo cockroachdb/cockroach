@@ -1,9 +1,6 @@
 # LogicTest: 5node 5node-metadata
 
-# Disable automatic stats.
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
+# Disable histogram collection.
 statement ok
 SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false
 
