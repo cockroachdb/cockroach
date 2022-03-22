@@ -2529,6 +2529,7 @@ func (r *Replica) sendSnapshot(
 				snap,
 				newBatchFn,
 				sent,
+				r.store.metrics.RangeSnapshotSentBytes,
 			)
 		})
 	if err != nil {
