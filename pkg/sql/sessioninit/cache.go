@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -60,6 +61,8 @@ type Cache struct {
 	// request for populating each cache entry.
 	populateCacheGroup singleflight.Group
 	stopper            *stop.Stopper
+
+	BeforeLoadValueOutsideOfCacheTestHook func()
 }
 
 // AuthInfo contains data that is used to perform an authentication attempt.
@@ -110,18 +113,20 @@ func (a *Cache) GetAuthInfo(
 	username security.SQLUsername,
 	readFromSystemTables func(
 		ctx context.Context,
-		txn *kv.Txn,
 		ie sqlutil.InternalExecutor,
 		username security.SQLUsername,
 	) (AuthInfo, error),
 ) (aInfo AuthInfo, err error) {
 	if !CacheEnabled.Get(&settings.SV) {
-		return readFromSystemTables(ctx, nil /* txn */, ie, username)
+		return readFromSystemTables(ctx, ie, username)
 	}
+
+	var usersTableDesc catalog.TableDescriptor
+	var roleOptionsTableDesc catalog.TableDescriptor
 	err = f.Txn(ctx, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		_, usersTableDesc, err := descriptors.GetImmutableTableByName(
+		_, usersTableDesc, err = descriptors.GetImmutableTableByName(
 			ctx,
 			txn,
 			UsersTableName,
@@ -130,58 +135,52 @@ func (a *Cache) GetAuthInfo(
 		if err != nil {
 			return err
 		}
-		_, roleOptionsTableDesc, err := descriptors.GetImmutableTableByName(
+		_, roleOptionsTableDesc, err = descriptors.GetImmutableTableByName(
 			ctx,
 			txn,
 			RoleOptionsTableName,
 			tree.ObjectLookupFlagsWithRequired(),
 		)
-		if err != nil {
-			return err
-		}
-
-		// If the underlying table versions are not committed, stop and avoid
-		// trying to cache anything.
-		if usersTableDesc.IsUncommittedVersion() ||
-			roleOptionsTableDesc.IsUncommittedVersion() {
-			aInfo, err = readFromSystemTables(ctx, txn, ie, username)
-			return err
-		}
-		usersTableVersion := usersTableDesc.GetVersion()
-		roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
-
-		// Check version and maybe clear cache while holding the mutex.
-		var found bool
-		aInfo, found = a.readAuthInfoFromCache(ctx, usersTableVersion, roleOptionsTableVersion, username)
-
-		if found {
-			return nil
-		}
-
-		// Lookup the data outside the lock. There will be at most one
-		// request in-flight for each user. The user and role_options table
-		// versions are also part of the request key so that we don't read data
-		// from an old version of either table.
-		val, err := a.loadCacheValue(
-			ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
-			func(loadCtx context.Context) (interface{}, error) {
-				return readFromSystemTables(loadCtx, txn, ie, username)
-			})
-		if err != nil {
-			return err
-		}
-		aInfo = val.(AuthInfo)
-
-		// Write data back to the cache if the table version hasn't changed.
-		a.maybeWriteAuthInfoBackToCache(
-			ctx,
-			usersTableVersion,
-			roleOptionsTableVersion,
-			aInfo,
-			username,
-		)
-		return nil
+		return err
 	})
+	if err != nil {
+		return AuthInfo{}, err
+	}
+
+	usersTableVersion := usersTableDesc.GetVersion()
+	roleOptionsTableVersion := roleOptionsTableDesc.GetVersion()
+
+	// Check version and maybe clear cache while holding the mutex.
+	var found bool
+	aInfo, found = a.readAuthInfoFromCache(ctx, usersTableVersion, roleOptionsTableVersion, username)
+
+	if found {
+		return aInfo, nil
+	}
+
+	// Lookup the data outside the lock. There will be at most one
+	// request in-flight for each user. The user and role_options table
+	// versions are also part of the request key so that we don't read data
+	// from an old version of either table.
+	val, err := a.loadValueOutsideOfCache(
+		ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
+		func(loadCtx context.Context) (interface{}, error) {
+			return readFromSystemTables(loadCtx, ie, username)
+		})
+	if err != nil {
+		return aInfo, err
+	}
+	aInfo = val.(AuthInfo)
+
+	// Write data back to the cache if the table version hasn't changed.
+	a.maybeWriteAuthInfoBackToCache(
+		ctx,
+		usersTableVersion,
+		roleOptionsTableVersion,
+		aInfo,
+		username,
+	)
+
 	return aInfo, err
 }
 
@@ -203,10 +202,10 @@ func (a *Cache) readAuthInfoFromCache(
 	return ai, foundAuthInfo
 }
 
-// loadCacheValue loads the value for the given requestKey using the provided
+// loadValueOutsideOfCache loads the value for the given requestKey using the provided
 // function. It ensures that there is only at most one in-flight request for
 // each key at any time.
-func (a *Cache) loadCacheValue(
+func (a *Cache) loadValueOutsideOfCache(
 	ctx context.Context, requestKey string, fn func(loadCtx context.Context) (interface{}, error),
 ) (interface{}, error) {
 	ch, _ := a.populateCacheGroup.DoChan(requestKey, func() (interface{}, error) {
@@ -234,6 +233,9 @@ func (a *Cache) loadCacheValue(
 // authInfoCache, and returns true if it succeeded. If the underlying system
 // tables have been modified since they were read, the authInfoCache is not
 // updated.
+// Note that reading from system tables may give us data from a newer table
+// version than the one we pass in here, that is okay since the cache will
+// be invalidated upon the next read.
 func (a *Cache) maybeWriteAuthInfoBackToCache(
 	ctx context.Context,
 	usersTableVersion descpb.DescriptorVersion,
@@ -286,16 +288,17 @@ func (a *Cache) GetDefaultSettings(
 	databaseName string,
 	readFromSystemTables func(
 		ctx context.Context,
-		txn *kv.Txn,
 		ie sqlutil.InternalExecutor,
 		username security.SQLUsername,
 		databaseID descpb.ID,
 	) ([]SettingsCacheEntry, error),
 ) (settingsEntries []SettingsCacheEntry, err error) {
+	var dbRoleSettingsTableDesc catalog.TableDescriptor
+	var databaseID descpb.ID
 	err = f.Txn(ctx, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		_, dbRoleSettingsTableDesc, err := descriptors.GetImmutableTableByName(
+		_, dbRoleSettingsTableDesc, err = descriptors.GetImmutableTableByName(
 			ctx,
 			txn,
 			DatabaseRoleSettingsTableName,
@@ -304,7 +307,7 @@ func (a *Cache) GetDefaultSettings(
 		if err != nil {
 			return err
 		}
-		databaseID := descpb.ID(0)
+		databaseID = descpb.ID(0)
 		if databaseName != "" {
 			dbDesc, err := descriptors.GetImmutableDatabaseByName(ctx, txn, databaseName, tree.DatabaseLookupFlags{})
 			if err != nil {
@@ -316,56 +319,61 @@ func (a *Cache) GetDefaultSettings(
 				databaseID = dbDesc.GetID()
 			}
 		}
-
-		// If the underlying table versions are not committed or if the cache is
-		// disabled, stop and avoid trying to cache anything.
-		// We can't check if the cache is disabled earlier, since we always need to
-		// start the `CollectionFactory.Txn()` regardless in order to look up the
-		// database descriptor ID.
-		if dbRoleSettingsTableDesc.IsUncommittedVersion() || !CacheEnabled.Get(&settings.SV) {
-			settingsEntries, err = readFromSystemTables(
-				ctx,
-				txn,
-				ie,
-				username,
-				databaseID,
-			)
-			return err
-		}
-		dbRoleSettingsTableVersion := dbRoleSettingsTableDesc.GetVersion()
-
-		// Check version and maybe clear cache while holding the mutex.
-		var found bool
-		settingsEntries, found = a.readDefaultSettingsFromCache(ctx, dbRoleSettingsTableVersion, username, databaseID)
-
-		if found {
-			return nil
-		}
-
-		// Lookup the data outside the lock. There will be at most one request
-		// in-flight for each user+database. The db_role_settings table version is
-		// also part of the request key so that we don't read data from an old
-		// version of the table.
-		val, err := a.loadCacheValue(
-			ctx, fmt.Sprintf("defaultsettings-%s-%d-%d", username.Normalized(), databaseID, dbRoleSettingsTableVersion),
-			func(loadCtx context.Context) (interface{}, error) {
-				return readFromSystemTables(loadCtx, txn, ie, username, databaseID)
-			},
-		)
-		if err != nil {
-			return err
-		}
-		settingsEntries = val.([]SettingsCacheEntry)
-
-		// Write the fetched data back to the cache if the table version hasn't
-		// changed.
-		a.maybeWriteDefaultSettingsBackToCache(
-			ctx,
-			dbRoleSettingsTableVersion,
-			settingsEntries,
-		)
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// We can't check if the cache is disabled earlier, since we always need to
+	// start the `CollectionFactory.Txn()` regardless in order to look up the
+	// database descriptor ID.
+	if !CacheEnabled.Get(&settings.SV) {
+		settingsEntries, err = readFromSystemTables(
+			ctx,
+			ie,
+			username,
+			databaseID,
+		)
+		return settingsEntries, err
+	}
+
+	dbRoleSettingsTableVersion := dbRoleSettingsTableDesc.GetVersion()
+
+	// Check version and maybe clear cache while holding the mutex.
+	var found bool
+	settingsEntries, found = a.readDefaultSettingsFromCache(ctx, dbRoleSettingsTableVersion, username, databaseID)
+
+	if found {
+		return settingsEntries, nil
+	}
+
+	if a.BeforeLoadValueOutsideOfCacheTestHook != nil {
+		a.BeforeLoadValueOutsideOfCacheTestHook()
+	}
+
+	// Lookup the data outside the lock. There will be at most one request
+	// in-flight for each user+database. The db_role_settings table version is
+	// also part of the request key so that we don't read data from an old
+	// version of the table.
+	val, err := a.loadValueOutsideOfCache(
+		ctx, fmt.Sprintf("defaultsettings-%s-%d-%d", username.Normalized(), databaseID, dbRoleSettingsTableVersion),
+		func(loadCtx context.Context) (interface{}, error) {
+			return readFromSystemTables(loadCtx, ie, username, databaseID)
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	settingsEntries = val.([]SettingsCacheEntry)
+
+	// Write the fetched data back to the cache if the table version hasn't
+	// changed.
+	a.maybeWriteDefaultSettingsBackToCache(
+		ctx,
+		dbRoleSettingsTableVersion,
+		settingsEntries,
+	)
 	return settingsEntries, err
 }
 
@@ -408,6 +416,9 @@ func (a *Cache) readDefaultSettingsFromCache(
 // list into the settingsCache, and returns true if it succeeded. If the
 // underlying system tables have been modified since they were read, the
 // settingsCache is not updated.
+// Note that reading from system tables may give us data from a newer table
+// version than the one we pass in here, that is okay since the cache will
+// be invalidated upon the next read.
 func (a *Cache) maybeWriteDefaultSettingsBackToCache(
 	ctx context.Context,
 	dbRoleSettingsTableVersion descpb.DescriptorVersion,
@@ -416,7 +427,7 @@ func (a *Cache) maybeWriteDefaultSettingsBackToCache(
 	a.Lock()
 	defer a.Unlock()
 	// Table version has changed while we were looking: don't cache the data.
-	if a.dbRoleSettingsTableVersion != dbRoleSettingsTableVersion {
+	if a.dbRoleSettingsTableVersion > dbRoleSettingsTableVersion {
 		return false
 	}
 
