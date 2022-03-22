@@ -86,13 +86,13 @@ vectorized: true
     │
     └── • zigzag join
           left table: json_tab@foo_inv
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: json_tab@foo_inv
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk9v1DAQxe98itFcCsLSxtmbT6FtEFstm5JU4k-JVt7NELlNPcF2ELDKd0dJRGGhXXVvnnl-b35jeYf-a4MK0w-Xy1eLFTw_XxRXxbvlCyjSZXp2BRpe59lbuPFs10Fv4P2bNE9hA8nnLormBCfXUkBcnkCWn6c5nH4EjQItV7TSd-RRXaPEUmDreEvesxtau_HCovqOKhJobNuFoV0K3LIjVDsMJjSECj-Z-qeuL9hYcrMIBVYUtGnG3MJUBJG6Z0u-MK-N_YZikuSDUtYFBYnEshfIXfgz2gddEyrZi6fjDWA56YrcTO7D3U_-fVi3t_QDBS6Zb7sWbthYYDuiCMxWkMT_valS6qLIVqco8Iyb7s56BZsnrBAfs0LBLpCbxfv4iXz5aPz8mPicfMvW0178Y8lRXwqkqqbpk3ju3JYuHW_HMVOZjb6xUZEPkyqnYmEnaQD82ywPmuPD5vigef6Pueyf_QoAAP__rQARbQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zAUxd_5FFf3ZSAsNU7f_BS2BdGpNCOZxJ8RVW5zibxlvsF2EFDlu6MkYltBrbY33z_n-Hcs79B_b1Bh-uly-Waxgpfni-Kq-LB8BUW6TM-uQMPbPHsPN57tOugNfHyX5ilsIPnaRdGc4ORaCojLE8jy8zSH08-gUaDlilb6jjyqa5RYCmwdb8l7dkNrNy4sqp-oIoHGtl0Y2qXALTtCtcNgQkOo8Iupf-v6go0lN4tQYEVBm2b0LUxFEKl7tuQb89rYHyjwjJvuznoFWsAGxbQqn7SadUFBMseyF8hdeEDzQdeESvbi6fgDeE66IjeT-_D3JH8P6_aWfqHAJfNt18INGwtsFSSDMFtBEv_35kqpiyJbnT5O8RBBHowQPydCwS6Qm8X7-Il8fdB-_hz7nHzL1tOe_SHnqC8FUlXT9Ik8d25Ll4634zVTmY26sVGRD9NUTsXCTqMB8LFYHhXHx8XxUfH8H3HZv_gTAAD__zhLGuM=
 
 # Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
 # This should use a zigzag join.
@@ -114,13 +114,13 @@ vectorized: true
     │
     └── • zigzag join
           left table: json_tab@foo_inv
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: json_tab@foo_inv
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1vm0AQfO-vWO1LHPUkc_jtnkhiqjpyIYVI_UiRhc3WusS5pXdH1dbiv1dAm4YqseI3doaZnVndHt23HSqMP14tzxYJTOaL_Dp_vzyFPF7GF9dQwpssfQe3js3Kl2v48DbOYpisIfrSBMGM4ORGFiencJbMx2jYoWk2jzM4_wQlCjRcUVLek0N1gxILgbXlDTnHtoP2_Q-L6geqQKA2deM7uBC4YUuo9ui13xEq_Ky3v8rtJWtDdhqgwIp8qXe9b64rgkA9BI6-Mq-0-Y5ioOSTVNp4BZHEohXIjf-32vlyS6hkK14erwuWUVmRncpxuIfNfz9W9R39RIFL5rumhlvWBtj0UQSmCUyicHxopdRlnibnfw4-osNHNAq84F1zb5yC9QsKhscUzNl6stNwXC6Sr5-1nx1jn5Gr2Tga2T_nHLSFQKq2NDwhx43d0JXlTb9mGNNe1wMVOT-wchgWZqC6gI_F8qA4PCwOD4pn_4mL9tXvAAAA___isx3b
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1vm0AQfO-vWO1LHPUkc_jtnkhiqjpyIYVI_UiRdTZbi8S5pXdH1dbyf6-ANjGRbMVv7MzOMKO9LbofG1QYf76ZX8wSGE1n-W3-cX4OeTyPr25Bw7ss_QD3js3C6yV8eh9nMYyWEH1rgmBCcHYni7NzuEimQzRs0TSbxhlcfgGNAg2XlOhHcqjuUGIhsLa8IufYttC2W5iVv1AFAitTN76FC4ErtoRqi77yG0KFX6v1H72-5sqQHQcosCSvq03nm1clQaCeAkffmReV-YkCr3jTPBqnQAtYouhX5atW08YriCZY7ARy45-jOa_XhEruxOvjt8Ez0iXZsRyGf0ry_2NRP9BvFDhnfmhquOfKABsFUStMExhF4fAQSqnrPE0u_x1kQId79H7H54LyYMHwlII5W092HA7LRfLtQfvJKfYZuZqNo4H9IedgVwikck39E3Pc2BXdWF51v-nHtNN1QEnO96zsh5npqTbgvlgeFYfHxeFR8eSFuNi9-RsAAP__LTAnUQ==
 
 # Filter with a nested array. This index expression is not tight.
 # This should use a zigzag join.
@@ -142,13 +142,13 @@ vectorized: true
     │
     └── • zigzag join
           left table: json_tab@foo_inv
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: json_tab@foo_inv
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk9v1DAQxe98itFcCsLSxtmbT6FtEFstm5JU4s8SrbybIXKbeoLtIGCV746SiMJW7aq9eeb5vfmN5T367w0qTD9dLt8sVvDyfFFcFR-Wr6BIl-nZFWh4m2fv4dqz3QS9hY_v0jyFLSRfuyiaE5ys11JAXJYnkOXnaQ6nn0GjQMsVrfQteVRrlFgKbB3vyHt2Q2s_XlhUP1FFAo1tuzC0S4E7doRqj8GEhlDhF1P_1vUFG0tuFqHAioI2zZhbmIogUnd0yTfmjbE_UEySfFDKuqAgkVj2ArkL_0b7oGtCJXvxdLwBLCddkZvJQ7i7yX8Pm_aGfqHAJfNN18I1GwtsRxSB2QqS-IFXVUpdFNnqFAWecdPdWq9g-4Ql4ucsUbAL5Gbx4QKJfP1o_Pw58Tn5lq2ng_jHkqO-FEhVTdM38dy5HV063o1jpjIbfWOjIh8mVU7Fwk7SAPi_WR41x8fN8VHz_J657F_8CQAA__9KGRLd
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zAUxd_5FFf3ZSAsNU7f_BS2BdGpNCOZxJ8SVW5zqbxlvsF2EFDlu6MkYlsRrdY33z_n-Hcs79B_r1Fh-ul6_ma2gJeXs-Km-DB_BUU6Ty9uQMPbPHsPt57tKug1fHyX5imsIfnaRtGU4Gy5lALisjyDLL9Mczj_DBoFWq5ooe_Jo1qixFJg43hD3rPrW7thYVb9RBUJNLZpQ98uBW7YEaodBhNqQoVfzPa33l6xseQmEQqsKGhTD76FqQgi9UCXfGNeGfsDBV5w3d5br0ALWKMYV-WzVrM2KEimWHYCuQ2PaD7oLaGSnXg-fg-ek67ITeQ-_APJ38OquaNfKHDOfNc2cMvGAlsFSS_MFpDE_3l1pdRVkS3On-Z4DCEPhohPCVGwC-Qm8X6ARL4-aD89xT4n37D1tGd_yDnqSoFUbWn8Rp5bt6Frx5vhmrHMBt3QqMiHcSrHYmbHUQ_4VCyPiuPj4vioePqPuOxe_AkAAP___0EcUw==
 
 subtest array
 
@@ -203,10 +203,10 @@ vectorized: true
     │
     └── • zigzag join
           left table: array_tab@foo_inv
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: array_tab@foo_inv
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkkFv00AQhe_8itFcCmKleJ0L2pNDa4RRiIsdCUqxok08REvTHbO7RpTI_x3ZRi2BNmpvM_P83nxj7R799x0qTD-dz2fZAp6fZeWy_DB_AWU6T0-XoOFNkb8H7Zy-WQW9Tr4yr4z9AR_fpkUKa0i-tFE0JTjZSwFxdwJ5cZYW8PoCNAq0XNNCX5NHdYkSK4GN4w15z64f7YcPsvonqkigsU0b-nElcMOOUO0xmLAjVPjZbH_p7Ts2ltwkQoE1BW12Q25paoJI_Q-JYtTk_VreBgWJxKoTyG24W-6D3hIq2YnHA_ZoBema3EQe4t2tvq1WzRXdoMA581XbwDc2FtgOMALzBSTx7X-dFcXs4lIqpbLF8pWI_xQVCjzlXXttvYL1I46Jn3JMyS6Qm8SHhyTy5YPx06fEF-Qbtp4O4h9KjrpKINVbGh-M59Zt6NzxZlgztvngGwY1-TCqcmwyO0o94N9medQcHzfHR83Tf8xV9-x3AAAA___ZeBlf
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk9v00AQxe98itFcCmKleJ0L2pNDa4RRiIsdCUqxok08RKbpjtldI4rl745so6ahStTe5t_v-T1rW3Q_d6gw_nI5nyULeHmR5Mv80_wV5PE8Pl-ChndZ-hG0tfpu5fU6-s68qswv-Pw-zmJYQ_StCYIpwVkrBYTdGaTZRZzB2yvQKNBwSQt9Sw7VNUosBNaWN-Qc237UDgdJ-RtVILAydeP7cSFww5ZQtegrvyNU-LXa_tHbD1wZspMABZbkdbUbdPOqJAjUY5Mo8Jx3za1xCrSANYrxVj7tNm28gmiKRSeQG78357zeEirZiacH6K1npEuyE3lof2_lvlrVN3SHAufMN00NP7gywEZB1KPpAqLw_r_Psmx2dS2VUsli-UaE_4riYZ59GHk0TPicMDlbT3YSHgaJ5Ouj8tPnyGfkajaODuSPKQddIZDKLY0PynFjN3RpeTN8ZmzTgRsGJTk_buXYJGZc9QYfwvIkHJ6Gw5Pw9D-46F78DQAA__9VuCLV
