@@ -369,10 +369,8 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 	return metrics
 }
 
-// getNetworkActivity produces three maps detailing information about
-// network activity between this node and all other nodes. The maps
-// are incoming throughput, outgoing throughput, and average
-// latency. Throughputs are stored as bytes, and latencies as nanos.
+// getLatencies produces a map of network activity from this node to all other
+// nodes. Latencies are stored as nanos.
 func (mr *MetricsRecorder) getNetworkActivity(
 	ctx context.Context,
 ) map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity {
@@ -380,7 +378,6 @@ func (mr *MetricsRecorder) getNetworkActivity(
 	if mr.nodeLiveness != nil && mr.gossip != nil {
 		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
 
-		throughputMap := mr.rpcContext.GetStatsMap()
 		var currentAverages map[string]time.Duration
 		if mr.rpcContext.RemoteClocks != nil {
 			currentAverages = mr.rpcContext.RemoteClocks.AllLatencies()
@@ -395,11 +392,6 @@ func (mr *MetricsRecorder) getNetworkActivity(
 			}
 			na := statuspb.NodeStatus_NetworkActivity{}
 			key := address.String()
-			if tp, ok := throughputMap.Load(key); ok {
-				stats := tp.(*rpc.Stats)
-				na.Incoming = stats.Incoming()
-				na.Outgoing = stats.Outgoing()
-			}
 			if entry.IsLive {
 				if latency, ok := currentAverages[key]; ok {
 					na.Latency = latency.Nanoseconds()
