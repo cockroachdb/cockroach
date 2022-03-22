@@ -96,7 +96,7 @@ const (
 
 	// latestHistoryDirectory is the directory where all 22.1 and beyond
 	// LATEST files will be stored as we no longer want to overwrite it.
-	latestHistoryDirectory = backupMetadataDirectory + "latest"
+	latestHistoryDirectory = backupMetadataDirectory + "/" + "latest"
 
 	// backupMetadataDirectory is the directory where metadata about a backup
 	// collection is stored. In v22.1 it contains the latest directory.
