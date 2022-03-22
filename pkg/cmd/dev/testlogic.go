@@ -179,13 +179,13 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 			args = append(args, goTestArgs...)
 		}
 
+		// TODO(irfansharif): Is this right? --config and --files is optional.
 		selector := fmt.Sprintf(
-			"%s%s%s%s",
+			"%s/%s/%s/%s",
 			selectorPrefix,
 			maybeAddBeginEndMarkers(config),
 			maybeAddBeginEndMarkers(files),
-			maybeAddBeginEndMarkers(subtests),
-		)
+			subtests)
 		args = append(args, testTarget)
 		args = append(args, "--test_filter", selector)
 		args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
@@ -202,5 +202,5 @@ func maybeAddBeginEndMarkers(s string) string {
 	if len(s) == 0 {
 		return s
 	}
-	return "/^" + s + "$"
+	return "^" + s + "$"
 }
