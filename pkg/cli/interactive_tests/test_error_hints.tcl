@@ -30,8 +30,8 @@ end_test
 
 start_test "Connecting a SQL client to a non-started server"
 send "$argv sql -e 'select 1'\r"
-eexpect "ERROR: cannot load certificates.\r\nCheck your certificate settings"
-eexpect "or use --insecure"
+eexpect "ERROR: cannot dial server.\r\nIs the server running?"
+eexpect "connection refused"
 eexpect ":/# "
 
 send "$argv sql -e 'select 1' --certs-dir=$certs_dir\r"
@@ -75,22 +75,6 @@ eexpect ":/# "
 
 send "$argv start-single-node --listen-addr=localhost --certs-dir=$certs_dir\r"
 eexpect "restarted pre-existing node"
-
-set spawn_id $client_spawn_id
-
-start_test "Connecting an insecure RPC client to a secure server"
-send "$argv quit --insecure\r"
-eexpect "ERROR: server closed the connection."
-eexpect "remove --insecure"
-eexpect ":/# "
-end_test
-
-start_test "Connecting an insecure SQL client to a secure server"
-send "$argv sql -e 'select 1' --insecure\r"
-eexpect "ERROR: SSL authentication error while connecting."
-eexpect "remove --insecure"
-eexpect ":/# "
-end_test
 
 # Check what happens when attempting to connect to something
 # that is not a CockroachDB server.

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -154,6 +154,9 @@ func prepareInsertOrUpdateBatch(
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
+				if err := helper.checkRowSize(ctx, kvKey, &marshaledValues[idx], family.ID); err != nil {
+					return nil, err
+				}
 				putFn(ctx, batch, kvKey, &marshaledValues[idx], traceKV)
 			}
 
@@ -184,10 +187,10 @@ func prepareInsertOrUpdateBatch(
 			if lastColID > col.GetID() {
 				return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
 			}
-			colIDDiff := col.GetID() - lastColID
+			colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
 			lastColID = col.GetID()
 			var err error
-			rawValueBuf, err = rowenc.EncodeTableValue(rawValueBuf, colIDDiff, values[idx], nil)
+			rawValueBuf, err = valueside.Encode(rawValueBuf, colIDDelta, values[idx], nil)
 			if err != nil {
 				return nil, err
 			}
@@ -204,6 +207,9 @@ func prepareInsertOrUpdateBatch(
 			// a deep copy so rawValueBuf can be re-used by other calls to the
 			// function.
 			kvValue.SetTuple(rawValueBuf)
+			if err := helper.checkRowSize(ctx, kvKey, kvValue, family.ID); err != nil {
+				return nil, err
+			}
 			putFn(ctx, batch, kvKey, kvValue, traceKV)
 		}
 

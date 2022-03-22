@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/util/hlc",
+        "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
     ],

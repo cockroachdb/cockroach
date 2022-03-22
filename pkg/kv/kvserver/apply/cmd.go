@@ -24,6 +24,14 @@ type Command interface {
 	// that were locally proposed typically have a client waiting on a
 	// response, so there is additional urgency to apply them quickly.
 	IsLocal() bool
+	// Ctx returns the Context in which operations on this Command should be
+	// performed.
+	//
+	// A Command does the unusual thing of capturing a Context because commands
+	// are generally processed in batches, but different commands might want their
+	// events going to different places. In particular, commands that have been
+	// proposed locally get a tracing span tied to the local proposal.
+	Ctx() context.Context
 	// AckErrAndFinish signals that the application of the command has been
 	// rejected due to the provided error. It also relays this rejection of
 	// the command to its client if it was proposed locally. An error will
@@ -167,12 +175,13 @@ func takeWhileCmdIter(iter CommandIterator, pred func(Command) bool) CommandIter
 // responsible for converting Commands into CheckedCommand. The function
 // closes the provided iterator.
 func mapCmdIter(
-	iter CommandIterator, fn func(Command) (CheckedCommand, error),
+	iter CommandIterator, fn func(context.Context, Command) (CheckedCommand, error),
 ) (CheckedCommandIterator, error) {
 	defer iter.Close()
 	ret := iter.NewCheckedList()
 	for iter.Valid() {
-		checked, err := fn(iter.Cur())
+		cur := iter.Cur()
+		checked, err := fn(cur.Ctx(), cur)
 		if err != nil {
 			ret.Close()
 			return nil, err
@@ -188,12 +197,13 @@ func mapCmdIter(
 // is responsible for converting CheckedCommand into AppliedCommand. The
 // function closes the provided iterator.
 func mapCheckedCmdIter(
-	iter CheckedCommandIterator, fn func(CheckedCommand) (AppliedCommand, error),
+	iter CheckedCommandIterator, fn func(context.Context, CheckedCommand) (AppliedCommand, error),
 ) (AppliedCommandIterator, error) {
 	defer iter.Close()
 	ret := iter.NewAppliedList()
 	for iter.Valid() {
-		applied, err := fn(iter.CurChecked())
+		curChecked := iter.CurChecked()
+		applied, err := fn(curChecked.Ctx(), curChecked)
 		if err != nil {
 			ret.Close()
 			return nil, err

@@ -13,6 +13,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It
@@ -40,14 +40,15 @@ import (
 func distRestore(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
+	jobID int64,
 	chunks [][]execinfrapb.RestoreSpanEntry,
 	pkIDs map[uint64]bool,
 	encryption *jobspb.BackupEncryptionOptions,
-	rekeys []execinfrapb.TableRekey,
+	tableRekeys []execinfrapb.TableRekey,
+	tenantRekeys []execinfrapb.TenantRekey,
 	restoreTime hlc.Timestamp,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
-	ctx = logtags.AddTag(ctx, "restore-distsql", nil)
 	defer close(progCh)
 	var noTxn *kv.Txn
 
@@ -76,21 +77,24 @@ func distRestore(
 		fileEncryption = &roachpb.FileEncryptionOptions{Key: encryption.Key}
 	}
 
-	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
 	if err != nil {
 		return err
 	}
 
-	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(nodes, chunks, rekeys)
+	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(sqlInstanceIDs, chunks, tableRekeys, tenantRekeys)
 	if err != nil {
 		return err
 	}
 
 	restoreDataSpec := execinfrapb.RestoreDataSpec{
-		RestoreTime: restoreTime,
-		Encryption:  fileEncryption,
-		Rekeys:      rekeys,
-		PKIDs:       pkIDs,
+		JobID:        jobID,
+		RestoreTime:  restoreTime,
+		Encryption:   fileEncryption,
+		TableRekeys:  tableRekeys,
+		TenantRekeys: tenantRekeys,
+		PKIDs:        pkIDs,
+		Validation:   jobspb.RestoreValidation_DefaultRestore,
 	}
 
 	if len(splitAndScatterSpecs) == 0 {
@@ -102,8 +106,8 @@ func distRestore(
 	p := planCtx.NewPhysicalPlan()
 
 	// Plan SplitAndScatter in a round-robin fashion.
-	splitAndScatterStageID := p.NewStageOnNodes(nodes)
-	splitAndScatterProcs := make(map[roachpb.NodeID]physicalplan.ProcessorIdx)
+	splitAndScatterStageID := p.NewStageOnNodes(sqlInstanceIDs)
+	splitAndScatterProcs := make(map[base.SQLInstanceID]physicalplan.ProcessorIdx)
 
 	defaultStream := int32(0)
 	rangeRouterSpec := execinfrapb.OutputRouterSpec_RangeRouterSpec{
@@ -116,8 +120,8 @@ func distRestore(
 			},
 		},
 	}
-	for stream, nodeID := range nodes {
-		startBytes, endBytes, err := routingSpanForNode(nodeID)
+	for stream, sqlInstanceID := range sqlInstanceIDs {
+		startBytes, endBytes, err := routingSpanForSQLInstance(sqlInstanceID)
 		if err != nil {
 			return err
 		}
@@ -134,7 +138,7 @@ func distRestore(
 		return bytes.Compare(rangeRouterSpec.Spans[i].Start, rangeRouterSpec.Spans[j].Start) == -1
 	})
 
-	for _, n := range nodes {
+	for _, n := range sqlInstanceIDs {
 		spec := splitAndScatterSpecs[n]
 		if spec == nil {
 			// We may have fewer chunks than we have nodes for very small imports. In
@@ -144,7 +148,7 @@ func distRestore(
 			continue
 		}
 		proc := physicalplan.Processor{
-			Node: n,
+			SQLInstanceID: n,
 			Spec: execinfrapb.ProcessorSpec{
 				Core: execinfrapb.ProcessorCoreUnion{SplitAndScatter: splitAndScatterSpecs[n]},
 				Post: execinfrapb.PostProcessSpec{},
@@ -163,11 +167,11 @@ func distRestore(
 	}
 
 	// Plan RestoreData.
-	restoreDataStageID := p.NewStageOnNodes(nodes)
-	restoreDataProcs := make(map[roachpb.NodeID]physicalplan.ProcessorIdx)
-	for _, n := range nodes {
+	restoreDataStageID := p.NewStageOnNodes(sqlInstanceIDs)
+	restoreDataProcs := make(map[base.SQLInstanceID]physicalplan.ProcessorIdx)
+	for _, sqlInstanceID := range sqlInstanceIDs {
 		proc := physicalplan.Processor{
-			Node: n,
+			SQLInstanceID: sqlInstanceID,
 			Spec: execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{
 					{ColumnTypes: splitAndScatterOutputTypes},
@@ -180,17 +184,17 @@ func distRestore(
 			},
 		}
 		pIdx := p.AddProcessor(proc)
-		restoreDataProcs[n] = pIdx
+		restoreDataProcs[sqlInstanceID] = pIdx
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
 
 	for _, srcProc := range splitAndScatterProcs {
 		slot := 0
-		for _, destNode := range nodes {
+		for _, destSQLInstanceID := range sqlInstanceIDs {
 			// Streams were added to the range router in the same order that the
 			// nodes appeared in `nodes`. Make sure that the `slot`s here are
 			// ordered the same way.
-			destProc := restoreDataProcs[destNode]
+			destProc := restoreDataProcs[destSQLInstanceID]
 			p.Streams = append(p.Streams, physicalplan.Stream{
 				SourceProcessor:  srcProc,
 				SourceRouterSlot: slot,
@@ -236,23 +240,28 @@ func distRestore(
 // spec that should be planned on that node. Given the chunks of ranges to
 // import it round-robin distributes the chunks amongst the given nodes.
 func makeSplitAndScatterSpecs(
-	nodes []roachpb.NodeID, chunks [][]execinfrapb.RestoreSpanEntry, rekeys []execinfrapb.TableRekey,
-) (map[roachpb.NodeID]*execinfrapb.SplitAndScatterSpec, error) {
-	specsByNodes := make(map[roachpb.NodeID]*execinfrapb.SplitAndScatterSpec)
+	sqlInstanceIDs []base.SQLInstanceID,
+	chunks [][]execinfrapb.RestoreSpanEntry,
+	tableRekeys []execinfrapb.TableRekey,
+	tenantRekeys []execinfrapb.TenantRekey,
+) (map[base.SQLInstanceID]*execinfrapb.SplitAndScatterSpec, error) {
+	specsBySQLInstanceID := make(map[base.SQLInstanceID]*execinfrapb.SplitAndScatterSpec)
 	for i, chunk := range chunks {
-		node := nodes[i%len(nodes)]
-		if spec, ok := specsByNodes[node]; ok {
+		sqlInstanceID := sqlInstanceIDs[i%len(sqlInstanceIDs)]
+		if spec, ok := specsBySQLInstanceID[sqlInstanceID]; ok {
 			spec.Chunks = append(spec.Chunks, execinfrapb.SplitAndScatterSpec_RestoreEntryChunk{
 				Entries: chunk,
 			})
 		} else {
-			specsByNodes[node] = &execinfrapb.SplitAndScatterSpec{
+			specsBySQLInstanceID[sqlInstanceID] = &execinfrapb.SplitAndScatterSpec{
 				Chunks: []execinfrapb.SplitAndScatterSpec_RestoreEntryChunk{{
 					Entries: chunk,
 				}},
-				Rekeys: rekeys,
+				TableRekeys:  tableRekeys,
+				TenantRekeys: tenantRekeys,
+				Validation:   jobspb.RestoreValidation_DefaultRestore,
 			}
 		}
 	}
-	return specsByNodes, nil
+	return specsBySQLInstanceID, nil
 }

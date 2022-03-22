@@ -37,6 +37,7 @@ go_library(
     srcs = [
         "decode.go",
         "engine.go",
+        "file_registry.go",
         "mvcc.go",
         "mvcc3.go",
     ],
@@ -59,10 +60,11 @@ go_test(
     ],
     deps = [
         ":enginepb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",
     ],
 )

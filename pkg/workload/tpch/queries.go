@@ -458,8 +458,12 @@ WHERE
 	// Note that the main query has been adjusted to go around issues with
 	// floating point computations when the order of summation is different
 	// (see #53946 for more details).
+	//
+	// Additionally, CREATE VIEW statement has been adjusted to include IF NOT
+	// EXISTS modifier so that query15 could be run with concurrency greater
+	// than one without hitting the "view already exists" error.
 	query15 = `
-CREATE VIEW revenue0 (supplier_no, total_revenue) AS
+CREATE VIEW IF NOT EXISTS revenue0 (supplier_no, total_revenue) AS
 	SELECT
 		l_suppkey,
 		sum(l_extendedprice * (1 - l_discount))

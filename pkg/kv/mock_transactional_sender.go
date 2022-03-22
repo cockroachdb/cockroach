@@ -48,14 +48,14 @@ func (m *MockTransactionalSender) Send(
 // GetLeafTxnInputState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnInputState(
 	context.Context, TxnStatusOpt,
-) (roachpb.LeafTxnInputState, error) {
+) (*roachpb.LeafTxnInputState, error) {
 	panic("unimplemented")
 }
 
 // GetLeafTxnFinalState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnFinalState(
 	context.Context, TxnStatusOpt,
-) (roachpb.LeafTxnFinalState, error) {
+) (*roachpb.LeafTxnFinalState, error) {
 	panic("unimplemented")
 }
 
@@ -160,6 +160,9 @@ func (m *MockTransactionalSender) ReleaseSavepoint(context.Context, SavepointTok
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
 
+// IsLocking is part of the TxnSender interface.
+func (m *MockTransactionalSender) IsLocking() bool { return false }
+
 // TestingCloneTxn is part of the TxnSender interface.
 func (m *MockTransactionalSender) TestingCloneTxn() *roachpb.Transaction {
 	return m.txn.Clone()
@@ -193,6 +196,9 @@ func (m *MockTransactionalSender) Step(_ context.Context) error {
 	return nil
 }
 
+// SetReadSeqNum is part of the TxnSender interface.
+func (m *MockTransactionalSender) SetReadSeqNum(_ enginepb.TxnSeq) error { return nil }
+
 // ConfigureStepping is part of the TxnSender interface.
 func (m *MockTransactionalSender) ConfigureStepping(context.Context, SteppingMode) SteppingMode {
 	// See Step() above.
@@ -214,10 +220,22 @@ func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(cont
 	panic("unimplemented")
 }
 
+// GetTxnRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetTxnRetryableErr(
+	ctx context.Context,
+) *roachpb.TransactionRetryWithProtoRefreshError {
+	return nil
+}
+
+// ClearTxnRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) ClearTxnRetryableErr(ctx context.Context) {
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (
 		*roachpb.BatchResponse, *roachpb.Error)
+	nonTxnSenderFunc Sender
 }
 
 var _ TxnSenderFactory = MockTxnSenderFactory{}
@@ -235,6 +253,21 @@ func MakeMockTxnSenderFactory(
 	}
 }
 
+// MakeMockTxnSenderFactoryWithNonTxnSender creates a MockTxnSenderFactory from
+// two sender functions: one for transactional and one for non-transactional
+// requests.
+func MakeMockTxnSenderFactoryWithNonTxnSender(
+	senderFunc func(
+		context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, *roachpb.Error),
+	nonTxnSenderFunc SenderFunc,
+) MockTxnSenderFactory {
+	return MockTxnSenderFactory{
+		senderFunc:       senderFunc,
+		nonTxnSenderFunc: nonTxnSenderFunc,
+	}
+}
+
 // RootTransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) RootTransactionalSender(
 	txn *roachpb.Transaction, _ roachpb.UserPriority,
@@ -249,5 +282,5 @@ func (f MockTxnSenderFactory) LeafTransactionalSender(tis *roachpb.LeafTxnInputS
 
 // NonTransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) NonTransactionalSender() Sender {
-	return nil
+	return f.nonTxnSenderFunc
 }

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -97,11 +98,11 @@ var _ tableWriter = &optTableUpserter{}
 
 // init is part of the tableWriter interface.
 func (tu *optTableUpserter) init(
-	ctx context.Context, txn *kv.Txn, evalCtx *tree.EvalContext,
+	ctx context.Context, txn *kv.Txn, evalCtx *tree.EvalContext, sv *settings.Values,
 ) error {
-	tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx)
+	tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx, sv)
 
-	// rowsNeeded, set upon initialization, indicates whether or not we want
+	// rowsNeeded, set upon initialization, indicates pkg/sql/backfill.gowhether or not we want
 	// rows returned from the operation.
 	if tu.rowsNeeded {
 		tu.resultRow = make(tree.Datums, len(tu.returnCols))

@@ -98,13 +98,13 @@ limit
  │    ├── cardinality: [0 - 10]
  │    ├── ordering: +2
  │    ├── limit hint: 5.00
- │    ├── scan def@secondary
+ │    ├── scan def@def_d_e_f_idx
  │    │    ├── columns: e:8 f:9
  │    │    ├── constraint: /7/8/9/10: [/1 - /1]
  │    │    ├── limit: 5
  │    │    ├── ordering: +8
  │    │    └── limit hint: 5.00
- │    └── scan def@secondary
+ │    └── scan def@def_d_e_f_idx
  │         ├── columns: e:14 f:15
  │         ├── constraint: /13/14/15/16: [/3 - /3]
  │         ├── limit: 5
@@ -302,29 +302,29 @@ project
 memo
 SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
-memo (optimized, ~5KB, required=[presentation: y:2,z:7] [ordering: +1,-2])
+memo (optimized, ~6KB, required=[presentation: y:2,z:7] [ordering: +1,-2])
  ├── G1: (project G2 G3 x y)
  │    ├── [presentation: y:2,z:7] [ordering: +1,-2]
  │    │    ├── best: (project G2="[ordering: +1,-2]" G3 x y)
- │    │    └── cost: 1101.91
+ │    │    └── cost: 1101.34
  │    └── []
  │         ├── best: (project G2 G3 x y)
- │         └── cost: 1101.91
+ │         └── cost: 1101.34
  ├── G2: (select G4 G5)
  │    ├── [ordering: +1,-2]
  │    │    ├── best: (select G4="[ordering: +1,-2]" G5)
- │    │    └── cost: 1095.23
+ │    │    └── cost: 1094.65
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1095.23
+ │         └── cost: 1094.65
  ├── G3: (projections G6)
  ├── G4: (scan a,cols=(1,2))
  │    ├── [ordering: +1,-2]
  │    │    ├── best: (scan a,cols=(1,2))
- │    │    └── cost: 1085.21
+ │    │    └── cost: 1084.62
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1085.21
+ │         └── cost: 1084.62
  ├── G5: (filters G7)
  ├── G6: (minus G8 G9)
  ├── G7: (gt G8 G10)
@@ -355,29 +355,29 @@ sort
 memo
 SELECT y, z FROM a WHERE x>y ORDER BY y
 ----
-memo (optimized, ~5KB, required=[presentation: y:2,z:3] [ordering: +2])
+memo (optimized, ~6KB, required=[presentation: y:2,z:3] [ordering: +2])
  ├── G1: (project G2 G3 y z)
  │    ├── [presentation: y:2,z:3] [ordering: +2]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1178.00
+ │    │    └── cost: 1177.34
  │    └── []
  │         ├── best: (project G2 G3 y z)
- │         └── cost: 1108.77
+ │         └── cost: 1108.10
  ├── G2: (select G4 G5)
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1177.99
+ │    │    └── cost: 1177.32
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1105.43
+ │         └── cost: 1104.75
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1-3))
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 1344.88
+ │    │    └── cost: 1344.20
  │    └── []
  │         ├── best: (scan a,cols=(1-3))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
  ├── G7: (variable x)
@@ -427,7 +427,7 @@ scalar-group-by
 opt
 SELECT a, min(b) FROM abc GROUP BY a ORDER BY a
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null min:6!null
  ├── grouping columns: a:1!null
  ├── key: (1)
@@ -443,7 +443,7 @@ group-by
 opt
 SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null min:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── internal-ordering: +1,+2
@@ -461,7 +461,7 @@ group-by
 opt
 SELECT a, b, min(c) FROM abc GROUP BY a, b ORDER BY a, b
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null min:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── key: (1,2)
@@ -478,7 +478,7 @@ group-by
 opt
 SELECT a, b, min(c) FROM abc GROUP BY b, a ORDER BY a, b
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null min:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── key: (1,2)
@@ -501,7 +501,7 @@ sort (segmented)
  ├── key: (1,2)
  ├── fd: (1,2)-->(6)
  ├── ordering: +1,+6
- └── group-by
+ └── group-by (streaming)
       ├── columns: a:1!null b:2!null min:6!null
       ├── grouping columns: a:1!null b:2!null
       ├── internal-ordering: +1,+2
@@ -520,7 +520,7 @@ sort (segmented)
 opt
 SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY c) GROUP BY a, b ORDER BY a, b
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null array_agg:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── internal-ordering: +3 opt(1,2)
@@ -538,7 +538,7 @@ group-by
 opt
 SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY a, b, c) GROUP BY a, b ORDER BY a, b
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null array_agg:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── internal-ordering: +3 opt(1,2)
@@ -556,7 +556,7 @@ group-by
 opt
 SELECT a, b, array_agg(c) FROM (SELECT * FROM abc ORDER BY b, c, a) GROUP BY b, a ORDER BY a, b
 ----
-group-by
+group-by (streaming)
  ├── columns: a:1!null b:2!null array_agg:6!null
  ├── grouping columns: a:1!null b:2!null
  ├── internal-ordering: +3 opt(1,2)
@@ -576,7 +576,7 @@ group-by
 opt
 SELECT sum(c) FROM abc WHERE a = 1 GROUP BY b ORDER BY b
 ----
-group-by
+group-by (streaming)
  ├── columns: sum:6!null  [hidden: b:2!null]
  ├── grouping columns: b:2!null
  ├── key: (2)
@@ -598,7 +598,7 @@ SELECT sum(d) FROM abcd GROUP BY a, b, c
 ----
 project
  ├── columns: sum:8
- └── group-by
+ └── group-by (hash)
       ├── columns: a:1 b:2 c:3 sum:8
       ├── grouping columns: a:1 b:2 c:3
       ├── key: (1-3)
@@ -615,7 +615,7 @@ SELECT sum(a) FROM abcd GROUP BY b, c, d
 ----
 project
  ├── columns: sum:8
- └── group-by
+ └── group-by (hash)
       ├── columns: b:2 c:3 d:4 sum:8
       ├── grouping columns: b:2 c:3 d:4
       ├── key: (2-4)
@@ -631,7 +631,7 @@ SELECT array_agg(d) FROM (SELECT * FROM abcd ORDER BY c) GROUP BY a, b
 ----
 project
  ├── columns: array_agg:8
- └── group-by
+ └── group-by (hash)
       ├── columns: a:1 b:2 array_agg:8
       ├── grouping columns: a:1 b:2
       ├── internal-ordering: +3 opt(1,2)
@@ -670,14 +670,14 @@ memo (optimized, ~3KB, required=[presentation: info:7])
  ├── G1: (explain G2 [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
  │    └── [presentation: info:7]
  │         ├── best: (explain G2="[presentation: x:1,y:2,z:3,s:4] [ordering: +2]" [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
- │         └── cost: 1365.09
+ │         └── cost: 1364.32
  └── G2: (scan a,cols=(1-4))
       ├── [presentation: x:1,y:2,z:3,s:4] [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1365.08
+      │    └── cost: 1364.30
       └── []
            ├── best: (scan a,cols=(1-4))
-           └── cost: 1105.61
+           └── cost: 1104.82
 
 # --------------------------------------------------
 # With Ordinality
@@ -686,111 +686,111 @@ memo (optimized, ~3KB, required=[presentation: info:7])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality
 ----
-memo (optimized, ~4KB, required=[presentation: y:2] [ordering: +7])
+memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2)
- │    │    └── cost: 1085.02
+ │    │    └── cost: 1084.54
  │    └── []
  │         ├── best: (ordinality G2)
- │         └── cost: 1085.02
+ │         └── cost: 1084.54
  └── G2: (scan a,cols=(2))
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1075.01
+           └── cost: 1074.52
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY -ordinality
 ----
-memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +8])
+memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +8])
  ├── G1: (project G2 G3 y)
  │    ├── [presentation: y:2] [ordering: +8]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1344.50
+ │    │    └── cost: 1344.04
  │    └── []
  │         ├── best: (project G2 G3 y)
- │         └── cost: 1105.03
+ │         └── cost: 1104.56
  ├── G2: (ordinality G4)
  │    └── []
  │         ├── best: (ordinality G4)
- │         └── cost: 1085.02
+ │         └── cost: 1084.54
  ├── G3: (projections G5)
  ├── G4: (scan a,cols=(2))
  │    └── []
  │         ├── best: (scan a,cols=(2))
- │         └── cost: 1075.01
+ │         └── cost: 1074.52
  ├── G5: (unary-minus G6)
  └── G6: (variable ordinality)
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality, x
 ----
-memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +7])
+memo (optimized, ~7KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2)
- │    │    └── cost: 1085.02
+ │    │    └── cost: 1084.54
  │    └── []
  │         ├── best: (ordinality G2)
- │         └── cost: 1085.02
+ │         └── cost: 1084.54
  └── G2: (scan a,cols=(2))
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1075.01
+           └── cost: 1074.52
 
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY y, ordinality
 ----
-memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +2,+7])
+memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +2,+7])
  ├── G1: (ordinality G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +2,+7]
  │    │    ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1314.49
+ │    │    └── cost: 1314.02
  │    └── []
  │         ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
- │         └── cost: 1314.49
+ │         └── cost: 1314.02
  └── G2: (scan a,cols=(2))
       ├── [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1304.48
+      │    └── cost: 1304.00
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1075.01
+           └── cost: 1074.52
 
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY ordinality, y
 ----
-memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +7])
+memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +7])
  ├── G1: (ordinality G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +7]
  │    │    ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1314.49
+ │    │    └── cost: 1314.02
  │    └── []
  │         ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
- │         └── cost: 1314.49
+ │         └── cost: 1314.02
  └── G2: (scan a,cols=(2))
       ├── [ordering: +2]
       │    ├── best: (sort G2)
-      │    └── cost: 1304.48
+      │    └── cost: 1304.00
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1075.01
+           └── cost: 1074.52
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality DESC
 ----
-memo (optimized, ~4KB, required=[presentation: y:2] [ordering: -7])
+memo (optimized, ~5KB, required=[presentation: y:2] [ordering: -7])
  ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: -7]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1324.49
+ │    │    └── cost: 1324.02
  │    └── []
  │         ├── best: (ordinality G2)
- │         └── cost: 1085.02
+ │         └── cost: 1084.54
  └── G2: (scan a,cols=(2))
       └── []
            ├── best: (scan a,cols=(2))
-           └── cost: 1075.01
+           └── cost: 1074.52
 
 # --------------------------------------------------
 # Merge Join
@@ -1685,6 +1685,68 @@ intersect-all
       ├── fd: ()-->(2)
       └── (1,)
 
+# Regression test for #69497. Ensure streaming set ops specify all columns in
+# the ordering.
+exec-ddl
+CREATE TABLE t69497_abc (a INT, b INT, c INT, INDEX (a, b, c DESC))
+----
+
+exec-ddl
+CREATE TABLE t69497_def (d INT PRIMARY KEY, e INT, f INT)
+----
+
+opt
+SELECT d, e, f FROM t69497_def EXCEPT SELECT a, b, c FROM t69497_abc ORDER by d, e
+----
+except-all
+ ├── columns: d:1 e:2 f:3
+ ├── left columns: d:1 e:2 f:3
+ ├── right columns: a:6 b:7 c:8
+ ├── internal-ordering: +1,+2,-3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── ordering: +1
+ ├── scan t69497_def
+ │    ├── columns: d:1!null e:2 f:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── ordering: +1
+ └── scan t69497_abc@t69497_abc_a_b_c_idx
+      ├── columns: a:6 b:7 c:8
+      └── ordering: +6,+7,-8
+
+# Example where the interesting orderings do not include all columns.
+exec-ddl
+CREATE TABLE t69497_abcd (a INT, b INT, c INT, d INT, INDEX (a, b, c DESC) STORING (d))
+----
+
+exec-ddl
+CREATE TABLE t69497_efgh (e INT PRIMARY KEY, f INT, g INT, h INT)
+----
+
+opt
+SELECT e, f, g, h FROM t69497_efgh EXCEPT SELECT a, b, c, d FROM t69497_abcd ORDER by e, f
+----
+except-all
+ ├── columns: e:1 f:2 g:3 h:4
+ ├── left columns: e:1 f:2 g:3 h:4
+ ├── right columns: a:7 b:8 c:9 d:10
+ ├── internal-ordering: +1,+2,-3,+4
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── ordering: +1
+ ├── scan t69497_efgh
+ │    ├── columns: e:1!null f:2 g:3 h:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── ordering: +1
+ └── sort (segmented)
+      ├── columns: a:7 b:8 c:9 d:10
+      ├── ordering: +7,+8,-9,+10
+      └── scan t69497_abcd@t69497_abcd_a_b_c_idx
+           ├── columns: a:7 b:8 c:9 d:10
+           └── ordering: +7,+8,-9
+
 # --------------------------------------------------
 # Insert operator.
 # --------------------------------------------------
@@ -1713,20 +1775,15 @@ sort
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
       │    ├── key: (1-3)
-      │    └── limit
+      │    └── top-k
       │         ├── columns: x:6!null y:7!null z:8!null
       │         ├── internal-ordering: +7,+8
+      │         ├── k: 2
       │         ├── cardinality: [0 - 2]
       │         ├── key: (6-8)
-      │         ├── sort
-      │         │    ├── columns: x:6!null y:7!null z:8!null
-      │         │    ├── key: (6-8)
-      │         │    ├── ordering: +7,+8
-      │         │    ├── limit hint: 2.00
-      │         │    └── scan xyz
-      │         │         ├── columns: x:6!null y:7!null z:8!null
-      │         │         └── key: (6-8)
-      │         └── 2
+      │         └── scan xyz
+      │              ├── columns: x:6!null y:7!null z:8!null
+      │              └── key: (6-8)
       └── with-scan &1
            ├── columns: a:11!null b:12!null c:13!null
            ├── mapping:
@@ -2029,7 +2086,7 @@ sort
       ├── volatile, mutations
       ├── upsert abc
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
-      │    ├── arbiter indexes: primary
+      │    ├── arbiter indexes: abc_pkey
       │    ├── canary column: abc.a:11
       │    ├── fetch columns: abc.a:11 abc.b:12 abc.c:13
       │    ├── insert-mapping:
@@ -2062,20 +2119,15 @@ sort
       │         │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
       │         │    │    ├── cardinality: [0 - 2]
       │         │    │    ├── key: (6-8)
-      │         │    │    └── limit
+      │         │    │    └── top-k
       │         │    │         ├── columns: x:6!null y:7!null z:8!null
       │         │    │         ├── internal-ordering: +7,+8
+      │         │    │         ├── k: 2
       │         │    │         ├── cardinality: [0 - 2]
       │         │    │         ├── key: (6-8)
-      │         │    │         ├── sort
-      │         │    │         │    ├── columns: x:6!null y:7!null z:8!null
-      │         │    │         │    ├── key: (6-8)
-      │         │    │         │    ├── ordering: +7,+8
-      │         │    │         │    ├── limit hint: 2.00
-      │         │    │         │    └── scan xyz
-      │         │    │         │         ├── columns: x:6!null y:7!null z:8!null
-      │         │    │         │         └── key: (6-8)
-      │         │    │         └── 2
+      │         │    │         └── scan xyz
+      │         │    │              ├── columns: x:6!null y:7!null z:8!null
+      │         │    │              └── key: (6-8)
       │         │    └── filters (true)
       │         └── projections
       │              ├── CASE WHEN abc.a:11 IS NULL THEN x:6 ELSE 10 END [as=upsert_a:17, outer=(6,11)]
@@ -2215,6 +2267,63 @@ sort
            └── filters
                 └── b:16 = c:17 [outer=(16,17), fd=(16)==(17), (17)==(16)]
 
+# --------------------------------------------------
+# With operator.
+# --------------------------------------------------
+
+# Verify that we can pass through the ordering requirement through the With
+# operator.
+opt
+WITH cte AS MATERIALIZED (SELECT x FROM xyz)
+SELECT * FROM abc ORDER BY a,b,c
+----
+with &1 (cte)
+ ├── columns: a:6!null b:7!null c:8!null
+ ├── materialized
+ ├── key: (6-8)
+ ├── ordering: +6,+7,+8
+ ├── scan xyz
+ │    └── columns: x:1!null
+ └── scan abc
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── key: (6-8)
+      └── ordering: +6,+7,+8
+
+opt
+WITH cte AS MATERIALIZED (SELECT x FROM xyz)
+SELECT * FROM abc INNER MERGE JOIN cte ON a = x ORDER BY a
+----
+with &1 (cte)
+ ├── columns: a:6!null b:7!null c:8!null x:11!null
+ ├── materialized
+ ├── fd: (6)==(11), (11)==(6)
+ ├── ordering: +(6|11) [actual: +6]
+ ├── scan xyz
+ │    └── columns: xyz.x:1!null
+ └── inner-join (merge)
+      ├── columns: a:6!null b:7!null c:8!null x:11!null
+      ├── flags: force merge join
+      ├── left ordering: +6
+      ├── right ordering: +11
+      ├── fd: (6)==(11), (11)==(6)
+      ├── ordering: +(6|11) [actual: +6]
+      ├── scan abc
+      │    ├── columns: a:6!null b:7!null c:8!null
+      │    ├── key: (6-8)
+      │    └── ordering: +6
+      ├── sort
+      │    ├── columns: x:11!null
+      │    ├── ordering: +11
+      │    └── with-scan &1 (cte)
+      │         ├── columns: x:11!null
+      │         └── mapping:
+      │              └──  xyz.x:1 => x:11
+      └── filters (true)
+
+
+# --------------------------------------------------
+# Misc tests.
+# --------------------------------------------------
 
 # Regression test for #36219: lookup join with ON condition that imposes an
 # equality on two input columns (which isn't pushed down).
@@ -2280,7 +2389,7 @@ distinct-on
  ├── grouping columns: b:5!null
  ├── key: (5)
  ├── ordering: +5
- └── inner-join (lookup t44469_cd@secondary)
+ └── inner-join (lookup t44469_cd@t44469_cd_c_d_idx)
       ├── columns: a:1!null b:5!null c:9!null d:10!null
       ├── flags: force lookup join (into right side)
       ├── key columns: [14 1] = [9 10]
@@ -2289,14 +2398,14 @@ distinct-on
       ├── project
       │    ├── columns: "lookup_join_const_col_@9":14!null a:1!null b:5!null
       │    ├── fd: ()-->(14), (1)==(5), (5)==(1)
-      │    ├── ordering: +(1|5) [actual: +1]
-      │    ├── inner-join (lookup t44469_b@secondary)
+      │    ├── ordering: +(1|5) opt(14) [actual: +1]
+      │    ├── inner-join (lookup t44469_b@t44469_b_b_idx)
       │    │    ├── columns: a:1!null b:5!null
       │    │    ├── flags: force lookup join (into right side)
       │    │    ├── key columns: [1] = [5]
       │    │    ├── fd: (1)==(5), (5)==(1)
       │    │    ├── ordering: +(1|5) [actual: +1]
-      │    │    ├── scan t44469_a@secondary
+      │    │    ├── scan t44469_a@t44469_a_a_idx
       │    │    │    ├── columns: a:1
       │    │    │    └── ordering: +1
       │    │    └── filters (true)
@@ -2314,6 +2423,19 @@ CREATE TABLE t47041 (
   b INT8 NOT NULL CHECK (b = 0),
   INDEX ba (b, a)
 )
+----
+
+exec-ddl
+ALTER TABLE t47041 INJECT STATISTICS '[
+  {
+    "columns": ["b"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 1000,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 1000
+  }
+]';
 ----
 
 opt
@@ -2339,3 +2461,113 @@ project
  │              └── k:1 > 0 [outer=(1)]
  └── projections
       └── 1 [as="?column?":6]
+
+# Regression test for #73968. Lookup join needs to simplify the ordering
+# required of its child.
+exec-ddl
+CREATE TABLE t73968 (
+  k INT PRIMARY KEY,
+  name STRING,
+  x STRING AS (CAST(k AS STRING)) VIRTUAL,
+  y STRING AS (lower(name)) VIRTUAL,
+  UNIQUE (y),
+  UNIQUE (x)
+);
+----
+
+exec-ddl
+ALTER TABLE t73968 INJECT STATISTICS e'[
+  {
+    "columns": ["k"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 1000000,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 1000000000
+  }
+]';
+----
+
+opt
+SELECT
+  t2.crdb_internal_mvcc_timestamp
+FROM
+  t73968 AS t1 JOIN t73968 AS t2 ON t1.name = t2.name
+      AND t1.y = t2.y
+      AND t1.x = t2.y
+      AND t1.k = t2.k
+      AND t1.x = t2.x
+ORDER BY
+  t2.x, t2.k
+LIMIT
+  56
+----
+project
+ ├── columns: crdb_internal_mvcc_timestamp:11  [hidden: k:7!null x:9!null]
+ ├── cardinality: [0 - 56]
+ ├── immutable
+ ├── key: (7)
+ ├── fd: (7)-->(9,11)
+ ├── ordering: +9,+7 [actual: +9]
+ └── limit
+      ├── columns: k:1!null name:2!null x:3!null k:7!null name:8!null x:9!null crdb_internal_mvcc_timestamp:11
+      ├── internal-ordering: +(3|9),+(1|7)
+      ├── cardinality: [0 - 56]
+      ├── immutable
+      ├── key: (7)
+      ├── fd: (1)-->(2,3), (7)-->(8,9,11), (2)==(8), (8)==(2), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
+      ├── ordering: +(3|9),+(1|7) [actual: +3]
+      ├── inner-join (lookup t73968)
+      │    ├── columns: k:1!null name:2!null x:3!null k:7!null name:8!null x:9!null crdb_internal_mvcc_timestamp:11
+      │    ├── key columns: [7] = [7]
+      │    ├── lookup columns are key
+      │    ├── immutable
+      │    ├── key: (7)
+      │    ├── fd: (1)-->(2,3), (7)-->(8,9,11), (2)==(8), (8)==(2), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
+      │    ├── ordering: +(3|9),+(1|7) [actual: +3]
+      │    ├── limit hint: 56.00
+      │    ├── inner-join (lookup t73968@t73968_x_key)
+      │    │    ├── columns: k:1!null name:2 x:3!null k:7!null x:9!null
+      │    │    ├── key columns: [3] = [9]
+      │    │    ├── lookup columns are key
+      │    │    ├── immutable
+      │    │    ├── key: (7)
+      │    │    ├── fd: (1)-->(2,3), (7)-->(9), (9)-->(7), (1)==(7), (7)==(1), (3)==(9), (9)==(3)
+      │    │    ├── ordering: +(3|9) [actual: +3]
+      │    │    ├── limit hint: 200.00
+      │    │    ├── sort
+      │    │    │    ├── columns: k:1!null name:2 x:3!null
+      │    │    │    ├── immutable
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2,3)
+      │    │    │    ├── ordering: +3
+      │    │    │    ├── limit hint: 2100.00
+      │    │    │    └── project
+      │    │    │         ├── columns: x:3!null k:1!null name:2
+      │    │    │         ├── immutable
+      │    │    │         ├── key: (1)
+      │    │    │         ├── fd: (1)-->(2,3)
+      │    │    │         ├── select
+      │    │    │         │    ├── columns: k:1!null name:2
+      │    │    │         │    ├── immutable
+      │    │    │         │    ├── key: (1)
+      │    │    │         │    ├── fd: (1)-->(2)
+      │    │    │         │    ├── scan t73968
+      │    │    │         │    │    ├── columns: k:1!null name:2
+      │    │    │         │    │    ├── computed column expressions
+      │    │    │         │    │    │    ├── x:3
+      │    │    │         │    │    │    │    └── k:1::STRING
+      │    │    │         │    │    │    └── y:4
+      │    │    │         │    │    │         └── lower(name:2)
+      │    │    │         │    │    ├── key: (1)
+      │    │    │         │    │    └── fd: (1)-->(2)
+      │    │    │         │    └── filters
+      │    │    │         │         └── k:1::STRING = lower(name:2) [outer=(1,2), immutable]
+      │    │    │         └── projections
+      │    │    │              └── k:1::STRING [as=x:3, outer=(1), immutable]
+      │    │    └── filters
+      │    │         └── k:1 = k:7 [outer=(1,7), fd=(1)==(7), (7)==(1)]
+      │    └── filters
+      │         ├── name:2 = name:8 [outer=(2,8), fd=(2)==(8), (8)==(2)]
+      │         └── k:7::STRING = lower(name:8) [outer=(7,8), immutable]
+      └── 56

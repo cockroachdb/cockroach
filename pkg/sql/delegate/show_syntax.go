@@ -65,5 +65,6 @@ func (d *delegator) delegateShowSyntax(n *tree.ShowSyntax) (tree.Statement, erro
 		nil, /* reportErr */
 	)
 	query.WriteByte(')')
+
 	return parse(query.String())
 }

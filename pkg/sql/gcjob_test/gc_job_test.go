@@ -27,9 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -90,19 +91,24 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				sqlDB.Exec(t, "ALTER TABLE my_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 				sqlDB.Exec(t, "ALTER TABLE my_other_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 			}
-			myDBID := descpb.ID(keys.MinUserDescID + 2)
-			myTableID := descpb.ID(keys.MinUserDescID + 3)
-			myOtherTableID := descpb.ID(keys.MinUserDescID + 4)
+			myDBID := descpb.ID(bootstrap.TestingUserDescID(2))
+			myTableID := descpb.ID(bootstrap.TestingUserDescID(3))
+			myOtherTableID := descpb.ID(bootstrap.TestingUserDescID(4))
 
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable
-			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				myTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myTableID)
+			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				myImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myTableID)
 				if err != nil {
 					return err
 				}
-				myOtherTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
-				return err
+				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
+				myOtherImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myOtherTableID)
+				if err != nil {
+					return err
+				}
+				myOtherTableDesc = tabledesc.NewBuilder(myOtherImm.TableDesc()).BuildExistingMutableTable()
+				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -223,8 +229,8 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				}
 			}
 
-			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				myTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myTableID)
+			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				myImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myTableID)
 				if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
 					// We dropped the table, so expect it to not be found.
 					require.EqualError(t, err, "descriptor not found")
@@ -233,13 +239,18 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				myOtherTableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID)
+				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
+				myOtherImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myOtherTableID)
 				if ttlTime != FUTURE && dropItem == DATABASE {
 					// We dropped the entire database, so expect none of the tables to be found.
 					require.EqualError(t, err, "descriptor not found")
 					return nil
 				}
-				return err
+				if err != nil {
+					return err
+				}
+				myOtherTableDesc = tabledesc.NewBuilder(myOtherImm.TableDesc()).BuildExistingMutableTable()
+				return nil
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -274,6 +285,10 @@ func TestSchemaChangeGCJobTableGCdWhileWaitingForExpiration(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
+	// Disable the declarative schema changer, since the job execution model will
+	// be different / labeled in a different manner.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';")
+	sqlDB.Exec(t, "SET use_declarative_schema_changer = 'off';")
 	// Note: this is to avoid a common failure during shutdown when a range
 	// merge runs concurrently with node shutdown leading to a panic due to
 	// pebble already being closed. See #51544.
@@ -359,9 +374,7 @@ func TestGCResumer(t *testing.T) {
 		require.NoError(t, sj.AwaitCompletion(ctx))
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
-		st, err := job.CurrentStatus(ctx, nil /* txn */)
-		require.NoError(t, err)
-		require.Equal(t, jobs.StatusSucceeded, st)
+		require.Equal(t, jobs.StatusSucceeded, job.Status())
 		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
@@ -389,9 +402,7 @@ func TestGCResumer(t *testing.T) {
 
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
-		st, err := job.CurrentStatus(ctx, nil /* txn */)
-		require.NoError(t, err)
-		require.Equal(t, jobs.StatusSucceeded, st)
+		require.Equal(t, jobs.StatusSucceeded, job.Status())
 		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
@@ -427,6 +438,7 @@ func TestGCJobRetry(t *testing.T) {
 	var failed atomic.Value
 	failed.Store(false)
 	params := base.TestServerArgs{}
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 			_, ok := request.GetArg(roachpb.ClearRange)
@@ -446,6 +458,8 @@ func TestGCJobRetry(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';")
+	tdb.Exec(t, "SET use_declarative_schema_changer = 'off';")
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 	tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
 	tdb.Exec(t, "DROP TABLE foo CASCADE;")

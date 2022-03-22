@@ -15,7 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geosegmentize"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -38,7 +39,7 @@ func Segmentize(g geo.Geometry, segmentMaxLength float64) (geo.Geometry, error) 
 		return g, nil
 	default:
 		if segmentMaxLength <= 0 {
-			return geo.Geometry{}, errors.Newf("maximum segment length must be positive")
+			return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "maximum segment length must be positive")
 		}
 		segGeometry, err := geosegmentize.Segmentize(geometry, segmentMaxLength, segmentizeCoords)
 		if err != nil {
@@ -55,10 +56,10 @@ func Segmentize(g geo.Geometry, segmentMaxLength float64) (geo.Geometry, error) 
 // Note: List of points does not consist of end point.
 func segmentizeCoords(a geom.Coord, b geom.Coord, maxSegmentLength float64) ([]float64, error) {
 	if len(a) != len(b) {
-		return nil, errors.Newf("cannot segmentize two coordinates of different dimensions")
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot segmentize two coordinates of different dimensions")
 	}
 	if maxSegmentLength <= 0 {
-		return nil, errors.Newf("maximum segment length must be positive")
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "maximum segment length must be positive")
 	}
 
 	// Only 2D distance is considered for determining number of segments.

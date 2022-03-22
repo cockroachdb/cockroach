@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -164,6 +165,46 @@ type eventLogOptions struct {
 	// If verboseTraceLevel is non-zero, its value is used as value for
 	// the vmodule filter. See exec_log for an example use.
 	verboseTraceLevel log.Level
+
+	// Additional redaction options, if necessary.
+	rOpts redactionOptions
+}
+
+// redactionOptions contains instructions on how to redact the SQL
+// events.
+type redactionOptions struct {
+	omitSQLNameRedaction bool
+}
+
+func (ro *redactionOptions) toFlags() tree.FmtFlags {
+	if ro.omitSQLNameRedaction {
+		return tree.FmtOmitNameRedaction
+	}
+	return tree.FmtSimple
+}
+
+var defaultRedactionOptions = redactionOptions{
+	omitSQLNameRedaction: false,
+}
+
+func (p *planner) getCommonSQLEventDetails(opt redactionOptions) eventpb.CommonSQLEventDetails {
+	redactableStmt := formatStmtKeyAsRedactableString(
+		p.extendedEvalCtx.VirtualSchemas, p.stmt.AST,
+		p.extendedEvalCtx.EvalContext.Annotations, opt.toFlags(),
+	)
+	commonSQLEventDetails := eventpb.CommonSQLEventDetails{
+		Statement:       redactableStmt,
+		Tag:             p.stmt.AST.StatementTag(),
+		User:            p.User().Normalized(),
+		ApplicationName: p.SessionData().ApplicationName,
+	}
+	if pls := p.extendedEvalCtx.EvalContext.Placeholders.Values; len(pls) > 0 {
+		commonSQLEventDetails.PlaceholderValues = make([]string, len(pls))
+		for idx, val := range pls {
+			commonSQLEventDetails.PlaceholderValues[idx] = val.String()
+		}
+	}
+	return commonSQLEventDetails
 }
 
 // logEventsWithOptions is like logEvent() but it gives control to the
@@ -174,22 +215,11 @@ type eventLogOptions struct {
 func (p *planner) logEventsWithOptions(
 	ctx context.Context, depth int, opts eventLogOptions, entries ...eventLogEntry,
 ) error {
-
-	redactableStmt := formatStmtKeyAsRedactableString(p.extendedEvalCtx.VirtualSchemas, p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
-
-	commonPayload := sqlEventCommonExecPayload{
-		user:         p.User(),
-		stmt:         redactableStmt,
-		stmtTag:      p.stmt.AST.StatementTag(),
-		placeholders: p.extendedEvalCtx.EvalContext.Placeholders.Values,
-		appName:      p.SessionData().ApplicationName,
-	}
-
 	return logEventInternalForSQLStatements(ctx,
 		p.extendedEvalCtx.ExecCfg, p.txn,
 		1+depth,
 		opts,
-		commonPayload,
+		p.getCommonSQLEventDetails(opts.rOpts),
 		entries...)
 }
 
@@ -232,16 +262,6 @@ func logEventInternalForSchemaChanges(
 	)
 }
 
-// sqlEventExecPayload contains the statement and session details
-// necessary to populate an eventpb.CommonSQLExecDetails.
-type sqlEventCommonExecPayload struct {
-	user         security.SQLUsername
-	stmt         redact.RedactableString
-	stmtTag      string
-	placeholders tree.QueryArguments
-	appName      string
-}
-
 // logEventInternalForSQLStatements emits a cluster event on behalf of
 // a SQL statement, when the point where the event is emitted does not
 // have access to a (*planner) and the current statement metadata.
@@ -256,7 +276,7 @@ func logEventInternalForSQLStatements(
 	txn *kv.Txn,
 	depth int,
 	opts eventLogOptions,
-	commonPayload sqlEventCommonExecPayload,
+	commonSQLEventDetails eventpb.CommonSQLEventDetails,
 	entries ...eventLogEntry,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
@@ -268,17 +288,8 @@ func logEventInternalForSQLStatements(
 			return errors.AssertionFailedf("unknown event type: %T", event)
 		}
 		m := sqlCommon.CommonSQLDetails()
-		m.Statement = commonPayload.stmt
-		m.Tag = commonPayload.stmtTag
-		m.ApplicationName = commonPayload.appName
-		m.User = commonPayload.user.Normalized()
+		*m = commonSQLEventDetails
 		m.DescriptorID = uint32(entry.targetID)
-		if pls := commonPayload.placeholders; len(pls) > 0 {
-			m.PlaceholderValues = make([]string, len(pls))
-			for idx, val := range pls {
-				m.PlaceholderValues[idx] = val.String()
-			}
-		}
 		return nil
 	}
 
@@ -288,13 +299,51 @@ func logEventInternalForSQLStatements(
 		}
 	}
 
-	return insertEventRecords(ctx,
-		execCfg.InternalExecutor, txn,
+	return insertEventRecords(
+		ctx,
+		execCfg.InternalExecutor,
+		txn,
 		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
 		1+depth,                               /* depth */
 		opts,                                  /* eventLogOptions */
 		entries...,                            /* ...eventLogEntry */
 	)
+}
+
+type schemaChangerEventLogger struct {
+	txn     *kv.Txn
+	execCfg *ExecutorConfig
+	depth   int
+}
+
+var _ scexec.EventLogger = (*schemaChangerEventLogger)(nil)
+
+// NewSchemaChangerEventLogger returns a scexec.EventLogger implementation.
+func NewSchemaChangerEventLogger(
+	txn *kv.Txn, execCfg *ExecutorConfig, depth int,
+) scexec.EventLogger {
+	return &schemaChangerEventLogger{
+		txn:     txn,
+		execCfg: execCfg,
+		depth:   depth,
+	}
+}
+
+// LogEvent implements the scexec.EventLogger interface.
+func (l schemaChangerEventLogger) LogEvent(
+	ctx context.Context,
+	descID descpb.ID,
+	details eventpb.CommonSQLEventDetails,
+	event eventpb.EventPayload,
+) error {
+	entry := eventLogEntry{targetID: int32(descID), event: event}
+	return logEventInternalForSQLStatements(ctx,
+		l.execCfg,
+		l.txn,
+		l.depth,
+		eventLogOptions{dst: LogEverywhere},
+		details,
+		entry)
 }
 
 // LogEventForJobs emits a cluster event in the context of a job.
@@ -339,6 +388,7 @@ func LogEventForJobs(
 }
 
 var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"server.eventlog.enabled",
 	"if set, logged notable events are also stored in the table system.eventlog",
 	true,

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -52,6 +53,9 @@ type encodeRow struct {
 	// tableDesc is a TableDescriptor for the table containing `datums`.
 	// It's valid for interpreting the row at `updated`.
 	tableDesc catalog.TableDescriptor
+	// familyID indicates which column family is populated on this row.
+	// It's valid for interpreting the row at `updated`.
+	familyID descpb.FamilyID
 	// prevDatums is the old value of a changed table row. The field is set
 	// to nil if the before value for changes was not requested (OptDiff).
 	prevDatums rowenc.EncDatumRow
@@ -60,6 +64,8 @@ type encodeRow struct {
 	// prevTableDesc is a TableDescriptor for the table containing `prevDatums`.
 	// It's valid for interpreting the row at `updated.Prev()`.
 	prevTableDesc catalog.TableDescriptor
+	// prevFamilyID indicates which column family is populated in prevDatums.
+	prevFamilyID descpb.FamilyID
 }
 
 // Encoder turns a row into a serialized changefeed key, value, or resolved
@@ -82,13 +88,13 @@ type Encoder interface {
 }
 
 func getEncoder(
-	ctx context.Context, opts map[string]string, targets jobspb.ChangefeedTargets,
+	opts map[string]string, targets []jobspb.ChangefeedTargetSpecification,
 ) (Encoder, error) {
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case ``, changefeedbase.OptFormatJSON:
 		return makeJSONEncoder(opts, targets)
-	case changefeedbase.OptFormatAvro:
-		return newConfluentAvroEncoder(ctx, opts, targets)
+	case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
+		return newConfluentAvroEncoder(opts, targets)
 	case changefeedbase.OptFormatNative:
 		return &nativeEncoder{}, nil
 	default:
@@ -103,20 +109,35 @@ func getEncoder(
 type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue, topicInValue bool
 
-	targets jobspb.ChangefeedTargets
-	alloc   rowenc.DatumAlloc
-	buf     bytes.Buffer
+	targets                 []jobspb.ChangefeedTargetSpecification
+	alloc                   tree.DatumAlloc
+	buf                     bytes.Buffer
+	virtualColumnVisibility string
+
+	// columnMapCache caches the TableColMap for the latest version of the
+	// table descriptor thus far seen. It avoids the need to recompute the
+	// map per row, which, prior to the change introducing this cache, could
+	// amount for 10% of row processing time.
+	columnMapCache map[descpb.ID]*tableColumnMapCacheEntry
+}
+
+// tableColumnMapCacheEntry stores a TableColMap for a given descriptor version.
+type tableColumnMapCacheEntry struct {
+	version descpb.DescriptorVersion
+	catalog.TableColMap
 }
 
 var _ Encoder = &jsonEncoder{}
 
 func makeJSONEncoder(
-	opts map[string]string, targets jobspb.ChangefeedTargets,
+	opts map[string]string, targets []jobspb.ChangefeedTargetSpecification,
 ) (*jsonEncoder, error) {
 	e := &jsonEncoder{
-		targets: targets,
-		keyOnly: changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeKeyOnly,
-		wrapped: changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
+		targets:                 targets,
+		keyOnly:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeKeyOnly,
+		wrapped:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
+		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
+		columnMapCache:          map[descpb.ID]*tableColumnMapCacheEntry{},
 	}
 	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
 	_, e.mvccTimestampField = opts[changefeedbase.OptMVCCTimestamps]
@@ -154,7 +175,7 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row encodeRow) ([]byte, error
 }
 
 func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
-	colIdxByID := catalog.ColumnIDToOrdinalMap(row.tableDesc.PublicColumns())
+	colIdxByID := e.getTableColMap(row.tableDesc)
 	primaryIndex := row.tableDesc.GetPrimaryIndex()
 	jsonEntries := make([]interface{}, primaryIndex.NumKeyColumns())
 	for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
@@ -163,7 +184,6 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
-		datum := row.datums[idx]
 		datum, col := row.datums[idx], row.tableDesc.PublicColumns()[idx]
 		if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
 			return nil, err
@@ -181,15 +201,39 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 	return jsonEntries, nil
 }
 
+// TODO (zinger): Cache this, but with eviction in the EACH_FAMILY case.
 func (e *jsonEncoder) encodeTopicRaw(row encodeRow) (interface{}, error) {
 	descID := row.tableDesc.GetID()
 	// use the target list since row.tableDesc.GetName() will not have fully qualified names
-	topicName, ok := e.targets[descID]
-	if !ok {
-		return nil, fmt.Errorf("table with name %s and descriptor ID %d not found in changefeed target list",
-			row.tableDesc.GetName(), descID)
+	for _, target := range e.targets {
+		if target.TableID == descID {
+			switch target.Type {
+			case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+				return target.StatementTimeName, nil
+			case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
+				family, err := row.tableDesc.FindFamilyByID(row.familyID)
+				if err != nil {
+					return nil, err
+				}
+				return fmt.Sprintf("%s.%s", target.StatementTimeName, family.Name), nil
+			case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+				family, err := row.tableDesc.FindFamilyByID(row.familyID)
+				if err != nil {
+					return nil, err
+				}
+				if family.Name != target.FamilyName {
+					// Not the right target specification for this family
+					continue
+				}
+				return fmt.Sprintf("%s.%s", target.StatementTimeName, target.FamilyName), nil
+			default:
+				// fall through to error
+			}
+			return nil, errors.AssertionFailedf("Found a matching target with unimplemented type %s", target.Type)
+		}
 	}
-	return topicName.StatementTimeName, nil
+	return nil, fmt.Errorf("table with name %s and descriptor ID %d not found in changefeed target list",
+		row.tableDesc.GetName(), descID)
 }
 
 // EncodeValue implements the Encoder interface.
@@ -200,42 +244,64 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 
 	var after map[string]interface{}
 	if !row.deleted {
-		columns := row.tableDesc.PublicColumns()
-		after = make(map[string]interface{}, len(columns))
-		for i, col := range columns {
-			datum := row.datums[i]
-			if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
-				return nil, err
-			}
-			var err error
-			after[col.GetName()], err = tree.AsJSON(
-				datum.Datum,
-				sessiondatapb.DataConversionConfig{},
-				time.UTC,
-			)
-			if err != nil {
-				return nil, err
+		family, err := row.tableDesc.FindFamilyByID(row.familyID)
+		if err != nil {
+			return nil, err
+		}
+		include := make(map[descpb.ColumnID]struct{}, len(family.ColumnIDs))
+		var yes struct{}
+		for _, colID := range family.ColumnIDs {
+			include[colID] = yes
+		}
+		after = make(map[string]interface{})
+		for i, col := range row.tableDesc.PublicColumns() {
+			_, inFamily := include[col.GetID()]
+			virtual := col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+			if inFamily || virtual {
+				datum := row.datums[i]
+				if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
+					return nil, err
+				}
+				after[col.GetName()], err = tree.AsJSON(
+					datum.Datum,
+					sessiondatapb.DataConversionConfig{},
+					time.UTC,
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
 
 	var before map[string]interface{}
 	if row.prevDatums != nil && !row.prevDeleted {
-		columns := row.prevTableDesc.PublicColumns()
-		before = make(map[string]interface{}, len(columns))
-		for i, col := range columns {
-			datum := row.prevDatums[i]
-			if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
-				return nil, err
-			}
-			var err error
-			before[col.GetName()], err = tree.AsJSON(
-				datum.Datum,
-				sessiondatapb.DataConversionConfig{},
-				time.UTC,
-			)
-			if err != nil {
-				return nil, err
+		family, err := row.prevTableDesc.FindFamilyByID(row.prevFamilyID)
+		if err != nil {
+			return nil, err
+		}
+		include := make(map[descpb.ColumnID]struct{})
+		var yes struct{}
+		for _, colID := range family.ColumnIDs {
+			include[colID] = yes
+		}
+		before = make(map[string]interface{})
+		for i, col := range row.prevTableDesc.PublicColumns() {
+			_, inFamily := include[col.GetID()]
+			virtual := col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+			if inFamily || virtual {
+				datum := row.prevDatums[i]
+				if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
+					return nil, err
+				}
+				before[col.GetName()], err = tree.AsJSON(
+					datum.Datum,
+					sessiondatapb.DataConversionConfig{},
+					time.UTC,
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -315,6 +381,29 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 	return gojson.Marshal(jsonEntries)
 }
 
+// getTableColMap gets the TableColMap for the provided table descriptor,
+// optionally consulting its cache.
+func (e *jsonEncoder) getTableColMap(desc catalog.TableDescriptor) catalog.TableColMap {
+	ce, exists := e.columnMapCache[desc.GetID()]
+	if exists {
+		switch {
+		case ce.version == desc.GetVersion():
+			return ce.TableColMap
+		case ce.version > desc.GetVersion():
+			return catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
+		default:
+			// Construct a new entry.
+			delete(e.columnMapCache, desc.GetID())
+		}
+	}
+	ce = &tableColumnMapCacheEntry{
+		version:     desc.GetVersion(),
+		TableColMap: catalog.ColumnIDToOrdinalMap(desc.PublicColumns()),
+	}
+	e.columnMapCache[desc.GetID()] = ce
+	return ce.TableColMap
+}
+
 // confluentAvroEncoder encodes changefeed entries as Avro's binary or textual
 // JSON format. Keys are the primary key columns in a record. Values are all
 // columns in a record.
@@ -322,19 +411,23 @@ type confluentAvroEncoder struct {
 	schemaRegistry                     schemaRegistry
 	schemaPrefix                       string
 	updatedField, beforeField, keyOnly bool
-	targets                            jobspb.ChangefeedTargets
+	virtualColumnVisibility            string
+	targets                            []jobspb.ChangefeedTargetSpecification
 
-	keyCache      map[tableIDAndVersion]confluentRegisteredKeySchema
-	valueCache    map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
+	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
+	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
+
+	// resolvedCache doesn't need to be bounded like the other caches because the number of topics
+	// is fixed per changefeed.
 	resolvedCache map[string]confluentRegisteredEnvelopeSchema
 }
 
-type tableIDAndVersion uint64
-type tableIDAndVersionPair [2]tableIDAndVersion // [before, after]
-
-func makeTableIDAndVersion(id descpb.ID, version descpb.DescriptorVersion) tableIDAndVersion {
-	return tableIDAndVersion(id)<<32 + tableIDAndVersion(version)
+type tableIDAndVersion struct {
+	tableID  descpb.ID
+	version  descpb.DescriptorVersion
+	familyID descpb.FamilyID
 }
+type tableIDAndVersionPair [2]tableIDAndVersion // [before, after]
 
 type confluentRegisteredKeySchema struct {
 	schema     *avroDataRecord
@@ -348,12 +441,21 @@ type confluentRegisteredEnvelopeSchema struct {
 
 var _ Encoder = &confluentAvroEncoder{}
 
+var encoderCacheConfig = cache.Config{
+	Policy: cache.CacheFIFO,
+	// TODO: If we find ourselves thrashing here in changefeeds on many tables,
+	// we can improve performance by eagerly evicting versions using Resolved notifications.
+	// An old version with a timestamp entirely before a notification can be safely evicted.
+	ShouldEvict: func(size int, _ interface{}, _ interface{}) bool { return size > 1024 },
+}
+
 func newConfluentAvroEncoder(
-	ctx context.Context, opts map[string]string, targets jobspb.ChangefeedTargets,
+	opts map[string]string, targets []jobspb.ChangefeedTargetSpecification,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{
-		schemaPrefix: opts[changefeedbase.OptAvroSchemaPrefix],
-		targets:      targets,
+		schemaPrefix:            opts[changefeedbase.OptAvroSchemaPrefix],
+		targets:                 targets,
+		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
 	}
 
 	switch opts[changefeedbase.OptEnvelope] {
@@ -392,32 +494,65 @@ func newConfluentAvroEncoder(
 	if err != nil {
 		return nil, err
 	}
+
 	e.schemaRegistry = reg
-
-	if err := reg.Ping(ctx); err != nil {
-		return nil, errors.Wrap(err, "schema registry unavailable")
-	}
-
-	e.keyCache = make(map[tableIDAndVersion]confluentRegisteredKeySchema)
-	e.valueCache = make(map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema)
+	e.keyCache = cache.NewUnorderedCache(encoderCacheConfig)
+	e.valueCache = cache.NewUnorderedCache(encoderCacheConfig)
 	e.resolvedCache = make(map[string]confluentRegisteredEnvelopeSchema)
 	return e, nil
 }
 
 // Get the raw SQL-formatted string for a table name
 // and apply full_table_name and avro_schema_prefix options
-func (e *confluentAvroEncoder) rawTableName(desc catalog.TableDescriptor) string {
-	return e.schemaPrefix + e.targets[desc.GetID()].StatementTimeName
+func (e *confluentAvroEncoder) rawTableName(
+	desc catalog.TableDescriptor, familyID descpb.FamilyID,
+) (string, error) {
+	for _, target := range e.targets {
+		if target.TableID == desc.GetID() {
+			switch target.Type {
+			case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+				return e.schemaPrefix + target.StatementTimeName, nil
+			case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
+				family, err := desc.FindFamilyByID(familyID)
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, family.Name), nil
+			case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+				family, err := desc.FindFamilyByID(familyID)
+				if err != nil {
+					return "", err
+				}
+				if family.Name != target.FamilyName {
+					// Not the right target specification for this family
+					continue
+				}
+				return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, target.FamilyName), nil
+			default:
+				// fall through to error
+			}
+			return "", errors.AssertionFailedf("Found a matching target with unimplemented type %s", target.Type)
+		}
+	}
+	return desc.GetName(), errors.Newf("Could not find TargetSpecification for descriptor %v", desc)
 }
 
 // EncodeKey implements the Encoder interface.
 func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]byte, error) {
-	cacheKey := makeTableIDAndVersion(row.tableDesc.GetID(), row.tableDesc.GetVersion())
+	// No familyID in the cache key for keys because it's the same schema for all families
+	cacheKey := tableIDAndVersion{tableID: row.tableDesc.GetID(), version: row.tableDesc.GetVersion()}
 
-	registered, ok := e.keyCache[cacheKey]
-	if !ok {
+	var registered confluentRegisteredKeySchema
+	v, ok := e.keyCache.Get(cacheKey)
+	if ok {
+		registered = v.(confluentRegisteredKeySchema)
+		registered.schema.refreshTypeMetadata(row.tableDesc)
+	} else {
 		var err error
-		tableName := e.rawTableName(row.tableDesc)
+		tableName, err := e.rawTableName(row.tableDesc, row.familyID)
+		if err != nil {
+			return nil, err
+		}
 		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex(), tableName, e.schemaPrefix)
 		if err != nil {
 			return nil, err
@@ -430,12 +565,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): Bound the size of this cache.
-		e.keyCache[cacheKey] = registered
-	}
-
-	if ok {
-		registered.schema.refreshTypeMetadata(row.tableDesc)
+		e.keyCache.Add(cacheKey, registered)
 	}
 
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
@@ -455,27 +585,43 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 
 	var cacheKey tableIDAndVersionPair
 	if e.beforeField && row.prevTableDesc != nil {
-		cacheKey[0] = makeTableIDAndVersion(row.prevTableDesc.GetID(), row.prevTableDesc.GetVersion())
+		cacheKey[0] = tableIDAndVersion{
+			tableID: row.prevTableDesc.GetID(), version: row.prevTableDesc.GetVersion(), familyID: row.prevFamilyID,
+		}
 	}
-	cacheKey[1] = makeTableIDAndVersion(row.tableDesc.GetID(), row.tableDesc.GetVersion())
-	registered, ok := e.valueCache[cacheKey]
-	if !ok {
+	cacheKey[1] = tableIDAndVersion{
+		tableID: row.tableDesc.GetID(), version: row.tableDesc.GetVersion(), familyID: row.familyID,
+	}
+
+	var registered confluentRegisteredEnvelopeSchema
+	v, ok := e.valueCache.Get(cacheKey)
+	if ok {
+		registered = v.(confluentRegisteredEnvelopeSchema)
+		registered.schema.after.refreshTypeMetadata(row.tableDesc)
+		if row.prevTableDesc != nil && registered.schema.before != nil {
+			registered.schema.before.refreshTypeMetadata(row.prevTableDesc)
+		}
+	} else {
 		var beforeDataSchema *avroDataRecord
 		if e.beforeField && row.prevTableDesc != nil {
 			var err error
-			beforeDataSchema, err = tableToAvroSchema(row.prevTableDesc, `before`, e.schemaPrefix)
+			beforeDataSchema, err = tableToAvroSchema(row.prevTableDesc, row.prevFamilyID, `before`, e.schemaPrefix, e.virtualColumnVisibility)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		afterDataSchema, err := tableToAvroSchema(row.tableDesc, avroSchemaNoSuffix, e.schemaPrefix)
+		afterDataSchema, err := tableToAvroSchema(row.tableDesc, row.familyID, avroSchemaNoSuffix, e.schemaPrefix, e.virtualColumnVisibility)
 		if err != nil {
 			return nil, err
 		}
 
 		opts := avroEnvelopeOpts{afterField: true, beforeField: e.beforeField, updatedField: e.updatedField}
-		registered.schema, err = envelopeToAvroSchema(e.rawTableName(row.tableDesc), opts, beforeDataSchema, afterDataSchema, e.schemaPrefix)
+		name, err := e.rawTableName(row.tableDesc, row.familyID)
+		if err != nil {
+			return nil, err
+		}
+		registered.schema, err = envelopeToAvroSchema(name, opts, beforeDataSchema, afterDataSchema, e.schemaPrefix)
 
 		if err != nil {
 			return nil, err
@@ -483,19 +629,12 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := SQLNameToKafkaName(e.rawTableName(row.tableDesc)) + confluentSubjectSuffixValue
+		subject := SQLNameToKafkaName(name) + confluentSubjectSuffixValue
 		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): Bound the size of this cache.
-		e.valueCache[cacheKey] = registered
-	}
-	if ok {
-		registered.schema.after.refreshTypeMetadata(row.tableDesc)
-		if row.prevTableDesc != nil && registered.schema.before != nil {
-			registered.schema.before.refreshTypeMetadata(row.prevTableDesc)
-		}
+		e.valueCache.Add(cacheKey, registered)
 	}
 
 	var meta avroMetadata
@@ -540,7 +679,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): Bound the size of this cache.
+
 		e.resolvedCache[topic] = registered
 	}
 	var meta avroMetadata

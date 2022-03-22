@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -25,6 +26,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
+
+var multipleModificationsOfTableEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.multiple_modifications_of_table.enabled",
+	"if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE "+
+		"subqueries modifying the same table, at the risk of data corruption if the same row is "+
+		"modified multiple times by a single statement (multiple INSERT subqueries without ON "+
+		"CONFLICT cannot cause corruption and are always allowed)",
+	false,
+).WithPublic()
 
 // windowAggregateFrame() returns a frame that any aggregate built as a window
 // can use.
@@ -204,6 +215,7 @@ func (b *Builder) synthesizeColumn(
 // populateSynthesizedColumn is similar to synthesizeColumn, but it fills in
 // the given existing column rather than allocating a new one.
 func (b *Builder) populateSynthesizedColumn(col *scopeColumn, scalar opt.ScalarExpr) {
+	col.typ = scalar.DataType()
 	colID := b.factory.Metadata().AddColumn(col.name.MetadataName(), col.typ)
 	col.id = colID
 	col.scalar = scalar
@@ -470,6 +482,27 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	return sch, resName
 }
 
+func (b *Builder) checkMultipleMutations(tab cat.Table, simpleInsert bool) {
+	if b.areAllTableMutationsSimpleInserts == nil {
+		b.areAllTableMutationsSimpleInserts = make(map[cat.StableID]bool)
+	}
+	allSimpleInserts, prevMutations := b.areAllTableMutationsSimpleInserts[tab.ID()]
+	if !prevMutations {
+		b.areAllTableMutationsSimpleInserts[tab.ID()] = simpleInsert
+		return
+	}
+	allSimpleInserts = allSimpleInserts && simpleInsert
+	b.areAllTableMutationsSimpleInserts[tab.ID()] = allSimpleInserts
+	if !allSimpleInserts && !multipleModificationsOfTableEnabled.Get(&b.evalCtx.Settings.SV) {
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"multiple modification subqueries of the same table %q are not supported unless "+
+				"they all use INSERT without ON CONFLICT; this is to prevent data corruption, see "+
+				"documentation of sql.multiple_modifications_of_table.enabled", tab.Name(),
+		))
+	}
+}
+
 // resolveTableForMutation is a helper method for building mutations. It returns
 // the table in the catalog that matches the given TableExpr, along with the
 // table's MDDepName and alias, and the IDs of any columns explicitly specified
@@ -675,9 +708,6 @@ type columnKinds struct {
 
 	// If true, include inverted index columns.
 	includeInverted bool
-
-	// If true, include virtual computed columns.
-	includeVirtualComputed bool
 }
 
 // tableOrdinals returns a slice of ordinals that correspond to table columns of
@@ -694,7 +724,7 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 	ordinals := make([]int, 0, n)
 	for i := 0; i < n; i++ {
 		col := tab.Column(i)
-		if shouldInclude[col.Kind()] && (k.includeVirtualComputed || !col.IsVirtualComputed()) {
+		if shouldInclude[col.Kind()] {
 			ordinals = append(ordinals, i)
 		}
 	}

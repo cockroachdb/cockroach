@@ -6,6 +6,7 @@ github.com/cockroachdb/redact.Fprintf
 github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/redact.Fprint
 github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/redact.Fprintf
 (*bufio.Writer).Flush
+(github.com/cockroachdb/cockroach/pkg/util/ioctx.ReadCloserCtx).Close
 (*database/sql.DB).Close
 (*database/sql.Rows).Close
 (*database/sql.Stmt).Close

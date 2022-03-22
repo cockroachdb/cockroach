@@ -12,7 +12,8 @@ package geogfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/s1"
 )
 
@@ -31,7 +32,7 @@ func DWithin(
 		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	if distance < 0 {
-		return false, errors.Newf("dwithin distance cannot be less than zero")
+		return false, pgerror.Newf(pgcode.InvalidParameterValue, "dwithin distance cannot be less than zero")
 	}
 	spheroid, err := a.Spheroid()
 	if err != nil {

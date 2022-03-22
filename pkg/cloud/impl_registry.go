@@ -100,7 +100,7 @@ func ExternalStorageFromURI(
 // protection from shoulder-surfing. The param is still present -- just
 // redacted -- to make it clearer that that value is indeed persisted interally.
 // extraParams which should be scrubbed -- for params beyond those that the
-// various clound-storage URIs supported by this package know about -- can be
+// various cloud-storage URIs supported by this package know about -- can be
 // passed allowing this function to be used to scrub other URIs too (such as
 // non-cloudstorage changefeed sinks).
 func SanitizeExternalStorageURI(path string, extraParams []string) (string, error) {

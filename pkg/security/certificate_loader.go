@@ -79,9 +79,9 @@ const (
 	_ PemUsage = iota
 	// CAPem describes the main CA certificate.
 	CAPem
-	// TenantClientCAPem describes the CA certificate used to broker authN/Z for SQL
+	// TenantCAPem describes the CA certificate used to broker authN/Z for SQL
 	// tenants wishing to access the KV layer.
-	TenantClientCAPem
+	TenantCAPem
 	// ClientCAPem describes the CA certificate used to verify client certificates.
 	ClientCAPem
 	// UICAPem describes the CA certificate used to verify the Admin UI server certificate.
@@ -93,8 +93,10 @@ const (
 	UIPem
 	// ClientPem describes a client certificate.
 	ClientPem
-	// TenantClientPem describes a SQL tenant client certificate.
-	TenantClientPem
+	// TenantPem describes a SQL tenant client certificate.
+	TenantPem
+	// TenantSigningPem describes a SQL tenant signing certificate.
+	TenantSigningPem
 
 	// Maximum allowable permissions.
 	maxKeyPermissions os.FileMode = 0700
@@ -102,7 +104,7 @@ const (
 	// Maximum allowable permissions if file is owned by root.
 	maxGroupKeyPermissions os.FileMode = 0740
 
-	// Filename extenstions.
+	// Filename extensions.
 	certExtension = `.crt`
 	keyExtension  = `.key`
 	// Certificate directory permissions.
@@ -110,7 +112,7 @@ const (
 )
 
 func isCA(usage PemUsage) bool {
-	return usage == CAPem || usage == ClientCAPem || usage == TenantClientCAPem || usage == UICAPem
+	return usage == CAPem || usage == ClientCAPem || usage == TenantCAPem || usage == UICAPem
 }
 
 func (p PemUsage) String() string {
@@ -119,7 +121,7 @@ func (p PemUsage) String() string {
 		return "CA"
 	case ClientCAPem:
 		return "Client CA"
-	case TenantClientCAPem:
+	case TenantCAPem:
 		return "Tenant Client CA"
 	case UICAPem:
 		return "UI CA"
@@ -129,7 +131,7 @@ func (p PemUsage) String() string {
 		return "UI"
 	case ClientPem:
 		return "Client"
-	case TenantClientPem:
+	case TenantPem:
 		return "Tenant Client"
 	default:
 		return "unknown"
@@ -201,7 +203,7 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 			return nil, errors.Errorf("client CA certificate filename should match ca-client%s", certExtension)
 		}
 	case `ca-client-tenant`:
-		fileUsage = TenantClientCAPem
+		fileUsage = TenantCAPem
 		if numParts != 2 {
 			return nil, errors.Errorf("tenant CA certificate filename should match ca%s", certExtension)
 		}
@@ -228,11 +230,18 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 			return nil, errors.Errorf("client certificate filename should match client.<user>%s", certExtension)
 		}
 	case `client-tenant`:
-		fileUsage = TenantClientPem
+		fileUsage = TenantPem
 		// Strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
 		if len(name) == 0 {
 			return nil, errors.Errorf("tenant certificate filename should match client-tenant.<tenantid>%s", certExtension)
+		}
+	case `tenant-signing`:
+		fileUsage = TenantSigningPem
+		// Strip prefix and suffix and re-join middle parts.
+		name = strings.Join(parts[1:numParts-1], `.`)
+		if len(name) == 0 {
+			return nil, errors.Errorf("tenant signing certificate filename should match tenant-signing.<tenantid>%s", certExtension)
 		}
 	default:
 		return nil, errors.Errorf("unknown prefix %q", prefix)
@@ -380,7 +389,7 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 	// Stat the file. This follows symlinks.
 	info, err := assetLoaderImpl.Stat(fullKeyPath)
 	if err != nil {
-		return errors.Errorf("could not stat key file %s: %v", fullKeyPath, err)
+		return errors.Wrapf(err, "could not stat key file %s", fullKeyPath)
 	}
 
 	// Only regular files are supported (after following symlinks).
@@ -399,7 +408,7 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 	// Read key file.
 	keyPEMBlock, err := assetLoaderImpl.ReadFile(fullKeyPath)
 	if err != nil {
-		return errors.Errorf("could not read key file %s: %v", fullKeyPath, err)
+		return errors.Wrapf(err, "could not read key file %s", fullKeyPath)
 	}
 
 	ci.KeyFilename = keyFilename

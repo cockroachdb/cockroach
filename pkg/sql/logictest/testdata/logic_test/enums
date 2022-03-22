@@ -1,4 +1,9 @@
-# LogicTest: !3node-tenant(49854)
+# Temporary disable declarative schema changer, since something shifts
+# the timing below to increase likelihood of transaction retries. Since we
+# are executing a select a result set is already sent to the client, so an
+# automatic retry isn't possible.
+statement ok
+SET use_declarative_schema_changer = 'off';
 
 statement ok
 CREATE TYPE t AS ENUM ()
@@ -376,9 +381,8 @@ SHOW CREATE t1
 t1  CREATE TABLE public.t1 (
     x public.greeting NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-    INDEX i (x ASC),
-    FAMILY "primary" (x, rowid)
+    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
+    INDEX i (x ASC)
 )
 
 # SHOW CREATE uses a virtual index, so also check the code path where a
@@ -389,9 +393,8 @@ SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_na
 CREATE TABLE public.t1 (
    x public.greeting NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-   INDEX i (x ASC),
-   FAMILY "primary" (x, rowid)
+   CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
+   INDEX i (x ASC)
 )
 
 # Test that the implicit array type has been created, and that we can use it.
@@ -437,10 +440,10 @@ FROM
 WHERE
   typname IN ('collision', '_collision', '__collision', '___collision')
 ----
-_collision    100085  0       100086
-__collision   100086  100085  0
-collision     100087  0       100088
-___collision  100088  100087  0
+_collision    100139  0       100140
+__collision   100140  100139  0
+collision     100141  0       100142
+___collision  100142  100141  0
 
 # Regression for #49756.
 query TT
@@ -451,7 +454,7 @@ FROM
 WHERE
   descriptor_name = 'enum_array' AND column_name = 'x'
 ----
-x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100067 array_contents:<InternalType:<family:EnumFamily width:0 precision:0 locale:"" visible_type:0 oid:100066 time_precision_is_set:false udt_metadata:<array_type_oid:100067 > > TypeMeta:<Version:0 > > time_precision_is_set:false
+x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100121 array_contents:<family: EnumFamily width: 0 precision: 0 locale: "" visible_type: 0 oid: 100120 time_precision_is_set: false udt_metadata: <   array_type_oid: 100121 > > time_precision_is_set:false
 
 # Test tables using enums in DEFAULT expressions.
 statement ok
@@ -494,7 +497,7 @@ enum_default  CREATE TABLE public.enum_default (
               y public.greeting NULL DEFAULT 'hello':::public.greeting,
               z BOOL NULL DEFAULT 'hello':::public.greeting IS OF (public.greeting, public.greeting),
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+              CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
               FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
 )
 
@@ -552,7 +555,7 @@ enum_computed  CREATE TABLE public.enum_computed (
                z BOOL NULL AS (w = 'howdy':::public.greeting) STORED,
                w public.greeting NULL,
                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+               CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
                FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
 )
 
@@ -586,8 +589,7 @@ SHOW CREATE enum_checks
 enum_checks  CREATE TABLE public.enum_checks (
              x public.greeting NULL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-             CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-             FAMILY "primary" (x, rowid),
+             CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
              CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
              CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
 )
@@ -610,6 +612,8 @@ ALTER TABLE enum_checks ADD CHECK (x = 'hello')
 # Check the above cases, but in a transaction.
 statement ok
 DROP TABLE enum_checks;
+
+statement ok
 BEGIN;
 CREATE TABLE enum_checks (x greeting);
 INSERT INTO enum_checks VALUES ('hi'), ('howdy');
@@ -754,28 +758,6 @@ txn
 statement ok
 ROLLBACK
 
-# Ensure that index drops that can't use range deletions succeed.
-statement ok
-CREATE TABLE enum_parent (x greeting PRIMARY KEY);
-CREATE TABLE enum_child (x greeting, y greeting, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT enum_parent (x);
-INSERT INTO enum_parent VALUES ('hello');
-INSERT INTO enum_child VALUES ('hello', 'hello');
-CREATE INDEX i ON enum_child (x, y) INTERLEAVE IN PARENT enum_parent (x);
-DROP INDEX enum_child@i
-
-# Test the above case, but in a transaction.
-statement ok
-DROP TABLE enum_child;
-DROP TABLE enum_parent;
-BEGIN;
-CREATE TABLE enum_parent (x greeting PRIMARY KEY);
-CREATE TABLE enum_child (x greeting, y greeting, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT enum_parent (x);
-INSERT INTO enum_parent VALUES ('hello');
-INSERT INTO enum_child VALUES ('hello', 'hello');
-CREATE INDEX i ON enum_child (x, y) INTERLEAVE IN PARENT enum_parent (x);
-DROP INDEX enum_child@i;
-ROLLBACK
-
 # Test primary key change to an ENUM column.
 statement ok
 CREATE TABLE enum_not_pk (x INT PRIMARY KEY, y greeting NOT NULL);
@@ -841,9 +823,11 @@ SELECT * FROM enum_ctas
 ----
 hi hello {hello} {hello,howdy,hi}
 
-# Test CTAS with a SELECT query in a transaction.
 statement ok
 DROP TABLE enum_ctas;
+
+# Test CTAS with a SELECT query in a transaction.
+statement ok
 BEGIN;
 CREATE TABLE enum_ctas AS (SELECT x, enum_first(y), z, enum_range(x) FROM enum_ctas_base)
 
@@ -969,12 +953,14 @@ INSERT INTO enum_referenced VALUES ('hello');
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
 
 # Try a foreign key insert that fails validation.
-statement error pq: insert on table "enum_origin" violates foreign key constraint "fk_x_ref_enum_referenced"
+statement error pq: insert on table "enum_origin" violates foreign key constraint "enum_origin_x_fkey"
 INSERT INTO enum_origin VALUES ('howdy')
+
+statement ok
+DROP TABLE enum_referenced, enum_origin;
 
 # Try the above, but in a transaction.
 statement ok
-DROP TABLE enum_referenced, enum_origin;
 BEGIN;
 CREATE TABLE enum_origin (x greeting PRIMARY KEY);
 CREATE TABLE enum_referenced (x greeting PRIMARY KEY);
@@ -982,7 +968,7 @@ INSERT INTO enum_origin VALUES ('hello');
 INSERT INTO enum_referenced VALUES ('hello');
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
 
-statement error pq: insert on table "enum_origin" violates foreign key constraint "fk_x_ref_enum_referenced"
+statement error pq: insert on table "enum_origin" violates foreign key constraint "enum_origin_x_fkey"
 INSERT INTO enum_origin VALUES ('howdy')
 
 statement ok
@@ -1005,7 +991,11 @@ statement ok
 SET enable_experimental_alter_column_type_general = true;
 CREATE TABLE enum_data_type (x STRING);
 INSERT INTO enum_data_type VALUES ('hello'), ('howdy');
+
+statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting;
+
+statement ok
 INSERT INTO enum_data_type VALUES ('hi')
 
 query T rowsort
@@ -1309,21 +1299,10 @@ CREATE TYPE IF NOT EXISTS ifne AS ENUM ('hi')
 statement ok
 CREATE TABLE table_ifne (x INT)
 
-statement error pq: relation "test_57196.public.table_ifne" already exists
-CREATE TYPE IF NOT EXISTS table_ifne AS ENUM ('hi')
-
-# Regression test for incorrectly serializing NULL expression type annotation in
-# a enum tuple.
+# This doesn't fail because there *is* already type with this name, which is
+# the implicit type with the same name as the table.
 statement ok
-CREATE TYPE greeting58889 AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
-CREATE TABLE t58889 AS SELECT enum_range('hello'::greeting58889)[g] as _enum FROM generate_series(1, 5) as g;
-ALTER TABLE t58889 SPLIT AT SELECT i FROM generate_series(1, 5) as g(i);
-ALTER TABLE t58889 SCATTER;
-
-query T
-SELECT _enum FROM t58889 WHERE _enum::greeting58889 IN (NULL, 'hi':::greeting58889);
-----
-hi
+CREATE TYPE IF NOT EXISTS table_ifne AS ENUM ('hi')
 
 
 subtest enum_array_cast
@@ -1390,9 +1369,6 @@ SELECT * from arr_t5
 # Test that if an enum value is being used by a default expression
 # or computed column, we disallow dropping it.
 subtest drop_used_enum_values
-
-statement ok
-SET enable_drop_enum_value = true
 
 statement ok
 CREATE TYPE default_abc AS ENUM ('a', 'b', 'c')
@@ -1505,7 +1481,7 @@ arr_t6  CREATE TABLE public.arr_t6 (
         j public.arr_typ2 NULL DEFAULT (ARRAY['b':::public.arr_typ2]:::public.arr_typ2[])[1:::INT8],
         k public.arr_typ2[] NULL DEFAULT ARRAY['c':::public.arr_typ2]:::public.arr_typ2[],
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+        CONSTRAINT arr_t6_pkey PRIMARY KEY (rowid ASC),
         FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
 )
 
@@ -1534,12 +1510,154 @@ typ2
 subtest drop_enum_value_index_predicate
 
 statement ok
-SET enable_drop_enum_value = true;
-
-statement ok
 DROP TYPE IF EXISTS enum_for_predicate;
 CREATE TYPE enum_for_predicate AS ENUM ('a', 'b');
 CREATE TABLE uses_in_index_predicate (i INT PRIMARY KEY, t enum_for_predicate, INDEX (t) WHERE (t = 'a'))
 
 statement error pgcode 2BP01 could not remove enum value "a" as it is being used in a predicate of index uses_in_index_predicate@uses_in_index_predicate_t_idx
 ALTER TYPE enum_for_predicate DROP VALUE 'a'
+
+subtest regression_71388
+
+statement ok
+CREATE TYPE enum_test AS ENUM ('a', 'b');
+
+statement ok
+CREATE TABLE enum_table (id SERIAL PRIMARY KEY, elem enum_test);
+
+statement ok
+INSERT INTO enum_table (elem) VALUES ('a'), ('b');
+
+statement ok
+CREATE TABLE enum_array_table (id SERIAL PRIMARY KEY, elems enum_test[]);
+
+statement ok
+INSERT INTO enum_array_table (elems) VALUES (array['a']), (array['b']), (array['a', 'b'])
+
+query TB
+SELECT
+  elem,
+  elem = 'a'
+FROM enum_table
+ORDER BY id
+----
+a  true
+b  false
+
+query TB
+SELECT
+  elems,
+  elems = '{a}'
+FROM enum_array_table
+ORDER BY id
+----
+{a}    true
+{b}    false
+{a,b}  false
+
+query TTBBBB
+SELECT
+  a.elems,
+  b.elems,
+  a.elems = b.elems,
+  a.elems < b.elems,
+  a.elems <= b.elems,
+  a.elems IS NOT DISTINCT FROM b.elems
+FROM enum_array_table a, enum_array_table b
+ORDER BY a.id, b.id
+----
+{a}    {a}    true   false  true   true
+{a}    {b}    false  true   true   false
+{a}    {a,b}  false  true   true   false
+{b}    {a}    false  false  false  false
+{b}    {b}    true   false  true   true
+{b}    {a,b}  false  false  false  false
+{a,b}  {a}    false  false  false  false
+{a,b}  {b}    false  true   true   false
+{a,b}  {a,b}  true   false  true   true
+
+query B
+SELECT '{a,b}'::enum_test[] = '{a,b}'
+----
+true
+
+statement ok
+DROP TABLE enum_table
+
+# Make sure that adding a new enum value works well with PREPARE/EXECUTE.
+subtest regression_70378
+
+statement ok
+CREATE TYPE enum_70378 AS ENUM ('a', 'b');
+CREATE TABLE enum_table (a enum_70378);
+PREPARE q AS INSERT INTO enum_table VALUES($1);
+EXECUTE q('a')
+
+query T
+SELECT * FROM enum_table
+----
+a
+
+statement ok
+ALTER TYPE enum_70378 ADD VALUE 'c';
+
+statement ok
+EXECUTE q('c')
+
+query T rowsort
+SELECT * FROM enum_table
+----
+a
+c
+
+# Regression test for not hydrating an enum when it is used in a tuple.
+statement ok
+DROP TYPE IF EXISTS greeting;
+
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi');
+
+statement ok
+CREATE TABLE seed AS SELECT g::INT8 AS _int8 FROM generate_series(1, 5) AS g;
+
+statement ok
+WITH
+  cte1 (col1)
+    AS (
+      SELECT * FROM (VALUES (COALESCE((NULL, 'hello':::greeting), (1, 'howdy':::greeting))), ((2, 'hi':::greeting)))
+    ),
+  cte2 (col2) AS (SELECT _int8 FROM seed)
+SELECT
+  col1, col2
+FROM
+  cte1, cte2;
+
+# Regression test for incorrectly serializing NULL expression type annotation in
+# a enum tuple.
+# Skipped on tenants because of SPLIT AT and SCATTER usage.
+skipif config 3node-tenant
+statement ok
+CREATE TYPE greeting58889 AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
+CREATE TABLE t58889 AS SELECT enum_range('hello'::greeting58889)[g] as _enum FROM generate_series(1, 5) as g;
+ALTER TABLE t58889 SPLIT AT SELECT i FROM generate_series(1, 5) as g(i);
+ALTER TABLE t58889 SCATTER;
+
+skipif config 3node-tenant
+query T
+SELECT _enum FROM t58889 WHERE _enum::greeting58889 IN (NULL, 'hi':::greeting58889);
+----
+hi
+
+subtest cast_from_enum_to_bytes
+
+statement ok
+CREATE TYPE myenum AS ENUM ('foo', 'bar');
+
+statement error invalid cast: myenum -> bytes
+SELECT 'foo'::myenum::bytes;
+
+statement error invalid cast: myenum -> bytes
+SELECT 'foo'::myenum::bytea;
+
+statement error invalid cast: myenum -> bytes
+SELECT 'foo'::myenum::blob;

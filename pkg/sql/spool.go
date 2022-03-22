@@ -30,6 +30,9 @@ type spoolNode struct {
 	curRowIdx int
 }
 
+// spoolNode is not a mutationPlanNode itself, but it might wrap one.
+var _ mutationPlanNode = &spoolNode{}
+
 func (s *spoolNode) startExec(params runParams) error {
 	// If FastPathResults() on the source indicates that the results are
 	// already available (2nd value true), then the computation is
@@ -103,4 +106,12 @@ func (s *spoolNode) Close(ctx context.Context) {
 		s.rows.Close(ctx)
 		s.rows = nil
 	}
+}
+
+func (s *spoolNode) rowsWritten() int64 {
+	m, ok := s.source.(mutationPlanNode)
+	if !ok {
+		return 0
+	}
+	return m.rowsWritten()
 }

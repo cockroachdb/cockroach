@@ -26,6 +26,9 @@ var termSignal os.Signal = nil
 // quitSignal is the signal to recognize to dump Go stacks.
 var quitSignal os.Signal = nil
 
+// debugSignal is the signal to open a pprof debugging server.
+var debugSignal os.Signal = nil
+
 const backgroundFlagDefined = false
 
 func handleSignalDuringShutdown(os.Signal) {

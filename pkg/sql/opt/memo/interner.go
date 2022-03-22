@@ -18,13 +18,13 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -299,6 +299,11 @@ func (h *hasher) HashInt(val int) {
 	h.hash *= prime64
 }
 
+func (h *hasher) HashInt64(val int64) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
 func (h *hasher) HashUint64(val uint64) {
 	h.hash ^= internHash(val)
 	h.hash *= prime64
@@ -396,9 +401,29 @@ func (h *hasher) hashDatumsWithType(datums tree.Datums, typ *types.T, alwaysHash
 }
 
 func (h *hasher) HashType(val *types.T) {
-	// NOTE: type.String() is not a perfect hash of the type, as items such as
-	// precision and width may be lost. Collision handling must still occur.
-	h.HashString(val.String())
+	// We hash the type's OID and a few important fields; however, the hash
+	// collisions will still occur, so IsTypeEqual makes the final call about
+	// what types are identical.
+	h.HashInt(int(val.Oid()))
+	if precision := val.InternalType.Precision; precision != 0 {
+		h.HashInt(int(precision))
+	}
+	if width := val.InternalType.Width; width != 0 {
+		h.HashInt(int(width))
+	}
+	for _, t := range val.TupleContents() {
+		h.HashType(t)
+	}
+	for _, l := range val.TupleLabels() {
+		h.HashString(l)
+	}
+	if locale := val.Locale(); locale != "" {
+		h.HashString(locale)
+	}
+	if geo := val.InternalType.GeoMetadata; geo != nil {
+		h.HashInt(int(geo.SRID))
+		h.HashInt(int(geo.ShapeType))
+	}
 }
 
 func (h *hasher) HashTypedExpr(val tree.TypedExpr) {
@@ -488,9 +513,17 @@ func (h *hasher) HashScanLimit(val ScanLimit) {
 func (h *hasher) HashScanFlags(val ScanFlags) {
 	h.HashBool(val.NoIndexJoin)
 	h.HashBool(val.NoZigzagJoin)
+	h.HashBool(val.NoFullScan)
 	h.HashBool(val.ForceIndex)
+	h.HashBool(val.ForceZigzag)
 	h.HashInt(int(val.Direction))
 	h.HashUint64(uint64(val.Index))
+	if !val.ZigzagIndexes.Empty() {
+		s := val.ZigzagIndexes
+		for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+			h.HashInt(i)
+		}
+	}
 }
 
 func (h *hasher) HashJoinFlags(val JoinFlags) {
@@ -533,6 +566,10 @@ func (h *hasher) HashScheduleCommand(val tree.ScheduleCommand) {
 
 func (h *hasher) HashIndexOrdinal(val cat.IndexOrdinal) {
 	h.HashInt(val)
+}
+
+func (h *hasher) HashRelocateSubject(val tree.RelocateSubject) {
+	h.HashUint64(uint64(val))
 }
 
 func (h *hasher) HashIndexOrdinals(val cat.IndexOrdinals) {
@@ -593,6 +630,9 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	}
 	h.HashOrderingChoice(val.Ordering)
 	h.HashFloat64(val.LimitHint)
+	for _, region := range val.Distribution.Regions {
+		h.HashString(region)
+	}
 }
 
 func (h *hasher) HashLockingItem(val *tree.LockingItem) {
@@ -724,6 +764,10 @@ func (h *hasher) IsBoolEqual(l, r bool) bool {
 }
 
 func (h *hasher) IsIntEqual(l, r int) bool {
+	return l == r
+}
+
+func (h *hasher) IsInt64Equal(l, r int64) bool {
 	return l == r
 }
 
@@ -938,6 +982,10 @@ func (h *hasher) IsScheduleCommandEqual(l, r tree.ScheduleCommand) bool {
 }
 
 func (h *hasher) IsIndexOrdinalEqual(l, r cat.IndexOrdinal) bool {
+	return l == r
+}
+
+func (h *hasher) IsRelocateSubjectEqual(l, r tree.RelocateSubject) bool {
 	return l == r
 }
 
@@ -1160,14 +1208,14 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 	// work, because the encoding does not uniquely represent some values which
 	// should not be considered equivalent by the interner (e.g. decimal values
 	// 1.0 and 1.00).
-	if !colinfo.HasCompositeKeyEncoding(val.ResolvedType()) {
-		b, err = rowenc.EncodeTableKey(b, val, encoding.Ascending)
+	if !colinfo.CanHaveCompositeKeyEncoding(val.ResolvedType()) {
+		b, err = keyside.Encode(b, val, encoding.Ascending)
 		if err == nil {
 			return b
 		}
 	}
 
-	b, err = rowenc.EncodeTableValue(b, descpb.ColumnID(encoding.NoColumnID), val, nil /* scratch */)
+	b, err = valueside.Encode(b, valueside.NoColumnID, val, nil /* scratch */)
 	if err != nil {
 		panic(err)
 	}

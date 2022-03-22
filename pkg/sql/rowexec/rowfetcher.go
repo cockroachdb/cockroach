@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -32,79 +34,87 @@ import (
 // collector wrapper can be plugged in.
 type rowFetcher interface {
 	StartScan(
-		_ context.Context, _ *kv.Txn, _ roachpb.Spans, limitBatches bool,
-		limitHint int64, traceKV bool, forceProductionKVBatchSize bool,
+		_ context.Context, _ *kv.Txn, _ roachpb.Spans, batchBytesLimit rowinfra.BytesLimit,
+		rowLimitHint rowinfra.RowLimit, traceKV bool, forceProductionKVBatchSize bool,
 	) error
+	StartScanFrom(_ context.Context, _ row.KVBatchFetcher, traceKV bool) error
 	StartInconsistentScan(
 		_ context.Context,
 		_ *kv.DB,
 		initialTimestamp hlc.Timestamp,
 		maxTimestampAge time.Duration,
 		spans roachpb.Spans,
-		limitBatches bool,
-		limitHint int64,
+		batchBytesLimit rowinfra.BytesLimit,
+		rowLimitHint rowinfra.RowLimit,
 		traceKV bool,
 		forceProductionKVBatchSize bool,
+		qualityOfService sessiondatapb.QoSLevel,
 	) error
 
-	NextRow(ctx context.Context) (
-		rowenc.EncDatumRow, catalog.TableDescriptor, catalog.Index, error)
+	NextRow(ctx context.Context) (rowenc.EncDatumRow, error)
+	NextRowInto(
+		ctx context.Context, destination rowenc.EncDatumRow, colIdxMap catalog.TableColMap,
+	) (ok bool, err error)
 
 	// PartialKey is not stat-related but needs to be supported.
-	PartialKey(int) (roachpb.Key, error)
+	PartialKey(nCols int) (roachpb.Key, error)
 	Reset()
 	GetBytesRead() int64
-	NextRowWithErrors(context.Context) (rowenc.EncDatumRow, error)
 	// Close releases any resources held by this fetcher.
 	Close(ctx context.Context)
 }
 
-// initRowFetcher initializes the fetcher.
-func initRowFetcher(
+// makeRowFetcherLegacy is a legacy version of the row fetcher which uses
+// the valNeededForCol ordinal set to determine the fetcher columns.
+func makeRowFetcherLegacy(
 	flowCtx *execinfra.FlowCtx,
-	fetcher *row.Fetcher,
 	desc catalog.TableDescriptor,
 	indexIdx int,
-	colIdxMap catalog.TableColMap,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
-	isCheck bool,
 	mon *mon.BytesMonitor,
-	alloc *rowenc.DatumAlloc,
-	scanVisibility execinfrapb.ScanVisibility,
+	alloc *tree.DatumAlloc,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	withSystemColumns bool,
-	virtualColumn catalog.Column,
-) (index catalog.Index, isSecondaryIndex bool, err error) {
+) (*row.Fetcher, error) {
+	colIDs := make([]descpb.ColumnID, 0, len(desc.AllColumns()))
+	for i, col := range desc.ReadableColumns() {
+		if valNeededForCol.Contains(i) {
+			colIDs = append(colIDs, col.GetID())
+		}
+	}
+	if withSystemColumns {
+		start := len(desc.ReadableColumns())
+		for i, col := range desc.SystemColumns() {
+			if valNeededForCol.Contains(start + i) {
+				colIDs = append(colIDs, col.GetID())
+			}
+		}
+	}
+
 	if indexIdx >= len(desc.ActiveIndexes()) {
-		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
+		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
-	index = desc.ActiveIndexes()[indexIdx]
-	isSecondaryIndex = !index.Primary()
+	index := desc.ActiveIndexes()[indexIdx]
 
-	tableArgs := row.FetcherTableArgs{
-		Desc:             desc,
-		Index:            index,
-		ColIdxMap:        colIdxMap,
-		IsSecondaryIndex: isSecondaryIndex,
-		ValNeededForCol:  valNeededForCol,
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(&spec, flowCtx.Codec(), desc, index, colIDs); err != nil {
+		return nil, err
 	}
-	tableArgs.InitCols(desc, scanVisibility, withSystemColumns, virtualColumn)
 
+	fetcher := &row.Fetcher{}
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
-		flowCtx.Codec(),
 		reverseScan,
 		lockStrength,
 		lockWaitPolicy,
-		isCheck,
+		flowCtx.EvalCtx.SessionData().LockTimeout,
 		alloc,
 		mon,
-		tableArgs,
+		&spec,
 	); err != nil {
-		return nil, false, err
+		return nil, err
 	}
-
-	return index, isSecondaryIndex, nil
+	return fetcher, nil
 }

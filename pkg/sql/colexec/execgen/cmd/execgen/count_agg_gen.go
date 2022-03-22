@@ -26,6 +26,9 @@ func genCountAgg(inputFileContents string, wr io.Writer) error {
 	accumulateSum := makeFunctionRegex("_ACCUMULATE_COUNT", 5)
 	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateCount" buildDict "Global" . "ColWithNulls" $4 "HasSel" $5}}`)
 
+	removeRow := makeFunctionRegex("_REMOVE_ROW", 4)
+	s = removeRow.ReplaceAllString(s, `{{template "removeRow" buildDict "Global" . "ColWithNulls" $4}}`)
+
 	s = replaceManipulationFuncs(s)
 
 	tmpl, err := template.New("count_agg").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)

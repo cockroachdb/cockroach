@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "ordering",
     srcs = [
+        "distribute.go",
         "doc.go",
         "group_by.go",
         "interesting_orderings.go",
@@ -19,6 +20,8 @@ go_library(
         "set.go",
         "sort.go",
         "statement.go",
+        "topk.go",
+        "with.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/ordering",
     visibility = ["//visibility:public"],
@@ -28,9 +31,9 @@ go_library(
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props",
         "//pkg/sql/sem/tree",
-        "//pkg/util",
-        "//pkg/util/log",
+        "//pkg/util/buildutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

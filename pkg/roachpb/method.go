@@ -97,6 +97,8 @@ const (
 	// result of the recovery should be committing the abandoned transaction or
 	// aborting it.
 	RecoverTxn
+	// QueryLocks requests the current state of concurrency control's lock table.
+	QueryLocks
 	// QueryTxn fetches the current state of the designated transaction.
 	QueryTxn
 	// QueryIntent checks whether the specified intent exists.
@@ -162,6 +164,16 @@ const (
 	// QueryResolvedTimestamp requests the resolved timestamp of the key span it
 	// is issued over.
 	QueryResolvedTimestamp
+	// ScanInterleavedIntents is a command to return interleaved intents
+	// encountered over a key range.
+	ScanInterleavedIntents
+	// Barrier is a command that ensures all conflicting in-flight operations on
+	// this range before this command have finished by the time it returns. It
+	// does not block new operations that started after this command's evaluation.
+	Barrier
+	// Probe is a noop write request used to test the ability to make
+	// progress at the replication layer.
+	Probe
 	// NumMethods represents the total number of API methods.
 	NumMethods
 )

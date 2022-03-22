@@ -15,7 +15,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
 
 const anyNotNullAggTmpl = "pkg/sql/colexec/colexecagg/any_not_null_agg_tmpl.go"
@@ -41,7 +41,7 @@ func genAnyNotNullAgg(inputFileContents string, wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.EQ])
+	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[treecmp.EQ])
 }
 
 func init() {

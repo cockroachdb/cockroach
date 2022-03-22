@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "staticcheck",
+    srcs = ["staticcheck.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/staticcheck",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@co_honnef_go_tools//analysis/facts",
+        "@co_honnef_go_tools//analysis/lint",
+        "@co_honnef_go_tools//analysis/report",
+        "@org_golang_x_tools//go/analysis",
+    ],
+)

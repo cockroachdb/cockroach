@@ -40,9 +40,10 @@ type kvScanner interface {
 }
 
 type scanRequestScanner struct {
-	settings *cluster.Settings
-	gossip   gossip.OptionalGossip
-	db       *kv.DB
+	settings                *cluster.Settings
+	gossip                  gossip.OptionalGossip
+	db                      *kv.DB
+	onBackfillRangeCallback func(int64) (func(), func())
 }
 
 var _ kvScanner = (*scanRequestScanner)(nil)
@@ -65,13 +66,29 @@ func (p *scanRequestScanner) Scan(
 		return err
 	}
 
-	maxConcurrentExports := maxConcurrentExportRequests(p.gossip, &p.settings.SV)
-	exportLim := limit.MakeConcurrentRequestLimiter("changefeedExportRequestLimiter", maxConcurrentExports)
+	var backfillDec, backfillClear func()
+	if p.onBackfillRangeCallback != nil {
+		backfillDec, backfillClear = p.onBackfillRangeCallback(int64(len(spans)))
+		defer backfillClear()
+	}
+
+	maxConcurrentScans := maxConcurrentScanRequests(p.gossip, &p.settings.SV)
+	exportLim := limit.MakeConcurrentRequestLimiter("changefeedScanRequestLimiter", maxConcurrentScans)
+
+	lastScanLimitUserSetting := changefeedbase.ScanRequestLimit.Get(&p.settings.SV)
+
 	g := ctxgroup.WithContext(ctx)
 	// atomicFinished is used only to enhance debugging messages.
 	var atomicFinished int64
 	for _, span := range spans {
 		span := span
+
+		// If the user defined scan request limit has changed, recalculate it
+		if currentUserScanLimit := changefeedbase.ScanRequestLimit.Get(&p.settings.SV); currentUserScanLimit != lastScanLimitUserSetting {
+			lastScanLimitUserSetting = currentUserScanLimit
+			exportLim.SetLimit(maxConcurrentScanRequests(p.gossip, &p.settings.SV))
+		}
+
 		limAlloc, err := exportLim.Begin(ctx)
 		if err != nil {
 			cancel()
@@ -82,6 +99,9 @@ func (p *scanRequestScanner) Scan(
 			defer limAlloc.Release()
 			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink, cfg.Knobs)
 			finished := atomic.AddInt64(&atomicFinished, 1)
+			if backfillDec != nil {
+				backfillDec()
+			}
 			if log.V(2) {
 				log.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
 			}
@@ -120,7 +140,9 @@ func (p *scanRequestScanner) exportSpan(
 		// during result parsing.
 		b.AddRawRequest(r)
 		if knobs.BeforeScanRequest != nil {
-			knobs.BeforeScanRequest(b)
+			if err := knobs.BeforeScanRequest(b); err != nil {
+				return err
+			}
 		}
 
 		if err := txn.Run(ctx, b); err != nil {
@@ -136,14 +158,18 @@ func (p *scanRequestScanner) exportSpan(
 		bufferDuration += afterBuffer.Sub(afterScan)
 		if res.ResumeSpan != nil {
 			consumed := roachpb.Span{Key: remaining.Key, EndKey: res.ResumeSpan.Key}
-			if err := sink.AddResolved(ctx, consumed, ts, jobspb.ResolvedSpan_NONE); err != nil {
+			if err := sink.Add(
+				ctx, kvevent.MakeResolvedEvent(consumed, ts, jobspb.ResolvedSpan_NONE),
+			); err != nil {
 				return err
 			}
 		}
 		remaining = res.ResumeSpan
 	}
 	// p.metrics.PollRequestNanosHist.RecordValue(scanDuration.Nanoseconds())
-	if err := sink.AddResolved(ctx, span, ts, jobspb.ResolvedSpan_NONE); err != nil {
+	if err := sink.Add(
+		ctx, kvevent.MakeResolvedEvent(span, ts, jobspb.ResolvedSpan_NONE),
+	); err != nil {
 		return err
 	}
 	if log.V(2) {
@@ -222,7 +248,7 @@ func slurpScanResponse(
 				// change. This is handled in kvsToRows.
 				prevVal = kv.Value
 			}
-			if err = sink.AddKV(ctx, kv, prevVal, ts); err != nil {
+			if err = sink.Add(ctx, kvevent.MakeKVEvent(kv, prevVal, ts)); err != nil {
 				return errors.Wrapf(err, `buffering changes for %s`, span)
 			}
 		}
@@ -236,7 +262,7 @@ func allRangeSpans(
 
 	ranges := make([]roachpb.Span, 0, len(spans))
 
-	it := kvcoord.NewRangeIterator(ds)
+	it := kvcoord.MakeRangeIterator(ds)
 
 	for i := range spans {
 		rSpan, err := keys.SpanAddr(spans[i])
@@ -274,8 +300,8 @@ func clusterNodeCount(gw gossip.OptionalGossip) int {
 	return nodes
 }
 
-// maxConcurrentExportRequests returns the number of concurrent scan requests.
-func maxConcurrentExportRequests(gw gossip.OptionalGossip, sv *settings.Values) int {
+// maxConcurrentScanRequests returns the number of concurrent scan requests.
+func maxConcurrentScanRequests(gw gossip.OptionalGossip, sv *settings.Values) int {
 	// If the user specified ScanRequestLimit -- use that value.
 	if max := changefeedbase.ScanRequestLimit.Get(sv); max > 0 {
 		return int(max)

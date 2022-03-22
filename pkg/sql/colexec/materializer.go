@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -35,7 +36,7 @@ type Materializer struct {
 	input colexecop.Operator
 	typs  []*types.T
 
-	drainHelper *drainHelper
+	drainHelper drainHelper
 
 	// runtime fields --
 
@@ -77,22 +78,6 @@ type drainHelper struct {
 }
 
 var _ execinfra.RowSource = &drainHelper{}
-var _ execinfra.Releasable = &drainHelper{}
-
-var drainHelperPool = sync.Pool{
-	New: func() interface{} {
-		return &drainHelper{}
-	},
-}
-
-func newDrainHelper(
-	statsCollectors []colexecop.VectorizedStatsCollector, sources colexecop.MetadataSources,
-) *drainHelper {
-	d := drainHelperPool.Get().(*drainHelper)
-	d.statsCollectors = statsCollectors
-	d.sources = sources
-	return d
-}
 
 // OutputTypes implements the execinfra.RowSource interface.
 func (d *drainHelper) OutputTypes() []*types.T {
@@ -147,12 +132,6 @@ func (d *drainHelper) ConsumerDone() {}
 // ConsumerClosed implements the execinfra.RowSource interface.
 func (d *drainHelper) ConsumerClosed() {}
 
-// Release implements the execinfra.Releasable interface.
-func (d *drainHelper) Release() {
-	*d = drainHelper{}
-	drainHelperPool.Put(d)
-}
-
 var materializerPool = sync.Pool{
 	New: func() interface{} {
 		return &Materializer{}
@@ -170,12 +149,38 @@ var materializerPool = sync.Pool{
 func NewMaterializer(
 	flowCtx *execinfra.FlowCtx, processorID int32, input colexecargs.OpWithMetaInfo, typs []*types.T,
 ) *Materializer {
+	// When the materializer is created in the middle of the chain of operators,
+	// it will modify the eval context when it is done draining, so we have to
+	// give it a copy to preserve the "global" eval context from being mutated.
+	return newMaterializerInternal(flowCtx, flowCtx.NewEvalCtx(), processorID, input, typs)
+}
+
+// NewMaterializerNoEvalCtxCopy is the same as NewMaterializer but doesn't make
+// a copy of the eval context (i.e. it'll use the "global" one coming from the
+// flowCtx).
+//
+// This should only be used when the materializer is at the root of the operator
+// tree which is acceptable because the root materializer is closed (which
+// modifies the eval context) only when the whole flow is done, at which point
+// the eval context won't be used anymore.
+func NewMaterializerNoEvalCtxCopy(
+	flowCtx *execinfra.FlowCtx, processorID int32, input colexecargs.OpWithMetaInfo, typs []*types.T,
+) *Materializer {
+	return newMaterializerInternal(flowCtx, flowCtx.EvalCtx, processorID, input, typs)
+}
+
+func newMaterializerInternal(
+	flowCtx *execinfra.FlowCtx,
+	evalCtx *tree.EvalContext,
+	processorID int32,
+	input colexecargs.OpWithMetaInfo,
+	typs []*types.T,
+) *Materializer {
 	m := materializerPool.Get().(*Materializer)
 	*m = Materializer{
 		ProcessorBaseNoHelper: m.ProcessorBaseNoHelper,
 		input:                 input.Root,
 		typs:                  typs,
-		drainHelper:           newDrainHelper(input.StatsCollectors, input.MetadataSources),
 		converter:             colconv.NewAllVecToDatumConverter(len(typs)),
 		row:                   make(rowenc.EncDatumRow, len(typs)),
 		// We have to perform a deep copy of closers because the input object
@@ -185,13 +190,13 @@ func NewMaterializer(
 		// rowSourceToPlanNode wrappers.
 		closers: append(m.closers[:0], input.ToClose...),
 	}
+	m.drainHelper.statsCollectors = input.StatsCollectors
+	m.drainHelper.sources = input.MetadataSources
 
 	m.Init(
 		m,
 		flowCtx,
-		// Materializer doesn't modify the eval context, so it is safe to reuse
-		// the one from the flow context.
-		flowCtx.EvalCtx,
+		evalCtx,
 		processorID,
 		nil, /* output */
 		execinfra.ProcStateOpts{
@@ -205,7 +210,7 @@ func NewMaterializer(
 			},
 		},
 	)
-	m.AddInputToDrain(m.drainHelper)
+	m.AddInputToDrain(&m.drainHelper)
 	return m
 }
 
@@ -325,7 +330,6 @@ func (m *Materializer) ConsumerClosed() {
 
 // Release implements the execinfra.Releasable interface.
 func (m *Materializer) Release() {
-	m.drainHelper.Release()
 	m.ProcessorBaseNoHelper.Reset()
 	m.converter.Release()
 	for i := range m.closers {

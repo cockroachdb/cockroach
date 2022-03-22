@@ -35,7 +35,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: t2@primary
+                  table: t2@t2_pkey
                   spans: FULL SCAN
 
 query T
@@ -66,7 +66,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: t@primary
+                  table: t@t_pkey
                   spans: FULL SCAN
 
 
@@ -101,7 +101,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: t@primary
+                      table: t@t_pkey
                       spans: FULL SCAN
                       locking strength: for update
 
@@ -165,7 +165,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: t2@primary
+                  table: t2@t2_pkey
                   spans: FULL SCAN
 
 query T
@@ -195,7 +195,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: t@primary
+                  table: t@t_pkey
                   spans: FULL SCAN
 
 query T
@@ -228,7 +228,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: t@primary
+                      table: t@t_pkey
                       spans: FULL SCAN
                       locking strength: for update
 
@@ -290,7 +290,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: t2@primary
+                  table: t2@t2_pkey
                   spans: FULL SCAN
 
 query T
@@ -308,7 +308,7 @@ vectorized: true
 │   │
 │   └── • scan
 │         missing stats
-│         table: t@primary
+│         table: t@t_pkey
 │         spans: FULL SCAN
 │
 └── • subquery
@@ -324,7 +324,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: t2@primary
+                  table: t2@t2_pkey
                   spans: FULL SCAN
 
 # Check that if a spool is already added at some level, then it is not added
@@ -359,7 +359,7 @@ vectorized: true
 │           │
 │           └── • scan
 │                 missing stats
-│                 table: t2@primary
+│                 table: t2@t2_pkey
 │                 spans: FULL SCAN
 │
 └── • subquery
@@ -403,7 +403,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: t2@primary
+                  table: t2@t2_pkey
                   spans: FULL SCAN
 
 # Check that no spool is used for a top-level INSERT, but
@@ -437,7 +437,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: t2@primary
+                  table: t2@t2_pkey
                   spans: FULL SCAN
 
 # Check that simple computations using RETURNING get their spool pulled up.
@@ -473,7 +473,7 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: t2@primary
+                      table: t2@t2_pkey
                       spans: FULL SCAN
 
 # Check that a pulled up spool gets elided at the top level.
@@ -506,5 +506,5 @@ vectorized: true
                 │
                 └── • scan
                       missing stats
-                      table: t2@primary
+                      table: t2@t2_pkey
                       spans: FULL SCAN

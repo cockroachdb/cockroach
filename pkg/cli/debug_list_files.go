@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -33,7 +34,7 @@ import (
 var debugListFilesCmd = &cobra.Command{
 	Use:   "list-files",
 	Short: "list files available for retrieval via 'debug zip'",
-	RunE:  MaybeDecorateGRPCError(runDebugListFiles),
+	RunE:  clierrorplus.MaybeDecorateError(runDebugListFiles),
 }
 
 func runDebugListFiles(cmd *cobra.Command, _ []string) error {

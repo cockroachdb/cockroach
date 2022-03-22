@@ -30,7 +30,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 	t.Run("test cleanup", func(t *testing.T) {
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			if err := pusher.pushRow(tree.NewDInt(1)); err != nil {
 				return err
 			}
@@ -48,12 +48,12 @@ func TestVirtualTableGenerators(t *testing.T) {
 		require.Equal(t, tree.Datums{tree.NewDInt(1)}, d)
 
 		// Check that we can safely cleanup in the middle of execution.
-		cleanup()
+		cleanup(ctx)
 	})
 
 	t.Run("test worker error", func(t *testing.T) {
 		// Test that if the worker returns an error we catch it.
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			if err := pusher.pushRow(tree.NewDInt(1)); err != nil {
 				return err
 			}
@@ -70,23 +70,23 @@ func TestVirtualTableGenerators(t *testing.T) {
 		require.NoError(t, err)
 		_, err = next()
 		require.Error(t, err)
-		cleanup()
+		cleanup(ctx)
 	})
 
 	t.Run("test no next", func(t *testing.T) {
 		// Test we don't leak anything if we call cleanup before next.
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			return nil
 		}
 		_, cleanup, setupError := setupGenerator(ctx, worker, stopper)
 		require.NoError(t, setupError)
-		cleanup()
+		cleanup(ctx)
 	})
 
 	t.Run("test context cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		// Test cancellation before asking for any rows.
-		worker := func(pusher rowPusher) error {
+		worker := func(ctx context.Context, pusher rowPusher) error {
 			if err := pusher.pushRow(tree.NewDInt(1)); err != nil {
 				return err
 			}
@@ -105,7 +105,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		if err != nil {
 			require.Equal(t, cancelchecker.QueryCanceledError, err)
 		}
-		cleanup()
+		cleanup(ctx)
 
 		// Test cancellation after asking for a row.
 		ctx, cancel = context.WithCancel(context.Background())
@@ -117,7 +117,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		cancel()
 		_, err = next()
 		require.Equal(t, cancelchecker.QueryCanceledError, err)
-		cleanup()
+		cleanup(ctx)
 
 		// Test cancellation after asking for all the rows.
 		ctx, cancel = context.WithCancel(context.Background())
@@ -128,7 +128,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		_, err = next()
 		require.NoError(t, err)
 		cancel()
-		cleanup()
+		cleanup(ctx)
 	})
 }
 
@@ -138,7 +138,7 @@ func BenchmarkVirtualTableGenerators(b *testing.B) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	worker := func(pusher rowPusher) error {
+	worker := func(ctx context.Context, pusher rowPusher) error {
 		for {
 			if err := pusher.pushRow(tree.NewDInt(tree.DInt(1))); err != nil {
 				return err
@@ -153,6 +153,6 @@ func BenchmarkVirtualTableGenerators(b *testing.B) {
 			_, err := next()
 			require.NoError(b, err)
 		}
-		cleanup()
+		cleanup(ctx)
 	})
 }

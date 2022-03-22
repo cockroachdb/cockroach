@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -40,7 +42,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	cmdInit := "./workload init json {pgurl:1}"
 	c.Run(ctx, workloadNode, cmdInit)
@@ -64,7 +66,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, workloadNode, cmdWrite)
 
-		db := c.Conn(ctx, 1)
+		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
 		var count int
@@ -91,7 +93,7 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 	})
 
 	m.Go(func(ctx context.Context) error {
-		db := c.Conn(ctx, 1)
+		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
 		t.L().Printf("creating index")

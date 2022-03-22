@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -77,6 +78,11 @@ func (tc *TestCluster) Server(idx int) serverutils.TestServerInterface {
 	return tc.Servers[idx]
 }
 
+// ServerTyped is like Server, but returns the right type.
+func (tc *TestCluster) ServerTyped(idx int) *server.TestServer {
+	return tc.Servers[idx]
+}
+
 // ServerConn is part of TestClusterInterface.
 func (tc *TestCluster) ServerConn(idx int) *gosql.DB {
 	return tc.Conns[idx]
@@ -116,12 +122,12 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		tc.stopServerLocked(i)
 	}
 
-	// TODO(irfansharif): Instead of checking for empty tracing registries after
-	// shutting down each node, we're doing it after shutting down all nodes.
-	// This is because TestCluster share the same Tracer object. Perhaps a saner
-	// thing to do is to separate out individual TestServers entirely. The
-	// component sharing within TestCluster has bitten in the past as well, and
-	// it's not clear why it has to be this way.
+	// TODO(andrei): Instead of checking for empty tracing registries after
+	// shutting down each node, we're doing it after shutting down all nodes. This
+	// is because all the nodes might share the same cluster (in case the Tracer
+	// was passed in at cluster creation time). We should not allow the Tracer to
+	// be passed in like this, and we should then also added this registry
+	// draining check to individual TestServers.
 	for i := 0; i < tc.NumServers(); i++ {
 		// Wait until a server's span registry is emptied out. This helps us check
 		// to see that there are no un-Finish()ed spans. We need to wrap this in a
@@ -131,10 +137,10 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		// example of this.
 		//
 		// [1]: cleanupSessionTempObjects
-		tracer := tc.Server(i).Tracer().(*tracing.Tracer)
+		tracer := tc.Servers[i].Tracer()
 		testutils.SucceedsSoon(tc.t, func() error {
-			var sps []*tracing.Span
-			_ = tracer.VisitSpans(func(span *tracing.Span) error {
+			var sps []tracing.RegistrySpan
+			_ = tracer.VisitSpans(func(span tracing.RegistrySpan) error {
 				sps = append(sps, span)
 				return nil
 			})
@@ -144,12 +150,16 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 			var buf strings.Builder
 			fmt.Fprintf(&buf, "unexpectedly found %d active spans:\n", len(sps))
 			for _, sp := range sps {
-				fmt.Fprintln(&buf, sp.GetRecording())
+				fmt.Fprintln(&buf, sp.GetFullRecording(tracing.RecordingVerbose))
 				fmt.Fprintln(&buf)
 			}
 			return errors.Newf("%s", buf.String())
 		})
 	}
+	// Force a GC in an attempt to run finalizers. Some finalizers run sanity
+	// checks that panic on failure, and ideally we'd run them all before starting
+	// the next test.
+	runtime.GC()
 }
 
 // StopServer stops an individual server in the cluster.
@@ -734,6 +744,13 @@ func (tc *TestCluster) WaitForVoters(
 // respective replica has caught up with the config change).
 //
 // targets are replication target for change replica.
+//
+// TODO(tbg): it seems silly that most callers pass `waitForVoter==false` even
+// when they are adding a voter, and instead well over a dozen tests then go and
+// call `.WaitForVoter` instead. It is very rare for a test to want to add a
+// voter but not wait for this voter to show up on the target replica (perhaps
+// when some strange error is injected) so the rare test should have to do the
+// extra work instead.
 func (tc *TestCluster) waitForNewReplicas(
 	startKey roachpb.Key, waitForVoter bool, targets ...roachpb.ReplicationTarget,
 ) error {
@@ -878,24 +895,26 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 	t testing.TB, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 ) {
 	if err := tc.TransferRangeLease(rangeDesc, dest); err != nil {
-		t.Fatalf(`could transfer lease for range %s error is %+v`, rangeDesc, err)
+		t.Fatalf(`could not transfer lease for range %s error is %+v`, rangeDesc, err)
 	}
 }
 
-// RemoveLeaseHolderOrFatal is a convenience version of TransferRangeLease and RemoveVoter
+// RemoveLeaseHolderOrFatal is a convenience wrapper around RemoveVoter
 func (tc *TestCluster) RemoveLeaseHolderOrFatal(
-	t testing.TB,
-	rangeDesc roachpb.RangeDescriptor,
-	src roachpb.ReplicationTarget,
-	dest roachpb.ReplicationTarget,
+	t testing.TB, rangeDesc roachpb.RangeDescriptor, src roachpb.ReplicationTarget,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		if err := tc.TransferRangeLease(rangeDesc, dest); err != nil {
-			return err
-		}
 		if _, err := tc.RemoveVoters(rangeDesc.StartKey.AsRawKey(), src); err != nil {
-			if strings.Contains(err.Error(), "to remove self (leaseholder)") {
+			if strings.Contains(err.Error(), "to remove self (leaseholder)") ||
+				strings.Contains(err.Error(), "leaseholder moved") ||
+				strings.Contains(err.Error(), "isn't the Raft leader") {
 				return err
+			} else if strings.Contains(err.Error(),
+				"trying to remove a replica that doesn't exist") {
+				// It's possible that on leaseholder initiates the removal but another one completes it.
+				// The first attempt throws an error because the leaseholder moves, the second attempt
+				// fails with the exception that the voter doesn't exist, which is expected.
+				return nil
 			}
 			t.Fatal(err)
 		}
@@ -1383,7 +1402,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	}
 
 	for i, specs := range serverArgs.StoreSpecs {
-		if specs.StickyInMemoryEngineID == "" {
+		if specs.InMemory && specs.StickyInMemoryEngineID == "" {
 			return errors.Errorf("failed to restart Server %d, because a restart can only be used on a server with a sticky engine", i)
 		}
 	}

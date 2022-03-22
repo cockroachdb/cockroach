@@ -10,7 +10,14 @@ go_library(
 go_test(
     name = "ring_test",
     size = "small",
-    srcs = ["ring_buffer_test.go"],
+    srcs = [
+        "main_test.go",
+        "ring_buffer_test.go",
+    ],
     embed = [":ring"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
 )

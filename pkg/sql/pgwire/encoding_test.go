@@ -17,19 +17,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -48,7 +47,7 @@ type encodingTest struct {
 
 func readEncodingTests(t testing.TB) []*encodingTest {
 	var tests []*encodingTest
-	f, err := os.Open(filepath.Join("testdata", "encodings.json"))
+	f, err := os.Open(testutils.TestDataPath(t, "encodings.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,17 +165,19 @@ func TestEncodings(t *testing.T) {
 	writeBinaryDatum := func(d tree.Datum, t *types.T) {
 		buf.writeBinaryDatum(ctx, d, time.UTC, t)
 	}
-	convertToVec := func(d tree.Datum, t *types.T) coldata.Vec {
-		vec := coldata.NewMemColumn(t, 1 /* length */, coldataext.NewExtendedColumnFactory(&evalCtx))
+	convertToVec := func(d tree.Datum, t *types.T) *coldata.TypedVecs {
+		batch := coldata.NewMemBatchWithCapacity([]*types.T{t}, 1 /* capacity */, coldataext.NewExtendedColumnFactory(&evalCtx))
 		converter := colconv.GetDatumToPhysicalFn(t)
-		coldata.SetValueAt(vec, converter(d), 0 /* rowIdx */)
-		return vec
+		coldata.SetValueAt(batch.ColVec(0), converter(d), 0 /* rowIdx */)
+		var vecs coldata.TypedVecs
+		vecs.SetBatch(batch)
+		return &vecs
 	}
 	writeTextColumnarElement := func(d tree.Datum, t *types.T) {
-		buf.writeTextColumnarElement(ctx, convertToVec(d, t), 0 /* idx */, conv, loc)
+		buf.writeTextColumnarElement(ctx, convertToVec(d, t), 0 /* vecIdx */, 0 /* rowIdx */, conv, loc)
 	}
 	writeBinaryColumnarElement := func(d tree.Datum, t *types.T) {
-		buf.writeBinaryColumnarElement(ctx, convertToVec(d, t), 0 /* idx */, loc)
+		buf.writeBinaryColumnarElement(ctx, convertToVec(d, t), 0 /* vecIdx */, 0 /* rowIdx */, loc)
 	}
 	t.Run("encode", func(t *testing.T) {
 		for _, test := range tests {
@@ -373,17 +374,5 @@ func BenchmarkEncodings(b *testing.B) {
 				}
 			})
 		})
-	}
-}
-
-func TestEncodingErrorCounts(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
-	d, _ := tree.ParseDDecimal("Inf")
-	buf.writeBinaryDatum(context.Background(), d, nil, d.ResolvedType())
-	if count := telemetry.GetRawFeatureCounts()["pgwire.#32489.binary_decimal_infinity"]; count != 1 {
-		t.Fatalf("expected 1 encoding error, got %d", count)
 	}
 }

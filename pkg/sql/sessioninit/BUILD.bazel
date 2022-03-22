@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sessioninit",
+    srcs = [
+        "cache.go",
+        "constants.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessioninit",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/security",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/syncutil/singleflight",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)

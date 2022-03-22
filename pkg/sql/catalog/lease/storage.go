@@ -19,12 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -61,6 +62,7 @@ type storage struct {
 // LeaseRenewalDuration controls the default time before a lease expires when
 // acquisition to renew the lease begins.
 var LeaseRenewalDuration = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.catalog.descriptor_lease_renewal_fraction",
 	"controls the default time before a lease expires when acquisition to renew the lease begins",
 	base.DefaultDescriptorLeaseRenewalTimeout)
@@ -85,6 +87,7 @@ func (s storage) jitteredLeaseDuration() time.Duration {
 func (s storage) acquire(
 	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID,
 ) (desc catalog.Descriptor, expiration hlc.Timestamp, _ error) {
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		// Run the descriptor read as high-priority, thereby pushing any intents out
 		// of its way. We don't want schema changes to prevent lease acquisitions;
@@ -102,11 +105,8 @@ func (s storage) acquire(
 			expiration = minExpiration.Add(int64(time.Millisecond), 0)
 		}
 
-		// TODO (lucy): Previously this called getTableDescFromID followed by a call
-		// to ValidateSelf() instead of Validate(), to avoid the cross-table
-		// checks. Does this actually matter? We already potentially do cross-table
-		// checks when populating pre-19.2 foreign keys.
-		desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, s.codec, id)
+		version := s.settings.Version.ActiveVersion(ctx)
+		desc, err = catkv.MustGetDescriptorByID(ctx, version, s.codec, txn, nil /* vd */, id, catalog.Any)
 		if err != nil {
 			return err
 		}
@@ -156,6 +156,7 @@ func (s storage) acquire(
 // descriptor through a schema change before the schema change has committed
 // that can result in a deadlock.
 func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *storedLease) {
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = stopper.ShouldQuiesce()
 	firstAttempt := true
@@ -217,7 +218,8 @@ func (s storage) getForExpiration(
 		if err != nil {
 			return err
 		}
-		desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, s.codec, id)
+		version := s.settings.Version.ActiveVersion(ctx)
+		desc, err = catkv.MustGetDescriptorByID(ctx, version, s.codec, txn, nil /* vd */, id, catalog.Any)
 		if err != nil {
 			return err
 		}

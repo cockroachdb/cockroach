@@ -209,7 +209,7 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 			maxNumAttempts: 1,
 		},
 		{
-			desc: "errors when max attempts is exhausted",
+			desc: "errors when max_attempts=3 is exhausted",
 			ctx:  context.Background(),
 			opts: Options{
 				InitialBackoff: time.Microsecond * 10,
@@ -222,6 +222,22 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 
 			minNumAttempts:  3,
 			maxNumAttempts:  3,
+			expectedErrText: expectedErr.Error(),
+		},
+		{
+			desc: "errors when max_attempts=1 is exhausted",
+			ctx:  context.Background(),
+			opts: Options{
+				InitialBackoff: time.Microsecond * 10,
+				MaxBackoff:     time.Microsecond * 20,
+				Multiplier:     2,
+				MaxRetries:     0,
+			},
+			retryFunc:   errWithAttemptsCounterFunc,
+			maxAttempts: 1,
+
+			minNumAttempts:  1,
+			maxNumAttempts:  1,
 			expectedErrText: expectedErr.Error(),
 		},
 		{

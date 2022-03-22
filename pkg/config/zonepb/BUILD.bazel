@@ -13,10 +13,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
-        "//pkg/sql/opt/cat",
+        "//pkg/roachpb",
         "//pkg/sql/sem/tree",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
         "@in_gopkg_yaml_v2//:yaml_v2",
@@ -30,6 +31,8 @@ go_test(
     embed = [":zonepb"],
     deps = [
         "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",
         "//pkg/util/leaktest",

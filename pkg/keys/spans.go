@@ -13,6 +13,9 @@ package keys
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 var (
+	// EverythingSpan is a span that covers everything.
+	EverythingSpan = roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}
+
 	// Meta1Span holds all first level addressing records.
 	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 
@@ -30,6 +33,15 @@ var (
 
 	// NodeLivenessSpan holds the liveness records for nodes in the cluster.
 	NodeLivenessSpan = roachpb.Span{Key: NodeLivenessPrefix, EndKey: NodeLivenessKeyMax}
+
+	// TimeseriesSpan holds all the timeseries data in the cluster.
+	TimeseriesSpan = roachpb.Span{Key: TimeseriesPrefix, EndKey: TimeseriesKeyMax}
+
+	// SystemSpanConfigSpan is part of the system keyspace that is used to carve
+	// out spans for system span configurations. No data is stored in these spans,
+	// instead, special meaning is assigned to them when stored in
+	// `system.span_configurations`.
+	SystemSpanConfigSpan = roachpb.Span{Key: SystemSpanConfigPrefix, EndKey: SystemSpanConfigKeyMax}
 
 	// SystemConfigSpan is the range of system objects which will be gossiped.
 	SystemConfigSpan = roachpb.Span{Key: SystemConfigSplitKey, EndKey: SystemConfigTableDataMax}

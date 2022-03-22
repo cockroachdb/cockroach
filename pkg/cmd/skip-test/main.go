@@ -19,6 +19,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -145,7 +146,15 @@ func main() {
 	replaceFile(fileName, testName, issueNum)
 
 	// Update the package's BUILD.bazel.
-	if err := spawn("make", "bazel-generate"); err != nil {
+	devPath, err := exec.LookPath("./dev")
+	if err != nil {
+		fmt.Printf("./dev not found, trying dev\n")
+		devPath, err = exec.LookPath("dev")
+		if err != nil {
+			log.Fatal(errors.Wrapf(err, "no path found for dev"))
+		}
+	}
+	if err := spawn(devPath, "generate", "bazel"); err != nil {
 		log.Fatal(errors.Wrap(err, "failed to run bazel"))
 	}
 
@@ -182,7 +191,7 @@ Release note: None
 
 	// The shorthand for opening a web browser with Python, `python -m
 	// webbrowser URL`, does not set the status code appropriately.
-	// TODO(mgartner): A Github username should be used instead of remote in the
+	// TODO(mgartner): A GitHub username should be used instead of remote in the
 	// URL. A remote might not be the same as the username, in which case an
 	// incorrect URL is opened. For example, the remote might be named "origin"
 	// but the username is "mgartner".

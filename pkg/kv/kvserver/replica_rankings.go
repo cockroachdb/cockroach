@@ -57,7 +57,7 @@ func (rr *replicaRankings) topQPS() []replicaWithStats {
 	defer rr.mu.Unlock()
 	// If we have a new set of data, consume it. Otherwise, just return the most
 	// recently consumed data.
-	if rr.mu.qpsAccumulator.qps.Len() > 0 {
+	if rr.mu.qpsAccumulator != nil && rr.mu.qpsAccumulator.qps.Len() > 0 {
 		rr.mu.byQPS = consumeAccumulator(&rr.mu.qpsAccumulator.qps)
 	}
 	return rr.mu.byQPS

@@ -19,6 +19,7 @@ go_library(
         "//pkg/util/duration",
         "//pkg/util/json",
         "//pkg/util/timeutil",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

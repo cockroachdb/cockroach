@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "uncertainty",
+    srcs = [
+        "compute.go",
+        "doc.go",
+        "interval.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+    ],
+)
+
+go_test(
+    name = "uncertainty_test",
+    srcs = [
+        "compute_test.go",
+        "interval_test.go",
+    ],
+    embed = [":uncertainty"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

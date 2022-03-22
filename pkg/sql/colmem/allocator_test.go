@@ -35,6 +35,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func init() {
+	randutil.SeedForTests()
+}
+
 func TestMaybeAppendColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -187,7 +191,7 @@ func TestPerformAppend(t *testing.T) {
 	const resetChance = 0.5
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	st := cluster.MakeTestingClusterSettings()
 	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
 	defer testMemMonitor.Stop(ctx)
@@ -260,7 +264,7 @@ func TestSetAccountingHelper(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	st := cluster.MakeTestingClusterSettings()
 	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
 	defer testMemMonitor.Stop(ctx)
@@ -277,11 +281,7 @@ func TestSetAccountingHelper(t *testing.T) {
 	}
 
 	var helper colmem.SetAccountingHelper
-	// We don't use notNeededVecIdxs because it is difficult to calculate
-	// expected value for the memory used (the vectors are appropriately
-	// allocated when creating a new batch but then aren't modified - and, thus,
-	// ignored by the helper.
-	helper.Init(testAllocator, typs, nil /* notNeededVecIdxs */)
+	helper.Init(testAllocator, typs)
 
 	numIterations := rng.Intn(10) + 1
 	numRows := rng.Intn(coldata.BatchSize()) + 1
@@ -306,7 +306,7 @@ func TestSetAccountingHelper(t *testing.T) {
 				switch typ.Family() {
 				case types.BytesFamily:
 					// For Bytes, insert pretty large values.
-					v := make([]byte, rng.Intn(8*coldata.BytesInitialAllocationFactor))
+					v := make([]byte, rng.Intn(8*coldata.BytesMaxInlineLength))
 					_, _ = rng.Read(v)
 					batch.ColVec(vecIdx).Bytes().Set(rowIdx, v)
 				default:
@@ -326,6 +326,47 @@ func TestSetAccountingHelper(t *testing.T) {
 		actual := testAllocator.Used()
 		if expected != actual {
 			fmt.Printf("iteration = %d numRows = %d\n", iteration, numRows)
+			for i := range typs {
+				fmt.Printf("%s ", typs[i].SQLString())
+			}
+			fmt.Println()
+			t.Fatal(errors.Newf("expected %d, actual %d", expected, actual))
+		}
+	}
+}
+
+// TestEstimateBatchSizeBytes verifies that EstimateBatchSizeBytes returns such
+// an estimate that it equals the actual footprint of the newly-created batch
+// with no values set.
+func TestEstimateBatchSizeBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rng, _ := randutil.NewTestRand()
+	st := cluster.MakeTestingClusterSettings()
+	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	defer testMemMonitor.Stop(ctx)
+	memAcc := testMemMonitor.MakeBoundAccount()
+	defer memAcc.Close(ctx)
+	evalCtx := tree.MakeTestingEvalContext(st)
+	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
+	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
+	numCols := rng.Intn(10) + 1
+	typs := make([]*types.T, numCols)
+	for i := range typs {
+		typs[i] = randgen.RandType(rng)
+	}
+	const numRuns = 10
+	for run := 0; run < numRuns; run++ {
+		memAcc.Clear(ctx)
+		numRows := rng.Intn(coldata.BatchSize()) + 1
+		batch := testAllocator.NewMemBatchWithFixedCapacity(typs, numRows)
+		expected := memAcc.Used()
+		actual := colmem.GetBatchMemSize(batch)
+		if expected != actual {
+			fmt.Printf("run = %d numRows = %d\n", run, numRows)
 			for i := range typs {
 				fmt.Printf("%s ", typs[i].SQLString())
 			}

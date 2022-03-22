@@ -35,9 +35,9 @@ type RangeIterator struct {
 	err   error
 }
 
-// NewRangeIterator creates a new RangeIterator.
-func NewRangeIterator(ds *DistSender) *RangeIterator {
-	return &RangeIterator{
+// MakeRangeIterator creates a new RangeIterator.
+func MakeRangeIterator(ds *DistSender) RangeIterator {
+	return RangeIterator{
 		ds: ds,
 	}
 }

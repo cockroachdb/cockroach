@@ -1,0 +1,47 @@
+# Test the basic control flow: writes to the span configurations table should
+# appear to the subscriber. Incremental updates should as well, and the exposed
+# store reader reflecting said updates appropriately.
+
+start
+----
+
+update
+upsert [a,c):A
+upsert [d,f):D
+----
+
+get
+span [a,f)
+----
+[a,c):A
+[d,f):D
+
+updates
+----
+[/Min,/Max)
+[a,c)
+[d,f)
+
+store-reader key=a
+----
+conf=A
+
+store-reader key=d
+----
+conf=D
+
+store-reader compute-split=[a,e)
+----
+d
+
+update
+delete [d,f)
+----
+
+updates
+----
+[d,f)
+
+store-reader key=d
+----
+conf=FALLBACK

@@ -4,7 +4,6 @@ go_library(
     name = "memo",
     srcs = [
         "check_expr.go",
-        "check_expr_skip.go",  # keep
         "constraint_builder.go",
         "cost.go",
         "expr.go",
@@ -12,7 +11,6 @@ go_library(
         "expr_name_gen.go",
         "extract.go",
         "filters_expr_mutate_checker.go",
-        "filters_expr_mutate_checker_skip.go",  # keep
         "group.go",
         "interner.go",
         "logical_props_builder.go",
@@ -27,7 +25,7 @@ go_library(
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/sql/catalog/colinfo",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
@@ -35,10 +33,15 @@ go_library(
         "//pkg/sql/opt/invertedexpr",  # keep
         "//pkg/sql/opt/props",
         "//pkg/sql/opt/props/physical",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
+        "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treewindow",
+        "//pkg/sql/stats",
         "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/json",
@@ -46,12 +49,13 @@ go_library(
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
 go_test(
     name = "memo_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "cost_test.go",
         "expr_test.go",
@@ -84,6 +88,7 @@ go_test(
         "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/util/duration",

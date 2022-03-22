@@ -28,6 +28,12 @@ func FormatWithContextTags(ctx context.Context, format string, args ...interface
 	return buf.String()
 }
 
+func formatOnlyArgs(format string, args ...interface{}) string {
+	var buf strings.Builder
+	formatArgs(&buf, format, args...)
+	return buf.String()
+}
+
 func formatArgs(buf *strings.Builder, format string, args ...interface{}) {
 	if len(args) == 0 {
 		buf.WriteString(format)

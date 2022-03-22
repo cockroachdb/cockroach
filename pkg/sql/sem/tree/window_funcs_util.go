@@ -10,7 +10,10 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/util/ring"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
+)
 
 // PeerGroupChecker can check if a pair of row indices within a partition are
 // in the same peer group. It also returns an error if it occurs while checking
@@ -57,7 +60,7 @@ func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGrou
 	var group *peerGroup
 	p.peerGrouper = peerGrouper
 	startIdxOfFirstPeerGroupWithinFrame := 0
-	if wfr.Frame != nil && wfr.Frame.Mode == GROUPS && wfr.Frame.Bounds.StartBound.BoundType == OffsetFollowing {
+	if wfr.Frame != nil && wfr.Frame.Mode == treewindow.GROUPS && wfr.Frame.Bounds.StartBound.BoundType == treewindow.OffsetFollowing {
 		// In GROUPS mode with OFFSET_FOLLOWING as a start bound, 'peerGroupOffset'
 		// number of peer groups needs to be processed upfront before we get to
 		// peer groups that will be within a frame of the first row.
@@ -115,7 +118,7 @@ func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGrou
 		return nil
 	}
 
-	if wfr.Frame != nil && wfr.Frame.Mode == GROUPS && wfr.Frame.Bounds.EndBound != nil && wfr.Frame.Bounds.EndBound.BoundType == OffsetFollowing {
+	if wfr.Frame != nil && wfr.Frame.Mode == treewindow.GROUPS && wfr.Frame.Bounds.EndBound != nil && wfr.Frame.Bounds.EndBound.BoundType == treewindow.OffsetFollowing {
 		// In GROUPS mode, 'peerGroupOffset' number of peer groups need to be
 		// processed upfront because they are within the frame of the first row.
 		// If end bound is of type:
@@ -160,10 +163,10 @@ func (p *PeerGroupsIndicesHelper) Update(wfr *WindowFrameRun) error {
 	lastPeerGroup := p.groups.GetLast().(*peerGroup)
 	nextPeerGroupStartIdx := lastPeerGroup.firstPeerIdx + lastPeerGroup.rowCount
 
-	if (wfr.Frame == nil || wfr.Frame.Mode == ROWS || wfr.Frame.Mode == RANGE) ||
-		(wfr.Frame.Bounds.StartBound.BoundType == OffsetPreceding && wfr.CurRowPeerGroupNum-p.headPeerGroupNum > int(MustBeDInt(wfr.StartBoundOffset)) ||
-			wfr.Frame.Bounds.StartBound.BoundType == CurrentRow ||
-			(wfr.Frame.Bounds.StartBound.BoundType == OffsetFollowing && p.headPeerGroupNum-wfr.CurRowPeerGroupNum > int(MustBeDInt(wfr.StartBoundOffset)))) {
+	if (wfr.Frame == nil || wfr.Frame.Mode == treewindow.ROWS || wfr.Frame.Mode == treewindow.RANGE) ||
+		(wfr.Frame.Bounds.StartBound.BoundType == treewindow.OffsetPreceding && wfr.CurRowPeerGroupNum-p.headPeerGroupNum > int(MustBeDInt(wfr.StartBoundOffset)) ||
+			wfr.Frame.Bounds.StartBound.BoundType == treewindow.CurrentRow ||
+			(wfr.Frame.Bounds.StartBound.BoundType == treewindow.OffsetFollowing && p.headPeerGroupNum-wfr.CurRowPeerGroupNum > int(MustBeDInt(wfr.StartBoundOffset)))) {
 		// With default frame, ROWS or RANGE mode, we want to "discard" the only
 		// peer group that we're storing information about. In GROUPS mode, with
 		// start bound of type:

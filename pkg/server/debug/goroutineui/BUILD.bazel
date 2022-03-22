@@ -2,13 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "goroutineui",
-    srcs = [
-        "dump.go",
-        "html.go",
-    ],
+    srcs = ["dump.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_maruel_panicparse//stack"],
+    deps = ["@com_github_maruel_panicparse_v2//stack"],
 )
 
 go_test(
@@ -20,6 +17,7 @@ go_test(
     deps = [
         "//pkg/build/bazel",
         "//pkg/util/leaktest",
+        "@com_github_maruel_panicparse_v2//stack",
         "@com_github_stretchr_testify//assert",
     ],
 )

@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -65,8 +64,17 @@ type windowFramer interface {
 	// frameIntervals returns a series of intervals that describes the set of all
 	// rows that are part of the frame for the current row. Note that there are at
 	// most three intervals - this case can occur when EXCLUDE TIES is used.
-	// frameIntervals is used to compute aggregate functions over a window.
+	// frameIntervals is used to compute aggregate functions over a window. The
+	// returned intervals cannot be modified.
 	frameIntervals() []windowInterval
+
+	// slidingWindowIntervals returns a pair of interval sets that describes the
+	// rows that should be added to the current aggregation, and those which
+	// should be removed from the current aggregation. It is used to implement the
+	// sliding window optimization for aggregate window functions. toAdd specifies
+	// the rows that should be accumulated in the current aggregation, and
+	// toRemove specifies those which should be removed.
+	slidingWindowIntervals() (toAdd, toRemove []windowInterval)
 
 	// close should always be called upon closing of the parent operator. It
 	// releases all references to enable garbage collection.
@@ -1078,13 +1086,19 @@ type windowFramerBase struct {
 
 	// datumAlloc is used to decode the offsets in RANGE mode. It is initialized
 	// lazily.
-	datumAlloc *rowenc.DatumAlloc
+	datumAlloc *tree.DatumAlloc
 
 	exclusion execinfrapb.WindowerSpec_Frame_Exclusion
 
 	// intervals is a small (at most length 3) slice that is used during
 	// aggregation computation.
-	intervals []windowInterval
+	intervals       []windowInterval
+	intervalsAreSet bool
+
+	// prevIntervals, toAdd, and toRemove are used to calculate the intervals
+	// for calculating aggregate window functions using the sliding window
+	// optimization.
+	prevIntervals, toAdd, toRemove []windowInterval
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -1130,7 +1144,14 @@ func (b *windowFramerBase) frameNthIdx(n int) (idx int) {
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (b *windowFramerBase) frameIntervals() []windowInterval {
+	if b.intervalsAreSet {
+		return b.intervals
+	}
+	b.intervalsAreSet = true
 	b.intervals = b.intervals[:0]
+	if b.startIdx >= b.endIdx {
+		return b.intervals
+	}
 	b.intervals = append(b.intervals, windowInterval{start: b.startIdx, end: b.endIdx})
 	return b.intervals
 }
@@ -1174,6 +1195,10 @@ func (b *windowFramerBase) startPartition(
 	b.storedCols = storedCols
 	b.startIdx = 0
 	b.endIdx = 0
+	b.intervals = b.intervals[:0]
+	b.prevIntervals = b.prevIntervals[:0]
+	b.toAdd = b.toAdd[:0]
+	b.toRemove = b.toRemove[:0]
 }
 
 // incrementPeerGroup increments the given index by 'groups' peer groups,
@@ -1264,7 +1289,7 @@ func (b *windowFramerBase) handleOffsets(
 			errors.AssertionFailedf("expected exactly one ordering column for RANGE mode with offset"))
 	}
 	// Only initialize the DatumAlloc field when we know we will need it.
-	b.datumAlloc = &rowenc.DatumAlloc{}
+	b.datumAlloc = &tree.DatumAlloc{}
 	b.ordColIdx = int(ordering.Columns[0].ColIdx)
 	ordColType := inputTypes[b.ordColIdx]
 	ordColAsc := ordering.Columns[0].Direction == execinfrapb.Ordering_Column_ASC
@@ -1386,6 +1411,122 @@ func (b *windowFramerBase) excludeTies() bool {
 	return b.exclusion == execinfrapb.WindowerSpec_Frame_EXCLUDE_TIES
 }
 
+// getSlidingWindowIntervals is a helper function used to calculate the sets of
+// rows that are a part of the current window frame, but not the previous one,
+// and rows that were a part of the previous window frame, but not the current
+// one. getSlidingWindowIntervals expects the intervals stored in currIntervals
+// and prevIntervals to be non-overlapping and increasing, and guarantees the
+// same invariants for the output intervals.
+func getSlidingWindowIntervals(
+	currIntervals, prevIntervals, toAdd, toRemove []windowInterval,
+) ([]windowInterval, []windowInterval) {
+	toAdd, toRemove = toAdd[:0], toRemove[:0]
+	var prevIdx, currIdx int
+	var prev, curr windowInterval
+	setPrev, setCurr := true, true
+	for {
+		// We need to find the set difference currIntervals \ prevIntervals (toAdd)
+		// and the set difference prevIntervals \ currIntervals (toRemove). To do
+		// this, take advantage of the fact that both sets of intervals are in
+		// ascending order, similar to merging sorted lists. Maintain indices into
+		// each list, and iterate whichever index has the 'smaller' interval
+		// (e.g. whichever ends first). The portions of the intervals that overlap
+		// are ignored, while those that don't are added to one of the 'toAdd' and
+		// 'toRemove' sets.
+		if prevIdx >= len(prevIntervals) {
+			// None of the remaining intervals in the current frame were part of the
+			// previous frame.
+			if !setCurr {
+				// The remaining interval stored in curr still hasn't been handled.
+				toAdd = append(toAdd, curr)
+				currIdx++
+			}
+			if currIdx < len(currIntervals) {
+				toAdd = append(toAdd, currIntervals[currIdx:]...)
+			}
+			break
+		}
+		if currIdx >= len(currIntervals) {
+			// None of the remaining intervals in the previous frame are part of the
+			// current frame.
+			if !setPrev {
+				// The remaining interval stored in prev still hasn't been handled.
+				toRemove = append(toRemove, prev)
+				prevIdx++
+			}
+			if prevIdx < len(prevIntervals) {
+				toRemove = append(toRemove, prevIntervals[prevIdx:]...)
+			}
+			break
+		}
+		if setPrev {
+			prev = prevIntervals[prevIdx]
+			setPrev = false
+		}
+		if setCurr {
+			curr = currIntervals[currIdx]
+			setCurr = false
+		}
+		if prev == curr {
+			// This interval has not changed from the previous frame.
+			prevIdx++
+			currIdx++
+			setPrev, setCurr = true, true
+			continue
+		}
+		if prev.start >= curr.end {
+			// The intervals do not overlap, and the curr interval did not exist in
+			// the previous window frame.
+			toAdd = append(toAdd, curr)
+			currIdx++
+			setCurr = true
+			continue
+		}
+		if curr.start >= prev.end {
+			// The intervals do not overlap, and the prev interval existed in the
+			// previous window frame, but not the current one.
+			toRemove = append(toRemove, prev)
+			prevIdx++
+			setPrev = true
+			continue
+		}
+		// The intervals overlap but are not equal.
+		if curr.start < prev.start {
+			// curr starts before prev. Add the prefix of curr to 'toAdd'. Advance the
+			// start of curr to the start of prev to reflect that the prefix has
+			// already been processed.
+			toAdd = append(toAdd, windowInterval{start: curr.start, end: prev.start})
+			curr.start = prev.start
+		} else if prev.start < curr.start {
+			// prev starts before curr. Add the prefix of prev to 'toRemove'. Advance
+			// the start of prev to the start of curr to reflect that the prefix has
+			// already been processed.
+			toRemove = append(toRemove, windowInterval{start: prev.start, end: curr.start})
+			prev.start = curr.start
+		}
+		if curr.end > prev.end {
+			// prev ends before curr. Set the start of curr to the end of prev to
+			// indicate that prev has been processed.
+			curr.start = prev.end
+			prevIdx++
+			setPrev = true
+		} else if prev.end > curr.end {
+			// curr ends before prev. Set the start of prev to the end of curr to
+			// indicate that curr has been processed.
+			prev.start = curr.end
+			currIdx++
+			setCurr = true
+		} else {
+			// prev and curr end at the same index. The prefix of whichever one starts
+			// first has already been handled.
+			prevIdx++
+			currIdx++
+			setPrev, setCurr = true, true
+		}
+	}
+	return toAdd, toRemove
+}
+
 type windowFramerRowsUnboundedPrecedingOffsetPreceding struct {
 	windowFramerBase
 }
@@ -1413,10 +1554,23 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetPreceding) next(ctx context.Con
 	if f.endIdx < 0 {
 		f.endIdx = 0
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsUnboundedPrecedingOffsetPreceding) close() {
 	*f = windowFramerRowsUnboundedPrecedingOffsetPreceding{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsUnboundedPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude struct {
@@ -1451,10 +1605,23 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) next(ctx cont
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) close() {
 	*f = windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -1484,6 +1651,10 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) frameNthIdx(n
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsUnboundedPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -1525,10 +1696,23 @@ func (f *windowFramerRowsUnboundedPrecedingCurrentRow) next(ctx context.Context)
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + 1
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsUnboundedPrecedingCurrentRow) close() {
 	*f = windowFramerRowsUnboundedPrecedingCurrentRow{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsUnboundedPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsUnboundedPrecedingCurrentRowExclude struct {
@@ -1560,10 +1744,23 @@ func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) next(ctx context.C
 	f.endIdx = f.currentRow + 1
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) close() {
 	*f = windowFramerRowsUnboundedPrecedingCurrentRowExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -1593,6 +1790,10 @@ func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) frameNthIdx(n int)
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsUnboundedPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -1639,10 +1840,23 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetFollowing) next(ctx context.Con
 		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsUnboundedPrecedingOffsetFollowing) close() {
 	*f = windowFramerRowsUnboundedPrecedingOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsUnboundedPrecedingOffsetFollowingExclude struct {
@@ -1679,10 +1893,23 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) next(ctx cont
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) close() {
 	*f = windowFramerRowsUnboundedPrecedingOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -1712,6 +1939,10 @@ func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) frameNthIdx(n
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsUnboundedPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -1753,10 +1984,23 @@ func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowing) next(ctx context.
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowing) close() {
 	*f = windowFramerRowsUnboundedPrecedingUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude struct {
@@ -1788,10 +2032,23 @@ func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) next(ctx c
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) close() {
 	*f = windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -1821,6 +2078,10 @@ func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) frameNthId
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsUnboundedPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -1868,10 +2129,23 @@ func (f *windowFramerRowsOffsetPrecedingOffsetPreceding) next(ctx context.Contex
 	if f.endIdx < 0 {
 		f.endIdx = 0
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetPrecedingOffsetPreceding) close() {
 	*f = windowFramerRowsOffsetPrecedingOffsetPreceding{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsOffsetPrecedingOffsetPrecedingExclude struct {
@@ -1909,10 +2183,23 @@ func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) next(ctx context
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) close() {
 	*f = windowFramerRowsOffsetPrecedingOffsetPrecedingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -1942,6 +2229,10 @@ func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) frameNthIdx(n in
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsOffsetPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -1986,10 +2277,23 @@ func (f *windowFramerRowsOffsetPrecedingCurrentRow) next(ctx context.Context) {
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + 1
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetPrecedingCurrentRow) close() {
 	*f = windowFramerRowsOffsetPrecedingCurrentRow{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsOffsetPrecedingCurrentRowExclude struct {
@@ -2024,10 +2328,23 @@ func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) next(ctx context.Cont
 	f.endIdx = f.currentRow + 1
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) close() {
 	*f = windowFramerRowsOffsetPrecedingCurrentRowExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -2057,6 +2374,10 @@ func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) frameNthIdx(n int) (i
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsOffsetPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -2106,10 +2427,23 @@ func (f *windowFramerRowsOffsetPrecedingOffsetFollowing) next(ctx context.Contex
 		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetPrecedingOffsetFollowing) close() {
 	*f = windowFramerRowsOffsetPrecedingOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsOffsetPrecedingOffsetFollowingExclude struct {
@@ -2149,10 +2483,23 @@ func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) next(ctx context
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) close() {
 	*f = windowFramerRowsOffsetPrecedingOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -2182,6 +2529,10 @@ func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) frameNthIdx(n in
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsOffsetPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -2226,10 +2577,23 @@ func (f *windowFramerRowsOffsetPrecedingUnboundedFollowing) next(ctx context.Con
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetPrecedingUnboundedFollowing) close() {
 	*f = windowFramerRowsOffsetPrecedingUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsOffsetPrecedingUnboundedFollowingExclude struct {
@@ -2264,10 +2628,23 @@ func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) next(ctx cont
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) close() {
 	*f = windowFramerRowsOffsetPrecedingUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -2297,6 +2674,10 @@ func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) frameNthIdx(n
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsOffsetPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -2338,10 +2719,23 @@ func (f *windowFramerRowsCurrentRowCurrentRow) next(ctx context.Context) {
 
 	// Handle the end bound.
 	f.endIdx = f.currentRow + 1
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsCurrentRowCurrentRow) close() {
 	*f = windowFramerRowsCurrentRowCurrentRow{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsCurrentRowCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsCurrentRowCurrentRowExclude struct {
@@ -2373,10 +2767,23 @@ func (f *windowFramerRowsCurrentRowCurrentRowExclude) next(ctx context.Context) 
 	f.endIdx = f.currentRow + 1
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsCurrentRowCurrentRowExclude) close() {
 	*f = windowFramerRowsCurrentRowCurrentRowExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsCurrentRowCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -2406,6 +2813,10 @@ func (f *windowFramerRowsCurrentRowCurrentRowExclude) frameNthIdx(n int) (idx in
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsCurrentRowCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -2452,10 +2863,23 @@ func (f *windowFramerRowsCurrentRowOffsetFollowing) next(ctx context.Context) {
 		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsCurrentRowOffsetFollowing) close() {
 	*f = windowFramerRowsCurrentRowOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsCurrentRowOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsCurrentRowOffsetFollowingExclude struct {
@@ -2492,10 +2916,23 @@ func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) next(ctx context.Cont
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) close() {
 	*f = windowFramerRowsCurrentRowOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -2525,6 +2962,10 @@ func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) frameNthIdx(n int) (i
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsCurrentRowOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -2566,10 +3007,23 @@ func (f *windowFramerRowsCurrentRowUnboundedFollowing) next(ctx context.Context)
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsCurrentRowUnboundedFollowing) close() {
 	*f = windowFramerRowsCurrentRowUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsCurrentRowUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsCurrentRowUnboundedFollowingExclude struct {
@@ -2601,10 +3055,23 @@ func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) next(ctx context.C
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) close() {
 	*f = windowFramerRowsCurrentRowUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -2634,6 +3101,10 @@ func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) frameNthIdx(n int)
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsCurrentRowUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -2685,10 +3156,23 @@ func (f *windowFramerRowsOffsetFollowingOffsetFollowing) next(ctx context.Contex
 		// overflow when offset is very large.
 		f.endIdx = f.partitionSize
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetFollowingOffsetFollowing) close() {
 	*f = windowFramerRowsOffsetFollowingOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetFollowingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsOffsetFollowingOffsetFollowingExclude struct {
@@ -2730,10 +3214,23 @@ func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) next(ctx context
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) close() {
 	*f = windowFramerRowsOffsetFollowingOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -2763,6 +3260,10 @@ func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) frameNthIdx(n in
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsOffsetFollowingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -2809,10 +3310,23 @@ func (f *windowFramerRowsOffsetFollowingUnboundedFollowing) next(ctx context.Con
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetFollowingUnboundedFollowing) close() {
 	*f = windowFramerRowsOffsetFollowingUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRowsOffsetFollowingUnboundedFollowingExclude struct {
@@ -2849,10 +3363,23 @@ func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) next(ctx cont
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) close() {
 	*f = windowFramerRowsOffsetFollowingUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -2882,6 +3409,10 @@ func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) frameNthIdx(n
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRowsOffsetFollowingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -2931,10 +3462,23 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetPreceding) next(ctx context.C
 	if currRowIsGroupStart {
 		f.currentGroup++
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsUnboundedPrecedingOffsetPreceding) close() {
 	*f = windowFramerGroupsUnboundedPrecedingOffsetPreceding{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude struct {
@@ -2973,10 +3517,23 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) next(ctx co
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) close() {
 	*f = windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -3006,6 +3563,10 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) frameNthIdx
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsUnboundedPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -3050,10 +3611,23 @@ func (f *windowFramerGroupsUnboundedPrecedingCurrentRow) next(ctx context.Contex
 	if currRowIsGroupStart {
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsUnboundedPrecedingCurrentRow) close() {
 	*f = windowFramerGroupsUnboundedPrecedingCurrentRow{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsUnboundedPrecedingCurrentRowExclude struct {
@@ -3087,10 +3661,23 @@ func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) next(ctx context
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) close() {
 	*f = windowFramerGroupsUnboundedPrecedingCurrentRowExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -3120,6 +3707,10 @@ func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) frameNthIdx(n in
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsUnboundedPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -3169,10 +3760,23 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowing) next(ctx context.C
 		// whenever the currentRow pointer enters a new peers group.
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowing) close() {
 	*f = windowFramerGroupsUnboundedPrecedingOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude struct {
@@ -3211,10 +3815,23 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) next(ctx co
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) close() {
 	*f = windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -3244,6 +3861,10 @@ func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) frameNthIdx
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsUnboundedPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -3285,10 +3906,23 @@ func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowing) next(ctx contex
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowing) close() {
 	*f = windowFramerGroupsUnboundedPrecedingUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude struct {
@@ -3320,10 +3954,23 @@ func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) next(ctx
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) close() {
 	*f = windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -3353,6 +4000,10 @@ func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameNth
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsUnboundedPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -3405,10 +4056,23 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetPreceding) next(ctx context.Cont
 	if currRowIsGroupStart {
 		f.currentGroup++
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetPrecedingOffsetPreceding) close() {
 	*f = windowFramerGroupsOffsetPrecedingOffsetPreceding{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude struct {
@@ -3450,10 +4114,23 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) next(ctx conte
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) close() {
 	*f = windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -3483,6 +4160,10 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) frameNthIdx(n 
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsOffsetPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -3534,10 +4215,23 @@ func (f *windowFramerGroupsOffsetPrecedingCurrentRow) next(ctx context.Context) 
 	if currRowIsGroupStart {
 		f.currentGroup++
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetPrecedingCurrentRow) close() {
 	*f = windowFramerGroupsOffsetPrecedingCurrentRow{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsOffsetPrecedingCurrentRowExclude struct {
@@ -3578,10 +4272,23 @@ func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) next(ctx context.Co
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) close() {
 	*f = windowFramerGroupsOffsetPrecedingCurrentRowExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -3611,6 +4318,10 @@ func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) frameNthIdx(n int) 
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsOffsetPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -3667,10 +4378,23 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetFollowing) next(ctx context.Cont
 	if currRowIsGroupStart {
 		f.currentGroup++
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetPrecedingOffsetFollowing) close() {
 	*f = windowFramerGroupsOffsetPrecedingOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsOffsetPrecedingOffsetFollowingExclude struct {
@@ -3716,10 +4440,23 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) next(ctx conte
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) close() {
 	*f = windowFramerGroupsOffsetPrecedingOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -3749,6 +4486,10 @@ func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) frameNthIdx(n 
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsOffsetPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -3798,10 +4539,23 @@ func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowing) next(ctx context.C
 	if currRowIsGroupStart {
 		f.currentGroup++
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowing) close() {
 	*f = windowFramerGroupsOffsetPrecedingUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude struct {
@@ -3840,10 +4594,23 @@ func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) next(ctx co
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) close() {
 	*f = windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -3873,6 +4640,10 @@ func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) frameNthIdx
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsOffsetPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -3919,10 +4690,23 @@ func (f *windowFramerGroupsCurrentRowCurrentRow) next(ctx context.Context) {
 	if currRowIsGroupStart {
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsCurrentRowCurrentRow) close() {
 	*f = windowFramerGroupsCurrentRowCurrentRow{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsCurrentRowCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsCurrentRowCurrentRowExclude struct {
@@ -3958,10 +4742,23 @@ func (f *windowFramerGroupsCurrentRowCurrentRowExclude) next(ctx context.Context
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsCurrentRowCurrentRowExclude) close() {
 	*f = windowFramerGroupsCurrentRowCurrentRowExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsCurrentRowCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -3991,6 +4788,10 @@ func (f *windowFramerGroupsCurrentRowCurrentRowExclude) frameNthIdx(n int) (idx 
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsCurrentRowCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -4042,10 +4843,23 @@ func (f *windowFramerGroupsCurrentRowOffsetFollowing) next(ctx context.Context) 
 		// whenever the currentRow pointer enters a new peers group.
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsCurrentRowOffsetFollowing) close() {
 	*f = windowFramerGroupsCurrentRowOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsCurrentRowOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsCurrentRowOffsetFollowingExclude struct {
@@ -4086,10 +4900,23 @@ func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) next(ctx context.Co
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) close() {
 	*f = windowFramerGroupsCurrentRowOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -4119,6 +4946,10 @@ func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) frameNthIdx(n int) 
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsCurrentRowOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -4163,10 +4994,23 @@ func (f *windowFramerGroupsCurrentRowUnboundedFollowing) next(ctx context.Contex
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsCurrentRowUnboundedFollowing) close() {
 	*f = windowFramerGroupsCurrentRowUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsCurrentRowUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsCurrentRowUnboundedFollowingExclude struct {
@@ -4200,10 +5044,23 @@ func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) next(ctx context
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) close() {
 	*f = windowFramerGroupsCurrentRowUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -4233,6 +5090,10 @@ func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) frameNthIdx(n in
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsCurrentRowUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -4289,10 +5150,23 @@ func (f *windowFramerGroupsOffsetFollowingOffsetFollowing) next(ctx context.Cont
 		// whenever the currentRow pointer enters a new peers group.
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetFollowingOffsetFollowing) close() {
 	*f = windowFramerGroupsOffsetFollowingOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsOffsetFollowingOffsetFollowingExclude struct {
@@ -4338,10 +5212,23 @@ func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) next(ctx conte
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) close() {
 	*f = windowFramerGroupsOffsetFollowingOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -4371,6 +5258,10 @@ func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) frameNthIdx(n 
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsOffsetFollowingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -4420,10 +5311,23 @@ func (f *windowFramerGroupsOffsetFollowingUnboundedFollowing) next(ctx context.C
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetFollowingUnboundedFollowing) close() {
 	*f = windowFramerGroupsOffsetFollowingUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerGroupsOffsetFollowingUnboundedFollowingExclude struct {
@@ -4462,10 +5366,23 @@ func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) next(ctx co
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) close() {
 	*f = windowFramerGroupsOffsetFollowingUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -4495,6 +5412,10 @@ func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) frameNthIdx
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerGroupsOffsetFollowingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -4540,11 +5461,24 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) next(ctx context.Co
 	if currRowIsGroupStart {
 		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) close() {
 	f.endHandler.close()
 	*f = windowFramerRangeUnboundedPrecedingOffsetPreceding{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeUnboundedPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude struct {
@@ -4579,11 +5513,24 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) next(ctx con
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) close() {
 	f.endHandler.close()
 	*f = windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -4613,6 +5560,10 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) frameNthIdx(
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeUnboundedPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -4657,10 +5608,23 @@ func (f *windowFramerRangeUnboundedPrecedingCurrentRow) next(ctx context.Context
 	if currRowIsGroupStart {
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeUnboundedPrecedingCurrentRow) close() {
 	*f = windowFramerRangeUnboundedPrecedingCurrentRow{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeUnboundedPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeUnboundedPrecedingCurrentRowExclude struct {
@@ -4694,10 +5658,23 @@ func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) next(ctx context.
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) close() {
 	*f = windowFramerRangeUnboundedPrecedingCurrentRowExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -4727,6 +5704,10 @@ func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) frameNthIdx(n int
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeUnboundedPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -4772,11 +5753,24 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) next(ctx context.Co
 	if currRowIsGroupStart {
 		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) close() {
 	f.endHandler.close()
 	*f = windowFramerRangeUnboundedPrecedingOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeUnboundedPrecedingOffsetFollowingExclude struct {
@@ -4811,11 +5805,24 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) next(ctx con
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) close() {
 	f.endHandler.close()
 	*f = windowFramerRangeUnboundedPrecedingOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -4845,6 +5852,10 @@ func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) frameNthIdx(
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeUnboundedPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -4886,10 +5897,23 @@ func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) next(ctx context
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) close() {
 	*f = windowFramerRangeUnboundedPrecedingUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude struct {
@@ -4921,10 +5945,23 @@ func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) next(ctx 
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) close() {
 	*f = windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -4954,6 +5991,10 @@ func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameNthI
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeUnboundedPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -5002,12 +6043,25 @@ func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) next(ctx context.Conte
 	if currRowIsGroupStart {
 		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) close() {
 	f.startHandler.close()
 	f.endHandler.close()
 	*f = windowFramerRangeOffsetPrecedingOffsetPreceding{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetPrecedingOffsetPreceding) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeOffsetPrecedingOffsetPrecedingExclude struct {
@@ -5045,12 +6099,25 @@ func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) next(ctx contex
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) close() {
 	f.startHandler.close()
 	f.endHandler.close()
 	*f = windowFramerRangeOffsetPrecedingOffsetPrecedingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -5080,6 +6147,10 @@ func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) frameNthIdx(n i
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeOffsetPrecedingOffsetPrecedingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -5127,11 +6198,24 @@ func (f *windowFramerRangeOffsetPrecedingCurrentRow) next(ctx context.Context) {
 	if currRowIsGroupStart {
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetPrecedingCurrentRow) close() {
 	f.startHandler.close()
 	*f = windowFramerRangeOffsetPrecedingCurrentRow{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetPrecedingCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeOffsetPrecedingCurrentRowExclude struct {
@@ -5168,11 +6252,24 @@ func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) next(ctx context.Con
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) close() {
 	f.startHandler.close()
 	*f = windowFramerRangeOffsetPrecedingCurrentRowExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -5202,6 +6299,10 @@ func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) frameNthIdx(n int) (
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeOffsetPrecedingCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -5250,12 +6351,25 @@ func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) next(ctx context.Conte
 	if currRowIsGroupStart {
 		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) close() {
 	f.startHandler.close()
 	f.endHandler.close()
 	*f = windowFramerRangeOffsetPrecedingOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeOffsetPrecedingOffsetFollowingExclude struct {
@@ -5293,12 +6407,25 @@ func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) next(ctx contex
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) close() {
 	f.startHandler.close()
 	f.endHandler.close()
 	*f = windowFramerRangeOffsetPrecedingOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -5328,6 +6455,10 @@ func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) frameNthIdx(n i
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeOffsetPrecedingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -5373,11 +6504,24 @@ func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) next(ctx context.Co
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) close() {
 	f.startHandler.close()
 	*f = windowFramerRangeOffsetPrecedingUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeOffsetPrecedingUnboundedFollowingExclude struct {
@@ -5412,11 +6556,24 @@ func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) next(ctx con
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) close() {
 	f.startHandler.close()
 	*f = windowFramerRangeOffsetPrecedingUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -5446,6 +6603,10 @@ func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) frameNthIdx(
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeOffsetPrecedingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -5492,10 +6653,23 @@ func (f *windowFramerRangeCurrentRowCurrentRow) next(ctx context.Context) {
 	if currRowIsGroupStart {
 		f.endIdx = f.incrementPeerGroup(ctx, f.endIdx, 1 /* groups */)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeCurrentRowCurrentRow) close() {
 	*f = windowFramerRangeCurrentRowCurrentRow{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeCurrentRowCurrentRow) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeCurrentRowCurrentRowExclude struct {
@@ -5531,10 +6705,23 @@ func (f *windowFramerRangeCurrentRowCurrentRowExclude) next(ctx context.Context)
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeCurrentRowCurrentRowExclude) close() {
 	*f = windowFramerRangeCurrentRowCurrentRowExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeCurrentRowCurrentRowExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -5564,6 +6751,10 @@ func (f *windowFramerRangeCurrentRowCurrentRowExclude) frameNthIdx(n int) (idx i
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeCurrentRowCurrentRowExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -5611,11 +6802,24 @@ func (f *windowFramerRangeCurrentRowOffsetFollowing) next(ctx context.Context) {
 	if currRowIsGroupStart {
 		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeCurrentRowOffsetFollowing) close() {
 	f.endHandler.close()
 	*f = windowFramerRangeCurrentRowOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeCurrentRowOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeCurrentRowOffsetFollowingExclude struct {
@@ -5652,11 +6856,24 @@ func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) next(ctx context.Con
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) close() {
 	f.endHandler.close()
 	*f = windowFramerRangeCurrentRowOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -5686,6 +6903,10 @@ func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) frameNthIdx(n int) (
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeCurrentRowOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -5730,10 +6951,23 @@ func (f *windowFramerRangeCurrentRowUnboundedFollowing) next(ctx context.Context
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeCurrentRowUnboundedFollowing) close() {
 	*f = windowFramerRangeCurrentRowUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeCurrentRowUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeCurrentRowUnboundedFollowingExclude struct {
@@ -5767,10 +7001,23 @@ func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) next(ctx context.
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) close() {
 	*f = windowFramerRangeCurrentRowUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -5800,6 +7047,10 @@ func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) frameNthIdx(n int
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeCurrentRowUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -5848,12 +7099,25 @@ func (f *windowFramerRangeOffsetFollowingOffsetFollowing) next(ctx context.Conte
 	if currRowIsGroupStart {
 		f.endIdx = f.endHandler.getIdx(ctx, f.currentRow, f.endIdx)
 	}
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetFollowingOffsetFollowing) close() {
 	f.startHandler.close()
 	f.endHandler.close()
 	*f = windowFramerRangeOffsetFollowingOffsetFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetFollowingOffsetFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeOffsetFollowingOffsetFollowingExclude struct {
@@ -5891,12 +7155,25 @@ func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) next(ctx contex
 	}
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) close() {
 	f.startHandler.close()
 	f.endHandler.close()
 	*f = windowFramerRangeOffsetFollowingOffsetFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -5926,6 +7203,10 @@ func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) frameNthIdx(n i
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeOffsetFollowingOffsetFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()
@@ -5971,11 +7252,24 @@ func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) next(ctx context.Co
 
 	// Handle the end bound.
 	f.endIdx = f.partitionSize
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) close() {
 	f.startHandler.close()
 	*f = windowFramerRangeOffsetFollowingUnboundedFollowing{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowing) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 type windowFramerRangeOffsetFollowingUnboundedFollowingExclude struct {
@@ -6010,11 +7304,24 @@ func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) next(ctx con
 	f.endIdx = f.partitionSize
 	// Handle exclusion clause.
 	f.handleExcludeForNext(ctx, currRowIsGroupStart)
+	f.prevIntervals = append(f.prevIntervals[:0], f.intervals...)
+	f.intervalsAreSet = false
 }
 
 func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) close() {
 	f.startHandler.close()
 	*f = windowFramerRangeOffsetFollowingUnboundedFollowingExclude{}
+}
+
+// slidingWindowIntervals returns a pair of interval sets that describes the
+// rows that should be added to the current aggregation, and those which
+// should be removed from the current aggregation. It is used to implement the
+// sliding window optimization for aggregate window functions.
+func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) slidingWindowIntervals() (toAdd, toRemove []windowInterval) {
+	f.toAdd, f.toRemove = f.toAdd[:0], f.toRemove[:0]
+	f.frameIntervals()
+	f.toAdd, f.toRemove = getSlidingWindowIntervals(f.intervals, f.prevIntervals, f.toAdd, f.toRemove)
+	return f.toAdd, f.toRemove
 }
 
 // frameFirstIdx returns the index of the first row in the window frame for
@@ -6044,6 +7351,10 @@ func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) frameNthIdx(
 // most three intervals - this case can occur when EXCLUDE TIES is used.
 // frameIntervals is used to compute aggregate functions over a window.
 func (f *windowFramerRangeOffsetFollowingUnboundedFollowingExclude) frameIntervals() []windowInterval {
+	if f.startIdx >= f.endIdx {
+		f.intervals = f.intervals[:0]
+		return f.intervals
+	}
 	if f.excludeStartIdx >= f.endIdx || f.excludeEndIdx <= f.startIdx {
 		// No rows excluded.
 		return f.windowFramerBase.frameIntervals()

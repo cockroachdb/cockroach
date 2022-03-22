@@ -130,6 +130,19 @@ $result
 =>
 $result
 
+# FoldAssignmentCast is similar to FoldCast, but it involves an assignment cast
+# operation. As with FoldCast, FoldAssignmentCast applies as long as the
+# evaluation would not cause an error.
+[FoldAssignmentCast, Normalize]
+(AssignmentCast
+    $input:*
+    $typ:* &
+        (IsConstValueOrGroupOfConstValues $input) &
+        (Let ($result $ok):(FoldAssignmentCast $input $typ) $ok)
+)
+=>
+$result
+
 # FoldIndirection eliminates a constant array indirection operator applied to an
 # array with a statically known number of elements, like this:
 #

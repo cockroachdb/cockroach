@@ -23,7 +23,7 @@ func (d *delegator) delegateShowSurvivalGoal(n *tree.ShowSurvivalGoal) (tree.Sta
 	sqltelemetry.IncrementShowCounter(sqltelemetry.SurvivalGoal)
 	dbName := string(n.DatabaseName)
 	if dbName == "" {
-		dbName = d.evalCtx.SessionData.Database
+		dbName = d.evalCtx.SessionData().Database
 	}
 	query := fmt.Sprintf(
 		`SELECT

@@ -453,7 +453,7 @@ SELECT count(*)
 1
 
 query I
-SELECT count(k) from kv
+SELECT count(k) FROM kv
 ----
 6
 
@@ -463,7 +463,7 @@ SELECT count(1)
 1
 
 query I
-SELECT count(1) from kv
+SELECT count(1) FROM kv
 ----
 6
 
@@ -612,7 +612,7 @@ SELECT jsonb_agg(s) FROM kv WHERE s IS NULL
 query RRRR
 SELECT avg(k), avg(v), sum(k), sum(v) FROM kv
 ----
-5 2.8 30 14
+5.0000000000000000000  2.8000000000000000000  30  14
 
 query TTTT
 SELECT min(i), avg(i), max(i), sum(i) FROM kv
@@ -622,24 +622,24 @@ SELECT min(i), avg(i), max(i), sum(i) FROM kv
 query RRRR
 SELECT avg(k::decimal), avg(v::decimal), sum(k::decimal), sum(v::decimal) FROM kv
 ----
-5 2.8 30 14
+5.0000000000000000000  2.8000000000000000000  30  14
 
 query RRRR
 SELECT avg(DISTINCT k), avg(DISTINCT v), sum(DISTINCT k), sum(DISTINCT v) FROM kv
 ----
-5 3 30 6
+5.0000000000000000000  3.0000000000000000000  30  6
 
 query R
 SELECT avg(k) * 2.0 + max(v)::DECIMAL FROM kv
 ----
-14.0
+14.00000000000000000000
 
 # Verify things work with distsql when some of the nodes emit no results in the
 # local stage.
 query R
 SELECT avg(k) * 2.0 + max(v)::DECIMAL FROM kv WHERE w*2 = k
 ----
-14.0
+14.00000000000000000000
 
 # Grouping columns can be eliminated, but should still return zero rows (i.e.
 # shouldn't use scalar GroupBy).
@@ -677,7 +677,7 @@ two 2 true 5
 query RRRR
 SELECT avg(b), sum(b), avg(d), sum(d) FROM abc
 ----
-1.75 3.5 3.05 6.1
+1.75  3.5  3.0500000000000000000  6.1
 
 # Verify summing of intervals
 statement ok
@@ -744,8 +744,53 @@ SELECT min(w) FROM xyz
 ----
 2
 
+query IF
+SELECT min(x), max(z) FROM xyz
+----
+1  8
+
+query IF
+SELECT min(x)+1, max(z)+1 FROM xyz
+----
+2  9
+
+query IFR
+SELECT min(x), max(z), sum(x) FROM xyz
+----
+1  8  12
+
+query II
+SELECT min(y), max(y) FROM xyz WHERE x IN (0, 4, 7)
+----
+5  5
+
+query II
+SELECT min(x), max(x) FROM xyz WHERE x = 1
+----
+1  1
+
+query FI
+SELECT min(z), max(y) FROM xyz WHERE z IN (3.0, 6.0, 8.0)
+----
+3  5
+
+query FI
+SELECT max(z), min(x) FROM (SELECT x,y,z FROM xyz a) dt WHERE dt.y > 0
+----
+6  1
+
+query FI
+SELECT max(z), min(x) FROM xyz WHERE (z,x) = (SELECT max(z), min(x) FROM xyz)
+----
+NULL  NULL
+
+query FI
+SELECT max(z), min(x) FROM xyz HAVING (max(z), min(x)) = (SELECT max(z), min(x) FROM xyz)
+----
+8  1
+
 query I
-SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
+SELECT min(x) FROM xyz WHERE x IN (0, 4, 7)
 ----
 4
 
@@ -819,7 +864,7 @@ SELECT var_pop(x) FROM xyz WHERE x = 1
 query RRR
 SELECT stddev_samp(x), stddev(y::decimal), round(stddev_samp(z), 14) FROM xyz
 ----
-3  2.1213203435596425732  2.51661147842358
+3.0000000000000000000  2.1213203435596425732  2.51661147842358
 
 query R
 SELECT stddev(x) FROM xyz WHERE x = 1
@@ -829,7 +874,7 @@ NULL
 query RRR
 SELECT stddev_pop(x), stddev_pop(y::decimal), round(stddev_pop(z), 14) FROM xyz
 ----
-2.4494897427831780982  1.5  2.05480466765633
+2.4494897427831780982  1.5000000000000000000  2.05480466765633
 
 query R
 SELECT stddev_pop(x) FROM xyz WHERE x = 1
@@ -864,15 +909,15 @@ VALUES (1, 1.1, 1.1),
        (18, 11.2, 11.2);
 
 query FRF
-select sqrdiff(i), round(sqrdiff(f), 12), sqrdiff(d)
-from ifd
+SELECT sqrdiff(i), round(sqrdiff(f), 12), sqrdiff(d)
+FROM ifd
 ----
 206.8333333333333333333334 86.248333333333 86.24833333333333333333333
 
 query FRF
 SELECT sqrdiff(i), round(sqrdiff(f), 2), sqrdiff(d)
 FROM ifd
-where i < 10
+WHERE i < 10
 ----
 8.666666666666666666666666 1.82 1.82
 
@@ -1114,7 +1159,7 @@ SELECT min(v) FROM opt_test
 
 # Cross-check against a query without this optimization.
 query I
-SELECT min(v) FROM opt_test@primary
+SELECT min(v) FROM opt_test@opt_test_pkey
 ----
 5
 
@@ -1405,8 +1450,10 @@ statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0, 1.797693134862315708145274237317043567981e+308, 0)
 
-query error float out of range
+query FF
 SELECT corr(y, x), corr(int_y, int_x) FROM statistics_agg_test
+----
+-0.443213217542505  0.917580124387801
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1453,7 +1500,7 @@ NULL NULL NULL
 statement OK
 TRUNCATE statistics_agg_test
 
-subtest covariance
+subtest covar_pop
 
 statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
@@ -1469,38 +1516,32 @@ VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
        (100.0,  99.097,    4,  100, 100.0,  99.097),
        (NULL,     NULL, NULL, NULL,  NULL,    NULL);
 
-query FFFFFFFFFF
-SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(y, int_x), covar_pop(int_y, x), round(covar_pop(dy, dx), 7),
-       covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(y, int_x), covar_samp(int_y, x), round(covar_samp(dy, dx), 6)
+query FFFFF
+SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(y, int_x), covar_pop(int_y, x), round(covar_pop(dy, dx), 7)
 FROM statistics_agg_test
 ----
--149.7003372 33 1100.4 -25.336322 -149.7003372 -166.333708 36.6666666666667 1222.66666666667 -28.1514688888889 -166.333708
+-149.7003372 33 1100.4 -25.336322 -149.7003372
 
-query FFFFFFFF
-SELECT covar_pop(y, dx), covar_pop(int_y, dx), covar_pop(dy, int_x), covar_pop(dy, x),
-       covar_samp(y, dx), covar_samp(int_y, dx), covar_samp(dy, int_x), covar_samp(dy, x)
+query FFFF
+SELECT covar_pop(y, dx), covar_pop(int_y, dx), covar_pop(dy, int_x), covar_pop(dy, x)
 FROM statistics_agg_test
 ----
--149.7003372 -25.336322 1100.4 -149.7003372 -166.333708 -28.1514688888889 1222.66666666667 -166.333708
+-149.7003372 -25.336322 1100.4 -149.7003372
 
-query FF
-SELECT covar_pop(DISTINCT y, x), covar_samp(DISTINCT y, x)
+query F
+SELECT covar_pop(DISTINCT y, x)
 FROM statistics_agg_test
 ----
-653.62895125 871.505268333333
+653.62895125
 
-query FF
-SELECT CAST(covar_pop(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal),
-       CAST(covar_samp(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal)
+query F
+SELECT CAST(covar_pop(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal)
 FROM statistics_agg_test
 ----
--1109.4299999999998 -2218.8599999999997
+-1109.4299999999998
 
 query error pq: unknown signature: covar_pop\(string, string\)
 SELECT covar_pop(y::string, x::string) FROM statistics_agg_test
-
-query error pq: unknown signature: covar_samp\(string, string\)
-SELECT covar_samp(y::string, x::string) FROM statistics_agg_test
 
 statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
@@ -1508,6 +1549,98 @@ INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
 
 query error float out of range
 SELECT covar_pop(y, x), covar_pop(int_y, int_x) FROM statistics_agg_test
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0, 10.0, 1, 10, 1.0, 10.0),
+  (2.0, 20.0, 2, 20, 2.0, 20.0)
+
+query RRR
+SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(dy, dx)
+FROM statistics_agg_test
+----
+2.5 2.5 2.5
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0,  10.0, 1,  10, 1.0,  10.0),
+  (2.0, -20.0, 2, -20, 2.0, -20.0)
+
+query RRR
+SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(dy, dx)
+FROM statistics_agg_test
+----
+-7.5 -7.5 -7.5
+
+statement OK
+TRUNCATE statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
+  (1.0, -1.0, 1, -1, 1.0, -1.0),
+  (1.0,  1.0, 1,  1, 1.0,  1.0)
+
+query RRR
+SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(dy, dx)
+FROM statistics_agg_test
+----
+0 0 0
+
+statement OK
+TRUNCATE statistics_agg_test
+
+subtest covar_samp
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx)
+VALUES (0.0,   0.09561,    1,   10,   0.0, 0.09561),
+       (42.0,   324.78,    2,   25,  42.0,  324.78),
+       (42.0,   324.78,    2,   25,  42.0,  324.78),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (56.0,      7.8,    3,   40,  56.0,     7.8),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (100.0,  99.097,    4,  100, 100.0,  99.097),
+       (NULL,     NULL, NULL, NULL,  NULL,    NULL);
+
+query FFFFF
+SELECT covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(y, int_x), covar_samp(int_y, x), round(covar_samp(dy, dx), 6)
+FROM statistics_agg_test
+----
+-166.333708 36.6666666666667 1222.66666666667 -28.1514688888889 -166.333708
+
+query FFFF
+SELECT covar_samp(y, dx), covar_samp(int_y, dx), covar_samp(dy, int_x), covar_samp(dy, x)
+FROM statistics_agg_test
+----
+-166.333708 -28.1514688888889 1222.66666666667 -166.333708
+
+query F
+SELECT covar_samp(DISTINCT y, x)
+FROM statistics_agg_test
+----
+871.505268333333
+
+query F
+SELECT CAST(covar_samp(DISTINCT y, x) FILTER (WHERE x > 3 AND y < 100) AS decimal)
+FROM statistics_agg_test
+----
+-2218.8599999999997
+
+query error pq: unknown signature: covar_samp\(string, string\)
+SELECT covar_samp(y::string, x::string) FROM statistics_agg_test
+
+statement OK
+INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
+  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
 query error float out of range
 SELECT covar_samp(y, x), covar_samp(int_y, int_x) FROM statistics_agg_test
@@ -1520,12 +1653,11 @@ INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, 10.0, 1, 10, 1.0, 10.0),
   (2.0, 20.0, 2, 20, 2.0, 20.0)
 
-query RRRRRR
-SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(dy, dx),
-       covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(dy, dx)
+query RRR
+SELECT covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(dy, dx)
 FROM statistics_agg_test
 ----
-2.5 2.5 2.5 5 5 5
+5 5 5
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1535,12 +1667,11 @@ INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0,  10.0, 1,  10, 1.0,  10.0),
   (2.0, -20.0, 2, -20, 2.0, -20.0)
 
-query RRRRRR
-SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(dy, dx),
-       covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(dy, dx)
+query RRR
+SELECT covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(dy, dx)
 FROM statistics_agg_test
 ----
--7.5 -7.5 -7.5 -15 -15 -15
+-15 -15 -15
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1550,12 +1681,11 @@ INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
   (1.0, -1.0, 1, -1, 1.0, -1.0),
   (1.0,  1.0, 1,  1, 1.0,  1.0)
 
-query RRRRRR
-SELECT covar_pop(y, x), covar_pop(int_y, int_x), covar_pop(dy, dx),
-       covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(dy, dx)
+query RRR
+SELECT covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(dy, dx)
 FROM statistics_agg_test
 ----
-0 0 0 0 0 0
+0 0 0
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1607,8 +1737,10 @@ statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
-query error float out of range
+query FF
 SELECT regr_intercept(y, x), regr_intercept(int_y, int_x) FROM statistics_agg_test
+----
+2.79449911391682e+307  1.07386861313869
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1702,8 +1834,10 @@ statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
-query error float out of range
+query FF
 SELECT regr_r2(y, x), regr_r2(int_y, int_x) FROM statistics_agg_test
+----
+0.070994090464941  0.841953284671533
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1797,8 +1931,10 @@ statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
   (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
 
-query error float out of range
+query FF
 SELECT regr_slope(y, x), regr_slope(int_y, int_x) FROM statistics_agg_test
+----
+-1.19338306247506e+305  0.0313576642335766
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1890,7 +2026,7 @@ SELECT regr_sxx(y::string, x::string) FROM statistics_agg_test
 
 statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
-  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
+  (0, 1.797693134862315708145274237317043567981e+308, 0, 0)
 
 query error float out of range
 SELECT regr_sxx(y, x), regr_sxx(int_y, int_x) FROM statistics_agg_test
@@ -2250,7 +2386,10 @@ SELECT regr_avgx(y::string, x::string) FROM statistics_agg_test
 
 statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x, dy, dx) VALUES
-  (1.797693134862315708145274237317043567981e+308, 0, 0, 0, 1.797693134862315708145274237317043567981e+308, 0)
+  (0, 1.797693134862315708145274237317043567981e+408, 0, 0, 0, 1.797693134862315708145274237317043567981e+408)
+
+query error float out of range
+SELECT regr_avgx(y, x), regr_avgx(int_y, int_x) FROM statistics_agg_test
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -2347,7 +2486,7 @@ SELECT regr_avgy(y::string, x::string) FROM statistics_agg_test
 
 statement OK
 INSERT INTO statistics_agg_test (y, x, int_y, int_x) VALUES
-  (1.797693134862315708145274237317043567981e+308, 0, 0, 0)
+  (1.797693134862315708145274237317043567981e+408, 0, 0, 0)
 
 query error float out of range
 SELECT regr_avgy(y, x), regr_avgy(int_y, int_x) FROM statistics_agg_test
@@ -2600,284 +2739,6 @@ FROM string_agg_test
 GROUP BY company_id
 ORDER BY company_id;
 
-# Now test the window function version of string_agg.
-
-query IT colnames
-SELECT company_id, string_agg(employee, ',')
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           A
-2           B
-2           B,B
-3           C
-3           C,C
-3           C,C,C
-4           D
-4           D,D
-4           D,D,D
-4           D,D,D,D
-
-query IT colnames
-SELECT company_id, string_agg(employee::BYTES, b',')
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           A
-2           B
-2           B,B
-3           C
-3           C,C
-3           C,C,C
-4           D
-4           D,D
-4           D,D,D
-4           D,D,D,D
-
-query IT colnames
-SELECT company_id, string_agg(employee, '')
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           A
-2           B
-2           BB
-3           C
-3           CC
-3           CCC
-4           D
-4           DD
-4           DDD
-4           DDDD
-
-query IT colnames
-SELECT company_id, string_agg(employee::BYTES, b'')
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           A
-2           B
-2           BB
-3           C
-3           CC
-3           CCC
-4           D
-4           DD
-4           DDD
-4           DDDD
-
-query IT colnames
-SELECT company_id, string_agg(employee, NULL)
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           A
-2           B
-2           BB
-3           C
-3           CC
-3           CCC
-4           D
-4           DD
-4           DDD
-4           DDDD
-
-query IT colnames
-SELECT company_id, string_agg(employee::BYTES, NULL)
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           A
-2           B
-2           BB
-3           C
-3           CC
-3           CCC
-4           D
-4           DD
-4           DDD
-4           DDDD
-
-query IT colnames
-SELECT company_id, string_agg(NULL::STRING, employee)
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           NULL
-2           NULL
-2           NULL
-3           NULL
-3           NULL
-3           NULL
-4           NULL
-4           NULL
-4           NULL
-4           NULL
-
-query IT colnames
-SELECT company_id, string_agg(NULL::BYTES, employee::BYTES)
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           NULL
-2           NULL
-2           NULL
-3           NULL
-3           NULL
-3           NULL
-4           NULL
-4           NULL
-4           NULL
-4           NULL
-
-query IT colnames
-SELECT company_id, string_agg(NULL::STRING, NULL)
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           NULL
-2           NULL
-2           NULL
-3           NULL
-3           NULL
-3           NULL
-4           NULL
-4           NULL
-4           NULL
-4           NULL
-
-query IT colnames
-SELECT company_id, string_agg(NULL::BYTES, NULL)
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           NULL
-2           NULL
-2           NULL
-3           NULL
-3           NULL
-3           NULL
-4           NULL
-4           NULL
-4           NULL
-4           NULL
-
-query IT colnames
-SELECT company_id, string_agg(NULL, NULL::STRING)
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           NULL
-2           NULL
-2           NULL
-3           NULL
-3           NULL
-3           NULL
-4           NULL
-4           NULL
-4           NULL
-4           NULL
-
-query IT colnames
-SELECT company_id, string_agg(NULL, NULL::BYTES)
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           NULL
-2           NULL
-2           NULL
-3           NULL
-3           NULL
-3           NULL
-4           NULL
-4           NULL
-4           NULL
-4           NULL
-
-query error pq: ambiguous call: string_agg\(unknown, unknown\)
-SELECT company_id, string_agg(NULL, NULL)
-OVER (PARTITION BY company_id ORDER BY id)
-FROM string_agg_test
-ORDER BY company_id, id;
-
-query IT colnames
-SELECT company_id, string_agg(employee, lower(employee))
-OVER (PARTITION BY company_id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           A
-2           BbB
-2           BbB
-3           CcCcC
-3           CcCcC
-3           CcCcC
-4           DdDdDdD
-4           DdDdDdD
-4           DdDdDdD
-4           DdDdDdD
-
-query IT colnames
-SELECT company_id, string_agg(lower(employee), employee)
-OVER (PARTITION BY company_id)
-FROM string_agg_test
-ORDER BY company_id, id;
-----
-company_id  string_agg
-1           a
-2           bBb
-2           bBb
-3           cCcCc
-3           cCcCc
-3           cCcCc
-4           dDdDdDd
-4           dDdDdDd
-4           dDdDdDd
-4           dDdDdDd
-
-statement error pq: unknown signature: string_agg\(string, string, string\)
-SELECT company_id, string_agg(employee, employee, employee)
-OVER (PARTITION BY company_id)
-FROM string_agg_test
-ORDER BY company_id, id;
-
-query error pq: unknown signature: string_agg\(string\)
-SELECT company_id, string_agg(employee)
-OVER (PARTITION BY company_id)
-FROM string_agg_test
-ORDER BY company_id, id;
-
-query error pq: unknown signature: string_agg\(string, string, string, string\)
-SELECT company_id, string_agg(employee, 'foo', employee, 'bar')
-OVER (PARTITION BY company_id)
-FROM string_agg_test
-ORDER BY company_id, id;
-
 statement OK
 TRUNCATE string_agg_test
 
@@ -3103,7 +2964,7 @@ array_agg   array_agg
 {-3,-2,-1}  {-3,-2,-1,0,1,2}
 
 query IT
-SELECT count(1), concat_agg(col3 ORDER BY col1) from tab
+SELECT count(1), concat_agg(col3 ORDER BY col1) FROM tab
 ----
 6  aaabbb
 
@@ -3303,6 +3164,8 @@ false
 
 statement ok
 TRUNCATE t_every;
+
+statement ok
 INSERT INTO t_every VALUES (NULL), (NULL), (NULL)
 
 query B
@@ -3632,7 +3495,14 @@ CREATE VIEW osagg_view (disc, cont) AS
 query TT
 SHOW CREATE osagg_view
 ----
-osagg_view  CREATE VIEW public.osagg_view (disc, cont) AS SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f), percentile_cont(0.50) WITHIN GROUP (ORDER BY f DESC) FROM test.public.osagg
+osagg_view  CREATE VIEW public.osagg_view (
+            disc,
+            cont
+) AS SELECT
+    percentile_disc(0.50)WITHIN GROUP (ORDER BY f),
+    percentile_cont(0.50)WITHIN GROUP (ORDER BY f DESC)
+  FROM
+    test.public.osagg
 
 # Test malformed ordered-set aggregation.
 statement error ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column
@@ -3720,10 +3590,10 @@ SELECT json_object_agg(user_name, networks) FROM
 {"Bob": {"Facebook": "Bob_fb", "LinkedIn": "Bob The Builder"}}
 
 statement error pq: field name must not be null
-select json_object_agg(null, null)
+SELECT json_object_agg(null, null)
 
 statement error pq: field name must not be null
-select json_object_agg(null, 1)
+SELECT json_object_agg(null, 1)
 
 statement ok
 CREATE TABLE persons(
@@ -3883,3 +3753,36 @@ query T
 SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY current_database()) FROM osagg
 ----
 test
+
+subtest corrupt_combine
+
+statement OK
+CREATE TABLE corrupt_combine (
+  y float,
+  x float
+)
+
+statement OK
+INSERT INTO corrupt_combine (y, x) VALUES
+  (1.0, 10.0),
+  (2.0, 25.0),
+  (3.0, 35.0),
+  (4.0, 50.0),
+  (5.0, 70.0),
+  (6.0, 70.0)
+
+# PR #73062 introduced a bug that caused
+# finalRegressionAccumulatorDecimalBase.combine function to corrupt values in
+# regressionAccumulatorDecimalBase that are used across iterations (n, sx, sxx,
+# sy, syy, sxy). Depending on the order of two local accumulators the result
+# from the second accumulator could be directly assigned to the mentioned fields
+# when "this.n == 0". In this case two or more functions in the bucket shared
+# the same values and repeated the calculation
+# (see aggregator.accumulateRowIntoBucket).
+# This test checks that multiple aggregate functions in the same bucket preserve
+# their values across multiple "combine".
+
+query FFFF
+select covar_pop(y, x), covar_samp(y, x), regr_sxx(y, x), regr_syy(y, x) from corrupt_combine
+----
+37.5 45 2983.333333333333 17.5

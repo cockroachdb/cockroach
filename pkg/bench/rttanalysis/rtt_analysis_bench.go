@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -12,19 +12,20 @@ package rttanalysis
 
 import (
 	"context"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/stretchr/testify/require"
 )
 
 // RoundTripBenchTestCase is a struct that holds the Name of a benchmark test
@@ -38,50 +39,77 @@ type RoundTripBenchTestCase struct {
 	Reset string
 }
 
-// RunRoundTripBenchmark sets up a db run the RoundTripBenchTestCase test cases
-// and counts how many round trips the Stmt specified by the test case performs.
-func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
-	skip.UnderMetamorphic(b, "changes the RTTs")
-
+func runRoundTripBenchmark(b testingB, tests []RoundTripBenchTestCase, cc ClusterConstructor) {
 	for _, tc := range tests {
-		b.Run(tc.Name, func(b *testing.B) {
-			defer log.Scope(b).Close(b)
-			var stmtToKvBatchRequests sync.Map
-
-			beforePlan := func(trace tracing.Recording, stmt string) {
-				if _, ok := stmtToKvBatchRequests.Load(stmt); ok {
-					stmtToKvBatchRequests.Store(stmt, trace)
-				}
-			}
-
-			params := base.TestServerArgs{
-				UseDatabase: "bench",
-				Knobs: base.TestingKnobs{
-					SQLExecutor: &sql.ExecutorTestingKnobs{
-						WithStatementTrace: beforePlan,
-					},
-				},
-			}
-
-			s, db, _ := serverutils.StartServer(
-				b, params,
-			)
-			sql := sqlutils.MakeSQLRunner(db)
-
-			defer s.Stopper().Stop(context.Background())
-
-			ExecuteRoundTripTest(b, sql, &stmtToKvBatchRequests, tc)
+		b.Run(tc.Name, func(b testingB) {
+			executeRoundTripTest(b, tc, cc)
 		})
 	}
 }
 
-// ExecuteRoundTripTest executes a RoundTripBenchCase on with the provided SQL runner
-func ExecuteRoundTripTest(
-	b *testing.B, sql *sqlutils.SQLRunner, stmtToKvBatchRequests *sync.Map, tc RoundTripBenchTestCase,
+// RunRoundTripBenchmark sets up a db run the RoundTripBenchTestCase test cases
+// and counts how many round trips the Stmt specified by the test case performs.
+// It runs each leaf subtest numRuns times. It uses the limiter to limit
+// concurrency.
+func runRoundTripBenchmarkTest(
+	t *testing.T,
+	scope *log.TestLogScope,
+	results *resultSet,
+	tests []RoundTripBenchTestCase,
+	cc ClusterConstructor,
+	numRuns int,
+	limit *quotapool.IntPool,
 ) {
-	expData := readExpectationsFile(b)
+	skip.UnderMetamorphic(t, "changes the RTTs")
+	var wg sync.WaitGroup
+	for _, tc := range tests {
+		wg.Add(1)
+		go func(tc RoundTripBenchTestCase) {
+			defer wg.Done()
+			t.Run(tc.Name, func(t *testing.T) {
+				runRoundTripBenchmarkTestCase(t, scope, results, tc, cc, numRuns, limit)
+			})
+		}(tc)
+	}
+	wg.Wait()
+}
 
-	defer log.Scope(b).Close(b)
+func runRoundTripBenchmarkTestCase(
+	t *testing.T,
+	scope *log.TestLogScope,
+	results *resultSet,
+	tc RoundTripBenchTestCase,
+	cc ClusterConstructor,
+	numRuns int,
+	limit *quotapool.IntPool,
+) {
+	var wg sync.WaitGroup
+	for i := 0; i < numRuns; i++ {
+		alloc, err := limit.Acquire(context.Background(), 1)
+		require.NoError(t, err)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer alloc.Release()
+			executeRoundTripTest(tShim{
+				T: t, results: results, scope: scope,
+			}, tc, cc)
+		}()
+	}
+	wg.Wait()
+}
+
+// executeRoundTripTest executes a RoundTripBenchCase on with the provided SQL runner
+func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConstructor) {
+	getDir, cleanup := b.logScope()
+	defer cleanup()
+
+	cluster := cc(b)
+	defer cluster.close()
+
+	sql := sqlutils.MakeSQLRunner(cluster.conn())
+
+	expData := readExpectationsFile(b)
 
 	exp, haveExp := expData.find(strings.TrimPrefix(b.Name(), "Benchmark"))
 
@@ -89,18 +117,20 @@ func ExecuteRoundTripTest(
 	b.ResetTimer()
 	b.StopTimer()
 	var r tracing.Recording
-	for i := 0; i < b.N; i++ {
+
+	// Do an extra iteration and don't record it in order to deal with effects of
+	// running it the first time.
+	for i := 0; i < b.N()+1; i++ {
 		sql.Exec(b, "CREATE DATABASE bench;")
 		sql.Exec(b, tc.Setup)
-		stmtToKvBatchRequests.Store(tc.Stmt, nil)
+		cluster.clearStatementTrace(tc.Stmt)
 
 		b.StartTimer()
 		sql.Exec(b, tc.Stmt)
 		b.StopTimer()
-
-		out, _ := stmtToKvBatchRequests.Load(tc.Stmt)
 		var ok bool
-		if r, ok = out.(tracing.Recording); !ok {
+		r, ok = cluster.getStatementTrace(tc.Stmt)
+		if !ok {
 			b.Fatalf(
 				"could not find number of round trips for statement: %s",
 				tc.Stmt,
@@ -112,7 +142,7 @@ func ExecuteRoundTripTest(
 		rt, hasRetry := countKvBatchRequestsInRecording(r)
 		if hasRetry {
 			i--
-		} else {
+		} else if i > 0 { // skip the initial iteration
 			roundTrips += rt
 		}
 
@@ -120,15 +150,21 @@ func ExecuteRoundTripTest(
 		sql.Exec(b, tc.Reset)
 	}
 
-	res := float64(roundTrips) / float64(b.N)
-	if haveExp && !exp.matches(int(res)) && *rewriteFlag == "" {
-		b.Fatalf(`got %v, expected %v. trace:
-%v
-(above trace from test %s. got %v, expected %v)
-`, res, exp, r, b.Name(), res, exp)
+	res := float64(roundTrips) / float64(b.N())
+
+	if haveExp && !exp.matches(int(res)) && !*rewriteFlag {
+		b.Errorf(`%s: got %v, expected %v`, b.Name(), res, exp)
+		dir := getDir()
+		jaegerJSON, err := r.ToJaegerJSON(tc.Stmt, "", "n0")
+		require.NoError(b, err)
+		path := filepath.Join(dir, strings.Replace(b.Name(), "/", "_", -1)) + ".jaeger.json"
+		require.NoError(b, ioutil.WriteFile(path, []byte(jaegerJSON), 0666))
+		b.Errorf("wrote jaeger trace to %s", path)
 	}
-	b.ReportMetric(res, "roundtrips")
+	b.ReportMetric(res, roundTripsMetric)
 }
+
+const roundTripsMetric = "roundtrips"
 
 // count the number of KvBatchRequests inside a recording, this is done by
 // counting each "txn coordinator send" operation.

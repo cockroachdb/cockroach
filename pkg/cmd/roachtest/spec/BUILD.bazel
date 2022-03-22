@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "spec",
@@ -11,19 +11,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/azure",
+        "//pkg/roachprod/vm/gce",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-    ],
-)
-
-go_test(
-    name = "spec_test",
-    srcs = ["cluster_spec_test.go"],
-    data = glob(["testdata/**"]),
-    embed = [":spec"],
-    deps = [
-        "@com_github_cockroachdb_datadriven//:datadriven",
-        "@com_github_stretchr_testify//require",
     ],
 )

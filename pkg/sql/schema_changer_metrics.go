@@ -10,7 +10,11 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/util/metric"
+import (
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+)
 
 // TODO(ajwerner): Add many more metrics.
 
@@ -47,6 +51,8 @@ type SchemaChangerMetrics struct {
 	Successes            *metric.Counter
 	RetryErrors          *metric.Counter
 	PermanentErrors      *metric.Counter
+	ConstraintErrors     telemetry.Counter
+	UncategorizedErrors  telemetry.Counter
 }
 
 // MetricStruct makes SchemaChangerMetrics a metric.Struct.
@@ -61,5 +67,7 @@ func NewSchemaChangerMetrics() *SchemaChangerMetrics {
 		Successes:            metric.NewCounter(metaSuccesses),
 		RetryErrors:          metric.NewCounter(metaRetryErrors),
 		PermanentErrors:      metric.NewCounter(metaPermanentErrors),
+		ConstraintErrors:     sqltelemetry.SchemaChangeErrorCounter("constraint_violation"),
+		UncategorizedErrors:  sqltelemetry.SchemaChangeErrorCounter("uncategorized"),
 	}
 }

@@ -13,6 +13,8 @@ package execinfrapb
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -48,6 +50,8 @@ func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // processExpression parses the string expression inside an Expression,
 // and associates ordinal references (@1, @2, etc) with the given helper.
+//
+// evalCtx will not be mutated.
 func processExpression(
 	exprSpec Expression,
 	evalCtx *tree.EvalContext,
@@ -59,7 +63,7 @@ func processExpression(
 	}
 	expr, err := parser.ParseExprWithInt(
 		exprSpec.Expr,
-		parser.NakedIntTypeFromDefaultIntSize(evalCtx.SessionData.DefaultIntSize),
+		parser.NakedIntTypeFromDefaultIntSize(evalCtx.SessionData().DefaultIntSize),
 	)
 	if err != nil {
 		return nil, err
@@ -108,7 +112,7 @@ type ExprHelper struct {
 
 	Types      []*types.T
 	Row        rowenc.EncDatumRow
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 }
 
 func (eh *ExprHelper) String() string {
@@ -143,6 +147,8 @@ func (eh *ExprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 
 // DeserializeExpr deserializes expr, binds the indexed variables to the
 // provided IndexedVarHelper, and evaluates any constants in the expression.
+//
+// evalCtx will not be mutated.
 func DeserializeExpr(
 	expr string, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, vars *tree.IndexedVarHelper,
 ) (tree.TypedExpr, error) {
@@ -155,7 +161,7 @@ func DeserializeExpr(
 		return deserializedExpr, err
 	}
 	var t transform.ExprTransformContext
-	if t.AggregateInExpr(deserializedExpr, evalCtx.SessionData.SearchPath) {
+	if t.AggregateInExpr(deserializedExpr, evalCtx.SessionData().SearchPath) {
 		return nil, errors.Errorf("expression '%s' has aggregate", deserializedExpr)
 	}
 	return deserializedExpr, nil
@@ -177,6 +183,13 @@ func (eh *ExprHelper) Init(
 		// Bind IndexedVars to our eh.Vars.
 		eh.Vars.Rebind(eh.Expr)
 		return nil
+	}
+	if semaCtx.TypeResolver != nil {
+		for _, t := range types {
+			if err := typedesc.EnsureTypeIsHydrated(evalCtx.Context, t, semaCtx.TypeResolver.(catalog.TypeDescriptorResolver)); err != nil {
+				return err
+			}
+		}
 	}
 	var err error
 	eh.Expr, err = DeserializeExpr(expr.Expr, semaCtx, evalCtx, &eh.Vars)

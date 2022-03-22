@@ -8,14 +8,21 @@ yarn.opt.installed
 yarn.cluster-ui.installed
 yarn.protobuf.installed
 yarn-error.log
+assets.ccl.installed
+assets.oss.installed
 
 # Generated intermediates
 .cache-loader
 dist*/**
+dist_vendor/**
+!dist_vendor/.gitkeep
+!dist*/_empty_assets/assets/index.html
+!distccl/assets/.gitkeep
 !distccl/distccl.go
+!distccl/distccl_no_bazel.go
+!distccl/BUILD.bazel
+!distoss/assets/.gitkeep
 !distoss/distoss.go
+!distoss/distoss_no_bazel.go
+!distoss/BUILD.bazel
 *manifest.json
-
-cypress/screenshots/*
-cypress/videos/*
-cypress/snapshots/**/__diff_output__

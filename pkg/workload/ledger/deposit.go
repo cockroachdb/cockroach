@@ -15,7 +15,7 @@ import (
 	gosql "database/sql"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 )
 
 type deposit struct{}

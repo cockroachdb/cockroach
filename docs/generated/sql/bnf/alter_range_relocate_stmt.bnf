@@ -1,0 +1,5 @@
+alter_range_relocate_stmt ::=
+	'ALTER' 'RANGE' relocate_kw 'LEASE' 'TO' a_expr 'FOR' select_stmt
+	| 'ALTER' 'RANGE' a_expr relocate_kw 'LEASE' 'TO' a_expr
+	| 'ALTER' 'RANGE' relocate_kw relocate_subject_nonlease 'FROM' a_expr 'TO' a_expr 'FOR' select_stmt
+	| 'ALTER' 'RANGE' a_expr relocate_kw relocate_subject_nonlease 'FROM' a_expr 'TO' a_expr

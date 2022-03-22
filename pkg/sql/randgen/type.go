@@ -15,7 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -69,7 +69,7 @@ func init() {
 // IsAllowedForArray returns true iff the passed in type can be a valid ArrayContents()
 func IsAllowedForArray(typ *types.T) bool {
 	// Don't include un-encodable types.
-	encTyp, err := rowenc.DatumTypeToArrayElementEncodingType(typ)
+	encTyp, err := valueside.DatumTypeToArrayElementEncodingType(typ)
 	if err != nil || encTyp == 0 {
 		return false
 	}
@@ -111,12 +111,21 @@ func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 			}
 			return types.MakeArray(inner)
 		}
+		if typ.ArrayContents().Family() == types.TupleFamily {
+			// Generate tuples between 0 and 4 datums in length
+			len := rng.Intn(5)
+			contents := make([]*types.T, len)
+			for i := range contents {
+				contents[i] = RandTypeFromSlice(rng, typs)
+			}
+			return types.MakeArray(types.MakeTuple(contents))
+		}
 	case types.TupleFamily:
 		// Generate tuples between 0 and 4 datums in length
 		len := rng.Intn(5)
 		contents := make([]*types.T, len)
 		for i := range contents {
-			contents[i] = RandType(rng)
+			contents[i] = RandTypeFromSlice(rng, typs)
 		}
 		return types.MakeTuple(contents)
 	}
@@ -170,7 +179,7 @@ func RandColumnTypes(rng *rand.Rand, numCols int) []*types.T {
 // RandSortingType returns a column type which can be key-encoded.
 func RandSortingType(rng *rand.Rand) *types.T {
 	typ := RandType(rng)
-	for colinfo.MustBeValueEncoded(typ) {
+	for colinfo.MustBeValueEncoded(typ) || typ == types.Void {
 		typ = RandType(rng)
 	}
 	return typ
@@ -216,6 +225,10 @@ func RandEncodableType(rng *rand.Rand) *types.T {
 					return false
 				}
 			}
+
+		case types.VoidFamily:
+			return false
+
 		}
 		return true
 	}

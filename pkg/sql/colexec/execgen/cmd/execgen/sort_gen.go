@@ -15,7 +15,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
 
 type sortDirOverload struct {
@@ -44,7 +44,7 @@ func genSortOps(inputFileContents string, wr io.Writer) error {
 
 		"_DIR_ENUM", "{{.Dir}}",
 		"_DIR", "{{$dir}}",
-		"_ISNULL", "{{$nulls}}",
+		"_WITH_NULLS", "{{if $nulls}}WithNulls{{else}}WithoutNulls{{end}}",
 		"_HANDLES_NULLS", "{{if $nulls}}WithNulls{{else}}{{end}}",
 	)
 	s := r.Replace(inputFileContents)
@@ -92,12 +92,12 @@ func init() {
 				{
 					Dir:             "execinfrapb.Ordering_Column_ASC",
 					DirString:       "Asc",
-					FamilyOverloads: sameTypeComparisonOpToOverloads[tree.LT],
+					FamilyOverloads: sameTypeComparisonOpToOverloads[treecmp.LT],
 				},
 				{
 					Dir:             "execinfrapb.Ordering_Column_DESC",
 					DirString:       "Desc",
-					FamilyOverloads: sameTypeComparisonOpToOverloads[tree.GT],
+					FamilyOverloads: sameTypeComparisonOpToOverloads[treecmp.GT],
 				},
 			},
 		}

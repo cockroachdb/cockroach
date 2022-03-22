@@ -26,7 +26,11 @@ CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
 
 exec-ddl
-CREATE TABLE booleans(a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
+CREATE TABLE booleans (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
+----
+
+exec-ddl
+CREATE TABLE comp (i INT, c INT AS (i + 10) STORED, v INT AS (abs(i)) VIRTUAL)
 ----
 
 norm
@@ -908,7 +912,7 @@ project
       ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8!null y:9 "?column?":16
       ├── immutable
       ├── key: (8)
-      ├── fd: (1)-->(2-5), (1,8)-->(9,16), (1)==(8), (8)==(1)
+      ├── fd: (1)-->(2-5), (1,8)-->(9,16), (1)==(8), (8)==(1), (8)-->(16)
       ├── scan a
       │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
       │    ├── key: (1)
@@ -946,7 +950,7 @@ project
       │              └── "?column?":16
       └── filters
            ├── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-           └── "?column?":16 = (x:8 * i:2) [outer=(2,8,16), immutable, constraints=(/16: (/NULL - ])]
+           └── "?column?":16 = (x:8 * i:2) [outer=(2,8,16), immutable, constraints=(/16: (/NULL - ]), fd=(2,8)-->(16)]
 
 # Ensure that we do not map filters for types with composite key encoding.
 norm expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
@@ -1442,7 +1446,7 @@ project
  │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true_agg:48
  │    │    ├── key: (12-15)
  │    │    ├── fd: (12-15)-->(21,48)
- │    │    ├── group-by
+ │    │    ├── group-by (hash)
  │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true_agg:48
  │    │    │    ├── grouping columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null
  │    │    │    ├── key: (12-15)
@@ -2181,7 +2185,7 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(9), (1)-->(2-5)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 sum:9
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
@@ -2633,7 +2637,7 @@ values
 norm expect=EliminateJoinNoColsRight
 SELECT * FROM xy WHERE EXISTS(SELECT generate_series(x, 10))
 ----
-group-by
+group-by (hash)
  ├── columns: x:1!null y:2
  ├── grouping columns: x:1!null
  ├── immutable
@@ -3196,8 +3200,72 @@ project
       │    ├── key: (5)
       │    └── fd: (5)-->(6)
       └── filters
-           ├── v:6 = (x:1 + u:5) [outer=(1,5,6), immutable, constraints=(/6: (/NULL - ])]
+           ├── v:6 = (x:1 + u:5) [outer=(1,5,6), immutable, constraints=(/6: (/NULL - ]), fd=(1,5)-->(6)]
            └── column9:9 = u:5 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
+
+# Computed columns with matching expressions should be reused as projection
+# columns.
+norm expect=ExtractJoinEqualities
+SELECT * FROM xy JOIN comp ON x=i+10 AND y=abs(i)
+----
+inner-join (hash)
+ ├── columns: x:1!null y:2!null i:5 c:6!null v:7!null
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── immutable
+ ├── fd: (1)-->(2), (5)-->(6,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── project
+ │    ├── columns: v:7 i:5 c:6
+ │    ├── immutable
+ │    ├── fd: (5)-->(6,7)
+ │    ├── scan comp
+ │    │    ├── columns: i:5 c:6
+ │    │    ├── computed column expressions
+ │    │    │    ├── c:6
+ │    │    │    │    └── i:5 + 10
+ │    │    │    └── v:7
+ │    │    │         └── abs(i:5)
+ │    │    └── fd: (5)-->(6)
+ │    └── projections
+ │         └── abs(i:5) [as=v:7, outer=(5), immutable]
+ └── filters
+      ├── x:1 = c:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── y:2 = v:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+
+# Computed columns with matching expressions should be reused as projection
+# columns.
+norm expect=ExtractJoinEqualities
+SELECT * FROM xy JOIN comp ON i+10=x AND abs(i)=y
+----
+inner-join (hash)
+ ├── columns: x:1!null y:2!null i:5 c:6!null v:7!null
+ ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ ├── immutable
+ ├── fd: (1)-->(2), (5)-->(6,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── project
+ │    ├── columns: v:7 i:5 c:6
+ │    ├── immutable
+ │    ├── fd: (5)-->(6,7)
+ │    ├── scan comp
+ │    │    ├── columns: i:5 c:6
+ │    │    ├── computed column expressions
+ │    │    │    ├── c:6
+ │    │    │    │    └── i:5 + 10
+ │    │    │    └── v:7
+ │    │    │         └── abs(i:5)
+ │    │    └── fd: (5)-->(6)
+ │    └── projections
+ │         └── abs(i:5) [as=v:7, outer=(5), immutable]
+ └── filters
+      ├── x:1 = c:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── y:2 = v:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Cases with non-extractable equality.
 norm expect-not=ExtractJoinEqualities

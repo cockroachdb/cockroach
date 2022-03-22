@@ -18,10 +18,12 @@ import (
 	"os/signal"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -33,7 +35,7 @@ var mtStartSQLProxyCmd = &cobra.Command{
 This proxy accepts incoming connections and relays them to a backend server
 determined by the arguments used.
 `,
-	RunE: MaybeDecorateGRPCError(runStartSQLProxy),
+	RunE: clierrorplus.MaybeDecorateError(runStartSQLProxy),
 	Args: cobra.NoArgs,
 }
 
@@ -111,18 +113,6 @@ func waitForSignals(
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, drainSignals...)
 
-	// Dump the stacks when QUIT is received.
-	if quitSignal != nil {
-		quitSignalCh := make(chan os.Signal, 1)
-		signal.Notify(quitSignalCh, quitSignal)
-		go func() {
-			for {
-				<-quitSignalCh
-				log.DumpStacks(context.Background())
-			}
-		}()
-	}
-
 	select {
 	case err := <-errChan:
 		log.StartAlwaysFlush()
@@ -158,7 +148,7 @@ func waitForSignals(
 			}
 
 			log.Ops.Shoutf(ctx, severity.ERROR,
-				"received signal '%s' during shutdown, initiating hard shutdown", log.Safe(sig))
+				"received signal '%s' during shutdown, initiating hard shutdown", redact.Safe(sig))
 			panic("terminate")
 		case <-stopper.IsStopped():
 			const msgDone = "server shutdown completed"

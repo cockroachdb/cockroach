@@ -22,6 +22,9 @@ SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '1b'
 statement ok
 SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '64MB'
 
+statement ok
+RESET CLUSTER SETTING sql.conn.max_read_buffer_message_size
+
 # Test permissions for modifying cluster settings.
 
 user testuser
@@ -29,13 +32,13 @@ user testuser
 statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
 SET CLUSTER SETTING sql.defaults.default_int_size = 4
 
-statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to show cluster setting 'sql.defaults.default_int_size'
+statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster setting 'sql.defaults.default_int_size'
 SHOW CLUSTER SETTING sql.defaults.default_int_size
 
-statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to SHOW CLUSTER SETTINGS
+statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
 SHOW CLUSTER SETTINGS
 
-statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to SHOW CLUSTER SETTINGS
+statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
 SHOW ALL CLUSTER SETTINGS
 
 user root
@@ -78,6 +81,52 @@ SET CLUSTER SETTING sql.defaults.default_int_size = 4
 user root
 
 statement ok
+ALTER USER testuser NOMODIFYCLUSTERSETTING
+
+statement ok
+ALTER USER testuser VIEWCLUSTERSETTING
+
+user testuser
+
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+query I
+SHOW CLUSTER SETTING sql.defaults.default_int_size
+----
+4
+
+query TT
+SELECT variable, value FROM [SHOW CLUSTER SETTINGS]
+WHERE variable IN ('sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+query TT
+SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4
+
+user root
+
+statement ok
+ALTER USER testuser NOVIEWCLUSTERSETTING
+
+user testuser
+
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
+SET CLUSTER SETTING sql.defaults.default_int_size = 4
+
+statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
+SHOW CLUSTER SETTINGS
+
+statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to SHOW CLUSTER SETTINGS
+SHOW ALL CLUSTER SETTINGS
+
+user root
+
+statement ok
 GRANT admin TO testuser
 
 user testuser
@@ -98,3 +147,62 @@ query B
 SHOW CLUSTER SETTING sql.defaults.stub_catalog_tables.enabled
 ----
 true
+
+skipif config 3node-tenant
+statement ok
+SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
+
+skipif config 3node-tenant
+query T
+SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate
+----
+10 MiB
+
+onlyif config 3node-tenant
+statement error unknown cluster setting
+SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
+
+onlyif config 3node-tenant
+statement error unknown setting
+SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate
+
+# Test a cluster setting which is SystemOnly
+subtest tenant-cluster-settings
+
+# Skip this test when inside a tenant, as this setting won't be visible in
+# there.
+skipif config 3node-tenant
+statement error admission.kv.enabled is a system-only setting and must be set at the host cluster level using SET CLUSTER SETTING
+ALTER TENANT 10 SET CLUSTER SETTING admission.kv.enabled=true
+
+onlyif config 3node-tenant
+statement error ALTER TENANT can only be called by system operators
+ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant
+statement error unimplemented
+ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant
+statement error unimplemented
+ALTER TENANT ALL SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+
+skipif config 3node-tenant
+statement error unimplemented
+ALTER TENANT 10 RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+
+skipif config 3node-tenant
+statement error unimplemented
+ALTER TENANT ALL RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+
+statement error unimplemented
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 10
+
+statement error unimplemented
+SHOW CLUSTER SETTINGS FOR TENANT 10
+
+statement error unimplemented
+SHOW PUBLIC CLUSTER SETTINGS FOR TENANT 10
+
+statement error unimplemented
+SHOW ALL CLUSTER SETTINGS FOR TENANT 10

@@ -191,8 +191,7 @@ define AlterTableRelocate {
 
 [Private]
 define AlterTableRelocatePrivate {
-    RelocateLease bool
-    RelocateNonVoters bool
+    SubjectReplicas RelocateSubject
     _ AlterTableSplitPrivate
 }
 
@@ -201,6 +200,9 @@ define AlterTableRelocatePrivate {
 define ControlJobs {
     # The input expression returns job IDs (as integers).
     Input RelExpr
+
+    # Reason is the reason string for the command job.
+    Reason ScalarExpr
     _ ControlJobsPrivate
 }
 
@@ -288,4 +290,30 @@ define CreateStatistics {
 define CreateStatisticsPrivate {
     # Syntax is the tree.CreateStats AST node.
     Syntax CreateStats
+}
+
+# AlterRangeRelocate represents an `ALTER RANGE .. RELOCATE ..` statement.
+[Relational, Mutation]
+define AlterRangeRelocate {
+    # The input expression provides range IDs as integers.
+    Input RelExpr
+
+    # ToStoreID is the destination store ID.
+    ToStoreID ScalarExpr
+
+    # FromStoreID is the origin store ID, set to NULL when transfering the leaseholder (subject LEASE).
+    FromStoreID ScalarExpr
+    _ AlterRangeRelocatePrivate
+}
+
+[Private]
+define AlterRangeRelocatePrivate {
+    # The subject indicates which replicas will be relocated.
+    SubjectReplicas RelocateSubject
+
+    # Columns stores the column IDs for the statement result columns.
+    Columns ColList
+
+    # Props stores the required physical properties for the input expression.
+    Props PhysProps
 }

@@ -21,12 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -36,7 +39,7 @@ import (
 )
 
 var configID = descpb.ID(1)
-var configDescKey = catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
+var configDescKey = catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(bootstrap.TestingUserDescID(0)))
 
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
@@ -48,16 +51,13 @@ func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
 			Database: &descpb.DatabaseDescriptor{
 				Name:       "sentinel",
 				ID:         configID,
-				Privileges: &descpb.PrivilegeDescriptor{},
+				Privileges: &catpb.PrivilegeDescriptor{},
 			},
 		},
 	}
 
 	// This needs to be done in a transaction with the system trigger set.
 	if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
-			return err
-		}
 		return txn.Put(ctx, configDescKey, configDesc)
 	}); err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 	var foundDesc descpb.Descriptor
 	var cfg *config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
-		if cfg = s.Gossip().GetSystemConfig(); cfg != nil {
+		if cfg = s.SystemConfigProvider().GetSystemConfig(); cfg != nil {
 			if val := cfg.GetValue(configDescKey); val != nil {
 				if err := val.GetProto(&foundDesc); err != nil {
 					t.Fatal(err)
@@ -86,9 +86,6 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 	return cfg
 }
 
-// TODO(benesch,ridwansharif): modernize these tests to avoid hardcoding
-// expectations about descriptor IDs and zone config encoding.
-// TestGetZoneConfig exercises config.getZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -106,9 +103,11 @@ func TestGetZoneConfig(t *testing.T) {
 
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
+	// Set the closed_timestamp interval to be short to shorten the test duration.
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
 	s := srv.(*server.TestServer)
-
-	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
 
 	type testCase struct {
 		objectID uint32
@@ -126,7 +125,7 @@ func TestGetZoneConfig(t *testing.T) {
 			// Verify SystemConfig.GetZoneConfigForKey.
 			{
 				key := append(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tc.objectID)), tc.keySuffix...)
-				zoneCfg, err := cfg.GetZoneConfigForKey(key) // Complete ZoneConfig
+				_, zoneCfg, err := cfg.GetZoneConfigForKey(key) // Complete ZoneConfig
 				if err != nil {
 					t.Fatalf("#%d: err=%s", tcNum, err)
 				}
@@ -140,7 +139,7 @@ func TestGetZoneConfig(t *testing.T) {
 			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
-					ctx, txn, config.SystemTenantObjectID(tc.objectID), dummyIndex, tc.partitionName, false,
+					ctx, txn, keys.SystemSQLCodec, descpb.ID(tc.objectID), dummyIndex, tc.partitionName, false,
 				)
 				if err != nil {
 					return err
@@ -172,51 +171,46 @@ func TestGetZoneConfig(t *testing.T) {
 	// db1 has tables tb11 and tb12
 	// db2 has tables tb21 and tb22
 
-	db1 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db1`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	db2 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db2`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb11 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb12 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb21 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb22 := expectedCounter
 	if _, err := sqlDB.Exec(`TRUNCATE TABLE db2.tb2`); err != nil {
 		t.Fatal(err)
 	}
+
+	db1 := sqlutils.QueryDatabaseID(t, sqlDB, "db1")
+	db2 := sqlutils.QueryDatabaseID(t, sqlDB, "db2")
+	tb11 := sqlutils.QueryTableID(t, sqlDB, "db1", "public", "tb1")
+	tb12 := sqlutils.QueryTableID(t, sqlDB, "db1", "public", "tb2")
+	tb21 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb1")
+	tb22 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb2")
 
 	// We have no custom zone configs.
 	verifyZoneConfigs([]testCase{
 		{0, nil, "", defaultZoneConfig},
 		{1, nil, "", defaultZoneConfig},
-		{keys.MaxReservedDescID, nil, "", defaultZoneConfig},
+		{keys.MaxSystemConfigDescID + 1, nil, "", defaultZoneConfig},
 		{db1, nil, "", defaultZoneConfig},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", defaultZoneConfig},
@@ -243,23 +237,23 @@ func TestGetZoneConfig(t *testing.T) {
 
 	db1Cfg := defaultZoneConfig
 	db1Cfg.NumReplicas = proto.Int32(1)
-	db1Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db1"}}}}
+	db1Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Value: "db1"}}}}
 
 	tb11Cfg := defaultZoneConfig
 	tb11Cfg.NumReplicas = proto.Int32(1)
-	tb11Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db1.tb1"}}}}
+	tb11Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Value: "db1.tb1"}}}}
 
 	p211Cfg := defaultZoneConfig
 	p211Cfg.NumReplicas = proto.Int32(1)
-	p211Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p1"}}}}
+	p211Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Value: "db2.tb1.p1"}}}}
 
 	p212Cfg := defaultZoneConfig
 	p212Cfg.NumReplicas = proto.Int32(1)
-	p212Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p2"}}}}
+	p212Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Value: "db2.tb1.p2"}}}}
 
 	tb21Cfg := defaultZoneConfig
 	tb21Cfg.NumReplicas = proto.Int32(1)
-	tb21Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1"}}}}
+	tb21Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Value: "db2.tb1"}}}}
 	tb21Cfg.Subzones = []zonepb.Subzone{
 		{IndexID: 1, PartitionName: "p0", Config: p211Cfg},
 		{IndexID: 1, PartitionName: "p1", Config: p212Cfg},
@@ -272,7 +266,7 @@ func TestGetZoneConfig(t *testing.T) {
 
 	p221Cfg := defaultZoneConfig
 	p221Cfg.NumReplicas = proto.Int32(1)
-	p221Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb2.p1"}}}}
+	p221Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Type: zonepb.Constraint_REQUIRED, Value: "db2.tb2.p1"}}}}
 
 	// Subzone Placeholder
 	tb22Cfg := *zonepb.NewZoneConfig()
@@ -300,7 +294,7 @@ func TestGetZoneConfig(t *testing.T) {
 	verifyZoneConfigs([]testCase{
 		{0, nil, "", defaultZoneConfig},
 		{1, nil, "", defaultZoneConfig},
-		{keys.MaxReservedDescID, nil, "", defaultZoneConfig},
+		{keys.MaxSystemConfigDescID + 1, nil, "", defaultZoneConfig},
 		{db1, nil, "", db1Cfg},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", tb11Cfg},
@@ -345,9 +339,11 @@ func TestCascadingZoneConfig(t *testing.T) {
 
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
+	// Set the closed_timestamp interval to be short to shorten the test duration.
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
 	s := srv.(*server.TestServer)
-
-	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
 
 	type testCase struct {
 		objectID uint32
@@ -365,7 +361,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 			// Verify SystemConfig.GetZoneConfigForKey.
 			{
 				key := append(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tc.objectID)), tc.keySuffix...)
-				zoneCfg, err := cfg.GetZoneConfigForKey(key) // Complete ZoneConfig
+				_, zoneCfg, err := cfg.GetZoneConfigForKey(key) // Complete ZoneConfig
 				if err != nil {
 					t.Fatalf("#%d: err=%s", tcNum, err)
 				}
@@ -379,7 +375,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
-					ctx, txn, config.SystemTenantObjectID(tc.objectID), dummyIndex, tc.partitionName, false,
+					ctx, txn, keys.SystemSQLCodec, descpb.ID(tc.objectID), dummyIndex, tc.partitionName, false,
 				)
 				if err != nil {
 					return err
@@ -411,51 +407,46 @@ func TestCascadingZoneConfig(t *testing.T) {
 	// db1 has tables tb11 and tb12
 	// db2 has tables tb21 and tb22
 
-	db1 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db1`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	db2 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db2`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb11 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb12 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb21 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedCounter++
-	tb22 := expectedCounter
 	if _, err := sqlDB.Exec(`TRUNCATE TABLE db2.tb2`); err != nil {
 		t.Fatal(err)
 	}
+
+	db1 := sqlutils.QueryDatabaseID(t, sqlDB, "db1")
+	db2 := sqlutils.QueryDatabaseID(t, sqlDB, "db2")
+	tb11 := sqlutils.QueryTableID(t, sqlDB, "db1", "public", "tb1")
+	tb12 := sqlutils.QueryTableID(t, sqlDB, "db1", "public", "tb2")
+	tb21 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb1")
+	tb22 := sqlutils.QueryTableID(t, sqlDB, "db2", "public", "tb2")
 
 	// We have no custom zone configs.
 	verifyZoneConfigs([]testCase{
 		{0, nil, "", defaultZoneConfig},
 		{1, nil, "", defaultZoneConfig},
-		{keys.MaxReservedDescID, nil, "", defaultZoneConfig},
+		{keys.MaxSystemConfigDescID + 1, nil, "", defaultZoneConfig},
 		{db1, nil, "", defaultZoneConfig},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", defaultZoneConfig},
@@ -479,44 +470,53 @@ func TestCascadingZoneConfig(t *testing.T) {
 	//   tb2: no zone config
 	//     p1: true  [1, 255) - inherits replciation factor from default
 
+	makeConstraints := func(value string) []zonepb.ConstraintsConjunction {
+		return []zonepb.ConstraintsConjunction{
+			{
+				Constraints: []zonepb.Constraint{
+					{Type: zonepb.Constraint_REQUIRED, Value: value},
+				},
+			},
+		}
+	}
 	db1Cfg := *zonepb.NewZoneConfig()
 	db1Cfg.NumReplicas = proto.Int32(5)
-	db1Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db1"}}}}
+	db1Cfg.Constraints = makeConstraints("db1")
 	db1Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedDb1Cfg := defaultZoneConfig
 	expectedDb1Cfg.NumReplicas = proto.Int32(5)
-	expectedDb1Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db1"}}}}
+	expectedDb1Cfg.Constraints = makeConstraints("db1")
 
 	tb11Cfg := *zonepb.NewZoneConfig()
-	tb11Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db1.tb1"}}}}
+	tb11Cfg.Constraints = makeConstraints("db1.tb1")
 	tb11Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedTb11Cfg := expectedDb1Cfg
-	expectedTb11Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db1.tb1"}}}}
+	expectedTb11Cfg.Constraints = makeConstraints("db1.tb1")
 
 	p211Cfg := *zonepb.NewZoneConfig()
 	p211Cfg.NumReplicas = proto.Int32(1)
-	p211Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p1"}}}}
+	p211Cfg.Constraints = makeConstraints("db2.tb1.p1")
 	p211Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedP211Cfg := defaultZoneConfig
 	expectedP211Cfg.NumReplicas = proto.Int32(1)
-	expectedP211Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p1"}}}}
+	expectedP211Cfg.Constraints = makeConstraints("db2.tb1.p1")
 
 	p212Cfg := *zonepb.NewZoneConfig()
-	p212Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p2"}}}}
+	p212Cfg.Constraints = makeConstraints("db2.tb1.p2")
 	p212Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedP212Cfg := defaultZoneConfig
-	expectedP212Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1.p2"}}}}
+	expectedP212Cfg.Constraints = makeConstraints("db2.tb1.p2")
 
 	tb21Cfg := *zonepb.NewZoneConfig()
-	tb21Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1"}}}}
+	tb21Cfg.Constraints = makeConstraints("db2.tb1")
 	tb21Cfg.InheritedConstraints = false
 	tb21Cfg.Subzones = []zonepb.Subzone{
 		{IndexID: 1, PartitionName: "p0", Config: p211Cfg},
@@ -530,7 +530,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 
 	// Expected complete config
 	expectedTb21Cfg := defaultZoneConfig
-	expectedTb21Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1"}}}}
+	expectedTb21Cfg.Constraints = makeConstraints("db2.tb1")
 	expectedTb21Cfg.Subzones = []zonepb.Subzone{
 		{IndexID: 1, PartitionName: "p0", Config: p211Cfg},
 		{IndexID: 1, PartitionName: "p1", Config: p212Cfg},
@@ -542,12 +542,12 @@ func TestCascadingZoneConfig(t *testing.T) {
 	}
 
 	p221Cfg := *zonepb.NewZoneConfig()
-	p221Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb2.p1"}}}}
+	p221Cfg.Constraints = makeConstraints("db2.tb2.p1")
 	p221Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedP221Cfg := defaultZoneConfig
-	expectedP221Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb2.p1"}}}}
+	expectedP221Cfg.Constraints = makeConstraints("db2.tb2.p1")
 
 	// Subzone Placeholder
 	tb22Cfg := *zonepb.NewZoneConfig()
@@ -575,7 +575,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 	verifyZoneConfigs([]testCase{
 		{0, nil, "", defaultZoneConfig},
 		{1, nil, "", defaultZoneConfig},
-		{keys.MaxReservedDescID, nil, "", defaultZoneConfig},
+		{keys.MaxSystemConfigDescID + 1, nil, "", defaultZoneConfig},
 		{db1, nil, "", expectedDb1Cfg},
 		{db2, nil, "", defaultZoneConfig},
 		{tb11, nil, "", expectedTb11Cfg},
@@ -648,15 +648,19 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	params, _ := tests.CreateTestServerParams()
-	srv, _, _ := serverutils.StartServer(b, params)
+	srv, sqlDB, _ := serverutils.StartServer(b, params)
 	defer srv.Stopper().Stop(context.Background())
+	// Set the closed_timestamp interval to be short to shorten the test duration.
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(b, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
+	tdb.Exec(b, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
 	s := srv.(*server.TestServer)
 	cfg := forceNewConfig(b, s)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID))
-		_, err := cfg.GetZoneConfigForKey(key)
+		key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)))
+		_, _, err := cfg.GetZoneConfigForKey(key)
 		if err != nil {
 			b.Fatal(err)
 		}

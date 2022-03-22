@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -29,14 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// NewDatumsToInvertedExpr returns a new DatumsToInvertedExpr. Currently there
-// is only one possible implementation returned, geoDatumsToInvertedExpr.
+// NewDatumsToInvertedExpr returns a new DatumsToInvertedExpr.
 func NewDatumsToInvertedExpr(
-	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, idx catalog.Index,
+	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, geoConfig geoindex.Config,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
-	geoConfig := idx.GetGeoConfig()
-	if !geoindex.IsEmptyConfig(&geoConfig) {
-		return NewGeoDatumsToInvertedExpr(evalCtx, colTypes, expr, &geoConfig)
+	if !geoConfig.IsEmpty() {
+		return NewGeoDatumsToInvertedExpr(evalCtx, colTypes, expr, geoConfig)
 	}
 
 	return NewJSONOrArrayDatumsToInvertedExpr(evalCtx, colTypes, expr)
@@ -94,7 +91,7 @@ func TryFilterInvertedIndex(
 	config := index.GeoConfig()
 	var typ *types.T
 	var filterPlanner invertedFilterPlanner
-	if geoindex.IsGeographyConfig(config) {
+	if config.IsGeography() {
 		filterPlanner = &geoFilterPlanner{
 			factory:     factory,
 			tabID:       tabID,
@@ -102,7 +99,7 @@ func TryFilterInvertedIndex(
 			getSpanExpr: getSpanExprForGeographyIndex,
 		}
 		typ = types.Geography
-	} else if geoindex.IsGeometryConfig(config) {
+	} else if config.IsGeometry() {
 		filterPlanner = &geoFilterPlanner{
 			factory:     factory,
 			tabID:       tabID,
@@ -175,7 +172,7 @@ func TryJoinInvertedIndex(
 
 	config := index.GeoConfig()
 	var joinPlanner invertedJoinPlanner
-	if geoindex.IsGeographyConfig(config) {
+	if config.IsGeography() {
 		joinPlanner = &geoJoinPlanner{
 			factory:     factory,
 			tabID:       tabID,
@@ -183,7 +180,7 @@ func TryJoinInvertedIndex(
 			inputCols:   inputCols,
 			getSpanExpr: getSpanExprForGeographyIndex,
 		}
-	} else if geoindex.IsGeometryConfig(config) {
+	} else if config.IsGeometry() {
 		joinPlanner = &geoJoinPlanner{
 			factory:     factory,
 			tabID:       tabID,
@@ -373,6 +370,7 @@ func constrainPrefixColumns(
 ) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	tabMeta := factory.Metadata().TableMeta(tabID)
 	prefixColumnCount := index.NonInvertedPrefixColumnCount()
+	ps, _ := tabMeta.IndexPartitionLocality(index.Ordinal(), index, evalCtx)
 
 	// If this is a single-column inverted index, there are no prefix columns to
 	// constrain.
@@ -413,7 +411,7 @@ func constrainPrefixColumns(
 		filters, optionalFilters,
 		prefixColumns, notNullCols, tabMeta.ComputedCols,
 		false, /* consolidate */
-		evalCtx, factory,
+		evalCtx, factory, ps,
 	)
 	constraint = ic.UnconsolidatedConstraint()
 	if constraint.Prefix(evalCtx) < prefixColumnCount {

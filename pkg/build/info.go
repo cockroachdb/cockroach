@@ -11,8 +11,10 @@
 package build
 
 import (
+	"bytes"
 	"fmt"
 	"runtime"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -33,10 +35,11 @@ var (
 	cgoTargetTriple string
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
-	Distribution = "OSS"
-	typ          string // Type of this build: <empty>, "development", or "release"
-	channel      = "unknown"
-	envChannel   = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
+	Distribution  = "OSS"
+	typ           string // Type of this build: <empty>, "development", or "release"
+	channel       = "unknown"
+	envChannel    = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
+	binaryVersion = computeVersion(tag)
 )
 
 // IsRelease returns true if the binary was produced by a "release" build.
@@ -50,8 +53,21 @@ func SeemsOfficial() bool {
 	return channel == "official-binary" || channel == "source-archive"
 }
 
-// VersionPrefix returns the version prefix of the current build.
-func VersionPrefix() string {
+func computeVersion(tag string) string {
+	v, err := version.Parse(tag)
+	if err != nil {
+		return "dev"
+	}
+	return v.String()
+}
+
+// BinaryVersion returns the version prefix, patch number and metadata of the current build.
+func BinaryVersion() string {
+	return binaryVersion
+}
+
+// BinaryVersionPrefix returns the version prefix of the current build.
+func BinaryVersionPrefix() string {
 	v, err := version.Parse(tag)
 	if err != nil {
 		return "dev"
@@ -75,6 +91,26 @@ func (b Info) Short() string {
 	}
 	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
 		b.Distribution, b.Tag, plat, b.Time, b.GoVersion)
+}
+
+// Long returns a pretty printed build summary
+func (b Info) Long() string {
+	var buf bytes.Buffer
+	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+	fmt.Fprintf(tw, "Build Tag:        %s\n", b.Tag)
+	fmt.Fprintf(tw, "Build Time:       %s\n", b.Time)
+	fmt.Fprintf(tw, "Distribution:     %s\n", b.Distribution)
+	fmt.Fprintf(tw, "Platform:         %s", b.Platform)
+	if b.CgoTargetTriple != "" {
+		fmt.Fprintf(tw, " (%s)", b.CgoTargetTriple)
+	}
+	fmt.Fprintln(tw)
+	fmt.Fprintf(tw, "Go Version:       %s\n", b.GoVersion)
+	fmt.Fprintf(tw, "C Compiler:       %s\n", b.CgoCompiler)
+	fmt.Fprintf(tw, "Build Commit ID:  %s\n", b.Revision)
+	fmt.Fprintf(tw, "Build Type:       %s", b.Type) // No final newline: cobra prints one for us.
+	_ = tw.Flush()
+	return buf.String()
 }
 
 // GoTime parses the utcTime string and returns a time.Time.
@@ -115,11 +151,13 @@ func GetInfo() Info {
 // TestingOverrideTag allows tests to override the build tag.
 func TestingOverrideTag(t string) func() {
 	prev := tag
+	prevVersion := binaryVersion
 	tag = t
-	return func() { tag = prev }
+	binaryVersion = computeVersion(tag)
+	return func() { tag = prev; binaryVersion = prevVersion }
 }
 
 // MakeIssueURL produces a URL to a CockroachDB issue.
 func MakeIssueURL(issue int) string {
-	return fmt.Sprintf("https://go.crdb.dev/issue-v/%d/%s", issue, VersionPrefix())
+	return fmt.Sprintf("https://go.crdb.dev/issue-v/%d/%s", issue, BinaryVersionPrefix())
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,11 +41,17 @@ func TestRandomizedCast(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	getValidSupportedCast := func() (from, to *types.T) {
 		for {
 			from, to = randgen.RandType(rng), randgen.RandType(rng)
+			if from.Oid() == oid.T_void && to.Oid() == oid.T_bpchar {
+				// Skip the cast from void to char because such setup would get
+				// stuck forever in the datum generation (due to the TODO
+				// below).
+				continue
+			}
 			if _, ok := tree.LookupCastVolatility(from, to, nil /* sessiondata */); ok {
 				if colexecbase.IsCastSupported(from, to) {
 					return from, to
@@ -68,16 +75,19 @@ func TestRandomizedCast(t *testing.T) {
 				fromDatum, toDatum tree.Datum
 				err                error
 			)
+			// Datum generation. The loop exists only because of the TODO below.
 			for {
 				// We don't allow any NULL datums to be generated, so disable
 				// this ability in the RandDatum function.
 				fromDatum = randgen.RandDatum(rng, from, false)
 				toDatum, err = tree.PerformCast(&evalCtx, fromDatum, to)
-				if to.String() == "char" && string(*toDatum.(*tree.DString)) == "" {
+				if to.Oid() == oid.T_bpchar && string(*toDatum.(*tree.DString)) == "" {
 					// There is currently a problem when converting an empty
 					// string datum to a physical representation, so we skip
 					// such a datum and retry generation.
-					// TODO(yuzefovich): figure it out.
+					// TODO(yuzefovich): figure it out. When removing this
+					// check, remove the special casing for 'void -> char' cast
+					// above.
 					continue
 				}
 				break
@@ -91,17 +101,15 @@ func TestRandomizedCast(t *testing.T) {
 			input = append(input, colexectestutils.Tuple{fromConverter(fromDatum)})
 			output = append(output, colexectestutils.Tuple{fromConverter(fromDatum), toPhys})
 		}
-		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(
-			t, testAllocator, []colexectestutils.Tuples{input}, [][]*types.T{{from}}, output, colexectestutils.OrderedVerifier,
+		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(t, testAllocator,
+			[]colexectestutils.Tuples{input}, [][]*types.T{{from}}, output, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexecbase.GetCastOperator(testAllocator, input[0], 0, 1, from, to, &evalCtx)
-			},
-			func(err error) {
+			}, func(err error) {
 				if !errorExpected {
 					t.Fatal(err)
 				}
-			},
-		)
+			}, nil /* orderedCols */)
 	}
 }
 
@@ -111,7 +119,7 @@ func BenchmarkCastOp(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, typePair := range [][]*types.T{
 		{types.Int, types.Float},
 		{types.Int, types.Decimal},

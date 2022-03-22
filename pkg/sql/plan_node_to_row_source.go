@@ -87,11 +87,29 @@ func (p *planNodeToRowSource) InitWithOutput(
 		post,
 		p.outputTypes,
 		flowCtx,
+		// Note that we have already created a copy of the extendedEvalContext
+		// (which made a copy of the EvalContext) right before calling
+		// makePlanNodeToRowSource, so we can just use the eval context from the
+		// params.
 		p.params.EvalContext(),
 		0, /* processorID */
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{},
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				var meta []execinfrapb.ProducerMetadata
+				if p.InternalClose() {
+					// Check if we're wrapping a mutation and emit the rows
+					// written metric if so.
+					if m, ok := p.node.(mutationPlanNode); ok {
+						metrics := execinfrapb.GetMetricsMeta()
+						metrics.RowsWritten = m.rowsWritten()
+						meta = []execinfrapb.ProducerMetadata{{Metrics: metrics}}
+					}
+				}
+				return meta
+			},
+		},
 	)
 }
 

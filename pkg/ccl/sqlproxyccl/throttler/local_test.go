@@ -9,10 +9,11 @@
 package throttler
 
 import (
-	"fmt"
+	"context"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,73 +38,98 @@ func newTestLocalService(opts ...LocalOption) *testLocalService {
 	s := &testLocalService{
 		localService: NewLocalService(opts...).(*localService),
 	}
+	s.clock.next = timeutil.Now()
 	s.localService.clock = s.clock.Now
 	return s
 }
 
-func (s *localService) checkInvariants() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func countGuesses(
+	t *testing.T,
+	connection ConnectionTags,
+	throttle *testLocalService,
+	step time.Duration,
+	period time.Duration,
+) int {
+	count := 0
+	for i := 0; step*time.Duration(i) < period; i++ {
+		throttle.clock.advance(step)
 
-	if len(s.mu.limiters) != len(s.mu.addrs) {
-		return fmt.Errorf("len(limiters) [%d] != len(addrs) [%d]", len(s.mu.limiters), len(s.mu.addrs))
-	}
-
-	for i, addr := range s.mu.addrs {
-		l := s.mu.limiters[addr]
-		if l.index != i {
-			return fmt.Errorf("limiters[addrs[%d]].index != %d (addr=%s index=%d)", i, i, addr, l.index)
+		throttleTime, err := throttle.LoginCheck(connection)
+		if err != nil {
+			continue
 		}
+
+		err = throttle.ReportAttempt(context.Background(), connection, throttleTime, AttemptInvalidCredentials)
+		require.NoError(t, err, "ReportAttempt should only return errors in the case of racing requests")
+
+		count++
 	}
-	return nil
+	return count
 }
 
-var expectedBackOff = []int{2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 3600, 3600, 3600}
+func TestThrottleLimitsCredentialGuesses(t *testing.T) {
+	throttle := newTestLocalService(WithBaseDelay(time.Second))
+	ip1Tenant1 := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
+	ip1Tenant2 := ConnectionTags{IP: "1.1.1.1", TenantID: "2"}
+	ip2Tenant1 := ConnectionTags{IP: "1.1.1.2", TenantID: "1"}
 
-func TestLocalService_BackOff(t *testing.T) {
-	s := newTestLocalService()
+	require.Equal(t,
+		35,
+		countGuesses(t, ip1Tenant1, throttle, time.Second, time.Hour*24),
+	)
 
-	const ipAddress = "127.0.0.1"
-
-	verifyBackOff := func() {
-		require.NoError(t, s.LoginCheck(ipAddress, s.clock.Now()))
-
-		for _, delay := range expectedBackOff {
-			require.EqualError(t, s.LoginCheck(ipAddress, s.clock.Now()), errRequestDenied.Error())
-
-			s.clock.advance(time.Duration(delay)*time.Second - time.Nanosecond)
-			require.EqualError(t, s.LoginCheck(ipAddress, s.clock.Now()), errRequestDenied.Error())
-
-			s.clock.advance(time.Nanosecond)
-			require.NoError(t, s.LoginCheck(ipAddress, s.clock.Now()))
-		}
-	}
-
-	verifyBackOff()
+	// Verify throttling logic is tenant specific.
+	require.Equal(t,
+		12,
+		countGuesses(t, ip1Tenant2, throttle, time.Second, time.Hour),
+	)
+	require.Equal(t,
+		12,
+		countGuesses(t, ip2Tenant1, throttle, time.Second, time.Hour),
+	)
 }
 
-func TestLocalService_WithBaseDelay(t *testing.T) {
-	s := newTestLocalService(WithBaseDelay(time.Second))
+func TestReportSuccessDisablesLimiter(t *testing.T) {
+	throttle := newTestLocalService()
+	tenant1 := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
+	tenant2 := ConnectionTags{IP: "1.1.1.1", TenantID: "2"}
 
-	const ipAddress = "127.0.0.1"
+	throttleTime, err := throttle.LoginCheck(tenant1)
+	require.NoError(t, err)
+	require.NoError(t, throttle.ReportAttempt(context.Background(), tenant1, throttleTime, AttemptOK))
 
-	require.NoError(t, s.LoginCheck(ipAddress, s.clock.Now()))
+	require.Equal(t,
+		int(time.Hour/time.Second),
+		countGuesses(t, tenant1, throttle, time.Second, time.Hour),
+	)
 
-	s.clock.advance(time.Second - time.Nanosecond)
-	require.EqualError(t, s.LoginCheck(ipAddress, s.clock.Now()), errRequestDenied.Error())
-
-	s.clock.advance(time.Nanosecond)
-	require.NoError(t, s.LoginCheck(ipAddress, s.clock.Now()))
+	// Verify the unlimited throttle only applies to the tenant with the
+	// successful connection.
+	require.Equal(t,
+		12,
+		countGuesses(t, tenant2, throttle, time.Second, time.Hour),
+	)
 }
 
-func TestLocalService_Eviction(t *testing.T) {
-	s := newTestLocalService()
-	s.maxMapSize = 10
+func TestRacingRequests(t *testing.T) {
+	throttle := newTestLocalService()
+	connection := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
 
-	for i := 0; i < 20; i++ {
-		ipAddress := fmt.Sprintf("%d", i)
-		_ = s.LoginCheck(ipAddress, s.clock.Now())
-		require.Less(t, len(s.mu.limiters), 11)
-		require.NoError(t, s.checkInvariants())
+	throttleTime, err := throttle.LoginCheck(connection)
+	require.NoError(t, err)
+
+	require.NoError(t, throttle.ReportAttempt(context.Background(), connection, throttleTime, AttemptInvalidCredentials))
+
+	l := throttle.lockedGetThrottle(connection)
+	nextTime := l.nextTime
+
+	for _, status := range []AttemptStatus{AttemptOK, AttemptInvalidCredentials} {
+		require.Error(t, throttle.ReportAttempt(context.Background(), connection, throttleTime, status))
+
+		// Verify the throttled report has no affect on limiter state.
+		l := throttle.lockedGetThrottle(connection)
+		require.NotNil(t, l)
+		require.NotEqual(t, l.nextBackoff, throttleDisabled)
+		require.Equal(t, l.nextTime, nextTime)
 	}
 }

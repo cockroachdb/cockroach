@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -31,10 +33,7 @@ import (
 // Will fail on complex tables where that operation requires e.g. looking up
 // other tables.
 func CreateTestTableDescriptor(
-	ctx context.Context,
-	parentID, id descpb.ID,
-	schema string,
-	privileges *descpb.PrivilegeDescriptor,
+	ctx context.Context, parentID, id descpb.ID, schema string, privileges *catpb.PrivilegeDescriptor,
 ) (*tabledesc.Mutable, error) {
 	st := cluster.MakeTestingClusterSettings()
 	stmt, err := parser.ParseOne(schema)
@@ -62,9 +61,8 @@ func CreateTestTableDescriptor(
 			&semaCtx,
 			&evalCtx,
 			&sessiondata.SessionData{
-				LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 					EnableUniqueWithoutIndexConstraints: true,
-					HashShardedIndexesEnabled:           true,
 				},
 			}, /* sessionData */
 			tree.PersistencePermanent,
@@ -73,13 +71,14 @@ func CreateTestTableDescriptor(
 	case *tree.CreateSequence:
 		desc, err := NewSequenceTableDesc(
 			ctx,
+			nil, /* planner */
+			st,
 			n.Name.Table(),
 			n.Options,
 			parentID, keys.PublicSchemaID, id,
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			tree.PersistencePermanent,
-			nil,   /* params */
 			false, /* isMultiRegion */
 		)
 		return desc, err
@@ -111,11 +110,6 @@ func (r *StmtBufReader) AdvanceOne() {
 	r.buf.AdvanceOne()
 }
 
-// SeekToNextBatch skips to the beginning of the next batch of commands.
-func (r *StmtBufReader) SeekToNextBatch() error {
-	return r.buf.seekToNextBatch()
-}
-
 // Exec is a test utility function that takes a localPlanner (of type
 // interface{} so that external packages can call NewInternalPlanner and pass
 // the result) and executes a sql statement through the DistSQLPlanner.
@@ -131,7 +125,7 @@ func (dsp *DistSQLPlanner) Exec(
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
-	rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+	rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		return nil
 	})
 	execCfg := p.ExecCfg()
@@ -148,8 +142,13 @@ func (dsp *DistSQLPlanner) Exec(
 	)
 	defer recv.Release()
 
+	distributionType := DistributionType(DistributionTypeNone)
+	if distribute {
+		distributionType = DistributionTypeSystemTenantOnly
+	}
 	evalCtx := p.ExtendedEvalContext()
-	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn, distribute)
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
+		distributionType)
 	planCtx.stmtType = recv.stmtType
 
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()

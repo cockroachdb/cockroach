@@ -166,6 +166,6 @@ contains the expression used to compute the column otherwise.
 | Oracle                 | `inventory_value COMPUTED BY qty_available * unit_price`        | `inventory_value AUTOMATIC INSERT AS qty_available * unit_price`          |
 
 # Unresolved Questions
-[Partioning]: https://github.com/cockroachdb/cockroach/blob/aa61db043e9c54c0b83a405cd76ce0ec7cc6a35d/docs/RFCS/20170921_sql_partitioning.md
+[Partitioning]: https://github.com/cockroachdb/cockroach/blob/aa61db043e9c54c0b83a405cd76ce0ec7cc6a35d/docs/RFCS/20170921_sql_partitioning.md
 [Query planning changes in the RFC]: https://github.com/cockroachdb/cockroach/blob/aa61db043e9c54c0b83a405cd76ce0ec7cc6a35d/docs/RFCS/20170921_sql_partitioning.md#query-planning-changes
 [MySQL's extension]: https://dev.mysql.com/doc/refman/5.7/en/columns-table.html

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
@@ -39,6 +40,7 @@ import (
 	"github.com/lib/pq"
 	promapi "github.com/prometheus/client_golang/api"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/stretchr/testify/require"
 )
 
 type tpccSetupType int
@@ -50,14 +52,17 @@ const (
 )
 
 type tpccOptions struct {
-	Warehouses       int
-	ExtraRunArgs     string
-	ExtraSetupArgs   string
-	Chaos            func() Chaos                // for late binding of stopper
-	During           func(context.Context) error // for running a function during the test
-	Duration         time.Duration               // if zero, TPCC is not invoked
-	SetupType        tpccSetupType
+	Warehouses     int
+	ExtraRunArgs   string
+	ExtraSetupArgs string
+	Chaos          func() Chaos                // for late binding of stopper
+	During         func(context.Context) error // for running a function during the test
+	Duration       time.Duration               // if zero, TPCC is not invoked
+	SetupType      tpccSetupType
+	// PrometheusConfig, if set, overwrites the default prometheus config settings.
 	PrometheusConfig *prometheus.Config
+	// DisablePrometheus will force prometheus to not start up.
+	DisablePrometheus bool
 	// WorkloadInstances contains a list of instances for
 	// workloads to run against.
 	// If unset, it will run one workload which talks to
@@ -76,6 +81,11 @@ type tpccOptions struct {
 	// also be doing a rolling-restart into the new binary while the cluster
 	// is running, but that feels like jamming too much into the tpcc setup.
 	Start func(context.Context, test.Test, cluster.Cluster)
+	// EnableCircuitBreakers causes the kv.replica_circuit_breaker.slow_replication_threshold
+	// setting to be populated, which enables per-Replica circuit breakers.
+	//
+	// TODO(tbg): remove this once https://github.com/cockroachdb/cockroach/issues/74705 is completed.
+	EnableCircuitBreakers bool
 }
 
 type workloadInstance struct {
@@ -114,7 +124,6 @@ func setupTPCC(
 	ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptions,
 ) (crdbNodes, workloadNode option.NodeListOption) {
 	// Randomize starting with encryption-at-rest enabled.
-	c.EncryptAtRandom(true)
 	crdbNodes = c.Range(1, c.Spec().NodeCount-1)
 	workloadNode = c.Node(c.Spec().NodeCount)
 	if c.IsLocal() {
@@ -129,15 +138,20 @@ func setupTPCC(
 			// We still use bare workload, though we could likely replace
 			// those with ./cockroach workload as well.
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-			c.Start(ctx, crdbNodes)
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 		}
 	}
 
 	func() {
 		opts.Start(ctx, t, c)
-		db := c.Conn(ctx, 1)
+		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
-		WaitFor3XReplication(t, c.Conn(ctx, crdbNodes[0]))
+		if opts.EnableCircuitBreakers {
+			_, err := db.Exec(`SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '15s'`)
+			require.NoError(t, err)
+		}
+		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), crdbNodes[0]))
+		require.NoError(t, err)
 		switch opts.SetupType {
 		case usingExistingData:
 			// Do nothing.
@@ -180,56 +194,22 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 
 	var ep *tpccChaosEventProcessor
-	if cfg := opts.PrometheusConfig; cfg != nil {
-		if c.IsLocal() {
+	promCfg, cleanupFunc := setupPrometheus(ctx, t, c, opts, workloadInstances)
+	defer cleanupFunc()
+	if opts.ChaosEventsProcessor != nil {
+		if promCfg == nil {
 			t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
 			return
 		}
-		p, err := prometheus.Init(
-			ctx,
-			*cfg,
-			c,
-			func(ctx context.Context, nodes option.NodeListOption, operation string, args ...string) error {
-				return repeatRunE(
-					ctx,
-					t,
-					c,
-					nodes,
-					operation,
-					args...,
-				)
-			},
+		cep, err := opts.ChaosEventsProcessor(
+			promCfg.PrometheusNode,
+			workloadInstances,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		defer func() {
-			// Use a context that will not time out to avoid the issue where
-			// ctx gets canceled if t.Fatal gets called.
-			snapshotCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
-			if err := p.Snapshot(
-				snapshotCtx,
-				c,
-				t.L(),
-				filepath.Join(t.ArtifactsDir(), "prometheus-snapshot.tar.gz"),
-			); err != nil {
-				t.L().Printf("failed to get prometheus snapshot: %v", err)
-			}
-		}()
-
-		if opts.ChaosEventsProcessor != nil {
-			cep, err := opts.ChaosEventsProcessor(
-				cfg.PrometheusNode,
-				workloadInstances,
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			cep.listen(ctx, t.L())
-			ep = &cep
-		}
+		cep.listen(ctx, t.L())
+		ep = &cep
 	}
 
 	rampDuration := 5 * time.Minute
@@ -341,18 +321,20 @@ func registerTPCC(r registry.Registry) {
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
 		// running with the max supported warehouses.
-		Name:    "tpcc/headroom/" + headroomSpec.String(),
-		Owner:   registry.OwnerKV,
-		Tags:    []string{`default`, `release_qualification`},
-		Cluster: headroomSpec,
+		Name:            "tpcc/headroom/" + headroomSpec.String(),
+		Owner:           registry.OwnerKV,
+		Tags:            []string{`default`, `release_qualification`},
+		Cluster:         headroomSpec,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: headroomWarehouses,
-				Duration:   120 * time.Minute,
-				SetupType:  usingImport,
+				Warehouses:            headroomWarehouses,
+				Duration:              120 * time.Minute,
+				SetupType:             usingImport,
+				EnableCircuitBreakers: true,
 			})
 		},
 	})
@@ -367,8 +349,9 @@ func registerTPCC(r registry.Registry) {
 		Owner: registry.OwnerKV,
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.
-		Tags:    []string{`default`},
-		Cluster: mixedHeadroomSpec,
+		Tags:            []string{`default`},
+		Cluster:         mixedHeadroomSpec,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			crdbNodes := c.Range(1, 4)
 			workloadNode := c.Node(5)
@@ -445,9 +428,10 @@ func registerTPCC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    "tpcc-nowait/nodes=3/w=1",
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
+		Name:            "tpcc-nowait/nodes=3/w=1",
+		Owner:           registry.OwnerKV,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   1,
@@ -464,7 +448,8 @@ func registerTPCC(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
 		// Give the test a generous extra 10 hours to load the dataset and
 		// slowly ramp up the load.
-		Timeout: 4*24*time.Hour + 10*time.Hour,
+		Timeout:         4*24*time.Hour + 10*time.Hour,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			warehouses := 1000
 			runTPCC(ctx, t, c, tpccOptions{
@@ -581,7 +566,8 @@ func registerTPCC(r registry.Registry) {
 				Name:  tc.name,
 				Owner: registry.OwnerMultiRegion,
 				// Add an extra node which serves as the workload nodes.
-				Cluster: r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
+				Cluster:         r.MakeClusterSpec(len(regions)*nodesPerRegion+1, spec.Geo(), spec.Zones(strings.Join(zs, ","))),
+				EncryptAtRandom: true,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					t.Status(tc.desc)
 					duration := 90 * time.Minute
@@ -591,15 +577,6 @@ func registerTPCC(r registry.Registry) {
 						strings.Join(regions, ","),
 						len(regions),
 					)
-					workloadNode := c.Node(c.Spec().NodeCount)
-					workloadScrapeNodes := make([]prometheus.ScrapeNode, len(tc.workloadInstances))
-					for i, workloadInstance := range tc.workloadInstances {
-						workloadScrapeNodes[i] = prometheus.ScrapeNode{
-							Nodes: workloadNode,
-							Port:  workloadInstance.prometheusPort,
-						}
-					}
-
 					iter := 0
 					chaosEventCh := make(chan ChaosEvent)
 					runTPCC(ctx, t, c, tpccOptions{
@@ -627,7 +604,7 @@ func registerTPCC(r registry.Registry) {
 							prometheusNode option.NodeListOption,
 							workloadInstances []workloadInstance,
 						) (tpccChaosEventProcessor, error) {
-							prometheusNodeIP, err := c.ExternalIP(ctx, prometheusNode)
+							prometheusNodeIP, err := c.ExternalIP(ctx, t.L(), prometheusNode)
 							if err != nil {
 								return tpccChaosEventProcessor{}, err
 							}
@@ -657,23 +634,13 @@ func registerTPCC(r registry.Registry) {
 								// * ERROR: inbox communication error: rpc error: code = Canceled
 								//   desc = context canceled (SQLSTATE 58C01)
 								// Setting this allows some errors to occur.
-								maxErrorsDuringUptime: warehousesPerRegion * 5,
+								maxErrorsDuringUptime: warehousesPerRegion * tpcc.NumWorkersPerWarehouse,
 								// "delivery" does not trigger often.
 								allowZeroSuccessDuringUptime: true,
 							}, nil
 						},
 						SetupType:         usingInit,
 						WorkloadInstances: tc.workloadInstances,
-						PrometheusConfig: &prometheus.Config{
-							PrometheusNode: workloadNode,
-							ScrapeConfigs: []prometheus.ScrapeConfig{
-								prometheus.MakeInsecureCockroachScrapeConfig(
-									"cockroach",
-									c.Range(1, c.Spec().NodeCount-1),
-								),
-								prometheus.MakeWorkloadScrapeConfig("workload", workloadScrapeNodes),
-							},
-						},
 					})
 				},
 			})
@@ -681,9 +648,10 @@ func registerTPCC(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "tpcc/w=100/nodes=3/chaos=true",
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(4),
+		Name:            "tpcc/w=100/nodes=3/chaos=true",
+		Owner:           registry.OwnerKV,
+		Cluster:         r.MakeClusterSpec(4),
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
@@ -708,10 +676,11 @@ func registerTPCC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:    "tpcc/interleaved/nodes=3/cpu=16/w=500",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(4, spec.CPU(16)),
-		Timeout: 6 * time.Hour,
+		Name:            "tpcc/interleaved/nodes=3/cpu=16/w=500",
+		Owner:           registry.OwnerSQLQueries,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Timeout:         6 * time.Hour,
+		EncryptAtRandom: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			skip.WithIssue(t, 53886)
 			runTPCC(ctx, t, c, tpccOptions{
@@ -739,8 +708,16 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehouses: gceOrAws(cloud, 2500, 3000),
-		EstimatedMax:   gceOrAws(cloud, 2100, 2500),
+		LoadWarehouses: gceOrAws(cloud, 3000, 3500),
+		EstimatedMax:   gceOrAws(cloud, 2400, 3000),
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes:                    3,
+		CPUs:                     16,
+		AdmissionControlDisabled: true,
+
+		LoadWarehouses: gceOrAws(cloud, 3000, 3500),
+		EstimatedMax:   gceOrAws(cloud, 2400, 3000),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
@@ -843,11 +820,12 @@ func (l tpccBenchLoadConfig) numLoadNodes(d tpccBenchDistribution) int {
 }
 
 type tpccBenchSpec struct {
-	Nodes        int
-	CPUs         int
-	Chaos        bool
-	Distribution tpccBenchDistribution
-	LoadConfig   tpccBenchLoadConfig
+	Nodes                    int
+	CPUs                     int
+	Chaos                    bool
+	AdmissionControlDisabled bool
+	Distribution             tpccBenchDistribution
+	LoadConfig               tpccBenchLoadConfig
 
 	// The number of warehouses to load into the cluster before beginning
 	// benchmarking. Should be larger than EstimatedMax and should be a
@@ -881,12 +859,16 @@ func (s tpccBenchSpec) partitions() int {
 }
 
 // startOpts returns any extra start options that the spec requires.
-func (s tpccBenchSpec) startOpts() []option.Option {
-	opts := []option.Option{option.StartArgsDontEncrypt}
+func (s tpccBenchSpec) startOpts() (option.StartOpts, install.ClusterSettings) {
+	startOpts := option.DefaultStartOpts()
+	settings := install.MakeClusterSettings()
+	// Facilitate diagnosing out-of-memory conditions in tpccbench runs.
+	// See https://github.com/cockroachdb/cockroach/issues/75071.
+	settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=15s")
 	if s.LoadConfig == singlePartitionedLoadgen {
-		opts = append(opts, option.Racks(s.partitions()))
+		settings.NumRacks = s.partitions()
 	}
-	return opts
+	return startOpts, settings
 }
 
 func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
@@ -897,6 +879,9 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	}
 	if b.Chaos {
 		nameParts = append(nameParts, "chaos")
+	}
+	if b.AdmissionControlDisabled {
+		nameParts = append(nameParts, "no-admission")
 	}
 
 	opts := []spec.Option{spec.CPU(b.CPUs)}
@@ -939,6 +924,9 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		Owner:   registry.OwnerKV,
 		Cluster: nodes,
 		Tags:    b.Tags,
+		// NB: intentionally not enabling encryption-at-rest to produce
+		// consistent results.
+		EncryptAtRandom: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
@@ -955,7 +943,7 @@ func loadTPCCBench(
 	b tpccBenchSpec,
 	roachNodes, loadNode option.NodeListOption,
 ) error {
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
 	// Check if the dataset already exists and is already large enough to
@@ -977,7 +965,8 @@ func loadTPCCBench(
 		// If the dataset exists but is not large enough, wipe the cluster
 		// before restoring.
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, append(b.startOpts(), roachNodes)...)
+		startOpts, settings := b.startOpts()
+		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
 		pgcode.MakeCode(string(pqErr.Code)) == pgcode.InvalidCatalogName) {
 		return err
@@ -1002,9 +991,10 @@ func loadTPCCBench(
 
 	// Load the corresponding fixture.
 	t.L().Printf("restoring tpcc fixture\n")
-	WaitFor3XReplication(t, db)
+	err := WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 	cmd := tpccImportCmd(b.LoadWarehouses, loadArgs)
-	if err := c.RunE(ctx, roachNodes[:1], cmd); err != nil {
+	if err = c.RunE(ctx, roachNodes[:1], cmd); err != nil {
 		return err
 	}
 	if rebalanceWait == 0 || len(roachNodes) <= 3 {
@@ -1012,7 +1002,7 @@ func loadTPCCBench(
 	}
 
 	t.L().Printf("waiting %v for rebalancing\n", rebalanceWait)
-	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='128MiB'`)
+	_, err = db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='128MiB'`)
 	if err != nil {
 		return err
 	}
@@ -1029,8 +1019,8 @@ func loadTPCCBench(
 	cmd = fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
 		"--wait=false --ramp=%s --duration=%s --scatter --tolerate-errors {pgurl%s}",
 		b.LoadWarehouses, b.LoadWarehouses, maxRate, rampTime, loadTime, roachNodes)
-	if out, err := c.RunWithBuffer(ctx, t.L(), loadNode, cmd); err != nil {
-		return errors.Wrapf(err, "failed with output %q", string(out))
+	if _, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode, cmd); err != nil {
+		return err
 	}
 
 	_, err = db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2MiB'`)
@@ -1069,10 +1059,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	// as well.
 	c.Put(ctx, t.Cockroach(), "./cockroach", loadNodes)
 	// Don't encrypt in tpccbench tests.
-	c.EncryptDefault(false)
-	c.EncryptAtRandom(false)
-	c.Start(ctx, append(b.startOpts(), roachNodes)...)
-
+	startOpts, settings := b.startOpts()
+	c.Start(ctx, t.L(), startOpts, settings, roachNodes)
+	SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	useHAProxy := b.Chaos
 	const restartWait = 15 * time.Second
 	{
@@ -1084,7 +1073,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				t.Fatal("distributed chaos benchmarking not supported")
 			}
 			t.Status("installing haproxy")
-			if err := c.Install(ctx, loadNodes, "haproxy"); err != nil {
+			if err := c.Install(ctx, t.L(), loadNodes, "haproxy"); err != nil {
 				t.Fatal(err)
 			}
 			c.Run(ctx, loadNodes, "./cockroach gen haproxy --insecure --url {pgurl:1}")
@@ -1127,7 +1116,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		// passing warehouse count, making the line search sensitive to the choice
 		// of starting warehouses. Do a best-effort at waiting for the cloud VM(s)
 		// to recover without failing the line search.
-		if err := c.Reset(ctx); err != nil {
+		if err := c.Reset(ctx, t.L()); err != nil {
 			// Reset() can flake sometimes, see for example:
 			// https://github.com/cockroachdb/cockroach/issues/61981#issuecomment-826838740
 			t.L().Printf("failed to reset VMs, proceeding anyway: %s", err)
@@ -1139,7 +1128,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				t.Fatal(err)
 			}
 			shortCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-			if err := c.StopE(shortCtx, roachNodes); err != nil {
+			if err := c.StopE(shortCtx, t.L(), option.DefaultStopOpts(), roachNodes); err != nil {
 				cancel()
 				t.L().Printf("unable to stop cluster; retrying to allow vm to recover: %s", err)
 				// We usually spend a long time blocking in StopE anyway, but just in case
@@ -1160,7 +1149,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			t.Fatalf("VM is hosed; giving up")
 		}
 
-		c.Start(ctx, append(b.startOpts(), roachNodes)...)
+		startOpts, settings := b.startOpts()
+		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
+		SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	}
 
 	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
@@ -1435,5 +1426,97 @@ func registerTPCCBench(r registry.Registry) {
 
 	for _, b := range specs {
 		registerTPCCBenchSpec(r, b)
+	}
+}
+
+// makeWorkloadScrapeNodes creates a ScrapeNode for every workloadInstance.
+func makeWorkloadScrapeNodes(
+	workloadNode option.NodeListOption, workloadInstances []workloadInstance,
+) []prometheus.ScrapeNode {
+	workloadScrapeNodes := make([]prometheus.ScrapeNode, len(workloadInstances))
+	for i, workloadInstance := range workloadInstances {
+		workloadScrapeNodes[i] = prometheus.ScrapeNode{
+			Nodes: workloadNode,
+			Port:  workloadInstance.prometheusPort,
+		}
+	}
+	return workloadScrapeNodes
+}
+
+// setupPrometheus initializes prometheus to run against the provided
+// PrometheusConfig. If no PrometheusConfig is provided, it creates a prometheus
+// scraper for all CockroachDB nodes in the TPC-C setup, as well as one for
+// each workloadInstance.
+// Returns the created PrometheusConfig if prometheus is initialized, as well
+// as a cleanup function which should be called in a defer statement.
+func setupPrometheus(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	opts tpccOptions,
+	workloadInstances []workloadInstance,
+) (*prometheus.Config, func()) {
+	cfg := opts.PrometheusConfig
+	if cfg == nil {
+		// Avoid setting prometheus automatically up for local clusters.
+		if c.IsLocal() {
+			return nil, func() {}
+		}
+		if opts.DisablePrometheus {
+			return nil, func() {}
+		}
+		workloadNode := c.Node(c.Spec().NodeCount)
+		cfg = &prometheus.Config{
+			PrometheusNode: workloadNode,
+			// Scrape each CockroachDB node and the workload node.
+			ScrapeConfigs: []prometheus.ScrapeConfig{
+				prometheus.MakeInsecureCockroachScrapeConfig(
+					"cockroach",
+					c.Range(1, c.Spec().NodeCount-1),
+				),
+				prometheus.MakeWorkloadScrapeConfig("workload", makeWorkloadScrapeNodes(workloadNode, workloadInstances)),
+			},
+		}
+	}
+	if opts.DisablePrometheus {
+		t.Fatal("test has PrometheusConfig but DisablePrometheus was on")
+	}
+	if c.IsLocal() {
+		t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
+		return nil, func() {}
+	}
+	p, err := prometheus.Init(
+		ctx,
+		*cfg,
+		c,
+		t.L(),
+		func(ctx context.Context, nodes option.NodeListOption, operation string, args ...string) error {
+			return repeatRunE(
+				ctx,
+				t,
+				c,
+				nodes,
+				operation,
+				args...,
+			)
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return cfg, func() {
+		// Use a context that will not time out to avoid the issue where
+		// ctx gets canceled if t.Fatal gets called.
+		snapshotCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := p.Snapshot(
+			snapshotCtx,
+			c,
+			t.L(),
+			t.ArtifactsDir(),
+		); err != nil {
+			t.L().Printf("failed to get prometheus snapshot: %v", err)
+		}
 	}
 }

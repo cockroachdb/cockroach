@@ -84,7 +84,6 @@ type Smither struct {
 	disableWindowFuncs bool
 	simpleDatums       bool
 	avoidConsts        bool
-	vectorizable       bool
 	outputSort         bool
 	postgres           bool
 	ignoreFNs          []*regexp.Regexp
@@ -272,6 +271,11 @@ var OnlyNoDropDDLs = simpleOption("only DDLs", func(s *Smither) {
 	)
 })
 
+// MultiRegionDDLs causes the Smither to enable multiregion features.
+var MultiRegionDDLs = simpleOption("include multiregion DDLs", func(s *Smither) {
+	s.alterWeights = append(s.alterWeights, alterMultiregion...)
+})
+
 // DisableWith causes the Smither to not emit WITH clauses.
 var DisableWith = simpleOption("disable WITH", func(s *Smither) {
 	s.disableWith = true
@@ -328,23 +332,6 @@ var AvoidConsts = simpleOption("avoid consts", func(s *Smither) {
 var DisableWindowFuncs = simpleOption("disable window funcs", func(s *Smither) {
 	s.disableWindowFuncs = true
 })
-
-// Vectorizable causes the Smither to limit query generation to queries
-// supported by vectorized execution.
-var Vectorizable = multiOption(
-	"Vectorizable",
-	DisableMutations(),
-	DisableWith(),
-	DisableWindowFuncs(),
-	AvoidConsts(),
-	// This must be last so it can make the final changes to table
-	// exprs and statements.
-	simpleOption("vectorizable", func(s *Smither) {
-		s.vectorizable = true
-		s.stmtWeights = nonMutatingStatements
-		s.tableExprWeights = vectorizableTableExprs
-	})(),
-)
 
 // OutputSort adds a top-level ORDER BY on all columns.
 var OutputSort = simpleOption("output sort", func(s *Smither) {

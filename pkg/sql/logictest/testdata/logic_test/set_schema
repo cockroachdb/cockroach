@@ -386,9 +386,6 @@ ALTER TYPE s1.typ3 SET SCHEMA s2
 statement ok
 SELECT 'hello'::s2.typ3
 
-statement error pq: type "s1.typ3" does not exist
-SELECT 'hello'::s1.typ3
-
 statement ok
 ROLLBACK
 

@@ -1,0 +1,92 @@
+# Test semantics of batched updates (multiple sets or deletes applied on a snapshot).
+
+# Test that dryruns don't actually mutate anything.
+apply dryrun
+set [b,d):A
+set [f,h):B
+----
+added [b,d):A
+added [f,h):B
+
+get key=b
+----
+conf=FALLBACK
+
+get key=g
+----
+conf=FALLBACK
+
+
+# Add span configs for real.
+apply
+set [b,d):A
+set [f,h):B
+----
+added [b,d):A
+added [f,h):B
+
+get key=a
+----
+conf=FALLBACK
+
+get key=b
+----
+conf=A
+
+get key=g
+----
+conf=B
+
+
+# Check that no-ops shows up as much.
+apply
+set [b,d):A
+set [f,h):B
+----
+
+
+# Check that a delete dryrun does nothing, though emitting the right operations.
+apply dryrun
+delete [f,h)
+delete [c,d)
+----
+deleted [b,d)
+deleted [f,h)
+added [b,c):A
+
+get key=f
+----
+conf=B
+
+
+# Delete a span for real.
+apply
+delete [f,h)
+delete [c,d)
+----
+deleted [b,d)
+deleted [f,h)
+added [b,c):A
+
+# Check for no-ops again.
+apply
+delete [f,g)
+delete [c,d)
+----
+
+# Check that keys are as we'd expect (including the deleted one).
+get key=b
+----
+conf=A
+
+get key=c
+----
+conf=FALLBACK
+
+get key=f
+----
+conf=FALLBACK
+
+get key=g
+----
+conf=FALLBACK

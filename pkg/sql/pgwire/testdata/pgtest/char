@@ -13,7 +13,7 @@ ReadyForQuery
 # Start of test.
 
 send
-Query {"String": "CREATE TABLE a (a INT PRIMARY KEY)"}
+Query {"String": "CREATE TABLE a (a INT4 PRIMARY KEY, b \"char\")"}
 ----
 
 until
@@ -23,7 +23,7 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Query {"String": "INSERT INTO a VALUES(1)"}
+Query {"String": "INSERT INTO a VALUES(1, 'c')"}
 ----
 
 until
@@ -44,5 +44,167 @@ ReadyForQuery
 ----
 {"Type":"RowDescription","Fields":[{"Name":"char","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":18,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"a"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Use "char" as a prepared statement parameter.
+# 'S' for Statement
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s1", "Query": "INSERT INTO a VALUES($1, $2)"}
+Describe {"ObjectType": "S", "Name": "s1"}
+Bind {"PreparedStatement": "s1", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"2"}, {"text":"d"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[23,18]}
+{"Type":"NoData"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT a, b FROM a WHERE a = 2"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":18,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Pass in a multi-char string for the "char" parameter.
+# ParameterFormatCodes = [0] for text format
+send
+Bind {"PreparedStatement": "s1", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"3"}, {"text":"eee"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT a, b FROM a WHERE a = 3"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":18,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"3"},{"text":"e"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Use the binary format for the "char" parameter.
+# ParameterFormatCodes = [1] for binary format
+send
+Bind {"PreparedStatement": "s1", "ParameterFormatCodes": [1,1], "ResultFormatCodes": [0], "Parameters":[{"binary":"00000004"}, {"binary":"46"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT a, b FROM a WHERE a = 4"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":18,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"4"},{"text":"F"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Pass in an empty string for the "char" parameter
+# ParameterFormatCodes = [0] for text format
+send
+Bind {"PreparedStatement": "s1", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters":[{"text":"5"}, {"text":""}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT a, b FROM a WHERE a = 5"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":18,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"5"},null]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Pass in a null byte.
+# ParameterFormatCodes = [1] for binary format
+send
+Bind {"PreparedStatement": "s1", "ParameterFormatCodes": [1,1], "ResultFormatCodes": [0], "Parameters":[{"binary":"00000006"}, {"binary":"00"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT a, b FROM a WHERE a = 6"}
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":18,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"6"},null]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Check handling of null byte when casting.
+# "ResultFormatCodes": [1] = binary
+send
+Parse {"Name": "s2", "Query": "SELECT 0::\"char\""}
+Describe {"ObjectType": "S", "Name": "s2"}
+Bind {"PreparedStatement": "s2", "ParameterFormatCodes": [0], "ResultFormatCodes": [1]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":null}
+{"Type":"RowDescription","Fields":[{"Name":"char","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":18,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"00"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

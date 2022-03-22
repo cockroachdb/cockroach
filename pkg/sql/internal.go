@@ -61,10 +61,10 @@ type InternalExecutor struct {
 	// InternalExecutor will contribute to.
 	memMetrics MemoryMetrics
 
-	// sessionData, if not nil, represents the session variables used by
+	// sessionDataStack, if not nil, represents the session variable stack used by
 	// statements executed on this internalExecutor. Note that queries executed
-	// by the executor will run on copies of this data.
-	sessionData *sessiondata.SessionData
+	// by the executor will run on copies of the top element of this data.
+	sessionDataStack *sessiondata.Stack
 
 	// syntheticDescriptors stores the synthetic descriptors to be injected into
 	// each query/statement's descs.Collection upon initialization.
@@ -116,12 +116,13 @@ func MakeInternalExecutor(
 }
 
 // SetSessionData binds the session variables that will be used by queries
-// performed through this executor from now on.
+// performed through this executor from now on. This creates a new session stack.
+// It is recommended to use SetSessionDataStack.
 //
 // SetSessionData cannot be called concurrently with query execution.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
 	ie.s.populateMinimalSessionData(sessionData)
-	ie.sessionData = sessionData
+	ie.sessionDataStack = sessiondata.NewStack(sessionData)
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -167,25 +168,25 @@ func (ie *InternalExecutor) initConnEx(
 		// If this is already an "internal app", don't put more prefix.
 		appStatsBucketName = sd.ApplicationName
 	}
-	statsWriter := ie.s.sqlStats.GetWriterForApplication(appStatsBucketName)
+	applicationStats := ie.s.sqlStats.GetApplicationStats(appStatsBucketName)
 
+	sds := sessiondata.NewStack(sd)
+	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
 	var ex *connExecutor
 	if txn == nil {
 		ex = ie.s.newConnExecutor(
 			ctx,
-			sd,
-			nil, /* sdDefaults */
+			sdMutIterator,
 			stmtBuf,
 			clientComm,
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
-			statsWriter,
+			applicationStats,
 		)
 	} else {
 		ex = ie.s.newConnExecutorWithTxn(
 			ctx,
-			sd,
-			nil, /* sdDefaults */
+			sdMutIterator,
 			stmtBuf,
 			clientComm,
 			ie.mon,
@@ -193,7 +194,7 @@ func (ie *InternalExecutor) initConnEx(
 			&ie.s.InternalMetrics,
 			txn,
 			ie.syntheticDescriptors,
-			statsWriter,
+			applicationStats,
 		)
 	}
 
@@ -257,6 +258,7 @@ type rowsIterator struct {
 }
 
 var _ sqlutil.InternalRows = &rowsIterator{}
+var _ tree.InternalRows = &rowsIterator{}
 
 func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 	// Due to recursive calls to Next() below, this deferred function might get
@@ -584,22 +586,26 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.DatabaseIDToTempSchemaID != nil {
 		sd.DatabaseIDToTempSchemaID = o.DatabaseIDToTempSchemaID
 	}
+	if o.QualityOfService != nil {
+		sd.DefaultTxnQualityOfService = o.QualityOfService.ValidateInternal()
+	}
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(
 	opName string,
 ) sessiondata.InternalExecutorOverride {
-	if ie.sessionData == nil {
+	if ie.sessionDataStack == nil {
 		return sessiondata.InternalExecutorOverride{
 			User:            security.RootUserName(),
 			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
 		}
 	}
 	o := sessiondata.InternalExecutorOverride{}
-	if ie.sessionData.User().Undefined() {
+	sd := ie.sessionDataStack.Top()
+	if sd.User().Undefined() {
 		o.User = security.RootUserName()
 	}
-	if ie.sessionData.ApplicationName == "" {
+	if sd.ApplicationName == "" {
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 	return o
@@ -629,14 +635,14 @@ func (ie *InternalExecutor) execInternal(
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	var sd *sessiondata.SessionData
-	if ie.sessionData != nil {
+	if ie.sessionDataStack != nil {
 		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
-		sdCopy := *ie.sessionData
-		sd = &sdCopy
+		sd = ie.sessionDataStack.Top().Clone()
 	} else {
 		sd = ie.s.newSessionData(SessionArgs{})
 	}
 	applyOverrides(sessionDataOverride, sd)
+	sd.Internal = true
 	if sd.User().Undefined() {
 		return nil, errors.AssertionFailedf("no user specified for internal query")
 	}
@@ -659,15 +665,15 @@ func (ie *InternalExecutor) execInternal(
 		//
 		// TODO(knz): track the callers and check whether opName could be turned
 		// into a type safe for reporting.
-		if retErr != nil {
-			if !errIsRetriable(retErr) {
+		if retErr != nil || r == nil {
+			// Both retErr and r can be nil in case of panic.
+			if retErr != nil && !errIsRetriable(retErr) {
 				retErr = errors.Wrapf(retErr, "%s", opName)
 			}
 			stmtBuf.Close()
 			wg.Wait()
 			sp.Finish()
 		} else {
-			// r must be non-nil here.
 			r.errCallback = func(err error) error {
 				if err != nil && !errIsRetriable(err) {
 					err = errors.Wrapf(err, "%s", opName)

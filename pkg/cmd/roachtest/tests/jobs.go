@@ -16,23 +16,30 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
-type jobStarter func(c cluster.Cluster) (string, error)
+type jobStarter func(c cluster.Cluster, t test.Test) (string, error)
 
 // jobSurvivesNodeShutdown is a helper that tests that a given job,
 // running on the specified gatewayNode will still complete successfully
 // if nodeToShutdown is shutdown partway through execution.
+//
 // This helper assumes:
-// - That the job is long running and will take a least a minute to complete.
+// - That the job is will take at least 2 seconds to complete.
 // - That the necessary setup is done (e.g. any data that the job relies on is
 // already loaded) so that `query` can be run on its own to kick off the job.
 // - That the statement running the job is a detached statement, and does not
 // block until the job completes.
+//
+// The helper waits for 3x replication on existing ranges before
+// running the provided jobStarter.
 func jobSurvivesNodeShutdown(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodeToShutdown int, startJob jobStarter,
 ) {
@@ -46,9 +53,20 @@ func jobSurvivesNodeShutdown(
 	m := c.NewMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
 		defer close(jobIDCh)
-		t.Status(`running job`)
+
+		watcherDB := c.Conn(ctx, t.L(), watcherNode)
+		defer watcherDB.Close()
+
+		// Wait for 3x replication to ensure that the cluster
+		// is in a healthy state before we start bringing any
+		// nodes down.
+		t.Status("waiting for cluster to be 3x replicated")
+		err := WaitFor3XReplication(ctx, t, watcherDB)
+		require.NoError(t, err)
+
+		t.Status("running job")
 		var jobID string
-		jobID, err := startJob(c)
+		jobID, err = startJob(c, t)
 		if err != nil {
 			return errors.Wrap(err, "starting the job")
 		}
@@ -57,10 +75,6 @@ func jobSurvivesNodeShutdown(
 
 		pollInterval := 5 * time.Second
 		ticker := time.NewTicker(pollInterval)
-
-		watcherDB := c.Conn(ctx, watcherNode)
-		defer watcherDB.Close()
-
 		var status string
 		for {
 			select {
@@ -92,35 +106,43 @@ func jobSurvivesNodeShutdown(
 			return errors.New("job never created")
 		}
 
-		// Shutdown a node after a bit, and keep it shutdown for the remainder
-		// of the job.
-		timeToWait := 10 * time.Second
-		timer := timeutil.Timer{}
-		timer.Reset(timeToWait)
-		select {
-		case <-ctx.Done():
-			return errors.Wrapf(ctx.Err(), "stopping test, did not shutdown node")
-		case <-timer.C:
-			timer.Read = true
-		}
-
-		// Sanity check that the job is still running.
-		watcherDB := c.Conn(ctx, watcherNode)
+		// Check once a second to see if the job has started running.
+		watcherDB := c.Conn(ctx, t.L(), watcherNode)
 		defer watcherDB.Close()
-
-		var status string
-		err := watcherDB.QueryRowContext(ctx, `SELECT status FROM [SHOW JOBS] WHERE job_id=$1`, jobID).Scan(&status)
-		if err != nil {
-			return errors.Wrap(err, "getting the job status")
-		}
-		jobStatus := jobs.Status(status)
-		if jobStatus != jobs.StatusRunning {
-			return errors.Newf("job too fast! job got to state %s before the target node could be shutdown",
-				status)
+		timeToWait := time.Second
+		timer := timeutil.Timer{}
+		jobRunning := false
+		for {
+			var status string
+			err := watcherDB.QueryRowContext(ctx, `SELECT status FROM [SHOW JOBS] WHERE job_id=$1`, jobID).Scan(&status)
+			if err != nil {
+				return errors.Wrap(err, "getting the job status")
+			}
+			switch jobs.Status(status) {
+			case jobs.StatusPending:
+			case jobs.StatusRunning:
+				jobRunning = true
+			default:
+				return errors.Newf("job too fast! job got to state %s before the target node could be shutdown",
+					status)
+			}
+			t.L().Printf(`status %s`, status)
+			timer.Reset(timeToWait)
+			select {
+			case <-ctx.Done():
+				return errors.Wrapf(ctx.Err(), "stopping test, did not shutdown node")
+			case <-timer.C:
+				timer.Read = true
+			}
+			// Break a second after confirming the job is running to ensure the node shutdown
+			// "in the middle" of running the job, right after the job began running.
+			if jobRunning {
+				break
+			}
 		}
 
 		t.L().Printf(`stopping node %s`, target)
-		if err := c.StopE(ctx, target); err != nil {
+		if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), target); err != nil {
 			return errors.Wrapf(err, "could not stop node %s", target)
 		}
 		t.L().Printf("stopped node %s", target)
@@ -134,7 +156,7 @@ func jobSurvivesNodeShutdown(
 	// NB: the roachtest harness checks that at the end of the test, all nodes
 	// that have data also have a running process.
 	t.Status(fmt.Sprintf("restarting %s (node restart test is done)\n", target))
-	if err := c.StartE(ctx, target); err != nil {
+	if err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), target); err != nil {
 		t.Fatal(errors.Wrapf(err, "could not restart node %s", target))
 	}
 }

@@ -10,5 +10,5 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42804"}
+{"Type":"ErrorResponse","Code":"08P01"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

@@ -12,15 +12,16 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,9 +31,10 @@ func init() {
 
 func declareKeysMigrate(
 	rs ImmutableRangeState,
-	_ roachpb.Header,
+	_ *roachpb.Header,
 	_ roachpb.Request,
-	latchSpans, lockSpans *spanset.SpanSet,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	// TODO(irfansharif): This will eventually grow to capture the super set of
 	// all keys accessed by all migrations defined here. That could get
@@ -42,8 +44,6 @@ func declareKeysMigrate(
 
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeVersionKey(rs.GetRangeID())})
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(rs.GetRangeID())})
-	lockSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(rs.GetRangeID())})
 }
 
 // migrationRegistry is a global registry of all KV-level migrations. See
@@ -54,7 +54,9 @@ var migrationRegistry = make(map[roachpb.Version]migration)
 type migration func(context.Context, storage.ReadWriter, CommandArgs) (result.Result, error)
 
 func init() {
-	registerMigration(clusterversion.TruncatedAndRangeAppliedStateMigration, truncatedAndAppliedStateMigration)
+	_ = registerMigration // prevent unused warning.
+	registerMigration(
+		clusterversion.AddRaftAppliedIndexTermMigration, addRaftAppliedIndexTermMigration)
 }
 
 func registerMigration(key clusterversion.Key, migration migration) {
@@ -95,39 +97,23 @@ func Migrate(
 	return pd, nil
 }
 
-// truncatedAndRangeAppliedStateMigration lets us stop using the legacy
-// replicated truncated state and start using the new RangeAppliedState for this
-// specific range.
-func truncatedAndAppliedStateMigration(
+// addRaftAppliedIndexTermMigration migrates the system to start populating
+// the RangeAppliedState.RaftAppliedIndexTerm field.
+func addRaftAppliedIndexTermMigration(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs,
 ) (result.Result, error) {
-	var legacyTruncatedState roachpb.RaftTruncatedState
-	legacyKeyFound, err := storage.MVCCGetProto(
-		ctx, readWriter, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
-		hlc.Timestamp{}, &legacyTruncatedState, storage.MVCCGetOptions{},
-	)
-	if err != nil {
-		return result.Result{}, err
-	}
-
-	var pd result.Result
-	if legacyKeyFound {
-		// Time to migrate by deleting the legacy key. The downstream-of-Raft
-		// code will atomically rewrite the truncated state (supplied via the
-		// side effect) into the new unreplicated key.
-		if err := storage.MVCCDelete(
-			ctx, readWriter, cArgs.Stats, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
-			hlc.Timestamp{}, nil, /* txn */
-		); err != nil {
-			return result.Result{}, err
-		}
-		pd.Replicated.State = &kvserverpb.ReplicaState{
-			// We need to pass in a truncated state to enable the migration.
-			// Passing the same one is the easiest thing to do.
-			TruncatedState: &legacyTruncatedState,
-		}
-	}
-	return pd, nil
+	return result.Result{
+		Replicated: kvserverpb.ReplicatedEvalResult{
+			State: &kvserverpb.ReplicaState{
+				// Signal the migration by sending a term on the new field that we
+				// want to migrate into. This term is chosen as one that would never
+				// be used in practice (since raftInitialLogTerm is 10), so we can
+				// special-case it below raft and start writing the (real) term to the
+				// AppliedState.
+				RaftAppliedIndexTerm: stateloader.RaftLogTermSignalForAddRaftAppliedIndexTermMigration,
+			},
+		},
+	}, nil
 }
 
 // TestingRegisterMigrationInterceptor is used in tests to register an

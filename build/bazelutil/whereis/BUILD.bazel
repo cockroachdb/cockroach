@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "whereis_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/build/bazelutil/whereis",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "whereis",
+    embed = [":whereis_lib"],
+    visibility = ["//visibility:public"],
+)

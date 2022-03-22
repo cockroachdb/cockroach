@@ -1,0 +1,16 @@
+@import "src/core/index.module";
+
+.diagnostic-status-badge {
+  &__content {
+    width: fit-content;
+  }
+}
+
+.tooltip--title a {
+    color: $colors--neutral-0;
+    text-decoration: underline;
+    &:hover {
+      opacity: 0.7;
+      color: $colors--neutral-0;
+    }
+}

@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
-	"github.com/nlopes/slack"
+	"github.com/slack-go/slack"
 )
 
 var slackToken = flag.String("slack-token", "", "Slack bot token")
@@ -56,9 +56,11 @@ func makeSlackClient() *slack.Client {
 	return slack.New(*slackToken)
 }
 
-func findChannel(client *slack.Client, name string) (string, error) {
+func findChannel(client *slack.Client, name string, nextCursor string) (string, error) {
 	if client != nil {
-		channels, err := client.GetChannels(true)
+		channels, cursor, err := client.GetConversationsForUser(
+			&slack.GetConversationsForUserParameters{Cursor: nextCursor},
+		)
 		if err != nil {
 			return "", err
 		}
@@ -66,6 +68,9 @@ func findChannel(client *slack.Client, name string) (string, error) {
 			if channel.Name == name {
 				return channel.ID, nil
 			}
+		}
+		if cursor != "" {
+			return findChannel(client, name, cursor)
 		}
 	}
 	return "", fmt.Errorf("not found")
@@ -78,14 +83,10 @@ func postReport(skipped []skippedTest) {
 		return
 	}
 
-	channel, _ := findChannel(client, *slackChannel)
+	channel, _ := findChannel(client, *slackChannel, "")
 	if channel == "" {
 		fmt.Printf("unable to find slack channel: %q\n", *slackChannel)
 		return
-	}
-
-	params := slack.PostMessageParameters{
-		Username: "Craig Cockroach",
 	}
 
 	status := "good"
@@ -99,7 +100,8 @@ func postReport(skipped []skippedTest) {
 	message := fmt.Sprintf("%d skipped tests", len(skipped))
 	fmt.Println(message)
 
-	params.Attachments = append(params.Attachments,
+	var attachments []slack.Attachment
+	attachments = append(attachments,
 		slack.Attachment{
 			Color:    status,
 			Title:    message,
@@ -122,13 +124,17 @@ func postReport(skipped []skippedTest) {
 	}
 	fmt.Print(buf.String())
 
-	params.Attachments = append(params.Attachments,
+	attachments = append(attachments,
 		slack.Attachment{
 			Color: status,
 			Text:  fmt.Sprintf("```\n%s```\n", buf.String()),
 		})
 
-	if _, _, err := client.PostMessage(channel, "", params); err != nil {
+	if _, _, err := client.PostMessage(
+		channel,
+		slack.MsgOptionUsername("Craig Cockroach"),
+		slack.MsgOptionAttachments(attachments...),
+	); err != nil {
 		fmt.Printf("unable to post slack report: %v\n", err)
 		return
 	}

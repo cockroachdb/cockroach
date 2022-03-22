@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build bazel
 // +build bazel
 
 package bazel
@@ -45,6 +46,12 @@ func RunfilesPath() (string, error) {
 // TestTmpDir is a convenience wrapper around the rules_go variant.
 func TestTmpDir() string {
 	return inner.TestTmpDir()
+}
+
+// NewTmpDir is a convenience wrapper around the rules_go variant.
+// The caller is responsible for cleaning the directory up after use.
+func NewTmpDir(prefix string) (string, error) {
+	return inner.NewTmpDir(prefix)
 }
 
 // Updates the current environment to use the Go toolchain that Bazel built this

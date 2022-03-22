@@ -13,7 +13,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -62,7 +62,7 @@ func IsRetryableError(err error) bool {
 		return true
 	}
 
-	return utilccl.IsDistSQLRetryableError(err)
+	return joberror.IsDistSQLRetryableError(err)
 }
 
 // MaybeStripRetryableErrorMarker performs some minimal attempt to clean the

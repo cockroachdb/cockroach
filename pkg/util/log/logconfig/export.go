@@ -55,7 +55,6 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 			processing = append(processing, fmt.Sprintf("card %s as \"strip\"", pkey))
 			links = append(links, fmt.Sprintf("%s %s %s", pkey, arrow, target))
 			target = pkey
-			arrow = defaultArrow
 		}
 		// Introduce a "redact" box if the redat flag is set.
 		if *cc.Redact {
@@ -64,7 +63,6 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 			processing = append(processing, fmt.Sprintf("card %s as \"redact\"", pkey))
 			links = append(links, fmt.Sprintf("%s --> %s", pkey, target))
 			target = pkey
-			arrow = defaultArrow
 		}
 		// Introduce the format box.
 		{
@@ -73,16 +71,17 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 			processing = append(processing, fmt.Sprintf("card %s as \"format:%s\"", pkey, *cc.Format))
 			links = append(links, fmt.Sprintf("%s --> %s", pkey, target))
 			target = pkey
-			arrow = defaultArrow
 		}
-		// Introduce a "filter" box if the filter severity is different from INFO.
-		if cc.Filter != logpb.Severity_INFO {
+		return target, processing, links
+	}
+
+	addFilter := func(target string, processing, links []string, filter logpb.Severity) (string, []string, []string) {
+		if filter != logpb.Severity_INFO {
 			pkey := fmt.Sprintf("p__%d", pNum)
 			pNum++
-			processing = append(processing, fmt.Sprintf("card %s as \"filter:%s\"", pkey, cc.Filter.String()[:1]))
+			processing = append(processing, fmt.Sprintf("card %s as \"filter:%s\"", pkey, filter.String()[:1]))
 			links = append(links, fmt.Sprintf("%s --> %s", pkey, target))
 			target = pkey
-			arrow = defaultArrow
 		}
 		return target, processing, links
 	}
@@ -128,11 +127,14 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 
 		target, thisprocs, thislinks := process(target, fc.CommonSinkConfig)
 		hasLink := false
-		for _, ch := range fc.Channels.Channels {
+		origTarget := target
+		for _, ch := range fc.Channels.AllChannels.Channels {
 			if !chanSel.HasChannel(ch) {
 				continue
 			}
 			hasLink = true
+			sev := fc.Channels.ChannelFilters[ch]
+			target, thisprocs, thislinks = addFilter(origTarget, thisprocs, thislinks, sev)
 			links = append(links, fmt.Sprintf("%s --> %s", ch, target))
 		}
 
@@ -185,12 +187,18 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 		}
 		skey := fmt.Sprintf("s__%s", fn)
 		target, thisprocs, thislinks := process(skey, fc.CommonSinkConfig)
+		origTarget := target
 		hasLink := false
-		for _, ch := range fc.Channels.Channels {
+		for _, ch := range fc.Channels.AllChannels.Channels {
 			if !chanSel.HasChannel(ch) {
 				continue
 			}
+			sev := fc.Channels.ChannelFilters[ch]
+			if sev == logpb.Severity_NONE {
+				continue
+			}
 			hasLink = true
+			target, thisprocs, thislinks = addFilter(origTarget, thisprocs, thislinks, sev)
 			links = append(links, fmt.Sprintf("%s --> %s", ch, target))
 		}
 		if hasLink {
@@ -217,12 +225,18 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 		}
 		key := fmt.Sprintf("h__%s", name)
 		target, thisprocs, thislinks := process(key, cfg.CommonSinkConfig)
+		origTarget := target
 		hasLink := false
-		for _, ch := range cfg.Channels.Channels {
+		for _, ch := range cfg.Channels.AllChannels.Channels {
 			if !chanSel.HasChannel(ch) {
 				continue
 			}
+			sev := cfg.Channels.ChannelFilters[ch]
+			if sev == logpb.Severity_NONE {
+				continue
+			}
 			hasLink = true
+			target, thisprocs, thislinks = addFilter(origTarget, thisprocs, thislinks, sev)
 			links = append(links, fmt.Sprintf("%s --> %s", ch, target))
 		}
 		if hasLink {
@@ -236,13 +250,18 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 	// Export the stderr redirects.
 	if c.Sinks.Stderr.Filter != logpb.Severity_NONE {
 		target, thisprocs, thislinks := process("stderr", c.Sinks.Stderr.CommonSinkConfig)
-
+		origTarget := target
 		hasLink := false
-		for _, ch := range c.Sinks.Stderr.Channels.Channels {
+		for _, ch := range c.Sinks.Stderr.Channels.AllChannels.Channels {
 			if !chanSel.HasChannel(ch) {
 				continue
 			}
+			sev := c.Sinks.Stderr.Channels.ChannelFilters[ch]
+			if sev == logpb.Severity_NONE {
+				continue
+			}
 			hasLink = true
+			target, thisprocs, thislinks = addFilter(origTarget, thisprocs, thislinks, sev)
 			links = append(links, fmt.Sprintf("%s --> %s", ch, target))
 		}
 		if hasLink {

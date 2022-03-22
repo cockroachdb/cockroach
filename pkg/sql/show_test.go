@@ -51,13 +51,13 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	s STRING NULL,
 	v FLOAT8 NOT NULL,
 	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0:::INT8)
@@ -72,13 +72,13 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	s STRING NULL,
 	v FLOAT8 NOT NULL,
 	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0:::INT8)
@@ -92,11 +92,11 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, rowid),
 	FAMILY fam_1_s (s)
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	s STRING NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	FAMILY "primary" (i, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT ck CHECK (i > 0:::INT8)
@@ -106,10 +106,9 @@ func TestShowCreateTable(t *testing.T) {
 			CreateStatement: `CREATE TABLE %s (
 	i INT8 PRIMARY KEY
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	FAMILY "primary" (i)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (i ASC)
 )`,
 		},
 		{
@@ -120,13 +119,13 @@ func TestShowCreateTable(t *testing.T) {
 				CREATE INDEX idx_if on %[1]s (f, i) STORING (s, d);
 				CREATE UNIQUE INDEX on %[1]s (d);
 			`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	f FLOAT8 NULL,
 	s STRING NULL,
 	d DATE NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX idx_if (f ASC, i ASC) STORING (s, d),
 	UNIQUE INDEX %[1]s_d_key (d ASC),
 	FAMILY "primary" (i, f, d, rowid),
@@ -136,13 +135,11 @@ func TestShowCreateTable(t *testing.T) {
 		{
 			CreateStatement: `CREATE TABLE %s (
 	"te""st" INT8 NOT NULL,
-	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC),
-	FAMILY "primary" ("te""st")
+	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC)
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	"te""st" INT8 NOT NULL,
-	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC),
-	FAMILY "primary" ("te""st")
+	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC)
 )`,
 		},
 		{
@@ -151,14 +148,24 @@ func TestShowCreateTable(t *testing.T) {
 	b int8,
 	index c(a asc, b desc)
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
 	b INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-	INDEX c (a ASC, b DESC),
-	FAMILY "primary" (a, b, rowid)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
+	INDEX c (a ASC, b DESC)
 )`,
+		},
+
+		{
+			CreateStatement: `CREATE TABLE %s (
+	pk int8 PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')`,
+			Expect: `CREATE TABLE public.%[1]s (
+	pk INT8 NOT NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (pk ASC)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)`,
 		},
 		// Check that FK dependencies inside the current database
 		// have their db name omitted.
@@ -169,15 +176,14 @@ func TestShowCreateTable(t *testing.T) {
 	FOREIGN KEY (i, j) REFERENCES items (a, b),
 	k int REFERENCES items (c)
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	j INT8 NULL,
 	k INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b),
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES public.items(c),
-	FAMILY "primary" (i, j, k, rowid)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b),
+	CONSTRAINT %[1]s_k_fkey FOREIGN KEY (k) REFERENCES public.items(c)
 )`,
 		},
 		// Check that FK dependencies using MATCH FULL on a non-composite key still
@@ -189,15 +195,14 @@ func TestShowCreateTable(t *testing.T) {
 	k int REFERENCES items (c) MATCH FULL,
 	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH FULL
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	j INT8 NULL,
 	k INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b) MATCH FULL,
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES public.items(c) MATCH FULL,
-	FAMILY "primary" (i, j, k, rowid)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b) MATCH FULL,
+	CONSTRAINT %[1]s_k_fkey FOREIGN KEY (k) REFERENCES public.items(c) MATCH FULL
 )`,
 		},
 		// Check that FK dependencies outside of the current database
@@ -207,12 +212,11 @@ func TestShowCreateTable(t *testing.T) {
 	x INT8,
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.foo (x)
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	x INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo(x),
-	FAMILY "primary" (x, rowid)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
+	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo(x)
 )`,
 		},
 		// Check that FK dependencies using SET NULL or SET DEFAULT
@@ -224,43 +228,15 @@ func TestShowCreateTable(t *testing.T) {
 	FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
 	k int8 REFERENCES items (c) ON DELETE SET NULL
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL DEFAULT 123:::INT8,
 	j INT8 NULL DEFAULT 123:::INT8,
 	k INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k) REFERENCES public.items(c) ON DELETE SET NULL,
-	FAMILY "primary" (i, j, k, rowid)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
+	CONSTRAINT %[1]s_k_fkey FOREIGN KEY (k) REFERENCES public.items(c) ON DELETE SET NULL
 )`,
-		},
-		// Check that INTERLEAVE dependencies inside the current database
-		// have their db name omitted.
-		{
-			CreateStatement: `CREATE TABLE %s (
-	a INT8,
-	b INT8,
-	PRIMARY KEY (a, b)
-) INTERLEAVE IN PARENT items (a, b)`,
-			Expect: `CREATE TABLE public.%s (
-	a INT8 NOT NULL,
-	b INT8 NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
-	FAMILY "primary" (a, b)
-) INTERLEAVE IN PARENT public.items (a, b)`,
-		},
-		// Check that INTERLEAVE dependencies outside of the current
-		// database are prefixed by their db name.
-		{
-			CreateStatement: `CREATE TABLE %s (
-	x INT8 PRIMARY KEY
-) INTERLEAVE IN PARENT o.foo (x)`,
-			Expect: `CREATE TABLE public.%s (
-	x INT8 NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (x ASC),
-	FAMILY "primary" (x)
-) INTERLEAVE IN PARENT o.public.foo (x)`,
 		},
 		// Check that FK dependencies using MATCH FULL and MATCH SIMPLE are both
 		// pretty-printed properly.
@@ -273,31 +249,29 @@ func TestShowCreateTable(t *testing.T) {
 	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH SIMPLE ON DELETE SET DEFAULT,
 	FOREIGN KEY (k, l) REFERENCES items (a, b) MATCH FULL ON UPDATE CASCADE
 )`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL DEFAULT 1:::INT8,
 	j INT8 NULL DEFAULT 2:::INT8,
 	k INT8 NULL DEFAULT 3:::INT8,
 	l INT8 NULL DEFAULT 4:::INT8,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-	CONSTRAINT fk_i_ref_items FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
-	CONSTRAINT fk_k_ref_items FOREIGN KEY (k, l) REFERENCES public.items(a, b) MATCH FULL ON UPDATE CASCADE,
-	FAMILY "primary" (i, j, k, l, rowid)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
+	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
+	CONSTRAINT %[1]s_k_l_fkey FOREIGN KEY (k, l) REFERENCES public.items(a, b) MATCH FULL ON UPDATE CASCADE
 )`,
 		},
 		// Check hash sharded indexes are round trippable.
 		{
 			CreateStatement: `CREATE TABLE %s (
 				a INT,
-				INDEX (a) USING HASH WITH BUCKET_COUNT = 8
+				INDEX (a) USING HASH WITH (bucket_count=8)
 			)`,
-			Expect: `CREATE TABLE public.%s (
+			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
-	crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(COALESCE(CAST(a AS STRING), '':::STRING)), 8:::INT8)) STORED,
+	crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-	INDEX t14_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 8,
-	FAMILY "primary" (a, crdb_internal_a_shard_8, rowid)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
+	INDEX %[1]s_a_idx (a ASC) USING HASH WITH (bucket_count=8)
 )`,
 		},
 	}
@@ -326,35 +300,37 @@ func TestShowCreateView(t *testing.T) {
 	}{
 		{
 			`CREATE VIEW %s AS SELECT i, s, v, t FROM t`,
-			`CREATE VIEW public.%s (i, s, v, t) AS SELECT i, s, v, t FROM d.public.t`,
+			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tv,\n\tt\n) AS SELECT i, s, v, t FROM d.public.t",
 		},
 		{
 			`CREATE VIEW %s AS SELECT i, s, t FROM t`,
-			`CREATE VIEW public.%s (i, s, t) AS SELECT i, s, t FROM d.public.t`,
+			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tt\n) AS SELECT i, s, t FROM d.public.t",
 		},
 		{
 			`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM t`,
-			`CREATE VIEW public.%s (i, s, t) AS SELECT t.i, t.s, t.t FROM d.public.t`,
+			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tt\n) AS SELECT t.i, t.s, t.t FROM d.public.t",
 		},
 		{
 			`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM t AS foo WHERE foo.i > 3`,
-			`CREATE VIEW public.%s (i, s, t) AS SELECT foo.i, foo.s, foo.t FROM d.public.t AS foo WHERE foo.i > 3`,
+			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tt\n) AS " +
+				"SELECT foo.i, foo.s, foo.t FROM d.public.t AS foo WHERE foo.i > 3",
 		},
 		{
 			`CREATE VIEW %s AS SELECT count(*) FROM t`,
-			`CREATE VIEW public.%s (count) AS SELECT count(*) FROM d.public.t`,
+			"CREATE VIEW public.%s (\n\tcount\n) AS SELECT count(*) FROM d.public.t",
 		},
 		{
 			`CREATE VIEW %s AS SELECT s, count(*) FROM t GROUP BY s HAVING count(*) > 3:::INT8`,
-			`CREATE VIEW public.%s (s, count) AS SELECT s, count(*) FROM d.public.t GROUP BY s HAVING count(*) > 3:::INT8`,
+			"CREATE VIEW public.%s (\n\ts,\n\tcount\n) AS " +
+				"SELECT s, count(*) FROM d.public.t GROUP BY s HAVING count(*) > 3:::INT8",
 		},
 		{
 			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM t`,
-			`CREATE VIEW public.%s (a, b, c, d) AS SELECT i, s, v, t FROM d.public.t`,
+			"CREATE VIEW public.%s (\n\ta,\n\tb,\n\tc,\n\td\n) AS SELECT i, s, v, t FROM d.public.t",
 		},
 		{
 			`CREATE VIEW %s (a, b) AS SELECT i, v FROM t`,
-			`CREATE VIEW public.%s (a, b) AS SELECT i, v FROM d.public.t`,
+			"CREATE VIEW public.%s (\n\ta,\n\tb\n) AS SELECT i, v FROM d.public.t",
 		},
 	}
 	for i, test := range tests {
@@ -441,6 +417,38 @@ func TestShowCreateSequence(t *testing.T) {
 		{
 			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0 CACHE 10`,
 			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10 CACHE 10`,
+		},
+		{
+			`CREATE SEQUENCE %s AS smallint`,
+			`CREATE SEQUENCE public.%s AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1`,
+		},
+		{
+			`CREATE SEQUENCE %s AS int2`,
+			`CREATE SEQUENCE public.%s AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1`,
+		},
+		// Int type is determined by `default_int_size` in cluster settings. Default is int8.
+		{
+			`CREATE SEQUENCE %s AS int`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+		},
+		{
+			`CREATE SEQUENCE %s AS bigint`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+		},
+		// Override int/bigint's max value with user configured max value.
+		{
+			`CREATE SEQUENCE %s AS integer MINVALUE -5 MAXVALUE 9001`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE -5 MAXVALUE 9001 INCREMENT 1 START -5`,
+		},
+		{
+			`
+			CREATE SEQUENCE %s AS integer
+			START WITH -20000
+			INCREMENT BY -1
+			MINVALUE -20000
+			MAXVALUE 0
+			CACHE 1;`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE -20000 MAXVALUE 0 INCREMENT -1 START -20000`,
 		},
 	}
 	for i, test := range tests {
@@ -866,12 +874,14 @@ func TestShowSessionPrivileges(t *testing.T) {
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
 	defer s.Stopper().Stop(context.Background())
 
-	// Create three users: one with no special permissions, one with the
-	// VIEWACTIVITY role option, and one admin. We'll check that the VIEWACTIVITY
+	// Create four users: one with no special permissions, one with the
+	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
+	// and one admin. We'll check that the VIEWACTIVITY, VIEWACTIVITYREDACTED
 	// users and the admin can see all sessions and the unpermissioned user can
 	// only see their own session.
 	_ = sqlDBroot.Exec(t, `CREATE USER noperms`)
 	_ = sqlDBroot.Exec(t, `CREATE USER viewactivity VIEWACTIVITY`)
+	_ = sqlDBroot.Exec(t, `CREATE USER viewactivityredacted VIEWACTIVITYREDACTED`)
 	_ = sqlDBroot.Exec(t, `CREATE USER adminuser`)
 	_ = sqlDBroot.Exec(t, `GRANT admin TO adminuser`)
 
@@ -884,6 +894,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 	users := []user{
 		{"noperms", false, nil},
 		{"viewactivity", true, nil},
+		{"viewactivityredacted", true, nil},
 		{"adminuser", true, nil},
 	}
 	for i, tc := range users {
@@ -1030,6 +1041,7 @@ func TestLintClusterSettingNames(t *testing.T) {
 				// These use the _timeout suffix to stay consistent with the
 				// corresponding session variables.
 				"sql.defaults.statement_timeout":                   `sql.defaults.statement_timeout: use ".timeout" instead of "_timeout"`,
+				"sql.defaults.lock_timeout":                        `sql.defaults.lock_timeout: use ".timeout" instead of "_timeout"`,
 				"sql.defaults.idle_in_session_timeout":             `sql.defaults.idle_in_session_timeout: use ".timeout" instead of "_timeout"`,
 				"sql.defaults.idle_in_transaction_session_timeout": `sql.defaults.idle_in_transaction_session_timeout: use ".timeout" instead of "_timeout"`,
 			}
@@ -1051,9 +1063,9 @@ func TestLintClusterSettingNames(t *testing.T) {
 			if strings.ToLower(desc[0:1]) != desc[0:1] {
 				t.Errorf("%s: description %q must not start with capital", varName, desc)
 			}
-			if sType != "e" && strings.Contains(desc, ". ") != (desc[len(desc)-1] == '.') {
+			if sType != "e" && (desc[len(desc)-1] == '.') && !strings.Contains(desc, ". ") {
 				// TODO(knz): this check doesn't work with the way enum values are added to their descriptions.
-				t.Errorf("%s: description %q must end with period if and only if it contains a secondary sentence", varName, desc)
+				t.Errorf("%s: description %q must end with period only if it contains a secondary sentence", varName, desc)
 			}
 		}
 	}

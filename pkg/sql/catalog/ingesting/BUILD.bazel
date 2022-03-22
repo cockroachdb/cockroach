@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ingesting",
+    srcs = [
+        "privileges.go",
+        "write_descs.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/ingesting",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/catprivilege",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/log",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

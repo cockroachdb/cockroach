@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for relative_rank.eg.go. It's formatted in
 // a special way, so it's both valid Go and a valid text/template input. This
@@ -309,7 +311,6 @@ func (r *_RELATIVE_RANK_STRINGOp) Init(ctx context.Context) {
 			DiskAcc:            r.diskAcc,
 		},
 	)
-	r.scratch = r.allocator.NewMemBatchWithFixedCapacity(r.inputTypes, coldata.BatchSize())
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 	// {{if .IsPercentRank}}
 	// All rank functions start counting from 1. Before we assign the rank to a
@@ -394,22 +395,12 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			// the input before we can proceed.
 			// {{end}}
 
-			sel := batch.Selection()
 			// First, we buffer up all of the tuples.
-			r.scratch.ResetInternalBatch()
-			r.allocator.PerformOperation(r.scratch.ColVecs(), func() {
-				for colIdx, vec := range r.scratch.ColVecs() {
-					vec.Copy(
-						coldata.SliceArgs{
-							Src:       batch.ColVec(colIdx),
-							Sel:       sel,
-							SrcEndIdx: n,
-						},
-					)
-				}
-				r.scratch.SetLength(n)
-			})
-			r.bufferedTuples.Enqueue(r.Ctx, r.scratch)
+			r.bufferedTuples.Enqueue(r.Ctx, batch)
+
+			// {{if or (.HasPartition) (.IsCumeDist)}}
+			sel := batch.Selection()
+			// {{end}}
 
 			// Then, we need to update the sizes of the partitions.
 			// {{if .HasPartition}}
@@ -585,7 +576,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(); err != nil {
+			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -598,23 +589,23 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 	}
 }
 
-func (r *_RELATIVE_RANK_STRINGOp) Close() error {
+func (r *_RELATIVE_RANK_STRINGOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() || r.Ctx == nil {
 		// Either Close() has already been called or Init() was never called. In
 		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
+	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err
 	}
 	// {{if .HasPartition}}
-	if err := r.partitionsState.Close(r.Ctx); err != nil {
+	if err := r.partitionsState.Close(ctx); err != nil {
 		lastErr = err
 	}
 	// {{end}}
 	// {{if .IsCumeDist}}
-	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
+	if err := r.peerGroupsState.Close(ctx); err != nil {
 		lastErr = err
 	}
 	// {{end}}

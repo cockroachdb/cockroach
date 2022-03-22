@@ -16,7 +16,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -66,9 +65,7 @@ var pebbleBatchPool = sync.Pool{
 }
 
 // Instantiates a new pebbleBatch.
-func newPebbleBatch(
-	db *pebble.DB, batch *pebble.Batch, writeOnly bool, settings *cluster.Settings,
-) *pebbleBatch {
+func newPebbleBatch(db *pebble.DB, batch *pebble.Batch, writeOnly bool) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
 	*pb = pebbleBatch{
 		db:    db,
@@ -96,8 +93,7 @@ func newPebbleBatch(
 		},
 		writeOnly: writeOnly,
 	}
-	pb.wrappedIntentWriter =
-		wrapIntentWriter(context.Background(), pb, settings, false /* isLongLived */)
+	pb.wrappedIntentWriter = wrapIntentWriter(context.Background(), pb)
 	return pb
 }
 
@@ -130,14 +126,8 @@ func (p *pebbleBatch) Closed() bool {
 
 // ExportMVCCToSst is part of the engine.Reader interface.
 func (p *pebbleBatch) ExportMVCCToSst(
-	ctx context.Context,
-	startKey, endKey roachpb.Key,
-	startTS, endTS hlc.Timestamp,
-	exportAllRevisions bool,
-	targetSize, maxSize uint64,
-	useTBI bool,
-	dest io.Writer,
-) (roachpb.BulkOpSummary, roachpb.Key, error) {
+	ctx context.Context, exportOptions ExportOptions, dest io.Writer,
+) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	panic("unimplemented")
 }
 
@@ -153,7 +143,7 @@ func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
 	return v, err
 }
 
-func (p *pebbleBatch) rawGet(key []byte) ([]byte, error) {
+func (p *pebbleBatch) rawMVCCGet(key []byte) ([]byte, error) {
 	r := pebble.Reader(p.batch)
 	if p.writeOnly {
 		panic("write-only batch")
@@ -219,7 +209,7 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
-		iter := MVCCIterator(newPebbleIterator(p.batch, nil, opts))
+		iter := MVCCIterator(newPebbleIterator(p.batch, nil, opts, StandardDurability))
 		if util.RaceEnabled {
 			iter = wrapInUnsafeIter(iter)
 		}
@@ -240,9 +230,9 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, opts)
+			iter.init(p.batch, p.iter, opts, StandardDurability)
 		} else {
-			iter.init(p.db, p.iter, opts)
+			iter.init(p.db, p.iter, opts, StandardDurability)
 		}
 		if p.iter == nil {
 			// For future cloning.
@@ -282,9 +272,9 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, opts)
+			iter.init(p.batch, p.iter, opts, StandardDurability)
 		} else {
-			iter.init(p.db, p.iter, opts)
+			iter.init(p.db, p.iter, opts, StandardDurability)
 		}
 		if p.iter == nil {
 			// For future cloning.
@@ -338,13 +328,11 @@ func (p *pebbleBatch) ClearUnversioned(key roachpb.Key) error {
 
 // ClearIntent implements the Batch interface.
 func (p *pebbleBatch) ClearIntent(
-	key roachpb.Key, state PrecedingIntentState, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
-) (int, error) {
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+) error {
 	var err error
-	var separatedIntentCountDelta int
-	p.scratch, separatedIntentCountDelta, err =
-		p.wrappedIntentWriter.ClearIntent(key, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
-	return separatedIntentCountDelta, err
+	p.scratch, err = p.wrappedIntentWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, p.scratch)
+	return err
 }
 
 // ClearEngineKey implements the Batch interface.
@@ -361,7 +349,7 @@ func (p *pebbleBatch) clear(key MVCCKey) error {
 		return emptyKeyError()
 	}
 
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
+	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], key)
 	return p.batch.Delete(p.buf, nil)
 }
 
@@ -393,8 +381,8 @@ func (p *pebbleBatch) ClearMVCCRange(start, end MVCCKey) error {
 }
 
 func (p *pebbleBatch) clearRange(start, end MVCCKey) error {
-	p.buf = EncodeKeyToBuf(p.buf[:0], start)
-	buf2 := EncodeKey(end)
+	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], start)
+	buf2 := EncodeMVCCKey(end)
 	return p.batch.DeleteRange(p.buf, buf2, nil)
 }
 
@@ -431,7 +419,7 @@ func (p *pebbleBatch) Merge(key MVCCKey, value []byte) error {
 		return emptyKeyError()
 	}
 
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
+	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], key)
 	return p.batch.Merge(p.buf, value, nil)
 }
 
@@ -450,18 +438,11 @@ func (p *pebbleBatch) PutUnversioned(key roachpb.Key, value []byte) error {
 
 // PutIntent implements the Batch interface.
 func (p *pebbleBatch) PutIntent(
-	ctx context.Context,
-	key roachpb.Key,
-	value []byte,
-	state PrecedingIntentState,
-	txnDidNotUpdateMeta bool,
-	txnUUID uuid.UUID,
-) (int, error) {
+	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
+) error {
 	var err error
-	var separatedIntentCountDelta int
-	p.scratch, separatedIntentCountDelta, err =
-		p.wrappedIntentWriter.PutIntent(ctx, key, value, state, txnDidNotUpdateMeta, txnUUID, p.scratch)
-	return separatedIntentCountDelta, err
+	p.scratch, err = p.wrappedIntentWriter.PutIntent(ctx, key, value, txnUUID, p.scratch)
+	return err
 }
 
 // PutEngineKey implements the Batch interface.
@@ -474,17 +455,12 @@ func (p *pebbleBatch) PutEngineKey(key EngineKey, value []byte) error {
 	return p.batch.Set(p.buf, value, nil)
 }
 
-// SafeToWriteSeparatedIntents implements the Batch interface.
-func (p *pebbleBatch) SafeToWriteSeparatedIntents(ctx context.Context) (bool, error) {
-	return p.wrappedIntentWriter.safeToWriteSeparatedIntents(ctx)
-}
-
 func (p *pebbleBatch) put(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
 
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
+	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], key)
 	return p.batch.Set(p.buf, value, nil)
 }
 
@@ -516,6 +492,11 @@ func (p *pebbleBatch) Commit(sync bool) error {
 // Empty implements the Batch interface.
 func (p *pebbleBatch) Empty() bool {
 	return p.batch.Count() == 0
+}
+
+// Count implements the Batch interface.
+func (p *pebbleBatch) Count() uint32 {
+	return p.batch.Count()
 }
 
 // Len implements the Batch interface.

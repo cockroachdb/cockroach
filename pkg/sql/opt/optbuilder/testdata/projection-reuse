@@ -70,7 +70,7 @@ sort
 build
 SELECT random(), random() FROM ab GROUP BY random()
 ----
-group-by
+group-by (hash)
  ├── columns: random:6 random:6
  ├── grouping columns: column6:6
  └── project

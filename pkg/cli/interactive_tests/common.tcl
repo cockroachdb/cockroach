@@ -138,3 +138,44 @@ proc force_stop_server {argv} {
     system "kill -KILL `cat server_pid`"
     report "END FORCE STOP SERVER"
 }
+
+proc tenant_port {tenant_id} {
+  return [expr 40000 + $tenant_id]
+}
+
+proc start_tenant {tenant_id argv} {
+    set port [tenant_port $tenant_id]
+    set http_port [expr 8080 + $tenant_id]
+    set pidfile tenant[set tenant_id]_pid
+    report "BEGIN START TENANT $tenant_id"
+    # Create tenant (if it doesn't exist).
+    system "$argv sql -e 'select case when (select 1 FROM system.tenants WHERE id=$tenant_id) is null then crdb_internal.create_tenant($tenant_id) else $tenant_id end'"
+    system "$argv mt start-sql --insecure --tenant-id $tenant_id --sql-addr 127.0.0.1:$port --http-addr 127.0.0.1:$http_port --pid-file=$pidfile --background -s=path=logs/tenant$tenant_id >>logs/expect-cmd.log 2>&1;
+            $argv sql --port $port --insecure -e 'select 1'"
+    report "START TENANT $tenant_id DONE"
+}
+
+proc stop_tenant {tenant_id argv} {
+    report "BEGIN STOP TENANT $tenant_id"
+    set pidfile tenant[set tenant_id]_pid
+    # Trigger a normal shutdown.
+    # If after 30 seconds the server hasn't shut down, kill the process and trigger an error.
+    # Note: kill -CONT tests whether the PID exists (SIGCONT is a no-op for the process).
+    system "kill -TERM `cat $pidfile` 2>/dev/null;
+            for i in `seq 1 30`; do
+              kill -CONT `cat $pidfile` 2>/dev/null || exit 0
+              echo still waiting
+              sleep 1
+            done
+            echo 'server still running?'
+            # Send an unclean shutdown signal to trigger a stack trace dump.
+            kill -ABRT `cat $pidfile` 2>/dev/null
+            # Sleep to increase the probability that the stack trace actually
+            # makes it to disk before we force-kill the process.
+            sleep 1
+            kill -KILL `cat $pidfile` 2>/dev/null
+            exit 1"
+
+    report "END STOP TENANT $tenant_id"
+}
+

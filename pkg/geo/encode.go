@@ -18,7 +18,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/s1"
 	"github.com/pierrre/geohash"
 	"github.com/twpayne/go-geom"
@@ -209,7 +210,8 @@ func SpatialObjectToGeoHash(so geopb.SpatialObject, p int) (string, error) {
 		}
 	}
 	if bbox.LoX < -180 || bbox.HiX > 180 || bbox.LoY < -90 || bbox.HiY > 90 {
-		return "", errors.Newf(
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue,
 			"object has bounds greater than the bounds of lat/lng, got (%f %f, %f %f)",
 			bbox.LoX, bbox.LoY,
 			bbox.HiX, bbox.HiY,

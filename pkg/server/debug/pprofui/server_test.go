@@ -11,15 +11,31 @@
 package pprofui
 
 import (
+	"context"
 	"fmt"
+	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/stretchr/testify/require"
 )
+
+type ProfilerFunc func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error)
+
+func (p ProfilerFunc) Profile(
+	ctx context.Context, req *serverpb.ProfileRequest,
+) (*serverpb.JSONResponse, error) {
+	return p(ctx, req)
+}
 
 func init() {
 	if bazel.BuiltWithBazel() {
@@ -36,40 +52,106 @@ func init() {
 }
 
 func TestServer(t *testing.T) {
+	expectedNodeID := "local"
+
+	mockProfile := func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error) {
+		require.Equal(t, expectedNodeID, req.NodeId)
+		b, err := ioutil.ReadFile(testutils.TestDataPath(t, "heap.profile"))
+		require.NoError(t, err)
+		return &serverpb.JSONResponse{Data: b}, nil
+	}
+
 	storage := NewMemStorage(1, 0)
-	s := NewServer(storage, nil)
+	s := NewServer(storage, ProfilerFunc(mockProfile))
 
 	for i := 0; i < 3; i++ {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("request local profile %d", i), func(t *testing.T) {
 			r := httptest.NewRequest("GET", "/heap/", nil)
 			w := httptest.NewRecorder()
 			s.ServeHTTP(w, r)
 
-			if a, e := w.Code, http.StatusTemporaryRedirect; a != e {
-				t.Fatalf("expected status code %d, got %d", e, a)
-			}
+			require.Equal(t, http.StatusTemporaryRedirect, w.Code)
 
 			loc := w.Result().Header.Get("Location")
-
-			if a, e := loc, fmt.Sprintf("/heap/%d/flamegraph", i+1); a != e {
-				t.Fatalf("expected location header %s, but got %s", e, a)
-			}
+			require.Equal(t, fmt.Sprintf("/heap/%d/flamegraph", i+1), loc)
 
 			r = httptest.NewRequest("GET", loc, nil)
 			w = httptest.NewRecorder()
 
 			s.ServeHTTP(w, r)
 
-			if a, e := w.Code, http.StatusOK; a != e {
-				t.Fatalf("expected status code %d, got %d", e, a)
-			}
-
-			if a, e := w.Body.String(), "pprof</a></h1>"; !strings.Contains(a, e) {
-				t.Fatalf("body does not contain %q: %v", e, a)
-			}
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Contains(t, w.Body.String(), "pprof</a></h1>")
 		})
-		if a, e := len(storage.mu.records), 1; a != e {
-			t.Fatalf("storage did not expunge records; have %d instead of %d", a, e)
+		require.Equal(t, 1, len(storage.getRecords()),
+			"storage did not expunge records")
+	}
+
+	t.Run("request profile from another node", func(t *testing.T) {
+		expectedNodeID = "3"
+
+		r := httptest.NewRequest("GET", "/heap/?node=3", nil)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+
+		require.Equal(t, http.StatusTemporaryRedirect, w.Code)
+		loc := w.Result().Header.Get("Location")
+		require.Equal(t, "/heap/4/flamegraph?node=3", loc)
+	})
+}
+
+func TestServerConcurrentAccess(t *testing.T) {
+	expectedNodeID := "local"
+	skip.UnderRace(t, "test fails under race due to known race condition with profiles")
+	const (
+		runsPerWorker = 1
+		workers       = ProfileConcurrency
+	)
+	mockProfile := func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error) {
+		require.Equal(t, expectedNodeID, req.NodeId)
+		fileName := "heap.profile"
+		if req.Type == serverpb.ProfileRequest_CPU {
+			fileName = "cpu.profile"
+		}
+		b, err := ioutil.ReadFile(testutils.TestDataPath(t, fileName))
+		require.NoError(t, err)
+		return &serverpb.JSONResponse{Data: b}, nil
+	}
+
+	s := NewServer(NewMemStorage(ProfileConcurrency, ProfileExpiry), ProfilerFunc(mockProfile))
+	getProfile := func(profile string, t *testing.T) {
+		t.Helper()
+
+		r := httptest.NewRequest("GET", "/heap/", nil)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+
+		require.Equal(t, http.StatusTemporaryRedirect, w.Code)
+
+		loc := w.Result().Header.Get("Location")
+
+		r = httptest.NewRequest("GET", loc, nil)
+		w = httptest.NewRecorder()
+
+		s.ServeHTTP(w, r)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, w.Body.String(), "pprof</a></h1>")
+	}
+	var wg sync.WaitGroup
+	profiles := [2]string{"/heap/", "/cpu"}
+	runWorker := func() {
+		defer wg.Done()
+		for i := 0; i < runsPerWorker; i++ {
+			time.Sleep(time.Microsecond)
+			profileID := rand.Intn(len(profiles))
+			getProfile(profiles[profileID], t)
 		}
 	}
+	// Run the workers.
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go runWorker()
+	}
+	wg.Wait()
 }

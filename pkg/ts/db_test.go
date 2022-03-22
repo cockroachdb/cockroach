@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 )
@@ -54,7 +53,7 @@ import (
 // are dispatched to both the ts.DB instance and the test model. Queries are
 // executed against both, and the results should match exactly.
 //
-// In addition, the test model can be used to generate an expecation of the
+// In addition, the test model can be used to generate an expectation of the
 // on-disk layout in the ts.DB instance; the tests should periodically assert
 // that the expectation matches reality.
 //
@@ -289,7 +288,7 @@ func (tm *testModelRunner) storeTimeSeriesData(r Resolution, data []tspb.TimeSer
 		}
 	}
 
-	// store data in the model. Even for rollup resolutoins we store the original
+	// store data in the model. Even for rollup resolutions we store the original
 	// data points in the model, with the expectation that queries will be
 	// identical to those based on rollups.
 	for _, d := range data {
@@ -752,10 +751,11 @@ func TestStoreTimeSeries(t *testing.T) {
 func TestPollSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runTestCaseMultipleFormats(t, func(t *testing.T, tm testModelRunner) {
+		tr := tm.Cfg.AmbientCtx.Tracer
 		testSource := modelDataSource{
 			model:   tm,
 			r:       Resolution10s,
-			stopper: stop.NewStopper(),
+			stopper: stop.NewStopper(stop.WithTracer(tr)),
 			datasets: [][]tspb.TimeSeriesData{
 				{
 					tsd("test.metric.float", "cpu01",
@@ -777,7 +777,7 @@ func TestPollSource(t *testing.T) {
 			},
 		}
 
-		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		ambient := log.MakeTestingAmbientContext(tr)
 		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 		<-testSource.stopper.IsStopped()
 		if a, e := testSource.calledCount, 2; a != e {
@@ -830,7 +830,7 @@ func TestDisableStorage(t *testing.T) {
 			},
 		}
 
-		ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+		ambient := log.MakeTestingAmbientCtxWithNewTracer()
 		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
 		select {
 		case <-testSource.stopper.IsStopped():

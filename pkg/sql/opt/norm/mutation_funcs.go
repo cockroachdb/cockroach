@@ -55,6 +55,30 @@ func (c *CustomFuncs) SimplifiablePartialIndexProjectCols(
 	// have already been simplified to false are ineligible to be simplified.
 	ineligibleCols := neededMutationCols.Union(simplifiedProjectCols)
 
+	// Partial index PUT and DEL columns that are used for multiple partial
+	// indexes cannot be simplified to false. This may occur when multiple
+	// partial indexes have the same predicate expression. If one index does not
+	// have mutating columns, simplifying its PUT or DEL columns to false would
+	// incorrectly prevent writes to other indexes that have mutating columns.
+	//
+	// For example, consider:
+	//
+	//   CREATE TABLE t (
+	//     a INT,
+	//     b INT,
+	//     c INT,
+	//     INDEX a_idx (a) WHERE c IS NULL,
+	//     INDEX b_idx (b) WHERE c IS NULL
+	//   )
+	//
+	//   UPDATE t SET a = NULL
+	//
+	// In the UPDATE, a single column is synthesized for the PUT and DEL columns
+	// of both partial indexes. Even though the UPDATE does not mutate columns
+	// in b_idx, the synthesized PUT/DEL column cannot be simplified to false.
+	// If it were set to false, writes to a_idx would never occur.
+	ineligibleCols.UnionWith(multiUsePartialIndexCols(private))
+
 	// ord is an ordinal into the mutation's PartialIndexPutCols and
 	// PartialIndexDelCols, which both have entries for each partial index
 	// defined on the table.
@@ -94,6 +118,49 @@ func (c *CustomFuncs) SimplifiablePartialIndexProjectCols(
 		// Add the projected DEL column if it is eligible to be simplified.
 		delCol := private.PartialIndexDelCols[ord]
 		if !ineligibleCols.Contains(delCol) {
+			cols.Add(delCol)
+		}
+	}
+
+	return cols
+}
+
+// multiUsePartialIndexCols returns the set of columns that are used as PUT or
+// DEL columns for more than one partial index. This may occur when multiple
+// partial indexes share the same predicate expression. Columns used as a PUT
+// and DEL column for the same index and no other indexes are not included in
+// the output.
+func multiUsePartialIndexCols(mp *memo.MutationPrivate) opt.ColSet {
+	var cols opt.ColSet
+
+	for i := range mp.PartialIndexPutCols {
+		putCol := mp.PartialIndexPutCols[i]
+		delCol := mp.PartialIndexDelCols[i]
+		putColUsedAgain := false
+		delColUsedAgain := false
+
+		for j := 0; j < i; j++ {
+			// A PUT column used as a PUT or DEL column for another index should
+			// be included in cols.
+			if putCol == mp.PartialIndexPutCols[j] || putCol == mp.PartialIndexDelCols[j] {
+				putColUsedAgain = true
+			}
+
+			// A DEL column used as a PUT or DEL column for another index should
+			// be included in cols.
+			if delCol == mp.PartialIndexPutCols[j] || delCol == mp.PartialIndexDelCols[j] {
+				delColUsedAgain = true
+			}
+
+			if putColUsedAgain && delColUsedAgain {
+				break
+			}
+		}
+
+		if putColUsedAgain {
+			cols.Add(putCol)
+		}
+		if delColUsedAgain {
 			cols.Add(delCol)
 		}
 	}

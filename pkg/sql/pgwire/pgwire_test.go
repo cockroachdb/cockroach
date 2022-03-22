@@ -42,8 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx"
+	pgproto3 "github.com/jackc/pgproto3/v2"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +66,8 @@ func trivialQuery(pgURL url.URL) error {
 
 // TestPGWireDrainClient makes sure that in draining mode, the server refuses
 // new connections and allows sessions with ongoing transactions to finish.
+//
+// TODO(knz): This test should also exercise SQL-only servers.
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -104,13 +106,15 @@ func TestPGWireDrainClient(t *testing.T) {
 	go func() {
 		defer close(errChan)
 		errChan <- func() error {
-			return s.(*server.TestServer).DrainClients(ctx)
+			return s.DrainClients(ctx)
 		}()
 	}()
 
 	// Ensure server is in draining mode and rejects new connections.
 	testutils.SucceedsSoon(t, func() error {
 		if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDrainingNewConn) {
+			// NB: errors.Wrapf(nil, ...) returns nil.
+			// nolint:errwrap
 			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
@@ -129,7 +133,7 @@ func TestPGWireDrainClient(t *testing.T) {
 		}
 	}
 
-	if !s.(*server.TestServer).PGServer().IsDraining() {
+	if !s.(*server.TestServer).PGServer().(*pgwire.Server).IsDraining() {
 		t.Fatal("server should be draining, but is not")
 	}
 }
@@ -162,7 +166,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	}
 	defer db.Close()
 
-	pgServer := s.(*server.TestServer).PGServer()
+	pgServer := s.(*server.TestServer).PGServer().(*pgwire.Server)
 
 	// Make sure that the server reports correctly the case in which a
 	// connection did not respond to cancellation in time.
@@ -199,6 +203,8 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		// connection registers the cancellation and closes itself.
 		testutils.SucceedsSoon(t, func() error {
 			if _, err := txn.Exec("SELECT 1"); !errors.Is(err, driver.ErrBadConn) {
+				// NB: errors.Wrapf(nil, ...) returns nil.
+				// nolint:errwrap
 				return errors.Errorf("unexpected error: %v", err)
 			}
 			return nil
@@ -544,16 +550,16 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", security.NodeUser),
 		}},
 		{"SHOW GRANTS ON system.users", []preparedQueryTest{
-			baseTest.Results("system", "public", "users", security.AdminRole, "DELETE").
-				Results("system", "public", "users", security.AdminRole, "GRANT").
-				Results("system", "public", "users", security.AdminRole, "INSERT").
-				Results("system", "public", "users", security.AdminRole, "SELECT").
-				Results("system", "public", "users", security.AdminRole, "UPDATE").
-				Results("system", "public", "users", security.RootUser, "DELETE").
-				Results("system", "public", "users", security.RootUser, "GRANT").
-				Results("system", "public", "users", security.RootUser, "INSERT").
-				Results("system", "public", "users", security.RootUser, "SELECT").
-				Results("system", "public", "users", security.RootUser, "UPDATE"),
+			baseTest.Results("system", "public", "users", security.AdminRole, "DELETE", true).
+				Results("system", "public", "users", security.AdminRole, "GRANT", true).
+				Results("system", "public", "users", security.AdminRole, "INSERT", true).
+				Results("system", "public", "users", security.AdminRole, "SELECT", true).
+				Results("system", "public", "users", security.AdminRole, "UPDATE", true).
+				Results("system", "public", "users", security.RootUser, "DELETE", true).
+				Results("system", "public", "users", security.RootUser, "GRANT", true).
+				Results("system", "public", "users", security.RootUser, "INSERT", true).
+				Results("system", "public", "users", security.RootUser, "SELECT", true).
+				Results("system", "public", "users", security.RootUser, "UPDATE", true),
 		}},
 		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false).
@@ -561,7 +567,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("users", "primary", false, 3, "isRole", "N/A", true, false),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
-			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(34),
+			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(36),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
 			baseTest.Results("crdb_internal", gosql.NullString{}).Others(4),
@@ -572,13 +578,15 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SHOW TIME ZONE", []preparedQueryTest{
 			baseTest.Results("UTC"),
 		}},
-		{"CREATE USER IF NOT EXISTS $1 WITH PASSWORD $2", []preparedQueryTest{
-			baseTest.SetArgs("abc", "def"),
-			baseTest.SetArgs("woo", "waa"),
+		{"CREATE USER IF NOT EXISTS abc WITH PASSWORD $1", []preparedQueryTest{
+			baseTest.SetArgs("def"),
 		}},
-		{"ALTER USER IF EXISTS $1 WITH PASSWORD $2", []preparedQueryTest{
-			baseTest.SetArgs("abc", "def"),
-			baseTest.SetArgs("woo", "waa"),
+		{"CREATE USER IF NOT EXISTS woo WITH PASSWORD $1", []preparedQueryTest{
+			baseTest.SetArgs("waa"),
+		}},
+		{"ALTER USER IF EXISTS foo WITH PASSWORD $1", []preparedQueryTest{
+			baseTest.SetArgs("def"),
+			baseTest.SetArgs("waa"),
 		}},
 		{"SHOW USERS", []preparedQueryTest{
 			baseTest.Results("abc", "", "{}").
@@ -586,9 +594,8 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("root", "", "{admin}").
 				Results("woo", "", "{}"),
 		}},
-		{"DROP USER $1", []preparedQueryTest{
-			baseTest.SetArgs("abc"),
-			baseTest.SetArgs("woo"),
+		{"DROP USER abc, woo", []preparedQueryTest{
+			baseTest.SetArgs(),
 		}},
 		{"SELECT (SELECT 1+$1)", []preparedQueryTest{
 			baseTest.SetArgs(1).Results(2),
@@ -768,6 +775,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT $1::TIMETZ", []preparedQueryTest{
 			baseTest.SetArgs("12:00:00+0330").Results("0000-01-01T12:00:00+03:30"),
 		}},
+		{"SELECT $1::VOID", []preparedQueryTest{
+			baseTest.SetArgs("this will not be the result").Results(""),
+		}},
 		{"SELECT $1::BOX2D", []preparedQueryTest{
 			baseTest.SetArgs("BOX(1 2,3 4)").Results("BOX(1 2,3 4)"),
 		}},
@@ -821,13 +831,21 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"TRUNCATE TABLE d.str", []preparedQueryTest{
 			baseTest.SetArgs(),
 		}},
+		{"SELECT '{\"field\": 12}'::JSON->$1", []preparedQueryTest{
+			baseTest.SetArgs("field").Results("12"),
+			baseTest.SetArgs(0).Results(gosql.NullString{}),
+		}},
+		{"SELECT '{\"field\": 12}'::JSON->>$1", []preparedQueryTest{
+			baseTest.SetArgs("field").Results("12"),
+			baseTest.SetArgs(0).Results(gosql.NullString{}),
+		}},
 
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
 		//   Nested constants are not exposed to the same constant type resolution rules
 		//   as top-level constants, and instead are simply resolved to their natural type.
-		//{"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2",  []preparedQueryTest{
+		// {"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2",  []preparedQueryTest{
 		// 	baseTest.SetArgs("hello").Results("one").Results("hello"),
-		//}},
+		// }},
 	}
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -1260,8 +1278,11 @@ func TestPGPreparedExec(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	runTests := func(
-		t *testing.T, query string, tests []preparedExecTest, execFunc func(...interface{},
-		) (gosql.Result, error)) {
+		t *testing.T,
+		query string,
+		tests []preparedExecTest,
+		execFunc func(...interface{}) (gosql.Result, error),
+	) {
 		for idx, test := range tests {
 			t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
 				if testing.Verbose() || log.V(1) {
@@ -1684,7 +1705,11 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 	//
 	// macOS has a tendency to produce very long temporary directory names, so
 	// we are careful to keep all the constants involved short.
-	tempDir, err := ioutil.TempDir("", "PGSQL")
+	baseTmpDir := ""
+	if runtime.GOOS == "darwin" || strings.Contains(runtime.GOOS, "bsd") {
+		baseTmpDir = "/tmp"
+	}
+	tempDir, err := ioutil.TempDir(baseTmpDir, "PGSQL")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1793,13 +1818,12 @@ func TestSessionParameters(t *testing.T) {
 	host, ports, _ := net.SplitHostPort(s.ServingSQLAddr())
 	port, _ := strconv.Atoi(ports)
 
-	connCfg := pgx.ConnConfig{
-		Host:      host,
-		Port:      uint16(port),
-		User:      security.RootUser,
-		TLSConfig: nil, // insecure
-		Logger:    pgxTestLogger{},
-	}
+	connCfg, err := pgx.ParseConfig(
+		fmt.Sprintf("postgresql://%s@%s:%d/defaultdb?sslmode=disable", security.RootUser, host, port),
+	)
+	require.NoError(t, err)
+	connCfg.TLSConfig = nil
+	connCfg.Logger = pgxTestLogger{}
 
 	testData := []struct {
 		varName        string
@@ -1833,7 +1857,7 @@ func TestSessionParameters(t *testing.T) {
 		t.Run(test.varName+"="+test.val, func(t *testing.T) {
 			cfg := connCfg
 			cfg.RuntimeParams = map[string]string{test.varName: test.val}
-			db, err := pgx.Connect(cfg)
+			db, err := pgx.ConnectConfig(ctx, cfg)
 			t.Logf("conn error: %v", err)
 			if !testutils.IsError(err, test.expectedErr) {
 				t.Fatalf("expected %q, got %v", test.expectedErr, err)
@@ -1841,16 +1865,12 @@ func TestSessionParameters(t *testing.T) {
 			if err != nil {
 				return
 			}
-			defer func() { _ = db.Close() }()
-
-			for k, v := range db.RuntimeParams {
-				t.Logf("received runtime param %s = %q", k, v)
-			}
+			defer func() { _ = db.Close(ctx) }()
 
 			// If the session var is also a valid status param, then check
 			// the requested value was processed.
 			if test.expectedStatus {
-				serverVal := db.RuntimeParams[test.varName]
+				serverVal := db.PgConn().ParameterStatus(test.varName)
 				if serverVal != test.val {
 					t.Fatalf("initial server status %v: got %q, expected %q",
 						test.varName, serverVal, test.val)
@@ -1858,7 +1878,7 @@ func TestSessionParameters(t *testing.T) {
 			}
 
 			// Check the value also inside the session.
-			rows, err := db.Query("SHOW " + test.varName)
+			rows, err := db.Query(ctx, "SHOW "+test.varName)
 			if err != nil {
 				// Check that the value was not expected to be settable.
 				// (The set was ignored).
@@ -1892,8 +1912,10 @@ func TestSessionParameters(t *testing.T) {
 
 type pgxTestLogger struct{}
 
-func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]interface{}) {
-	log.Infof(context.Background(), "pgx log [%s] %s - %s", level, msg, data)
+func (l pgxTestLogger) Log(
+	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
+) {
+	log.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.
@@ -1931,7 +1953,7 @@ func TestCancelRequest(t *testing.T) {
 		if _, err := fe.Receive(); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("unexpected: %v", err)
 		}
-		if count := telemetry.GetRawFeatureCounts()["pgwire.unimplemented.cancel_request"]; count != 1 {
+		if count := telemetry.GetRawFeatureCounts()["pgwire.cancel_request"]; count != 1 {
 			t.Fatalf("expected 1 cancel request, got %d", count)
 		}
 	})

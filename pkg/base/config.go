@@ -231,18 +231,6 @@ type Config struct {
 	// The flag exists mostly for the benefit of tests, and for
 	// `cockroach start-single-node`.
 	AutoInitializeCluster bool
-
-	// IdleExistAfter, If nonzero, will cause the server to run normally for the
-	// indicated amount of time, wait for all SQL connections to terminate,
-	// start a `defaultCountdownDuration` countdown and exit upon countdown
-	// reaching zero if no new connections occur. New connections will be
-	// accepted at all times and will effectively delay the exit (indefinitely
-	// if there is always at least one connection or there are no connection
-	// for less than `defaultCountdownDuration`. A new `defaultCountdownDuration`
-	// countdown will start when no more SQL connections exist.
-	// The interval is specified with a suffix of 's' for seconds, 'm' for
-	// minutes, and 'h' for hours.
-	IdleExitAfter time.Duration
 }
 
 // HistogramWindowInterval is used to determine the approximate length of time
@@ -321,7 +309,7 @@ type RaftConfig struct {
 	// duration should be of the range lease active time. For example, with a
 	// value of 0.2 and a lease duration of 10 seconds, leases would be eagerly
 	// renewed 8 seconds into each lease. A value of zero means use the default
-	// and a value of -1 means never pre-emptively renew the lease. A value of 1
+	// and a value of -1 means never preemptively renew the lease. A value of 1
 	// means always renew.
 	RangeLeaseRenewalFraction float64
 
@@ -522,6 +510,9 @@ type StorageConfig struct {
 	// MaxSize is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size.
 	MaxSize int64
+	// BallastSize is the amount reserved by a ballast file for manual
+	// out-of-disk recovery.
+	BallastSize int64
 	// Settings instance for cluster-wide knobs.
 	Settings *cluster.Settings
 	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
@@ -586,6 +577,15 @@ type ExternalIODirConfig struct {
 	// DisableOutbound disables the use of any external-io that dials out such as
 	// to s3, gcs, or even `nodelocal` as it may need to dial another node.
 	DisableOutbound bool
+
+	// EnableNonAdminImplicitAndArbitraryOutbound removes the usual restriction to
+	// only admin users placed on usage of node-granted access, such as to the
+	// implicit auth via the machine account for the node or to arbitrary network
+	// addresses (which are accessed from the node and might otherwise not be
+	// reachable). Instead, all users can use implicit auth, http addresses and
+	// configure custom endpoints. This should only be used if all users with SQL
+	// access should have access to anything the node has access to.
+	EnableNonAdminImplicitAndArbitraryOutbound bool
 }
 
 // TempStorageConfigFromEnv creates a TempStorageConfig.

@@ -12,8 +12,9 @@ package rttanalysis
 
 import "testing"
 
-func BenchmarkGrantRole(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkGrantRole(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("GrantRole", []RoundTripBenchTestCase{
 		{
 			Name: "grant 1 role",
 			Setup: `CREATE ROLE a;
@@ -29,13 +30,12 @@ CREATE ROLE c;`,
 			Stmt:  "GRANT a,b TO c",
 			Reset: "DROP ROLE a,b,c",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }
 
-func BenchmarkRevokeRole(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkRevokeRole(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("RevokeRole", []RoundTripBenchTestCase{
 		{
 			Name: "revoke 1 role",
 			Setup: `CREATE ROLE a;
@@ -53,7 +53,5 @@ GRANT a,b TO c;`,
 			Stmt:  "REVOKE a,b FROM c",
 			Reset: "DROP ROLE a,b,c",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }

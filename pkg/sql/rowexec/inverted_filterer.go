@@ -125,7 +125,7 @@ func newInvertedFilterer(
 	}
 
 	if spec.PreFiltererSpec != nil {
-		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+		semaCtx := flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
 		var exprHelper execinfrapb.ExprHelper
 		colTypes := []*types.T{spec.PreFiltererSpec.Type}
 		if err := exprHelper.Init(spec.PreFiltererSpec.Expression, colTypes, semaCtx, ifr.EvalCtx); err != nil {
@@ -226,11 +226,11 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 			ifr.MoveToDraining(errors.New("no datum found"))
 			return ifrStateUnknown, ifr.DrainHelper()
 		}
-		if row[ifr.invertedColIdx].Datum.ResolvedType().Family() != types.BytesFamily {
-			ifr.MoveToDraining(errors.New("inverted column should have type bytes"))
+		if row[ifr.invertedColIdx].Datum.ResolvedType().Family() != types.EncodedKeyFamily {
+			ifr.MoveToDraining(errors.New("inverted column should have type encodedkey"))
 			return ifrStateUnknown, ifr.DrainHelper()
 		}
-		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DBytes))
+		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DEncodedKey))
 	}
 	shouldAdd, err := ifr.invertedEval.prepareAddIndexRow(enc, nil /* encFull */)
 	if err != nil {

@@ -33,7 +33,8 @@ type TLSSettings interface {
 	ocspTimeout() time.Duration
 }
 
-var ocspMode = settings.RegisterEnumSetting("security.ocsp.mode",
+var ocspMode = settings.RegisterEnumSetting(
+	settings.TenantWritable, "security.ocsp.mode",
 	"use OCSP to check whether TLS certificates are revoked. If the OCSP "+
 		"server is unreachable, in strict mode all certificates will be rejected "+
 		"and in lax mode all certificates will be accepted.",
@@ -42,7 +43,8 @@ var ocspMode = settings.RegisterEnumSetting("security.ocsp.mode",
 // TODO(bdarnell): 3 seconds is the same as base.NetworkTimeout, but
 // we can't use it here due to import cycles. We need a real
 // no-dependencies base package for constants like this.
-var ocspTimeout = settings.RegisterDurationSetting("security.ocsp.timeout",
+var ocspTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable, "security.ocsp.timeout",
 	"timeout before considering the OCSP server unreachable",
 	3*time.Second,
 	settings.NonNegativeDuration,

@@ -115,7 +115,7 @@ What's wrong with this?
 - the rewrite of the subquery results, when applicable, is expensive
   towards Go's heap allocator and GC.
 
-## Motivation for column data referencs ("indexed vars")
+## Motivation for column data references ("indexed vars")
 
 Currently in CockroachDB an early transform called "name resolution"
 will replace any column reference by name (e.g. "`k`" in `select k
@@ -247,7 +247,7 @@ However it breaks down when any of the following conditions apply:
   but the logical values in the trees require replacement between
   uses. This requires an expensive "rewrite via new allocation" traversal.
 - some algorithms need to perform an action for every node in a tree of a
-  specific type, without knowning in advance where these values are,
+  specific type, without knowing in advance where these values are,
   and this types happens to be rather uncommon in trees in
   practice. This causes "work for nothing": the common case pays the
   price of full tree traversals even when the application domain tells us

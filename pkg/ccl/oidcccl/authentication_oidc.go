@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/coreos/go-oidc"
+	oidc "github.com/coreos/go-oidc"
 	"golang.org/x/oauth2"
 )
 
@@ -258,7 +258,7 @@ var ConfigureOIDC = func(
 	serverCtx context.Context,
 	st *cluster.Settings,
 	locality roachpb.Locality,
-	mux *http.ServeMux,
+	handleHTTP func(pattern string, handler http.Handler),
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
@@ -268,7 +268,7 @@ var ConfigureOIDC = func(
 	// Don't want to use GRPC here since these endpoints require HTTP-Redirect behaviors and the
 	// callback endpoint will be receiving specialized parameters that grpc-gateway will only get
 	// in the way of processing.
-	mux.HandleFunc(oidcCallbackPath, func(w http.ResponseWriter, r *http.Request) {
+	handleHTTP(oidcCallbackPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
 		// Verify state and errors.
@@ -376,9 +376,9 @@ var ConfigureOIDC = func(
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 
 		telemetry.Inc(loginSuccessUseCounter)
-	})
+	}))
 
-	mux.HandleFunc(oidcLoginPath, func(w http.ResponseWriter, r *http.Request) {
+	handleHTTP(oidcLoginPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
 		oidcAuthentication.mutex.Lock()
@@ -406,7 +406,7 @@ var ConfigureOIDC = func(
 		http.Redirect(
 			w, r, oidcAuthentication.oauth2Config.AuthCodeURL(kast.signedTokenEncoded), http.StatusFound,
 		)
-	})
+	}))
 
 	reloadConfig(serverCtx, oidcAuthentication, locality, st)
 

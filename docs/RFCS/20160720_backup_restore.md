@@ -68,7 +68,7 @@ reasonably-efficient read-only queries over backups.
 
 Restore and load both use this same format. A backup will use the current ranges
 as segments, so they will be roughly range sized when restored. It's suggested
-that load segements are also this size, but not required.
+that load segments are also this size, but not required.
 
 See [Alternatives](#overlapping-load-segments) for a discussion of how we can
 remove the requirement for non-overlapping key ranges in load.

@@ -15,8 +15,10 @@ package concurrency
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -151,7 +153,7 @@ type Manager interface {
 	TransactionManager
 	RangeStateListener
 	MetricExporter
-	TestStateExporter
+	TestingAccessor
 }
 
 // RequestSequencer is concerned with the sequencing of concurrent requests. It
@@ -187,6 +189,15 @@ type RequestSequencer interface {
 	// directly, in which case it will return a Response for the request. If it
 	// does so, it will not return a request guard.
 	SequenceReq(context.Context, *Guard, Request, RequestEvalKind) (*Guard, Response, *Error)
+
+	// PoisonReq idempotently marks a Guard as poisoned, indicating that its
+	// latches may be held for an indefinite amount of time. Requests waiting on
+	// this Guard will be notified. Latch acquisitions under poison.Policy_Error
+	// react to this by failing with a poison.PoisonedError, while requests under
+	// poison.Policy_Wait continue waiting, but propagate the poisoning upwards.
+	//
+	// See poison.Policy for details.
+	PoisonReq(*Guard)
 
 	// FinishReq marks the request as complete, releasing any protection
 	// the request had against conflicting requests and allowing conflicting
@@ -250,6 +261,10 @@ type LockManager interface {
 	// updated or released a lock or range of locks that it previously held.
 	// The Durability field of the lock update struct is ignored.
 	OnLockUpdated(context.Context, *roachpb.LockUpdate)
+
+	// QueryLockTableState gathers detailed metadata on locks tracked in the lock
+	// table that are part of the provided span and key scope, up to provided limits.
+	QueryLockTableState(ctx context.Context, span roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)
 }
 
 // TransactionManager is concerned with tracking transactions that have their
@@ -306,16 +321,20 @@ type MetricExporter interface {
 	// TxnWaitQueueMetrics()
 }
 
-// TestStateExporter is concerned with providing testing hooks that expose the
+// TestingAccessor is concerned with providing testing hooks that expose the
 // state of the concurrency manager, to be used by unit tests outside of the
 // concurrency package. It is one of the roles of Manager.
-type TestStateExporter interface {
+type TestingAccessor interface {
 	// TestingLockTableString returns a debug string representing the state of the
 	// lockTable.
 	TestingLockTableString() string
 
 	// TestingTxnWaitQueue returns the concurrency manager's txnWaitQueue.
 	TestingTxnWaitQueue() *txnwait.Queue
+
+	// TestingSetMaxLocks updates the locktable's lock limit. This can be used to
+	// force the locktable to exceed its limit and clear locks.
+	TestingSetMaxLocks(n int64)
 }
 
 ///////////////////////////////////
@@ -371,6 +390,11 @@ type Request struct {
 	// transactions.
 	WaitPolicy lock.WaitPolicy
 
+	// The maximum amount of time that the batch request will wait while
+	// attempting to acquire a lock on a key or while blocking on an
+	// existing lock in order to perform a non-locking read on a key.
+	LockTimeout time.Duration
+
 	// The maximum length of a lock wait-queue that the request is willing
 	// to enter and wait in. Used to provide a release valve and ensure some
 	// level of quality-of-service under severe per-key contention. If set
@@ -378,6 +402,9 @@ type Request struct {
 	// to or exceeding this length, the request will be rejected eagerly
 	// with a WriteIntentError instead of entering the queue and waiting.
 	MaxLockWaitQueueLength int
+
+	// The poison.Policy to use for this Request.
+	PoisonPolicy poison.Policy
 
 	// The individual requests in the batch.
 	Requests []roachpb.RequestUnion
@@ -427,6 +454,33 @@ type Response = []roachpb.ResponseUnion
 // Error is an alias for a roachpb.Error.
 type Error = roachpb.Error
 
+// QueryLockTableOptions bundles the options for the QueryLockTableState function.
+type QueryLockTableOptions struct {
+	KeyScope           spanset.SpanScope
+	MaxLocks           int64
+	TargetBytes        int64
+	IncludeUncontended bool
+}
+
+// QueryLockTableResumeState bundles the return metadata on the pagination of
+// results from the QueryLockTableState function.
+type QueryLockTableResumeState struct {
+	ResumeSpan   *roachpb.Span
+	ResumeReason roachpb.ResumeReason
+
+	// ResumeNextBytes represents the size (in bytes) of the next
+	// roachpb.LockStateInfo object that would have been returned by
+	// QueryLockTableState if it were not limited by MaxLocks or TargetBytes.
+	// As such, this value is only set if ResumeSpan, ResumeReason have been set.
+	ResumeNextBytes int64
+
+	// TotalBytes is the byte size of the roachpb.LockStateInfo objects returned
+	// by QueryLockTableState, and is always set. This value is used to calculate
+	// the remaining quota of bytes (from TargetBytes) that can be used in
+	// querying other ranges served by the same request.
+	TotalBytes int64
+}
+
 ///////////////////////////////////
 // Internal Structure Interfaces //
 ///////////////////////////////////
@@ -455,7 +509,15 @@ type latchManager interface {
 	// causing this request to switch to pessimistic latching.
 	WaitUntilAcquired(ctx context.Context, lg latchGuard) (latchGuard, *Error)
 
-	// Releases latches, relinquish its protection from conflicting requests.
+	// WaitFor waits for conflicting latches on the specified spans without adding
+	// any latches itself. Fast path for operations that only require flushing out
+	// old operations without blocking any new ones.
+	WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison.Policy) *Error
+
+	// Poison a guard's latches, allowing waiters to fail fast.
+	Poison(latchGuard)
+
+	// Release a guard's latches, relinquish its protection from conflicting requests.
 	Release(latchGuard)
 
 	// Metrics returns information about the state of the latchManager.
@@ -662,6 +724,9 @@ type lockTable interface {
 	// lockTableGuard.ResolveBeforeEvaluation to resolve a batch of intents.
 	TransactionIsFinalized(*roachpb.Transaction)
 
+	// QueryLockTableState returns detailed metadata on locks managed by the lockTable.
+	QueryLockTableState(span roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)
+
 	// Metrics returns information about the state of the lockTable.
 	Metrics() LockTableMetrics
 
@@ -744,22 +809,6 @@ type lockTableWaiter interface {
 	// wait-queues and it is safe to re-acquire latches and scan the lockTable
 	// again.
 	WaitOn(context.Context, Request, lockTableGuard) *Error
-
-	// WaitOnLock waits on the transaction responsible for the specified lock
-	// and then ensures that the lock is cleared out of the request's way.
-	//
-	// The method should be called after dropping any latches that a request has
-	// acquired. It returns when the lock has been resolved.
-	//
-	// NOTE: this method is used when the lockTable is disabled (e.g. on a
-	// follower replica) and a lock is discovered that must be waited on (e.g.
-	// during a follower read). If/when lockTables are maintained on follower
-	// replicas by propagating lockTable state transitions through the Raft log
-	// in the ReplicatedEvalResult instead of through the (leaseholder-only)
-	// LocalResult, we should be able to remove the lockTable "disabled" state
-	// and, in turn, remove this method. This will likely fall out of pulling
-	// all replicated locks into the lockTable.
-	WaitOnLock(context.Context, Request, *roachpb.Intent) *Error
 
 	// ResolveDeferredIntents resolves the batch of intents if the provided
 	// error is nil. The batch of intents may be resolved more efficiently than

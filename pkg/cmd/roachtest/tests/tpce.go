@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,19 +43,20 @@ func registerTPCE(r registry.Registry) {
 
 		t.Status("installing cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-		c.Start(ctx, roachNodes, option.StartArgs(
-			fmt.Sprintf("--racks=%d", racks),
-			fmt.Sprintf("--store-count=%d", opts.ssds),
-		))
+
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.StoreCount = opts.ssds
+		settings := install.MakeClusterSettings(install.NumRacksOption(racks))
+		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 
 		t.Status("installing docker")
-		if err := c.Install(ctx, loadNode, "docker"); err != nil {
+		if err := c.Install(ctx, t.L(), loadNode, "docker"); err != nil {
 			t.Fatal(err)
 		}
 
 		// Configure to increase the speed of the import.
 		func() {
-			db := c.Conn(ctx, 1)
+			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 			if _, err := db.ExecContext(
 				ctx, "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1", 4*opts.ssds,
@@ -72,7 +74,7 @@ func registerTPCE(r registry.Registry) {
 		m.Go(func(ctx context.Context) error {
 			const dockerRun = `sudo docker run cockroachdb/tpc-e:latest`
 
-			roachNodeIPs, err := c.InternalIP(ctx, roachNodes)
+			roachNodeIPs, err := c.InternalIP(ctx, t.L(), roachNodes)
 			if err != nil {
 				return err
 			}
@@ -88,15 +90,14 @@ func registerTPCE(r registry.Registry) {
 			t.Status("running workload")
 			duration := 2 * time.Hour
 			threads := opts.nodes * opts.cpus
-			out, err := c.RunWithBuffer(ctx, t.L(), loadNode,
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode,
 				fmt.Sprintf("%s --customers=%d --racks=%d --duration=%s --threads=%d %s",
 					dockerRun, opts.customers, racks, duration, threads, strings.Join(roachNodeIPFlags, " ")))
 			if err != nil {
-				t.Fatalf("%v\n%s", err, out)
+				t.Fatal(err.Error())
 			}
-			outStr := string(out)
-			t.L().Printf("workload output:\n%s\n", outStr)
-			if strings.Contains(outStr, "Reported tpsE :    --   (not between 80% and 100%)") {
+			t.L().Printf("workload output:\n%s\n", result.Stdout)
+			if strings.Contains(result.Stdout, "Reported tpsE :    --   (not between 80% and 100%)") {
 				return errors.New("invalid tpsE fraction")
 			}
 			return nil

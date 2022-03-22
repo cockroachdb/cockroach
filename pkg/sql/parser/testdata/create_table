@@ -359,6 +359,14 @@ CREATE TABLE a (b GEOGRAPHY(POINT,4326)) -- literals removed
 CREATE TABLE _ (_ GEOGRAPHY(POINT,4326)) -- identifiers removed
 
 parse
+CREATE TABLE a (b GEOGRAPHY(LINESTRINGZ,4326))
+----
+CREATE TABLE a (b GEOGRAPHY(LINESTRINGZ,4326))
+CREATE TABLE a (b GEOGRAPHY(LINESTRINGZ,4326)) -- fully parenthesized
+CREATE TABLE a (b GEOGRAPHY(LINESTRINGZ,4326)) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY(LINESTRINGZ,4326)) -- identifiers removed
+
+parse
 CREATE TABLE a (b GEOGRAPHY(LINESTRING,4326))
 ----
 CREATE TABLE a (b GEOGRAPHY(LINESTRING,4326))
@@ -551,14 +559,6 @@ CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > _) -- literals remov
 CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_) WHERE _ > 3) -- identifiers removed
 
 parse
-CREATE TABLE a (b INT, UNIQUE INDEX foo (b) INTERLEAVE IN PARENT c (d))
-----
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- normalized!
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- fully parenthesized
-CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- literals removed
-CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_) INTERLEAVE IN PARENT _ (_)) -- identifiers removed
-
-parse
 CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
 ----
 CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) -- normalized!
@@ -589,6 +589,22 @@ CREATE TABLE a (b INT8 DEFAULT 1)
 CREATE TABLE a (b INT8 DEFAULT (1)) -- fully parenthesized
 CREATE TABLE a (b INT8 DEFAULT _) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT 1) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 ON UPDATE 1)
+----
+CREATE TABLE a (b INT8 ON UPDATE 1)
+CREATE TABLE a (b INT8 ON UPDATE (1)) -- fully parenthesized
+CREATE TABLE a (b INT8 ON UPDATE _) -- literals removed
+CREATE TABLE _ (_ INT8 ON UPDATE 1) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 DEFAULT 1 ON UPDATE 2)
+----
+CREATE TABLE a (b INT8 DEFAULT 1 ON UPDATE 2)
+CREATE TABLE a (b INT8 DEFAULT (1) ON UPDATE (2)) -- fully parenthesized
+CREATE TABLE a (b INT8 DEFAULT _ ON UPDATE _) -- literals removed
+CREATE TABLE _ (_ INT8 DEFAULT 1 ON UPDATE 2) -- identifiers removed
 
 parse
 CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT 1)
@@ -1297,14 +1313,6 @@ CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c)) -- f
 CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c)) -- literals removed
 CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE WITHOUT INDEX (_, _)) -- identifiers removed
 
-parse
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f))
-----
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f))
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f)) -- fully parenthesized
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f)) -- literals removed
-CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE (_, _) INTERLEAVE IN PARENT _ (_, _)) -- identifiers removed
-
 error
 CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
@@ -1590,14 +1598,6 @@ CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c)) -- literals
 CREATE TABLE _ (_ INT8, _ STRING, INDEX (_ ASC, _ DESC) STORING (_)) -- identifiers removed
 
 parse
-CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e))
-----
-CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e))
-CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e)) -- fully parenthesized
-CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e)) -- literals removed
-CREATE TABLE _ (_ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_, _)) -- identifiers removed
-
-parse
 CREATE TABLE a (b INT8, FAMILY (b))
 ----
 CREATE TABLE a (b INT8, FAMILY (b))
@@ -1612,22 +1612,6 @@ CREATE TABLE a (b INT8, c STRING, FAMILY foo (b), FAMILY (c))
 CREATE TABLE a (b INT8, c STRING, FAMILY foo (b), FAMILY (c)) -- fully parenthesized
 CREATE TABLE a (b INT8, c STRING, FAMILY foo (b), FAMILY (c)) -- literals removed
 CREATE TABLE _ (_ INT8, _ STRING, FAMILY _ (_), FAMILY (_)) -- identifiers removed
-
-parse
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d)
-----
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d)
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d) -- fully parenthesized
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d) -- literals removed
-CREATE TABLE _ (_ INT8) INTERLEAVE IN PARENT _ (_, _) -- identifiers removed
-
-parse
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE
-----
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE -- fully parenthesized
-CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE -- literals removed
-CREATE TABLE _ (_ INT8) INTERLEAVE IN PARENT _ (_) CASCADE -- identifiers removed
 
 parse
 CREATE TABLE a.b (b INT8)
@@ -1811,15 +1795,6 @@ CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM ((m
 CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (_), PARTITION p2 VALUES FROM (_, maxvalue) TO (_, _), PARTITION p3 VALUES FROM (_, _) TO (maxvalue)) -- literals removed
 CREATE TABLE _ (_ INT8) PARTITION ALL BY RANGE (_) (PARTITION _ VALUES FROM (_) TO (1), PARTITION _ VALUES FROM (2, _) TO (4, 4), PARTITION _ VALUES FROM (4, 4) TO (_)) -- identifiers removed
 
-
-parse
-CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))
-----
-CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))
-CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN ((1))) -- fully parenthesized
-CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (_)) -- literals removed
-CREATE TABLE _ () INTERLEAVE IN PARENT _ (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
-
 parse
 CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (1))
 ----
@@ -1953,7 +1928,7 @@ CREATE TABLE a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 ----
 CREATE TABLE a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE a AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE a AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE a AS VALUES ('_', _), (__more2__) -- literals removed
 CREATE TABLE _ AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -1961,7 +1936,7 @@ CREATE TABLE IF NOT EXISTS a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 ----
 CREATE TABLE IF NOT EXISTS a AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE IF NOT EXISTS a AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE IF NOT EXISTS a AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE IF NOT EXISTS a AS VALUES ('_', _), (__more2__) -- literals removed
 CREATE TABLE IF NOT EXISTS _ AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -1969,7 +1944,7 @@ CREATE TABLE a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
 ----
 CREATE TABLE a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE a (str, num) AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE a (str, num) AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE a (str, num) AS VALUES ('_', _), (__more2__) -- literals removed
 CREATE TABLE _ (_, _) AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -1977,7 +1952,7 @@ CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('one', 1), ('two', 2), ('thre
 ----
 CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
 CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthesized
-CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('_', _), (__more2__) -- literals removed
 CREATE TABLE IF NOT EXISTS _ (_, _) AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
 
 parse
@@ -2001,7 +1976,7 @@ CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5
 ----
 CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5
 CREATE TABLE a AS SELECT (*) FROM b UNION VALUES (('one'), (1)) ORDER BY (c) LIMIT (5) -- fully parenthesized
-CREATE TABLE a AS SELECT * FROM b UNION VALUES (_, _) ORDER BY c LIMIT _ -- literals removed
+CREATE TABLE a AS SELECT * FROM b UNION VALUES ('_', _) ORDER BY c LIMIT _ -- literals removed
 CREATE TABLE _ AS SELECT * FROM _ UNION VALUES ('one', 1) ORDER BY _ LIMIT 5 -- identifiers removed
 
 parse
@@ -2009,7 +1984,7 @@ CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY
 ----
 CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5
 CREATE TABLE IF NOT EXISTS a AS SELECT (*) FROM b UNION VALUES (('one'), (1)) ORDER BY (c) LIMIT (5) -- fully parenthesized
-CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES (_, _) ORDER BY c LIMIT _ -- literals removed
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('_', _) ORDER BY c LIMIT _ -- literals removed
 CREATE TABLE IF NOT EXISTS _ AS SELECT * FROM _ UNION VALUES ('one', 1) ORDER BY _ LIMIT 5 -- identifiers removed
 
 parse
@@ -2221,17 +2196,17 @@ CREATE TABLE _ (_ INT4) LOCALITY REGIONAL BY ROW AS _ -- identifiers removed
 parse
 CREATE TABLE a (b INT) WITH (fillfactor=100)
 ----
-CREATE TABLE a (b INT8) -- normalized!
-CREATE TABLE a (b INT8) -- fully parenthesized
-CREATE TABLE a (b INT8) -- literals removed
-CREATE TABLE _ (_ INT8) -- identifiers removed
+CREATE TABLE a (b INT8) WITH (fillfactor = 100) -- normalized!
+CREATE TABLE a (b INT8) WITH (fillfactor = (100)) -- fully parenthesized
+CREATE TABLE a (b INT8) WITH (fillfactor = _) -- literals removed
+CREATE TABLE _ (_ INT8) WITH (_ = 100) -- identifiers removed
 
 parse
 CREATE TABLE arr_t (i STRING DEFAULT (('{' || 'a' || '}')::STRING[])[1]::STRING)
 ----
 CREATE TABLE arr_t (i STRING DEFAULT ((('{' || 'a') || '}')::STRING[])[1]::STRING) -- normalized!
 CREATE TABLE arr_t (i STRING DEFAULT ((((((((((('{') || ('a'))) || ('}'))))::STRING[])))[(1)])::STRING)) -- fully parenthesized
-CREATE TABLE arr_t (i STRING DEFAULT (((_ || _) || _)::STRING[])[_]::STRING) -- literals removed
+CREATE TABLE arr_t (i STRING DEFAULT ((('_' || '_') || '_')::STRING[])[_]::STRING) -- literals removed
 CREATE TABLE _ (_ STRING DEFAULT ((('{' || 'a') || '}')::STRING[])[1]::STRING) -- identifiers removed
 
 parse
@@ -2239,7 +2214,7 @@ CREATE TABLE arr_t (i INT8 DEFAULT (('{' || '1' || '}')::INT8[])[1])
 ----
 CREATE TABLE arr_t (i INT8 DEFAULT ((('{' || '1') || '}')::INT8[])[1]) -- normalized!
 CREATE TABLE arr_t (i INT8 DEFAULT (((((((((('{') || ('1'))) || ('}'))))::INT8[])))[(1)])) -- fully parenthesized
-CREATE TABLE arr_t (i INT8 DEFAULT (((_ || _) || _)::INT8[])[_]) -- literals removed
+CREATE TABLE arr_t (i INT8 DEFAULT ((('_' || '_') || '_')::INT8[])[_]) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT ((('{' || '1') || '}')::INT8[])[1]) -- identifiers removed
 
 parse
@@ -2260,3 +2235,174 @@ CREATE TABLE operator_tbl (a INT8 DEFAULT 1 OPERATOR(+) 2, b INT8 DEFAULT 1 OPER
 CREATE TABLE operator_tbl (a INT8 DEFAULT ((1) OPERATOR(+) (2)), b INT8 DEFAULT ((1) OPERATOR(+) (2))) -- fully parenthesized
 CREATE TABLE operator_tbl (a INT8 DEFAULT _ OPERATOR(+) _, b INT8 DEFAULT _ OPERATOR(+) _) -- literals removed
 CREATE TABLE _ (_ INT8 DEFAULT 1 OPERATOR(+) 2, _ INT8 DEFAULT 1 OPERATOR(+) 2) -- identifiers removed
+
+parse
+CREATE TABLE generated_always_as_identity_tb (
+  a INT UNIQUE,
+  b INT GENERATED ALWAYS AS IDENTITY,
+  c INT GENERATED BY DEFAULT AS IDENTITY
+)
+----
+CREATE TABLE generated_always_as_identity_tb (a INT8 UNIQUE, b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY, c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY) -- normalized!
+CREATE TABLE generated_always_as_identity_tb (a INT8 UNIQUE, b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY, c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY) -- fully parenthesized
+CREATE TABLE generated_always_as_identity_tb (a INT8 UNIQUE, b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY, c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY) -- literals removed
+CREATE TABLE _ (_ INT8 UNIQUE, _ INT8 NOT NULL GENERATED ALWAYS AS IDENTITY, _ INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY) -- identifiers removed
+
+parse
+CREATE TABLE generated_not_null (
+  a INT,
+  b INT NOT NULL GENERATED ALWAYS AS IDENTITY,
+  c INT NOT NULL GENERATED BY DEFAULT AS IDENTITY
+)
+----
+CREATE TABLE generated_not_null (a INT8, b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY, c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY) -- normalized!
+CREATE TABLE generated_not_null (a INT8, b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY, c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY) -- fully parenthesized
+CREATE TABLE generated_not_null (a INT8, b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY, c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 NOT NULL GENERATED ALWAYS AS IDENTITY, _ INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY) -- identifiers removed
+
+error
+CREATE TABLE generated_error (
+  a INT UNIQUE,
+  b INT GENERATED BY DEFAULT AS IDENTITY GENERATED ALWAYS AS IDENTITY
+)
+----
+at or near ")": syntax error: multiple identity specifications for column "b"
+DETAIL: source SQL:
+CREATE TABLE generated_error (
+  a INT UNIQUE,
+  b INT GENERATED BY DEFAULT AS IDENTITY GENERATED ALWAYS AS IDENTITY
+)
+^
+
+error
+CREATE TABLE generated_error (
+  a INT UNIQUE,
+  b INT NULL GENERATED BY DEFAULT AS IDENTITY
+)
+----
+at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "b"
+DETAIL: source SQL:
+CREATE TABLE generated_error (
+  a INT UNIQUE,
+  b INT NULL GENERATED BY DEFAULT AS IDENTITY
+)
+^
+
+error
+CREATE TABLE generated_error (
+  a INT UNIQUE,
+  b INT GENERATED BY DEFAULT AS IDENTITY NULL
+)
+----
+at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "b"
+DETAIL: source SQL:
+CREATE TABLE generated_error (
+  a INT UNIQUE,
+  b INT GENERATED BY DEFAULT AS IDENTITY NULL
+)
+^
+
+error
+CREATE TABLE generated_error (
+  a INT,
+  b INT AS (a + 10) STORED GENERATED ALWAYS AS IDENTITY
+)
+----
+at or near ")": syntax error: both generated identity and computed expression specified for column "b"
+DETAIL: source SQL:
+CREATE TABLE generated_error (
+  a INT,
+  b INT AS (a + 10) STORED GENERATED ALWAYS AS IDENTITY
+)
+^
+
+error
+CREATE TABLE generated_error (
+  a INT,
+  b INT GENERATED ALWAYS AS (a + 10) STORED GENERATED ALWAYS AS IDENTITY
+)
+----
+at or near ")": syntax error: both generated identity and computed expression specified for column "b"
+DETAIL: source SQL:
+CREATE TABLE generated_error (
+  a INT,
+  b INT GENERATED ALWAYS AS (a + 10) STORED GENERATED ALWAYS AS IDENTITY
+)
+^
+
+error
+CREATE TABLE generated_error (
+  a INT,
+  b INT GENERATED ALWAYS AS (a + 10) IDENTITY
+)
+----
+at or near "identity": syntax error: use AS ( <expr> ) STORED or AS ( <expr> ) VIRTUAL
+DETAIL: source SQL:
+CREATE TABLE generated_error (
+  a INT,
+  b INT GENERATED ALWAYS AS (a + 10) IDENTITY
+                                     ^
+
+error
+CREATE TABLE generated_error (
+  a INT,
+  b INT GENERATED BY DEFAULT AS IDENTITY DEFAULT 1
+)
+----
+at or near ")": syntax error: multiple default values specified for column "b"
+DETAIL: source SQL:
+CREATE TABLE generated_error (
+  a INT,
+  b INT GENERATED BY DEFAULT AS IDENTITY DEFAULT 1
+)
+^
+
+error
+CREATE TABLE generated_error (
+  a INT,
+  b INT DEFAULT 1 GENERATED BY DEFAULT AS IDENTITY
+)
+----
+at or near ")": syntax error: multiple default values specified for column "b"
+DETAIL: source SQL:
+CREATE TABLE generated_error (
+  a INT,
+  b INT DEFAULT 1 GENERATED BY DEFAULT AS IDENTITY
+)
+^
+
+error
+CREATE TABLE generated_error (
+  a INT,
+  b VARCHAR(12) GENERATED ALWAYS AS IDENTITY
+)
+----
+at or near ")": syntax error: identity column type must be an INT
+DETAIL: source SQL:
+CREATE TABLE generated_error (
+  a INT,
+  b VARCHAR(12) GENERATED ALWAYS AS IDENTITY
+)
+^
+
+error
+CREATE TABLE generated_error (
+  a INT,
+  b VARCHAR(12) GENERATED BY DEFAULT AS IDENTITY
+)
+----
+at or near ")": syntax error: identity column type must be an INT
+DETAIL: source SQL:
+CREATE TABLE generated_error (
+  a INT,
+  b VARCHAR(12) GENERATED BY DEFAULT AS IDENTITY
+)
+^
+
+parse
+CREATE TABLE visible (visible INT4)
+----
+CREATE TABLE visible (visible INT4)
+CREATE TABLE visible (visible INT4) -- fully parenthesized
+CREATE TABLE visible (visible INT4) -- literals removed
+CREATE TABLE _ (_ INT4) -- identifiers removed

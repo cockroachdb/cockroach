@@ -25,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // scope is used for the build process and maintains the variables that have
@@ -126,6 +128,7 @@ const (
 	exprKindOrderBy
 	exprKindReturning
 	exprKindSelect
+	exprKindStoreID
 	exprKindValues
 	exprKindWhere
 	exprKindWindowFrameStart
@@ -146,6 +149,7 @@ var exprKindName = [...]string{
 	exprKindOrderBy:           "ORDER BY",
 	exprKindReturning:         "RETURNING",
 	exprKindSelect:            "SELECT",
+	exprKindStoreID:           "RELOCATE STORE ID",
 	exprKindValues:            "VALUES",
 	exprKindWhere:             "WHERE",
 	exprKindWindowFrameStart:  "WINDOW FRAME START",
@@ -315,6 +319,22 @@ func (s *scope) getColumn(col opt.ColumnID) *scopeColumn {
 	return nil
 }
 
+// getColumnWithIDAndReferenceName returns the scopeColumn with the given id and
+// reference name (either in cols or extraCols).
+func (s *scope) getColumnWithIDAndReferenceName(col opt.ColumnID, refName tree.Name) *scopeColumn {
+	for i := range s.cols {
+		if s.cols[i].id == col && s.cols[i].name.MatchesReferenceName(refName) {
+			return &s.cols[i]
+		}
+	}
+	for i := range s.extraCols {
+		if s.extraCols[i].id == col && s.cols[i].name.MatchesReferenceName(refName) {
+			return &s.extraCols[i]
+		}
+	}
+	return nil
+}
+
 // getColumnForTableOrdinal returns the column with a specific tableOrdinal
 // value, or nil if it doesn't exist.
 func (s *scope) getColumnForTableOrdinal(tabOrd int) *scopeColumn {
@@ -342,12 +362,15 @@ func (s *scope) makeOrderingChoice() props.OrderingChoice {
 }
 
 // makePhysicalProps constructs physical properties using the columns in the
-// scope for presentation and s.ordering for required ordering.
+// scope for presentation and s.ordering for required ordering. The distribution
+// is determined based on the locality of the gateway node, since data must
+// always be returned to the gateway.
 func (s *scope) makePhysicalProps() *physical.Required {
 	p := &physical.Required{
 		Presentation: s.makePresentation(),
 	}
 	p.Ordering.FromOrdering(s.ordering)
+	p.Distribution.FromLocality(s.builder.evalCtx.Locality)
 	return p
 }
 
@@ -458,7 +481,7 @@ func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.Typ
 	if err != nil {
 		panic(err)
 	}
-	return tree.ReType(s.ensureNullType(texpr, desired), desired)
+	return s.ensureNullType(texpr, desired)
 }
 
 // ensureNullType tests the type of the given expression. If types.Unknown, then
@@ -924,7 +947,9 @@ func (s *scope) Resolve(
 	inScope := srcMeta.(*scope)
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
-		if col.name.MatchesReferenceName(colName) && sourceNameMatches(*prefix, col.table) {
+		if col.visibility != inaccessible &&
+			col.name.MatchesReferenceName(colName) &&
+			sourceNameMatches(*prefix, col.table) {
 			return col, nil
 		}
 	}
@@ -1025,7 +1050,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 
 	case *tree.ComparisonExpr:
 		switch t.Operator.Symbol {
-		case tree.In, tree.NotIn, tree.Any, tree.Some, tree.All:
+		case treecmp.In, treecmp.NotIn, treecmp.Any, treecmp.Some, treecmp.All:
 			if sub, ok := t.Right.(*tree.Subquery); ok {
 				// Copy the Comparison expression so that the tree isn't mutated.
 				copy := *t
@@ -1387,11 +1412,11 @@ func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
 	startBound, endBound := bounds.StartBound, bounds.EndBound
 	var requiredType *types.T
 	switch frame.Mode {
-	case tree.ROWS:
+	case treewindow.ROWS:
 		// In ROWS mode, offsets must be non-null, non-negative integers. Non-nullity
 		// and non-negativity will be checked later.
 		requiredType = types.Int
-	case tree.RANGE:
+	case treewindow.RANGE:
 		// In RANGE mode, offsets must be non-null and non-negative datums of a type
 		// dependent on the type of the ordering column. Non-nullity and
 		// non-negativity will be checked later.
@@ -1406,14 +1431,14 @@ func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
 			if !types.IsAdditiveType(requiredType) {
 				return pgerror.Newf(pgcode.Windowing,
 					"RANGE with offset PRECEDING/FOLLOWING is not supported for column type %s",
-					log.Safe(requiredType))
+					redact.Safe(requiredType))
 			}
 			if types.IsDateTimeType(requiredType) {
 				// Spec: for datetime ordering columns, the required type is an 'interval'.
 				requiredType = types.Interval
 			}
 		}
-	case tree.GROUPS:
+	case treewindow.GROUPS:
 		if len(windowDef.OrderBy) == 0 {
 			return pgerror.Newf(pgcode.Windowing, "GROUPS mode requires an ORDER BY clause")
 		}

@@ -57,6 +57,7 @@ type NodeStatusGenerator interface {
 }
 
 var reportFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"diagnostics.reporting.interval",
 	"interval at which diagnostics data should be reported",
 	time.Hour,
@@ -93,7 +94,7 @@ type Reporter struct {
 // PeriodicallyReportDiagnostics starts a background worker that periodically
 // phones home to report usage and diagnostics.
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
-	_ = stopper.RunAsyncTask(ctx, "diagnostics", func(ctx context.Context) {
+	_ = stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "diagnostics", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
 		nextReport := r.StartTime
 
@@ -169,7 +170,7 @@ func (r *Reporter) CreateReport(
 ) *diagnosticspb.DiagnosticReport {
 	info := diagnosticspb.DiagnosticReport{}
 	secret := sql.ClusterSecret.Get(&r.Settings.SV)
-	uptime := int64(timeutil.Now().Sub(r.StartTime).Seconds())
+	uptime := int64(timeutil.Since(r.StartTime).Seconds())
 
 	// Populate the hardware, OS, binary, and location of the CRDB node or SQL
 	// instance.
@@ -208,7 +209,9 @@ func (r *Reporter) CreateReport(
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			row := it.Cur()
 			name := string(tree.MustBeDString(row[0]))
-			info.AlteredSettings[name] = settings.RedactedValue(name, &r.Settings.SV)
+			info.AlteredSettings[name] = settings.RedactedValue(
+				name, &r.Settings.SV, r.TenantID == roachpb.SystemTenantID,
+			)
 		}
 		if err != nil {
 			// No need to clear AlteredSettings map since we only make best
@@ -326,7 +329,7 @@ func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescrip
 			return nil, errors.Wrapf(err, "%s: unable to unmarshal SQL descriptor", kv.Key)
 		}
 		t, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, kv.Value.Timestamp)
-		if t != nil && t.ID > keys.MaxReservedDescID {
+		if t != nil && t.ParentID != keys.SystemDatabaseID {
 			if err := reflectwalk.Walk(t, redactor); err != nil {
 				panic(err) // stringRedactor never returns a non-nil err
 			}

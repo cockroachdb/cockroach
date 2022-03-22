@@ -13,16 +13,18 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -68,10 +70,10 @@ func (p *planner) createDatabase(
 	dbName := string(database.Name)
 	dKey := catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, dbName)
 
-	if exists, databaseID, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, dbName); err == nil && exists {
+	if dbID, err := p.Descriptors().Direct().LookupDatabaseID(ctx, p.txn, dbName); err == nil && dbID != descpb.InvalidID {
 		if database.IfNotExists {
 			// Check if the database is in a dropping state
-			desc, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, databaseID)
+			desc, err := p.Descriptors().Direct().MustGetDatabaseDescByID(ctx, p.txn, dbID)
 			if err != nil {
 				return nil, false, err
 			}
@@ -88,7 +90,7 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
 		return nil, false, err
 	}
@@ -100,6 +102,13 @@ func (p *planner) createDatabase(
 				database.SurvivalGoal.TelemetryName(),
 			),
 		)
+		if database.Placement != tree.DataPlacementUnspecified {
+			telemetry.Inc(
+				sqltelemetry.CreateDatabasePlacementCounter(
+					database.Placement.TelemetryName(),
+				),
+			)
+		}
 	}
 
 	regionConfig, err := p.maybeInitializeMultiRegionMetadata(
@@ -107,36 +116,104 @@ func (p *planner) createDatabase(
 		database.SurvivalGoal,
 		database.PrimaryRegion,
 		database.Regions,
+		database.Placement,
 	)
 	if err != nil {
 		return nil, false, err
 	}
 
+	publicSchemaID, err := p.createPublicSchema(ctx, id, database)
+	if err != nil {
+		return nil, false, err
+	}
+
+	owner := p.SessionData().User()
+	if !database.Owner.Undefined() {
+		owner, err = database.Owner.ToSQLUsername(p.SessionData(), security.UsernameValidation)
+		if err != nil {
+			return nil, true, err
+		}
+	}
+
 	desc := dbdesc.NewInitial(
 		id,
 		string(database.Name),
-		p.SessionData().User(),
+		owner,
 		dbdesc.MaybeWithDatabaseRegionConfig(regionConfig),
+		dbdesc.WithPublicSchemaID(publicSchemaID),
 	)
 
-	if err := p.createDescriptorWithID(ctx, dKey, id, desc, nil, jobDesc); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, desc, owner); err != nil {
+		return nil, true, err
+	}
+
+	if err := p.createDescriptorWithID(ctx, dKey, id, desc, jobDesc); err != nil {
 		return nil, true, err
 	}
 
 	// Initialize the multi-region database by creating the multi-region enum and
 	// database-level zone configuration if there is a region config on the
 	// descriptor.
+
 	if err := p.maybeInitializeMultiRegionDatabase(ctx, desc, regionConfig); err != nil {
 		return nil, true, err
 	}
 
-	// Every database must be initialized with the public schema.
-	key := catalogkeys.MakePublicSchemaNameKey(p.ExecCfg().Codec, id)
-	if err := p.CreateSchemaNamespaceEntry(ctx, key, keys.PublicSchemaID); err != nil {
-		return nil, true, err
+	return desc, true, nil
+}
+
+func (p *planner) maybeCreatePublicSchemaWithDescriptor(
+	ctx context.Context, dbID descpb.ID, database *tree.CreateDatabase,
+) (descpb.ID, error) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) {
+		return descpb.InvalidID, nil
 	}
 
-	return desc, true, nil
+	publicSchemaID, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+
+	// Every database must be initialized with the public schema.
+	// Create the SchemaDescriptor.
+	publicSchemaPrivileges := catpb.NewPublicSchemaPrivilegeDescriptor()
+	publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		ParentID:   dbID,
+		Name:       tree.PublicSchema,
+		ID:         publicSchemaID,
+		Privileges: publicSchemaPrivileges,
+		Version:    1,
+	}).BuildCreatedMutableSchema()
+
+	if err := p.createDescriptorWithID(
+		ctx,
+		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema),
+		publicSchemaDesc.GetID(),
+		publicSchemaDesc,
+		tree.AsStringWithFQNames(database, p.Ann()),
+	); err != nil {
+		return descpb.InvalidID, err
+	}
+
+	return publicSchemaID, nil
+}
+
+func (p *planner) createPublicSchema(
+	ctx context.Context, dbID descpb.ID, database *tree.CreateDatabase,
+) (descpb.ID, error) {
+	publicSchemaID, err := p.maybeCreatePublicSchemaWithDescriptor(ctx, dbID, database)
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if publicSchemaID != descpb.InvalidID {
+		return publicSchemaID, nil
+	}
+	// Every database must be initialized with the public schema.
+	key := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema)
+	if err := p.CreateSchemaNamespaceEntry(ctx, key, keys.PublicSchemaID); err != nil {
+		return keys.PublicSchemaID, err
+	}
+	return keys.PublicSchemaID, nil
 }
 
 func (p *planner) createDescriptorWithID(
@@ -144,7 +221,6 @@ func (p *planner) createDescriptorWithID(
 	idKey roachpb.Key,
 	id descpb.ID,
 	descriptor catalog.Descriptor,
-	st *cluster.Settings,
 	jobDesc string,
 ) error {
 	if descriptor.GetID() == 0 {
@@ -170,13 +246,10 @@ func (p *planner) createDescriptorWithID(
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 	}
 	b.CPut(idKey, descID, nil)
-	if err := catalogkv.WriteNewDescToBatch(
+	if err := p.Descriptors().Direct().WriteNewDescToBatch(
 		ctx,
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		st,
 		b,
-		p.ExecCfg().Codec,
-		descID,
 		descriptor,
 	); err != nil {
 		return err
@@ -235,9 +308,22 @@ func TranslateSurvivalGoal(g tree.SurvivalGoal) (descpb.SurvivalGoal, error) {
 	}
 }
 
-func (p *planner) checkRegionIsCurrentlyActive(
-	ctx context.Context, region descpb.RegionName,
-) error {
+// TranslateDataPlacement translates a tree.DataPlacement into a
+// descpb.DataPlacement.
+func TranslateDataPlacement(g tree.DataPlacement) (descpb.DataPlacement, error) {
+	switch g {
+	case tree.DataPlacementUnspecified:
+		return descpb.DataPlacement_DEFAULT, nil
+	case tree.DataPlacementDefault:
+		return descpb.DataPlacement_DEFAULT, nil
+	case tree.DataPlacementRestricted:
+		return descpb.DataPlacement_RESTRICTED, nil
+	default:
+		return 0, errors.AssertionFailedf("unknown data placement: %d", g)
+	}
+}
+
+func (p *planner) checkRegionIsCurrentlyActive(ctx context.Context, region catpb.RegionName) error {
 	liveRegions, err := p.getLiveClusterRegions(ctx)
 	if err != nil {
 		return err
@@ -254,8 +340,9 @@ var InitializeMultiRegionMetadataCCL = func(
 	execCfg *ExecutorConfig,
 	liveClusterRegions LiveClusterRegions,
 	survivalGoal tree.SurvivalGoal,
-	primaryRegion descpb.RegionName,
+	primaryRegion catpb.RegionName,
 	regions []tree.Name,
+	dataPlacement tree.DataPlacement,
 ) (*multiregion.RegionConfig, error) {
 	return nil, sqlerrors.NewCCLRequiredError(
 		errors.New("creating multi-region databases requires a CCL binary"),
@@ -267,6 +354,7 @@ const DefaultPrimaryRegionClusterSettingName = "sql.defaults.primary_region"
 
 // DefaultPrimaryRegion is a cluster setting that contains the default primary region.
 var DefaultPrimaryRegion = settings.RegisterStringSetting(
+	settings.TenantWritable,
 	DefaultPrimaryRegionClusterSettingName,
 	`if not empty, all databases created without a PRIMARY REGION will `+
 		`implicitly have the given PRIMARY REGION`,
@@ -278,7 +366,11 @@ var DefaultPrimaryRegion = settings.RegisterStringSetting(
 // a new region config from the given parameters and reserves an ID for the
 // multi-region enum.
 func (p *planner) maybeInitializeMultiRegionMetadata(
-	ctx context.Context, survivalGoal tree.SurvivalGoal, primaryRegion tree.Name, regions []tree.Name,
+	ctx context.Context,
+	survivalGoal tree.SurvivalGoal,
+	primaryRegion tree.Name,
+	regions []tree.Name,
+	placement tree.DataPlacement,
 ) (*multiregion.RegionConfig, error) {
 	if primaryRegion == "" && len(regions) == 0 {
 		defaultPrimaryRegion := DefaultPrimaryRegion.Get(&p.execCfg.Settings.SV)
@@ -287,7 +379,8 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 		}
 		primaryRegion = tree.Name(defaultPrimaryRegion)
 		// TODO(#67156): send notice immediately, so it pops up even on error.
-		p.noticeSender.BufferNotice(
+		p.BufferClientNotice(
+			ctx,
 			pgnotice.Newf("setting %s as the PRIMARY REGION as no PRIMARY REGION was specified", primaryRegion),
 		)
 	}
@@ -302,8 +395,9 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 		p.ExecCfg(),
 		liveRegions,
 		survivalGoal,
-		descpb.RegionName(primaryRegion),
+		catpb.RegionName(primaryRegion),
 		regions,
+		placement,
 	)
 	if err != nil {
 		return nil, err

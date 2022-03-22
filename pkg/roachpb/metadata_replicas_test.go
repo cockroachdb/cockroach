@@ -332,7 +332,7 @@ func TestReplicaDescriptorsCanMakeProgressRandom(t *testing.T) {
 	var progress, noProgress, skipped int
 
 	start := timeutil.Now()
-	for timeutil.Now().Sub(start) < 100*time.Millisecond {
+	for timeutil.Since(start) < 100*time.Millisecond {
 		// Generate a random range configuration with between 1 and 7 replicas.
 		size := 1 + rand.Intn(6)
 		rds := make([]ReplicaDescriptor, size)

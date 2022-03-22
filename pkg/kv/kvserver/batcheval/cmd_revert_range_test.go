@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []byte {
@@ -55,7 +57,7 @@ func getStats(t *testing.T, reader storage.Reader) enginepb.MVCCStats {
 // createTestPebbleEngine returns a new in-memory Pebble storage engine.
 func createTestPebbleEngine(ctx context.Context) (storage.Engine, error) {
 	return storage.Open(ctx, storage.InMemory(),
-		storage.MaxSize(1<<20), storage.SettingsForTesting())
+		storage.MaxSize(1<<20), storage.ForTesting)
 }
 
 var engineImpls = []struct {
@@ -160,9 +162,13 @@ func TestCmdRevertRange(t *testing.T) {
 					var resumes int
 					for {
 						var reply roachpb.RevertRangeResponse
-						if _, err := RevertRange(ctx, batch, cArgs, &reply); err != nil {
+						result, err := RevertRange(ctx, batch, cArgs, &reply)
+						if err != nil {
 							t.Fatal(err)
 						}
+						require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+						require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans,
+							[]roachpb.Span{{Key: req.RequestHeader.Key, EndKey: req.RequestHeader.EndKey}})
 						if reply.ResumeSpan == nil {
 							break
 						}
@@ -187,7 +193,7 @@ func TestCmdRevertRange(t *testing.T) {
 				})
 			}
 
-			txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, tsC, 1)
+			txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, tsC, 1, 1)
 			if err := storage.MVCCPut(
 				ctx, eng, &stats, []byte("0012"), tsC, roachpb.MakeValueFromBytes([]byte("i")), &txn,
 			); err != nil {
@@ -236,10 +242,14 @@ func TestCmdRevertRange(t *testing.T) {
 					var err error
 					for {
 						var reply roachpb.RevertRangeResponse
-						_, err = RevertRange(ctx, batch, cArgs, &reply)
+						var result result.Result
+						result, err = RevertRange(ctx, batch, cArgs, &reply)
 						if err != nil || reply.ResumeSpan == nil {
 							break
 						}
+						require.NotNil(t, result.Replicated.MVCCHistoryMutation)
+						require.Equal(t, result.Replicated.MVCCHistoryMutation.Spans,
+							[]roachpb.Span{{Key: req.RequestHeader.Key, EndKey: req.RequestHeader.EndKey}})
 						req.RequestHeader.Key = reply.ResumeSpan.Key
 						resumes++
 					}

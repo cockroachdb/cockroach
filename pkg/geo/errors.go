@@ -14,13 +14,16 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
 // NewMismatchingSRIDsError returns the error message for SRIDs of GeospatialTypes
 // a and b being a mismatch.
 func NewMismatchingSRIDsError(a geopb.SpatialObject, b geopb.SpatialObject) error {
-	return errors.Newf(
+	return pgerror.Newf(
+		pgcode.InvalidParameterValue,
 		"operation on mixed SRIDs forbidden: (%s, %d) != (%s, %d)",
 		a.ShapeType,
 		a.SRID,
@@ -65,5 +68,5 @@ func IsEmptyGeometryError(err error) bool {
 
 // NewEmptyGeometryError returns an error indicating an empty geometry has been found.
 func NewEmptyGeometryError() *EmptyGeometryError {
-	return &EmptyGeometryError{cause: errors.Newf("empty shape found")}
+	return &EmptyGeometryError{cause: pgerror.Newf(pgcode.InvalidParameterValue, "empty shape found")}
 }

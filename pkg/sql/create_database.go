@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 type createDatabaseNode struct {
@@ -86,11 +87,41 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		)
 	}
 
-	if n.SurvivalGoal != tree.SurvivalGoalDefault && n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
+	if n.SurvivalGoal != tree.SurvivalGoalDefault &&
+		n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
 		return nil, pgerror.New(
 			pgcode.InvalidDatabaseDefinition,
 			"PRIMARY REGION must be specified when using SURVIVE",
 		)
+	}
+
+	if n.Placement != tree.DataPlacementUnspecified {
+		if !p.EvalContext().SessionData().PlacementEnabled {
+			return nil, errors.WithHint(pgerror.New(
+				pgcode.FeatureNotSupported,
+				"PLACEMENT requires that the session setting enable_multiregion_placement_policy "+
+					"is enabled",
+			),
+				"to use PLACEMENT, enable the session setting with SET"+
+					" enable_multiregion_placement_policy = true or enable the cluster setting"+
+					" sql.defaults.multiregion_placement_policy.enabled",
+			)
+		}
+
+		if n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
+			return nil, pgerror.New(
+				pgcode.InvalidDatabaseDefinition,
+				"PRIMARY REGION must be specified when using PLACEMENT",
+			)
+		}
+
+		if n.Placement == tree.DataPlacementRestricted &&
+			n.SurvivalGoal == tree.SurvivalGoalRegionFailure {
+			return nil, pgerror.New(
+				pgcode.InvalidDatabaseDefinition,
+				"PLACEMENT RESTRICTED can only be used with SURVIVE ZONE FAILURE",
+			)
+		}
 	}
 
 	hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
@@ -98,7 +129,10 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		return nil, err
 	}
 	if !hasCreateDB {
-		return nil, pgerror.New(pgcode.InsufficientPrivilege, "permission denied to create database")
+		return nil, pgerror.New(
+			pgcode.InsufficientPrivilege,
+			"permission denied to create database",
+		)
 	}
 
 	return &createDatabaseNode{n: n}, nil

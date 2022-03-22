@@ -11,9 +11,13 @@
 package sqlsmith
 
 import (
+	gosql "database/sql"
+	"math/rand"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -43,7 +47,20 @@ var (
 	}
 	altersExistingTypes = []statementWeight{
 		{5, makeAlterTypeDropValue},
+		{5, makeAlterTypeAddValue},
+		{1, makeAlterTypeRenameValue},
+		{1, makeAlterTypeRenameType},
 	}
+	alterTableMultiregion = []statementWeight{
+		{10, makeAlterLocality},
+	}
+	alterDatabaseMultiregion = []statementWeight{
+		{5, makeAlterDatabaseDropRegion},
+		{5, makeAlterDatabaseAddRegion},
+		{5, makeAlterSurvivalGoal},
+		{5, makeAlterDatabasePlacement},
+	}
+	alterMultiregion = append(alterTableMultiregion, alterDatabaseMultiregion...)
 )
 
 func makeAlter(s *Smither) (tree.Statement, bool) {
@@ -215,7 +232,7 @@ func makeJSONComputedColumn(s *Smither) (tree.Statement, bool) {
 	}
 	col.Computed.Computed = true
 	col.Computed.Expr = tree.NewTypedBinaryExpr(
-		tree.MakeBinaryOperator(tree.JSONFetchText),
+		treebin.MakeBinaryOperator(treebin.JSONFetchText),
 		ref.typedExpr(),
 		randgen.RandDatumSimple(s.rnd, types.String),
 		types.String,
@@ -298,7 +315,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 			continue
 		}
 		seen[col.Name] = true
-		// If this is the first column and it's invertable (i.e., JSONB), make an inverted index.
+		// If this is the first column and it's invertible (i.e., JSONB), make an inverted index.
 		if len(cols) == 0 &&
 			colinfo.ColumnTypeIsInvertedIndexable(tree.MustBeStaticallyKnownType(col.Type)) {
 			inverted = true
@@ -358,6 +375,128 @@ func makeCreateType(s *Smither) (tree.Statement, bool) {
 	return randgen.RandCreateType(s.rnd, string(name), letters), true
 }
 
+func rowsToRegionList(rows *gosql.Rows) []string {
+	// Don't add duplicate regions to the slice.
+	regionsSet := make(map[string]struct{})
+	var region, zone string
+	for rows.Next() {
+		if err := rows.Scan(&region, &zone); err != nil {
+			panic(err)
+		}
+		regionsSet[region] = struct{}{}
+	}
+
+	var regions []string
+	for region := range regionsSet {
+		regions = append(regions, region)
+	}
+	return regions
+}
+
+func getClusterRegions(s *Smither) []string {
+	rows, err := s.db.Query("SHOW REGIONS FROM CLUSTER")
+	if err != nil {
+		panic(err)
+	}
+	return rowsToRegionList(rows)
+}
+
+func getDatabaseRegions(s *Smither) []string {
+	rows, err := s.db.Query("SHOW REGIONS FROM DATABASE defaultdb")
+	if err != nil {
+		panic(err)
+	}
+	return rowsToRegionList(rows)
+}
+
+func makeAlterLocality(s *Smither) (tree.Statement, bool) {
+	_, _, tableRef, _, ok := s.getSchemaTable()
+	if !ok {
+		return nil, false
+	}
+	regions := getClusterRegions(s)
+
+	localityLevel := tree.LocalityLevel(rand.Intn(3))
+	ast := &tree.AlterTableLocality{
+		Name: tableRef.TableName.ToUnresolvedObjectName(),
+		Locality: &tree.Locality{
+			LocalityLevel: localityLevel,
+		},
+	}
+	if localityLevel == tree.LocalityLevelTable {
+		if len(regions) == 0 {
+			return &tree.AlterDatabaseAddRegion{}, false
+		}
+		ast.Locality.TableRegion = tree.Name(regions[rand.Intn(len(regions))])
+	}
+	return ast, ok
+}
+
+func makeAlterDatabaseAddRegion(s *Smither) (tree.Statement, bool) {
+	regions := getClusterRegions(s)
+
+	if len(regions) == 0 {
+		return &tree.AlterDatabaseAddRegion{}, false
+	}
+
+	ast := &tree.AlterDatabaseAddRegion{
+		Region: tree.Name(regions[rand.Intn(len(regions))]),
+		Name:   tree.Name("defaultdb"),
+	}
+
+	return ast, true
+}
+
+func makeAlterDatabaseDropRegion(s *Smither) (tree.Statement, bool) {
+	regions := getDatabaseRegions(s)
+
+	if len(regions) == 0 {
+		return &tree.AlterDatabaseDropRegion{}, false
+	}
+
+	ast := &tree.AlterDatabaseDropRegion{
+		Region: tree.Name(regions[rand.Intn(len(regions))]),
+		Name:   tree.Name("defaultdb"),
+	}
+
+	return ast, true
+}
+
+func makeAlterSurvivalGoal(s *Smither) (tree.Statement, bool) {
+	// Only SurvivalGoalRegionFailure and SurvivalGoalZoneFailure are valid
+	// values for SurvivalGoal. SurvivalGoalDefault is not valid in an
+	// AlterDatabaseSurvivalGoal AST node.
+	survivalGoals := [...]tree.SurvivalGoal{
+		tree.SurvivalGoalRegionFailure,
+		tree.SurvivalGoalZoneFailure,
+	}
+	survivalGoal := survivalGoals[rand.Intn(len(survivalGoals))]
+
+	ast := &tree.AlterDatabaseSurvivalGoal{
+		Name:         tree.Name("defaultdb"),
+		SurvivalGoal: survivalGoal,
+	}
+	return ast, true
+}
+
+func makeAlterDatabasePlacement(s *Smither) (tree.Statement, bool) {
+	// Only DataPlacementDefault and DataPlacementRestricted are valid values
+	// for Placement. DataPlacementUnspecified is not valid in an
+	// AlterDatabasePlacement AST node.
+	dataPlacements := [...]tree.DataPlacement{
+		tree.DataPlacementDefault,
+		tree.DataPlacementRestricted,
+	}
+	dataPlacement := dataPlacements[rand.Intn(len(dataPlacements))]
+
+	ast := &tree.AlterDatabasePlacement{
+		Name:      tree.Name("defaultdb"),
+		Placement: dataPlacement,
+	}
+
+	return ast, true
+}
+
 func makeAlterTypeDropValue(s *Smither) (tree.Statement, bool) {
 	enumVal, udtName, ok := s.getRandUserDefinedTypeLabel()
 	if !ok {
@@ -369,4 +508,45 @@ func makeAlterTypeDropValue(s *Smither) (tree.Statement, bool) {
 			Val: *enumVal,
 		},
 	}, ok
+}
+
+func makeAlterTypeAddValue(s *Smither) (tree.Statement, bool) {
+	_, udtName, ok := s.getRandUserDefinedTypeLabel()
+	if !ok {
+		return nil, false
+	}
+	return &tree.AlterType{
+		Type: udtName.ToUnresolvedObjectName(),
+		Cmd: &tree.AlterTypeAddValue{
+			NewVal:      tree.EnumValue(s.name("added_val")),
+			IfNotExists: true,
+		},
+	}, true
+}
+
+func makeAlterTypeRenameValue(s *Smither) (tree.Statement, bool) {
+	enumVal, udtName, ok := s.getRandUserDefinedTypeLabel()
+	if !ok {
+		return nil, false
+	}
+	return &tree.AlterType{
+		Type: udtName.ToUnresolvedObjectName(),
+		Cmd: &tree.AlterTypeRenameValue{
+			OldVal: *enumVal,
+			NewVal: tree.EnumValue(s.name("renamed_val")),
+		},
+	}, true
+}
+
+func makeAlterTypeRenameType(s *Smither) (tree.Statement, bool) {
+	_, udtName, ok := s.getRandUserDefinedTypeLabel()
+	if !ok {
+		return nil, false
+	}
+	return &tree.AlterType{
+		Type: udtName.ToUnresolvedObjectName(),
+		Cmd: &tree.AlterTypeRename{
+			NewName: s.name("typ"),
+		},
+	}, true
 }

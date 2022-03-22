@@ -13,12 +13,15 @@ package acceptance
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/api/types"
@@ -85,9 +88,39 @@ func testDocker(
 		if err != nil {
 			return
 		}
+		testdataDir := filepath.Join(pwd, "testdata")
+		if bazel.BuiltWithBazel() {
+			testdataDir, err = ioutil.TempDir("", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Copy runfiles symlink content to a temporary directory to avoid broken symlinks in docker.
+			err = copyRunfiles("testdata", testdataDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				_ = os.RemoveAll(testdataDir)
+			}()
+		}
 		hostConfig := container.HostConfig{
 			NetworkMode: "host",
-			Binds:       []string{filepath.Join(pwd, "testdata") + ":/mnt/data"},
+			Binds:       []string{testdataDir + ":/mnt/data"},
+		}
+		if bazel.BuiltWithBazel() {
+			interactivetestsDir, err := ioutil.TempDir("", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Copy runfiles symlink content to a temporary directory to avoid broken symlinks in docker.
+			err = copyRunfiles("../cli/interactive_tests", interactivetestsDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				_ = os.RemoveAll(interactivetestsDir)
+			}()
+			hostConfig.Binds = append(hostConfig.Binds, interactivetestsDir+":/mnt/interactive_tests")
 		}
 		err = l.OneShot(
 			ctx, acceptanceImage, types.ImagePullOptions{}, containerConfig, hostConfig,
@@ -97,6 +130,31 @@ func testDocker(
 		l.Cleanup(ctx, preserveLogs)
 	})
 	return err
+}
+
+// Bazel uses symlinks in the runfiles directory. If a directory with symlinks is mounted inside a docker container,
+// the symlinks point to not existing destination.
+// This function copies the content of the symlinks to another directory,
+// so the files can be used inside a docker container. The caller function is responsible for cleaning up.
+// This function doesn't copy the original file permissions and uses 755 for directories and files.
+func copyRunfiles(source, destination string) error {
+	return filepath.WalkDir(source, func(path string, dirEntry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relPath := strings.Replace(path, source, "", 1)
+		if relPath == "" {
+			return nil
+		}
+		if dirEntry.IsDir() {
+			return os.Mkdir(filepath.Join(destination, relPath), 0755)
+		}
+		data, err := ioutil.ReadFile(filepath.Join(source, relPath))
+		if err != nil {
+			return err
+		}
+		return ioutil.WriteFile(filepath.Join(destination, relPath), data, 0755)
+	})
 }
 
 func testDockerSingleNode(

@@ -5,6 +5,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "hlc",
     srcs = [
+        "doc.go",
         "hlc.go",
         "hlc_clock_device_linux.go",
         "hlc_clock_device_stub.go",
@@ -18,7 +19,9 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

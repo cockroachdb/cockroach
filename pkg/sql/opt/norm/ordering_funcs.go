@@ -139,6 +139,28 @@ func (c *CustomFuncs) SimplifyExplainOrdering(
 	return &copy
 }
 
+// CanSimplifyWithBindingOrdering returns true if the ordering required by the
+// WithBinding operator can be made less restrictive, so that the input operator
+// has more ordering choices.
+func (c *CustomFuncs) CanSimplifyWithBindingOrdering(
+	in memo.RelExpr, private *memo.WithPrivate,
+) bool {
+	return c.canSimplifyOrdering(in, private.BindingOrdering)
+}
+
+// SimplifyWithBindingOrdering makes the ordering required by the WithBinding operator
+// less restrictive by removing optional columns, adding equivalent columns, and
+// removing redundant columns.
+func (c *CustomFuncs) SimplifyWithBindingOrdering(
+	in memo.RelExpr, private *memo.WithPrivate,
+) *memo.WithPrivate {
+	// Copy WithBindingPrivate and its physical properties to stack and replace
+	// Ordering field in the copied properties.
+	copy := *private
+	copy.BindingOrdering = c.simplifyOrdering(in, private.BindingOrdering)
+	return &copy
+}
+
 func (c *CustomFuncs) canSimplifyOrdering(in memo.RelExpr, ordering props.OrderingChoice) bool {
 	// If any ordering is allowed, nothing to simplify.
 	if ordering.Any() {

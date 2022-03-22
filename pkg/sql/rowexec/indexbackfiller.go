@@ -58,19 +58,13 @@ type indexBackfiller struct {
 var _ execinfra.Processor = &indexBackfiller{}
 
 var backfillerBufferSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"schemachanger.backfiller.buffer_size", "the initial size of the BulkAdder buffer handling index backfills", 32<<20,
 )
 
 var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"schemachanger.backfiller.max_buffer_size", "the maximum size of the BulkAdder buffer handling index backfills", 512<<20,
-)
-
-var backfillerBufferIncrementSize = settings.RegisterByteSizeSetting(
-	"schemachanger.backfiller.buffer_increment", "the size by which the BulkAdder attempts to grow its buffer before flushing", 32<<20,
-)
-
-var backillerSSTSize = settings.RegisterByteSizeSetting(
-	"schemachanger.backfiller.max_sst_size", "target size for ingested files during backfills", 16<<20,
 )
 
 func newIndexBackfiller(
@@ -84,7 +78,7 @@ func newIndexBackfiller(
 	indexBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"index-backfill-mon")
 	ib := &indexBackfiller{
-		desc:    spec.BuildTableDescriptor(),
+		desc:    flowCtx.TableDescriptor(&spec.Table),
 		spec:    spec,
 		flowCtx: flowCtx,
 		output:  output,
@@ -129,8 +123,8 @@ func (ib *indexBackfiller) constructIndexEntries(
 	var entries []rowenc.IndexEntry
 	for i := range ib.spec.Spans {
 		log.VEventf(ctx, 2, "index backfiller starting span %d of %d: %s",
-			i+1, len(ib.spec.Spans), ib.spec.Spans[i].Span)
-		todo := ib.spec.Spans[i].Span
+			i+1, len(ib.spec.Spans), ib.spec.Spans[i])
+		todo := ib.spec.Spans[i]
 		for todo.Key != nil {
 			startKey := todo.Key
 			readAsOf := ib.spec.ReadAsOf
@@ -145,7 +139,7 @@ func (ib *indexBackfiller) constructIndexEntries(
 
 			// Identify the Span for which we have constructed index entries. This is
 			// used for reporting progress and updating the job details.
-			completedSpan := ib.spec.Spans[i].Span
+			completedSpan := ib.spec.Spans[i]
 			if todo.Key != nil {
 				completedSpan.Key = startKey
 				completedSpan.EndKey = todo.Key
@@ -186,15 +180,14 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
-	sstSize := func() int64 { return backillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
-	stepSize := backfillerBufferIncrementSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	opts := kvserverbase.BulkAdderOptions{
-		SSTSize:        sstSize,
-		MinBufferSize:  minBufferSize,
-		MaxBufferSize:  maxBufferSize,
-		StepBufferSize: stepSize,
-		SkipDuplicates: ib.ContainsInvertedIndex(),
-		BatchTimestamp: ib.spec.ReadAsOf,
+		Name:                     ib.desc.GetName() + " backfill",
+		MinBufferSize:            minBufferSize,
+		MaxBufferSize:            maxBufferSize,
+		SkipDuplicates:           ib.ContainsInvertedIndex(),
+		BatchTimestamp:           ib.spec.ReadAsOf,
+		InitialSplitsIfUnordered: int(ib.spec.InitialSplits),
+		WriteAtBatchTimestamp:    ib.spec.WriteAtBatchTimestamp,
 	}
 	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.WriteAsOf, opts)
 	if err != nil {
@@ -215,7 +208,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	// When the bulk adder flushes, the spans which were previously marked as
 	// "added" can now be considered "completed", and be sent back to the
 	// coordinator node as part of the next progress report.
-	adder.SetOnFlush(func() {
+	adder.SetOnFlush(func(_ roachpb.BulkOpSummary) {
 		mu.Lock()
 		defer mu.Unlock()
 		mu.completedSpans = append(mu.completedSpans, mu.addedSpans...)
@@ -348,6 +341,7 @@ func (ib *indexBackfiller) runBackfill(
 
 func (ib *indexBackfiller) Run(ctx context.Context) {
 	opName := "indexBackfillerProcessor"
+	ctx = logtags.AddTag(ctx, "job", ib.spec.JobID)
 	ctx = logtags.AddTag(ctx, opName, int(ib.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, opName)
 	defer span.Finish()
@@ -444,7 +438,7 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 	}); err != nil {
 		return nil, nil, 0, err
 	}
-	prepTime := timeutil.Now().Sub(start)
+	prepTime := timeutil.Since(start)
 	log.VEventf(ctx, 3, "index backfill stats: entries %d, prepare %+v",
 		len(entries), prepTime)
 

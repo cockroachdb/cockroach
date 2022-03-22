@@ -22,7 +22,6 @@ tc_start_block "Compile CockroachDB"
 # Buffer noisy output and only print it on failure.
 run pkg/acceptance/prepare.sh &> artifacts/acceptance-compile.log || (cat artifacts/acceptance-compile.log && false)
 rm artifacts/acceptance-compile.log
-run ln -s cockroach-linux-2.6.32-gnu-amd64 cockroach  # For the tests that run without Docker.
 tc_end_block "Compile CockroachDB"
 
 # We need to compile the test binary because we can't invoke it in builder.sh (recursive use of Docker, though
@@ -44,5 +43,5 @@ tc_start_block "Run acceptance tests"
 run_json_test env TZ=America/New_York stdbuf -eL -oL go test \
   -mod=vendor -json -timeout 30m -v \
 	-exec "../../build/teamcity-go-test-precompiled.sh ./pkg/acceptance/acceptance.test" ./pkg/acceptance \
-	-l "$TMPDIR"
+	-l "$TMPDIR" -b "$PWD/cockroach-linux-2.6.32-gnu-amd64"
 tc_end_block "Run acceptance tests"

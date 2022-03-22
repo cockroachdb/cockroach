@@ -15,6 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/logictest"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -27,5 +29,6 @@ import (
 func TestExecBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer sql.TestingOverrideExplainEnvVersion("CockroachDB execbuilder test version")()
-	logictest.RunLogicTest(t, logictest.TestServerArgs{}, "testdata/[^.]*")
+	skip.UnderDeadlock(t, "times out and/or hangs")
+	logictest.RunLogicTest(t, logictest.TestServerArgs{}, testutils.TestDataPath(t, "[^.]*"))
 }

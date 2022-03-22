@@ -13,17 +13,18 @@ package config
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
 // MakeZoneKeyPrefix returns the key prefix for id's row in the system.zones
 // table.
-func MakeZoneKeyPrefix(id SystemTenantObjectID) roachpb.Key {
-	return keys.SystemSQLCodec.ZoneKeyPrefix(uint32(id))
+func MakeZoneKeyPrefix(codec keys.SQLCodec, id descpb.ID) roachpb.Key {
+	return codec.ZoneKeyPrefix(uint32(id))
 }
 
-// MakeZoneKey returns the key for id's entry in the system.zones table.
-func MakeZoneKey(id SystemTenantObjectID) roachpb.Key {
-	return keys.SystemSQLCodec.ZoneKey(uint32(id))
+// MakeZoneKey returns the key for a given id's entry in the system.zones table.
+func MakeZoneKey(codec keys.SQLCodec, id descpb.ID) roachpb.Key {
+	return codec.ZoneKey(uint32(id))
 }
 
 // DecodeSystemTenantObjectID decodes the object ID for the system-tenant from

@@ -191,18 +191,19 @@ func GenerateUIServerCert(
 	return certBytes, nil
 }
 
-// GenerateTenantClientCert generates a tenant client certificate and returns the cert bytes.
+// GenerateTenantCert generates a tenant client certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the tenant client public key, the certificate lifetime,
 // and the tenant id.
 //
 // Tenant client certificates add OU=Tenants in the subject field to prevent
 // using them as user certificates.
-func GenerateTenantClientCert(
+func GenerateTenantCert(
 	caCert *x509.Certificate,
 	caPrivateKey crypto.PrivateKey,
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
 	tenantID uint64,
+	hosts []string,
 ) ([]byte, error) {
 
 	if tenantID == 0 {
@@ -221,8 +222,10 @@ func GenerateTenantClientCert(
 	}
 
 	// Set client-specific fields.
-	// Client authentication only.
-	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	// Client authentication to authenticate to KV nodes.
+	// Server authentication to authenticate to other SQL servers.
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
+	addHostsToTemplate(template, hosts)
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
 	if err != nil {
@@ -267,6 +270,38 @@ func GenerateClientCert(
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return certBytes, nil
+}
+
+// GenerateTenantSigningCert generates a signing certificate and returns the
+// cert bytes. Takes in the signing keypair and the certificate lifetime.
+func GenerateTenantSigningCert(
+	publicKey crypto.PublicKey, privateKey crypto.PrivateKey, lifetime time.Duration, tenantID uint64,
+) ([]byte, error) {
+	now := timeutil.Now()
+	template := &x509.Certificate{
+		Subject: pkix.Name{
+			CommonName: fmt.Sprintf("Tenant %d Token Signing Certificate", tenantID),
+		},
+		SerialNumber:          big.NewInt(1), // The serial number does not matter because we are not using a certificate authority.
+		BasicConstraintsValid: true,
+		IsCA:                  false, // This certificate CANNOT sign other certificates.
+		PublicKey:             publicKey,
+		NotBefore:             now.Add(validFrom),
+		NotAfter:              now.Add(lifetime),
+		KeyUsage:              x509.KeyUsageDigitalSignature, // This certificate can ONLY make signatures.
+	}
+
+	certBytes, err := x509.CreateCertificate(
+		rand.Reader,
+		template,
+		template,
+		publicKey,
+		privateKey)
 	if err != nil {
 		return nil, err
 	}

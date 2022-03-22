@@ -174,7 +174,7 @@ func TestReplicaStats(t *testing.T) {
 			return tc.localities[nodeID]
 		})
 		for _, req := range tc.reqs {
-			rs.record(req)
+			rs.recordCount(1, req)
 		}
 		manual.Increment(int64(time.Second))
 		if actual, _ := rs.perLocalityDecayingQPS(); !floatMapsEqual(tc.expected, actual) {
@@ -200,7 +200,7 @@ func TestReplicaStats(t *testing.T) {
 			t.Errorf("%d: avgQPS() got %f, want %f", i, actual, expectedAvgQPS)
 		}
 		rs.resetRequestCounts()
-		if actual, _ := rs.perLocalityDecayingQPS(); len(actual) != 0 {
+		if actual, _ := rs.sumQueriesLocked(); actual != 0 {
 			t.Errorf("%d: unexpected non-empty QPS averages after resetting: %+v", i, actual)
 		}
 	}
@@ -240,7 +240,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 
 	{
 		for _, req := range []roachpb.NodeID{1, 1, 2, 2, 3} {
-			rs.record(req)
+			rs.recordCount(1, req)
 		}
 		counts := perLocalityCounts{
 			awsLocalities[1]: 2,
@@ -285,11 +285,11 @@ func TestReplicaStatsDecay(t *testing.T) {
 
 	{
 		for _, req := range []roachpb.NodeID{1, 1, 2, 2, 3} {
-			rs.record(req)
+			rs.recordCount(1, req)
 		}
 		manual.Increment(int64(replStatsRotateInterval))
 		for _, req := range []roachpb.NodeID{2, 2, 3, 3, 3} {
-			rs.record(req)
+			rs.recordCount(1, req)
 		}
 		durationDivisor := time.Duration(float64(replStatsRotateInterval) * decayFactor).Seconds()
 		expected := perLocalityCounts{
@@ -322,11 +322,11 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 	rs := newReplicaStats(clock, func(nodeID roachpb.NodeID) string {
 		return awsLocalities[nodeID]
 	})
-	rs.record(1)
-	rs.record(1)
-	rs.record(2)
-	rs.record(2)
-	rs.record(3)
+	rs.recordCount(1, 1)
+	rs.recordCount(1, 1)
+	rs.recordCount(1, 2)
+	rs.recordCount(1, 2)
+	rs.recordCount(1, 3)
 	expected := perLocalityCounts{
 		awsLocalities[1]: 2,
 		awsLocalities[2]: 2,

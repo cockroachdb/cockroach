@@ -18,17 +18,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-var comparisonOpInfix = map[tree.ComparisonOperatorSymbol]string{
-	tree.EQ: "==",
-	tree.NE: "!=",
-	tree.LT: "<",
-	tree.LE: "<=",
-	tree.GT: ">",
-	tree.GE: ">=",
+var comparisonOpInfix = map[treecmp.ComparisonOperatorSymbol]string{
+	treecmp.EQ: "==",
+	treecmp.NE: "!=",
+	treecmp.LT: "<",
+	treecmp.LE: "<=",
+	treecmp.GT: ">",
+	treecmp.GE: ">=",
 }
 
 var comparableCanonicalTypeFamilies = map[types.Family][]types.Family{
@@ -46,7 +46,7 @@ var comparableCanonicalTypeFamilies = map[types.Family][]types.Family{
 // sameTypeComparisonOpToOverloads maps a comparison operator to all of the
 // overloads that implement that comparison between two values of the same type
 // (meaning they have the same family and width).
-var sameTypeComparisonOpToOverloads = make(map[tree.ComparisonOperatorSymbol][]*oneArgOverload, len(execgen.ComparisonOpName))
+var sameTypeComparisonOpToOverloads = make(map[treecmp.ComparisonOperatorSymbol][]*oneArgOverload)
 
 // cmpOpOutputTypes contains a types.Bool entry for each type pair that we
 // support.
@@ -66,11 +66,11 @@ func registerCmpOpOutputTypes() {
 
 func populateCmpOpOverloads() {
 	registerCmpOpOutputTypes()
-	for _, op := range []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
+	for _, op := range []treecmp.ComparisonOperatorSymbol{treecmp.EQ, treecmp.NE, treecmp.LT, treecmp.LE, treecmp.GT, treecmp.GE} {
 		base := &overloadBase{
 			kind:  comparisonOverload,
 			Name:  execgen.ComparisonOpName[op],
-			CmpOp: tree.MakeComparisonOperator(op),
+			CmpOp: treecmp.MakeComparisonOperator(op),
 			OpStr: comparisonOpInfix[op],
 		}
 		sameTypeComparisonOpToOverloads[op] = populateTwoArgsOverloads(
@@ -222,11 +222,11 @@ func (c decimalFloatCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.TmpDec1
+				var tmpDec apd.Decimal //gcassert:noescape
 				if _, err := tmpDec.SetFloat64(float64({{.Right}})); err != nil {
 					colexecerror.ExpectedError(err)
 				}
-				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
+				{{.Target}} = tree.CompareDecimals(&{{.Left}}, &tmpDec)
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -242,9 +242,9 @@ func (c decimalIntCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.TmpDec1
+				var tmpDec apd.Decimal //gcassert:noescape
 				tmpDec.SetInt64(int64({{.Right}}))
-				{{.Target}} = tree.CompareDecimals(&{{.Left}}, tmpDec)
+				{{.Target}} = tree.CompareDecimals(&{{.Left}}, &tmpDec)
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -260,11 +260,11 @@ func (c floatDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.TmpDec1
+				var tmpDec apd.Decimal //gcassert:noescape
 				if _, err := tmpDec.SetFloat64(float64({{.Left}})); err != nil {
 					colexecerror.ExpectedError(err)
 				}
-				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
+				{{.Target}} = tree.CompareDecimals(&tmpDec, &{{.Right}})
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -280,9 +280,9 @@ func (c intDecimalCustomizer) getCmpOpCompareFunc() compareFunc {
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
 			{
-				tmpDec := &_overloadHelper.TmpDec1
+				var tmpDec apd.Decimal //gcassert:noescape
 				tmpDec.SetInt64(int64({{.Left}}))
-				{{.Target}} = tree.CompareDecimals(tmpDec, &{{.Right}})
+				{{.Target}} = tree.CompareDecimals(&tmpDec, &{{.Right}})
 			}
 		`))
 

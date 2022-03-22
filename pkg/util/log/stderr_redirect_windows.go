@@ -19,10 +19,7 @@ import (
 // dupFD is used to initialize OrigStderr (see stderr_redirect.go).
 func dupFD(fd uintptr) (uintptr, error) {
 	// Adapted from https://github.com/golang/go/blob/go1.8/src/syscall/exec_windows.go#L303.
-	p, err := windows.GetCurrentProcess()
-	if err != nil {
-		return 0, err
-	}
+	p := windows.CurrentProcess()
 	var h windows.Handle
 	return uintptr(h), windows.DuplicateHandle(p, windows.Handle(fd), p, &h, 0, true, windows.DUPLICATE_SAME_ACCESS)
 }

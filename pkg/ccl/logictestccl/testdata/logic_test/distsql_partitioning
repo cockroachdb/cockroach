@@ -16,19 +16,19 @@ query TTTTTTTTT colnames
 SHOW PARTITIONS FROM DATABASE test
 ----
 database_name  table_name  partition_name  parent_partition  column_names  index_name  partition_value  zone_config  full_zone_config
-test           t1          p1              NULL              x             t1@primary  (1)              NULL         range_min_bytes = 134217728,
+test           t1          p1              NULL              x             t1@t1_pkey  (1)              NULL         range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[]',
 lease_preferences = '[]'
-test                      t1  p2  NULL  x  t1@primary  (2)  NULL  range_min_bytes = 134217728,
+test                      t1  p2  NULL  x  t1@t1_pkey  (2)  NULL  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[]',
 lease_preferences = '[]'
-test                      t1  p3  NULL  x  t1@primary  (3)  NULL  range_min_bytes = 134217728,
+test                      t1  p3  NULL  x  t1@t1_pkey  (3)  NULL  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -44,19 +44,19 @@ query TTTTTTTTT colnames
 SHOW PARTITIONS FROM DATABASE test
 ----
 database_name  table_name  partition_name  parent_partition  column_names  index_name  partition_value  zone_config                full_zone_config
-test           t1          p1              NULL              x             t1@primary  (1)              constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test           t1          p1              NULL              x             t1@t1_pkey  (1)              constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc1]',
 lease_preferences = '[]'
-test                      t1  p2  NULL  x  t1@primary  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test                      t1  p2  NULL  x  t1@t1_pkey  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc2]',
 lease_preferences = '[]'
-test                      t1  p3  NULL  x  t1@primary  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
+test                      t1  p3  NULL  x  t1@t1_pkey  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -66,19 +66,19 @@ lease_preferences = '[]'
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE t1
 ----
-test  t1  p1  NULL  x  t1@primary  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t1  p1  NULL  x  t1@t1_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc1]',
 lease_preferences = '[]'
-test                      t1  p2  NULL  x  t1@primary  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test                      t1  p2  NULL  x  t1@t1_pkey  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc2]',
 lease_preferences = '[]'
-test                      t1  p3  NULL  x  t1@primary  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
+test                      t1  p3  NULL  x  t1@t1_pkey  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -86,21 +86,21 @@ constraints = '[+dc=dc3]',
 lease_preferences = '[]'
 
 query TTTTTTTTT
-SHOW PARTITIONS FROM INDEX t1@primary
+SHOW PARTITIONS FROM INDEX t1@t1_pkey
 ----
-test  t1  p1  NULL  x  t1@primary  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t1  p1  NULL  x  t1@t1_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc1]',
 lease_preferences = '[]'
-test                      t1  p2  NULL  x  t1@primary  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test                      t1  p2  NULL  x  t1@t1_pkey  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc2]',
 lease_preferences = '[]'
-test                      t1  p3  NULL  x  t1@primary  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
+test                      t1  p3  NULL  x  t1@t1_pkey  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -123,31 +123,31 @@ ALTER PARTITION p2 OF TABLE t2 CONFIGURE ZONE USING constraints='[+dc=dc2]'
 query TTTTTTTTT
 SHOW PARTITIONS FROM DATABASE test
 ----
-test  t1  p1  NULL  x  t1@primary  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t1  p1  NULL  x  t1@t1_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc1]',
 lease_preferences = '[]'
-test                      t1  p2  NULL  x  t1@primary  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test                      t1  p2  NULL  x  t1@t1_pkey  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc2]',
 lease_preferences = '[]'
-test                      t1  p3  NULL  x  t1@primary  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
+test                      t1  p3  NULL  x  t1@t1_pkey  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc3]',
 lease_preferences = '[]'
-test                      t2  p1  NULL  x  t2@primary  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test                      t2  p1  NULL  x  t2@t2_pkey  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc1]',
 lease_preferences = '[]'
-test                      t2  p2  NULL  x  t2@primary  (2) TO (3)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test                      t2  p2  NULL  x  t2@t2_pkey  (2) TO (3)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -157,13 +157,13 @@ lease_preferences = '[]'
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE t2
 ----
-test  t2  p1  NULL  x  t2@primary  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t2  p1  NULL  x  t2@t2_pkey  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc1]',
 lease_preferences = '[]'
-test                      t2  p2  NULL  x  t2@primary  (2) TO (3)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test                      t2  p2  NULL  x  t2@t2_pkey  (2) TO (3)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -171,15 +171,15 @@ constraints = '[+dc=dc2]',
 lease_preferences = '[]'
 
 query TTTTTTTTT
-SHOW PARTITIONS FROM INDEX t2@primary
+SHOW PARTITIONS FROM INDEX t2@t2_pkey
 ----
-test  t2  p1  NULL  x  t2@primary  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t2  p1  NULL  x  t2@t2_pkey  (1) TO (2)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc1]',
 lease_preferences = '[]'
-test                      t2  p2  NULL  x  t2@primary  (2) TO (3)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test                      t2  p2  NULL  x  t2@t2_pkey  (2) TO (3)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -210,13 +210,13 @@ ALTER PARTITION p4 OF INDEX t3@sec CONFIGURE ZONE USING constraints='[+dc=dc4]'
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE t3
 ----
-test  t3  p1  NULL  x  t3@primary  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t3  p1  NULL  x  t3@t3_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc1]',
 lease_preferences = '[]'
-test                      t3  p2  NULL  x  t3@primary  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test                      t3  p2  NULL  x  t3@t3_pkey  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -238,13 +238,13 @@ lease_preferences = '[]'
 query TTTTTTTTT
 SHOW PARTITIONS FROM INDEX t3@*
 ----
-test  t3  p1  NULL  x  t3@primary  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t3  p1  NULL  x  t3@t3_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc1]',
 lease_preferences = '[]'
-test                      t3  p2  NULL  x  t3@primary  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test                      t3  p2  NULL  x  t3@t3_pkey  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -303,31 +303,31 @@ ALTER PARTITION p2_a OF TABLE t4 CONFIGURE ZONE USING constraints='[+dc=dc5]'
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE t4
 ----
-test  t4  p1  NULL  x  t4@primary  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
+test  t4  p1  NULL  x  t4@t4_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc1]',
 lease_preferences = '[]'
-test                      t4  p1_a  p1  y  t4@primary  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
+test                      t4  p1_a  p1  y  t4@t4_pkey  (2)  constraints = '[+dc=dc2]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc2]',
 lease_preferences = '[]'
-test                      t4  p1_b  p1  y  t4@primary  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
+test                      t4  p1_b  p1  y  t4@t4_pkey  (3)  constraints = '[+dc=dc3]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc3]',
 lease_preferences = '[]'
-test                      t4  p2  NULL  x  t4@primary  (4)  constraints = '[+dc=dc4]'  range_min_bytes = 134217728,
+test                      t4  p2  NULL  x  t4@t4_pkey  (4)  constraints = '[+dc=dc4]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
 constraints = '[+dc=dc4]',
 lease_preferences = '[]'
-test                      t4  p2_a  p2  y  t4@primary  (5)  constraints = '[+dc=dc5]'  range_min_bytes = 134217728,
+test                      t4  p2_a  p2  y  t4@t4_pkey  (5)  constraints = '[+dc=dc5]'  range_min_bytes = 134217728,
 range_max_bytes = 536870912,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -342,7 +342,7 @@ statement ok
 CREATE TABLE partitioning.inheritance (x INT PRIMARY KEY)
 
 statement ok
-ALTER INDEX partitioning.inheritance@primary PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1))
+ALTER INDEX partitioning.inheritance@inheritance_pkey PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1))
 
 statement ok
 ALTER DATABASE partitioning CONFIGURE ZONE USING range_min_bytes=64000, range_max_bytes=75000
@@ -350,7 +350,7 @@ ALTER DATABASE partitioning CONFIGURE ZONE USING range_min_bytes=64000, range_ma
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
-partitioning  inheritance  p1  NULL  x  inheritance@primary  (1)  NULL  range_min_bytes = 64000,
+partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  NULL  range_min_bytes = 64000,
 range_max_bytes = 75000,
 gc.ttlseconds = 90000,
 num_replicas = 3,
@@ -363,7 +363,7 @@ ALTER TABLE partitioning.inheritance CONFIGURE ZONE USING gc.ttlseconds=80000
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
-partitioning  inheritance  p1  NULL  x  inheritance@primary  (1)  NULL  range_min_bytes = 64000,
+partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  NULL  range_min_bytes = 64000,
 range_max_bytes = 75000,
 gc.ttlseconds = 80000,
 num_replicas = 3,
@@ -371,12 +371,12 @@ constraints = '[]',
 lease_preferences = '[]'
 
 statement ok
-ALTER INDEX partitioning.inheritance@primary CONFIGURE ZONE USING num_replicas=5
+ALTER INDEX partitioning.inheritance@inheritance_pkey CONFIGURE ZONE USING num_replicas=5
 
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
-partitioning  inheritance  p1  NULL  x  inheritance@primary  (1)  NULL  range_min_bytes = 64000,
+partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  NULL  range_min_bytes = 64000,
 range_max_bytes = 75000,
 gc.ttlseconds = 80000,
 num_replicas = 5,
@@ -384,12 +384,12 @@ constraints = '[]',
 lease_preferences = '[]'
 
 statement ok
-ALTER PARTITION p1 OF INDEX partitioning.inheritance@primary CONFIGURE ZONE USING constraints='[+dc=dc1]'
+ALTER PARTITION p1 OF INDEX partitioning.inheritance@inheritance_pkey CONFIGURE ZONE USING constraints='[+dc=dc1]'
 
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE partitioning.inheritance
 ----
-partitioning  inheritance  p1  NULL  x  inheritance@primary  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 64000,
+partitioning  inheritance  p1  NULL  x  inheritance@inheritance_pkey  (1)  constraints = '[+dc=dc1]'  range_min_bytes = 64000,
 range_max_bytes = 75000,
 gc.ttlseconds = 80000,
 num_replicas = 5,

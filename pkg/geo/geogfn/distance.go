@@ -16,7 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geodist"
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 )
@@ -407,5 +408,5 @@ func regionToGeodistShape(r s2.Region) (geodist.Shape, error) {
 	case *s2.Polygon:
 		return &s2GeodistPolygon{Polygon: r}, nil
 	}
-	return nil, errors.Newf("unknown region: %T", r)
+	return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unknown region: %T", r)
 }

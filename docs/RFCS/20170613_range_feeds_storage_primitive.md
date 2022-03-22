@@ -48,7 +48,7 @@ requested features for CockroachDB.
 Our motivating use cases are:
 
 - wait for updates on individual rows or small spans in a table. For example, if
-  a branch is pushed while its diff is viewed on Github, a notification will pop
+  a branch is pushed while its diff is viewed on GitHub, a notification will pop
   up in the browser to alert the user that the diff they're viewing has changed.
   This kind of functionality should be easy to achieve when using CockroachDB.
   Individual developers often ask for this, and it's one of the RethinkDB/etcd
@@ -77,7 +77,7 @@ presented here: We
   spans).
 - emit checkpoint notifications with attached key ranges since that is a natural
   consequence of the Range-based sharding in CockroachDB, and fine-grained
-  information is always preferrable. When not necessary, the key range can be
+  information is always preferable. When not necessary, the key range can be
   processed away by an intermediate stage that tracks the minimum checkpointed
   timestamp over all tracked key spans and emits that (with a global key range)
   whenever it changes.

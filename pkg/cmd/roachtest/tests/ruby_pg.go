@@ -16,15 +16,21 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 var rubyPGTestFailureRegex = regexp.MustCompile(`^rspec ./.*# .*`)
+var testFailureFilenameRegexp = regexp.MustCompile("^rspec .*.rb.*([0-9]|]) # ")
+var testSummaryRegexp = regexp.MustCompile("^([0-9]+) examples, [0-9]+ failures")
 var rubyPGVersion = "v1.2.3"
 
 // This test runs Ruby PG's full test suite against a single cockroach node.
@@ -43,14 +49,14 @@ func registerRubyPG(r registry.Registry) {
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatal(err)
 		}
-		c.Start(ctx, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0]); err != nil {
 			t.Fatal(err)
 		}
 
@@ -146,9 +152,23 @@ func registerRubyPG(r registry.Registry) {
 		t.Status("running ruby-pg test suite")
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
 			`cd /mnt/data1/ruby-pg/ && sudo rake`,
 		)
+
+		// Expected to fail but we should still scan the error to check if
+		// there's an SSH/roachprod error.
+		if err != nil {
+			// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+			// or roachprod errors, so we call t.Fatal if the error is not an
+			// install.NonZeroExitCode error
+			commandError := (*install.NonZeroExitCode)(nil)
+			if !errors.As(err, &commandError) {
+				t.Fatal(err)
+			}
+		}
+
+		rawResults := []byte(result.Stdout + result.Stderr)
 
 		t.L().Printf("Test Results:\n%s", rawResults)
 
@@ -160,8 +180,17 @@ func registerRubyPG(r registry.Registry) {
 		}
 
 		scanner := bufio.NewScanner(bytes.NewReader(rawResults))
+		totalTests := int64(0)
 		for scanner.Scan() {
-			match := rubyPGTestFailureRegex.FindStringSubmatch(scanner.Text())
+			line := scanner.Text()
+			testSummaryMatch := testSummaryRegexp.FindStringSubmatch(line)
+			if testSummaryMatch != nil {
+				totalTests, err = strconv.ParseInt(testSummaryMatch[1], 10, 64)
+				require.NoError(t, err)
+				continue
+			}
+
+			match := rubyPGTestFailureRegex.FindStringSubmatch(line)
 			if match == nil {
 				continue
 			}
@@ -175,7 +204,7 @@ func registerRubyPG(r registry.Registry) {
 			// This regex is used to get the name of the test.
 			// The test name follows the file name and a hashtag.
 			// ie. test.rb:99 # TEST NAME.
-			strs := regexp.MustCompile("^rspec .*.rb.*([0-9]|]) # ").Split(test, -1)
+			strs := testFailureFilenameRegexp.Split(test, -1)
 			if len(strs) != 2 {
 				log.Fatalf(ctx, "expected test output line to be split into two strings")
 			}
@@ -193,9 +222,18 @@ func registerRubyPG(r registry.Registry) {
 				results.results[test] = fmt.Sprintf("--- FAIL: %s - %s (unexpected)",
 					test, maybeAddGithubLink(issue),
 				)
+				results.failUnexpectedCount++
+				results.currentFailures = append(results.currentFailures, test)
 			}
 			results.runTests[test] = struct{}{}
 		}
+
+		if totalTests == 0 {
+			log.Fatalf(ctx, "failed to find total number of tests run")
+		}
+		totalPasses := int(totalTests) - (results.failUnexpectedCount + results.failExpectedCount)
+		results.passUnexpectedCount = len(expectedFailures) - results.failExpectedCount
+		results.passExpectedCount = totalPasses - results.passUnexpectedCount
 
 		results.summarizeAll(t, "ruby-pg", blocklistName, expectedFailures, version, rubyPGVersion)
 	}

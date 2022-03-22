@@ -108,7 +108,7 @@ func TestLoadEmbeddedCerts(t *testing.T) {
 
 	// Check that all non-CA pairs include a key.
 	for _, c := range certs {
-		if c.FileUsage == security.CAPem || c.FileUsage == security.TenantClientCAPem {
+		if c.FileUsage == security.CAPem || c.FileUsage == security.TenantCAPem {
 			if len(c.KeyFilename) != 0 {
 				t.Errorf("CA key was loaded for CertInfo %+v", c)
 			}
@@ -167,6 +167,22 @@ func makeTestCert(
 func TestNamingScheme(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	permissionRequirementErr := errors.New(".* exceeds -rwx------")
+
+	// by default we only allow certificate keys owned by the same user
+	// as the running process (0700). In some environments, such as
+	// Kubernetes, we do not have control over owning user for volume
+	// mounts (such as Secrets) which always mount as root, and in
+	// this case we allow the group read permission (0740), provided
+	// the process shares the same group ID and the owning user of the
+	// key is root.
+	//
+	// Because this test creates certificate keys, when run as root we
+	// we have the less stringent permission requirement.
+	if os.Getuid() == 0 {
+		permissionRequirementErr = errors.New("exceeds -rwxr-----")
+	}
+
 	fullKeyUsage := x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature
 	// Build a few certificates. These are barebones since we only need to check our custom validation,
 	// not chain verification.
@@ -195,15 +211,7 @@ func TestNamingScheme(t *testing.T) {
 	}
 
 	// Create directory.
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir := t.TempDir()
 
 	type testFile struct {
 		name     string
@@ -263,14 +271,14 @@ func TestNamingScheme(t *testing.T) {
 				{"node.crt", 0777, goodNodeCert},
 				{"node.key", 0704, []byte{}},
 				{"client.root.crt", 0777, goodRootCert},
-				{"client.root.key", 0740, []byte{}},
+				{"client.root.key", 0704, []byte{}},
 			},
 			certs: []security.CertInfo{
 				{FileUsage: security.CAPem, Filename: "ca.crt", FileContents: caCert},
 				{FileUsage: security.ClientPem, Filename: "client.root.crt", Name: "root",
-					Error: errors.New(".* exceeds -rwx------")},
+					Error: permissionRequirementErr},
 				{FileUsage: security.NodePem, Filename: "node.crt",
-					Error: errors.New(".* exceeds -rwx------")},
+					Error: permissionRequirementErr},
 			},
 			skipWindows: true,
 		},

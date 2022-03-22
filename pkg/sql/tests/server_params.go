@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 )
 
 // CreateTestServerParams creates a set of params suitable for SQL tests. It
@@ -25,10 +27,28 @@ func CreateTestServerParams() (base.TestServerArgs, *CommandFilters) {
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(CheckEndTxnTrigger, true)
 	params := base.TestServerArgs{}
+	params.Knobs = CreateTestingKnobs()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
 	}
 	return params, &cmdFilters
+}
+
+// CreateTestTenantParams creates a set of params suitable for SQL Tenant Tests.
+func CreateTestTenantParams(tenantID roachpb.TenantID) base.TestTenantArgs {
+	return base.TestTenantArgs{
+		TenantID:     tenantID,
+		TestingKnobs: CreateTestingKnobs(),
+	}
+}
+
+// CreateTestingKnobs creates a testing knob in the unit tests.
+func CreateTestingKnobs() base.TestingKnobs {
+	return base.TestingKnobs{
+		SQLStatsKnobs: &sqlstats.TestingKnobs{
+			AOSTClause: "AS OF SYSTEM TIME '-1us'",
+		},
+	}
 }

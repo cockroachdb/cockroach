@@ -43,13 +43,13 @@ func installGolang(
 	}
 
 	if err := repeatRunE(
-		ctx, t, c, node, "download go", `curl -fsSL https://dl.google.com/go/go1.16.6.linux-amd64.tar.gz > /tmp/go.tgz`,
+		ctx, t, c, node, "download go", `curl -fsSL https://dl.google.com/go/go1.17.6.linux-amd64.tar.gz > /tmp/go.tgz`,
 	); err != nil {
 		t.Fatal(err)
 	}
 	if err := repeatRunE(
 		ctx, t, c, node, "verify tarball", `sha256sum -c - <<EOF
-be333ef18b3016e9d7cb7b1ff1fdb0cac800ca0be4cf2290fe613b3d069dfe0d /tmp/go.tgz
+231654bbf2dab3d86c1619ce799e77b03d96f9b50770297c8f4dff8836fc8ca2 /tmp/go.tgz
 EOF`,
 	); err != nil {
 		t.Fatal(err)

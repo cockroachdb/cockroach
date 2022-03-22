@@ -11,7 +11,9 @@ package streamingest
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -28,22 +31,24 @@ import (
 
 func distStreamIngestionPlanSpecs(
 	streamAddress streamingccl.StreamAddress,
-	topology streamingccl.Topology,
-	nodes []roachpb.NodeID,
+	topology streamclient.Topology,
+	sqlInstanceIDs []base.SQLInstanceID,
 	initialHighWater hlc.Timestamp,
 	jobID jobspb.JobID,
+	streamID streaming.StreamID,
 ) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
 
 	// For each stream partition in the topology, assign it to a node.
-	streamIngestionSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0, len(nodes))
+	streamIngestionSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0, len(sqlInstanceIDs))
 
 	trackedSpans := make([]roachpb.Span, 0)
-	for i, partition := range topology.Partitions {
+	for i, partition := range topology {
 		// Round robin assign the stream partitions to nodes. Partitions 0 through
 		// len(nodes) - 1 creates the spec. Future partitions just add themselves to
 		// the partition addresses.
-		if i < len(nodes) {
+		if i < len(sqlInstanceIDs) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
+				StreamID:           uint64(streamID),
 				JobID:              int64(jobID),
 				StartTime:          initialHighWater,
 				StreamAddress:      string(streamAddress),
@@ -51,23 +56,31 @@ func distStreamIngestionPlanSpecs(
 			}
 			streamIngestionSpecs = append(streamIngestionSpecs, spec)
 		}
-		n := i % len(nodes)
+		n := i % len(sqlInstanceIDs)
+
+		streamIngestionSpecs[n].PartitionIds = append(streamIngestionSpecs[n].PartitionIds, partition.ID)
+		streamIngestionSpecs[n].PartitionSpecs = append(streamIngestionSpecs[n].PartitionSpecs,
+			string(partition.SubscriptionToken))
 		streamIngestionSpecs[n].PartitionAddresses = append(streamIngestionSpecs[n].PartitionAddresses,
-			string(partition))
-		partitionKey := roachpb.Key(partition)
+			string(partition.SrcAddr))
 		// We create "fake" spans to uniquely identify the partition. This is used
 		// to keep track of the resolved ts received for a particular partition in
 		// the frontier processor.
 		trackedSpans = append(trackedSpans, roachpb.Span{
-			Key:    partitionKey,
-			EndKey: partitionKey.Next(),
+			Key:    roachpb.Key(partition.ID),
+			EndKey: roachpb.Key(partition.ID).Next(),
 		})
 	}
 
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
 	// node.
 	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{
-		HighWaterAtStart: initialHighWater, TrackedSpans: trackedSpans}
+		HighWaterAtStart: initialHighWater,
+		TrackedSpans:     trackedSpans,
+		JobID:            int64(jobID),
+		StreamID:         uint64(streamID),
+		StreamAddress:    string(streamAddress),
+	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
 }
@@ -75,7 +88,7 @@ func distStreamIngestionPlanSpecs(
 func distStreamIngest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	nodes []roachpb.NodeID,
+	sqlInstanceIDs []base.SQLInstanceID,
 	jobID jobspb.JobID,
 	planCtx *sql.PlanningCtx,
 	dsp *sql.DistSQLPlanner,
@@ -93,7 +106,7 @@ func distStreamIngest(
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(streamIngestionSpecs))
 	for i := range streamIngestionSpecs {
-		corePlacement[i].NodeID = nodes[i]
+		corePlacement[i].SQLInstanceID = sqlInstanceIDs[i]
 		corePlacement[i].Core.StreamIngestionData = streamIngestionSpecs[i]
 	}
 
@@ -113,7 +126,7 @@ func distStreamIngest(
 
 	// The ResultRouters from the previous stage will feed in to the
 	// StreamIngestionFrontier processor.
-	p.AddSingleGroupStage(gatewayNodeID,
+	p.AddSingleGroupStage(base.SQLInstanceID(gatewayNodeID),
 		execinfrapb.ProcessorCoreUnion{StreamIngestionFrontier: streamIngestionFrontierSpec},
 		execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)
 
@@ -168,19 +181,16 @@ func (s *streamIngestionResultWriter) AddRow(ctx context.Context, row tree.Datum
 		return errors.New("streamIngestionResultWriter expects non-nil row entry")
 	}
 
-	job, err := s.registry.LoadJob(ctx, s.jobID)
-	if err != nil {
-		return err
+	// Decode the row, write the ts into job record, and send a heartbeat to source cluster.
+	var ingestedHighWatermark hlc.Timestamp
+	if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)),
+		&ingestedHighWatermark); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, `unmarshalling resolved timestamp`)
 	}
-	return job.Update(s.ctx, nil /* txn */, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		// Decode the row and write the ts.
-		var ingestedHighWatermark hlc.Timestamp
-		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)),
-			&ingestedHighWatermark); err != nil {
-			return errors.NewAssertionErrorWithWrappedErrf(err, `unmarshalling resolved timestamp`)
-		}
-		return jobs.UpdateHighwaterProgressed(ingestedHighWatermark, md, ju)
-	})
+	return s.registry.UpdateJobWithTxn(ctx, s.jobID, nil /* txn */, false, /* useReadLock */
+		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			return jobs.UpdateHighwaterProgressed(ingestedHighWatermark, md, ju)
+		})
 }
 
 // IncrementRowsAffected implements the sql.rowResultWriter interface.

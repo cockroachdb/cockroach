@@ -12,7 +12,7 @@ package colexec
 import (
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -42,7 +42,7 @@ func EncDatumRowsToColVec(
 	vec coldata.Vec,
 	columnIdx int,
 	t *types.T,
-	alloc *rowenc.DatumAlloc,
+	alloc *tree.DatumAlloc,
 ) error {
 	var err error
 	allocator.PerformOperation(
@@ -427,6 +427,33 @@ func EncDatumRowsToColVec(
 
 								v = datum.(*tree.DJSON).JSON
 								castV := v.(json.JSON)
+								col.Set(i, castV)
+							}
+						}
+					}
+				}
+			case types.EncodedKeyFamily:
+				switch t.Width() {
+				case -1:
+				default:
+					col := vec.Bytes()
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
+							}
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
+
+								v = encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DEncodedKey)))
+								castV := v.([]byte)
 								col.Set(i, castV)
 							}
 						}

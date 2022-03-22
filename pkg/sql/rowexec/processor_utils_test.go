@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -74,7 +75,7 @@ func toEncDatum(datumType *types.T, v interface{}) rowenc.EncDatum {
 		}
 	}()
 	// Initialize both EncDatum.Datum, and EncDatum.encoded.
-	encoded, err := rowenc.EncodeTableKey(nil, d, encoding.Ascending)
+	encoded, err := keyside.Encode(nil, d, encoding.Ascending)
 	if err != nil {
 		panic(err)
 	}

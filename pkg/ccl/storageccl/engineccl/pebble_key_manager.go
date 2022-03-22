@@ -17,12 +17,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/pebble/vfs/atomicfs"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -35,6 +36,22 @@ const (
 	keyIDLength = 32
 	// The filename used for writing the data keys by the DataKeyManager.
 	keyRegistryFilename = "COCKROACHDB_DATA_KEYS"
+	// The name of the marker used to record the active data keys
+	// registry.
+	keysRegistryMarkerName = "datakeys"
+)
+
+// registryFormat is an enum describing the format of the data keys
+// registry file. The enum value is encoded into the data keys registry
+// filename. Currently, there's only one value for the enum. Future work
+// may convert the data keys registry to a new format (see #70140).
+type registryFormat string
+
+const (
+	// registryFormatMonolith is the existing format of the data keys
+	// registry file used by the DataKeyManager. The format is a single
+	// serialized enginepbccl.DataKeysRegistry protocol buffer.
+	registryFormatMonolith registryFormat = "monolith"
 )
 
 // PebbleKeyManager manages encryption keys. There are two implementations. See encrypted_fs.go for
@@ -147,11 +164,9 @@ type DataKeyManager struct {
 	fs             vfs.FS
 	dbDir          string
 	rotationPeriod int64 // seconds
+	readOnly       bool
 
 	// Implementation.
-
-	// Initialized in Load()
-	registryFilename string
 
 	mu struct {
 		syncutil.Mutex
@@ -162,6 +177,13 @@ type DataKeyManager struct {
 		// Transitions to true when SetActiveStoreKeyInfo() is called for the
 		// first time.
 		rotationEnabled bool
+		// marker is an atomic file marker used to denote which of the
+		// data keys registry files is the current one. When we rotate
+		// files, the marker is atomically moved to the new file. It's
+		// guaranteed to be non-nil after Load.
+		marker *atomicfs.Marker
+		// filename is the filename of the currently active registry.
+		filename string
 	}
 }
 
@@ -172,37 +194,51 @@ func makeRegistryProto() *enginepbccl.DataKeysRegistry {
 	}
 }
 
-// Load must be called before calling other methods.
-func (m *DataKeyManager) Load(ctx context.Context) error {
-	m.registryFilename = m.fs.PathJoin(m.dbDir, keyRegistryFilename)
-	_, err := m.fs.Stat(m.registryFilename)
+// Close releases all of the manager's held resources.
+func (m *DataKeyManager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.mu.marker.Close()
+}
+
+// Load must be called before calling other methods.
+func (m *DataKeyManager) Load(ctx context.Context) error {
+	marker, filename, err := atomicfs.LocateMarker(m.fs, m.dbDir, keysRegistryMarkerName)
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.marker = marker
 	if oserror.IsNotExist(err) {
 		// First run.
 		m.mu.keyRegistry = makeRegistryProto()
 		return nil
 	}
-	if err != nil {
-		return err
-	}
 
-	f, err := m.fs.Open(m.registryFilename)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	b, err := ioutil.ReadAll(f)
-	if err != nil {
-		return err
-	}
+	// Load the existing state from the file named by `filename`.
+	m.mu.filename = filename
 	m.mu.keyRegistry = makeRegistryProto()
-	if err = protoutil.Unmarshal(b, m.mu.keyRegistry); err != nil {
-		return err
+	if filename != "" {
+		f, err := m.fs.Open(m.fs.PathJoin(m.dbDir, filename))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		b, err := ioutil.ReadAll(f)
+		if err != nil {
+			return err
+		}
+		if err = protoutil.Unmarshal(b, m.mu.keyRegistry); err != nil {
+			return err
+		}
+		if err = validateRegistry(m.mu.keyRegistry); err != nil {
+			return err
+		}
 	}
-	if err = validateRegistry(m.mu.keyRegistry); err != nil {
-		return err
-	}
+	// Else there is no DataKeysRegistry file yet.
+
 	if m.mu.keyRegistry.ActiveDataKeyId != "" {
 		key, found := m.mu.keyRegistry.DataKeys[m.mu.keyRegistry.ActiveDataKeyId]
 		if !found {
@@ -259,6 +295,9 @@ func (m *DataKeyManager) GetKey(id string) (*enginepbccl.SecretKey, error) {
 func (m *DataKeyManager) SetActiveStoreKeyInfo(
 	ctx context.Context, storeKeyInfo *enginepbccl.KeyInfo,
 ) error {
+	if m.readOnly {
+		return errors.New("read only")
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	prevActiveStoreKey, found := m.mu.keyRegistry.StoreKeys[m.mu.keyRegistry.ActiveStoreKeyId]
@@ -369,6 +408,7 @@ func generateAndSetNewDataKey(
 	return key, nil
 }
 
+// REQUIRES: m.mu is held.
 func (m *DataKeyManager) rotateDataKeyAndWrite(
 	ctx context.Context, keyRegistry *enginepbccl.DataKeysRegistry,
 ) (err error) {
@@ -389,12 +429,43 @@ func (m *DataKeyManager) rotateDataKeyAndWrite(
 	}
 	bytes, err := protoutil.Marshal(keyRegistry)
 	if err != nil {
-		return
+		return err
 	}
-	if err = storage.SafeWriteToFile(m.fs, m.dbDir, m.registryFilename, bytes); err != nil {
-		return
+
+	// Write the current registry state to a new file and sync it.
+	// The new file's filename incorporates the marker's iteration
+	// number to ensure we're not overwriting the existing registry.
+	filename := fmt.Sprintf("%s_%06d_%s", keyRegistryFilename, m.mu.marker.NextIter(), registryFormatMonolith)
+	f, err := m.fs.Create(m.fs.PathJoin(m.dbDir, filename))
+	if err != nil {
+		return err
 	}
+	defer f.Close()
+	if _, err := f.Write(bytes); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	// Move the marker to the new file. Once the marker is moved,
+	// the new file is active. This call to marker.Move will also sync
+	// the directory on behalf of both the marker and the registry
+	// itself.
+	if err := m.mu.marker.Move(filename); err != nil {
+		return err
+	}
+
+	prevFilename := m.mu.filename
+	m.mu.filename = filename
 	m.mu.keyRegistry = keyRegistry
 	m.mu.activeKey = newKey
-	return
+
+	// Remove the previous data registry file.
+	if prevFilename != "" {
+		path := m.fs.PathJoin(m.dbDir, prevFilename)
+		if err := m.fs.Remove(path); err != nil && !oserror.IsNotExist(err) {
+			return err
+		}
+	}
+	return err
 }

@@ -15,8 +15,11 @@
 package migrations
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/errors"
 )
 
 // GetMigration returns the migration corresponding to this version if
@@ -26,66 +29,115 @@ func GetMigration(key clusterversion.ClusterVersion) (migration.Migration, bool)
 	return m, ok
 }
 
+// NoPrecondition is a PreconditionFunc that doesn't check anything.
+func NoPrecondition(context.Context, clusterversion.ClusterVersion, migration.TenantDeps) error {
+	return nil
+}
+
 // registry defines the global mapping between a cluster version and the
 // associated migration. The migration is only executed after a cluster-wide
 // bump of the corresponding version gate.
 var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
+	migration.NewTenantMigration(
+		"ensure that draining names are no longer in use",
+		toCV(clusterversion.DrainingNamesMigration),
+		NoPrecondition,
+		ensureNoDrainingNames,
+	),
+	migration.NewTenantMigration(
+		"add column avgSize to table system.table_statistics",
+		toCV(clusterversion.AlterSystemTableStatisticsAddAvgSizeCol),
+		NoPrecondition,
+		alterSystemTableStatisticsAddAvgSize,
+	),
+	migration.NewTenantMigration(
+		"update system.statement_diagnostics_requests table to support conditional stmt diagnostics",
+		toCV(clusterversion.AlterSystemStmtDiagReqs),
+		NoPrecondition,
+		alterSystemStmtDiagReqs,
+	),
+	migration.NewTenantMigration(
+		"seed system.span_configurations with configs for existing tenants",
+		toCV(clusterversion.SeedTenantSpanConfigs),
+		NoPrecondition,
+		seedTenantSpanConfigsMigration,
+	),
+	migration.NewTenantMigration("insert missing system.namespace entries for public schemas",
+		toCV(clusterversion.InsertPublicSchemaNamespaceEntryOnRestore),
+		NoPrecondition,
+		insertMissingPublicSchemaNamespaceEntry,
+	),
+	migration.NewTenantMigration(
+		"add column target to system.protected_ts_records",
+		toCV(clusterversion.AlterSystemProtectedTimestampAddColumn),
+		NoPrecondition,
+		alterTableProtectedTimestampRecords,
+	),
+	migration.NewTenantMigration("update synthetic public schemas to be backed by a descriptor",
+		toCV(clusterversion.PublicSchemasWithDescriptors),
+		NoPrecondition,
+		publicSchemaMigration,
+	),
+	migration.NewTenantMigration(
+		"enable span configs infrastructure",
+		toCV(clusterversion.EnsureSpanConfigReconciliation),
+		NoPrecondition,
+		ensureSpanConfigReconciliation,
+	),
 	migration.NewSystemMigration(
-		"use unreplicated TruncatedState and RangeAppliedState for all ranges",
-		toCV(clusterversion.TruncatedAndRangeAppliedStateMigration),
-		truncatedStateMigration,
+		"enable span configs infrastructure",
+		toCV(clusterversion.EnsureSpanConfigSubscription),
+		ensureSpanConfigSubscription,
+	),
+	migration.NewTenantMigration(
+		"track grant options on users and enable granting/revoking with them",
+		toCV(clusterversion.ValidateGrantOption),
+		NoPrecondition,
+		grantOptionMigration,
+	),
+	migration.NewTenantMigration(
+		"delete comments that belong to dropped indexes",
+		toCV(clusterversion.DeleteCommentsWithDroppedIndexes),
+		NoPrecondition,
+		ensureCommentsHaveNonDroppedIndexes,
+	),
+	migration.NewTenantMigration(
+		"convert incompatible database privileges to default privileges",
+		toCV(clusterversion.RemoveIncompatibleDatabasePrivileges),
+		NoPrecondition,
+		runRemoveInvalidDatabasePrivileges,
 	),
 	migration.NewSystemMigration(
-		"purge all replicas using the replicated TruncatedState",
-		toCV(clusterversion.PostTruncatedAndRangeAppliedStateMigration),
-		postTruncatedStateMigration,
+		"populate RangeAppliedState.RaftAppliedIndexTerm for all ranges",
+		toCV(clusterversion.AddRaftAppliedIndexTermMigration),
+		raftAppliedIndexTermMigration,
+	),
+	migration.NewSystemMigration(
+		"purge all replicas not populating RangeAppliedState.RaftAppliedIndexTerm",
+		toCV(clusterversion.PostAddRaftAppliedIndexTermMigration),
+		postRaftAppliedIndexTermMigration,
 	),
 	migration.NewTenantMigration(
-		"add the systems.join_tokens table",
-		toCV(clusterversion.JoinTokensTable),
-		joinTokensTableMigration,
+		"add the system.tenant_settings table",
+		toCV(clusterversion.TenantSettingsTable),
+		NoPrecondition,
+		tenantSettingsTableMigration,
 	),
 	migration.NewTenantMigration(
-		"delete the deprecated namespace table descriptor at ID=2",
-		toCV(clusterversion.DeleteDeprecatedNamespaceTableDescriptorMigration),
-		deleteDeprecatedNamespaceTableDescriptorMigration,
-	),
-	migration.NewTenantMigration(
-		"fix all descriptors",
-		toCV(clusterversion.FixDescriptors),
-		fixDescriptorMigration,
-	),
-	migration.NewTenantMigration(
-		"add the system.sql_statement_stats table",
-		toCV(clusterversion.SQLStatsTable),
-		sqlStatementStatsTableMigration,
-	),
-	migration.NewTenantMigration(
-		"add the system.sql_transaction_stats table",
-		toCV(clusterversion.SQLStatsTable),
-		sqlTransactionStatsTableMigration,
-	),
-	migration.NewTenantMigration(
-		"add the system.database_role_settings table",
-		toCV(clusterversion.DatabaseRoleSettings),
-		databaseRoleSettingsTableMigration,
-	),
-	migration.NewTenantMigration(
-		"add the systems.tenant_usage table",
-		toCV(clusterversion.TenantUsageTable),
-		tenantUsageTableMigration,
-	),
-	migration.NewTenantMigration(
-		"add the system.sql_instances table",
-		toCV(clusterversion.SQLInstancesTable),
-		sqlInstancesTableMigration,
+		"Rewrites cast that are negatively affected by DateStyle/IntervalStyle",
+		toCV(clusterversion.DateStyleIntervalStyleCastRewrite),
+		NoPrecondition,
+		fixCastForStyleMigration,
 	),
 }
 
 func init() {
 	for _, m := range migrations {
+		if _, exists := registry[m.ClusterVersion()]; exists {
+			panic(errors.AssertionFailedf("duplicate migration registration for %v", m.ClusterVersion()))
+		}
 		registry[m.ClusterVersion()] = m
 	}
 }

@@ -14,13 +14,16 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
-//go:generate mockgen -package=roachpb -destination=mocks_generated.go . InternalClient,Internal_RangeFeedClient
+//go:generate mockgen -package=roachpbmock -destination=roachpbmock/mocks_generated.go . InternalClient,Internal_RangeFeedClient
 
 // UserPriority is a custom type for transaction's user priority.
 type UserPriority float64
@@ -51,22 +54,6 @@ const (
 	MaxUserPriority UserPriority = 1000
 )
 
-// RequiresReadLease returns whether the ReadConsistencyType requires
-// that a read-only request be performed on an active valid leaseholder.
-// TODO(aayush): Rename the method since we no longer require a replica to be a
-// leaseholder to serve a consistent read.
-func (rc ReadConsistencyType) RequiresReadLease() bool {
-	switch rc {
-	case CONSISTENT:
-		return true
-	case READ_UNCOMMITTED:
-		return true
-	case INCONSISTENT:
-		return false
-	}
-	panic("unreachable")
-}
-
 // SupportsBatch determines whether the methods in the provided batch
 // are supported by the ReadConsistencyType, returning an error if not.
 func (rc ReadConsistencyType) SupportsBatch(ba BatchRequest) error {
@@ -87,24 +74,42 @@ func (rc ReadConsistencyType) SupportsBatch(ba BatchRequest) error {
 	panic("unreachable")
 }
 
+type flag int
+
 const (
-	isAdmin             = 1 << iota // admin cmds don't go through raft, but run on lease holder
-	isRead                          // read-only cmds don't go through raft, but may run on lease holder
-	isWrite                         // write cmds go through raft and must be proposed on lease holder
-	isTxn                           // txn commands may be part of a transaction
-	isLocking                       // locking cmds acquire locks for their transaction  (implies isTxn)
-	isIntentWrite                   // intent write cmds leave intents when they succeed (implies isWrite and isLocking)
-	isRange                         // range commands may span multiple keys
-	isReverse                       // reverse commands traverse ranges in descending direction
-	isAlone                         // requests which must be alone in a batch
-	isPrefix                        // requests which should be grouped with the next request in a batch
-	isUnsplittable                  // range command that must not be split during sending
-	skipLeaseCheck                  // commands which skip the check that the evaluting replica has a valid lease
-	updatesTSCache                  // commands which update the timestamp cache
-	updatesTSCacheOnErr             // commands which make read data available on errors
-	needsRefresh                    // commands which require refreshes to avoid serializable retries
-	canBackpressure                 // commands which deserve backpressure when a Range grows too large
+	isAdmin                       flag = 1 << iota // admin cmds don't go through raft, but run on lease holder
+	isRead                                         // read-only cmds don't go through raft, but may run on lease holder
+	isWrite                                        // write cmds go through raft and must be proposed on lease holder
+	isTxn                                          // txn commands may be part of a transaction
+	isLocking                                      // locking cmds acquire locks for their transaction
+	isIntentWrite                                  // intent write cmds leave intents when they succeed
+	isRange                                        // range commands may span multiple keys
+	isReverse                                      // reverse commands traverse ranges in descending direction
+	isAlone                                        // requests which must be alone in a batch
+	isPrefix                                       // requests which, in a batch, must not be split from the following request
+	isUnsplittable                                 // range command that must not be split during sending
+	skipsLeaseCheck                                // commands which skip the check that the evaluating replica has a valid lease
+	appliesTSCache                                 // commands which apply the timestamp cache and closed timestamp
+	updatesTSCache                                 // commands which update the timestamp cache
+	updatesTSCacheOnErr                            // commands which make read data available on errors
+	needsRefresh                                   // commands which require refreshes to avoid serializable retries
+	canBackpressure                                // commands which deserve backpressure when a Range grows too large
+	bypassesReplicaCircuitBreaker                  // commands which bypass the replica circuit breaker, i.e. opt out of fail-fast
 )
+
+// flagDependencies specifies flag dependencies, asserted by TestFlagCombinations.
+var flagDependencies = map[flag][]flag{
+	isAdmin:         {isAlone},
+	isLocking:       {isTxn},
+	isIntentWrite:   {isWrite, isLocking},
+	appliesTSCache:  {isWrite},
+	skipsLeaseCheck: {isAlone},
+}
+
+// flagExclusions specifies flag incompatibilities, asserted by TestFlagCombinations.
+var flagExclusions = map[flag][]flag{
+	skipsLeaseCheck: {isIntentWrite},
+}
 
 // IsReadOnly returns true iff the request is read-only. A request is
 // read-only if it does not go through raft, meaning that it cannot
@@ -165,6 +170,13 @@ func IsRange(args Request) bool {
 	return (args.flags() & isRange) != 0
 }
 
+// AppliesTimestampCache returns whether the command is a write that applies the
+// timestamp cache (and closed timestamp), possibly pushing its write timestamp
+// into the future to avoid re-writing history.
+func AppliesTimestampCache(args Request) bool {
+	return (args.flags() & appliesTSCache) != 0
+}
+
 // UpdatesTimestampCache returns whether the command must update
 // the timestamp cache in order to set a low water mark for the
 // timestamp at which mutations to overlapping key(s) can write
@@ -192,6 +204,13 @@ func CanBackpressure(args Request) bool {
 	return (args.flags() & canBackpressure) != 0
 }
 
+// BypassesReplicaCircuitBreaker returns whether the command bypasses
+// the per-Replica circuit breakers. These requests will thus hang when
+// addressed to an unavailable range (instead of failing fast).
+func BypassesReplicaCircuitBreaker(args Request) bool {
+	return (args.flags() & bypassesReplicaCircuitBreaker) != 0
+}
+
 // Request is an interface for RPC requests.
 type Request interface {
 	protoutil.Message
@@ -203,7 +222,7 @@ type Request interface {
 	Method() Method
 	// ShallowCopy returns a shallow copy of the receiver.
 	ShallowCopy() Request
-	flags() int
+	flags() flag
 }
 
 // SizedWriteRequest is an interface used to expose the number of bytes a
@@ -253,25 +272,6 @@ var _ SizedWriteRequest = (*AddSSTableRequest)(nil)
 // WriteBytes makes AddSSTableRequest implement SizedWriteRequest.
 func (r *AddSSTableRequest) WriteBytes() int64 {
 	return int64(len(r.Data))
-}
-
-// leaseRequestor is implemented by requests dealing with leases.
-// Implementors return the previous lease at the time the request
-// was proposed.
-type leaseRequestor interface {
-	prevLease() Lease
-}
-
-var _ leaseRequestor = &RequestLeaseRequest{}
-
-func (rlr *RequestLeaseRequest) prevLease() Lease {
-	return rlr.PrevLease
-}
-
-var _ leaseRequestor = &TransferLeaseRequest{}
-
-func (tlr *TransferLeaseRequest) prevLease() Lease {
-	return tlr.PrevLease
 }
 
 // Response is an interface for RPC responses.
@@ -470,6 +470,48 @@ func (r *QueryResolvedTimestampResponse) combine(c combinable) error {
 
 var _ combinable = &QueryResolvedTimestampResponse{}
 
+// combine implements the combinable interface.
+func (r *BarrierResponse) combine(c combinable) error {
+	otherR := c.(*BarrierResponse)
+	if r != nil {
+		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
+			return err
+		}
+		r.Timestamp.Forward(otherR.Timestamp)
+	}
+	return nil
+}
+
+var _ combinable = &BarrierResponse{}
+
+// combine implements the combinable interface.
+func (r *ScanInterleavedIntentsResponse) combine(c combinable) error {
+	otherR := c.(*ScanInterleavedIntentsResponse)
+	if r != nil {
+		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
+			return err
+		}
+		r.Intents = append(r.Intents, otherR.Intents...)
+	}
+	return nil
+}
+
+var _ combinable = &ScanInterleavedIntentsResponse{}
+
+// combine implements the combinable interface.
+func (r *QueryLocksResponse) combine(c combinable) error {
+	otherR := c.(*QueryLocksResponse)
+	if r != nil {
+		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
+			return err
+		}
+		r.Locks = append(r.Locks, otherR.Locks...)
+	}
+	return nil
+}
+
+var _ combinable = &QueryLocksResponse{}
+
 // Header implements the Request interface.
 func (rh RequestHeader) Header() RequestHeader {
 	return rh
@@ -527,7 +569,7 @@ func (rh ResponseHeader) Header() ResponseHeader {
 	return rh
 }
 
-// Verify implements the Response interface for ResopnseHeader with a
+// Verify implements the Response interface for ResponseHeader with a
 // default noop. Individual response types should override this method
 // if they contain checksummed data which can be verified.
 func (rh *ResponseHeader) Verify(req Request) error {
@@ -638,6 +680,9 @@ func (*QueryTxnRequest) Method() Method { return QueryTxn }
 func (*QueryIntentRequest) Method() Method { return QueryIntent }
 
 // Method implements the Request interface.
+func (*QueryLocksRequest) Method() Method { return QueryLocks }
+
+// Method implements the Request interface.
 func (*ResolveIntentRequest) Method() Method { return ResolveIntent }
 
 // Method implements the Request interface.
@@ -654,6 +699,9 @@ func (*RequestLeaseRequest) Method() Method { return RequestLease }
 
 // Method implements the Request interface.
 func (*TransferLeaseRequest) Method() Method { return TransferLease }
+
+// Method implements the Request interface.
+func (*ProbeRequest) Method() Method { return Probe }
 
 // Method implements the Request interface.
 func (*LeaseInfoRequest) Method() Method { return LeaseInfo }
@@ -693,6 +741,12 @@ func (*AdminVerifyProtectedTimestampRequest) Method() Method { return AdminVerif
 
 // Method implements the Request interface.
 func (*QueryResolvedTimestampRequest) Method() Method { return QueryResolvedTimestamp }
+
+// Method implements the Request interface.
+func (*ScanInterleavedIntentsRequest) Method() Method { return ScanInterleavedIntents }
+
+// Method implements the Request interface.
+func (*BarrierRequest) Method() Method { return Barrier }
 
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
@@ -845,6 +899,12 @@ func (pir *QueryIntentRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
+func (pir *QueryLocksRequest) ShallowCopy() Request {
+	shallowCopy := *pir
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
 func (rir *ResolveIntentRequest) ShallowCopy() Request {
 	shallowCopy := *rir
 	return &shallowCopy
@@ -877,6 +937,12 @@ func (rlr *RequestLeaseRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (tlr *TransferLeaseRequest) ShallowCopy() Request {
 	shallowCopy := *tlr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *ProbeRequest) ShallowCopy() Request {
+	shallowCopy := *r
 	return &shallowCopy
 }
 
@@ -954,6 +1020,18 @@ func (r *AdminVerifyProtectedTimestampRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *QueryResolvedTimestampRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *ScanInterleavedIntentsRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *BarrierRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1038,9 +1116,6 @@ func NewConditionalPut(key Key, value Value, expValue []byte, allowNotExist bool
 // The callee takes ownership of value's underlying bytes and it will mutate
 // them. The caller retains ownership of expVal; NewConditionalPut will copy it
 // into the request.
-//
-// Callers should check the version gate clusterversion.CPutInline to make
-// sure this is supported.
 func NewConditionalPutInline(key Key, value Value, expValue []byte, allowNotExist bool) Request {
 	value.InitChecksum(key)
 	// Compatibility with 20.1 servers.
@@ -1133,20 +1208,20 @@ func scanLockStrength(forUpdate bool) lock.Strength {
 	return lock.None
 }
 
-func flagForLockStrength(l lock.Strength) int {
+func flagForLockStrength(l lock.Strength) flag {
 	if l != lock.None {
 		return isLocking
 	}
 	return 0
 }
 
-func (gr *GetRequest) flags() int {
+func (gr *GetRequest) flags() flag {
 	maybeLocking := flagForLockStrength(gr.KeyLocking)
 	return isRead | isTxn | maybeLocking | updatesTSCache | needsRefresh
 }
 
-func (*PutRequest) flags() int {
-	return isWrite | isTxn | isLocking | isIntentWrite | canBackpressure
+func (*PutRequest) flags() flag {
+	return isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
 }
 
 // ConditionalPut effectively reads without writing if it hits a
@@ -1154,8 +1229,9 @@ func (*PutRequest) flags() int {
 // ConditionalPuts do not require a refresh because on write-too-old errors,
 // they return an error immediately instead of continuing a serializable
 // transaction to be retried at end transaction.
-func (*ConditionalPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | updatesTSCache | updatesTSCacheOnErr | canBackpressure
+func (*ConditionalPutRequest) flags() flag {
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite |
+		appliesTSCache | updatesTSCache | updatesTSCacheOnErr | canBackpressure
 }
 
 // InitPut, like ConditionalPut, effectively reads without writing if it hits a
@@ -1163,8 +1239,9 @@ func (*ConditionalPutRequest) flags() int {
 // InitPuts do not require a refresh because on write-too-old errors, they
 // return an error immediately instead of continuing a serializable transaction
 // to be retried at end transaction.
-func (*InitPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | updatesTSCache | updatesTSCacheOnErr | canBackpressure
+func (*InitPutRequest) flags() flag {
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite |
+		appliesTSCache | updatesTSCache | updatesTSCacheOnErr | canBackpressure
 }
 
 // Increment reads the existing value, but always leaves an intent so
@@ -1172,15 +1249,15 @@ func (*InitPutRequest) flags() int {
 // require a refresh because on write-too-old errors, they return an
 // error immediately instead of continuing a serializable transaction
 // to be retried at end transaction.
-func (*IncrementRequest) flags() int {
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | canBackpressure
+func (*IncrementRequest) flags() flag {
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
 }
 
-func (*DeleteRequest) flags() int {
-	return isWrite | isTxn | isLocking | isIntentWrite | canBackpressure
+func (*DeleteRequest) flags() flag {
+	return isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
 }
 
-func (drr *DeleteRangeRequest) flags() int {
+func (drr *DeleteRangeRequest) flags() flag {
 	// DeleteRangeRequest has different properties if the "inline" flag is set.
 	// This flag indicates that the request is deleting inline MVCC values,
 	// which cannot be deleted transactionally - inline DeleteRange will thus
@@ -1204,23 +1281,28 @@ func (drr *DeleteRangeRequest) flags() int {
 	// it. Note that, even if we didn't update the ts cache, deletes of keys
 	// that exist would not be lost (since the DeleteRange leaves intents on
 	// those keys), but deletes of "empty space" would.
-	return isRead | isWrite | isTxn | isLocking | isIntentWrite | isRange | updatesTSCache | needsRefresh | canBackpressure
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | isRange |
+		appliesTSCache | updatesTSCache | needsRefresh | canBackpressure
 }
 
 // Note that ClearRange commands cannot be part of a transaction as
 // they clear all MVCC versions.
-func (*ClearRangeRequest) flags() int { return isWrite | isRange | isAlone }
+func (*ClearRangeRequest) flags() flag {
+	return isWrite | isRange | isAlone | bypassesReplicaCircuitBreaker
+}
 
 // Note that RevertRange commands cannot be part of a transaction as
 // they clear all MVCC versions above their target time.
-func (*RevertRangeRequest) flags() int { return isWrite | isRange }
+func (*RevertRangeRequest) flags() flag {
+	return isWrite | isRange | isAlone | bypassesReplicaCircuitBreaker
+}
 
-func (sr *ScanRequest) flags() int {
+func (sr *ScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(sr.KeyLocking)
 	return isRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh
 }
 
-func (rsr *ReverseScanRequest) flags() int {
+func (rsr *ReverseScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(rsr.KeyLocking)
 	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh
 }
@@ -1228,43 +1310,52 @@ func (rsr *ReverseScanRequest) flags() int {
 // EndTxn updates the timestamp cache to prevent replays.
 // Replays for the same transaction key and timestamp will have
 // Txn.WriteTooOld=true and must retry on EndTxn.
-func (*EndTxnRequest) flags() int              { return isWrite | isTxn | isAlone | updatesTSCache }
-func (*AdminSplitRequest) flags() int          { return isAdmin | isAlone }
-func (*AdminUnsplitRequest) flags() int        { return isAdmin | isAlone }
-func (*AdminMergeRequest) flags() int          { return isAdmin | isAlone }
-func (*AdminTransferLeaseRequest) flags() int  { return isAdmin | isAlone }
-func (*AdminChangeReplicasRequest) flags() int { return isAdmin | isAlone }
-func (*AdminRelocateRangeRequest) flags() int  { return isAdmin | isAlone }
-func (*GCRequest) flags() int                  { return isWrite | isRange }
+func (*EndTxnRequest) flags() flag              { return isWrite | isTxn | isAlone | updatesTSCache }
+func (*AdminSplitRequest) flags() flag          { return isAdmin | isAlone }
+func (*AdminUnsplitRequest) flags() flag        { return isAdmin | isAlone }
+func (*AdminMergeRequest) flags() flag          { return isAdmin | isAlone }
+func (*AdminTransferLeaseRequest) flags() flag  { return isAdmin | isAlone }
+func (*AdminChangeReplicasRequest) flags() flag { return isAdmin | isAlone }
+func (*AdminRelocateRangeRequest) flags() flag  { return isAdmin | isAlone }
+
+func (*GCRequest) flags() flag {
+	// We defensively let GCRequest bypass the circuit breaker because otherwise,
+	// the GC queue might busy loop on an unavailable range, doing lots of work
+	// but never making progress.
+	return isWrite | isRange | bypassesReplicaCircuitBreaker
+}
 
 // HeartbeatTxn updates the timestamp cache with transaction records,
 // to avoid checking for them on disk when considering 1PC evaluation.
-func (*HeartbeatTxnRequest) flags() int { return isWrite | isTxn | updatesTSCache }
+func (*HeartbeatTxnRequest) flags() flag { return isWrite | isTxn | updatesTSCache }
 
 // PushTxnRequest updates different marker keys in the timestamp cache when
 // pushing a transaction's timestamp and when aborting a transaction.
-func (*PushTxnRequest) flags() int {
+func (*PushTxnRequest) flags() flag {
 	return isWrite | isAlone | updatesTSCache | updatesTSCache
 }
-func (*RecoverTxnRequest) flags() int { return isWrite | isAlone | updatesTSCache }
-func (*QueryTxnRequest) flags() int   { return isRead | isAlone }
+func (*RecoverTxnRequest) flags() flag { return isWrite | isAlone | updatesTSCache }
+func (*QueryTxnRequest) flags() flag   { return isRead | isAlone }
 
 // QueryIntent only updates the timestamp cache when attempting to prevent an
 // intent that is found missing from ever being written in the future. See
 // QueryIntentRequest_PREVENT.
-func (*QueryIntentRequest) flags() int {
+func (*QueryIntentRequest) flags() flag {
 	return isRead | isPrefix | updatesTSCache | updatesTSCacheOnErr
 }
-func (*ResolveIntentRequest) flags() int      { return isWrite }
-func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
-func (*TruncateLogRequest) flags() int        { return isWrite }
-func (*MergeRequest) flags() int              { return isWrite | canBackpressure }
-func (*RequestLeaseRequest) flags() int       { return isWrite | isAlone | skipLeaseCheck }
+func (*QueryLocksRequest) flags() flag         { return isRead | isRange }
+func (*ResolveIntentRequest) flags() flag      { return isWrite }
+func (*ResolveIntentRangeRequest) flags() flag { return isWrite | isRange }
+func (*TruncateLogRequest) flags() flag        { return isWrite }
+func (*MergeRequest) flags() flag              { return isWrite | canBackpressure }
+func (*RequestLeaseRequest) flags() flag {
+	return isWrite | isAlone | skipsLeaseCheck | bypassesReplicaCircuitBreaker
+}
 
 // LeaseInfoRequest is usually executed in an INCONSISTENT batch, which has the
-// effect of the `skipLeaseCheck` flag that lease write operations have.
-func (*LeaseInfoRequest) flags() int { return isRead | isAlone }
-func (*TransferLeaseRequest) flags() int {
+// effect of the `skipsLeaseCheck` flag that lease write operations have.
+func (*LeaseInfoRequest) flags() flag { return isRead | isAlone }
+func (*TransferLeaseRequest) flags() flag {
 	// TransferLeaseRequest requires the lease, which is checked in
 	// `AdminTransferLease()` before the TransferLeaseRequest is created and sent
 	// for evaluation and in the usual way at application time (i.e.
@@ -1272,36 +1363,52 @@ func (*TransferLeaseRequest) flags() int {
 	// command resulting from the evaluation of TransferLeaseRequest was
 	// proposed).
 	//
-	// But we're marking it with skipLeaseCheck because `redirectOnOrAcquireLease`
+	// But we're marking it with skipsLeaseCheck because `redirectOnOrAcquireLease`
 	// can't be used before evaluation as, by the time that call would be made,
 	// the store has registered that a transfer is in progress and
 	// `redirectOnOrAcquireLease` would already tentatively redirect to the future
 	// lease holder.
-	return isWrite | isAlone | skipLeaseCheck
+	//
+	// Note that we intentionally don't let TransferLease bypass the Replica
+	// circuit breaker. Transferring a lease while the replication layer is
+	// unavailable results in the "old" leaseholder relinquishing the ability
+	// to serve (strong) reads, without being able to hand over the lease.
+	return isWrite | isAlone | skipsLeaseCheck
 }
-func (*RecomputeStatsRequest) flags() int                { return isWrite | isAlone }
-func (*ComputeChecksumRequest) flags() int               { return isWrite }
-func (*CheckConsistencyRequest) flags() int              { return isAdmin | isRange }
-func (*ExportRequest) flags() int                        { return isRead | isRange | updatesTSCache }
-func (*AdminScatterRequest) flags() int                  { return isAdmin | isRange | isAlone }
-func (*AdminVerifyProtectedTimestampRequest) flags() int { return isAdmin | isRange | isAlone }
-func (*AddSSTableRequest) flags() int {
-	return isWrite | isRange | isAlone | isUnsplittable | canBackpressure
+func (*ProbeRequest) flags() flag {
+	return isWrite | isAlone | skipsLeaseCheck | bypassesReplicaCircuitBreaker
 }
-func (*MigrateRequest) flags() int { return isWrite | isRange | isAlone }
+func (*RecomputeStatsRequest) flags() flag   { return isWrite | isAlone }
+func (*ComputeChecksumRequest) flags() flag  { return isWrite }
+func (*CheckConsistencyRequest) flags() flag { return isAdmin | isRange | isAlone }
+func (*ExportRequest) flags() flag {
+	return isRead | isRange | updatesTSCache | bypassesReplicaCircuitBreaker
+}
+func (*AdminScatterRequest) flags() flag                  { return isAdmin | isRange | isAlone }
+func (*AdminVerifyProtectedTimestampRequest) flags() flag { return isAdmin | isRange | isAlone }
+func (r *AddSSTableRequest) flags() flag {
+	flags := isWrite | isRange | isAlone | isUnsplittable | canBackpressure | bypassesReplicaCircuitBreaker
+	if r.SSTTimestampToRequestTimestamp.IsSet() {
+		flags |= appliesTSCache
+	}
+	return flags
+}
+func (*MigrateRequest) flags() flag { return isWrite | isRange | isAlone }
 
 // RefreshRequest and RefreshRangeRequest both determine which timestamp cache
 // they update based on their Write parameter.
-func (r *RefreshRequest) flags() int {
+func (r *RefreshRequest) flags() flag {
 	return isRead | isTxn | updatesTSCache
 }
-func (r *RefreshRangeRequest) flags() int {
+func (r *RefreshRangeRequest) flags() flag {
 	return isRead | isTxn | isRange | updatesTSCache
 }
 
-func (*SubsumeRequest) flags() int                { return isRead | isAlone | updatesTSCache }
-func (*RangeStatsRequest) flags() int             { return isRead }
-func (*QueryResolvedTimestampRequest) flags() int { return isRead | isRange }
+func (*SubsumeRequest) flags() flag                { return isRead | isAlone | updatesTSCache }
+func (*RangeStatsRequest) flags() flag             { return isRead }
+func (*QueryResolvedTimestampRequest) flags() flag { return isRead | isRange }
+func (*ScanInterleavedIntentsRequest) flags() flag { return isRead | isRange }
+func (*BarrierRequest) flags() flag                { return isWrite | isRange }
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
 // a parallel commit. See txn_interceptor_committer.go for a discussion about
@@ -1395,6 +1502,9 @@ func (e *RangeFeedEvent) ShallowCopy() *RangeFeedEvent {
 	case *RangeFeedCheckpoint:
 		cpyChk := *t
 		cpy.MustSetValue(&cpyChk)
+	case *RangeFeedSSTable:
+		cpySST := *t
+		cpy.MustSetValue(&cpySST)
 	case *RangeFeedError:
 		cpyErr := *t
 		cpy.MustSetValue(&cpyErr)
@@ -1402,6 +1512,11 @@ func (e *RangeFeedEvent) ShallowCopy() *RangeFeedEvent {
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}
 	return &cpy
+}
+
+// Timestamp is part of rangefeedbuffer.Event.
+func (e *RangeFeedValue) Timestamp() hlc.Timestamp {
+	return e.Value.Timestamp
 }
 
 // MakeReplicationChanges returns a slice of changes of the given type with an
@@ -1548,6 +1663,16 @@ func (c *ContentionEvent) String() string {
 	return redact.StringWithoutMarkers(c)
 }
 
+// Equal returns whether the two structs are identical. Needed for compatibility
+// with proto2.
+func (c *TenantConsumption) Equal(other *TenantConsumption) bool {
+	return *c == *other
+}
+
+// Equal is used by generated code when TenantConsumption is embedded in a
+// proto2.
+var _ = (*TenantConsumption).Equal
+
 // Add consumption from the given structure.
 func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.RU += other.RU
@@ -1556,6 +1681,7 @@ func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.WriteRequests += other.WriteRequests
 	c.WriteBytes += other.WriteBytes
 	c.SQLPodsCPUSeconds += other.SQLPodsCPUSeconds
+	c.PGWireEgressBytes += other.PGWireEgressBytes
 }
 
 // Sub subtracts consumption, making sure no fields become negative.
@@ -1595,4 +1721,49 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 	} else {
 		c.SQLPodsCPUSeconds -= other.SQLPodsCPUSeconds
 	}
+
+	if c.PGWireEgressBytes < other.PGWireEgressBytes {
+		c.PGWireEgressBytes = 0
+	} else {
+		c.PGWireEgressBytes -= other.PGWireEgressBytes
+	}
 }
+
+func humanizePointCount(n uint64) redact.SafeString {
+	return redact.SafeString(humanize.SI(float64(n), ""))
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal); "+
+		"block-bytes: (total %s, cached %s); "+
+		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s)",
+		s.NumInterfaceSteps, s.NumInternalSteps, s.NumInterfaceSeeks, s.NumInternalSeeks,
+		humanizeutil.IBytes(int64(s.BlockBytes)),
+		humanizeutil.IBytes(int64(s.BlockBytesInCache)),
+		humanizePointCount(s.PointCount),
+		humanizeutil.IBytes(int64(s.KeyBytes)),
+		humanizeutil.IBytes(int64(s.ValueBytes)),
+		humanizePointCount(s.PointsCoveredByRangeTombstones))
+}
+
+// String implements fmt.Stringer.
+func (s *ScanStats) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// TenantSettingsPrecedence identifies the precedence of a set of setting
+// overrides. It is used by the TenantSettings API which supports passing
+// multiple overrides for the same setting.
+type TenantSettingsPrecedence uint32
+
+const (
+	// SpecificTenantOverrides is the high precedence for tenant setting overrides.
+	// These overrides take precedence over AllTenantsOverrides.
+	SpecificTenantOverrides TenantSettingsPrecedence = 1 + iota
+
+	// AllTenantsOverrides is the low precedence for tenant setting overrides.
+	// These overrides are only effectual for a tenant if there is no override
+	// with the SpecificTenantOverrides precedence..
+	AllTenantsOverrides
+)

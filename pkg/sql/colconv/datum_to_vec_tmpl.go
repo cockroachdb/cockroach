@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for datum_to_vec.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
@@ -20,10 +22,19 @@
 package colconv
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
+)
+
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ encoding.Direction
+	_ = typeconv.DatumVecCanonicalTypeFamily
 )
 
 // GetDatumToPhysicalFn returns a function for converting a datum of the given

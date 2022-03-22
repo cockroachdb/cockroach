@@ -138,7 +138,7 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 					return nil
 				},
 			); err != nil {
-				return errors.Errorf("failed to visit all nodes, got %v", err)
+				return errors.Wrap(err, "failed to visit all nodes")
 			}
 
 			if storeCount != 3 {
@@ -208,7 +208,7 @@ func TestMultiStoreIDAlloc(t *testing.T) {
 					return nil
 				},
 			); err != nil {
-				return errors.Errorf("failed to visit all nodes, got %v", err)
+				return errors.Wrap(err, "failed to visit all nodes")
 			}
 
 			if storeCount != numStoresPerNode {

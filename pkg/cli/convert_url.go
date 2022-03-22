@@ -13,6 +13,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -30,7 +31,7 @@ var convertURLCmd = &cobra.Command{
 
 	Short: "convert a SQL connection string for use with various client drivers",
 	Args:  cobra.NoArgs,
-	RunE:  MaybeDecorateGRPCError(runConvertURL),
+	RunE:  clierrorplus.MaybeDecorateError(runConvertURL),
 }
 
 func runConvertURL(cmd *cobra.Command, _ []string) error {

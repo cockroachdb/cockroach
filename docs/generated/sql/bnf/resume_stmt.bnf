@@ -1,3 +1,4 @@
 resume_stmt ::=
 	resume_jobs_stmt
 	| resume_schedules_stmt
+	| resume_all_jobs_stmt

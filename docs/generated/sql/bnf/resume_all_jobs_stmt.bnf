@@ -1,0 +1,2 @@
+resume_all_jobs_stmt ::=
+	'RESUME' 'ALL' name 'JOBS'

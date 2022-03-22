@@ -22,7 +22,7 @@ As of writing, the leading replica is the only replica that proposes commands
 to Raft. However, each replica applies commands individually, which leads to
 large swaths of code living "downstream" of Raft. Since all of this code needs
 to produce identical output even during migrations, a satisfactory migration
-story is almost inachievable, a comment made by several reviewers (and the
+story is almost unachievable, a comment made by several reviewers (and the
 author).
 
 By having the proposing replica compute the effects on the key-value state

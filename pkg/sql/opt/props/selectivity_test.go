@@ -73,6 +73,13 @@ func TestSelectivity(t *testing.T) {
 	test(MinSelectivity(ZeroSelectivity, s(epsilon)), ZeroSelectivity)
 	test(MinSelectivity(s(0), s(epsilon)), s(epsilon))
 
+	// MaxSelectivity variations.
+	test(MaxSelectivity(s(0.4), s(0.5)), s(0.5))
+	test(MaxSelectivity(s(0.5), s(0.4)), s(0.5))
+	test(MaxSelectivity(ZeroSelectivity, OneSelectivity), OneSelectivity)
+	test(MaxSelectivity(ZeroSelectivity, s(epsilon)), s(epsilon))
+	test(MaxSelectivity(s(0), s(epsilon)), s(epsilon))
+
 	// selectivityInRange variations.
 	testFloat(selectivityInRange(epsilon), epsilon)
 	testFloat(selectivityInRange(1), 1)

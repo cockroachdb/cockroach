@@ -37,9 +37,11 @@ func init() {
 }
 
 // NewRecord constructs a new jobs.Record for this migration.
-func NewRecord(version clusterversion.ClusterVersion, user security.SQLUsername) jobs.Record {
+func NewRecord(
+	version clusterversion.ClusterVersion, user security.SQLUsername, name string,
+) jobs.Record {
 	return jobs.Record{
-		Description: "Migration to " + version.String(),
+		Description: name,
 		Details: jobspb.MigrationDetails{
 			ClusterVersion: &version,
 		},
@@ -56,7 +58,6 @@ type resumer struct {
 var _ jobs.Resumer = (*resumer)(nil)
 
 func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
-
 	execCtx := execCtxI.(sql.JobExecContext)
 	pl := r.j.Payload()
 	cv := *pl.GetMigration().ClusterVersion
@@ -79,16 +80,21 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	}
 	switch m := m.(type) {
 	case *migration.SystemMigration:
-		err = m.Run(ctx, cv, mc.Cluster())
+		err = m.Run(ctx, cv, mc.SystemDeps(), r.j)
 	case *migration.TenantMigration:
-		err = m.Run(ctx, cv, migration.TenantDeps{
+		tenantDeps := migration.TenantDeps{
 			DB:                execCtx.ExecCfg().DB,
 			Codec:             execCtx.ExecCfg().Codec,
 			Settings:          execCtx.ExecCfg().Settings,
 			CollectionFactory: execCtx.ExecCfg().CollectionFactory,
 			LeaseManager:      execCtx.ExecCfg().LeaseManager,
 			InternalExecutor:  execCtx.ExecCfg().InternalExecutor,
-		})
+			TestingKnobs:      execCtx.ExecCfg().MigrationTestingKnobs,
+		}
+		tenantDeps.SpanConfig.KVAccessor = execCtx.ExecCfg().SpanConfigKVAccessor
+		tenantDeps.SpanConfig.Default = execCtx.ExecCfg().DefaultZoneConfig.AsSpanConfig()
+
+		err = m.Run(ctx, cv, tenantDeps, r.j)
 	default:
 		return errors.AssertionFailedf("unknown migration type %T", m)
 	}

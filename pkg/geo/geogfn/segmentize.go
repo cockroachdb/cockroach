@@ -15,7 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geosegmentize"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
 )
@@ -37,7 +38,7 @@ func Segmentize(geography geo.Geography, segmentMaxLength float64) (geo.Geograph
 		return geography, nil
 	default:
 		if segmentMaxLength <= 0 {
-			return geo.Geography{}, errors.Newf("maximum segment length must be positive")
+			return geo.Geography{}, pgerror.Newf(pgcode.InvalidParameterValue, "maximum segment length must be positive")
 		}
 		spheroid, err := geography.Spheroid()
 		if err != nil {
@@ -61,10 +62,10 @@ func Segmentize(geography geo.Geography, segmentMaxLength float64) (geo.Geograph
 // Note: List of points does not consist of end point.
 func segmentizeCoords(a geom.Coord, b geom.Coord, segmentMaxAngle float64) ([]float64, error) {
 	if len(a) != len(b) {
-		return nil, errors.Newf("cannot segmentize two coordinates of different dimensions")
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot segmentize two coordinates of different dimensions")
 	}
 	if segmentMaxAngle <= 0 {
-		return nil, errors.Newf("maximum segment angle must be positive")
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "maximum segment angle must be positive")
 	}
 
 	// Converted geom.Coord into s2.Point so we can segmentize the coordinates.

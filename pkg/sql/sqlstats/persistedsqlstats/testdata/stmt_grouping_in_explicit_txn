@@ -1,0 +1,175 @@
+exec-sql
+SET application_name = 'test'
+----
+
+exec-sql
+SELECT 1
+SELECT 1
+SELECT 1, 1
+----
+
+
+exec-sql
+BEGIN
+SELECT 1
+SELECT 1, 1
+SELECT 1, 1
+COMMIT
+----
+
+
+exec-sql
+BEGIN
+SELECT 1
+SELECT 1, 1
+SELECT 1, 1
+SELECT 1, 1
+COMMIT
+----
+
+exec-sql
+BEGIN
+SELECT 1
+SELECT 1, 1
+SELECT 1, 1
+SELECT 1, 1
+COMMIT
+----
+
+# Ensure we records both explicit transactions with correct statement
+# fingerprint IDs. We filter out transactions that has less than 3 statements
+# in order to ignore the implicit transactions.
+observe-sql
+SELECT
+  encode(fingerprint_id, 'hex'),
+  metadata -> 'stmtFingerprintIDs'
+FROM
+  crdb_internal.transaction_statistics
+WHERE
+  app_name = 'test' AND
+  jsonb_array_length(metadata -> 'stmtFingerprintIDs') >= 3
+ORDER BY
+  jsonb_array_length(metadata -> 'stmtFingerprintIDs')
+ASC
+----
+175a20896dca7754,["df3c70bf7729b43f", "15c74af7a18bd6d6", "15c74af7a18bd6d6"]
+6d5bd7722e83156a,["df3c70bf7729b43f", "15c74af7a18bd6d6", "15c74af7a18bd6d6", "15c74af7a18bd6d6"]
+
+# Ensures the statistics for each explicit transactions are grouped into
+# different entry.
+observe-sql
+SELECT
+  encode(s.fingerprint_id, 'hex') AS stmtFingerprintID,
+  encode(t.fingerprint_id, 'hex') AS txnFingerprintID,
+  s.metadata ->> 'query' AS query,
+  (s.statistics -> 'statistics' ->> 'cnt')::INT AS count
+FROM
+  crdb_internal.statement_statistics s,
+  crdb_internal.transaction_statistics t
+WHERE
+  s.app_name = 'test' AND
+  encode(s.transaction_fingerprint_id, 'hex') = encode(t.fingerprint_id, 'hex') AND
+  jsonb_array_length(t.metadata -> 'stmtFingerprintIDs') >= 3
+----
+df3c70bf7729b43f,175a20896dca7754,SELECT _,1
+15c74af7a18bd6d6,175a20896dca7754,SELECT _, _,2
+df3c70bf7729b43f,6d5bd7722e83156a,SELECT _,2
+15c74af7a18bd6d6,6d5bd7722e83156a,SELECT _, _,6
+
+# Ensures that implicit transaction stats are collected separately.
+observe-sql
+SELECT
+  encode(fingerprint_id, 'hex') AS stmtFingerprintID,
+  encode(transaction_fingerprint_id, 'hex') AS txnFingerprintID,
+  metadata ->> 'query',
+  (statistics -> 'statistics' ->> 'cnt')::INT
+FROM
+  crdb_internal.statement_statistics
+WHERE
+  app_name = 'test' AND
+  metadata ->> 'query' IN (
+    'SELECT _', 'SELECT _, _'
+  ) AND
+  encode(transaction_fingerprint_id, 'hex') NOT IN (
+    SELECT
+      encode(fingerprint_id, 'hex')
+    FROM
+      crdb_internal.transaction_statistics
+    WHERE
+      jsonb_array_length(metadata -> 'stmtFingerprintIDs') >= 3
+  )
+----
+df3c70bf7729b433,705fcdf3f12803ec,SELECT _,2
+15c74af7a18bd6da,baa4f7bb278a6105,SELECT _, _,1
+
+
+sql-stats-flush
+----
+
+# Run the same tests again after the flush.
+
+# Ensure we records both explicit transactions with correct statement
+# fingerprint IDs.
+observe-sql
+SELECT
+  encode(fingerprint_id, 'hex'),
+  metadata -> 'stmtFingerprintIDs'
+FROM
+  crdb_internal.transaction_statistics
+WHERE
+  app_name = 'test' AND
+  jsonb_array_length(metadata -> 'stmtFingerprintIDs') >= 3
+ORDER BY
+  jsonb_array_length(metadata -> 'stmtFingerprintIDs')
+ASC
+----
+175a20896dca7754,["df3c70bf7729b43f", "15c74af7a18bd6d6", "15c74af7a18bd6d6"]
+6d5bd7722e83156a,["df3c70bf7729b43f", "15c74af7a18bd6d6", "15c74af7a18bd6d6", "15c74af7a18bd6d6"]
+
+# Ensures the statistics for each explicit transactions are grouped into
+# different entry.
+observe-sql
+SELECT
+  encode(s.fingerprint_id, 'hex') AS stmtFingerprintID,
+  encode(t.fingerprint_id, 'hex') AS txnFingerprintID,
+  s.metadata ->> 'query' AS query,
+  (s.statistics -> 'statistics' ->> 'cnt')::INT AS count
+FROM
+  crdb_internal.statement_statistics s,
+  crdb_internal.transaction_statistics t
+WHERE
+  s.app_name = 'test' AND
+  encode(s.transaction_fingerprint_id, 'hex') = encode(t.fingerprint_id, 'hex') AND
+  jsonb_array_length(t.metadata -> 'stmtFingerprintIDs') >= 3
+ORDER BY s.transaction_fingerprint_id, s.metadata ->> 'query'
+----
+df3c70bf7729b43f,175a20896dca7754,SELECT _,1
+15c74af7a18bd6d6,175a20896dca7754,SELECT _, _,2
+df3c70bf7729b43f,6d5bd7722e83156a,SELECT _,2
+15c74af7a18bd6d6,6d5bd7722e83156a,SELECT _, _,6
+
+# Ensures that implicit transaction stats are collected separately.
+observe-sql
+SELECT
+  encode(fingerprint_id, 'hex') AS stmtFingerprintID,
+  encode(transaction_fingerprint_id, 'hex') AS txnFingerprintID,
+  metadata ->> 'query',
+  (statistics -> 'statistics' ->> 'cnt')::INT
+FROM
+  crdb_internal.statement_statistics
+WHERE
+  app_name = 'test' AND
+  metadata ->> 'query' IN (
+    'SELECT _', 'SELECT _, _'
+  ) AND
+  encode(transaction_fingerprint_id, 'hex') NOT IN (
+    SELECT
+      encode(fingerprint_id, 'hex')
+    FROM
+      crdb_internal.transaction_statistics
+    WHERE
+      jsonb_array_length(metadata -> 'stmtFingerprintIDs') >= 3
+  )
+----
+df3c70bf7729b433,705fcdf3f12803ec,SELECT _,2
+15c74af7a18bd6da,baa4f7bb278a6105,SELECT _, _,1

@@ -117,10 +117,10 @@ more details.
 
 Additionally, incremental cluster backups and restoration is supported using
 the same syntax as the existing `BACKUP`. In addition to checking that the
-previous backups cover the necassary span of keybase and time, a check must be
+previous backups cover the necessary span of keybase and time, a check must be
 added `backupPlanHook` to verify that every backup that this incremental backup
 builds upon are also cluster backups. Additionally, full cluster restore should
-only be permitted on Therefore it is necasary to add a flag in the backup
+only be permitted on Therefore it is necessary to add a flag in the backup
 manifest (`BackupDescriptor`) indicating whether or not a given backup is a
 full cluster backup or not. The primary reason for this bit is to ensure that
 full cluster restore can only restore full cluster backup files.
@@ -200,7 +200,7 @@ have options: `RequestedDescriptors`, which is the default and is what existing
 backups will have going forward, and `AllDescriptors` for full cluster backup.
 This enum is required to prevent a full cluster restore being performed from a
 non-full cluster backup file. In particular, this requirement exists because
-full cluster RESTORE guarnatees that the entire cluster has been RESTOREd (so we
+full cluster RESTORE guarantees that the entire cluster has been RESTOREd (so we
 need the entire cluster to be in the backup file).
 
 ## Restore
@@ -212,7 +212,7 @@ locality if appropriate. The user data will then be restored, and finally the
 rest of the system tables.
 
 First, a check is performed to ensure that no user data exists in this cluster.
-This is acheived by ensuring that no descriptors exist with ID greater than or
+This is achieved by ensuring that no descriptors exist with ID greater than or
 equal to `MinNonPredefinedUserDescID`. Then the `DescIDGenerator` needs to be
 restored. This key is used to determine that value of the next descriptor ID
 (such as during the creation of a table or database). This check would also
@@ -378,7 +378,7 @@ can assume that all system tables included in those backups are safe to restore
   failure in the middle of the backup. It will clean up the data following the
   normal backup procedures. In the case that there is a failure while updating
   the system tables, the cluster should be started up again. Since we enforce
-  that the cluster we are restoring to has no user data, this is acceptible.
+  that the cluster we are restoring to has no user data, this is acceptable.
 
 # Drawbacks
 

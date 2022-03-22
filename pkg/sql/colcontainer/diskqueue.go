@@ -237,10 +237,10 @@ type RewindableQueue interface {
 }
 
 const (
-	// defaultBufferSizeBytesDefaultCacheMode is the default buffer size used when
-	// the DiskQueue is in DiskQueueCacheModeDefault.
+	// defaultBufferSizeBytesIntertwinedCallsCacheMode is the default buffer
+	// size used when the DiskQueue is in DiskQueueCacheModeIntertwinedCalls.
 	// This value was chosen by running BenchmarkQueue.
-	defaultBufferSizeBytesDefaultCacheMode = 128 << 10 /* 128 KiB */
+	defaultBufferSizeBytesIntertwinedCallsCacheMode = 128 << 10 /* 128 KiB */
 	// defaultBufferSizeBytesReuseCacheMode is the default buffer size used when
 	// the DiskQueue is in DiskQueueCacheMode{ClearAnd}ReuseCache.
 	defaultBufferSizeBytesReuseCacheMode = 64 << 10 /* 64 KiB */
@@ -255,8 +255,20 @@ const (
 type DiskQueueCacheMode int
 
 const (
-	// DiskQueueCacheModeDefault is the default mode for DiskQueue cache behavior.
-	// The cache (DiskQueueCfg.BufferSizeBytes) will be divided as follows:
+	// DiskQueueCacheModeReuseCache imposes a limitation that all Enqueues happen
+	// before all Dequeues to be able to reuse more memory. In this mode the cache
+	// will be divided as follows:
+	// - 1/2 for buffered writes and buffered reads.
+	// - 1/2 for compressed write and reads (given the limitation that this memory
+	//   has to be non-overlapping).
+	DiskQueueCacheModeReuseCache DiskQueueCacheMode = iota
+	// DiskQueueCacheModeClearAndReuseCache is the same as
+	// DiskQueueCacheModeReuseCache with the additional behavior that when a
+	// coldata.ZeroBatch is Enqueued, the cache will be released to the GC.
+	DiskQueueCacheModeClearAndReuseCache
+	// DiskQueueCacheModeIntertwinedCalls is the cache mode in which Enqueues
+	// and Dequeues may happen in any order. The cache
+	// (DiskQueueCfg.BufferSizeBytes) will be divided as follows:
 	// - 1/3 for buffered writes (before compression)
 	// - 1/3 for compressed writes, this is distinct from the previous 1/3 because
 	//   it is a requirement of the snappy library that the compressed memory may
@@ -265,19 +277,7 @@ const (
 	// - 1/3 for buffered reads after decompression. Kept separate from the write
 	//   memory to allow for Enqueues to come in while unread batches are held in
 	//   memory.
-	// In this mode, Enqueues and Dequeues may happen in any order.
-	DiskQueueCacheModeDefault DiskQueueCacheMode = iota
-	// DiskQueueCacheModeReuseCache imposes a limitation that all Enqueues happen
-	// before all Dequeues to be able to reuse more memory. In this mode the cache
-	// will be divided as follows:
-	// - 1/2 for buffered writes and buffered reads.
-	// - 1/2 for compressed write and reads (given the limitation that this memory
-	//   has to be non-overlapping.
-	DiskQueueCacheModeReuseCache
-	// DiskQueueCacheModeClearAndReuseCache is the same as
-	// DiskQueueCacheModeReuseCache with the additional behavior that when a
-	// coldata.ZeroBatch is Enqueued, the cache will be released to the GC.
-	DiskQueueCacheModeClearAndReuseCache
+	DiskQueueCacheModeIntertwinedCalls
 )
 
 // GetPather is an object that has a temporary directory.
@@ -339,7 +339,7 @@ func (cfg *DiskQueueCfg) EnsureDefaults() error {
 		return errors.New("FS unset on DiskQueueCfg")
 	}
 	if cfg.BufferSizeBytes == 0 {
-		cfg.SetDefaultBufferSizeBytesForCacheMode()
+		cfg.setDefaultBufferSizeBytesForCacheMode()
 	}
 	if cfg.MaxFileSizeBytes == 0 {
 		cfg.MaxFileSizeBytes = defaultMaxFileSizeBytes
@@ -347,11 +347,18 @@ func (cfg *DiskQueueCfg) EnsureDefaults() error {
 	return nil
 }
 
-// SetDefaultBufferSizeBytesForCacheMode sets the default BufferSizeBytes
+// SetCacheMode sets the given mode on the config and updates the buffer size
+// bytes to the corresponding default value.
+func (cfg *DiskQueueCfg) SetCacheMode(m DiskQueueCacheMode) {
+	cfg.CacheMode = m
+	cfg.setDefaultBufferSizeBytesForCacheMode()
+}
+
+// setDefaultBufferSizeBytesForCacheMode sets the default BufferSizeBytes
 // according to the set CacheMode.
-func (cfg *DiskQueueCfg) SetDefaultBufferSizeBytesForCacheMode() {
-	if cfg.CacheMode == DiskQueueCacheModeDefault {
-		cfg.BufferSizeBytes = defaultBufferSizeBytesDefaultCacheMode
+func (cfg *DiskQueueCfg) setDefaultBufferSizeBytesForCacheMode() {
+	if cfg.CacheMode == DiskQueueCacheModeIntertwinedCalls {
+		cfg.BufferSizeBytes = defaultBufferSizeBytesIntertwinedCallsCacheMode
 	} else {
 		cfg.BufferSizeBytes = defaultBufferSizeBytesReuseCacheMode
 	}
@@ -401,7 +408,7 @@ func newDiskQueue(
 	}
 	// Refer to the DiskQueueCacheMode comment for why this division of
 	// BufferSizeBytes.
-	if d.cfg.CacheMode != DiskQueueCacheModeDefault {
+	if d.cfg.CacheMode != DiskQueueCacheModeIntertwinedCalls {
 		d.writeBufferLimit = d.cfg.BufferSizeBytes / 2
 	}
 	if err := cfg.FS.MkdirAll(filepath.Join(cfg.GetPather.GetPath(ctx), d.dirName)); err != nil {
@@ -556,8 +563,11 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 
 func (d *diskQueue) Enqueue(ctx context.Context, b coldata.Batch) error {
 	if d.state == diskQueueStateDequeueing {
-		if d.cfg.CacheMode != DiskQueueCacheModeDefault {
-			return errors.Errorf("attempted to Enqueue to DiskQueue in mode that disallows it: %d", d.cfg.CacheMode)
+		if d.cfg.CacheMode != DiskQueueCacheModeIntertwinedCalls {
+			return errors.Errorf(
+				"attempted to Enqueue to DiskQueue after Dequeueing "+
+					"in mode that disallows it: %d", d.cfg.CacheMode,
+			)
 		}
 		if d.rewindable {
 			return errors.Errorf("attempted to Enqueue to RewindableDiskQueue after Dequeue has been called")
@@ -733,7 +743,7 @@ func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) 
 			return false, err
 		}
 	}
-	if d.state == diskQueueStateEnqueueing && d.cfg.CacheMode != DiskQueueCacheModeDefault {
+	if d.state == diskQueueStateEnqueueing && d.cfg.CacheMode != DiskQueueCacheModeIntertwinedCalls {
 		// This is the first Dequeue after Enqueues, so reuse the write cache for
 		// reads. Note that the buffer for compressed reads is reused in
 		// maybeInitDeserializer in either case, so there is nothing to do here for

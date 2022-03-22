@@ -185,16 +185,12 @@ var _ = [...]interface{}{
 	//   range as a whole. Though they are replicated, they are unaddressable.
 	//   Typical examples are MVCC stats and the abort span. They all share
 	//   `LocalRangeIDPrefix` and `LocalRangeIDReplicatedInfix`.
-	AbortSpanKey,                // "abc-"
-	RangeGCThresholdKey,         // "lgc-"
-	RangeAppliedStateKey,        // "rask"
-	RaftAppliedIndexLegacyKey,   // "rfta"
-	RaftTruncatedStateLegacyKey, // "rftt"
-	RangeLeaseKey,               // "rll-"
-	LeaseAppliedIndexLegacyKey,  // "rlla"
-	RangePriorReadSummaryKey,    // "rprs"
-	RangeVersionKey,             // "rver"
-	RangeStatsLegacyKey,         // "stat"
+	AbortSpanKey,             // "abc-"
+	RangeGCThresholdKey,      // "lgc-"
+	RangeAppliedStateKey,     // "rask"
+	RangeLeaseKey,            // "rll-"
+	RangePriorReadSummaryKey, // "rprs"
+	RangeVersionKey,          // "rver"
 
 	//   2. Unreplicated range-ID local keys: These contain metadata that
 	//   pertain to just one replica of a range. They are unreplicated and
@@ -203,6 +199,7 @@ var _ = [...]interface{}{
 	RangeTombstoneKey,              // "rftb"
 	RaftHardStateKey,               // "rfth"
 	RaftLogKey,                     // "rftl"
+	RaftReplicaIDKey,               // "rftr"
 	RaftTruncatedStateKey,          // "rftt"
 	RangeLastReplicaGCTimestampKey, // "rlrt"
 
@@ -210,6 +207,7 @@ var _ = [...]interface{}{
 	//   as a whole. They are replicated and addressable. Typical examples are
 	//   the range descriptor and transaction records. They all share
 	//   `LocalRangePrefix`.
+	RangeProbeKey,         // "prbe"
 	QueueLastProcessedKey, // "qlpt"
 	RangeDescriptorKey,    // "rdsc"
 	TransactionKey,        // "txn-"
@@ -217,13 +215,14 @@ var _ = [...]interface{}{
 	//   4. Store local keys: These contain metadata about an individual store.
 	//   They are unreplicated and unaddressable. The typical example is the
 	//   store 'ident' record. They all share `localStorePrefix`.
-	StoreClusterVersionKey, // "cver"
-	StoreGossipKey,         // "goss"
-	StoreHLCUpperBoundKey,  // "hlcu"
-	StoreIdentKey,          // "iden"
-	StoreNodeTombstoneKey,  // "ntmb"
-	StoreLastUpKey,         // "uptm"
-	StoreCachedSettingsKey, // "stng"
+	StoreClusterVersionKey,        // "cver"
+	StoreGossipKey,                // "goss"
+	StoreHLCUpperBoundKey,         // "hlcu"
+	StoreIdentKey,                 // "iden"
+	StoreUnsafeReplicaRecoveryKey, // "loqr"
+	StoreNodeTombstoneKey,         // "ntmb"
+	StoreCachedSettingsKey,        // "stng"
+	StoreLastUpKey,                // "uptm"
 
 	//   5. Range lock keys for all replicated locks. All range locks share
 	//   LocalRangeLockTablePrefix. Locks can be acquired on global keys and on
@@ -247,24 +246,24 @@ var _ = [...]interface{}{
 	// 	2. System keys: This is where we store global, system data which is
 	// 	replicated across the cluster.
 	SystemPrefix,
-	NodeLivenessPrefix,  // "\x00liveness-"
-	BootstrapVersionKey, // "bootstrap-version"
-	descIDGenerator,     // "desc-idgen"
-	NodeIDGenerator,     // "node-idgen"
-	RangeIDGenerator,    // "range-idgen"
-	StatusPrefix,        // "status-"
-	StatusNodePrefix,    // "status-node-"
-	StoreIDGenerator,    // "store-idgen"
-	MigrationPrefix,     // "system-version/"
-	MigrationLease,      // "system-version/lease"
-	TimeseriesPrefix,    // "tsd"
+	NodeLivenessPrefix,     // "\x00liveness-"
+	BootstrapVersionKey,    // "bootstrap-version"
+	descIDGenerator,        // "desc-idgen"
+	NodeIDGenerator,        // "node-idgen"
+	RangeIDGenerator,       // "range-idgen"
+	StatusPrefix,           // "status-"
+	StatusNodePrefix,       // "status-node-"
+	StoreIDGenerator,       // "store-idgen"
+	MigrationPrefix,        // "system-version/"
+	MigrationLease,         // "system-version/lease"
+	TimeseriesPrefix,       // "tsd"
+	SystemSpanConfigPrefix, // "xffsys-scfg"
 	SystemMax,
 
 	// 	3. System tenant SQL keys: This is where we store all system-tenant
 	// 	table data.
 	TableDataMin,
 	NamespaceTableMin,
-	UserTableDataMin,
 	TableDataMax,
 
 	//  4. Non-system tenant SQL keys: This is where we store all non-system

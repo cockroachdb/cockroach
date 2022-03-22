@@ -228,6 +228,143 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 	require.NotNil(t, br)
 }
 
+// TestModifyReadSeqNum tests that it's possible to switch the read seq num
+// inside of a transaction to perform reads that do not include writes that
+// occurred at higher seq nums in the transaction. This is a unit test of the
+// functionality that SQL uses to implement CURSOR.
+func TestModifyReadSeqNum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, mockSender := makeMockTxnSeqNumAllocator()
+
+	txn := makeTxnProto()
+	keyA := roachpb.Key("a")
+
+	s.configureSteppingLocked(true /* enabled */)
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	// The test plan is as follows:
+	// 1. do a mutation.
+	// 2. pretend to create a cursor by grabbing the current read seq num.
+	// 3. do another mutation.
+	// 4. ensure that we can perform a read at the old seq num and that nothing
+	//    blows up, and that we can perform a read at the current seq num as well
+	//    afterwards.
+	// 5. do another mutation.
+	// 6. repeat step 4.
+
+	// First, do a mutation.
+	if err := s.stepLocked(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	br, pErr := s.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Grab the current seq num.
+	cursorSeqNum := s.readSeq
+
+	// Perform another mutation.
+	if err := s.stepLocked(ctx); err != nil {
+		t.Fatal(err)
+	}
+	ba = roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	br, pErr = s.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Ensure that sending a read at the old seq num doesn't do anything bad and
+	// also passes through the correct seq num.
+	curReadSeq := s.readSeq
+	if err := s.stepLocked(ctx); err != nil {
+		t.Fatal(err)
+	}
+	s.readSeq = cursorSeqNum
+	ba = roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, cursorSeqNum, ba.Requests[0].GetGet().RequestHeader.Sequence)
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+	s.readSeq = curReadSeq
+
+	// Ensure that doing another read after resetting the seq num back to the
+	// newer seq num also doesn't do anything bad.
+	if err := s.stepLocked(ctx); err != nil {
+		t.Fatal(err)
+	}
+	ba = roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, curReadSeq, ba.Requests[0].GetGet().RequestHeader.Sequence)
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	// Do another mutation after messing with the read seq nums so that we can
+	// be sure things are still groovy.
+	if err := s.stepLocked(ctx); err != nil {
+		t.Fatal(err)
+	}
+	ba = roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, s.writeSeq, ba.Requests[0].GetGet().RequestHeader.Sequence)
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	// Ensure that sending another read at the old seq num doesn't do anything bad
+	// and also passes through the correct seq num.
+	curReadSeq = s.readSeq
+	if err := s.stepLocked(ctx); err != nil {
+		t.Fatal(err)
+	}
+	s.readSeq = cursorSeqNum
+	ba = roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, cursorSeqNum, ba.Requests[0].GetGet().RequestHeader.Sequence)
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+	s.readSeq = curReadSeq
+
+	// Ensure that doing another read after resetting the seq num back to the
+	// newer seq num also doesn't do anything bad.
+	if err := s.stepLocked(ctx); err != nil {
+		t.Fatal(err)
+	}
+	ba = roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Equal(t, curReadSeq, ba.Requests[0].GetGet().RequestHeader.Sequence)
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+}
+
 // TestSequenceNumberAllocationTxnRequests tests sequence number allocation's
 // interaction with transaction state requests (HeartbeatTxn and EndTxn). Only
 // EndTxn requests should be assigned unique sequence numbers.

@@ -469,6 +469,11 @@ func (d ReplicaSet) ReplicationStatus(
 	return res
 }
 
+// Empty returns true if `target` is an empty replication target.
+func Empty(target ReplicationTarget) bool {
+	return target == ReplicationTarget{}
+}
+
 // ReplicationTargets returns a slice of ReplicationTargets corresponding to
 // each of the replicas in the set.
 func (d ReplicaSet) ReplicationTargets() (out []ReplicationTarget) {
@@ -524,25 +529,7 @@ func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, rngDesc *RangeDe
 	repDesc, ok := rngDesc.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
 		return errReplicaNotFound
-	} else if t := repDesc.GetType(); t != VOTER_FULL {
-		// NB: there's no harm in transferring the lease to a VOTER_INCOMING,
-		// but we disallow it anyway. On the other hand, transferring to
-		// VOTER_OUTGOING would be a pretty bad idea since those voters are
-		// dropped when transitioning out of the joint config, which then
-		// amounts to removing the leaseholder without any safety precautions.
-		// This would either wedge the range or allow illegal reads to be
-		// served.
-		//
-		// Since the leaseholder can't remove itself and is a VOTER_FULL, we
-		// also know that in any configuration there's at least one VOTER_FULL.
-		//
-		// TODO(tbg): if this code path is hit during a lease transfer (we check
-		// upstream of raft, but this check has false negatives) then we are in
-		// a situation where the leaseholder is a node that has set its
-		// minProposedTS and won't be using its lease any more. Either the setting
-		// of minProposedTS needs to be "reversible" (tricky) or we make the
-		// lease evaluation succeed, though with a lease that's "invalid" so that
-		// a new lease can be requested right after.
+	} else if !repDesc.IsVoterNewConfig() {
 		return errReplicaCannotHoldLease
 	}
 	return nil

@@ -22,21 +22,14 @@ import (
 // has been canceled or not. Encapsulates all logic for waiting for cancelCheckInterval
 // rows before actually checking for cancellation. The cancellation check
 // has a significant time overhead, so it's not checked in every iteration.
+// TODO(yuzefovich): audit all processors to make sure that the ones that should
+// use the cancel checker actually do so.
 type CancelChecker struct {
 	// Reference to associated context to check.
 	ctx context.Context
 
 	// Number of times Check() has been called since last context cancellation check.
 	callsSinceLastCheck uint32
-}
-
-// NewCancelChecker returns a new CancelChecker.
-// TODO(yuzefovich): audit all processors to make sure that the ones that
-// should use the cancel checker actually do so.
-func NewCancelChecker(ctx context.Context) *CancelChecker {
-	return &CancelChecker{
-		ctx: ctx,
-	}
 }
 
 // Check returns an error if the associated query has been canceled.

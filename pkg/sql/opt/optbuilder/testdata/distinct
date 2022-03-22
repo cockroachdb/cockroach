@@ -215,7 +215,7 @@ distinct-on
  ├── grouping columns: max:6!null
  └── project
       ├── columns: max:6!null
-      └── group-by
+      └── group-by (hash)
            ├── columns: x:1!null max:6!null
            ├── grouping columns: x:1!null
            ├── project
@@ -275,7 +275,7 @@ distinct-on
       ├── columns: r:7!null s:8!null max:6
       ├── select
       │    ├── columns: x:1!null y:2!null max:6
-      │    ├── group-by
+      │    ├── group-by (hash)
       │    │    ├── columns: x:1!null y:2 max:6
       │    │    ├── grouping columns: x:1!null y:2
       │    │    ├── project

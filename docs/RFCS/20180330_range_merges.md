@@ -180,7 +180,7 @@ concerns. Here's how it works:
    GetSnapshotForMerge works.
 
    Finally, the transaction commits, including the snapshot of _R_ in the
-   merge trigger and sychronously resolving any local intents.
+   merge trigger and synchronously resolving any local intents.
 
 2. **Merge trigger evaluation**
 

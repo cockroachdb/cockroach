@@ -43,6 +43,7 @@ import (
 // ReporterInterval is the interval between two generations of the reports.
 // When set to zero - disables the report generation.
 var ReporterInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.replication_reports.interval",
 	"the frequency for generating the replication_constraint_stats, replication_stats_report and "+
 		"replication_critical_localities reports (set to 0 to disable)",
@@ -53,6 +54,12 @@ var ReporterInterval = settings.RegisterDurationSetting(
 // Reporter periodically produces a couple of reports on the cluster's data
 // distribution: the system tables: replication_constraint_stats,
 // replication_stats_report and replication_critical_localities.
+//
+// TODO(irfansharif): After #67679 these replication reports will be the last
+// remaining use of the system config span in KV. Strawman: we could hoist all
+// this code above KV and run it for each tenant. We'd have to expose a view
+// into node liveness and store descriptors, and instead of using the system
+// config span we could consult the tenant-scoped system.zones directly.
 type Reporter struct {
 	// Contains the list of the stores of the current node
 	localStores *kvserver.Stores
@@ -66,6 +73,7 @@ type Reporter struct {
 	settings  *cluster.Settings
 	storePool *kvserver.StorePool
 	executor  sqlutil.InternalExecutor
+	cfgs      config.SystemConfigProvider
 
 	frequencyMu struct {
 		syncutil.Mutex
@@ -82,6 +90,7 @@ func NewReporter(
 	st *cluster.Settings,
 	liveness *liveness.NodeLiveness,
 	executor sqlutil.InternalExecutor,
+	provider config.SystemConfigProvider,
 ) *Reporter {
 	r := Reporter{
 		db:          db,
@@ -90,6 +99,7 @@ func NewReporter(
 		settings:    st,
 		liveness:    liveness,
 		executor:    executor,
+		cfgs:        provider,
 	}
 	r.frequencyMu.changeCh = make(chan struct{})
 	return &r
@@ -171,7 +181,7 @@ func (stats *Reporter) update(
 	log.VEventf(ctx, 2, "updating replication reports...")
 	defer func() {
 		log.VEventf(ctx, 2, "updating replication reports... done. Generation took: %s.",
-			timeutil.Now().Sub(start))
+			timeutil.Since(start))
 	}()
 	stats.updateLatestConfig()
 	if stats.latestConfig == nil {
@@ -272,7 +282,7 @@ func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Stor
 }
 
 func (stats *Reporter) updateLatestConfig() {
-	stats.latestConfig = stats.meta1LeaseHolder.Gossip().GetSystemConfig()
+	stats.latestConfig = stats.cfgs.GetSystemConfig()
 }
 
 // nodeChecker checks whether a node is to be considered alive or not.
@@ -489,7 +499,7 @@ func visitDefaultZone(
 func getZoneByID(
 	id config.SystemTenantObjectID, cfg *config.SystemConfig,
 ) (*zonepb.ZoneConfig, error) {
-	zoneVal := cfg.GetValue(config.MakeZoneKey(id))
+	zoneVal := cfg.GetValue(config.MakeZoneKey(keys.SystemSQLCodec, descpb.ID(id)))
 	if zoneVal == nil {
 		return nil, nil
 	}
@@ -604,7 +614,7 @@ func visitRanges(
 			if err != nil {
 				// Sanity check - v.failed() should return an error now (the same as err above).
 				if !v.failed() {
-					return errors.AssertionFailedf("expected visitor %T to have failed() after error: %s", v, err)
+					return errors.NewAssertionErrorWithWrappedErrf(err, "expected visitor %T to have failed() after error", v)
 				}
 				// Remove this visitor; it shouldn't be called any more.
 				visitors = append(visitors[:i], visitors[i+1:]...)

@@ -23,6 +23,10 @@ import (
 
 // Limiter is used to rate-limit KV requests for a given tenant.
 //
+// The intention is to limit a single tenant from using a large percentage of a
+// KV machine, which could lead to very significant variation in observed
+// performance depending how many other tenants are using the node.
+//
 // The use of an interface permits a different implementation for the system
 // tenant and other tenants. The remaining commentary will pertain to the
 // implementation used for non-system tenants. The limiter is implemented as
@@ -130,7 +134,7 @@ func (rl *limiter) RecordRead(ctx context.Context, respInfo tenantcostmodel.Resp
 	rl.metrics.readBytesAdmitted.Inc(respInfo.ReadBytes())
 	rl.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
 		tb := res.(*tokenBucket)
-		amount := tb.config.CostModel.ResponseCost(respInfo)
+		amount := float64(respInfo.ReadBytes()) * tb.config.ReadUnitsPerByte
 		tb.Adjust(quotapool.Tokens(-amount))
 		// Do not notify the head of the queue. In the best case we did not disturb
 		// the time at which it can be fulfilled and in the worst case, we made it
@@ -194,7 +198,12 @@ func (req *waitRequest) Acquire(
 	ctx context.Context, res quotapool.Resource,
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	tb := res.(*tokenBucket)
-	needed := tb.config.CostModel.RequestCost(req.info)
+	var needed float64
+	if isWrite, writeBytes := req.info.IsWrite(); isWrite {
+		needed = tb.config.WriteRequestUnits + float64(writeBytes)*tb.config.WriteUnitsPerByte
+	} else {
+		needed = tb.config.ReadRequestUnits
+	}
 	return tb.TryToFulfill(quotapool.Tokens(needed))
 }
 

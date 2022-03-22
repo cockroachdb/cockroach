@@ -80,7 +80,7 @@ func TestDeselector(t *testing.T) {
 
 func BenchmarkDeselector(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
 	nCols := 1

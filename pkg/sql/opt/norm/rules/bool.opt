@@ -57,7 +57,7 @@ $right
 =>
 $left
 
-# SimplifyOrTrue maps the Or operator to True if its righht input is True.
+# SimplifyOrTrue maps the Or operator to True if its right input is True.
 [SimplifyOrTrue, Normalize]
 (Or * $right:(True))
 =>

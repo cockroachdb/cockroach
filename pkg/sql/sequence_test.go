@@ -23,11 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -185,13 +186,13 @@ CREATE TABLE t.test(a INT PRIMARY KEY, b INT)`); err != nil {
 func assertColumnOwnsSequences(
 	t *testing.T, kvDB *kv.DB, dbName string, tbName string, colIdx int, seqNames []string,
 ) {
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tbName)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tbName)
 	col := tableDesc.PublicColumns()[colIdx]
 	var seqDescs []catalog.TableDescriptor
 	for _, seqName := range seqNames {
 		seqDescs = append(
 			seqDescs,
-			catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName),
+			desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName),
 		)
 	}
 
@@ -225,6 +226,7 @@ func assertColumnOwnsSequences(
 // Relevant sub-issues are referenced in test names/inline comments.
 func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		name string
 		test func(*testing.T, *kv.DB, *sqlutils.SQLRunner)
@@ -366,7 +368,13 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 			s, sqlConn, kvDB := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(ctx)
 			sqlDB := sqlutils.MakeSQLRunner(sqlConn)
-			sqlDB.Exec(t, `CREATE DATABASE t;
+			// While these scenarios are interesting, for declarative schema changer
+			// from a correctness view point it's okay for them to fail. It's better to
+			// have these explicitly fail and require descriptor surgery or the legacy
+			// schema changer, rather than not being able to trust descriptor content.
+			sqlDB.Exec(t, `
+SET use_declarative_schema_changer = 'off';
+CREATE DATABASE t;
 CREATE TABLE t.test(a INT PRIMARY KEY, b INT);
 CREATE SEQUENCE t.seq OWNED BY t.test.a;
 CREATE SEQUENCE t.useq OWNED BY t.test.a;
@@ -380,6 +388,7 @@ CREATE SEQUENCE t.valid_seq OWNED BY t.test.a`)
 // TestCachedSequences tests the behavior of cached sequences.
 func TestCachedSequences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Start test cluster.
 	ctx := context.Background()
@@ -614,6 +623,118 @@ func TestCachedSequences(t *testing.T) {
 				execStmt(t, "DROP SEQUENCE s2")
 			},
 		},
+		{
+			name: "Create Table With GENERATED ALWAYS AS IDENTITY",
+			test: func(t *testing.T) {
+				execStmt(t, `
+				CREATE TABLE demo_t_always (
+           x INT UNIQUE,
+				   y INT GENERATED ALWAYS AS IDENTITY (START 2 INCREMENT 2 CACHE 5)
+				)
+			  `)
+				// The `GENERATED ALWAYS AS IDENTITY` syntax automatically creates
+				// an underlying sequence named `demo_t_always_y_seq` for the y column of the
+				// demo_t_always table. Such creation applies the sequence option (
+				// START 2 INCREMENT 2 CACHE 5) in the statement.
+				// The cache of demo_t_always_y_seq starts out empty. When the cache is empty,
+				// the underlying sequence in the database
+				// should be incremented by the cache size * increment amount,
+				// so it should increase by 10 each time.
+
+				// Session 0 caches 5 values (2,4,6,8,10) and uses the first value (2).
+				//
+				// caches:
+				//  session 0: 4,6,8,10
+				// db:
+				//  s: 10
+				checkIntValue(t, 0, "SELECT nextval('demo_t_always_y_seq')", 2)
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_always_y_seq", 10)
+
+				// caches:
+				//  session 0: -
+				// db:
+				//  s: 10
+				for sequenceNumber := 4; sequenceNumber <= 10; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('demo_t_always_y_seq')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_always_y_seq", 10)
+
+				// Session 0 caches 5 values (12,14,16,18,20) and uses the first value (12).
+				// caches:
+				//  session 0: 14,16,18,20
+				// db:
+				//  s: 20
+				checkIntValue(t, 0, "SELECT nextval('demo_t_always_y_seq')", 12)
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_always_y_seq", 20)
+
+				// caches:
+				//  node 0: -
+				// db:
+				//  s: 20
+				for sequenceNumber := 14; sequenceNumber <= 20; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('demo_t_always_y_seq')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_always_y_seq", 20)
+
+				execStmt(t, "DROP TABLE demo_t_always")
+			},
+		},
+		{
+			name: "Create Table With GENERATED BY DEFAULT AS IDENTITY",
+			test: func(t *testing.T) {
+				execStmt(t, `
+				CREATE TABLE demo_t_bydefault (
+           x INT UNIQUE,
+				   y INT GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 2 CACHE 5)
+				)
+			  `)
+				// The `GENERATED ALWAYS AS IDENTITY` syntax automatically creates
+				// an underlying sequence named `demo_t_bydefault_y_seq` for the y column of the
+				// demo_t_bydefault table. Such creation applies the sequence option (
+				// START 2 INCREMENT 2 CACHE 5) in the statement.
+				// The cache of demo_t_bydefault_y_seq starts out empty. When the cache is empty,
+				// the underlying sequence in the database
+				// should be incremented by the cache size * increment amount,
+				// so it should increase by 10 each time.
+
+				// Session 0 caches 5 values (2,4,6,8,10) and uses the first value (2).
+				//
+				// caches:
+				//  session 0: 4,6,8,10
+				// db:
+				//  s: 10
+				checkIntValue(t, 0, "SELECT nextval('demo_t_bydefault_y_seq')", 2)
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_bydefault_y_seq", 10)
+
+				// caches:
+				//  session 0: -
+				// db:
+				//  s: 10
+				for sequenceNumber := 4; sequenceNumber <= 10; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('demo_t_bydefault_y_seq')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_bydefault_y_seq", 10)
+
+				// Session 0 caches 5 values (12,14,16,18,20) and uses the first value (12).
+				// caches:
+				//  session 0: 14,16,18,20
+				// db:
+				//  s: 20
+				checkIntValue(t, 0, "SELECT nextval('demo_t_bydefault_y_seq')", 12)
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_bydefault_y_seq", 20)
+
+				// caches:
+				//  node 0: -
+				// db:
+				//  s: 20
+				for sequenceNumber := 14; sequenceNumber <= 20; sequenceNumber += 2 {
+					checkIntValue(t, 0, "SELECT nextval('demo_t_bydefault_y_seq')", sequenceNumber)
+				}
+				checkIntValue(t, anySession(), "SELECT last_value FROM demo_t_bydefault_y_seq", 20)
+
+				execStmt(t, "DROP TABLE demo_t_bydefault")
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -629,6 +750,7 @@ func TestCachedSequences(t *testing.T) {
 // cache sizes of 0 function in the same way as sequences with a cache size of 1.
 func TestSequencesZeroCacheSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}
@@ -643,7 +765,7 @@ func TestSequencesZeroCacheSize(t *testing.T) {
   `)
 
 	// Alter the descriptor to have a cache size of 0.
-	seqDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "seq")
+	seqDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "seq")
 	seqDesc.SequenceOpts.CacheSize = 0
 	err := kvDB.Put(
 		context.Background(),
@@ -664,8 +786,8 @@ func TestSequencesZeroCacheSize(t *testing.T) {
 func addOwnedSequence(
 	t *testing.T, kvDB *kv.DB, dbName string, tableName string, colIdx int, seqName string,
 ) {
-	seqDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, dbName, tableName)
 
 	tableDesc.GetColumns()[colIdx].OwnsSequenceIds = append(
@@ -685,8 +807,8 @@ func addOwnedSequence(
 func breakOwnershipMapping(
 	t *testing.T, kvDB *kv.DB, dbName string, tableName string, seqName string,
 ) {
-	seqDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
-	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+	seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, dbName, tableName)
 
 	for colIdx := range tableDesc.GetColumns() {

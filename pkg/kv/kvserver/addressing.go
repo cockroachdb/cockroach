@@ -50,8 +50,20 @@ func mergeRangeAddressing(b *kv.Batch, left, merged *roachpb.RangeDescriptor) er
 	return rangeAddressing(b, merged, putMeta)
 }
 
-// updateRangeAddressing overwrites the meta1 and meta2 range addressing
-// records for the descriptor.
+// updateRangeAddressing overwrites the meta1 and meta2 range addressing records
+// for the descriptor. These are copies of the range descriptor but keyed by the
+// EndKey (for historical reasons relating to ReverseScan not having been
+// available; we might use the StartKey if starting from scratch today). While
+// usually in sync with the main copy under RangeDescriptorKey(StartKey), after
+// loss-of-quorum recovery the Range-resident copy is the newer descriptor
+// (containing fewer replicas). This is why updateRangeAddressing uses Put over
+// ConditionalPut, thus allowing up-replication to "repair" the meta copies of
+// the descriptor as a by-product.
+//
+// Because the last meta2 range can extend past the meta2 keyspace, it has two
+// index entries, at Meta1KeyMax and RangeMetaKey(desc.EndKey). See #18998.
+//
+// See also kv.RangeLookup for more information on the meta ranges.
 func updateRangeAddressing(b *kv.Batch, desc *roachpb.RangeDescriptor) error {
 	return rangeAddressing(b, desc, putMeta)
 }

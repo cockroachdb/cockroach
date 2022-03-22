@@ -21,12 +21,13 @@ import (
 
 func registerAcceptance(r registry.Registry) {
 	testCases := map[registry.Owner][]struct {
-		name       string
-		fn         func(ctx context.Context, t test.Test, c cluster.Cluster)
-		skip       string
-		minVersion string
-		numNodes   int
-		timeout    time.Duration
+		name            string
+		fn              func(ctx context.Context, t test.Test, c cluster.Cluster)
+		skip            string
+		minVersion      string
+		numNodes        int
+		timeout         time.Duration
+		encryptAtRandom bool
 	}{
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
@@ -36,7 +37,6 @@ func registerAcceptance(r registry.Registry) {
 			{
 				name: "gossip/restart-node-one",
 				fn:   runGossipRestartNodeOne,
-				skip: "https://github.com/cockroachdb/cockroach/issues/68107",
 			},
 			{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 			{
@@ -47,7 +47,8 @@ func registerAcceptance(r registry.Registry) {
 			{name: "reset-quorum", fn: runResetQuorum, numNodes: 8},
 			{
 				name: "many-splits", fn: runManySplits,
-				minVersion: "v19.2.0", // SQL syntax unsupported on 19.1.x
+				minVersion:      "v19.2.0", // SQL syntax unsupported on 19.1.x
+				encryptAtRandom: true,
 			},
 			{
 				name: "version-upgrade",
@@ -68,10 +69,7 @@ func registerAcceptance(r registry.Registry) {
 			{name: "build-analyze", fn: RunBuildAnalyze},
 			{name: "cli/node-status", fn: runCLINodeStatus},
 			{name: "cluster-init", fn: runClusterInit},
-			{
-				name: "rapid-restart", fn: runRapidRestart,
-				skip: "https://github.com/cockroachdb/cockroach/issues/63795",
-			},
+			{name: "rapid-restart", fn: runRapidRestart},
 			{name: "status-server", fn: runStatusServer},
 		},
 	}
@@ -104,6 +102,7 @@ func registerAcceptance(r registry.Registry) {
 			if tc.timeout != 0 {
 				spec.Timeout = tc.timeout
 			}
+			spec.EncryptAtRandom = tc.encryptAtRandom
 			spec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tc.fn(ctx, t, c)
 			}

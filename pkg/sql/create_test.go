@@ -21,155 +21,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
-
-func TestDatabaseDescriptor(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-	ctx := context.Background()
-	codec := keys.SystemSQLCodec
-	expectedCounter := int64(keys.MinNonPredefinedUserDescID)
-
-	// Test values before creating the database.
-	// descriptor ID counter.
-	if ir, err := kvDB.Get(ctx, codec.DescIDSequenceKey()); err != nil {
-		t.Fatal(err)
-	} else if actual := ir.ValueInt(); actual != expectedCounter {
-		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
-	}
-
-	// Database name.
-	nameKey := catalogkeys.MakeDatabaseNameKey(codec, "test")
-	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
-		t.Fatal(err)
-	} else if gr.Exists() {
-		t.Fatal("expected non-existing key")
-	}
-
-	// Write a descriptor key that will interfere with database creation.
-	dbDescKey := catalogkeys.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
-	dbDesc := &descpb.Descriptor{
-		Union: &descpb.Descriptor_Database{
-			Database: &descpb.DatabaseDescriptor{
-				Name:       "sentinel",
-				ID:         descpb.ID(expectedCounter),
-				Privileges: &descpb.PrivilegeDescriptor{},
-			},
-		},
-	}
-	if err := kvDB.CPut(ctx, dbDescKey, dbDesc, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	// Database creation should fail, and nothing should have been written.
-	if _, err := sqlDB.Exec(`CREATE DATABASE test`); !testutils.IsError(err, "unexpected value") {
-		t.Fatalf("unexpected error %v", err)
-	}
-
-	// Even though the CREATE above failed, the counter is still incremented
-	// (that's performed non-transactionally).
-	expectedCounter++
-
-	if ir, err := kvDB.Get(ctx, codec.DescIDSequenceKey()); err != nil {
-		t.Fatal(err)
-	} else if actual := ir.ValueInt(); actual != expectedCounter {
-		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
-	}
-
-	start := codec.TablePrefix(uint32(keys.NamespaceTableID))
-	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0 /* maxRows */); err != nil {
-		t.Fatal(err)
-	} else {
-		systemDescriptorIDs, err := startupmigrations.ExpectedDescriptorIDs(
-			ctx, kvDB, codec, &s.(*server.TestServer).Cfg.DefaultZoneConfig, &s.(*server.TestServer).Cfg.DefaultSystemZoneConfig,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// In addition to the system database and its tables, there are 3 other
-		// databases: defaultdb, system, and postgres.
-		e := len(systemDescriptorIDs) + 3
-		if a := len(kvs); a != e {
-			t.Fatalf("expected %d keys to have been written, found %d keys", e, a)
-		}
-	}
-
-	// Remove the junk; allow database creation to proceed.
-	if err := kvDB.Del(ctx, dbDescKey); err != nil {
-		t.Fatal(err)
-	}
-
-	dbDescKey = catalogkeys.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
-	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
-		t.Fatal(err)
-	}
-	expectedCounter++
-
-	// Check keys again.
-	// descriptor ID counter.
-	if ir, err := kvDB.Get(ctx, codec.DescIDSequenceKey()); err != nil {
-		t.Fatal(err)
-	} else if actual := ir.ValueInt(); actual != expectedCounter {
-		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
-	}
-
-	// Database name.
-	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
-		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatal("key is missing")
-	}
-
-	// database descriptor.
-	if gr, err := kvDB.Get(ctx, dbDescKey); err != nil {
-		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatal("key is missing")
-	}
-
-	// Now try to create it again. We should fail, but not increment the counter.
-	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err == nil {
-		t.Fatal("failure expected")
-	}
-
-	// Check keys again.
-	// descriptor ID counter.
-	if ir, err := kvDB.Get(ctx, codec.DescIDSequenceKey()); err != nil {
-		t.Fatal(err)
-	} else if actual := ir.ValueInt(); actual != expectedCounter {
-		t.Fatalf("expected descriptor ID == %d, got %d", expectedCounter, actual)
-	}
-
-	// Database name.
-	if gr, err := kvDB.Get(ctx, nameKey); err != nil {
-		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatal("key is missing")
-	}
-
-	// database descriptor.
-	if gr, err := kvDB.Get(ctx, dbDescKey); err != nil {
-		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatal("key is missing")
-	}
-}
 
 // createTestTable tries to create a new table named based on the passed in id.
 // It is designed to be synced with a number of concurrent calls to this
@@ -232,7 +95,7 @@ func verifyTables(
 		count++
 		tableName := fmt.Sprintf("table_%d", id)
 		kvDB := tc.Servers[count%tc.NumServers()].DB()
-		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 		if tableDesc.GetID() < descIDStart {
 			t.Fatalf(
 				"table %s's ID %d is too small. Expected >= %d",
@@ -454,36 +317,36 @@ func TestCreateStatementType(t *testing.T) {
 
 	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
-	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err := pgx.Connect(pgxConfig)
+	conn, err := pgx.ConnectConfig(ctx, pgxConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cmdTag, err := conn.Exec("CREATE DATABASE t")
+	cmdTag, err := conn.Exec(ctx, "CREATE DATABASE t")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdTag != "CREATE DATABASE" {
+	if cmdTag.String() != "CREATE DATABASE" {
 		t.Fatal("expected CREATE DATABASE, got", cmdTag)
 	}
 
-	cmdTag, err = conn.Exec("CREATE TABLE t.foo(x INT)")
+	cmdTag, err = conn.Exec(ctx, "CREATE TABLE t.foo(x INT)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdTag != "CREATE TABLE" {
+	if cmdTag.String() != "CREATE TABLE" {
 		t.Fatal("expected CREATE TABLE, got", cmdTag)
 	}
 
-	cmdTag, err = conn.Exec("CREATE TABLE t.bar AS SELECT * FROM generate_series(1,10)")
+	cmdTag, err = conn.Exec(ctx, "CREATE TABLE t.bar AS SELECT * FROM generate_series(1,10)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmdTag != "CREATE TABLE AS" {
+	if cmdTag.String() != "CREATE TABLE AS" {
 		t.Fatal("expected CREATE TABLE AS, got", cmdTag)
 	}
 }
@@ -527,8 +390,8 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 		sql       string
 		errString string
 	}{
-		{"CREATE USER $1 WITH PASSWORD $2", errFail},
-		{"ALTER USER $1 WITH PASSWORD $2", errFail},
+		{"CREATE USER user3 WITH PASSWORD $1", errFail},
+		{"ALTER USER user3 WITH PASSWORD $1", errFail},
 	}
 
 	for _, testCase := range testCases {
@@ -537,7 +400,7 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = stmt.Exec("user3", "cockroach")
+			_, err = stmt.Exec("cockroach")
 			if testCase.errString != "" {
 				if !testutils.IsError(err, testCase.errString) {
 					t.Fatal(err)

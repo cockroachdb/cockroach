@@ -34,7 +34,7 @@ solved within CockroachDB:
 
 - the output format is not configurable.
 
-Since this client talks over pgwire anyways, it seems obvious to consider
+Since this client talks over pgwire anyway, it seems obvious to consider
 using a native command-line PostgreSQL client instead, for example
 the official client `psql` from `postgresql-client`.
 

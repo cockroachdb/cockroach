@@ -13,7 +13,6 @@ package tree_test
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -45,7 +44,7 @@ func TestEval(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 
 	walk := func(t *testing.T, getExpr func(*testing.T, *datadriven.TestData) string) {
-		datadriven.Walk(t, filepath.Join("testdata", "eval"), func(t *testing.T, path string) {
+		datadriven.Walk(t, testutils.TestDataPath(t, "eval"), func(t *testing.T, path string) {
 			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 				if d.Cmd != "eval" {
 					t.Fatalf("unsupported command %s", d.Cmd)
@@ -377,7 +376,7 @@ func TestHLCTimestampDecimalRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		ts := hlc.Timestamp{WallTime: rng.Int63(), Logical: rng.Int31()}
 		dec := tree.TimestampToDecimalDatum(ts)

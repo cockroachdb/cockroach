@@ -18,7 +18,7 @@ TABLE xyz
  ├── z int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX xyz_pkey
  │    └── x int not null
  └── INDEX foo
       ├── z int
@@ -53,7 +53,7 @@ TABLE abcdef
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── CHECK (f > 2:::INT8)
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX abcdef_pkey
       └── rowid int not null default (unique_rowid()) [hidden]
 scan abcdef
  ├── check constraint expressions
@@ -91,7 +91,7 @@ TABLE uvwxy
  ├── FAMILY fam_0_u_v_w (u, v, w)
  ├── FAMILY fam_1_x (x)
  ├── FAMILY fam_2_y (y)
- └── PRIMARY INDEX primary
+ └── PRIMARY INDEX uvwxy_pkey
       ├── u int not null
       └── v int not null
 scan uvwxy
@@ -119,7 +119,7 @@ TABLE child
  ├── r int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX child_pkey
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
 scan child
@@ -134,7 +134,7 @@ TABLE parent
  ├── other int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX parent_pkey
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
@@ -161,7 +161,7 @@ TABLE child2
  ├── r int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX child2_pkey
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child2 (p, q, r) REFERENCES parent (p, q, r) MATCH FULL ON DELETE SET NULL
 scan child2
@@ -176,112 +176,10 @@ TABLE parent
  ├── other int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── PRIMARY INDEX primary
+ ├── PRIMARY INDEX parent_pkey
  │    ├── p int not null
  │    ├── q int not null
  │    └── r int not null
  ├── REFERENCED BY CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
  └── REFERENCED BY CONSTRAINT fk FOREIGN KEY child2 (p, q, r) REFERENCES parent (p, q, r) MATCH FULL ON DELETE SET NULL
 scan parent
-
-# Tests with interleaved tables.
-statement ok
-CREATE TABLE a (a INT PRIMARY KEY, other INT, FAMILY (a,other))
-
-statement ok
-CREATE TABLE ab (
-  a INT, b INT, PRIMARY KEY (a,b), FAMILY (a,b)
-) INTERLEAVE IN PARENT a(a)
-
-statement ok
-CREATE TABLE abc (k INT PRIMARY KEY, a INT, b INT, c INT, FAMILY (a,b,c));
-CREATE INDEX abc_idx ON abc(a,b,c) INTERLEAVE IN PARENT ab(a,b)
-
-statement ok
-CREATE TABLE abx (
-  a INT, b INT, x INT,
-  PRIMARY KEY (a,b,x),
-  FAMILY (a,b,x)
-) INTERLEAVE IN PARENT ab(a,b)
-
-query T
-EXPLAIN (OPT, CATALOG) SELECT * FROM a
-----
-TABLE a
- ├── a int not null
- ├── other int
- ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── tableoid oid [hidden] [system]
- ├── FAMILY fam_0_a_other (a, other)
- └── PRIMARY INDEX primary
-      ├── a int not null
-      └── interleaved by
-           └── table=60 index=1
-scan a
-
-query T
-EXPLAIN (OPT, CATALOG) SELECT * FROM ab
-----
-TABLE ab
- ├── a int not null
- ├── b int not null
- ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── tableoid oid [hidden] [system]
- ├── FAMILY fam_0_a_b (a, b)
- └── PRIMARY INDEX primary
-      ├── a int not null
-      ├── b int not null
-      ├── interleave ancestors
-      │    └── table=59 index=1 (1 key column)
-      └── interleaved by
-           ├── table=61 index=2
-           └── table=62 index=1
-scan ab
-
-query T
-EXPLAIN (OPT, CATALOG) SELECT * FROM abc
-----
-TABLE abc
- ├── k int not null
- ├── a int
- ├── b int
- ├── c int
- ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── tableoid oid [hidden] [system]
- ├── FAMILY fam_0_a_b_c_k (a, b, c, k)
- ├── PRIMARY INDEX primary
- │    └── k int not null
- └── INDEX abc_idx
-      ├── a int
-      ├── b int
-      ├── c int
-      ├── k int not null
-      └── interleave ancestors
-           ├── table=59 index=1 (1 key column)
-           └── table=60 index=1 (1 key column)
-scan abc
-
-query T
-EXPLAIN (OPT, CATALOG) SELECT * FROM abx
-----
-TABLE abx
- ├── a int not null
- ├── b int not null
- ├── x int not null
- ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── tableoid oid [hidden] [system]
- ├── FAMILY fam_0_a_b_x (a, b, x)
- └── PRIMARY INDEX primary
-      ├── a int not null
-      ├── b int not null
-      ├── x int not null
-      └── interleave ancestors
-           ├── table=59 index=1 (1 key column)
-           └── table=60 index=1 (1 key column)
-scan abx
-
-query T
-EXPLAIN (OPT) select * from pg_type where oid = 1000
-----
-scan pg_type@pg_type_oid_idx
- └── constraint: /2/1: [/1000 - /1000]

@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+# keep
+go_test(
+    name = "docker_test",
+    srcs = ["single_node_docker_test.go"],
+    data = glob(["testdata/**"]) + [
+        "//pkg/testutils/docker:testdata",
+        "//pkg/testutils/docker/docker-fsnotify:docker-fsnotify",
+    ],
+    gotags = ["docker"],
+    deps = [
+        "//pkg/util/contextutil",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_docker_docker//api/types",
+        "@com_github_docker_docker//api/types/container",
+        "@com_github_docker_docker//api/types/filters",
+        "@com_github_docker_docker//client",
+        "@com_github_docker_docker//pkg/stdcopy",
+        "@com_github_docker_go_connections//nat",
+    ],
+)
+
+go_library(
+    name = "testutils_docker",
+    srcs = ["empty.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/docker",
+    visibility = ["//visibility:public"],
+)

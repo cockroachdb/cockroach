@@ -23,13 +23,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 )
@@ -385,8 +386,6 @@ func BenchmarkSQL(b *testing.B) {
 			runBenchmarkInsertDistinct,
 			runBenchmarkInsertFK,
 			runBenchmarkInsertSecondaryIndex,
-			runBenchmarkInterleavedSelect,
-			runBenchmarkInterleavedFK,
 			runBenchmarkTrackChoices,
 			runBenchmarkUpdate,
 			runBenchmarkUpsert,
@@ -404,115 +403,132 @@ func BenchmarkSQL(b *testing.B) {
 	})
 }
 
-// BenchmarkSampling measures the overhead of sampled statements. It also
+// BenchmarkTracing measures the overhead of tracing and sampled statements. It also
 // reports the memory utilization.
-func BenchmarkSampling(b *testing.B) {
-	skip.UnderShort(b)
-	defer log.Scope(b).Close(b)
-
-	for _, dbFn := range []func(*testing.B, BenchmarkFn){
-		benchmarkCockroach,
-		benchmarkMultinodeCockroach,
-	} {
-		dbName := runtime.FuncForPC(reflect.ValueOf(dbFn).Pointer()).Name()
-		dbName = strings.TrimPrefix(dbName, "github.com/cockroachdb/cockroach/pkg/bench.benchmark")
-
-		b.Run(dbName, func(b *testing.B) {
-			dbFn(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-				for _, sampleRate := range []string{"1.0", "0.0"} {
-					db.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.txn_stats.sample_rate = %s", sampleRate))
-					b.Run(fmt.Sprintf("sample_rate=%s", sampleRate), func(b *testing.B) {
-						for _, runFn := range []func(*testing.B, *sqlutils.SQLRunner, int){
-							runBenchmarkScan1,
-							runBenchmarkInsert,
-						} {
-							fnName := runtime.FuncForPC(reflect.ValueOf(runFn).Pointer()).Name()
-							fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/bench.runBenchmark")
-							b.Run(fnName, func(b *testing.B) {
-								b.ReportAllocs()
-
-								runFn(b, db, 1 /* count */)
-							})
-						}
-					})
-				}
-			})
-		})
-	}
-}
-
-func benchmarkCockroachWithRealSpans(b *testing.B, realSpans bool, f BenchmarkFn) {
-	s, db, _ := serverutils.StartServer(
-		b, base.TestServerArgs{
-			UseDatabase: "bench",
-			Knobs: base.TestingKnobs{
-				SQLExecutor: &sql.ExecutorTestingKnobs{
-					ForceRealTracingSpans: realSpans,
-				},
-			},
-		})
-	defer s.Stopper().Stop(context.Background())
-
-	if _, err := db.Exec(`CREATE DATABASE bench`); err != nil {
-		b.Fatal(err)
-	}
-
-	f(b, sqlutils.MakeSQLRunner(db))
-}
-
-func benchmarkMultinodeCockroachWithRealSpans(b *testing.B, realSpans bool, f BenchmarkFn) {
-	tc := testcluster.StartTestCluster(b, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationAuto,
-			ServerArgs: base.TestServerArgs{
-				UseDatabase: "bench",
-				Knobs: base.TestingKnobs{
-					SQLExecutor: &sql.ExecutorTestingKnobs{
-						ForceRealTracingSpans: realSpans,
-					},
-				},
-			},
-		})
-	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {
-		b.Fatal(err)
-	}
-	defer tc.Stopper().Stop(context.Background())
-
-	f(b, sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2]))
-}
-
-// BenchmarkTracing measures the overhead of tracing. It also reports the memory
-// utilization.
 func BenchmarkTracing(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
 
-	for _, dbFn := range []func(*testing.B, bool, BenchmarkFn){
-		benchmarkCockroachWithRealSpans,
-		benchmarkMultinodeCockroachWithRealSpans,
-	} {
-		dbName := runtime.FuncForPC(reflect.ValueOf(dbFn).Pointer()).Name()
-		dbName = strings.TrimPrefix(dbName, "github.com/cockroachdb/cockroach/pkg/bench.benchmark")
-		dbName = strings.TrimSuffix(dbName, "WithRealSpans")
-		b.Run(dbName, func(b *testing.B) {
-			for _, tracingEnabled := range []bool{false, true} {
-				dbFn(b, tracingEnabled, func(b *testing.B, db *sqlutils.SQLRunner) {
-					// Disable statement sampling to de-noise this benchmark.
-					db.Exec(b, "SET CLUSTER SETTING sql.txn_stats.sample_rate = 0.0")
-					b.Run(fmt.Sprintf("tracing=%s", fmt.Sprintf("%t", tracingEnabled)[:1]), func(b *testing.B) {
-						for _, runFn := range []func(*testing.B, *sqlutils.SQLRunner, int){
-							runBenchmarkScan1,
-							runBenchmarkInsert,
-						} {
-							fnName := runtime.FuncForPC(reflect.ValueOf(runFn).Pointer()).Name()
-							fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/bench.runBenchmark")
-							b.Run(fnName, func(b *testing.B) {
-								b.ReportAllocs()
-
-								runFn(b, db, 1 /* count */)
-							})
-						}
+	type clusterCreationFn func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper)
+	type clusterSpec struct {
+		name   string
+		create clusterCreationFn
+	}
+	for _, cluster := range []clusterSpec{
+		{
+			name: "1node",
+			create: func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper) {
+				s, db, _ := serverutils.StartServer(b, base.TestServerArgs{
+					UseDatabase: "bench",
+					Tracer:      tr,
+				})
+				sqlRunner := sqlutils.MakeSQLRunner(db)
+				return sqlRunner, s.Stopper()
+			},
+		},
+		{
+			name: "3node",
+			create: func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper) {
+				tc := testcluster.StartTestCluster(b, 3,
+					base.TestClusterArgs{
+						ReplicationMode: base.ReplicationAuto,
+						ServerArgs: base.TestServerArgs{
+							UseDatabase: "bench",
+							Tracer:      tr,
+						},
 					})
+				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2])
+				return sqlRunner, tc.Stopper()
+			},
+		},
+	} {
+		b.Run(cluster.name, func(b *testing.B) {
+			ctx := context.Background()
+
+			type benchmark struct {
+				name string
+				fn   func(b *testing.B, db *sqlutils.SQLRunner)
+			}
+			for _, bench := range []benchmark{
+				{
+					name: "scan",
+					fn: func(b *testing.B, db *sqlutils.SQLRunner) {
+						runBenchmarkScan(b, db, 1, 1)
+					},
+				},
+				{
+					name: "insert",
+					fn: func(b *testing.B, db *sqlutils.SQLRunner) {
+						runBenchmarkInsert(b, db, 1)
+					},
+				},
+			} {
+				b.Run(bench.name, func(b *testing.B) {
+					type testSpec struct {
+						// alwaysTrace causes the Tracer to always create spans. Note
+						// "verbose tracing" (collection of log messages) is not enabled.
+						alwaysTrace bool
+						// sqlTraceRatio, when > 0, causes sql.txn_stats.sample_rate to be
+						// set to the respective ratio. Some SQL statements will have
+						// contention events generated and their traces will be collected.
+						//
+						// Note that there's a difference between alwaysTrace and
+						// sqlTraceRatio=1. Both will end up creating tracing spans (for
+						// everything going on in the cluster in the former case, for traces
+						// of SQL statements in the latter case), but the latter includes
+						// the generation of structured events. The latter seems to be much
+						// more expensive.
+						sqlTraceRatio float64
+						// netTrace, if set, enables use of net.Traces. This is similar to
+						// the effects of the trace.debug.enable cluster setting.
+						netTrace bool
+					}
+					for _, test := range []testSpec{
+						{alwaysTrace: false},
+						{sqlTraceRatio: 0.01},
+						{sqlTraceRatio: 1.0},
+						{alwaysTrace: true},
+						{netTrace: true},
+					} {
+						if test.alwaysTrace && test.sqlTraceRatio != 0 {
+							panic("invalid test")
+						}
+
+						var name strings.Builder
+						name.WriteString("trace=")
+						if test.alwaysTrace {
+							name.WriteString("on")
+						} else if test.netTrace {
+							name.WriteString("netTrace")
+						} else if test.sqlTraceRatio == 0 {
+							name.WriteString("off")
+						} else {
+							percent := int(test.sqlTraceRatio * 100)
+							name.WriteString(fmt.Sprintf("%d%%", percent))
+						}
+						b.Run(name.String(), func(b *testing.B) {
+							var opts []tracing.TracerOption
+							opts = append(opts, tracing.WithTestingKnobs(tracing.TracerTestingKnobs{
+								UseNetTrace: test.netTrace,
+							}))
+							var o tracing.TracingMode
+							if !test.alwaysTrace {
+								o = tracing.TracingModeOnDemand
+							} else {
+								o = tracing.TracingModeActiveSpansRegistry
+							}
+							opts = append(opts, tracing.WithTracingMode(o))
+							tr := tracing.NewTracerWithOpt(ctx, opts...)
+							sqlRunner, stop := cluster.create(tr)
+							defer stop.Stop(ctx)
+
+							sqlRunner.Exec(b, `CREATE DATABASE bench`)
+							sqlRunner.Exec(b, `SET CLUSTER SETTING sql.txn_stats.sample_rate = $1`, test.sqlTraceRatio)
+
+							b.ReportAllocs()
+							bench.fn(b, sqlRunner)
+						})
+					}
 				})
 			}
 		})
@@ -623,10 +639,6 @@ func runBenchmarkDelete(b *testing.B, db *sqlutils.SQLRunner, rows int) {
 		db.Exec(b, buf.String())
 	}
 	b.StopTimer()
-}
-
-func runBenchmarkScan1(b *testing.B, db *sqlutils.SQLRunner, count int) {
-	runBenchmarkScan(b, db, count, 1)
 }
 
 // runBenchmarkScan benchmarks scanning a table containing count rows.
@@ -751,88 +763,6 @@ func BenchmarkScanFilter(b *testing.B) {
 			})
 		})
 	})
-}
-
-func runBenchmarkInterleavedSelect(b *testing.B, db *sqlutils.SQLRunner, count int) {
-	defer func() {
-		db.Exec(b, `DROP TABLE IF EXISTS bench.interleaved_select2`)
-		db.Exec(b, `DROP TABLE IF EXISTS bench.interleaved_select1`)
-	}()
-
-	db.Exec(b, `CREATE TABLE bench.interleaved_select1 (a INT PRIMARY KEY, b INT)`)
-	db.Exec(b, `CREATE TABLE bench.interleaved_select2 (c INT PRIMARY KEY, d INT) INTERLEAVE IN PARENT interleaved_select1 (c)`)
-
-	const interleaveFreq = 4
-
-	var buf1 bytes.Buffer
-	var buf2 bytes.Buffer
-	buf1.WriteString(`INSERT INTO bench.interleaved_select1 VALUES `)
-	buf2.WriteString(`INSERT INTO bench.interleaved_select2 VALUES `)
-	for i := 0; i < count; i++ {
-		if i > 0 {
-			buf1.WriteString(", ")
-		}
-		fmt.Fprintf(&buf1, "(%d, %d)", i, i)
-		if i%interleaveFreq == 0 {
-			if i > 0 {
-				buf2.WriteString(", ")
-			}
-			fmt.Fprintf(&buf2, "(%d, %d)", i, i)
-		}
-	}
-	db.Exec(b, buf1.String())
-	db.Exec(b, buf2.String())
-
-	query := `SELECT * FROM bench.interleaved_select1 is1 INNER JOIN bench.interleaved_select2 is2 on is1.a = is2.c`
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		rows := db.Query(b, query)
-		n := 0
-		for rows.Next() {
-			n++
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			b.Fatal(err)
-		}
-		expected := (count + interleaveFreq - 1) / interleaveFreq
-		if n != expected {
-			b.Fatalf("unexpected result count: %d (expected %d)", n, expected)
-		}
-	}
-	b.StopTimer()
-}
-
-func runBenchmarkInterleavedFK(b *testing.B, db *sqlutils.SQLRunner, count int) {
-	defer func() {
-		db.Exec(b, `DROP TABLE IF EXISTS bench.parent CASCADE; DROP TABLE IF EXISTS bench.child CASCADE`)
-	}()
-
-	db.Exec(b, `
-CREATE TABLE bench.parent (a INT PRIMARY KEY);
-INSERT INTO bench.parent VALUES(0);
-CREATE TABLE bench.child
-  (a INT REFERENCES bench.parent(a),
-   b INT, PRIMARY KEY(a, b))
-INTERLEAVE IN PARENT bench.parent (a)
-`)
-
-	b.ResetTimer()
-	var buf bytes.Buffer
-	val := 0
-	for i := 0; i < b.N; i++ {
-		buf.Reset()
-		buf.WriteString(`INSERT INTO bench.child VALUES `)
-		for j := 0; j < count; j++ {
-			if j > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, "(0, %d)", val)
-			val++
-		}
-		db.Exec(b, buf.String())
-	}
 }
 
 // runBenchmarkOrderBy benchmarks scanning a table and sorting the results.
@@ -1222,9 +1152,9 @@ func BenchmarkIndexJoin(b *testing.B) {
 				 FAMILY "primary" (k, v, extra)
 		 )
 		`
-		// We'll insert 1000 rows with random values below 1000 in the index. We'll
-		// then query the index with a query that retrieves all the data (but the
-		// optimizer doesn't know that).
+		// We'll insert 1000 rows with random values below 1000 in the index.
+		// We'll then force scanning of the secondary index which will require
+		// performing an index join to get 'extra' column.
 		insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
 
 		db.Exec(b, create)
@@ -1232,7 +1162,7 @@ func BenchmarkIndexJoin(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			db.Exec(b, "select * from bench.tidx where v < 1000")
+			db.Exec(b, "select * from bench.tidx@idx where v < 1000")
 		}
 	})
 }

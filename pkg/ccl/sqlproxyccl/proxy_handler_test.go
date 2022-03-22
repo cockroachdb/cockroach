@@ -11,35 +11,43 @@ package sqlproxyccl
 import (
 	"context"
 	"crypto/tls"
+	gosql "database/sql"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx/v4"
+	pgproto3 "github.com/jackc/pgproto3/v2"
+	pgx "github.com/jackc/pgx/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -57,6 +65,7 @@ const notFoundTenantID = 99
 
 func TestLongDBName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -74,7 +83,7 @@ func TestLongDBName(t *testing.T) {
 	s, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "{{clusterName}}-0.cockroachdb:26257"})
 
 	longDB := strings.Repeat("x", 70) // 63 is limit
-	pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28", addr, longDB)
+	pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, longDB)
 	te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
 	require.Equal(t, int64(1), s.metrics.RoutingErrCount.Count())
 }
@@ -84,6 +93,7 @@ func TestLongDBName(t *testing.T) {
 // deleted.
 func TestBackendDownRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -101,16 +111,17 @@ func TestBackendDownRetry(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$"})
+	_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$:1234"})
 
 	// Valid connection, but no backend server running.
-	pgurl := fmt.Sprintf("postgres://unused:unused@%s/db?options=--cluster=dim-dog-28", addr)
+	pgurl := fmt.Sprintf("postgres://unused:unused@%s/db?options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "cluster dim-dog-28 not found")
 	require.Equal(t, 3, callCount)
 }
 
 func TestFailedConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -118,48 +129,50 @@ func TestFailedConnection(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	s, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$"})
+	s, proxyAddr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$"})
 
 	// TODO(asubiotto): consider using datadriven for these, especially if the
 	// proxy becomes more complex.
 
-	_, p, err := net.SplitHostPort(addr)
+	_, p, err := addr.SplitHostPort(proxyAddr, "")
 	require.NoError(t, err)
 	u := fmt.Sprintf("postgres://unused:unused@localhost:%s/", p)
 
 	// Unencrypted connections bounce.
-	for _, sslmode := range []string{"disable", "allow"} {
-		te.TestConnectErr(
-			ctx, t, u+"?options=--cluster=dim-dog-28&sslmode="+sslmode,
-			codeUnexpectedInsecureStartupMessage, "server requires encryption",
-		)
-	}
+	te.TestConnectErr(
+		ctx, t, u+"?options=--cluster=dim-dog-28&sslmode=disable",
+		codeUnexpectedInsecureStartupMessage, "server requires encryption",
+	)
 	require.Equal(t, int64(0), s.metrics.RoutingErrCount.Count())
 
-	// TenantID rejected as malformed.
-	te.TestConnectErr(
-		ctx, t, u+"?options=--cluster=dimdog&sslmode=require",
-		codeParamsRoutingFailed, "invalid cluster name 'dimdog'",
-	)
-	require.Equal(t, int64(1), s.metrics.RoutingErrCount.Count())
+	sslModesUsingTLS := []string{"require", "allow"}
+	for i, sslmode := range sslModesUsingTLS {
+		// TenantID rejected as malformed.
+		te.TestConnectErr(
+			ctx, t, u+"?options=--cluster=dimdog&sslmode="+sslmode,
+			codeParamsRoutingFailed, "invalid cluster identifier 'dimdog'",
+		)
+		require.Equal(t, int64(1+(i*3)), s.metrics.RoutingErrCount.Count())
 
-	// No cluster name and TenantID.
-	te.TestConnectErr(
-		ctx, t, u+"?sslmode=require",
-		codeParamsRoutingFailed, "missing cluster name in connection string",
-	)
-	require.Equal(t, int64(2), s.metrics.RoutingErrCount.Count())
+		// No cluster name and TenantID.
+		te.TestConnectErr(
+			ctx, t, u+"?sslmode="+sslmode,
+			codeParamsRoutingFailed, "missing cluster identifier",
+		)
+		require.Equal(t, int64(2+(i*3)), s.metrics.RoutingErrCount.Count())
 
-	// Bad TenantID. Ensure that we don't leak any parsing errors.
-	te.TestConnectErr(
-		ctx, t, u+"?options=--cluster=dim-dog-foo3&sslmode=require",
-		codeParamsRoutingFailed, "invalid cluster name 'dim-dog-foo3'",
-	)
-	require.Equal(t, int64(3), s.metrics.RoutingErrCount.Count())
+		// Bad TenantID. Ensure that we don't leak any parsing errors.
+		te.TestConnectErr(
+			ctx, t, u+"?options=--cluster=dim-dog-foo3&sslmode="+sslmode,
+			codeParamsRoutingFailed, "invalid cluster identifier 'dim-dog-foo3'",
+		)
+		require.Equal(t, int64(3+(i*3)), s.metrics.RoutingErrCount.Count())
+	}
 }
 
 func TestUnexpectedError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -196,13 +209,16 @@ func TestUnexpectedError(t *testing.T) {
 
 func TestProxyAgainstSecureCRDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
+	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -213,10 +229,10 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	)
 
 	url := fmt.Sprintf("postgres://bob:wrong@%s/dim-dog-28.defaultdb?sslmode=require", addr)
-	te.TestConnectErr(ctx, t, url, 0, "ERROR: password authentication failed for user bob")
+	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
 	url = fmt.Sprintf("postgres://bob@%s/dim-dog-28.defaultdb?sslmode=require", addr)
-	te.TestConnectErr(ctx, t, url, 0, "ERROR: password authentication failed for user bob")
+	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
 	url = fmt.Sprintf("postgres://bob:builder@%s/dim-dog-28.defaultdb?sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
@@ -227,8 +243,90 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
 }
 
+func TestProxyTLSConf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("insecure", func(t *testing.T) {
+		ctx := context.Background()
+		te := newTester()
+		defer te.Close()
+
+		defer testutils.TestingHook(&BackendDial, func(
+			_ *pgproto3.StartupMessage, _ string, tlsConf *tls.Config,
+		) (net.Conn, error) {
+			require.Nil(t, tlsConf)
+			return nil, newErrorf(codeParamsRoutingFailed, "boom")
+		})()
+
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
+			Insecure:    true,
+			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+		})
+
+		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
+		te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
+	})
+
+	t.Run("skip-verify", func(t *testing.T) {
+		ctx := context.Background()
+		te := newTester()
+		defer te.Close()
+
+		defer testutils.TestingHook(&BackendDial, func(
+			_ *pgproto3.StartupMessage, _ string, tlsConf *tls.Config,
+		) (net.Conn, error) {
+			require.True(t, tlsConf.InsecureSkipVerify)
+			return nil, newErrorf(codeParamsRoutingFailed, "boom")
+		})()
+
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
+			Insecure:    false,
+			SkipVerify:  true,
+			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+		})
+
+		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
+		te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
+	})
+
+	t.Run("no-skip-verify", func(t *testing.T) {
+		ctx := context.Background()
+		te := newTester()
+		defer te.Close()
+
+		defer testutils.TestingHook(&BackendDial, func(
+			_ *pgproto3.StartupMessage, outgoingAddress string, tlsConf *tls.Config,
+		) (net.Conn, error) {
+			outgoingHost, _, err := addr.SplitHostPort(outgoingAddress, "")
+			require.NoError(t, err)
+
+			require.False(t, tlsConf.InsecureSkipVerify)
+			require.Equal(t, tlsConf.ServerName, outgoingHost)
+			return nil, newErrorf(codeParamsRoutingFailed, "boom")
+		})()
+
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
+			Insecure:    false,
+			SkipVerify:  false,
+			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+		})
+
+		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
+		te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
+	})
+
+}
+
 func TestProxyTLSClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// NB: The leaktest call is an important part of this test. We're
 	// verifying that no goroutines are leaked, despite calling Close an
 	// underlying TCP connection (rather than the TLSConn that wraps it).
@@ -238,7 +336,9 @@ func TestProxyTLSClose(t *testing.T) {
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
+	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -277,19 +377,29 @@ func TestProxyTLSClose(t *testing.T) {
 
 func TestProxyModifyRequestParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
 	defer te.Close()
 
-	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
+	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
+	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
+
+	// Create some user with password authn.
+	_, err := sqlDB.Exec("CREATE USER testuser WITH PASSWORD foo123")
+	require.NoError(t, err)
 
 	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()
 	require.NoError(t, err)
 	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true
+
+	// We wish the proxy to work even without providing a valid TLS client cert to the SQL server.
+	proxyOutgoingTLSConfig.Certificates = nil
 
 	originalBackendDial := BackendDial
 	defer testutils.TestingHook(&BackendDial, func(
@@ -307,14 +417,14 @@ func TestProxyModifyRequestParams(t *testing.T) {
 		// NB: This test will fail unless the user used between the proxy
 		// and the backend is changed to a user that actually exists.
 		delete(params, "authToken")
-		params["user"] = "root"
+		params["user"] = "testuser"
 
 		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
 	s, proxyAddr := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{})
 
-	u := fmt.Sprintf("postgres://bogususer@%s/?sslmode=require&authToken=abc123&options=--cluster=dim-dog-28", proxyAddr)
+	u := fmt.Sprintf("postgres://bogususer:foo123@%s/?sslmode=require&authToken=abc123&options=--cluster=dim-dog-28&sslmode=require", proxyAddr)
 	te.TestConnect(ctx, t, u, func(conn *pgx.Conn) {
 		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 		require.NoError(t, runTestQuery(ctx, conn))
@@ -323,13 +433,16 @@ func TestProxyModifyRequestParams(t *testing.T) {
 
 func TestInsecureProxy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
+	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
+	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -339,10 +452,10 @@ func TestInsecureProxy(t *testing.T) {
 		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
 	)
 
-	url := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable&options=--cluster=dim-dog-28", addr)
-	te.TestConnectErr(ctx, t, url, 0, "ERROR: password authentication failed for user bob")
+	url := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
+	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
-	url = fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28", addr)
+	url = fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.NoError(t, runTestQuery(ctx, conn))
 	})
@@ -352,6 +465,7 @@ func TestInsecureProxy(t *testing.T) {
 
 func TestErroneousFrontend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -367,7 +481,7 @@ func TestErroneousFrontend(t *testing.T) {
 	defer stopper.Stop(ctx)
 	_, addr := newProxyServer(ctx, t, stopper, &ProxyOptions{})
 
-	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28", addr)
+	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
 
 	// Generic message here as the Frontend's error is not codeError and
 	// by default we don't pass back error's text. The startup message doesn't
@@ -377,6 +491,7 @@ func TestErroneousFrontend(t *testing.T) {
 
 func TestErroneousBackend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -392,7 +507,7 @@ func TestErroneousBackend(t *testing.T) {
 	defer stopper.Stop(ctx)
 	_, addr := newProxyServer(ctx, t, stopper, &ProxyOptions{})
 
-	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28", addr)
+	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
 
 	// Generic message here as the Backend's error is not codeError and
 	// by default we don't pass back error's text. The startup message has
@@ -402,6 +517,7 @@ func TestErroneousBackend(t *testing.T) {
 
 func TestProxyRefuseConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -417,7 +533,7 @@ func TestProxyRefuseConn(t *testing.T) {
 	defer stopper.Stop(ctx)
 	s, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{})
 
-	url := fmt.Sprintf("postgres://root:admin@%s?sslmode=require&options=--cluster=dim-dog-28", addr)
+	url := fmt.Sprintf("postgres://root:admin@%s?sslmode=require&options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, codeProxyRefusedConnection, "too many attempts")
 	require.Equal(t, int64(1), s.metrics.RefusedConnCount.Count())
 	require.Equal(t, int64(0), s.metrics.SuccessfulConnCount.Count())
@@ -426,6 +542,7 @@ func TestProxyRefuseConn(t *testing.T) {
 
 func TestDenylistUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
@@ -434,14 +551,21 @@ func TestDenylistUpdate(t *testing.T) {
 	denyList, err := ioutil.TempFile("", "*_denylist.yml")
 	require.NoError(t, err)
 
-	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	sql.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
+	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	sql.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
 	defer sql.Stopper().Stop(ctx)
+
+	// Create some user with password authn.
+	_, err = sqlDB.Exec("CREATE USER testuser WITH PASSWORD foo123")
+	require.NoError(t, err)
 
 	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()
 	require.NoError(t, err)
 	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true
+
+	// We wish the proxy to work even without providing a valid TLS client cert to the SQL server.
+	proxyOutgoingTLSConfig.Certificates = nil
 
 	originalBackendDial := BackendDial
 	defer testutils.TestingHook(&BackendDial, func(
@@ -472,7 +596,7 @@ func TestDenylistUpdate(t *testing.T) {
 	})
 	defer func() { _ = os.Remove(denyList.Name()) }()
 
-	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require&options=--cluster=dim-dog-28", addr)
+	url := fmt.Sprintf("postgres://testuser:foo123@%s/defaultdb_29?sslmode=require&options=--cluster=dim-dog-28&sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.Eventuallyf(
 			t,
@@ -490,13 +614,18 @@ func TestDenylistUpdate(t *testing.T) {
 
 func TestDirectoryConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// TODO(jaylim-crl): This is a potential port reuse issue, so skip this
+	// under stress. See linked GitHub issue.
+	skip.UnderStress(t, "https://github.com/cockroachdb/cockroach/issues/76839")
+	skip.UnderDeadlockWithIssue(t, 71365)
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	te := newTester()
 	defer te.Close()
 
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	srv.(*server.TestServer).PGServer().TestingSetTrustClientProvidedRemoteAddr(true)
+	srv.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
 	defer srv.Stopper().Stop(ctx)
 
 	// Create tenant 28.
@@ -548,7 +677,7 @@ func TestDirectoryConnect(t *testing.T) {
 		// Ensure that Directory.ReportFailure is being called correctly.
 		countReports := 0
 		defer testutils.TestingHook(&reportFailureToDirectory, func(
-			ctx context.Context, tenantID roachpb.TenantID, addr string, directory *tenant.Directory,
+			ctx context.Context, tenantID roachpb.TenantID, addr string, directory TenantResolver,
 		) error {
 			require.Equal(t, roachpb.MakeTenantID(28), tenantID)
 			addrs, err := directory.LookupTenantAddrs(ctx, tenantID)
@@ -631,8 +760,395 @@ func TestDirectoryConnect(t *testing.T) {
 	})
 }
 
+func TestConnectionMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tenantID := serverutils.TestTenantID()
+
+	// TODO(rafi): use ALTER TENANT ALL when available.
+	_, err := mainDB.Exec(`INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
+		(0, 'server.user_login.session_revival_token.enabled', 'true', 'b')`)
+	require.NoError(t, err)
+
+	// Start first SQL pod.
+	tenant1, tenantDB1 := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(tenantID))
+	tenant1.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	defer tenant1.Stopper().Stop(ctx)
+	defer tenantDB1.Close()
+
+	// Start second SQL pod.
+	params2 := tests.CreateTestTenantParams(tenantID)
+	params2.Existing = true
+	tenant2, tenantDB2 := serverutils.StartTenant(t, s, params2)
+	tenant2.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	defer tenant2.Stopper().Stop(ctx)
+	defer tenantDB2.Close()
+
+	_, err = tenantDB1.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
+	require.NoError(t, err)
+	_, err = tenantDB1.Exec("GRANT admin TO testuser")
+	require.NoError(t, err)
+
+	// Create a proxy server without using a directory. The directory is very
+	// difficult to work with, and there isn't a way to easily stub out fake
+	// loads. For this test, we will stub out lookupAddr in the connector. We
+	// will alternate between tenant1 and tenant2, starting with tenant1.
+	forwarderCh := make(chan *forwarder)
+	opts := &ProxyOptions{SkipVerify: true, RoutingRule: tenant1.SQLAddr()}
+	opts.testingKnobs.afterForward = func(f *forwarder) error {
+		select {
+		case forwarderCh <- f:
+		case <-time.After(10 * time.Second):
+			return errors.New("no receivers for forwarder")
+		}
+		return nil
+	}
+	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+
+	// The tenant ID does not matter here since we stubbed RoutingRule.
+	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-28", addr)
+
+	type queryer interface {
+		QueryRowContext(context.Context, string, ...interface{}) *gosql.Row
+	}
+	// queryAddr queries the SQL node that `db` is connected to for its address.
+	queryAddr := func(t *testing.T, ctx context.Context, db queryer) string {
+		t.Helper()
+		var host, port string
+		require.NoError(t, db.QueryRowContext(ctx, `
+			SELECT
+				a.value AS "host", b.value AS "port"
+			FROM crdb_internal.node_runtime_info a, crdb_internal.node_runtime_info b
+			WHERE a.component = 'DB' AND a.field = 'Host'
+				AND b.component = 'DB' AND b.field = 'Port'
+		`).Scan(&host, &port))
+		return fmt.Sprintf("%s:%s", host, port)
+	}
+
+	// validateMiscMetrics ensures that our invariant of
+	// attempts = success + error_recoverable + error_fatal is valid, and all
+	// other transfer related metrics were incremented as well.
+	validateMiscMetrics := func(t *testing.T) {
+		t.Helper()
+		totalAttempts := proxy.metrics.ConnMigrationSuccessCount.Count() +
+			proxy.metrics.ConnMigrationErrorRecoverableCount.Count() +
+			proxy.metrics.ConnMigrationErrorFatalCount.Count()
+		require.Equal(t, totalAttempts, proxy.metrics.ConnMigrationAttemptedCount.Count())
+		require.Equal(t, totalAttempts,
+			proxy.metrics.ConnMigrationAttemptedLatency.TotalCount())
+		require.Equal(t, totalAttempts,
+			proxy.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
+	}
+
+	// Test that connection transfers are successful. Note that if one sub-test
+	// fails, the remaining will fail as well since they all use the same
+	// forwarder instance.
+	t.Run("successful", func(t *testing.T) {
+		tCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		db, err := gosql.Open("postgres", connectionString)
+		db.SetMaxOpenConns(1)
+		defer db.Close()
+		require.NoError(t, err)
+
+		// Spin up a goroutine to trigger the initial connection.
+		go func() {
+			_ = db.PingContext(tCtx)
+		}()
+
+		var f *forwarder
+		select {
+		case f = <-forwarderCh:
+		case <-time.After(10 * time.Second):
+			t.Fatal("no connection")
+		}
+
+		// Set up forwarder hooks.
+		prevTenant1 := true
+		var lookupAddrDelayDuration time.Duration
+		f.connector.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+			if lookupAddrDelayDuration != 0 {
+				select {
+				case <-ctx.Done():
+					return "", errors.Wrap(ctx.Err(), "injected delays")
+				case <-time.After(lookupAddrDelayDuration):
+				}
+			}
+			if prevTenant1 {
+				prevTenant1 = false
+				return tenant2.SQLAddr(), nil
+			}
+			prevTenant1 = true
+			return tenant1.SQLAddr(), nil
+		}
+
+		t.Run("normal_transfer", func(t *testing.T) {
+			require.Equal(t, tenant1.SQLAddr(), queryAddr(t, tCtx, db))
+
+			_, err = db.Exec("SET application_name = 'foo'")
+			require.NoError(t, err)
+
+			// Show that we get alternating SQL pods when we transfer.
+			require.NoError(t, f.TransferConnection())
+			require.Equal(t, int64(1), f.metrics.ConnMigrationSuccessCount.Count())
+			require.Equal(t, tenant2.SQLAddr(), queryAddr(t, tCtx, db))
+
+			var name string
+			require.NoError(t, db.QueryRow("SHOW application_name").Scan(&name))
+			require.Equal(t, "foo", name)
+
+			_, err = db.Exec("SET application_name = 'bar'")
+			require.NoError(t, err)
+
+			require.NoError(t, f.TransferConnection())
+			require.Equal(t, int64(2), f.metrics.ConnMigrationSuccessCount.Count())
+			require.Equal(t, tenant1.SQLAddr(), queryAddr(t, tCtx, db))
+
+			require.NoError(t, db.QueryRow("SHOW application_name").Scan(&name))
+			require.Equal(t, "bar", name)
+
+			// Now attempt a transfer concurrently with requests.
+			initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
+			subCtx, cancel := context.WithCancel(tCtx)
+			defer cancel()
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for subCtx.Err() == nil {
+					_ = f.TransferConnection()
+					time.Sleep(100 * time.Millisecond)
+				}
+			}()
+
+			// This loop will run approximately 5 seconds.
+			var tenant1Addr, tenant2Addr int
+			for i := 0; i < 100; i++ {
+				addr := queryAddr(t, tCtx, db)
+				if addr == tenant1.SQLAddr() {
+					tenant1Addr++
+				} else {
+					require.Equal(t, tenant2.SQLAddr(), addr)
+					tenant2Addr++
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+
+			// Ensure that the goroutine terminates so other subtests are not
+			// affected.
+			cancel()
+			wg.Wait()
+
+			// Ensure that some transfers were performed, and the forwarder isn't
+			// closed.
+			require.True(t, tenant1Addr >= 2)
+			require.True(t, tenant2Addr >= 2)
+			require.Nil(t, f.ctx.Err())
+
+			// Check metrics.
+			require.True(t, f.metrics.ConnMigrationSuccessCount.Count() > initSuccessCount+4)
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+
+			validateMiscMetrics(t)
+		})
+
+		// Transfers should fail if there is an open transaction. These failed
+		// transfers should not close the connection.
+		t.Run("failed_transfers_with_tx", func(t *testing.T) {
+			initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
+			initAddr := queryAddr(t, tCtx, db)
+
+			err = crdb.ExecuteTx(tCtx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+				// Run multiple times to ensure that connection isn't closed.
+				for i := 0; i < 5; i++ {
+					err := f.TransferConnection()
+					if err == nil {
+						return errors.New("no error")
+					}
+					if !assert.Regexp(t, "cannot serialize", err.Error()) {
+						return errors.Wrap(err, "non-serialization error")
+					}
+					addr := queryAddr(t, tCtx, tx)
+					if initAddr != addr {
+						return errors.Newf(
+							"address does not match, expected %s, found %s",
+							initAddr,
+							addr,
+						)
+					}
+				}
+				return nil
+			})
+			require.NoError(t, err)
+
+			// None of the migrations should succeed, and the forwarder should
+			// still be active.
+			require.Nil(t, f.ctx.Err())
+			require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
+			require.Equal(t, int64(5), f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+
+			// Once the transaction is closed, transfers should work.
+			require.NoError(t, f.TransferConnection())
+			require.NotEqual(t, initAddr, queryAddr(t, tCtx, db))
+			require.Nil(t, f.ctx.Err())
+			require.Equal(t, initSuccessCount+1, f.metrics.ConnMigrationSuccessCount.Count())
+			require.Equal(t, int64(5), f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+
+			validateMiscMetrics(t)
+		})
+
+		// Transfer timeout caused by dial issues should not close the session.
+		// We will test this by introducing delays when connecting to the SQL
+		// pod.
+		t.Run("failed_transfers_with_dial_issues", func(t *testing.T) {
+			initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
+			initErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
+			initAddr := queryAddr(t, tCtx, db)
+
+			// Set the delay longer than the timeout.
+			lookupAddrDelayDuration = 10 * time.Second
+			defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Second)()
+
+			err := f.TransferConnection()
+			require.Error(t, err)
+			require.Regexp(t, "injected delays", err.Error())
+			require.Equal(t, initAddr, queryAddr(t, tCtx, db))
+			require.Nil(t, f.ctx.Err())
+
+			require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
+			require.Equal(t, initErrorRecoverableCount+1,
+				f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+
+			validateMiscMetrics(t)
+		})
+	})
+
+	// Test transfer timeouts caused by waiting for a transfer state response.
+	// In reality, this can only be caused by pipelined queries. Consider the
+	// folllowing:
+	//   1. short-running simple query
+	//   2. long-running simple query
+	//   3. SHOW TRANSFER STATE
+	// When (1) returns a response, the forwarder will see that we're in a
+	// safe transfer point, and initiate (3). But (2) may block until we hit
+	// a timeout.
+	//
+	// There's no easy way to simulate pipelined queries. pgtest (that allows
+	// us to send individual pgwire messages) does not support authentication,
+	// which is what the proxy needs, so we will stub isSafeTransferPointLocked
+	// instead.
+	t.Run("transfer_timeout_in_response", func(t *testing.T) {
+		tCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		db, err := gosql.Open("postgres", connectionString)
+		db.SetMaxOpenConns(1)
+		defer db.Close()
+		require.NoError(t, err)
+
+		// Use a single connection so that we don't reopen when the connection
+		// is closed.
+		conn, err := db.Conn(tCtx)
+		require.NoError(t, err)
+
+		// Spin up a goroutine to trigger the initial connection.
+		go func() {
+			_ = conn.PingContext(tCtx)
+		}()
+
+		var f *forwarder
+		select {
+		case f = <-forwarderCh:
+		case <-time.After(10 * time.Second):
+			t.Fatal("no connection")
+		}
+
+		initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
+		initErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
+
+		// Set up forwarder hooks.
+		prevTenant1 := true
+		f.connector.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+			if prevTenant1 {
+				prevTenant1 = false
+				return tenant2.SQLAddr(), nil
+			}
+			prevTenant1 = true
+			return tenant1.SQLAddr(), nil
+		}
+		defer testutils.TestingHook(&isSafeTransferPointLocked, func(req *processor, res *processor) bool {
+			return true
+		})()
+		// Transfer timeout is 3s, and we'll run pg_sleep for 10s.
+		defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Second)()
+
+		goCh := make(chan struct{}, 1)
+		errCh := make(chan error, 1)
+		go func() {
+			goCh <- struct{}{}
+			_, err := conn.ExecContext(tCtx, "SELECT pg_sleep(10)")
+			errCh <- err
+		}()
+
+		// Block until goroutine is started. We want to make sure we run the
+		// transfer request *after* sending the query. This doesn't guarantee,
+		// but is the best that we can do. We also added a sleep call here.
+		//
+		// Alternatively, we could open another connection, and query the server
+		// to make sure pg_sleep is running, but that seems unnecessary for just
+		// one test.
+		<-goCh
+		time.Sleep(2 * time.Second)
+		// This should be an error because the transfer timed out.
+		require.Error(t, f.TransferConnection())
+
+		// Connection should be closed because this is a non-recoverable error,
+		// i.e. timeout after sending the request, but before fully receiving
+		// its response.
+		err = conn.PingContext(tCtx)
+		require.Error(t, err)
+		require.Regexp(t, "(closed|bad connection)", err.Error())
+
+		select {
+		case <-time.After(10 * time.Second):
+			t.Fatalf("require that pg_sleep query terminates")
+		case err = <-errCh:
+			require.Error(t, err)
+			require.Regexp(t, "(closed|bad connection)", err.Error())
+		}
+
+		require.EqualError(t, f.ctx.Err(), context.Canceled.Error())
+		require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
+		require.Equal(t, initErrorRecoverableCount, f.metrics.ConnMigrationErrorRecoverableCount.Count())
+		require.Equal(t, int64(1), f.metrics.ConnMigrationErrorFatalCount.Count())
+
+		totalAttempts := f.metrics.ConnMigrationSuccessCount.Count() +
+			f.metrics.ConnMigrationErrorRecoverableCount.Count() +
+			f.metrics.ConnMigrationErrorFatalCount.Count()
+		require.Equal(t, totalAttempts, f.metrics.ConnMigrationAttemptedCount.Count())
+		require.Equal(t, totalAttempts,
+			f.metrics.ConnMigrationAttemptedLatency.TotalCount())
+		// Here, we get a transfer timeout in response, so the message size
+		// should not be recorded.
+		require.Equal(t, totalAttempts-1,
+			f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
+	})
+}
+
 func TestClusterNameAndTenantFromParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -643,51 +1159,50 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 		expectedTenantID    uint64
 		expectedParams      map[string]string
 		expectedError       string
+		expectedHint        string
 	}{
 		{
 			name:          "empty params",
 			params:        map[string]string{},
-			expectedError: "missing cluster name in connection string",
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
 		},
 		{
-			name: "cluster name is not provided",
+			name: "cluster identifier is not provided",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "--foo=bar",
 			},
-			expectedError: "missing cluster name in connection string",
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
 		},
 		{
-			name: "multiple similar cluster names",
-			params: map[string]string{
-				"database": "happy-koala-7.defaultdb",
-				"options":  "--cluster=happy-koala",
-			},
-			expectedError: "multiple cluster names provided",
-		},
-		{
-			name: "multiple different cluster names",
+			name: "multiple different cluster identifiers",
 			params: map[string]string{
 				"database": "happy-koala-7.defaultdb",
 				"options":  "--cluster=happy-tiger",
 			},
-			expectedError: "multiple cluster names provided",
+			expectedError: "multiple different cluster identifiers provided",
+			expectedHint: "Is 'happy-koala-7' or 'happy-tiger' the identifier for the cluster that you're connecting to?\n--\n" +
+				clusterIdentifierHint,
 		},
 		{
-			name: "invalid cluster name in database param",
+			name: "invalid cluster identifier in database param",
 			params: map[string]string{
 				// Cluster names need to be between 6 to 20 alphanumeric characters.
 				"database": "short-0.defaultdb",
 			},
-			expectedError: "invalid cluster name 'short-0'",
+			expectedError: "invalid cluster identifier 'short-0'",
+			expectedHint:  "Is 'short' a valid cluster name?\n--\n" + clusterNameFormHint,
 		},
 		{
-			name: "invalid cluster name in options param",
+			name: "invalid cluster identifier in options param",
 			params: map[string]string{
 				// Cluster names need to be between 6 to 20 alphanumeric characters.
 				"options": "--cluster=cockroachlabsdotcomfoobarbaz-0",
 			},
-			expectedError: "invalid cluster name 'cockroachlabsdotcomfoobarbaz-0'",
+			expectedError: "invalid cluster identifier 'cockroachlabsdotcomfoobarbaz-0'",
+			expectedHint:  "Is 'cockroachlabsdotcomfoobarbaz' a valid cluster name?\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "invalid database param (1)",
@@ -728,30 +1243,45 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 		{
 			name:          "no tenant id",
 			params:        map[string]string{"database": "happy2koala.defaultdb"},
-			expectedError: "invalid cluster name 'happy2koala'",
+			expectedError: "invalid cluster identifier 'happy2koala'",
+			expectedHint:  missingTenantIDHint + "\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "missing tenant id",
 			params:        map[string]string{"database": "happy2koala-.defaultdb"},
-			expectedError: "invalid cluster name 'happy2koala-'",
+			expectedError: "invalid cluster identifier 'happy2koala-'",
+			expectedHint:  missingTenantIDHint + "\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "missing cluster name",
 			params:        map[string]string{"database": "-7.defaultdb"},
-			expectedError: "invalid cluster name '-7'",
+			expectedError: "invalid cluster identifier '-7'",
+			expectedHint:  "Is '' a valid cluster name?\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "bad tenant id",
 			params:        map[string]string{"database": "happy-koala-0-7a.defaultdb"},
-			expectedError: "invalid cluster name 'happy-koala-0-7a'",
+			expectedError: "invalid cluster identifier 'happy-koala-0-7a'",
+			expectedHint:  "Is '7a' a valid tenant ID?\n--\n" + clusterNameFormHint,
 		},
 		{
 			name:          "zero tenant id",
 			params:        map[string]string{"database": "happy-koala-0.defaultdb"},
-			expectedError: "invalid cluster name 'happy-koala-0'",
+			expectedError: "invalid cluster identifier 'happy-koala-0'",
+			expectedHint:  "Tenant ID 0 is invalid.",
 		},
 		{
-			name: "cluster name in database param",
+			name: "multiple similar cluster identifiers",
+			params: map[string]string{
+				"database": "happy-koala-7.defaultdb",
+				"options":  "--cluster=happy-koala-7",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams:      map[string]string{"database": "defaultdb"},
+		},
+		{
+			name: "cluster identifier in database param",
 			params: map[string]string{
 				"database": "happy-koala-7.defaultdb",
 				"foo":      "bar",
@@ -761,17 +1291,20 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedParams:      map[string]string{"database": "defaultdb", "foo": "bar"},
 		},
 		{
-			name: "valid cluster name with invalid arrangements",
+			name: "valid cluster identifier with invalid arrangements",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "-c --cluster=happy-koala-7 -c -c -c",
 			},
 			expectedClusterName: "happy-koala",
 			expectedTenantID:    7,
-			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedParams: map[string]string{
+				"database": "defaultdb",
+				"options":  "-c  -c -c -c",
+			},
 		},
 		{
-			name: "short option: cluster name in options param",
+			name: "short option: cluster identifier in options param",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "-ccluster=happy-koala-7",
@@ -781,7 +1314,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedParams:      map[string]string{"database": "defaultdb"},
 		},
 		{
-			name: "short option with spaces: cluster name in options param",
+			name: "short option with spaces: cluster identifier in options param",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "-c   cluster=happy-koala-7",
@@ -791,14 +1324,30 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 			expectedParams:      map[string]string{"database": "defaultdb"},
 		},
 		{
-			name: "long option: cluster name in options param",
+			name: "long option: cluster identifier in options param",
 			params: map[string]string{
 				"database": "defaultdb",
 				"options":  "--cluster=happy-koala-7\t--foo=test",
 			},
 			expectedClusterName: "happy-koala",
 			expectedTenantID:    7,
-			expectedParams:      map[string]string{"database": "defaultdb"},
+			expectedParams: map[string]string{
+				"database": "defaultdb",
+				"options":  "--foo=test",
+			},
+		},
+		{
+			name: "long option: cluster identifier in options param with other options",
+			params: map[string]string{
+				"database": "defaultdb",
+				"options":  "-csearch_path=public --cluster=happy-koala-7\t--foo=test",
+			},
+			expectedClusterName: "happy-koala",
+			expectedTenantID:    7,
+			expectedParams: map[string]string{
+				"database": "defaultdb",
+				"options":  "-csearch_path=public \t--foo=test",
+			},
 		},
 		{
 			name:                "leading 0s are ok",
@@ -828,6 +1377,9 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				require.Equal(t, tc.expectedParams, outMsg.Parameters)
 			} else {
 				require.EqualErrorf(t, err, tc.expectedError, "failed test case\n%+v", tc)
+
+				pgerr := pgerror.Flatten(err)
+				require.Equal(t, tc.expectedHint, pgerr.Hint)
 			}
 
 			// Check that the original parameters were not modified.
@@ -864,8 +1416,8 @@ func newTester() *tester {
 	// Record successful connection and authentication.
 	originalAuthenticate := authenticate
 	te.restoreAuthenticate =
-		testutils.TestingHook(&authenticate, func(clientConn, crdbConn net.Conn) error {
-			err := originalAuthenticate(clientConn, crdbConn)
+		testutils.TestingHook(&authenticate, func(clientConn, crdbConn net.Conn, throttleHook func(status throttler.AttemptStatus) error) error {
+			err := originalAuthenticate(clientConn, crdbConn, throttleHook)
 			te.setAuthenticated(err == nil)
 			return err
 		})
@@ -874,7 +1426,7 @@ func newTester() *tester {
 	originalSendErrToClient := SendErrToClient
 	te.restoreSendErrToClient =
 		testutils.TestingHook(&SendErrToClient, func(conn net.Conn, err error) {
-			if codeErr, ok := err.(*codeError); ok {
+			if codeErr := (*codeError)(nil); errors.As(err, &codeErr) {
 				te.setErrToClient(codeErr)
 			}
 			originalSendErrToClient(conn, err)
@@ -939,7 +1491,12 @@ func (te *tester) TestConnectErr(
 	t.Helper()
 	te.setAuthenticated(false)
 	te.setErrToClient(nil)
-	conn, err := pgx.Connect(ctx, url)
+	cfg, err := pgx.ParseConfig(url)
+	require.NoError(t, err)
+
+	// Prevent pgx from tying to connect to the `::1` ipv6 address for localhost.
+	cfg.LookupFunc = func(ctx context.Context, s string) ([]string, error) { return []string{s}, nil }
+	conn, err := pgx.ConnectConfig(ctx, cfg)
 	if err == nil {
 		_ = conn.Close(ctx)
 	}
@@ -960,8 +1517,8 @@ openssl genrsa -out testdata/testserver.key 2048
 openssl req -new -x509 -sha256 -key testdata/testserver.key -out testdata/testserver.crt \
   -days 3650 -config testdata/testserver_config.cnf
 `
-	opts.ListenKey = "testdata/testserver.key"
-	opts.ListenCert = "testdata/testserver.crt"
+	opts.ListenKey = testutils.TestDataPath(t, "testserver.key")
+	opts.ListenCert = testutils.TestDataPath(t, "testserver.crt")
 
 	return newProxyServer(ctx, t, stopper, opts)
 }
@@ -1019,7 +1576,6 @@ func newDirectoryServer(
 			return nil, status.Error(codes.NotFound, "tenant not found")
 		}
 
-		log.TestingClearServerIdentifiers()
 		tenantStopper := tenantdirsvr.NewSubStopper(tdsStopper)
 		ten, err := srv.StartTenant(ctx, base.TestTenantArgs{
 			Existing:      true,

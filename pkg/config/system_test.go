@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -65,7 +66,7 @@ func sqlKV(tableID uint32, indexID, descID uint64) roachpb.KeyValue {
 	return kv(k, nil)
 }
 
-func descriptor(descID uint64) roachpb.KeyValue {
+func descriptor(descID uint32) roachpb.KeyValue {
 	id := descpb.ID(descID)
 	k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
 	v := tabledesc.NewBuilder(&descpb.TableDescriptor{ID: id}).BuildImmutable()
@@ -81,9 +82,9 @@ func tenant(tenID uint64) roachpb.KeyValue {
 	return kv(k, nil)
 }
 
-func zoneConfig(descID config.SystemTenantObjectID, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
+func zoneConfig(descID descpb.ID, spans ...zonepb.SubzoneSpan) roachpb.KeyValue {
 	kv := roachpb.KeyValue{
-		Key: config.MakeZoneKey(descID),
+		Key: config.MakeZoneKey(keys.SystemSQLCodec, descID),
 	}
 	if err := kv.Value.SetProto(&zonepb.ZoneConfig{SubzoneSpans: spans}); err != nil {
 		panic(err)
@@ -350,7 +351,6 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
-		start         = keys.MinUserDescID
 		reservedStart = keys.MaxSystemConfigDescID + 1
 	)
 
@@ -367,13 +367,14 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	baseSql, _ /* splits */ := schema.GetInitialValues()
 	// Real system tables plus some user stuff.
 	kvs, _ /* splits */ := schema.GetInitialValues()
+	start := bootstrap.TestingUserDescID(0)
 	userSQL := append(kvs, descriptor(start), descriptor(start+1), descriptor(start+5))
 	// Real system tables and partitioned user tables.
 	var subzoneSQL = make([]roachpb.KeyValue, len(userSQL))
 	copy(subzoneSQL, userSQL)
 	subzoneSQL = append(subzoneSQL,
-		zoneConfig(start+1, subzone("a", ""), subzone("c", "e")),
-		zoneConfig(start+5, subzone("b", ""), subzone("c", "d"), subzone("d", "")))
+		zoneConfig(descpb.ID(start+1), subzone("a", ""), subzone("c", "e")),
+		zoneConfig(descpb.ID(start+5), subzone("b", ""), subzone("c", "d"), subzone("d", "")))
 
 	sort.Sort(roachpb.KeyValueByKey(userSQL))
 	sort.Sort(roachpb.KeyValueByKey(subzoneSQL))
@@ -463,12 +464,13 @@ func TestComputeSplitKeyTenantBoundaries(t *testing.T) {
 	// in the secondary tenant keyspace rather than within the system ranges and
 	// system config span that come earlier in the keyspace. Those splits are
 	// tested separately above.
-	minKey := tkey(keys.MinUserDescID)
 	minTenID, maxTenID := roachpb.MinTenantID.ToUint64(), roachpb.MaxTenantID.ToUint64()
 
 	schema := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	)
+	minKey := tkey(bootstrap.TestingUserDescID(0))
+
 	// Real system tenant only.
 	baseSql, _ /* splits */ := schema.GetInitialValues()
 	// Real system tenant plus some secondary tenants.
@@ -542,6 +544,7 @@ func TestComputeSplitKeyTenantBoundaries(t *testing.T) {
 func TestGetZoneConfigForKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	testCases := []struct {
 		key        roachpb.RKey
 		expectedID config.SystemTenantObjectID
@@ -572,7 +575,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 
 		// Non-gossiped system tables should refer to themselves.
 		{tkey(keys.LeaseTableID), keys.LeaseTableID},
-		{tkey(keys.JobsTableID), keys.JobsTableID},
+		{tkey(uint32(systemschema.JobsTable.GetID())), config.SystemTenantObjectID(systemschema.JobsTable.GetID())},
 		{tkey(keys.LocationsTableID), keys.LocationsTableID},
 		{tkey(keys.NamespaceTableID), keys.NamespaceTableID},
 
@@ -583,15 +586,15 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{tkey(keys.LivenessRangesID), keys.SystemDatabaseID},
 
 		// User tables should refer to themselves.
-		{tkey(keys.MinUserDescID), keys.MinUserDescID},
-		{tkey(keys.MinUserDescID + 22), keys.MinUserDescID + 22},
+		{tkey(bootstrap.TestingUserDescID(0)), config.SystemTenantObjectID(bootstrap.TestingUserDescID(0))},
+		{tkey(bootstrap.TestingUserDescID(22)), config.SystemTenantObjectID(bootstrap.TestingUserDescID(22))},
 		{roachpb.RKeyMax, keys.RootNamespaceID},
 
 		// Secondary tenant tables should refer to the TenantsRangesID.
-		{tenantTkey(5, keys.MinUserDescID), keys.TenantsRangesID},
-		{tenantTkey(5, keys.MinUserDescID+22), keys.TenantsRangesID},
-		{tenantTkey(10, keys.MinUserDescID), keys.TenantsRangesID},
-		{tenantTkey(10, keys.MinUserDescID+22), keys.TenantsRangesID},
+		{tenantTkey(5, bootstrap.TestingUserDescID(0)), keys.TenantsRangesID},
+		{tenantTkey(5, bootstrap.TestingUserDescID(22)), keys.TenantsRangesID},
+		{tenantTkey(10, bootstrap.TestingUserDescID(0)), keys.TenantsRangesID},
+		{tenantTkey(10, bootstrap.TestingUserDescID(22)), keys.TenantsRangesID},
 	}
 
 	originalZoneConfigHook := config.ZoneConfigHook
@@ -612,11 +615,11 @@ func TestGetZoneConfigForKey(t *testing.T) {
 			_ *config.SystemConfig, id config.SystemTenantObjectID,
 		) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 			objectID = id
-			return &zonepb.ZoneConfig{}, nil, false, nil
+			return cfg.DefaultZoneConfig, nil, false, nil
 		}
-		_, err := cfg.GetZoneConfigForKey(tc.key)
+		_, err := cfg.GetSpanConfigForKey(ctx, tc.key)
 		if err != nil {
-			t.Errorf("#%d: GetZoneConfigForKey(%v) got error: %v", tcNum, tc.key, err)
+			t.Errorf("#%d: GetSpanConfigForKey(%v) got error: %v", tcNum, tc.key, err)
 		}
 		if objectID != tc.expectedID {
 			t.Errorf("#%d: GetZoneConfigForKey(%v) got %d; want %d", tcNum, tc.key, objectID, tc.expectedID)

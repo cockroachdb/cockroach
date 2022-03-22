@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for select_in.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
@@ -20,7 +22,7 @@
 package colexec
 
 import (
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -78,6 +80,7 @@ const (
 )
 
 func GetInProjectionOperator(
+	evalCtx *tree.EvalContext,
 	allocator *colmem.Allocator,
 	t *types.T,
 	input colexecop.Operator,
@@ -100,7 +103,7 @@ func GetInProjectionOperator(
 				outputIdx:      resultIdx,
 				negate:         negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(evalCtx, t, datumTuple)
 			return obj, nil
 			// {{end}}
 		}
@@ -110,7 +113,12 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
-	t *types.T, input colexecop.Operator, colIdx int, datumTuple *tree.DTuple, negate bool,
+	evalCtx *tree.EvalContext,
+	t *types.T,
+	input colexecop.Operator,
+	colIdx int,
+	datumTuple *tree.DTuple,
+	negate bool,
 ) (colexecop.Operator, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
@@ -123,7 +131,7 @@ func GetInOperator(
 				colIdx:         colIdx,
 				negate:         negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(evalCtx, t, datumTuple)
 			return obj, nil
 			// {{end}}
 		}
@@ -157,7 +165,12 @@ type projectInOp_TYPE struct {
 
 var _ colexecop.Operator = &projectInOp_TYPE{}
 
-func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool) {
+func fillDatumRow_TYPE(
+	evalCtx *tree.EvalContext, t *types.T, datumTuple *tree.DTuple,
+) ([]_GOTYPE, bool) {
+	// Sort the contents of the tuple, if they are not already sorted.
+	datumTuple.Normalize(evalCtx)
+
 	conv := colconv.GetDatumToPhysicalFn(t)
 	var result []_GOTYPE
 	hasNulls := false
@@ -176,8 +189,8 @@ func fillDatumRow_TYPE(t *types.T, datumTuple *tree.DTuple) ([]_GOTYPE, bool) {
 func cmpIn_TYPE(
 	targetElem _GOTYPE, targetCol _GOTYPESLICE, filterRow []_GOTYPE, hasNulls bool,
 ) comparisonResult {
-	// Filter row input is already sorted due to normalization, so we can use a
-	// binary search right away.
+	// Filter row input was already sorted in fillDatumRow_TYPE, so we can
+	// perform a binary search.
 	lo := 0
 	hi := len(filterRow)
 	for lo < hi {

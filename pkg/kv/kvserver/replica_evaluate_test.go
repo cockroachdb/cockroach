@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -35,7 +36,7 @@ func TestEvaluateBatch(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, ts, 0)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, ts, 0, 0)
 
 	tcs := []testCase{
 		//
@@ -651,7 +652,7 @@ func TestEvaluateBatch(t *testing.T) {
 			}
 			d.AbortSpan = abortspan.New(1)
 			d.ba.Header.Timestamp = ts
-			d.ClusterSettings = cluster.MakeClusterSettings()
+			d.ClusterSettings = cluster.MakeTestingClusterSettings()
 
 			tc.setup(t, d)
 
@@ -664,7 +665,7 @@ func TestEvaluateBatch(t *testing.T) {
 				d.MockEvalCtx.EvalContext(),
 				&d.ms,
 				&d.ba,
-				hlc.Timestamp{},
+				uncertainty.Interval{},
 				d.readOnly,
 			)
 

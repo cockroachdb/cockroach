@@ -128,8 +128,8 @@ func getDecimalToIntCastFunc(toIntWidth int32) castFunc {
 		// as well.
 		convStr := `
 		{
-			tmpDec := &_overloadHelper.TmpDec1
-			_, err := tree.DecimalCtx.RoundToIntegralValue(tmpDec, &%[2]s)
+			var tmpDec apd.Decimal //gcassert:noescape
+			_, err := tree.DecimalCtx.RoundToIntegralValue(&tmpDec, &%[2]s)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}

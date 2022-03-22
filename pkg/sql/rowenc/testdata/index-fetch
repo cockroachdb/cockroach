@@ -1,0 +1,885 @@
+exec
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b STRING,
+  c DECIMAL,
+  d BOOL,
+
+  INDEX b1(b),
+  INDEX b2(b) STORING (c, d),
+  UNIQUE INDEX cb1(c, b DESC),
+  UNIQUE INDEX cb2(c, b) STORING (d)
+)
+----
+
+# Primary index scan, all columns.
+index-fetch
+table: t
+index: t_pkey
+columns:
+  - a
+  - b
+  - c
+----
+{
+  "version": 1,
+  "table_id": 106,
+  "table_name": "t",
+  "index_id": 1,
+  "index_name": "t_pkey",
+  "is_secondary_index": false,
+  "is_unique_index": true,
+  "geo_config": {},
+  "encoding_type": 1,
+  "num_key_suffix_columns": 0,
+  "max_keys_per_row": 1,
+  "key_prefix_length": 2,
+  "max_family_id": 0,
+  "family_default_columns": null,
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 1,
+      "name": "a",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    },
+    {
+      "column_id": 2,
+      "name": "b",
+      "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    },
+    {
+      "column_id": 3,
+      "name": "c",
+      "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 1700\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    }
+  ]
+}
+
+# Primary index scan, not all columns.
+index-fetch
+table: t
+index: t_pkey
+columns:
+  - b
+----
+{
+  "version": 1,
+  "table_id": 106,
+  "table_name": "t",
+  "index_id": 1,
+  "index_name": "t_pkey",
+  "is_secondary_index": false,
+  "is_unique_index": true,
+  "geo_config": {},
+  "encoding_type": 1,
+  "num_key_suffix_columns": 0,
+  "max_keys_per_row": 1,
+  "key_prefix_length": 2,
+  "max_family_id": 0,
+  "family_default_columns": null,
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 2,
+      "name": "b",
+      "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    }
+  ]
+}
+
+index-fetch
+table: t
+index: b1
+columns:
+  - a
+  - b
+----
+{
+  "version": 1,
+  "table_id": 106,
+  "table_name": "t",
+  "index_id": 2,
+  "index_name": "b1",
+  "is_secondary_index": true,
+  "is_unique_index": false,
+  "geo_config": {},
+  "encoding_type": 0,
+  "num_key_suffix_columns": 1,
+  "max_keys_per_row": 1,
+  "key_prefix_length": 2,
+  "max_family_id": 0,
+  "family_default_columns": null,
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 2,
+        "name": "b",
+        "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 1,
+      "name": "a",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    },
+    {
+      "column_id": 2,
+      "name": "b",
+      "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    }
+  ]
+}
+
+index-fetch
+table: t
+index: b2
+columns:
+  - b
+  - d
+----
+{
+  "version": 1,
+  "table_id": 106,
+  "table_name": "t",
+  "index_id": 3,
+  "index_name": "b2",
+  "is_secondary_index": true,
+  "is_unique_index": false,
+  "geo_config": {},
+  "encoding_type": 0,
+  "num_key_suffix_columns": 1,
+  "max_keys_per_row": 1,
+  "key_prefix_length": 2,
+  "max_family_id": 0,
+  "family_default_columns": null,
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 2,
+        "name": "b",
+        "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 2,
+      "name": "b",
+      "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    },
+    {
+      "column_id": 4,
+      "name": "d",
+      "type": "family: BoolFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 16\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    }
+  ]
+}
+
+# Here we should have the composite flag set for c and descending
+# direction for b.
+index-fetch
+table: t
+index: cb1
+columns:
+  - a
+  - c
+----
+{
+  "version": 1,
+  "table_id": 106,
+  "table_name": "t",
+  "index_id": 4,
+  "index_name": "cb1",
+  "is_secondary_index": true,
+  "is_unique_index": true,
+  "geo_config": {},
+  "encoding_type": 0,
+  "num_key_suffix_columns": 1,
+  "max_keys_per_row": 1,
+  "key_prefix_length": 2,
+  "max_family_id": 0,
+  "family_default_columns": null,
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 3,
+        "name": "c",
+        "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 1700\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": true,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 2,
+        "name": "b",
+        "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 1,
+      "is_composite": false,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 1,
+      "name": "a",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    },
+    {
+      "column_id": 3,
+      "name": "c",
+      "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 1700\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    }
+  ]
+}
+
+index-fetch
+table: t
+index: cb2
+columns:
+  - a
+  - c
+  - d
+----
+{
+  "version": 1,
+  "table_id": 106,
+  "table_name": "t",
+  "index_id": 5,
+  "index_name": "cb2",
+  "is_secondary_index": true,
+  "is_unique_index": true,
+  "geo_config": {},
+  "encoding_type": 0,
+  "num_key_suffix_columns": 1,
+  "max_keys_per_row": 1,
+  "key_prefix_length": 2,
+  "max_family_id": 0,
+  "family_default_columns": null,
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 3,
+        "name": "c",
+        "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 1700\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": true,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 2,
+        "name": "b",
+        "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 1,
+      "name": "a",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    },
+    {
+      "column_id": 3,
+      "name": "c",
+      "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 1700\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    },
+    {
+      "column_id": 4,
+      "name": "d",
+      "type": "family: BoolFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 16\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    }
+  ]
+}
+
+
+# Tests with multiple families.
+exec
+CREATE TABLE fam (
+  a INT PRIMARY KEY,
+  b STRING,
+  c DECIMAL,
+  d BOOL,
+  e FLOAT,
+
+  INDEX b(b),
+  INDEX b2(b) STORING (d),
+  INDEX c(c),
+  INDEX c2(c) STORING (d),
+
+  FAMILY f1(a, b),
+  FAMILY f2(c),
+  FAMILY f3(d, e)
+)
+----
+
+# Primary index scan should have 3 keys per row. Also, we have default columns
+# for families 0 and 1.
+index-fetch
+table: fam
+index: fam_pkey
+columns:
+  - a
+----
+{
+  "version": 1,
+  "table_id": 107,
+  "table_name": "fam",
+  "index_id": 1,
+  "index_name": "fam_pkey",
+  "is_secondary_index": false,
+  "is_unique_index": true,
+  "geo_config": {},
+  "encoding_type": 1,
+  "num_key_suffix_columns": 0,
+  "max_keys_per_row": 3,
+  "key_prefix_length": 2,
+  "max_family_id": 2,
+  "family_default_columns": [
+    {
+      "family_id": 0,
+      "default_column_id": 2
+    },
+    {
+      "family_id": 1,
+      "default_column_id": 3
+    }
+  ],
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 1,
+      "name": "a",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    }
+  ]
+}
+
+# Index b has one key per row.
+index-fetch
+table: fam
+index: b
+columns:
+  - a
+----
+{
+  "version": 1,
+  "table_id": 107,
+  "table_name": "fam",
+  "index_id": 2,
+  "index_name": "b",
+  "is_secondary_index": true,
+  "is_unique_index": false,
+  "geo_config": {},
+  "encoding_type": 0,
+  "num_key_suffix_columns": 1,
+  "max_keys_per_row": 1,
+  "key_prefix_length": 2,
+  "max_family_id": 2,
+  "family_default_columns": [
+    {
+      "family_id": 0,
+      "default_column_id": 2
+    },
+    {
+      "family_id": 1,
+      "default_column_id": 3
+    }
+  ],
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 2,
+        "name": "b",
+        "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 1,
+      "name": "a",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    }
+  ]
+}
+
+# Index b2 spans two families.
+index-fetch
+table: fam
+index: b2
+columns:
+  - a
+----
+{
+  "version": 1,
+  "table_id": 107,
+  "table_name": "fam",
+  "index_id": 3,
+  "index_name": "b2",
+  "is_secondary_index": true,
+  "is_unique_index": false,
+  "geo_config": {},
+  "encoding_type": 0,
+  "num_key_suffix_columns": 1,
+  "max_keys_per_row": 2,
+  "key_prefix_length": 2,
+  "max_family_id": 2,
+  "family_default_columns": [
+    {
+      "family_id": 0,
+      "default_column_id": 2
+    },
+    {
+      "family_id": 1,
+      "default_column_id": 3
+    }
+  ],
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 2,
+        "name": "b",
+        "type": "family: StringFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 25\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 1,
+      "name": "a",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    }
+  ]
+}
+
+# Index c has one key per row.
+index-fetch
+table: fam
+index: c
+columns:
+  - a
+----
+{
+  "version": 1,
+  "table_id": 107,
+  "table_name": "fam",
+  "index_id": 4,
+  "index_name": "c",
+  "is_secondary_index": true,
+  "is_unique_index": false,
+  "geo_config": {},
+  "encoding_type": 0,
+  "num_key_suffix_columns": 1,
+  "max_keys_per_row": 1,
+  "key_prefix_length": 2,
+  "max_family_id": 2,
+  "family_default_columns": [
+    {
+      "family_id": 0,
+      "default_column_id": 2
+    },
+    {
+      "family_id": 1,
+      "default_column_id": 3
+    }
+  ],
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 3,
+        "name": "c",
+        "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 1700\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": true,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 1,
+      "name": "a",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    }
+  ]
+}
+
+# Index c2 has two keys per row.
+index-fetch
+table: fam
+index: c2
+columns:
+  - a
+----
+{
+  "version": 1,
+  "table_id": 107,
+  "table_name": "fam",
+  "index_id": 5,
+  "index_name": "c2",
+  "is_secondary_index": true,
+  "is_unique_index": false,
+  "geo_config": {},
+  "encoding_type": 0,
+  "num_key_suffix_columns": 1,
+  "max_keys_per_row": 2,
+  "key_prefix_length": 2,
+  "max_family_id": 2,
+  "family_default_columns": [
+    {
+      "family_id": 0,
+      "default_column_id": 2
+    },
+    {
+      "family_id": 1,
+      "default_column_id": 3
+    }
+  ],
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 3,
+        "name": "c",
+        "type": "family: DecimalFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 1700\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": true,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 1,
+        "name": "a",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 1,
+      "name": "a",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    }
+  ]
+}
+
+exec
+CREATE TABLE inv (
+   k INT PRIMARY KEY,
+   b INT,
+   j JSONB,
+   INVERTED INDEX inv(j),
+   INVERTED INDEX inv2(b, j)
+)
+----
+
+# Test that the type for the inverted column key is Bytes (and not JSON).
+index-fetch
+table: inv
+index: inv
+columns:
+ - j
+ - k
+----
+{
+  "version": 1,
+  "table_id": 108,
+  "table_name": "inv",
+  "index_id": 2,
+  "index_name": "inv",
+  "is_secondary_index": true,
+  "is_unique_index": false,
+  "geo_config": {},
+  "encoding_type": 0,
+  "num_key_suffix_columns": 1,
+  "max_keys_per_row": 1,
+  "key_prefix_length": 2,
+  "max_family_id": 0,
+  "family_default_columns": null,
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 3,
+        "name": "j",
+        "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 705\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": true
+    },
+    {
+      "column": {
+        "column_id": 1,
+        "name": "k",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 3,
+      "name": "j",
+      "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 705\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    },
+    {
+      "column_id": 1,
+      "name": "k",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    }
+  ]
+}
+
+index-fetch
+table: inv
+index: inv2
+columns:
+ - j
+ - b
+ - k
+----
+{
+  "version": 1,
+  "table_id": 108,
+  "table_name": "inv",
+  "index_id": 3,
+  "index_name": "inv2",
+  "is_secondary_index": true,
+  "is_unique_index": false,
+  "geo_config": {},
+  "encoding_type": 0,
+  "num_key_suffix_columns": 1,
+  "max_keys_per_row": 1,
+  "key_prefix_length": 2,
+  "max_family_id": 0,
+  "family_default_columns": null,
+  "key_and_suffix_columns": [
+    {
+      "column": {
+        "column_id": 2,
+        "name": "b",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    },
+    {
+      "column": {
+        "column_id": 3,
+        "name": "j",
+        "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 705\ntime_precision_is_set: false\n",
+        "is_non_nullable": false
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": true
+    },
+    {
+      "column": {
+        "column_id": 1,
+        "name": "k",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+        "is_non_nullable": true
+      },
+      "direction": 0,
+      "is_composite": false,
+      "is_inverted": false
+    }
+  ],
+  "fetched_columns": [
+    {
+      "column_id": 3,
+      "name": "j",
+      "type": "family: EncodedKeyFamily\nwidth: 0\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 705\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    },
+    {
+      "column_id": 2,
+      "name": "b",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": false
+    },
+    {
+      "column_id": 1,
+      "name": "k",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
+      "is_non_nullable": true
+    }
+  ]
+}

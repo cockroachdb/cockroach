@@ -150,7 +150,7 @@ type spanResolverIterator struct {
 	// txn is the transaction using the iterator.
 	txn *kv.Txn
 	// it is a wrapped RangeIterator.
-	it *kvcoord.RangeIterator
+	it kvcoord.RangeIterator
 	// oracle is used to choose a lease holders for ranges when one isn't present
 	// in the cache.
 	oracle replicaoracle.Oracle
@@ -170,7 +170,7 @@ var _ SpanResolverIterator = &spanResolverIterator{}
 func (sr *spanResolver) NewSpanResolverIterator(txn *kv.Txn) SpanResolverIterator {
 	return &spanResolverIterator{
 		txn:        txn,
-		it:         kvcoord.NewRangeIterator(sr.distSender),
+		it:         kvcoord.MakeRangeIterator(sr.distSender),
 		oracle:     sr.oracle,
 		queryState: replicaoracle.MakeQueryState(),
 	}
@@ -267,7 +267,8 @@ func (it *spanResolverIterator) ReplicaInfo(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
-	it.queryState.RangesPerNode[repl.NodeID]++
+	prev := it.queryState.RangesPerNode.GetDefault(int(repl.NodeID))
+	it.queryState.RangesPerNode.Set(int(repl.NodeID), prev+1)
 	it.queryState.AssignedRanges[rngID] = repl
 	return repl, nil
 }

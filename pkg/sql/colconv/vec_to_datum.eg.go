@@ -10,20 +10,28 @@
 package colconv
 
 import (
-	"math/big"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq/oid"
+)
+
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ colexecerror.StorageError
+	_ json.JSON
+	_ pgdate.Date
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ uuid.UUID
 )
 
 // VecToDatumConverter is a helper struct that converts vectors from batches to
@@ -45,7 +53,7 @@ import (
 type VecToDatumConverter struct {
 	convertedVecs    []tree.Datums
 	vecIdxsToConvert []int
-	da               rowenc.DatumAlloc
+	da               tree.DatumAlloc
 }
 
 var _ execinfra.Releasable = &VecToDatumConverter{}
@@ -239,7 +247,7 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 // selection vector. It doesn't account for the memory used by the newly
 // created tree.Datums, so it is up to the caller to do the memory accounting.
 func ColVecToDatumAndDeselect(
-	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
+	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *tree.DatumAlloc,
 ) {
 	if length == 0 {
 		return
@@ -440,10 +448,6 @@ func ColVecToDatumAndDeselect(
 						_ = true
 						v := typedCol.Get(srcIdx)
 						_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-						// Clear the Coeff so that the Set below allocates a new slice for the
-						// Coeff.abs field.
-						_converted.Coeff = big.Int{}
-						_converted.Coeff.Set(&v.Coeff)
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}
@@ -496,6 +500,32 @@ func ColVecToDatumAndDeselect(
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
 						_converted := da.NewDBytes(tree.DBytes(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
+					}
+				}
+			case types.EncodedKeyFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.Bytes()
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
+							converted[destIdx] = tree.DNull
+							continue
+						}
+						v := typedCol.Get(srcIdx)
+						// Note that there is no need for a copy since DEncodedKey uses a string
+						// as underlying storage, which will perform the copy for us.
+						_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}
@@ -824,10 +854,6 @@ func ColVecToDatumAndDeselect(
 						_ = true
 						v := typedCol.Get(srcIdx)
 						_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-						// Clear the Coeff so that the Set below allocates a new slice for the
-						// Coeff.abs field.
-						_converted.Coeff = big.Int{}
-						_converted.Coeff.Set(&v.Coeff)
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}
@@ -870,6 +896,27 @@ func ColVecToDatumAndDeselect(
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
 						_converted := da.NewDBytes(tree.DBytes(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
+					}
+				}
+			case types.EncodedKeyFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.Bytes()
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						v := typedCol.Get(srcIdx)
+						// Note that there is no need for a copy since DEncodedKey uses a string
+						// as underlying storage, which will perform the copy for us.
+						_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}
@@ -1025,7 +1072,7 @@ func ColVecToDatumAndDeselect(
 // doesn't account for the memory used by the newly created tree.Datums, so it
 // is up to the caller to do the memory accounting.
 func ColVecToDatum(
-	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
+	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *tree.DatumAlloc,
 ) {
 	if length == 0 {
 		return
@@ -1215,10 +1262,6 @@ func ColVecToDatum(
 							_ = true
 							v := typedCol.Get(srcIdx)
 							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-							// Clear the Coeff so that the Set below allocates a new slice for the
-							// Coeff.abs field.
-							_converted.Coeff = big.Int{}
-							_converted.Coeff.Set(&v.Coeff)
 							converted[destIdx] = _converted
 						}
 					}
@@ -1269,6 +1312,31 @@ func ColVecToDatum(
 							// Note that there is no need for a copy since DBytes uses a string
 							// as underlying storage, which will perform the copy for us.
 							_converted := da.NewDBytes(tree.DBytes(v))
+							converted[destIdx] = _converted
+						}
+					}
+				case types.EncodedKeyFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							if nulls.NullAt(srcIdx) {
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							v := typedCol.Get(srcIdx)
+							// Note that there is no need for a copy since DEncodedKey uses a string
+							// as underlying storage, which will perform the copy for us.
+							_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
 							converted[destIdx] = _converted
 						}
 					}
@@ -1633,10 +1701,6 @@ func ColVecToDatum(
 							//gcassert:bce
 							v := typedCol.Get(srcIdx)
 							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-							// Clear the Coeff so that the Set below allocates a new slice for the
-							// Coeff.abs field.
-							_converted.Coeff = big.Int{}
-							_converted.Coeff.Set(&v.Coeff)
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}
@@ -1689,6 +1753,31 @@ func ColVecToDatum(
 							// Note that there is no need for a copy since DBytes uses a string
 							// as underlying storage, which will perform the copy for us.
 							_converted := da.NewDBytes(tree.DBytes(v))
+							//gcassert:bce
+							converted[destIdx] = _converted
+						}
+					}
+				case types.EncodedKeyFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							if nulls.NullAt(srcIdx) {
+								//gcassert:bce
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							v := typedCol.Get(srcIdx)
+							// Note that there is no need for a copy since DEncodedKey uses a string
+							// as underlying storage, which will perform the copy for us.
+							_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}
@@ -2019,10 +2108,6 @@ func ColVecToDatum(
 							_ = true
 							v := typedCol.Get(srcIdx)
 							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-							// Clear the Coeff so that the Set below allocates a new slice for the
-							// Coeff.abs field.
-							_converted.Coeff = big.Int{}
-							_converted.Coeff.Set(&v.Coeff)
 							converted[destIdx] = _converted
 						}
 					}
@@ -2065,6 +2150,27 @@ func ColVecToDatum(
 							// Note that there is no need for a copy since DBytes uses a string
 							// as underlying storage, which will perform the copy for us.
 							_converted := da.NewDBytes(tree.DBytes(v))
+							converted[destIdx] = _converted
+						}
+					}
+				case types.EncodedKeyFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							v := typedCol.Get(srcIdx)
+							// Note that there is no need for a copy since DEncodedKey uses a string
+							// as underlying storage, which will perform the copy for us.
+							_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
 							converted[destIdx] = _converted
 						}
 					}
@@ -2365,10 +2471,6 @@ func ColVecToDatum(
 							//gcassert:bce
 							v := typedCol.Get(srcIdx)
 							_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
-							// Clear the Coeff so that the Set below allocates a new slice for the
-							// Coeff.abs field.
-							_converted.Coeff = big.Int{}
-							_converted.Coeff.Set(&v.Coeff)
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}
@@ -2411,6 +2513,26 @@ func ColVecToDatum(
 							// Note that there is no need for a copy since DBytes uses a string
 							// as underlying storage, which will perform the copy for us.
 							_converted := da.NewDBytes(tree.DBytes(v))
+							//gcassert:bce
+							converted[destIdx] = _converted
+						}
+					}
+				case types.EncodedKeyFamily:
+					switch ct.Width() {
+					case -1:
+					default:
+						typedCol := col.Bytes()
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							v := typedCol.Get(srcIdx)
+							// Note that there is no need for a copy since DEncodedKey uses a string
+							// as underlying storage, which will perform the copy for us.
+							_converted := da.NewDEncodedKey(tree.DEncodedKey(v))
 							//gcassert:bce
 							converted[destIdx] = _converted
 						}

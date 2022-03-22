@@ -23,7 +23,7 @@ func BenchmarkColSet(b *testing.B) {
 	b.Run("fastintset", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var c util.FastIntSet
-			for j := 0; j < n; j++ {
+			for j := 1; j <= n; j++ {
 				c.Add(j)
 			}
 		}
@@ -31,7 +31,7 @@ func BenchmarkColSet(b *testing.B) {
 	b.Run("colset", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			var c ColSet
-			for j := 0; j < n; j++ {
+			for j := 1; j <= n; j++ {
 				c.Add(ColumnID(j))
 			}
 		}

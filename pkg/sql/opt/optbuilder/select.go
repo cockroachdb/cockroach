@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -77,9 +78,9 @@ func (b *Builder) buildDataSource(
 		if cte := inScope.resolveCTE(tn); cte != nil {
 			locking.ignoreLockingForCTE()
 			outScope = inScope.push()
-			inCols := make(opt.ColList, len(cte.cols))
-			outCols := make(opt.ColList, len(cte.cols))
-			outScope.cols = nil
+			inCols := make(opt.ColList, len(cte.cols), len(cte.cols)+len(inScope.ordering))
+			outCols := make(opt.ColList, len(cte.cols), len(cte.cols)+len(inScope.ordering))
+			outScope.cols, outScope.extraCols = nil, nil
 			for i, col := range cte.cols {
 				id := col.ID
 				c := b.factory.Metadata().ColumnMeta(id)
@@ -114,10 +115,9 @@ func (b *Builder) buildDataSource(
 			return b.buildScan(
 				tabMeta,
 				tableOrdinals(t, columnKinds{
-					includeMutations:       false,
-					includeSystem:          true,
-					includeInverted:        false,
-					includeVirtualComputed: true,
+					includeMutations: false,
+					includeSystem:    true,
+					includeInverted:  false,
 				}),
 				indexFlags, locking, inScope,
 			)
@@ -398,10 +398,9 @@ func (b *Builder) buildScanFromTableRef(
 		ordinals = resolveNumericColumnRefs(tab, ref.Columns)
 	} else {
 		ordinals = tableOrdinals(tab, columnKinds{
-			includeMutations:       false,
-			includeSystem:          true,
-			includeInverted:        false,
-			includeVirtualComputed: true,
+			includeMutations: false,
+			includeSystem:    true,
+			includeInverted:  false,
 		})
 	}
 
@@ -511,6 +510,7 @@ func (b *Builder) buildScan(
 	if indexFlags != nil {
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
 		private.Flags.NoZigzagJoin = indexFlags.NoZigzagJoin
+		private.Flags.NoFullScan = indexFlags.NoFullScan
 		if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 			idx := -1
 			for i := 0; i < tab.IndexCount(); i++ {
@@ -519,6 +519,11 @@ func (b *Builder) buildScan(
 					idx = i
 					break
 				}
+			}
+			// Fallback to referencing @primary as the PRIMARY KEY.
+			// Note that indexes with "primary" as their name takes precedence above.
+			if idx == -1 && indexFlags.Index == tabledesc.LegacyPrimaryKeyIndexName {
+				idx = 0
 			}
 			if idx == -1 {
 				var err error
@@ -534,6 +539,45 @@ func (b *Builder) buildScan(
 			private.Flags.ForceIndex = true
 			private.Flags.Index = idx
 			private.Flags.Direction = indexFlags.Direction
+		}
+		private.Flags.ForceZigzag = indexFlags.ForceZigzag
+		if len(indexFlags.ZigzagIndexes) > 0 {
+			private.Flags.ForceZigzag = true
+			for _, name := range indexFlags.ZigzagIndexes {
+				var found bool
+				for i := 0; i < tab.IndexCount(); i++ {
+					if tab.Index(i).Name() == tree.Name(name) {
+						if private.Flags.ZigzagIndexes.Contains(i) {
+							panic(pgerror.New(pgcode.DuplicateObject, "FORCE_ZIGZAG index duplicated"))
+						}
+						private.Flags.ZigzagIndexes.Add(i)
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic(pgerror.Newf(pgcode.UndefinedObject, "index %q not found", tree.ErrString(&name)))
+				}
+			}
+		}
+		if len(indexFlags.ZigzagIndexIDs) > 0 {
+			private.Flags.ForceZigzag = true
+			for _, id := range indexFlags.ZigzagIndexIDs {
+				var found bool
+				for i := 0; i < tab.IndexCount(); i++ {
+					if tab.Index(i).ID() == cat.StableID(id) {
+						if private.Flags.ZigzagIndexes.Contains(i) {
+							panic(pgerror.New(pgcode.DuplicateObject, "FORCE_ZIGZAG index duplicated"))
+						}
+						private.Flags.ZigzagIndexes.Add(i)
+						found = true
+						break
+					}
+				}
+				if !found {
+					panic(pgerror.Newf(pgcode.UndefinedObject, "index [%d] not found", id))
+				}
+			}
 		}
 	}
 	if locking.isSet() {
@@ -551,8 +595,6 @@ func (b *Builder) buildScan(
 
 	// Add the partial indexes after constructing the scan so we can use the
 	// logical properties of the scan to fully normalize the index predicates.
-	// We don't need to add deletable partial index predicates in the context of
-	// a scan.
 	b.addPartialIndexPredicatesForTable(tabMeta, outScope.expr)
 
 	if !virtualColIDs.Empty() {
@@ -770,7 +812,7 @@ func (b *Builder) buildWithOrdinality(inScope *scope) (outScope *scope) {
 	// See https://www.cockroachlabs.com/docs/stable/query-order.html#order-preservation
 	// for the semantics around WITH ORDINALITY and ordering.
 
-	input := inScope.expr.(memo.RelExpr)
+	input := inScope.expr
 	inScope.expr = b.factory.ConstructOrdinality(input, &memo.OrdinalityPrivate{
 		Ordering: inScope.makeOrderingChoice(),
 		ColID:    col.id,
@@ -1066,7 +1108,7 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 
 	// Wrap the filter in a FiltersOp.
 	inScope.expr = b.factory.ConstructSelect(
-		inScope.expr.(memo.RelExpr),
+		inScope.expr,
 		memo.FiltersExpr{b.factory.ConstructFiltersItem(filter)},
 	)
 }
@@ -1124,8 +1166,8 @@ func (b *Builder) buildFromTablesRightDeep(
 
 	outScope.appendColumnsFromScope(tableScope)
 
-	left := outScope.expr.(memo.RelExpr)
-	right := tableScope.expr.(memo.RelExpr)
+	left := outScope.expr
+	right := tableScope.expr
 	outScope.expr = b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
 	return outScope
 }
@@ -1139,6 +1181,7 @@ func (b *Builder) exprIsLateral(t tree.TableExpr) bool {
 	}
 	// Expressions which explicitly use the LATERAL keyword are lateral.
 	if ate.Lateral {
+		telemetry.Inc(sqltelemetry.LateralJoinUseCounter)
 		return true
 	}
 	// SRFs are always lateral.
@@ -1175,8 +1218,8 @@ func (b *Builder) buildFromWithLateral(
 
 		outScope.appendColumnsFromScope(tableScope)
 
-		left := outScope.expr.(memo.RelExpr)
-		right := tableScope.expr.(memo.RelExpr)
+		left := outScope.expr
+		right := tableScope.expr
 		outScope.expr = b.factory.ConstructInnerJoinApply(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
 	}
 
@@ -1202,7 +1245,10 @@ func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
 	}
 
-	if *b.evalCtx.AsOfSystemTime != asOf {
+	// Allow anything with max_timestamp_bound to differ, as this
+	// is a retry and we expect AOST to differ.
+	if *b.evalCtx.AsOfSystemTime != asOf &&
+		b.evalCtx.AsOfSystemTime.MaxTimestampBound.IsEmpty() {
 		panic(unimplementedWithIssueDetailf(35712, "",
 			"cannot specify AS OF SYSTEM TIME with different timestamps"))
 	}

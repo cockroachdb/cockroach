@@ -22,10 +22,10 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/keysbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -48,6 +48,25 @@ const (
 	ArrayJSONType
 	ObjectJSONType
 )
+
+func (t Type) String() string {
+	switch t {
+	case NullJSONType:
+		return "null"
+	case StringJSONType:
+		return "string"
+	case NumberJSONType:
+		return "numeric"
+	case FalseJSONType, TrueJSONType:
+		return "boolean"
+	case ArrayJSONType:
+		return "array"
+	case ObjectJSONType:
+		return "object"
+	default:
+		panic(errors.AssertionFailedf("unknown JSON type %d", int(t)))
+	}
+}
 
 const (
 	wordSize          = unsafe.Sizeof(big.Word(0))
@@ -154,8 +173,12 @@ type JSON interface {
 	AsText() (*string, error)
 
 	// AsDecimal returns the JSON document as a apd.Decimal if it is a numeric
-	// type, and a boolean inidicating if this JSON document is a numeric type.
+	// type, and a boolean indicating if this JSON value is a numeric type.
 	AsDecimal() (*apd.Decimal, bool)
+
+	// AsBool returns the JSON document as a boolean if it is a boolean type,
+	// and a boolean indicating if this JSON value is a bool type.
+	AsBool() (bool, bool)
 
 	// Exists implements the `?` operator: does the string exist as a top-level
 	// key within the JSON value?
@@ -451,6 +474,14 @@ func (j jsonNumber) AsDecimal() (*apd.Decimal, bool) {
 	return &d, true
 }
 
+func (j jsonNull) AsBool() (bool, bool)   { return false, false }
+func (j jsonFalse) AsBool() (bool, bool)  { return false, true }
+func (j jsonTrue) AsBool() (bool, bool)   { return true, true }
+func (j jsonString) AsBool() (bool, bool) { return false, false }
+func (j jsonArray) AsBool() (bool, bool)  { return false, false }
+func (j jsonObject) AsBool() (bool, bool) { return false, false }
+func (j jsonNumber) AsBool() (bool, bool) { return false, false }
+
 func (j jsonNull) tryDecode() (JSON, error)   { return j, nil }
 func (j jsonFalse) tryDecode() (JSON, error)  { return j, nil }
 func (j jsonTrue) tryDecode() (JSON, error)   { return j, nil }
@@ -725,8 +756,7 @@ func (jsonFalse) Size() uintptr { return 0 }
 func (jsonTrue) Size() uintptr { return 0 }
 
 func (j jsonNumber) Size() uintptr {
-	intVal := j.Coeff
-	return decimalSize + uintptr(cap(intVal.Bits()))*wordSize
+	return j.Coeff.Size()
 }
 
 func (j jsonString) Size() uintptr {
@@ -1311,7 +1341,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 			// for JSON objects.
 			Start: inverted.EncVal(encoding.EncodeJSONObjectSpanStartAscending(prefix)),
 			// This end key is equal to jsonInvertedIndex + 1.
-			End: inverted.EncVal(roachpb.Key(prefix).PrefixEnd()),
+			End: inverted.EncVal(keysbase.PrefixEnd(prefix)),
 		}, true /* tight */))
 
 	default:

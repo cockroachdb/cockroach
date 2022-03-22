@@ -361,3 +361,35 @@ func EnvOrDefaultDuration(name string, value time.Duration) time.Duration {
 	}
 	return value
 }
+
+// TB is a slimmed down version of testing.T for use below.
+// We would like to use testutils.TB but this is not possible
+// due to a dependency cycle.
+type TB interface {
+	Fatal(args ...interface{})
+	Helper()
+}
+
+// TestSetEnv sets an environment variable and the cleanup function
+// resets it to the original value.
+func TestSetEnv(t TB, name string, value string) func() {
+	t.Helper()
+	ClearEnvCache()
+	before, exists := os.LookupEnv(name)
+
+	if err := os.Setenv(name, value); err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		if exists {
+			if err := os.Setenv(name, before); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if err := os.Unsetenv(name); err != nil {
+				t.Fatal(err)
+			}
+		}
+		ClearEnvCache()
+	}
+}

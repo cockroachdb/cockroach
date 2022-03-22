@@ -36,28 +36,41 @@ const (
 
 // BackupOptions describes options for the BACKUP execution.
 type BackupOptions struct {
-	CaptureRevisionHistory       bool
-	EncryptionPassphrase         Expr
-	Detached                     bool
-	EncryptionKMSURI             StringOrPlaceholderOptList
-	IncludeDeprecatedInterleaves bool
+	CaptureRevisionHistory bool
+	EncryptionPassphrase   Expr
+	Detached               bool
+	EncryptionKMSURI       StringOrPlaceholderOptList
+	IncrementalStorage     StringOrPlaceholderOptList
 }
 
 var _ NodeFormatter = &BackupOptions{}
 
 // Backup represents a BACKUP statement.
 type Backup struct {
-	Targets         *TargetList
-	To              StringOrPlaceholderOptList
+	Targets *TargetList
+
+	// To is set to the root directory of the backup (called the <destination> in
+	// the docs).
+	To StringOrPlaceholderOptList
+
+	// IncrementalFrom is only set for the old 'BACKUP .... TO ...' syntax.
 	IncrementalFrom Exprs
-	AsOf            AsOfClause
-	Options         BackupOptions
-	Nested          bool
-	AppendToLatest  bool
-	// Subdir may be set by the parser when the SQL query is of the form
-	// `BACKUP INTO 'subdir' IN...`. Alternatively, if Nested is true but a subdir
-	// was not explicitly specified by the user, then this will be set during
-	// BACKUP planning once the destination has been resolved.
+
+	AsOf    AsOfClause
+	Options BackupOptions
+
+	// Nested is set to true when the user creates a backup with
+	//`BACKUP ... INTO... ` syntax.
+	Nested bool
+
+	// AppendToLatest is set to true if the user creates a backup with
+	//`BACKUP...INTO LATEST...`
+	AppendToLatest bool
+
+	// Subdir may be set by the parser when the SQL query is of the form `BACKUP
+	// INTO 'subdir' IN...`. Alternatively, if Nested is true but a subdir was not
+	// explicitly specified by the user, then this will be set during BACKUP
+	// planning once the destination has been resolved.
 	Subdir Expr
 }
 
@@ -116,18 +129,36 @@ type RestoreOptions struct {
 	SkipMissingViews          bool
 	Detached                  bool
 	SkipLocalitiesCheck       bool
+	DebugPauseOn              Expr
+	NewDBName                 Expr
+	IncrementalStorage        StringOrPlaceholderOptList
+	AsTenant                  Expr
 }
 
 var _ NodeFormatter = &RestoreOptions{}
 
 // Restore represents a RESTORE statement.
 type Restore struct {
-	Targets            TargetList
+	Targets TargetList
+	// Whether this is the RESTORE SYSTEM USERS variant of RESTORE statement.
+	SystemUsers        bool
 	DescriptorCoverage DescriptorCoverage
-	From               []StringOrPlaceholderOptList
-	AsOf               AsOfClause
-	Options            RestoreOptions
-	Subdir             Expr
+
+	// From contains the URIs for the backup(s) we seek to restore.
+	//   - len(From)>1 implies the user explicitly passed incremental backup paths,
+	//     which is only allowed using the old syntax, `RESTORE <targets> FROM <destination>.
+	//     In this case, From[0] contains the URI(s) for the full backup.
+	//   - len(From)==1 implies we'll have to look for incremental backups in planning
+	//   - len(From[0]) > 1 implies the backups are locality aware
+	//   - From[i][0] must be the default locality.
+	From    []StringOrPlaceholderOptList
+	AsOf    AsOfClause
+	Options RestoreOptions
+
+	// Subdir may be set by the parser when the SQL query is of the form `RESTORE
+	// ... FROM 'from' IN 'subdir'...`. Alternatively, restore_planning.go will set
+	// it for the query `RESTORE ... FROM 'from' IN LATEST...`
+	Subdir Expr
 }
 
 var _ Statement = &Restore{}
@@ -237,9 +268,10 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&o.EncryptionKMSURI)
 	}
 
-	if o.IncludeDeprecatedInterleaves {
+	if o.IncrementalStorage != nil {
 		maybeAddSep()
-		ctx.WriteString("include_deprecated_interleaves")
+		ctx.WriteString("incremental_location = ")
+		ctx.FormatNode(&o.IncrementalStorage)
 	}
 }
 
@@ -274,12 +306,10 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("kms specified multiple times")
 	}
 
-	if o.IncludeDeprecatedInterleaves {
-		if other.IncludeDeprecatedInterleaves {
-			return errors.New("include_deprecated_interleaves option specified multiple times")
-		}
-	} else {
-		o.IncludeDeprecatedInterleaves = other.IncludeDeprecatedInterleaves
+	if o.IncrementalStorage == nil {
+		o.IncrementalStorage = other.IncrementalStorage
+	} else if other.IncrementalStorage != nil {
+		return errors.New("incremental_location option specified multiple times")
 	}
 
 	return nil
@@ -290,7 +320,8 @@ func (o BackupOptions) IsDefault() bool {
 	options := BackupOptions{}
 	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
 		o.Detached == options.Detached && cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
-		o.EncryptionPassphrase == options.EncryptionPassphrase
+		o.EncryptionPassphrase == options.EncryptionPassphrase &&
+		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage)
 }
 
 // Format implements the NodeFormatter interface.
@@ -318,6 +349,12 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("into_db = ")
 		ctx.FormatNode(o.IntoDB)
+	}
+
+	if o.DebugPauseOn != nil {
+		maybeAddSep()
+		ctx.WriteString("debug_pause_on = ")
+		ctx.FormatNode(o.DebugPauseOn)
 	}
 
 	if o.SkipMissingFKs {
@@ -348,6 +385,24 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	if o.SkipLocalitiesCheck {
 		maybeAddSep()
 		ctx.WriteString("skip_localities_check")
+	}
+
+	if o.NewDBName != nil {
+		maybeAddSep()
+		ctx.WriteString("new_db_name = ")
+		ctx.FormatNode(o.NewDBName)
+	}
+
+	if o.IncrementalStorage != nil {
+		maybeAddSep()
+		ctx.WriteString("incremental_location = ")
+		ctx.FormatNode(&o.IncrementalStorage)
+	}
+
+	if o.AsTenant != nil {
+		maybeAddSep()
+		ctx.WriteString("tenant = ")
+		ctx.FormatNode(o.AsTenant)
 	}
 }
 
@@ -420,6 +475,30 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.SkipLocalitiesCheck = other.SkipLocalitiesCheck
 	}
 
+	if o.DebugPauseOn == nil {
+		o.DebugPauseOn = other.DebugPauseOn
+	} else if other.DebugPauseOn != nil {
+		return errors.New("debug_pause_on specified multiple times")
+	}
+
+	if o.NewDBName == nil {
+		o.NewDBName = other.NewDBName
+	} else if other.NewDBName != nil {
+		return errors.New("new_db_name specified multiple times")
+	}
+
+	if o.IncrementalStorage == nil {
+		o.IncrementalStorage = other.IncrementalStorage
+	} else if other.IncrementalStorage != nil {
+		return errors.New("incremental_location option specified multiple times")
+	}
+
+	if o.AsTenant == nil {
+		o.AsTenant = other.AsTenant
+	} else if other.AsTenant != nil {
+		return errors.New("tenant option specified multiple times")
+	}
+
 	return nil
 }
 
@@ -434,5 +513,9 @@ func (o RestoreOptions) IsDefault() bool {
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.IntoDB == options.IntoDB &&
 		o.Detached == options.Detached &&
-		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck
+		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
+		o.DebugPauseOn == options.DebugPauseOn &&
+		o.NewDBName == options.NewDBName &&
+		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
+		o.AsTenant == options.AsTenant
 }

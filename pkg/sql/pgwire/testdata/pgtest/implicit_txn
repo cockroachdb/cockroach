@@ -1,0 +1,78 @@
+# Prepare a statement that will start an explicit transaction.
+send
+Parse {"Name": "begin_stmt", "Query": "BEGIN"}
+Sync
+----
+
+# At this point, TxStatus is still "idle" since the BEGIN was not
+# executed yet.
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Executing should start the explicit transaction.
+send
+Bind {"DestinationPortal": "p1", "PreparedStatement": "begin_stmt"}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Preparing another BEGIN is allowed.
+send
+Parse {"Name": "another_begin_stmt", "Query": "BEGIN"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# But we can't execute the other BEGIN.
+send
+Bind {"DestinationPortal": "p2", "PreparedStatement": "another_begin_stmt"}
+Execute {"Portal": "p2"}
+Sync
+----
+
+# Postgres allows BEGIN inside an explicit transaction, but shows a warning.
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Severity":"WARNING","SeverityUnlocalized":"WARNING","Code":"25001","Message":"there is already a transaction in progress","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"xact.c","Line":3689,"Routine":"BeginTransactionBlock","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+until crdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"XXUUU"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Parse {"Name": "rollback_stmt", "Query": "ROLLBACK"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "rollback_stmt"}
+Execute {"Portal": "p3"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

@@ -16,11 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -149,18 +148,9 @@ func GenerateInsertRow(
 
 	// Verify the column constraints.
 	//
-	// We would really like to use enforceLocalColumnConstraints() here,
-	// but this is not possible because of some brain damage in the
-	// Insert() constructor, which causes insertCols to contain
-	// duplicate columns descriptors: computed columns are listed twice,
-	// one will receive a NULL value and one will receive a comptued
-	// value during execution. It "works out in the end" because the
-	// latter (non-NULL) value overwrites the earlier, but
-	// enforceLocalColumnConstraints() does not know how to reason about
-	// this.
-	//
-	// In the end it does not matter much, this code is going away in
-	// favor of the (simpler, correct) code in the CBO.
+	// During mutations (INSERT, UPDATE, UPSERT), this is checked by
+	// sql.enforceLocalColumnConstraints. These checks are required for IMPORT
+	// statements.
 
 	// Check to see if NULL is being inserted into any non-nullable column.
 	for _, col := range tableDesc.WritableColumns() {
@@ -265,6 +255,10 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 
 	var seqNameToMetadata map[string]*SequenceMetadata
 	var seqIDToMetadata map[descpb.ID]*SequenceMetadata
+	// TODO(postamar): give the tree.EvalContext a useful interface
+	// instead of cobbling a descs.Collection in this way.
+	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
+	descsCol := cf.MakeCollection(evalCtx.Context, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
 	err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)
@@ -272,22 +266,16 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 			return err
 		}
 		for seqID := range sequenceIDs {
-			seqDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, evalCtx.Codec, seqID)
+			seqDesc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, seqID)
 			if err != nil {
 				return err
 			}
-
-			seqOpts := seqDesc.GetSequenceOpts()
-			if seqOpts == nil {
-				return errors.Newf("descriptor %s is not a sequence", seqDesc.GetName())
+			if seqDesc.GetSequenceOpts() == nil {
+				return errors.Errorf("relation %q (%d) is not a sequence", seqDesc.GetName(), seqDesc.GetID())
 			}
-
-			seqMetadata := &SequenceMetadata{
-				id:      seqID,
-				seqDesc: seqDesc,
-			}
+			seqMetadata := &SequenceMetadata{seqDesc: seqDesc}
 			seqNameToMetadata[seqDesc.GetName()] = seqMetadata
-			seqIDToMetadata[seqDesc.GetID()] = seqMetadata
+			seqIDToMetadata[seqID] = seqMetadata
 		}
 		return nil
 	})
@@ -297,11 +285,13 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
 	ctx context.Context,
+	baseSemaCtx *tree.SemaContext,
 	tableDesc catalog.TableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,
 	seqChunkProvider *SeqChunkProvider,
+	metrics *Metrics,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,
@@ -330,12 +320,15 @@ func NewDatumRowConverter(
 	}
 
 	var txCtx transform.ExprTransformContext
-	semaCtx := tree.MakeSemaContext()
 	relevantColumns := func(col catalog.Column) bool {
 		return col.HasDefault() || col.IsComputed()
 	}
+
+	// We take a copy of the baseSemaCtx since this method is called by the parallel
+	// import workers.
+	semaCtxCopy := *baseSemaCtx
 	cols := schemaexpr.ProcessColumnSet(targetCols, tableDesc, relevantColumns)
-	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
+	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtxCopy)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default and computed columns")
 	}
@@ -346,7 +339,10 @@ func NewDatumRowConverter(
 		evalCtx.Codec,
 		tableDesc,
 		cols,
-		&rowenc.DatumAlloc{},
+		&tree.DatumAlloc{},
+		&evalCtx.Settings.SV,
+		evalCtx.SessionData().Internal,
+		metrics,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")
@@ -441,7 +437,7 @@ func NewDatumRowConverter(
 		c.tableDesc,
 		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
 		c.EvalCtx,
-		&semaCtx)
+		&semaCtxCopy)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
 	}

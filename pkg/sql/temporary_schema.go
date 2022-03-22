@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -50,8 +50,18 @@ import (
 // TempObjectCleanupInterval is a ClusterSetting controlling how often
 // temporary objects get cleaned up.
 var TempObjectCleanupInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.temp_object_cleaner.cleanup_interval",
 	"how often to clean up orphaned temporary objects",
+	30*time.Minute,
+).WithPublic()
+
+// TempObjectWaitInterval is a ClusterSetting controlling how long
+// after a creation a temporary object will be cleaned up.
+var TempObjectWaitInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.temp_object_cleaner.wait_interval",
+	"how long after creation a temporary object will be cleaned up",
 	30*time.Minute,
 ).WithPublic()
 
@@ -103,15 +113,17 @@ func (p *planner) getOrCreateTemporarySchema(
 	sKey := catalogkeys.NewNameKeyComponents(db.GetID(), keys.RootNamespaceID, tempSchemaName)
 
 	// The temporary schema has not been created yet.
-	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+	id, err := descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
 		return nil, err
 	}
 	if err := p.CreateSchemaNamespaceEntry(ctx, catalogkeys.EncodeNameKey(p.ExecCfg().Codec, sKey), id); err != nil {
 		return nil, err
 	}
-	p.sessionDataMutator.SetTemporarySchemaName(sKey.GetName())
-	p.sessionDataMutator.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
+	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+		m.SetTemporarySchemaName(sKey.GetName())
+		m.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
+	})
 	return p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), id, p.CommonLookupFlags(true))
 }
 
@@ -172,11 +184,11 @@ func cleanupSessionTempObjects(
 	return cf.Txn(ctx, ie, db, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
-		dbIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, codec)
+		allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
 		if err != nil {
 			return err
 		}
-		for _, id := range dbIDs {
+		for _, dbDesc := range allDbDescs {
 			if err := cleanupSchemaObjects(
 				ctx,
 				settings,
@@ -184,7 +196,7 @@ func cleanupSessionTempObjects(
 				descsCol,
 				codec,
 				ie,
-				id,
+				dbDesc,
 				tempSchemaName,
 			); err != nil {
 				return err
@@ -193,7 +205,7 @@ func cleanupSessionTempObjects(
 			// itself may still exist (eg. a temporary table was created and then
 			// dropped). So we remove the namespace table entry of the temporary
 			// schema.
-			key := catalogkeys.MakeSchemaNameKey(codec, id, tempSchemaName)
+			key := catalogkeys.MakeSchemaNameKey(codec, dbDesc.GetID(), tempSchemaName)
 			if err := txn.Del(ctx, key); err != nil {
 				return err
 			}
@@ -203,6 +215,12 @@ func cleanupSessionTempObjects(
 }
 
 // cleanupSchemaObjects removes all objects that is located within a dbID and schema.
+//
+// TODO(postamar): properly use descsCol
+// We're currently unable to leverage descsCol properly because we run DROP
+// statements in the transaction which cause descsCol's cached state to become
+// invalid. We should either drop all objects programmatically via descsCol's
+// API or avoid it entirely.
 func cleanupSchemaObjects(
 	ctx context.Context,
 	settings *cluster.Settings,
@@ -210,14 +228,10 @@ func cleanupSchemaObjects(
 	descsCol *descs.Collection,
 	codec keys.SQLCodec,
 	ie sqlutil.InternalExecutor,
-	dbID descpb.ID,
+	dbDesc catalog.DatabaseDescriptor,
 	schemaName string,
 ) error {
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dbID)
-	if err != nil {
-		return err
-	}
-	tbNames, _, err := descsCol.GetObjectNamesAndIDs(
+	tbNames, tbIDs, err := descsCol.GetObjectNamesAndIDs(
 		ctx,
 		txn,
 		dbDesc,
@@ -240,10 +254,8 @@ func cleanupSchemaObjects(
 
 	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor, len(tbNames))
 	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
-	for _, tbName := range tbNames {
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidCached = true
-		_, desc, err := descsCol.GetImmutableTableByName(ctx, txn, &tbName, flags)
+	for i, tbName := range tbNames {
+		desc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, tbIDs[i])
 		if err != nil {
 			return err
 		}
@@ -253,11 +265,16 @@ func cleanupSchemaObjects(
 
 		databaseIDToTempSchemaID[uint32(desc.GetParentID())] = uint32(desc.GetParentSchemaID())
 
-		if desc.GetSequenceOpts() != nil {
+		// If a sequence is owned by a table column, it is dropped when the owner
+		// table/column is dropped. So here we want to only drop sequences not
+		// owned.
+		if desc.IsSequence() &&
+			desc.GetSequenceOpts().SequenceOwner.OwnerColumnID == 0 &&
+			desc.GetSequenceOpts().SequenceOwner.OwnerTableID == 0 {
 			sequences = append(sequences, desc.GetID())
 		} else if desc.GetViewQuery() != "" {
 			views = append(views, desc.GetID())
-		} else {
+		} else if !desc.IsSequence() {
 			tables = append(tables, desc.GetID())
 		}
 	}
@@ -296,12 +313,11 @@ func cleanupSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
-					// TODO (lucy): Use the descriptor collection to get descriptors here.
-					dTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, d.ID)
+					dTableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, d.ID)
 					if err != nil {
 						return err
 					}
-					db, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dTableDesc.GetParentID())
+					db, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, dTableDesc.GetParentID())
 					if err != nil {
 						return err
 					}
@@ -309,8 +325,9 @@ func cleanupSchemaObjects(
 						ctx,
 						txn,
 						codec,
-						dTableDesc.GetParentID(),
+						db,
 						dTableDesc.GetParentSchemaID(),
+						settings.Version,
 					)
 					if err != nil {
 						return err
@@ -474,15 +491,22 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		)
 	}
 
-	// We only want to perform the cleanup if we are holding the meta1 lease.
-	// This ensures only one server can perform the job at a time.
-	isLeaseholder, err := c.isMeta1LeaseholderFunc(ctx, c.db.Clock().NowAsClockTimestamp())
-	if err != nil {
-		return err
-	}
-	if !isLeaseholder {
-		log.Infof(ctx, "skipping temporary object cleanup run as it is not the leaseholder")
-		return nil
+	// For tenants, we will completely skip this logic since listing
+	// sessions will fan out to all pods in the tenant case. So, there
+	// is no harm in executing this logic without any type of coordination.
+	if c.codec.ForSystemTenant() {
+		// We only want to perform the cleanup if we are holding the meta1 lease.
+		// This ensures only one server can perform the job at a time.
+		isLeaseHolder, err := c.isMeta1LeaseholderFunc(ctx, c.db.Clock().NowAsClockTimestamp())
+		if err != nil {
+			return err
+		}
+		// For the system tenant we will check if the lease is held. For tenants
+		// every single POD will try to execute this clean up logic.
+		if !isLeaseHolder {
+			log.Infof(ctx, "skipping temporary object cleanup run as it is not the leaseholder")
+			return nil
+		}
 	}
 
 	c.metrics.ActiveCleaners.Inc(1)
@@ -492,32 +516,40 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	// TODO(sumeer): this is not using NewTxnWithSteppingEnabled and so won't be
 	// classified as FROM_SQL for purposes of admission control. Fix.
 	txn := kv.NewTxn(ctx, c.db, 0)
-
-	// Build a set of all session IDs with temporary objects.
-	var dbIDs []descpb.ID
+	// Only see temporary schemas after some delay as safety
+	// mechanism.
+	waitTimeForCreation := TempObjectWaitInterval.Get(&c.settings.SV)
+	// Build a set of all databases with temporary objects.
+	var allDbDescs []catalog.DatabaseDescriptor
+	descsCol := c.collectionFactory.NewCollection(ctx, nil /* TemporarySchemaProvider */)
 	if err := retryFunc(ctx, func() error {
 		var err error
-		dbIDs, err = catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, c.codec)
+		allDbDescs, err = descsCol.GetAllDatabaseDescriptors(ctx, txn)
 		return err
 	}); err != nil {
 		return err
 	}
 
 	sessionIDs := make(map[ClusterWideID]struct{})
-	for _, dbID := range dbIDs {
-		var schemaNames map[descpb.ID]string
+	for _, dbDesc := range allDbDescs {
+		var schemaEntries map[descpb.ID]resolver.SchemaEntryForDB
 		if err := retryFunc(ctx, func() error {
 			var err error
-			schemaNames, err = resolver.GetForDatabase(ctx, txn, c.codec, dbID)
+			schemaEntries, err = resolver.GetForDatabase(ctx, txn, c.codec, dbDesc)
 			return err
 		}); err != nil {
 			return err
 		}
-		for _, scName := range schemaNames {
-			isTempSchema, sessionID, err := temporarySchemaSessionID(scName)
+		for _, scEntry := range schemaEntries {
+			// Skip over any temporary objects that are not old enough,
+			// we intentionally use a delay to avoid problems.
+			if !scEntry.Timestamp.Less(txn.ReadTimestamp().Add(-waitTimeForCreation.Nanoseconds(), 0)) {
+				continue
+			}
+			isTempSchema, sessionID, err := temporarySchemaSessionID(scEntry.Name)
 			if err != nil {
 				// This should not cause an error.
-				log.Warningf(ctx, "could not parse %q as temporary schema name", scName)
+				log.Warningf(ctx, "could not parse %q as temporary schema name", scEntry)
 				continue
 			}
 			if isTempSchema {
@@ -540,6 +572,10 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 			ctx,
 			&serverpb.ListSessionsRequest{},
 		)
+		if response != nil && len(response.Errors) > 0 &&
+			err == nil {
+			return errors.Newf("fan out rpc failed with %s on node %d", response.Errors[0].Message, response.Errors[0].NodeID)
+		}
 		return err
 	}); err != nil {
 		return err

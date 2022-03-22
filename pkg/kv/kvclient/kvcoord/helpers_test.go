@@ -26,3 +26,32 @@ func (s *condensableSpanSet) asSortedSlice() []roachpb.Span {
 	sort.Sort(cpy)
 	return cpy
 }
+
+// TestingSenderConcurrencyLimit exports the cluster setting for testing
+// purposes.
+var TestingSenderConcurrencyLimit = senderConcurrencyLimit
+
+// TestingGetLockFootprint returns the internal lock footprint for testing
+// purposes.
+func (tc *TxnCoordSender) TestingGetLockFootprint(mergeAndSort bool) []roachpb.Span {
+	if mergeAndSort {
+		tc.interceptorAlloc.txnPipeliner.lockFootprint.mergeAndSort()
+	}
+	return tc.interceptorAlloc.txnPipeliner.lockFootprint.asSlice()
+}
+
+// TestingGetRefreshFootprint returns the internal refresh footprint for testing
+// purposes.
+func (tc *TxnCoordSender) TestingGetRefreshFootprint() []roachpb.Span {
+	return tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.asSlice()
+}
+
+// TestingSetLinearizable allows tests to enable linearizable behavior.
+func (tcf *TxnCoordSenderFactory) TestingSetLinearizable(linearizable bool) {
+	tcf.linearizable = linearizable
+}
+
+// TestingSetMetrics allows tests to override the factory's metrics struct.
+func (tcf *TxnCoordSenderFactory) TestingSetMetrics(metrics TxnMetrics) {
+	tcf.metrics = metrics
+}

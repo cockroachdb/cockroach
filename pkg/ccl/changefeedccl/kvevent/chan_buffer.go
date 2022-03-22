@@ -8,19 +8,13 @@
 
 package kvevent
 
-import (
-	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-)
+import "context"
 
 // chanBuffer mediates between the changed data KVFeed and the rest of the
 // changefeed pipeline (which is backpressured all the way to the sink).
 type chanBuffer struct {
-	entriesCh chan Event
+	entriesCh    chan Event
+	closedReason error
 }
 
 // MakeChanBuffer returns an Buffer backed by an unbuffered channel.
@@ -32,35 +26,27 @@ func MakeChanBuffer() Buffer {
 	return &chanBuffer{entriesCh: make(chan Event)}
 }
 
-// AddKV inserts a changed KV into the buffer. Individual keys must be added in
-// increasing mvcc order.
-func (b *chanBuffer) AddKV(
-	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
-) error {
-	return b.addEvent(ctx, makeKVEvent(kv, prevVal, backfillTimestamp))
-}
-
-// AddResolved inserts a Resolved timestamp notification in the buffer.
-func (b *chanBuffer) AddResolved(
-	ctx context.Context,
-	span roachpb.Span,
-	ts hlc.Timestamp,
-	boundaryType jobspb.ResolvedSpan_BoundaryType,
-) error {
-	return b.addEvent(ctx, makeResolvedEvent(span, ts, boundaryType))
-}
-
-func (b *chanBuffer) Close(_ context.Context) {
-	close(b.entriesCh)
-}
-
-func (b *chanBuffer) addEvent(ctx context.Context, e Event) error {
+// Add implements Writer interface.
+func (b *chanBuffer) Add(ctx context.Context, event Event) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case b.entriesCh <- e:
+	case b.entriesCh <- event:
 		return nil
 	}
+}
+
+// Drain implements Writer interface.
+func (b *chanBuffer) Drain(ctx context.Context) error {
+	// channel buffer is unbuffered.
+	return nil
+}
+
+// CloseWithReason implements Writer interface.
+func (b *chanBuffer) CloseWithReason(_ context.Context, reason error) error {
+	b.closedReason = reason
+	close(b.entriesCh)
+	return nil
 }
 
 // Get returns an entry from the buffer. They are handed out in an order that
@@ -69,8 +55,12 @@ func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
 	select {
 	case <-ctx.Done():
 		return Event{}, ctx.Err()
-	case e := <-b.entriesCh:
-		e.bufferGetTimestamp = timeutil.Now()
+	case e, ok := <-b.entriesCh:
+		if !ok {
+			// Our channel has been closed by the
+			// Writer. No more events will be returned.
+			return e, ErrBufferClosed{reason: b.closedReason}
+		}
 		return e, nil
 	}
 }

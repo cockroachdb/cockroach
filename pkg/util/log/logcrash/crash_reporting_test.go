@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -45,7 +44,10 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 	var errWrapped1 = errors.Wrap(errFundamental, "this is reportable")
 	var errWrapped2 = errors.Wrapf(errWrapped1, "this is reportable too")
 	var errWrapped3 = errors.Wrap(errWrapped2, "this is reportable as well")
-	var errFormatted = errors.Newf("this embed an error: %v", errWrapped2)
+	// NB: the nolint:errwrap directive does not work here because the lines
+	// of this file are renumbered above.
+	const format = "this embed an error: %v"
+	var errFormatted = errors.Newf(format, errWrapped2)
 	var errWrappedSentinel = errors.Wrap(
 		errors.Wrapf(errSentinel,
 			"this is reportable"),
@@ -128,7 +130,7 @@ Wraps: (2) interface conversion: interface {} is nil, not int
 Error types: (1) *safedetails.withSafeDetails (2) *runtime.TypeAssertionError`,
 		},
 		{
-			err: errors.Newf("I like %s and my pin code is %v or %v", log.Safe("A"), "1234", log.Safe("9999")),
+			err: errors.Newf("I like %s and my pin code is %v or %v", redact.Safe("A"), "1234", redact.Safe("9999")),
 			expErr: `I like A and my pin code is ` + rm + ` or 9999
 (1) attached stack trace
   -- stack trace:
@@ -148,7 +150,7 @@ Wraps: (2) I like A and my pin code is ` + rm + ` or 9999
 Error types: (1) *withstack.withStack (2) *errutil.leafError`,
 		},
 		{
-			err: errors.Wrapf(context.Canceled, "this is preserved: %d", log.Safe(6)),
+			err: errors.Wrapf(context.Canceled, "this is preserved: %d", redact.Safe(6)),
 			expErr: `this is preserved: 6: context canceled
 (1) attached stack trace
   -- stack trace:

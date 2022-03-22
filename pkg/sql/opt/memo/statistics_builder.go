@@ -15,16 +15,86 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var statsAnnID = opt.NewTableAnnID()
+
+const (
+	// This is the value used for inequality filters such as x < 1 in
+	// "Access Path Selection in a Relational Database Management System"
+	// by Pat Selinger et al.
+	unknownFilterSelectivity = 1.0 / 3.0
+
+	// TODO(rytaft): Add other selectivities for other types of predicates.
+
+	// This is an arbitrary row count used in the absence of any real statistics.
+	unknownRowCount = 1000
+
+	// UnknownDistinctCountRatio is the ratio of distinct column values to number
+	// of rows, which is used in the absence of any real statistics for non-key
+	// columns.  TODO(rytaft): See if there is an industry standard value for
+	// this.
+	UnknownDistinctCountRatio = 0.1
+
+	// UnknownNullCountRatio is the ratio of null column values to number of rows
+	// for nullable columns, which is used in the absence of any real statistics.
+	UnknownNullCountRatio = 0.01
+
+	// UnknownAvgRowSize is the average size of a row in bytes, which is used in
+	// the absence of any real statistics.
+	UnknownAvgRowSize = 8
+
+	// Use a small row count for generator functions; this allows use of lookup
+	// join in cases like using json_array_elements with a small constant array.
+	unknownGeneratorRowCount = 10
+
+	// Since the generator row count is so small, we need a larger distinct count
+	// ratio for generator functions.
+	unknownGeneratorDistinctCountRatio = 0.7
+
+	// When subtracting floating point numbers, avoid precision errors by making
+	// sure the result is greater than or equal to epsilon.
+	epsilon = 1e-10
+
+	// This is the minimum cardinality an expression should have in order to make
+	// it worth adding the overhead of using a histogram.
+	minCardinalityForHistogram = 100
+
+	// This is the default selectivity estimated for inverted joins until we can
+	// get better statistics on inverted indexes.
+	unknownInvertedJoinSelectivity = 1.0 / 100.0
+
+	// multiColWeight is the weight to assign the selectivity calculation using
+	// multi-column statistics versus the calculation using single-column
+	// statistics. See the comment above selectivityFromMultiColDistinctCounts for
+	// details.
+	multiColWeight = 9.0 / 10.0
+
+	// defaultColSize is the default size of a column in bytes. This is used when
+	// the table statistics have an avgSize of 0 for a given column and not all
+	// columns are NULL.
+	defaultColSize = 4.0
+
+	// maxValuesForFullHistogramFromCheckConstraint is the maximum number of
+	// values from the spans a check constraint is allowed to have in order to build
+	// a histogram from it.
+	maxValuesForFullHistogramFromCheckConstraint = tabledesc.MaxBucketAllowed
+)
 
 // statisticsBuilder is responsible for building the statistics that are
 // used by the coster to estimate the cost of expressions.
@@ -322,14 +392,14 @@ func (sb *statisticsBuilder) colStatFromInput(
 		return &props.ColumnStatistic{Cols: colSet, DistinctCount: 1}, sb.statsFromChild(e, 0 /* childIdx */)
 	}
 
-	panic(errors.AssertionFailedf("unsupported operator type %s", log.Safe(e.Op())))
+	panic(errors.AssertionFailedf("unsupported operator type %s", redact.Safe(e.Op())))
 }
 
 // colStat gets a column statistic for the given set of columns if it exists.
-// If the column statistic is not available in the current expression, colStat
-// recursively tries to find it in the children of the expression, lazily
-// populating s.ColStats with the statistic as it gets passed up the expression
-// tree.
+// If the column statistic is not available in the current expression,
+// colStat recursively tries to find it in the children of the expression,
+// lazily populating s.ColStats with the statistic as it gets passed up the
+// expression tree.
 func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.ColumnStatistic {
 	if colSet.Empty() {
 		panic(errors.AssertionFailedf("column statistics cannot be determined for empty column set"))
@@ -340,7 +410,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return stat
 	}
 
-	// We only calculate statistics on the normalized expression in a memo group.
+	// Only calculate statistics on the normalized expression in a memo group.
 	e = e.FirstExpr()
 
 	// The statistic was not found in the cache, so calculate it based on the
@@ -417,7 +487,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return sb.colStatLeaf(colSet, &rel.Stats, &rel.FuncDeps, rel.NotNullCols)
 	}
 
-	panic(errors.AssertionFailedf("unrecognized relational expression type: %v", log.Safe(e.Op())))
+	panic(errors.AssertionFailedf("unrecognized relational expression type: %v", redact.Safe(e.Op())))
 }
 
 // colStatLeaf creates a column statistic for a given column set (if it doesn't
@@ -433,6 +503,12 @@ func (sb *statisticsBuilder) colStatLeaf(
 		// Already in the cache.
 		return colStat
 	}
+	// Build single-column stats from non-null check constraints, if they exist.
+	if colSet.Len() == 1 {
+		if ok := sb.buildStatsFromCheckConstraints(colStat, s); ok {
+			return colStat
+		}
+	}
 
 	// If some of the columns are a lax key, the distinct count equals the row
 	// count. The null count is 0 if any of these columns are not nullable,
@@ -445,7 +521,7 @@ func (sb *statisticsBuilder) colStatLeaf(
 			if nullableCols.Equals(colSet) {
 				// No column statistics on this colSet - use the unknown
 				// null count ratio.
-				colStat.NullCount = s.RowCount * unknownNullCountRatio
+				colStat.NullCount = s.RowCount * UnknownNullCountRatio
 			} else {
 				colStatLeaf := sb.colStatLeaf(nullableCols, s, fd, notNullCols)
 				// Fetch the colStat again since it may now have a different address.
@@ -455,13 +531,33 @@ func (sb *statisticsBuilder) colStatLeaf(
 		}
 		// Only one of the null values counts towards the distinct count.
 		colStat.DistinctCount = s.RowCount - max(colStat.NullCount-1, 0)
+
+		if colSet.Len() == 1 {
+			// If there was only one key in the column set, and it wasn't found in the
+			// cache above, then we don't have statistics on this column so we use the
+			// default size.
+			// TODO(harding): Base the AvgSize on the type of the column.
+			colStat.AvgSize = defaultColSize
+		} else {
+			// Compute the average column size by adding the size of each member of
+			// the lax key together.
+			avgSize := 0.0
+			colSet.ForEach(func(i opt.ColumnID) {
+				colStatLeaf := sb.colStatLeaf(opt.MakeColSet(i), s, fd, notNullCols)
+				avgSize += colStatLeaf.AvgSize
+			})
+			colStat.AvgSize = avgSize
+		}
 		return colStat
 	}
 
 	if colSet.Len() == 1 {
+		// There is only one column, and it was not found in the cache above, so we
+		// do not have statistics available for it.
 		col, _ := colSet.Next(0)
-		colStat.DistinctCount = unknownDistinctCountRatio * s.RowCount
-		colStat.NullCount = unknownNullCountRatio * s.RowCount
+		colStat.DistinctCount = UnknownDistinctCountRatio * s.RowCount
+		colStat.NullCount = UnknownNullCountRatio * s.RowCount
+		colStat.AvgSize = defaultColSize
 		if notNullCols.Contains(col) {
 			colStat.NullCount = 0
 		}
@@ -478,17 +574,21 @@ func (sb *statisticsBuilder) colStatLeaf(
 	} else {
 		distinctCount := 1.0
 		nullCount := s.RowCount
+		avgSize := 0.0
 		colSet.ForEach(func(i opt.ColumnID) {
 			colStatLeaf := sb.colStatLeaf(opt.MakeColSet(i), s, fd, notNullCols)
 			distinctCount *= colStatLeaf.DistinctCount
 			// Multiply by the expected chance of collisions with nulls already
 			// collected.
 			nullCount *= colStatLeaf.NullCount / s.RowCount
+			// Add the average size of the columns together.
+			avgSize += colStatLeaf.AvgSize
 		})
 		// Fetch the colStat again since it may now have a different address.
 		colStat, _ = s.ColStats.Lookup(colSet)
 		colStat.DistinctCount = min(distinctCount, s.RowCount)
 		colStat.NullCount = min(nullCount, s.RowCount)
+		colStat.AvgSize = avgSize
 	}
 
 	return colStat
@@ -510,7 +610,6 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	}
 
 	tab := sb.md.Table(tabID)
-
 	// Create a mapping from table column ordinals to inverted index column
 	// ordinals. This allows us to do a fast lookup while iterating over all
 	// stats from a statistic's column to any associated inverted columns.
@@ -547,7 +646,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		// column set. Stats are ordered with most recent first.
 		for i := 0; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
-			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData.OptimizerUseMultiColStats {
+			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
 				continue
 			}
 
@@ -559,8 +658,9 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			if colStat, ok := stats.ColStats.Add(cols); ok {
 				colStat.DistinctCount = float64(stat.DistinctCount())
 				colStat.NullCount = float64(stat.NullCount())
+				colStat.AvgSize = float64(stat.AvgSize())
 				if cols.Len() == 1 && stat.Histogram() != nil &&
-					sb.evalCtx.SessionData.OptimizerUseHistograms {
+					sb.evalCtx.SessionData().OptimizerUseHistograms {
 					col, _ := cols.Next(0)
 
 					// If this column is invertable, the histogram describes the inverted index
@@ -577,10 +677,17 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 							if invColStat, ok := stats.ColStats.Add(invCols); ok {
 								invColStat.Histogram = &props.Histogram{}
 								invColStat.Histogram.Init(sb.evalCtx, invCol, stat.Histogram())
-								// Set inverted entry counts from the histogram.
-								invColStat.DistinctCount = invColStat.Histogram.DistinctValuesCount()
+								// Set inverted entry counts from the histogram. Make sure the
+								// distinct count is at least 1, for the same reason as the row
+								// count above.
+								invColStat.DistinctCount = max(invColStat.Histogram.DistinctValuesCount(), 1)
 								// Inverted indexes don't have nulls.
 								invColStat.NullCount = 0
+								if stat.AvgSize() == 0 {
+									invColStat.AvgSize = defaultColSize
+								} else {
+									invColStat.AvgSize = float64(stat.AvgSize())
+								}
 							}
 						}
 					}
@@ -747,11 +854,13 @@ func (sb *statisticsBuilder) constrainScan(
 
 			inputStat, _ := sb.colStatFromInput(colSet, scan)
 			if inputHist := inputStat.Histogram; inputHist != nil {
-				// If we have a histogram, set the row count to its total,
-				// unfiltered count. This is needed because s.RowCount is
-				// currently the row count of the table, but should instead
-				// reflect the number of inverted index entries.
-				s.RowCount = inputHist.ValuesCount()
+				// If we have a histogram, set the row count to its total, unfiltered
+				// count. This is needed because s.RowCount is currently the row count
+				// of the table, but should instead reflect the number of inverted index
+				// entries. (Make sure the row count is at least 1. The stats may be
+				// stale, and we can end up with weird and inefficient plans if we
+				// estimate 0 rows.)
+				s.RowCount = max(inputHist.ValuesCount(), 1)
 				if colStat, ok := s.ColStats.Lookup(colSet); ok {
 					colStat.Histogram = inputHist.InvertedFilter(scan.InvertedConstraint)
 					histCols.Add(invertedConstrainedCol)
@@ -804,16 +913,10 @@ func (sb *statisticsBuilder) constrainScan(
 
 	// Calculate row count and selectivity
 	// -----------------------------------
-	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, scan, s)
-	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
+	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, scan, s)
+	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, scan, s, corr))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
-
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
-	s.LimitSelectivity(selectivityUpperBound)
 }
 
 func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *props.ColumnStatistic {
@@ -945,6 +1048,7 @@ func (sb *statisticsBuilder) colStatProject(
 		// above.
 		inputColStat := sb.colStatFromChild(reqInputCols, prj, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
+		colStat.AvgSize = inputColStat.AvgSize
 		if nonNullFound {
 			colStat.NullCount = 0
 		} else {
@@ -953,6 +1057,7 @@ func (sb *statisticsBuilder) colStatProject(
 	} else {
 		// There are no columns in this expression, so it must be a constant.
 		colStat.DistinctCount = 1
+		colStat.AvgSize = float64(defaultColSize * colSet.Len())
 		if nonNullFound {
 			colStat.NullCount = 0
 		} else {
@@ -994,15 +1099,9 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 	// -----------------------------------
 	inputStats := &invFilter.Input.Relational().Stats
 	s.RowCount = inputStats.RowCount
-	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, invFilter, s)
-	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, invFilter, s))
+	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, invFilter, s)
+	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, invFilter, s, corr))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(invFilter, relProps.NotNullCols, constrainedCols))
-
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, invFilter, s))
-	s.LimitSelectivity(selectivityUpperBound)
 
 	sb.finalizeFromCardinality(relProps)
 }
@@ -1163,21 +1262,10 @@ func (sb *statisticsBuilder) buildJoin(
 	if join.Op() == opt.InvertedJoinOp || hasInvertedJoinCond(h.filters) {
 		s.ApplySelectivity(sb.selectivityFromInvertedJoinCondition(join, s))
 	}
-	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, join, s)
-	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(
-		constrainedCols.Intersection(leftCols), join, s,
-	))
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(
-		constrainedCols.Intersection(rightCols), join, s,
-	))
+	corr := sb.correlationFromMultiColDistinctCountsForJoin(constrainedCols, leftCols, rightCols, join, s)
+	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, join, s, corr))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps.NotNullCols, constrainedCols))
-
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, join, s))
-	s.LimitSelectivity(selectivityUpperBound)
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
@@ -1389,6 +1477,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 			}
 			colStat, _ = s.ColStats.Add(colSet)
 			colStat.DistinctCount = leftColStat.DistinctCount * rightColStat.DistinctCount
+			colStat.AvgSize = leftColStat.AvgSize + rightColStat.AvgSize
 		}
 
 		// Null count estimation - assume an inner join and then bump the null count later
@@ -1567,6 +1656,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = s.RowCount
+	colStat.AvgSize = 0
 
 	// Some of the requested columns may be from the input index.
 	reqInputCols := colSet.Intersection(inputCols)
@@ -1574,6 +1664,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 		inputColStat := sb.colStatFromChild(reqInputCols, join, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount
+		colStat.AvgSize += inputColStat.AvgSize
 	}
 
 	// Other requested columns may be from the primary index.
@@ -1600,6 +1691,8 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 		f1 := lookupColStat.NullCount / inputStats.RowCount
 		f2 := colStat.NullCount / inputStats.RowCount
 		colStat.NullCount = inputStats.RowCount * f1 * f2
+
+		colStat.AvgSize += lookupColStat.AvgSize
 	}
 
 	if colSet.Intersects(relProps.NotNullCols) {
@@ -1683,7 +1776,8 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 
 	// Calculate selectivity and row count
 	// -----------------------------------
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s))
+	multiColSelectivity, _ := sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s)
+	s.ApplySelectivity(multiColSelectivity)
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, zigzag, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(zigzag, relProps.NotNullCols, constrainedCols))
@@ -1765,6 +1859,7 @@ func (sb *statisticsBuilder) colStatGroupBy(
 		colStat.DistinctCount = 1
 		// TODO(itsbilal): Handle case where the scalar resolves to NULL.
 		colStat.NullCount = 0
+		colStat.AvgSize = float64(defaultColSize * colSet.Len())
 		return colStat
 	}
 
@@ -1773,9 +1868,12 @@ func (sb *statisticsBuilder) colStatGroupBy(
 	if !colSet.SubsetOf(groupingColSet) {
 		// Some of the requested columns are aggregates. Estimate the distinct
 		// count to be the same as the grouping columns.
+		// TODO(harding): We should be able to get const-agg or first-agg stats from
+		// the input.
 		colStat, _ = s.ColStats.Add(colSet)
 		inputColStat = sb.colStatFromChild(groupingColSet, groupNode, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
+		colStat.AvgSize = inputColStat.AvgSize
 	} else {
 		// Make a copy so we don't modify the original
 		colStat = sb.copyColStatFromChild(colSet, groupNode, s)
@@ -1874,14 +1972,19 @@ func (sb *statisticsBuilder) colStatSetNodeImpl(
 	case opt.UnionOp, opt.UnionAllOp:
 		colStat.DistinctCount = leftColStat.DistinctCount + rightColStat.DistinctCount
 		colStat.NullCount = leftNullCount + rightNullCount
+		leftRowCount := sb.statsFromChild(setNode, 0 /* childIdx */).RowCount
+		rightRowCount := sb.statsFromChild(setNode, 1 /* childIdx */).RowCount
+		colStat.AvgSize = (leftColStat.AvgSize*leftRowCount + rightColStat.AvgSize*rightRowCount) / (leftRowCount + rightRowCount)
 
 	case opt.IntersectOp, opt.IntersectAllOp:
 		colStat.DistinctCount = min(leftColStat.DistinctCount, rightColStat.DistinctCount)
 		colStat.NullCount = min(leftNullCount, rightNullCount)
+		colStat.AvgSize = leftColStat.AvgSize
 
 	case opt.ExceptOp, opt.ExceptAllOp:
 		colStat.DistinctCount = leftColStat.DistinctCount
 		colStat.NullCount = max(leftNullCount-rightNullCount, 0)
+		colStat.AvgSize = leftColStat.AvgSize
 	}
 
 	// Use the actual null counts for bag operations, and normalize them for set
@@ -1962,6 +2065,9 @@ func (sb *statisticsBuilder) colStatValues(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = float64(len(distinct))
 	colStat.NullCount = float64(nullCount)
+	// TODO(harding): The AvgSize would be more accurate if we took the width and/
+	// or type of the values.
+	colStat.AvgSize = float64(defaultColSize * colSet.Len())
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -1990,6 +2096,28 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 			s.RowCount = min(float64(hardLimit), inputStats.RowCount)
 			s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
 		}
+	}
+
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) buildTopK(topK *TopKExpr, relProps *props.Relational) {
+	s := &relProps.Stats
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(topK)
+
+	inputStats := &topK.Input.Relational().Stats
+
+	// Copy row count from input.
+	s.RowCount = inputStats.RowCount
+
+	// Update row count if row count and k are non-zero.
+	if inputStats.RowCount > 0 && topK.K > 0 {
+		s.RowCount = min(float64(topK.K), inputStats.RowCount)
+		s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -2086,10 +2214,12 @@ func (sb *statisticsBuilder) colStatMax1Row(
 	s := &max1Row.Relational().Stats
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
-	colStat.NullCount = s.RowCount * unknownNullCountRatio
+	colStat.NullCount = s.RowCount * UnknownNullCountRatio
 	if colSet.Intersects(max1Row.Relational().NotNullCols) {
 		colStat.NullCount = 0
 	}
+	inputColStat := sb.colStatFromChild(colSet, max1Row, 0 /* childIdx */)
+	colStat.AvgSize = inputColStat.AvgSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2120,12 +2250,14 @@ func (sb *statisticsBuilder) colStatOrdinality(
 
 	colStat, _ := s.ColStats.Add(colSet)
 
+	inputColStat := sb.colStatFromChild(colSet, ord, 0 /* childIdx */)
+	colStat.AvgSize = inputColStat.AvgSize
+
 	if colSet.Contains(ord.ColID) {
 		// The ordinality column is a key, so every row is distinct.
 		colStat.DistinctCount = s.RowCount
 		colStat.NullCount = 0
 	} else {
-		inputColStat := sb.colStatFromChild(colSet, ord, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount
 	}
@@ -2184,16 +2316,20 @@ func (sb *statisticsBuilder) colStatWindow(
 		if colSet.SubsetOf(windowCols) {
 			// The generated columns are the only columns being requested.
 			colStat.NullCount = 0
+			// TODO(harding): make AvgSize more accurate.
+			colStat.AvgSize = float64(defaultColSize * colSet.Len())
 		} else {
-			// Copy NullCount from child.
+			// Copy NullCount and AvgSize from child.
 			colSetChild := colSet.Difference(windowCols)
 			inputColStat := sb.colStatFromChild(colSetChild, window, 0 /* childIdx */)
 			colStat.NullCount = inputColStat.NullCount
+			colStat.AvgSize = inputColStat.AvgSize
 		}
 	} else {
 		inputColStat := sb.colStatFromChild(colSet, window, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount
+		colStat.AvgSize = inputColStat.AvgSize
 	}
 
 	if colSet.Intersects(relProps.NotNullCols) {
@@ -2222,7 +2358,7 @@ func (sb *statisticsBuilder) buildProjectSet(
 	var zipRowCount float64
 	for i := range projectSet.Zip {
 		if fn, ok := projectSet.Zip[i].Fn.(*FunctionExpr); ok {
-			if fn.Overload.Generator != nil {
+			if fn.Overload.IsGenerator() {
 				// TODO(rytaft): We may want to estimate the number of rows based on
 				// the type of generator function and its parameters.
 				zipRowCount = unknownGeneratorRowCount
@@ -2258,6 +2394,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = s.RowCount
+	colStat.AvgSize = 0
 
 	// Some of the requested columns may be from the input.
 	reqInputCols := colSet.Intersection(inputCols)
@@ -2265,11 +2402,13 @@ func (sb *statisticsBuilder) colStatProjectSet(
 		inputColStat := sb.colStatFromChild(reqInputCols, projectSet, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount * (s.RowCount / inputStats.RowCount)
+		colStat.AvgSize += inputColStat.AvgSize
 	}
 
 	// Other requested columns may be from the output columns of the zip.
 	zipCols := projectSet.Zip.OutputCols()
 	reqZipCols := colSet.Difference(inputCols).Intersection(zipCols)
+	colStat.AvgSize += float64(defaultColSize * reqZipCols.Len())
 	if !reqZipCols.Empty() {
 		// Calculate the distinct count and null count for the zip columns
 		// after the cross join has been applied.
@@ -2278,13 +2417,13 @@ func (sb *statisticsBuilder) colStatProjectSet(
 		for i := range projectSet.Zip {
 			item := &projectSet.Zip[i]
 			if item.Cols.ToSet().Intersects(reqZipCols) {
-				if fn, ok := item.Fn.(*FunctionExpr); ok && fn.Overload.Generator != nil {
+				if fn, ok := item.Fn.(*FunctionExpr); ok && fn.Overload.IsGenerator() {
 					// The columns(s) contain a generator function.
 					// TODO(rytaft): We may want to determine which generator function the
 					// requested columns correspond to, and estimate the distinct count and
 					// null count based on the type of generator function and its parameters.
 					zipColsDistinctCount *= unknownGeneratorRowCount * unknownGeneratorDistinctCountRatio
-					zipColsNullCount *= unknownNullCountRatio
+					zipColsNullCount *= UnknownNullCountRatio
 				} else {
 					// The columns(s) contain a scalar function or expression.
 					// These columns can contain many null values if the zip also
@@ -2311,7 +2450,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 				if item.ScalarProps().OuterCols.Intersects(inputProps.OutputCols) {
 					// The column(s) are correlated with the input, so they may have a
 					// distinct value for each distinct row of the input.
-					zipColsDistinctCount *= inputStats.RowCount * unknownDistinctCountRatio
+					zipColsDistinctCount *= inputStats.RowCount * UnknownDistinctCountRatio
 				}
 			}
 		}
@@ -2369,6 +2508,7 @@ func (sb *statisticsBuilder) colStatWithScan(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
+	colStat.AvgSize = inColStat.AvgSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2406,6 +2546,7 @@ func (sb *statisticsBuilder) colStatMutation(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inColStat.DistinctCount
 	colStat.NullCount = inColStat.NullCount
+	colStat.AvgSize = inColStat.AvgSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2429,6 +2570,7 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = 0
+	colStat.AvgSize = defaultColSize
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2452,6 +2594,7 @@ func (sb *statisticsBuilder) colStatUnknown(
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = s.RowCount
 	colStat.NullCount = 0
+	colStat.AvgSize = float64(defaultColSize * colSet.Len())
 	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 	return colStat
 }
@@ -2494,12 +2637,13 @@ func (sb *statisticsBuilder) copyColStat(
 ) *props.ColumnStatistic {
 	if !inputColStat.Cols.SubsetOf(colSet) {
 		panic(errors.AssertionFailedf(
-			"copyColStat colSet: %v inputColSet: %v\n", log.Safe(colSet), log.Safe(inputColStat.Cols),
+			"copyColStat colSet: %v inputColSet: %v\n", redact.Safe(colSet), redact.Safe(inputColStat.Cols),
 		))
 	}
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inputColStat.DistinctCount
 	colStat.NullCount = inputColStat.NullCount
+	colStat.AvgSize = inputColStat.AvgSize
 	return colStat
 }
 
@@ -2563,6 +2707,12 @@ func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
 	// The distinct and null counts should be no larger than the row count.
 	colStat.DistinctCount = min(colStat.DistinctCount, rowCount)
 	colStat.NullCount = min(colStat.NullCount, rowCount)
+
+	// If there are non-nulls in the column but the avgSize is 0, use the default
+	// column size.
+	if rowCount > 0 && colStat.AvgSize == 0 && colStat.NullCount < rowCount {
+		colStat.AvgSize = float64(defaultColSize * colStat.Cols.Len())
+	}
 
 	// Uniformly reduce the size of each histogram bucket so the number of values
 	// is no larger than the row count.
@@ -2675,7 +2825,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 
 	default:
 		if !opt.IsJoinOp(e) {
-			panic(errors.AssertionFailedf("rowsProcessed not supported for operator type %v", log.Safe(e.Op())))
+			panic(errors.AssertionFailedf("rowsProcessed not supported for operator type %v", redact.Safe(e.Op())))
 		}
 
 		leftCols := e.Child(0).(RelExpr).Relational().OutputCols
@@ -2717,7 +2867,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 			case *FullJoinExpr:
 				e = e.Memo().MemoizeFullJoin(t.Left, t.Right, on, &t.JoinPrivate)
 			default:
-				panic(errors.AssertionFailedf("join type %v not handled", log.Safe(e.Op())))
+				panic(errors.AssertionFailedf("join type %v not handled", redact.Safe(e.Op())))
 			}
 		}
 		return e.Relational().Stats.RowCount
@@ -2741,53 +2891,6 @@ func max(a, b float64) float64 {
 //////////////////////////////////////////////////
 // Helper functions for selectivity calculation //
 //////////////////////////////////////////////////
-
-const (
-	// This is the value used for inequality filters such as x < 1 in
-	// "Access Path Selection in a Relational Database Management System"
-	// by Pat Selinger et al.
-	unknownFilterSelectivity = 1.0 / 3.0
-
-	// TODO(rytaft): Add other selectivities for other types of predicates.
-
-	// This is an arbitrary row count used in the absence of any real statistics.
-	unknownRowCount = 1000
-
-	// This is the ratio of distinct column values to number of rows, which is
-	// used in the absence of any real statistics for non-key columns.
-	// TODO(rytaft): See if there is an industry standard value for this.
-	unknownDistinctCountRatio = 0.1
-
-	// This is the ratio of null column values to number of rows for nullable
-	// columns, which is used in the absence of any real statistics.
-	unknownNullCountRatio = 0.01
-
-	// Use a small row count for generator functions; this allows use of lookup
-	// join in cases like using json_array_elements with a small constant array.
-	unknownGeneratorRowCount = 10
-
-	// Since the generator row count is so small, we need a larger distinct count
-	// ratio for generator functions.
-	unknownGeneratorDistinctCountRatio = 0.7
-
-	// When subtracting floating point numbers, avoid precision errors by making
-	// sure the result is greater than or equal to epsilon.
-	epsilon = 1e-10
-
-	// This is the minimum cardinality an expression should have in order to make
-	// it worth adding the overhead of using a histogram.
-	minCardinalityForHistogram = 100
-
-	// This is the default selectivity estimated for inverted joins until we can
-	// get better statistics on inverted indexes.
-	unknownInvertedJoinSelectivity = 1.0 / 100.0
-
-	// multiColWeight is the weight to assign the selectivity calculation using
-	// multi-column statistics versus the calculation using single-column
-	// statistics. See the comment above selectivityFromMultiColDistinctCounts for
-	// details.
-	multiColWeight = 9.0 / 10.0
-)
 
 // countPaths returns the number of JSON or Array paths in the specified
 // FiltersItem. Used in the calculation of unapplied conjuncts in a Contains
@@ -2863,17 +2966,11 @@ func (sb *statisticsBuilder) filterRelExpr(
 
 	// Calculate row count and selectivity
 	// -----------------------------------
-	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, e, s)
-	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s))
+	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, e, s)
+	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, e, s, corr))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, e, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
-
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, e, s))
-	s.LimitSelectivity(selectivityUpperBound)
 
 	// Update distinct and null counts based on equivalencies; this should
 	// happen after selectivityFromMultiColDistinctCounts and
@@ -3102,15 +3199,9 @@ func (sb *statisticsBuilder) constrainExpr(
 
 	// Calculate row count and selectivity
 	// -----------------------------------
-	histSelectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, e, s)
-	s.ApplySelectivity(histSelectivity)
-	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, e, s))
+	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, e, s)
+	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, e, s, corr))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(e, notNullCols, constrainedCols))
-
-	// Adjust the selectivity so we don't double-count the histogram columns, but
-	// make sure it does not exceed the upper bound based on the histograms.
-	s.UnapplySelectivity(sb.selectivityFromSingleColDistinctCounts(histCols, e, s))
-	s.LimitSelectivity(selectivityUpperBound)
 }
 
 // applyIndexConstraint is used to update the distinct counts and histograms
@@ -3155,7 +3246,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 		numConjuncts := sb.numConjunctsInConstraint(c, i)
 
 		// Set the distinct count for the current column of the constraint
-		// according to unknownDistinctCountRatio.
+		// according to UnknownDistinctCountRatio.
 		var lowerBound float64
 		if i == applied {
 			lowerBound = lastColMinDistinct
@@ -3207,7 +3298,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 			numConjuncts := sb.numConjunctsInConstraint(c, 0 /* nth */)
 
 			// Set the distinct count for the first column of the constraint
-			// according to unknownDistinctCountRatio.
+			// according to UnknownDistinctCountRatio.
 			sb.updateDistinctCountFromUnappliedConjuncts(col, e, s, numConjuncts, lastColMinDistinct)
 		}
 
@@ -3565,14 +3656,19 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 // This selectivity will be used later to update the row count and the
 // distinct count for the unconstrained columns.
 //
+// We also return selectivityUpperBound, which is the minimum selectivity of any
+// single column. This would be the value of equation (2) if the columns were
+// completely correlated. It will be used later to measure the level of
+// correlation.
+//
 // [1] Ilyas, Ihab F., et al. "CORDS: automatic discovery of correlations and
 //     soft functional dependencies." SIGMOD 2004.
 //
 func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
-) (selectivity props.Selectivity) {
+) (selectivity, selectivityUpperBound props.Selectivity) {
 	// Respect the session setting OptimizerUseMultiColStats.
-	if !sb.evalCtx.SessionData.OptimizerUseMultiColStats {
+	if !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
 		return sb.selectivityFromSingleColDistinctCounts(cols, e, s)
 	}
 
@@ -3624,7 +3720,7 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 
 	// If we don't need to use a multi-column statistic, we're done.
 	if multiColSet.Len() <= 1 {
-		return singleColSelectivity
+		return singleColSelectivity, minLocalSel
 	}
 
 	// Otherwise, calculate the selectivity using multi-column stats from
@@ -3632,8 +3728,7 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	// about the formula.
 	inputColStat, inputStats := sb.colStatFromInput(multiColSet, e)
 	fdStrength := min(maxOldDistinct/inputColStat.DistinctCount, 1.0)
-	maxMutiColOldDistinct := min(oldDistinctProduct, inputStats.RowCount)
-	minFdStrength := min(maxOldDistinct/maxMutiColOldDistinct, fdStrength)
+	minFdStrength := min(maxOldDistinct/oldDistinctProduct, fdStrength)
 	if minFdStrength < 1 {
 		// Scale the fdStrength so it ranges between 0 and 1.
 		fdStrength = (fdStrength - minFdStrength) / (1 - minFdStrength)
@@ -3643,7 +3738,12 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	colStat, _ := s.ColStats.Add(multiColSet)
 	colStat.DistinctCount = maxNewDistinct + distinctCountRange*(1-fdStrength)
 	colStat.NullCount = multiColNullCount
+	colStat.AvgSize = inputColStat.AvgSize
 	multiColSelectivity := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
+
+	// multiColSelectivity must be at least as large as singleColSelectivity,
+	// since singleColSelectivity corresponds to equation (1).
+	multiColSelectivity = props.MaxSelectivity(multiColSelectivity, singleColSelectivity)
 
 	// Now, we must adjust multiColSelectivity so that it is not greater than
 	// the selectivity of any subset of the columns in multiColSet. This would
@@ -3662,7 +3762,7 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	// count less than or equal to 1 may have a smaller selectivity according to
 	// equation (2).
 	//
-	// In this case, update minLocalSel and adjust multiColSelectivity as needed.
+	// In this case, adjust multiColSelectivity as needed.
 	//
 	if maxNewDistinct > 1 && multiColSet.Len() > 2 {
 		var lowDistinctCountCols opt.ColSet
@@ -3675,17 +3775,114 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 		})
 
 		if lowDistinctCountCols.Len() > 1 {
-			selLowDistinctCountCols := sb.selectivityFromMultiColDistinctCounts(
+			// Find the selectivity of the low distinct count columns to ensure that
+			// multiColSelectivity is lower (see above comment). Additionally,
+			// multiply by the selectivity of the other columns to differentiate
+			// between different plans that constrain different subsets of these
+			// columns.
+			selLowDistinctCountCols, _ := sb.selectivityFromMultiColDistinctCounts(
 				lowDistinctCountCols, e, s,
 			)
-			minLocalSel = props.MinSelectivity(minLocalSel, selLowDistinctCountCols)
+			selOtherCols, _ := sb.selectivityFromMultiColDistinctCounts(
+				multiColSet.Difference(lowDistinctCountCols), e, s,
+			)
+			selLowDistinctCountCols.Multiply(selOtherCols)
+			multiColSelectivity = props.MinSelectivity(multiColSelectivity, selLowDistinctCountCols)
 		}
 	}
 	multiColSelectivity = props.MinSelectivity(multiColSelectivity, minLocalSel)
 
 	// As described in the function comment, we actually return a weighted sum
 	// of multi-column and single-column selectivity estimates.
-	return props.MakeSelectivity((1-multiColWeight)*singleColSelectivity.AsFloat() + multiColWeight*multiColSelectivity.AsFloat())
+	//
+	// Use MaxSelectivity to handle floating point rounding errors.
+	w := multiColWeight
+	return props.MaxSelectivity(singleColSelectivity, props.MakeSelectivity(
+			(1-w)*singleColSelectivity.AsFloat()+w*multiColSelectivity.AsFloat(),
+		)),
+		minLocalSel
+}
+
+// correlationFromMultiColDistinctCounts returns the correlation between the
+// given set of columns, as indicated by multi-column stats. It is a number
+// between 0 and 1, where 0 means the columns are completely independent, and 1
+// means the columns are completely correlated.
+//
+// Note that this isn't the real correlation; that would require calculating the
+// correlation coefficient between pairs of columns during table stats
+// collection. Instead, this is just a proxy obtained by estimating three values
+// for the selectivity of the filter constraining the given columns:
+// 1. lb (lower bound): the value returned by multiplying the individual
+//    conjunct selectivities together, estimated from single-column distinct
+//    counts. This would be the selectivity of the entire predicate if the
+//    columns were completely independent.
+// 2. ub (upper bound): the lowest single-conjunct selectivity estimated from
+//    single-column distinct counts. This would be the selectivity of the entire
+//    predicate if the columns were completely correlated. In other words, this
+//    would be the selectivity if the value of the column with the most
+//    selective predicate functionally determined the value of all other
+//    constrained columns.
+// 3. mc (multi-column selectivity): the value returned by estimating the
+//    predicate selectivity with a combination of single-column and multi-column
+//    distinct counts. It falls somewhere between upper and lower bound, and
+//    thus approximates the level of correlation of the columns.
+//
+// The "correlation" returned by this function is thus:
+//   corr = (mc - lb) / (ub - lb)
+// where
+//   lb <= mc <= ub
+//
+// This value will be used to refine the selectivity estimate from single-column
+// histograms, which do not contain information about column correlations.
+//
+// TODO(rytaft): There's probably a way to do this directly from distinct counts
+// without first estimating selectivities, but I couldn't find a formula that
+// didn't result in a lot of bad plans.
+func (sb *statisticsBuilder) correlationFromMultiColDistinctCounts(
+	cols opt.ColSet, e RelExpr, s *props.Statistics,
+) float64 {
+	// Respect the session setting OptimizerUseMultiColStats.
+	if !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
+		return 0
+	}
+
+	lowerBound, _ := sb.selectivityFromSingleColDistinctCounts(cols, e, s)
+	selectivity, upperBound := sb.selectivityFromMultiColDistinctCounts(cols, e, s)
+	if upperBound == lowerBound {
+		return 0
+	}
+	return (selectivity.AsFloat() - lowerBound.AsFloat()) / (upperBound.AsFloat() - lowerBound.AsFloat())
+}
+
+// correlationFromMultiColDistinctCountsForJoin is similar to
+// correlationFromMultiColDistinctCounts, but used for join expressions.
+func (sb *statisticsBuilder) correlationFromMultiColDistinctCountsForJoin(
+	cols, leftCols, rightCols opt.ColSet, e RelExpr, s *props.Statistics,
+) float64 {
+	// Respect the session setting OptimizerUseMultiColStats.
+	if !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
+		return 0
+	}
+
+	lowerBound, _ := sb.selectivityFromSingleColDistinctCounts(cols, e, s)
+	selectivityLeft, upperBoundLeft := sb.selectivityFromMultiColDistinctCounts(
+		cols.Intersection(leftCols), e, s,
+	)
+	selectivityRight, upperBoundRight := sb.selectivityFromMultiColDistinctCounts(
+		cols.Intersection(rightCols), e, s,
+	)
+	selectivity := selectivityLeft
+	selectivity.Multiply(selectivityRight)
+	upperBound := upperBoundLeft
+	upperBound.Multiply(upperBoundRight)
+	if upperBound == lowerBound {
+		return 0
+	}
+	if selectivity.AsFloat() < lowerBound.AsFloat() {
+		// This can happen due to floating point rounding errors.
+		return 0
+	}
+	return (selectivity.AsFloat() - lowerBound.AsFloat()) / (upperBound.AsFloat() - lowerBound.AsFloat())
 }
 
 // selectivityFromSingleColDistinctCounts calculates the selectivity of a
@@ -3693,10 +3890,15 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 // and after the filter was applied. It assumes independence between columns,
 // so it uses equation (1) from selectivityFromMultiColDistinctCounts. See the
 // comment above that function for details.
+//
+// We also return selectivityUpperBound, which is the minimum selectivity of any
+// single column. This is the maximum possible selectivity of the entire
+// expression.
 func (sb *statisticsBuilder) selectivityFromSingleColDistinctCounts(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
-) (selectivity props.Selectivity) {
+) (selectivity, selectivityUpperBound props.Selectivity) {
 	selectivity = props.OneSelectivity
+	selectivityUpperBound = props.OneSelectivity
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
 		colStat, ok := s.ColStats.Lookup(opt.MakeColSet(col))
 		if !ok {
@@ -3704,10 +3906,16 @@ func (sb *statisticsBuilder) selectivityFromSingleColDistinctCounts(
 		}
 
 		inputColStat, inputStats := sb.colStatFromInput(colStat.Cols, e)
-		selectivity.Multiply(sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount))
+		predicateSelectivity := sb.selectivityFromDistinctCount(colStat, inputColStat, inputStats.RowCount)
+
+		// The maximum possible selectivity of the entire expression is the minimum
+		// selectivity of all individual predicates.
+		selectivityUpperBound = props.MinSelectivity(selectivityUpperBound, predicateSelectivity)
+
+		selectivity.Multiply(predicateSelectivity)
 	}
 
-	return selectivity
+	return selectivity, selectivityUpperBound
 }
 
 // selectivityFromDistinctCount calculates the selectivity of a filter by using
@@ -3759,7 +3967,7 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 			continue
 		}
 
-		inputColStat, inputStats := sb.colStatFromInput(colStat.Cols, e)
+		inputColStat, _ := sb.colStatFromInput(colStat.Cols, e)
 		newHist := colStat.Histogram
 		oldHist := inputColStat.Histogram
 		if newHist == nil || oldHist == nil {
@@ -3769,12 +3977,9 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 		newCount := newHist.ValuesCount()
 		oldCount := oldHist.ValuesCount()
 
-		// Calculate the selectivity of the predicate.
-		nonNullSelectivity := props.MakeSelectivityFromFraction(newCount, oldCount)
-		nullSelectivity := props.MakeSelectivityFromFraction(colStat.NullCount, inputColStat.NullCount)
-		predicateSelectivity := sb.predicateSelectivity(
-			nonNullSelectivity, nullSelectivity, inputColStat.NullCount, inputStats.RowCount,
-		)
+		// Calculate the selectivity of the predicate. Nulls are already included
+		// in the histogram, so we do not need to account for them separately.
+		predicateSelectivity := props.MakeSelectivityFromFraction(newCount, oldCount)
 
 		// The maximum possible selectivity of the entire expression is the minimum
 		// selectivity of all individual predicates.
@@ -3784,6 +3989,30 @@ func (sb *statisticsBuilder) selectivityFromHistograms(
 	}
 
 	return selectivity, selectivityUpperBound
+}
+
+// selectivityFromConstrainedCols calculates the selectivity from the
+// constrained columns. histCols is a subset of constrainedCols, and represents
+// the columns that have histograms available. correlation represents the
+// correlation between the columns, and is a number between 0 and 1, where 0
+// means the columns are completely independent, and 1 means the columns are
+// completely correlated.
+func (sb *statisticsBuilder) selectivityFromConstrainedCols(
+	constrainedCols, histCols opt.ColSet, e RelExpr, s *props.Statistics, correlation float64,
+) (selectivity props.Selectivity) {
+	if buildutil.CrdbTestBuild && (correlation < 0 || correlation > 1) {
+		panic(errors.AssertionFailedf("correlation must be betwen 0 and 1. Found %f", correlation))
+	}
+	selectivity, selectivityUpperBound := sb.selectivityFromHistograms(histCols, e, s)
+	selectivity2, selectivityUpperBound2 := sb.selectivityFromSingleColDistinctCounts(
+		constrainedCols.Difference(histCols), e, s,
+	)
+	selectivity.Multiply(selectivity2)
+	selectivityUpperBound = props.MinSelectivity(selectivityUpperBound, selectivityUpperBound2)
+	selectivity.Add(props.MakeSelectivity(
+		correlation * (selectivityUpperBound.AsFloat() - selectivity.AsFloat()),
+	))
+	return selectivity
 }
 
 // selectivityFromNullsRemoved calculates the selectivity from null-rejecting
@@ -4077,4 +4306,198 @@ func RequestColStat(evalCtx *tree.EvalContext, e RelExpr, cols opt.ColSet) {
 	var sb statisticsBuilder
 	sb.init(evalCtx, e.Memo().Metadata())
 	sb.colStat(cols, e)
+}
+
+// buildStatsFromCheckConstraints checks if there are any non-null CHECK
+// constraints which constrain indexes and has a first index column id the same
+// as the single column in colStat.Cols, and modifies the colStat entry with
+// samples from the CHECK constraint. It is assumed colStat has just been added
+// to the stats cache and no actual table statistics exist on it. If the
+// optimizer_use_histograms session setting is on, and the first index column is
+// not of a data type which is invertable-indexable (JSON, ARRAY or spatial
+// types), and the number of rows in the table is not less than the number of
+// values found in the constraint, then an EquiDepthHistogram is built from the
+// CHECK constraint values using an even data distribution. If the number of
+// values is greater than maxValuesForFullHistogramFromCheckConstraint, no
+// histogram is built. If no statistics exist on any columns in this table (as
+// indicated via statistics.Available), buildStatsFromCheckConstraints does not
+// modify colStat. True is returned if colStat was modified, otherwise false.
+func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
+	colStat *props.ColumnStatistic, statistics *props.Statistics,
+) bool {
+	if !statistics.Available {
+		return false
+	}
+	// This function only builds single-column stats.
+	if colStat.Cols.Len() != 1 {
+		return false
+	}
+	cols := colStat.Cols
+	colID := cols.SingleColumn()
+	tabID := sb.md.ColumnMeta(colID).Table
+	colType := sb.md.ColumnMeta(colID).Type
+
+	// Only handle columns that come from tables.
+	if tabID == opt.TableID(0) {
+		return false
+	}
+	tabMeta := sb.md.TableMeta(tabID)
+
+	// Reuse a previous building of this ColumnStatistic if possible, but
+	// referencing the new ColumnID.
+	if origColStatPtr, ok := tabMeta.OrigCheckConstraintsStats(colID); ok {
+		if origColStat, ok := origColStatPtr.(*props.ColumnStatistic); ok {
+			if origColStat.Cols.Len() == 1 && origColStat.Cols.SingleColumn() != colID {
+				colStat.CopyFromOther(origColStat, sb.evalCtx)
+				return true
+			}
+		}
+	}
+
+	var firstColID opt.ColumnID
+	constraints := tabMeta.Constraints
+	if constraints == nil {
+		return false
+	}
+	if constraints.Op() != opt.FiltersOp {
+		return false
+	}
+	filters := *constraints.(*FiltersExpr)
+	// For each ANDed check constraint...
+	for i := 0; i < len(filters); i++ {
+		filter := filters[i]
+		// This must be some type of comparison operation, or an OR or AND
+		// expression. These operations have at least 2 children.
+		if filter.Condition.ChildCount() < 2 {
+			continue
+		}
+		if filter.ScalarProps().Constraints == nil {
+			continue
+		}
+		for j := 0; j < filter.ScalarProps().Constraints.Length(); j++ {
+			filterConstraint := filter.ScalarProps().Constraints.Constraint(j)
+			firstColID = filterConstraint.Columns.Get(0).ID()
+			if firstColID != colID {
+				continue
+			}
+			dataType := tabMeta.Table.Column(tabID.ColumnOrdinal(firstColID)).DatumType()
+			numRows := int64(statistics.RowCount)
+			var hasNullValue, ok bool
+			var values tree.Datums
+			var distinctVals uint64
+			invertedIndexableColumnType := colinfo.ColumnTypeIsInvertedIndexable(colType)
+			if distinctVals, ok = filterConstraint.CalculateMaxResults(sb.evalCtx, cols, cols); ok {
+				// If the number of values is excessive, don't spend too much time building the histogram,
+				// as it may slow down the query.
+				// TODO(msirek): Consider bumping up this limit for tables with high RowCount, as they
+				//   may take longer to scan, and compared to scan costs, a slight increase in query
+				//   planning time may be worth it to get more detailed stats.
+				if distinctVals <= maxValuesForFullHistogramFromCheckConstraint {
+					values, hasNullValue, _ = filterConstraint.CollectFirstColumnValues(sb.evalCtx)
+					if hasNullValue {
+						log.Infof(
+							sb.evalCtx.Ctx(), "null value seen in histogram built from check constraint: %s", filterConstraint.String(),
+						)
+					}
+				}
+			} else {
+				continue
+			}
+			numValues := len(values)
+			// Histograms are not typically built on inverted columns, and the data
+			// types of such columns (JSON, ARRAY, and spatial types) aren't likely to
+			// occur in CHECK constraints.  So, let's play it safe and don't create a
+			// histogram directly on columns that have a data type which is
+			// InvertedIndexable since the possible user benefit of adding this
+			// support seems low.
+			//
+			// Also, histogram building errors out when the number of samples is
+			// greater than the number of rows, so just skip that case.
+			// Non-null check constraints are not expected to have nulls, so we do
+			// not expect to see null values. If we do see a null, something may have
+			// gone wrong, so do not build a histogram in this case either.
+			useHistogram := sb.evalCtx.SessionData().OptimizerUseHistograms && numValues > 0 &&
+				!hasNullValue && !invertedIndexableColumnType && int64(numValues) <= numRows
+			if !useHistogram {
+				if distinctVals > math.MaxInt32 {
+					continue
+				}
+				numValues = int(distinctVals)
+			}
+			var avgSize float64
+			var histogram []cat.HistogramBucket
+
+			distinctCount := max(float64(numValues), 1)
+			nullCount := float64(0)
+			if useHistogram {
+				// Each single-column prefix value from the Spans is a sample value.
+				// Give each sample value its own bucket, up to a maximum of 200
+				// buckets, with even distribution.
+				encodedHistogram, unencodedBuckets, err := stats.EquiDepthHistogram(sb.evalCtx,
+					dataType,
+					values, /* samples */
+					numRows,
+					int64(numValues),              /* distinctCount */
+					stats.DefaultHistogramBuckets, /* maxBuckets */
+				)
+				// This shouldn't error out, but if it does, let's not punish the user.
+				// Just build stats without the histogram in that case.
+				if err == nil {
+					avgSize = avgSizeFromEncodedHistogram(encodedHistogram)
+					histogram = unencodedBuckets
+				} else {
+					useHistogram = false
+					log.Infof(
+						sb.evalCtx.Ctx(), "histogram could not be generated from check constraint due to error: %v", err,
+					)
+				}
+			}
+			if avgSize == float64(0) {
+				avgSize = avgSizeFromDatums(values)
+			}
+
+			// Modify the actual stats entry in statistics.ColStats that can be looked
+			// up via a ColSet.
+			colStat.DistinctCount = distinctCount
+			colStat.NullCount = nullCount
+			colStat.AvgSize = avgSize
+			if useHistogram {
+				colStat.Histogram = &props.Histogram{}
+				colStat.Histogram.Init(sb.evalCtx, firstColID, histogram)
+			}
+			sb.finalizeFromRowCountAndDistinctCounts(colStat, statistics)
+			tabMeta.AddCheckConstraintsStats(firstColID, colStat)
+			return true
+		}
+	}
+	return false
+}
+
+func avgSizeFromEncodedHistogram(encodedHistogram stats.HistogramData) float64 {
+	dataSize := 0
+	numValues := len(encodedHistogram.Buckets)
+	if numValues == 0 {
+		return defaultColSize
+	}
+	for j := range encodedHistogram.Buckets {
+		dataSize += len(encodedHistogram.Buckets[j].UpperBound)
+	}
+	return float64(dataSize / numValues)
+}
+
+func avgSizeFromDatums(values tree.Datums) float64 {
+	dataSize := 0
+	numValues := len(values)
+	if numValues == 0 {
+		return defaultColSize
+	}
+	for _, value := range values {
+		encoded, err := keyside.Encode(nil, value, encoding.Ascending)
+		if err != nil {
+			dataSize = int(defaultColSize) * numValues
+			break
+		}
+		dataSize += len(encoded)
+	}
+	return float64(dataSize / numValues)
 }

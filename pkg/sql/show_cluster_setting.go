@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -75,7 +76,7 @@ func (p *planner) showVersionSetting(
 						// which creates tenants sets up the cluster version state. It also
 						// is set when the version is upgraded.
 						tenantDefaultVersion := clusterversion.ClusterVersion{
-							Version: clusterversion.ByKey(clusterversion.V20_2),
+							Version: roachpb.Version{Major: 20, Minor: 2},
 						}
 						encoded, err := protoutil.Marshal(&tenantDefaultVersion)
 						if err != nil {
@@ -90,6 +91,8 @@ func (p *planner) showVersionSetting(
 
 					localRawVal := []byte(s.Get(&st.SV))
 					if !bytes.Equal(localRawVal, kvRawVal) {
+						// NB: errors.Wrapf(nil, ...) returns nil.
+						// nolint:errwrap
 						return errors.Errorf(
 							"value differs between local setting (%v) and KV (%v); try again later (%v after %s)",
 							localRawVal, kvRawVal, ctx.Err(), timeutil.Since(tBegin))
@@ -116,7 +119,9 @@ func (p *planner) ShowClusterSetting(
 ) (planNode, error) {
 	name := strings.ToLower(n.Name)
 	st := p.ExecCfg().Settings
-	val, ok := settings.Lookup(name, settings.LookupForLocalAccess)
+	val, ok := settings.Lookup(
+		name, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant(),
+	)
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}

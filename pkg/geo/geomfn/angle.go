@@ -14,7 +14,8 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -59,10 +60,10 @@ func Angle(g1, g2, g3, g4 geo.Geometry) (*float64, error) {
 	p4, p4ok := t4.(*geom.Point)
 
 	if !p1ok || !p2ok || !p3ok || !p4ok {
-		return nil, errors.New("arguments must be POINT geometries")
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "arguments must be POINT geometries")
 	}
 	if p1.Empty() || p2.Empty() || p3.Empty() || p4.Empty() {
-		return nil, errors.New("received EMPTY geometry")
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "received EMPTY geometry")
 	}
 
 	return angleFromCoords(p1.Coords(), p2.Coords(), p3.Coords(), p4.Coords()), nil
@@ -105,6 +106,12 @@ func angleFromCoords(c1, c2, c3, c4 geom.Coord) *float64 {
 	// We want the clockwise angle, not the smallest interior angle, so can't use cosine formula.
 	angle := math.Atan2(-coordDet(a, b), coordDot(a, b))
 	// We want the angle in the interval [0,2π), while Atan2 returns [-π,π]
+	//
+	// NB: In Go, the literal -0.0 does not produce negative
+	// zero. However, since IEEE 754 requires that -0.0 == 0.0,
+	// this code is still correct and we use -0.0 here for
+	// semantic clarity.
+	//lint:ignore SA4026 -0.0 used here for clarity
 	if angle == -0.0 {
 		angle = 0.0
 	} else if angle < 0 {

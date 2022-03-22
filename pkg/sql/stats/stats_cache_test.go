@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -45,8 +45,8 @@ func insertTableStat(
 ) error {
 	insertStatStmt := `
 INSERT INTO system.table_statistics ("tableID", "statisticID", name, "columnIDs", "createdAt",
-	"rowCount", "distinctCount", "nullCount", histogram)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	"rowCount", "distinctCount", "nullCount", "avgSize", histogram)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 	columnIDs := tree.NewDArray(types.Int)
 	for _, id := range stat.ColumnIDs {
@@ -64,6 +64,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		stat.RowCount,
 		stat.DistinctCount,
 		stat.NullCount,
+		stat.AvgSize,
 		nil, // histogram
 	}
 	if len(stat.Name) != 0 {
@@ -74,7 +75,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		if err != nil {
 			return err
 		}
-		args[8] = histogramBytes
+		args[9] = histogramBytes
 	}
 
 	var rows int
@@ -115,7 +116,7 @@ func checkStatsForTable(
 
 	// Perform the lookup and refresh, and confirm the
 	// returned stats match the expected values.
-	statsList, err := sc.GetTableStats(ctx, tableID)
+	statsList, err := sc.getTableStatsFromCache(ctx, tableID)
 	if err != nil {
 		t.Fatalf("error retrieving stats: %s", err)
 	}
@@ -156,6 +157,7 @@ func initTestData(
 			RowCount:      32,
 			DistinctCount: 30,
 			NullCount:     0,
+			AvgSize:       4,
 			HistogramData: &HistogramData{ColumnType: types.Int, Buckets: []HistogramData_Bucket{
 				{NumEq: 3, NumRange: 30, UpperBound: encoding.EncodeVarintAscending(nil, 3000)}},
 			},
@@ -168,6 +170,7 @@ func initTestData(
 			RowCount:      32,
 			DistinctCount: 5,
 			NullCount:     5,
+			AvgSize:       4,
 		},
 		{
 			TableID:       descpb.ID(101),
@@ -177,6 +180,7 @@ func initTestData(
 			RowCount:      320000,
 			DistinctCount: 300000,
 			NullCount:     100,
+			AvgSize:       2,
 		},
 		{
 			TableID:       descpb.ID(102),
@@ -187,6 +191,7 @@ func initTestData(
 			RowCount:      0,
 			DistinctCount: 0,
 			NullCount:     0,
+			AvgSize:       0,
 		},
 	}
 
@@ -331,17 +336,15 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-USE t;
-CREATE TYPE t AS ENUM ('hello');
-CREATE TABLE tt (x t PRIMARY KEY, y INT, INDEX(y));
-INSERT INTO tt VALUES ('hello');
-CREATE STATISTICS s FROM tt;
-`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `USE t;`)
+	sqlRunner.Exec(t, `CREATE TYPE t AS ENUM ('hello');`)
+	sqlRunner.Exec(t, `CREATE TABLE tt (x t PRIMARY KEY, y INT, INDEX(y));`)
+	sqlRunner.Exec(t, `INSERT INTO tt VALUES ('hello');`)
+	sqlRunner.Exec(t, `CREATE STATISTICS s FROM tt;`)
+
 	_ = kvDB
 	// Make a stats cache.
 	sc := NewTableStatisticsCache(
@@ -354,10 +357,10 @@ CREATE STATISTICS s FROM tt;
 		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
-	tbl := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
-	stats, err := sc.GetTableStats(ctx, tbl.GetID())
+	stats, err := sc.GetTableStats(ctx, tbl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,14 +369,13 @@ CREATE STATISTICS s FROM tt;
 	}
 
 	// Drop the table and the type.
-	if _, err := sqlDB.Exec(`DROP TABLE tt; DROP TYPE t;`); err != nil {
-		t.Fatal(err)
-	}
+	sqlRunner.Exec(t, `DROP TABLE tt;`)
+	sqlRunner.Exec(t, `DROP TYPE t;`)
 	// Purge the cache.
 	sc.InvalidateTableStats(ctx, tbl.GetID())
 	// Verify that GetTableStats ignores the statistic on the now unknown type and
 	// returns the rest.
-	stats, err = sc.GetTableStats(ctx, tbl.GetID())
+	stats, err = sc.GetTableStats(ctx, tbl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +431,7 @@ func TestCacheWait(t *testing.T) {
 		for n := 0; n < 10; n++ {
 			wg.Add(1)
 			go func() {
-				stats, err := sc.GetTableStats(ctx, id)
+				stats, err := sc.getTableStatsFromCache(ctx, id)
 				if err != nil {
 					t.Error(err)
 				} else if !checkStats(stats, expectedStats[id]) {
@@ -479,11 +481,10 @@ func TestCacheAutoRefresh(t *testing.T) {
 	sr0.Exec(t, "CREATE TABLE test.t (k INT PRIMARY KEY, v INT)")
 	sr0.Exec(t, "INSERT INTO test.t VALUES (1, 1), (2, 2), (3, 3)")
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
-	tableID := tableDesc.GetID()
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
 
 	expectNStats := func(n int) error {
-		stats, err := sc.GetTableStats(ctx, tableID)
+		stats, err := sc.GetTableStats(ctx, tableDesc)
 		if err != nil {
 			t.Fatal(err)
 		}

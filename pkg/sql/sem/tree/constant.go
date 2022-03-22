@@ -168,6 +168,8 @@ func (expr *NumVal) Format(ctx *FmtCtx) {
 	s := expr.origString
 	if s == "" {
 		s = expr.value.String()
+	} else if strings.EqualFold(s, "NaN") {
+		s = "'NaN'"
 	}
 	if expr.negative {
 		ctx.WriteByte('-')
@@ -303,13 +305,20 @@ func (expr *NumVal) ResolveAsType(
 				return nil, err
 			}
 		}
-		return &expr.resInt, nil
+		return AdjustValueToType(typ, &expr.resInt)
 	case types.FloatFamily:
-		f, _ := constant.Float64Val(expr.value)
-		if expr.negative {
-			f = -f
+		if strings.EqualFold(expr.origString, "NaN") {
+			// We need to check NaN separately since expr.value is unknownVal for NaN.
+			// TODO(sql-experience): unknownVal is also used for +Inf and -Inf,
+			// so we may need to handle those in the future too.
+			expr.resFloat = DFloat(math.NaN())
+		} else {
+			f, _ := constant.Float64Val(expr.value)
+			if expr.negative {
+				f = -f
+			}
+			expr.resFloat = DFloat(f)
 		}
-		expr.resFloat = DFloat(f)
 		return &expr.resFloat, nil
 	case types.DecimalFamily:
 		dd := &expr.resDecimal
@@ -467,6 +476,7 @@ var (
 		types.Decimal,
 		types.Date,
 		types.StringArray,
+		types.BytesArray,
 		types.IntArray,
 		types.FloatArray,
 		types.DecimalArray,
@@ -491,8 +501,11 @@ var (
 		types.Jsonb,
 		types.VarBit,
 		types.AnyEnum,
+		types.AnyEnumArray,
 		types.INetArray,
 		types.VarBitArray,
+		types.AnyTuple,
+		types.AnyTupleArray,
 	}
 	// StrValAvailBytes is the set of types convertible to byte array.
 	StrValAvailBytes = []*types.T{types.Bytes, types.Uuid, types.String, types.AnyEnum}
@@ -554,7 +567,7 @@ func (expr *StrVal) ResolveAsType(
 		case types.UuidFamily:
 			return ParseDUuidFromBytes([]byte(expr.s))
 		case types.StringFamily:
-			expr.resString = DString(adjustStringValueToType(typ, expr.s))
+			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
 		return nil, errors.AssertionFailedf("attempt to type byte array literal to %T", typ)
@@ -567,7 +580,7 @@ func (expr *StrVal) ResolveAsType(
 			expr.resString = DString(expr.s)
 			return NewDNameFromDString(&expr.resString), nil
 		}
-		expr.resString = DString(adjustStringValueToType(typ, expr.s))
+		expr.resString = DString(expr.s)
 		return &expr.resString, nil
 
 	case types.BytesFamily:

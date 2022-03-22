@@ -1,0 +1,224 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.kvserverpb;
+option go_package = "kvserverpb";
+
+import "roachpb/errors.proto";
+import "roachpb/metadata.proto";
+import "kv/kvserver/liveness/livenesspb/liveness.proto";
+import "kv/kvserver/kvserverpb/state.proto";
+import "etcd/raft/v3/raftpb/raft.proto";
+import "gogoproto/gogo.proto";
+
+// RaftHeartbeat is a request that contains the barebones information for a
+// raftpb.MsgHeartbeat raftpb.Message. RaftHeartbeats are coalesced and sent
+// in a RaftMessageRequest, and reconstructed by the receiver into individual
+// raftpb.Message protos.
+message RaftHeartbeat {
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  uint32 from_replica_id = 2 [(gogoproto.customname) = "FromReplicaID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+  uint32 to_replica_id = 3 [(gogoproto.customname) = "ToReplicaID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+  uint64 term = 4;
+  uint64 commit = 5;
+  bool quiesce = 6;
+  reserved 7;
+  repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
+  // This field helps migrate in the lagging_followers_on_quiesce field. For
+  // messages sent by versions of Cockroach that do not know about the
+  // lagging_followers_on_quiesce field (i.e. v20.1), we need to assume that all
+  // replicas are lagging, not that none of them are.
+  //
+  // TODO(nvanbenschoten): Migration path:
+  // v20.2: Add this field. Always set to true when quiesce == true.
+  //        Consult field on receiver. Consider all replicas "lagging"
+  //        if not set to true on liveness change.
+  // v22.1: Keep sending. Stop consulting.
+  // v22.2: Remove field.
+  bool lagging_followers_on_quiesce_accurate = 10;
+}
+
+// RaftMessageRequest is the request used to send raft messages using our
+// protobuf-based RPC codec. If a RaftMessageRequest has a non-empty number of
+// heartbeats or heartbeat_resps, the contents of the message field is treated
+// as a dummy message and discarded. A coalesced heartbeat request's replica
+// descriptor's range ID must be zero.
+message RaftMessageRequest {
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // Optionally, the start key of the sending replica. This is only populated
+  // as a "hint" under certain conditions.
+  bytes range_start_key = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+
+  roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+  roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
+
+  raftpb.Message message = 4 [(gogoproto.nullable) = false];
+
+  // Is this a quiesce request? A quiesce request is a MsgHeartbeat
+  // which is requesting the recipient to stop ticking its local
+  // replica as long as the current Raft state matches the heartbeat
+  // Term/Commit. If the Term/Commit match, the recipient is marked as
+  // quiescent. If they don't match, the message is passed along to
+  // Raft which will generate a MsgHeartbeatResp that will unquiesce
+  // the sender.
+  bool quiesce = 5;
+  // If quiesce is true, this set contains liveness information about
+  // the replicas that were dead when the leader decided to quiesce and
+  // were lagging behind the quiescence log index (meaning they would
+  // have prevented quiescence had they been alive). If any replica
+  // (leader or follower) becomes aware that a replica in this set has
+  // become live, it should unquiesce the range so that the replica can
+  // be caught back up.
+  repeated kv.kvserver.liveness.livenesspb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
+
+  // A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
+  // heartbeats or heartbeat_resps.
+  repeated RaftHeartbeat heartbeats = 6 [(gogoproto.nullable) = false];
+  repeated RaftHeartbeat heartbeat_resps = 7 [(gogoproto.nullable) = false];
+
+  reserved 10;
+}
+
+message RaftMessageRequestBatch {
+  repeated RaftMessageRequest requests = 1 [(gogoproto.nullable) = false];
+}
+
+message RaftMessageResponseUnion {
+  option (gogoproto.onlyone) = true;
+
+  kv.kvpb.Error error = 1;
+}
+
+// RaftMessageResponse may be sent to the sender of a
+// RaftMessageRequest. RaftMessage does not use the usual
+// request/response pattern; it is primarily modeled as a one-way
+// stream of requests. Normal 'responses' are usually sent as new
+// requests on a separate stream in the other direction.
+// RaftMessageResponse is not sent for every RaftMessageRequest, but
+// may be used for certain error conditions.
+message RaftMessageResponse {
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+
+  roachpb.ReplicaDescriptor from_replica = 2 [(gogoproto.nullable) = false];
+  roachpb.ReplicaDescriptor to_replica = 3 [(gogoproto.nullable) = false];
+
+  RaftMessageResponseUnion union = 4 [(gogoproto.nullable) = false];
+}
+
+// SnapshotRequest is the request used to send streaming snapshot requests.
+message SnapshotRequest {
+  enum Priority {
+    UNKNOWN = 0;
+    // RECOVERY is used for a Raft-initiated snapshots and for
+    // up-replication snapshots (i.e. when a dead node has been
+    // removed and the range needs to be up-replicated).
+    RECOVERY = 1;
+    // REBALANCE is used for snapshots involved in rebalancing.
+    REBALANCE = 2;
+  }
+
+  enum Strategy {
+    // KV_BATCH snapshots stream batches of KV pairs for all keys in a
+    // range from the sender the the receiver. These KV pairs are then
+    // combined into a large RocksDB WriteBatch that is atomically
+    // applied.
+    KV_BATCH = 0;
+  }
+
+  // Type is used for metrics collection on the receiver side. See
+  // applySnapshot in replica_raftstorage.go.
+  enum Type {
+    // VIA_SNAPSHOT_QUEUE indicates the snapshots sent by the raft snapshot
+    // queue to all types of replicas.
+    VIA_SNAPSHOT_QUEUE = 0;
+    // INITIAL indicates the initial snapshots sent to LEARNER (before they're
+    // promoted to full voters) and NON_VOTER replicas for upreplication.
+    //
+    // As of the time of writing, we only send this snapshot from the
+    // initializeRaftLearners after creating a new LEARNER or NON_VOTER replica.
+    INITIAL = 1;
+    reserved 2;
+  }
+
+  message Header {
+    // The replica state at the time the snapshot was generated. Note
+    // that ReplicaState.Desc differs from the above range_descriptor
+    // field which holds the updated descriptor after the new replica
+    // has been added while ReplicaState.Desc holds the descriptor
+    // before the new replica has been added.
+    storagepb.ReplicaState state = 5 [(gogoproto.nullable) = false];
+
+    // The inner raft message is of type MsgSnap, and its snapshot data contains a UUID.
+    RaftMessageRequest raft_message_request = 2 [(gogoproto.nullable) = false];
+
+    // The estimated size of the range, to be used in reservation decisions.
+    int64 range_size = 3;
+
+    // The priority of the snapshot.
+    Priority priority = 6;
+
+    // The strategy of the snapshot.
+    Strategy strategy = 7;
+
+    // The type of the snapshot.
+    Type type = 9;
+
+    // Whether the snapshot uses the unreplicated RaftTruncatedState or not.
+    // This is always true for snapshots generated in v21.1+ clusters. In v20.2
+    // it was possible for ranges to be using the replicated variant. v21.1
+    // therefore had code expecting that possibility (unlike v21.2 code, where
+    // this field is assumed to always be true and thus never read). For
+    // compatibility with v21.1 nodes however, v21.2 has to explicitly set this
+    // field to true. In v22.1 we can remove it entirely seeing as how v21.2
+    // code never reads the field.
+    //
+    // TODO(irfansharif): Remove this in v22.1.
+    bool deprecated_unreplicated_truncated_state = 8;
+
+    reserved 1, 4;
+  }
+
+  Header header = 1;
+
+  // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple request messages.
+  bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
+
+  bool final = 4;
+
+  reserved 3;
+}
+
+message SnapshotResponse {
+  enum Status {
+    UNKNOWN = 0;
+    ACCEPTED = 1;
+    APPLIED = 2;
+    ERROR = 3;
+    reserved 4;
+  }
+  Status status = 1;
+  string message = 2;
+  reserved 3;
+}
+
+// ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
+message ConfChangeContext {
+  string command_id = 1 [(gogoproto.customname) = "CommandID"];
+
+  // Payload is the application-level command (i.e. an encoded
+  // kvserverpb.RaftCommand).
+  bytes payload = 2;
+}

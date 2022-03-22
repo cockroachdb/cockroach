@@ -72,7 +72,7 @@ message TxnMeta {
   //       up to t15. Now the txn commits at ts11 and bumps the intent to ts11.
   //       But the client thinks it has seen all changes up to t15, and so never
   //       sees the intent! We avoid this problem by writing intents at the
-  //       provisional commit timestamp insteadr. In this example, the intent
+  //       provisional commit timestamp instead. In this example, the intent
   //       would instead be written at ts11 and picked up by the client's next
   //       read from (ts10, ts15].
   //
@@ -122,6 +122,13 @@ message TxnMeta {
   int32 sequence = 7 [(gogoproto.casttype) = "TxnSeq"];
 
   reserved 8;
+
+  // The ID of the node where this transaction originated.
+  // This field represents either a SQLInstanceID of a SQL pod, a SQL
+  // gateway NodeID, or a KV node ID (in the case of KV-initiated
+  // transactions) and was introduced for the purposes of SQL Observability.
+  // TODO(sarkesian): Refactor to use gogoproto.casttype GenericNodeID when #73309 completes.
+  int32 coordinator_node_id = 10 [(gogoproto.customname) = "CoordinatorNodeID"];
 }
 
 // IgnoredSeqNumRange describes a range of ignored seqnums.
@@ -217,6 +224,15 @@ message RangeAppliedState {
   // migration). In 21.1 we cannot write empty timestamp to disk because that
   // looks like an inconsistency to the consistency-checker.
   util.hlc.Timestamp raft_closed_timestamp = 4;
+
+  // raft_applied_index_term is the term corresponding to raft_applied_index.
+  // The serialized proto will not contain this field until code starts
+  // setting it to a value > 0. This is desirable since we don't want a mixed
+  // version cluster to have divergent replica state simply because we have
+  // introduced this field. An explicit migration,
+  // AddRaftAppliedIndexTermMigration, will cause this field to start being
+  // populated.
+  uint64 raft_applied_index_term = 5;
 }
 
 // MVCCWriteValueOp corresponds to a value being written outside of a

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -27,6 +28,7 @@ import (
 // MergeQueueEnabled is a setting that controls whether the merge queue is
 // enabled.
 var MergeQueueEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
 	"kv.range_merge.queue_enabled",
 	"whether the automatic merge queue is enabled",
 	true,
@@ -57,30 +59,33 @@ var _ redact.SafeFormatter = CmdIDKey("")
 
 // FilterArgs groups the arguments to a ReplicaCommandFilter.
 type FilterArgs struct {
-	Ctx   context.Context
-	CmdID CmdIDKey
-	Index int
-	Sid   roachpb.StoreID
-	Req   roachpb.Request
-	Hdr   roachpb.Header
-	Err   error // only used for TestingPostEvalFilter
+	Ctx     context.Context
+	CmdID   CmdIDKey
+	Index   int
+	Sid     roachpb.StoreID
+	Req     roachpb.Request
+	Hdr     roachpb.Header
+	Version roachpb.Version
+	Err     error // only used for TestingPostEvalFilter
 }
 
 // ProposalFilterArgs groups the arguments to ReplicaProposalFilter.
 type ProposalFilterArgs struct {
-	Ctx   context.Context
-	Cmd   kvserverpb.RaftCommand
-	CmdID CmdIDKey
-	Req   roachpb.BatchRequest
+	Ctx        context.Context
+	Cmd        kvserverpb.RaftCommand
+	QuotaAlloc *quotapool.IntAlloc
+	CmdID      CmdIDKey
+	Req        roachpb.BatchRequest
 }
 
 // ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
 type ApplyFilterArgs struct {
 	kvserverpb.ReplicatedEvalResult
-	CmdID   CmdIDKey
-	RangeID roachpb.RangeID
-	StoreID roachpb.StoreID
-	Req     *roachpb.BatchRequest // only set on the leaseholder
+	CmdID       CmdIDKey
+	RangeID     roachpb.RangeID
+	StoreID     roachpb.StoreID
+	Req         *roachpb.BatchRequest // only set on the leaseholder
+	ForcedError *roachpb.Error
 }
 
 // InRaftCmd returns true if the filter is running in the context of a Raft
@@ -108,11 +113,8 @@ type ReplicaCommandFilter func(args FilterArgs) *roachpb.Error
 // from proposals after a request is evaluated but before it is proposed.
 type ReplicaProposalFilter func(args ProposalFilterArgs) *roachpb.Error
 
-// A ReplicaApplyFilter can be used in testing to influence the error returned
-// from proposals after they apply. The returned int is treated as a
-// storage.proposalReevaluationReason and will only take an effect when it is
-// nonzero and the existing reason is zero. Similarly, the error is only applied
-// if there's no error so far.
+// A ReplicaApplyFilter is a testing hook into raft command application.
+// See StoreTestingKnobs.
 type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *roachpb.Error)
 
 // ReplicaResponseFilter is used in unittests to modify the outbound
@@ -209,6 +211,7 @@ func IntersectSpan(
 
 // SplitByLoadMergeDelay wraps "kv.range_split.by_load_merge_delay".
 var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.range_split.by_load_merge_delay",
 	"the delay that range splits created due to load will wait before considering being merged away",
 	5*time.Minute,
@@ -220,3 +223,7 @@ var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
 		return nil
 	},
 )
+
+// MaxCommandSizeDefault is the default for the kv.raft.command.max_size
+// cluster setting.
+const MaxCommandSizeDefault = 64 << 20

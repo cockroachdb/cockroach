@@ -10,6 +10,16 @@
 # splits ranges. This can cause table scans to return tuples in any
 # arbitrary order.
 
+# Disable transaction write pipelining. Pipelining is not incompatible
+# with this test. However, disabling it is the easiest way to remove a
+# degree of non-determinism from the test where variants that use
+# DistSQL (e.g. fakedist) hear about a transaction retry error due to a
+# transaction timestamp push and are unable to refresh it away due to
+# the limitation described in #24798. Variants that do not use DistSQL
+# transparently refresh this error away.
+statement ok
+SET CLUSTER SETTING kv.transaction.write_pipelining_enabled = false
+
 statement ok
 CREATE TABLE t (id INT PRIMARY KEY)
 

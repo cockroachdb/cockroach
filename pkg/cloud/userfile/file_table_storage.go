@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -206,7 +207,9 @@ func checkBaseAndJoinFilePath(prefix, basename string) (string, error) {
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
-func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (f *fileTableStorage) ReadFile(
+	ctx context.Context, basename string,
+) (ioctx.ReadCloserCtx, error) {
 	body, _, err := f.ReadFileAt(ctx, basename, 0)
 	return body, err
 }
@@ -215,7 +218,7 @@ func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.Re
 // the file stored in the user scoped FileToTableSystem.
 func (f *fileTableStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
 	if err != nil {
 		return nil, 0, err

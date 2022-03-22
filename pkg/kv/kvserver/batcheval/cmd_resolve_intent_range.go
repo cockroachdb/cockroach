@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -24,7 +25,11 @@ func init() {
 }
 
 func declareKeysResolveIntentRange(
-	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState,
+	_ *roachpb.Header,
+	req roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	declareKeysResolveIntentCombined(rs, req, latchSpans)
 }
@@ -43,7 +48,6 @@ func ResolveIntentRange(
 	}
 
 	update := args.AsLockUpdate()
-
 	numKeys, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
 		ctx, readWriter, ms, update, h.MaxSpanRequestKeys)
 	if err != nil {
@@ -54,6 +58,10 @@ func ResolveIntentRange(
 	if resumeSpan != nil {
 		update.EndKey = resumeSpan.Key
 		reply.ResumeSpan = resumeSpan
+		// The given MaxSpanRequestKeys really specifies the number of intents
+		// resolved, not the number of keys scanned. We could return
+		// RESUME_INTENT_LIMIT here, but since the given limit is a key limit we
+		// return RESUME_KEY_LIMIT for symmetry.
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 

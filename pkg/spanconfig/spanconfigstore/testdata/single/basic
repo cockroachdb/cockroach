@@ -1,0 +1,103 @@
+# Test basic get/set/delete operations where the spans retrieved are identical
+# to the ones being added/deleted, and are non-overlapping with respect to one
+# another. Only a single update is applied at a time.
+
+# Check that missing keys fallback to a static config.
+get key=b
+----
+conf=FALLBACK
+
+
+# Test that dryruns don't actually mutate anything.
+apply dryrun
+set [b,d):A
+----
+added [b,d):A
+
+get key=b
+----
+conf=FALLBACK
+
+
+# Add span configs for real.
+apply
+set [b,d):A
+----
+added [b,d):A
+
+apply
+set [f,h):B
+----
+added [f,h):B
+
+
+# Check that a no-op operation shows up as much.
+apply
+set [f,h):B
+----
+
+
+# Check that a few keys are as we'd expect.
+get key=b
+----
+conf=A
+
+get key=c
+----
+conf=A
+
+get key=f
+----
+conf=B
+
+get key=g
+----
+conf=B
+
+get key=h
+----
+conf=FALLBACK
+
+
+# Check that a delete dryrun does nothing.
+apply dryrun
+delete [f,h)
+----
+deleted [f,h)
+
+get key=f
+----
+conf=B
+
+
+# Delete a span for real.
+apply
+delete [f,h)
+----
+deleted [f,h)
+
+# Check that a no-op operation does nothing.
+apply
+delete [f,g)
+----
+
+apply
+delete [f,h)
+----
+
+# Check that keys are as we'd expect (including the deleted one).
+get key=b
+----
+conf=A
+
+get key=c
+----
+conf=A
+
+get key=f
+----
+conf=FALLBACK
+
+get key=g
+----
+conf=FALLBACK

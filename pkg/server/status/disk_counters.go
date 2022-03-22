@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build !darwin
 // +build !darwin
 
 package status
@@ -16,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/shirou/gopsutil/disk"
+	"github.com/shirou/gopsutil/v3/disk"
 )
 
 func getDiskCounters(ctx context.Context) ([]diskStats, error) {

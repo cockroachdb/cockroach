@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/datadriven"
 	"github.com/jackc/pgproto3/v2"
+	"github.com/stretchr/testify/require"
 )
 
 // WalkWithRunningServer walks path for datadriven files and calls RunTest on them.
@@ -45,10 +46,18 @@ func WalkWithNewServer(
 // RunTest executes PGTest commands, connecting to the database specified by
 // addr and user. Supported commands:
 //
+// "let": Run a query that returns a single row with a single column, and
+// save it in the variable named in the command argument. This variable can
+// be used in future "send" commands and is replaced by simple string
+// substitution.
+//
 // "send": Sends messages to a server. Takes a newline-delimited list of
 // pgproto3.FrontendMessage types. Can fill in values by adding a space then
 // a JSON object. No output. Messages with a []byte type (like CopyData) should
-// not base64 encode the data, instead use Go-escaped strings.
+// not base64 encode the data, instead use Go-escaped strings. If the input
+// data actually has binary input or characters not allowed in JSON strings
+// (like '\n'), then a base64-encoded value should be used as the `BinaryData`
+// field.
 //
 // "until": Receives all messages from a server until messages of the given
 // types have been seen. Converts them to JSON one per line as output. Takes
@@ -62,13 +71,15 @@ func WalkWithNewServer(
 // messages.
 //
 // If the argument crdb_only is given and the server is non-crdb (e.g.
-// posrgres), then the exchange is skipped. With noncrdb_only, the inverse
+// postgres), then the exchange is skipped. With noncrdb_only, the inverse
 // happens.
 func RunTest(t *testing.T, path, addr, user string) {
 	p, err := NewPGTest(context.Background(), addr, user)
+
 	if err != nil {
 		t.Fatal(err)
 	}
+	vars := make(map[string]string)
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "only":
@@ -80,12 +91,40 @@ func RunTest(t *testing.T, path, addr, user string) {
 			}
 			return d.Expected
 
+		case "let":
+			require.Len(t, d.CmdArgs, 1, "only one argument permitted for let")
+			require.Truef(t, strings.HasPrefix(d.CmdArgs[0].Key, "$"), "let argument must begin with '$'")
+			lines := strings.Split(d.Input, "\n")
+			require.Len(t, lines, 1, "only one input command permitted for let")
+			require.Truef(t, strings.HasPrefix(lines[0], "Query "), "let must use a Query command")
+			if err := p.SendOneLine(lines[0]); err != nil {
+				t.Fatalf("%s: send %s: %v", d.Pos, lines[0], err)
+			}
+			msgs, err := p.Receive(hasKeepErrMsg(d), &pgproto3.DataRow{}, &pgproto3.ReadyForQuery{})
+			if err != nil {
+				t.Fatalf("%s: %+v", d.Pos, err)
+			}
+			sawData := false
+			for _, msg := range msgs {
+				if dataRow, ok := msg.(*pgproto3.DataRow); ok {
+					require.False(t, sawData, "let Query must return only one row")
+					require.Len(t, dataRow.Values, 1, "let Query must return only one column")
+					sawData = true
+					for _, arg := range d.CmdArgs {
+						vars[arg.Key] = string(dataRow.Values[0])
+					}
+				}
+			}
+			return ""
 		case "send":
 			if (d.HasArg("crdb_only") && !p.isCockroachDB) ||
 				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
 				return d.Expected
 			}
 			for _, line := range strings.Split(d.Input, "\n") {
+				for k, v := range vars {
+					line = strings.ReplaceAll(line, k, v)
+				}
 				if err := p.SendOneLine(line); err != nil {
 					t.Fatalf("%s: send %s: %v", d.Pos, line, err)
 				}
@@ -176,6 +215,12 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 					for i := range m.Fields {
 						m.Fields[i].DataTypeSize = 0
 					}
+				}
+			}
+		case "ignore_constraint_name":
+			for _, msg := range msgs {
+				if m, ok := msg.(*pgproto3.ErrorResponse); ok {
+					m.ConstraintName = ""
 				}
 			}
 		case "ignore":

@@ -1,0 +1,240 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+import { createSelector } from "reselect";
+import {
+  aggregateStatementStats,
+  appAttr,
+  combineStatementStats,
+  ExecutionStatistics,
+  flattenStatementStats,
+  formatDate,
+  queryByName,
+  statementKey,
+  StatementStatistics,
+  TimestampToMoment,
+} from "src/util";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { RouteComponentProps } from "react-router-dom";
+
+import { AppState } from "src/store";
+import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnostics";
+import { AggregateStatistics } from "../statementsTable";
+import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
+import { SQLStatsState } from "../store/sqlStats";
+
+type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+export interface StatementsSummaryData {
+  statementFingerprintID: string;
+  statement: string;
+  statementSummary: string;
+  aggregatedTs: number;
+  aggregationInterval: number;
+  implicitTxn: boolean;
+  fullScan: boolean;
+  database: string;
+  stats: StatementStatistics[];
+}
+
+export const adminUISelector = createSelector(
+  (state: AppState) => state.adminUI,
+  adminUiState => adminUiState,
+);
+
+export const localStorageSelector = createSelector(
+  adminUISelector,
+  adminUiState => adminUiState.localStorage,
+);
+
+// selectApps returns the array of all apps with statement statistics present
+// in the data.
+export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
+  if (!sqlStatsState.data || !sqlStatsState.valid) {
+    return [];
+  }
+
+  let sawBlank = false;
+  const apps: { [app: string]: boolean } = {};
+  sqlStatsState.data.statements.forEach(
+    (statement: ICollectedStatementStatistics) => {
+      const isNotInternalApp =
+        sqlStatsState.data.internal_app_name_prefix &&
+        !statement.key.key_data.app.startsWith(
+          sqlStatsState.data.internal_app_name_prefix,
+        );
+      if (
+        sqlStatsState.data.internal_app_name_prefix == undefined ||
+        isNotInternalApp
+      ) {
+        if (statement.key.key_data.app) {
+          apps[statement.key.key_data.app] = true;
+        } else {
+          sawBlank = true;
+        }
+      }
+    },
+  );
+  return [].concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
+});
+
+// selectDatabases returns the array of all databases with statement statistics present
+// in the data.
+export const selectDatabases = createSelector(
+  sqlStatsSelector,
+  sqlStatsState => {
+    if (!sqlStatsState.data) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        sqlStatsState.data.statements.map(s =>
+          s.key.key_data.database ? s.key.key_data.database : "(unset)",
+        ),
+      ),
+    ).filter((dbName: string) => dbName !== null && dbName.length > 0);
+  },
+);
+
+// selectTotalFingerprints returns the count of distinct statement fingerprints
+// present in the data.
+export const selectTotalFingerprints = createSelector(
+  sqlStatsSelector,
+  state => {
+    if (!state.data) {
+      return 0;
+    }
+    const aggregated = aggregateStatementStats(state.data.statements);
+    return aggregated.length;
+  },
+);
+
+// selectLastReset returns a string displaying the last time the statement
+// statistics were reset.
+export const selectLastReset = createSelector(sqlStatsSelector, state => {
+  if (!state.data) {
+    return "";
+  }
+
+  return formatDate(TimestampToMoment(state.data.last_reset));
+});
+
+export const selectStatements = createSelector(
+  sqlStatsSelector,
+  (_: AppState, props: RouteComponentProps) => props,
+  selectDiagnosticsReportsPerStatement,
+  (
+    state: SQLStatsState,
+    props: RouteComponentProps<any>,
+    diagnosticsReportsPerStatement,
+  ): AggregateStatistics[] => {
+    // State is valid if we successfully fetched data, and the data has not yet been invalidated.
+    if (!state.data || !state.valid) {
+      return null;
+    }
+    let statements = flattenStatementStats(state.data.statements);
+    const app = queryByName(props.location, appAttr);
+    const isInternal = (statement: ExecutionStatistics) =>
+      statement.app.startsWith(state.data.internal_app_name_prefix);
+
+    if (app && app !== "All") {
+      const criteria = decodeURIComponent(app).split(",");
+      let showInternal = false;
+      if (criteria.includes(state.data.internal_app_name_prefix)) {
+        showInternal = true;
+      }
+      if (criteria.includes("(unset)")) {
+        criteria.push("");
+      }
+
+      statements = statements.filter(
+        (statement: ExecutionStatistics) =>
+          (showInternal && isInternal(statement)) ||
+          criteria.includes(statement.app),
+      );
+    } else {
+      // We don't want to show internal statements by default.
+      statements = statements.filter(
+        (statement: ExecutionStatistics) => !isInternal(statement),
+      );
+    }
+
+    const statsByStatementKey: {
+      [statement: string]: StatementsSummaryData;
+    } = {};
+    statements.forEach(stmt => {
+      const key = statementKey(stmt);
+      if (!(key in statsByStatementKey)) {
+        statsByStatementKey[key] = {
+          statementFingerprintID: stmt.statement_fingerprint_id?.toString(),
+          statement: stmt.statement,
+          statementSummary: stmt.statement_summary,
+          aggregatedTs: stmt.aggregated_ts,
+          aggregationInterval: stmt.aggregation_interval,
+          implicitTxn: stmt.implicit_txn,
+          fullScan: stmt.full_scan,
+          database: stmt.database,
+          stats: [],
+        };
+      }
+      statsByStatementKey[key].stats.push(stmt.stats);
+    });
+
+    return Object.keys(statsByStatementKey).map(key => {
+      const stmt = statsByStatementKey[key];
+      return {
+        aggregatedFingerprintID: stmt.statementFingerprintID,
+        label: stmt.statement,
+        summary: stmt.statementSummary,
+        aggregatedTs: stmt.aggregatedTs,
+        aggregationInterval: stmt.aggregationInterval,
+        implicitTxn: stmt.implicitTxn,
+        fullScan: stmt.fullScan,
+        database: stmt.database,
+        stats: combineStatementStats(stmt.stats),
+        diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
+      };
+    });
+  },
+);
+
+export const selectStatementsLastError = createSelector(
+  sqlStatsSelector,
+  state => state.lastError,
+);
+
+export const selectColumns = createSelector(
+  localStorageSelector,
+  // return array of columns if user have customized it or `null` otherwise
+  localStorage =>
+    localStorage["showColumns/StatementsPage"]
+      ? localStorage["showColumns/StatementsPage"].split(",")
+      : null,
+);
+
+export const selectTimeScale = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["timeScale/SQLActivity"],
+);
+
+export const selectSortSetting = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["sortSetting/StatementsPage"],
+);
+
+export const selectFilters = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["filters/StatementsPage"],
+);
+
+export const selectSearch = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["search/StatementsPage"],
+);

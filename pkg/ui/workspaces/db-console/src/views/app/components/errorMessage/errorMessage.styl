@@ -1,0 +1,35 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index'
+
+.error-message-page
+  min-width 320px
+  &__content
+    display flex
+    flex-direction column
+    align-items center
+    margin 0 $spacing-large
+  &__img
+    max-width 100%
+  &__body
+    text-align center
+    max-width 450px
+    padding $spacing-xx-large 0 $spacing-x-large
+    font-family $font-family--base
+    font-size $font-size--medium
+    line-height $line-height--medium
+    color $colors--neutral-6
+  &__message
+    color $colors--neutral-9
+    font-size $font-size--large
+    line-height $line-height--large
+    font-weight $font-weight--bold
+    margin-bottom 0

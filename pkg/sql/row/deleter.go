@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -41,7 +42,12 @@ type Deleter struct {
 // FetchCols; otherwise, all columns that are part of the key of any index
 // (either primary or secondary) are included in FetchCols.
 func MakeDeleter(
-	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, requestedCols []catalog.Column,
+	codec keys.SQLCodec,
+	tableDesc catalog.TableDescriptor,
+	requestedCols []catalog.Column,
+	sv *settings.Values,
+	internal bool,
+	metrics *Metrics,
 ) Deleter {
 	indexes := tableDesc.DeletableNonPrimaryIndexes()
 
@@ -86,7 +92,7 @@ func MakeDeleter(
 	}
 
 	rd := Deleter{
-		Helper:               newRowHelper(codec, tableDesc, indexes),
+		Helper:               newRowHelper(codec, tableDesc, indexes, sv, internal, metrics),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
@@ -123,10 +129,9 @@ func (rd *Deleter) DeleteRow(
 			return err
 		}
 		for _, e := range entries {
-			if traceKV {
-				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.secIndexValDirs[i], e.Key))
+			if err := rd.Helper.deleteIndexEntry(ctx, b, rd.Helper.Indexes[i], rd.Helper.secIndexValDirs[i], &e, traceKV); err != nil {
+				return err
 			}
-			b.Del(&e.Key)
 		}
 	}
 
@@ -155,34 +160,4 @@ func (rd *Deleter) DeleteRow(
 		rd.key = nil
 		return nil
 	})
-}
-
-// DeleteIndexRow adds to the batch the kv operations necessary to delete a
-// table row from the given index.
-func (rd *Deleter) DeleteIndexRow(
-	ctx context.Context, b *kv.Batch, idx catalog.Index, values []tree.Datum, traceKV bool,
-) error {
-	// We want to include empty k/v pairs because we want
-	// to delete all k/v's for this row. By setting includeEmpty
-	// to true, we will get a k/v pair for each family in the row,
-	// which will guarantee that we delete all the k/v's in this row.
-	secondaryIndexEntry, err := rowenc.EncodeSecondaryIndex(
-		rd.Helper.Codec,
-		rd.Helper.TableDesc,
-		idx,
-		rd.FetchColIDtoRowIndex,
-		values,
-		true, /* includeEmpty */
-	)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range secondaryIndexEntry {
-		if traceKV {
-			log.VEventf(ctx, 2, "Del %s", entry.Key)
-		}
-		b.Del(entry.Key)
-	}
-	return nil
 }

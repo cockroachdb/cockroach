@@ -15,8 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -33,6 +31,7 @@ func constructPlan(
 	subqueries []exec.Subquery,
 	cascades []exec.Cascade,
 	checks []exec.Node,
+	rootRowCount int64,
 ) (exec.Plan, error) {
 	res := &planComponents{}
 	assignPlan := func(plan *planMaybePhysical, node exec.Node) {
@@ -46,6 +45,7 @@ func constructPlan(
 		}
 	}
 	assignPlan(&res.main, root)
+	res.mainRowCount = rootRowCount
 	if len(subqueries) > 0 {
 		res.subqueryPlans = make([]subquery, len(subqueries))
 		for i := range subqueries {
@@ -65,6 +65,7 @@ func constructPlan(
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}
 			out.expanded = true
+			out.rowCount = in.RowCount
 			assignPlan(&out.plan, in.Root)
 		}
 	}
@@ -88,43 +89,28 @@ func constructPlan(
 // list of descriptor IDs for columns in the given cols set. Columns are
 // identified by their ordinal position in the table schema.
 func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) scanColumnsConfig {
-	// Set visibility=execinfra.ScanVisibilityPublicAndNotPublic, since all
-	// columns in the "cols" set should be projected, regardless of whether
-	// they're public or non-public. The caller decides which columns to
-	// include (or not include). Note that when wantedColumns is non-empty,
-	// the visibility flag will never trigger the addition of more columns.
 	colCfg := scanColumnsConfig{
-		wantedColumns:         make([]tree.ColumnID, 0, cols.Len()),
-		wantedColumnsOrdinals: make([]uint32, 0, cols.Len()),
-		visibility:            execinfra.ScanVisibilityPublicAndNotPublic,
+		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
 	}
 	for ord, ok := cols.Next(0); ok; ord, ok = cols.Next(ord + 1) {
 		col := table.Column(ord)
-		colOrd := ord
 		if col.Kind() == cat.Inverted {
-			typ := col.DatumType()
-			colOrd = col.InvertedSourceColumnOrdinal()
+			colCfg.invertedColumnType = col.DatumType()
+			colOrd := col.InvertedSourceColumnOrdinal()
 			col = table.Column(colOrd)
-			colCfg.virtualColumn = &struct {
-				colID tree.ColumnID
-				typ   *types.T
-			}{
-				colID: tree.ColumnID(col.ColID()),
-				typ:   typ,
-			}
+			colCfg.invertedColumnID = tree.ColumnID(col.ColID())
 		}
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(col.ColID()))
-		colCfg.wantedColumnsOrdinals = append(colCfg.wantedColumnsOrdinals, uint32(colOrd))
 	}
 	return colCfg
 }
 
 // getResultColumnsForSimpleProject populates result columns for a simple
-// projection. It supports two configurations:
+// projection. inputCols must be non-nil and contain the result columns before
+// the projection has been applied. It supports two configurations:
 // 1. colNames and resultTypes are non-nil. resultTypes indicates the updated
 //    types (after the projection has been applied)
-// 2. if colNames is nil, then inputCols must be non-nil (which are the result
-//    columns before the projection has been applied).
+// 2. colNames is nil.
 func getResultColumnsForSimpleProject(
 	cols []exec.NodeColumnOrdinal,
 	colNames []string,
@@ -140,8 +126,10 @@ func getResultColumnsForSimpleProject(
 			resultCols[i].Hidden = false
 		} else {
 			resultCols[i] = colinfo.ResultColumn{
-				Name: colNames[i],
-				Typ:  resultTypes[i],
+				Name:           colNames[i],
+				Typ:            resultTypes[i],
+				TableID:        inputCols[col].TableID,
+				PGAttributeNum: inputCols[col].PGAttributeNum,
 			}
 		}
 	}
@@ -196,9 +184,19 @@ func getResultColumnsForGroupBy(
 	return columns
 }
 
-// convertOrdinalsToInts converts a slice of exec.NodeColumnOrdinals to a slice
+// convertNodeOrdinalsToInts converts a slice of exec.NodeColumnOrdinals to a slice
 // of ints.
-func convertOrdinalsToInts(ordinals []exec.NodeColumnOrdinal) []int {
+func convertNodeOrdinalsToInts(ordinals []exec.NodeColumnOrdinal) []int {
+	ints := make([]int, len(ordinals))
+	for i := range ordinals {
+		ints[i] = int(ordinals[i])
+	}
+	return ints
+}
+
+// convertTableOrdinalsToInts converts a slice of exec.TableColumnOrdinal to a
+// slice of ints.
+func convertTableOrdinalsToInts(ordinals []exec.TableColumnOrdinal) []int {
 	ints := make([]int, len(ordinals))
 	for i := range ordinals {
 		ints[i] = int(ordinals[i])
@@ -282,7 +280,7 @@ func constructVirtualScan(
 
 func scanContainsSystemColumns(colCfg *scanColumnsConfig) bool {
 	for _, id := range colCfg.wantedColumns {
-		if colinfo.IsColIDSystemColumn(descpb.ColumnID(id)) {
+		if colinfo.IsColIDSystemColumn(id) {
 			return true
 		}
 	}

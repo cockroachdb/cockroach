@@ -57,7 +57,7 @@ type projectSetProcessor struct {
 	// thus also whether NULLs should be emitted instead.
 	done []bool
 
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 }
 
 var _ execinfra.Processor = &projectSetProcessor{}
@@ -104,7 +104,7 @@ func newProjectSetProcessor(
 	}
 
 	// Initialize exprHelpers.
-	semaCtx := ps.FlowCtx.TypeResolverFactory.NewSemaContext(ps.EvalCtx.Txn)
+	semaCtx := ps.FlowCtx.NewSemaContext(ps.EvalCtx.Txn)
 	for i, expr := range ps.spec.Exprs {
 		var helper execinfrapb.ExprHelper
 		err := helper.Init(expr, ps.input.OutputTypes(), semaCtx, ps.EvalCtx)
@@ -124,7 +124,7 @@ func newProjectSetProcessor(
 func (ps *projectSetProcessor) Start(ctx context.Context) {
 	ctx = ps.StartInternal(ctx, projectSetProcName)
 	ps.input.Start(ctx)
-	ps.cancelChecker = cancelchecker.NewCancelChecker(ctx)
+	ps.cancelChecker.Reset(ctx)
 }
 
 // nextInputRow returns the next row or metadata from ps.input. It also
@@ -285,13 +285,13 @@ func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) rowenc.EncDa
 }
 
 func (ps *projectSetProcessor) close() {
-	if ps.InternalClose() {
+	ps.InternalCloseEx(func() {
 		for _, gen := range ps.gens {
 			if gen != nil {
 				gen.Close(ps.Ctx)
 			}
 		}
-	}
+	})
 }
 
 // ConsumerClosed is part of the RowSource interface.

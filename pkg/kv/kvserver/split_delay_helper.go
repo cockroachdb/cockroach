@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft/v3"
@@ -63,7 +64,7 @@ func (sdh *splitDelayHelper) ProposeEmptyCommand(ctx context.Context) {
 	_ = r.withRaftGroup(true /* campaignOnWake */, func(rawNode *raft.RawNode) (bool, error) {
 		// NB: intentionally ignore the error (which can be ErrProposalDropped
 		// when there's an SST inflight).
-		data := encodeRaftCommand(raftVersionStandard, makeIDKey(), nil)
+		data := kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandard, makeIDKey(), nil)
 		_ = rawNode.Propose(data)
 		// NB: we need to unquiesce as the group might be quiesced.
 		return true /* unquiesceAndWakeLeader */, nil

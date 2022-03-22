@@ -1,0 +1,113 @@
+# Test basic operations performed with system span configurations.
+
+apply
+set [a,c):A
+----
+added [a,c):A
+
+apply
+set {entire-keyspace}:X
+----
+added {entire-keyspace}:X
+
+# Check that keys are hydrated correctly.
+get key=b
+----
+conf=A+X
+
+get key=c
+----
+conf=FALLBACK+X
+
+# Ensure no-ops appear as such.
+apply
+set {entire-keyspace}:X
+----
+
+# Ensure combining system span configs that target a tenant and the entire
+# keyspace both take affect.
+apply
+set {source=1,target=1}:Y
+----
+added {source=1,target=1}:Y
+
+# Check that keys are hydrated correctly.
+get key=b
+----
+conf=A+X+Y
+
+get key=c
+----
+conf=FALLBACK+X+Y
+
+# Ensure updates take affect as you'd expect.
+apply
+set {entire-keyspace}:Z
+----
+deleted {entire-keyspace}
+added {entire-keyspace}:Z
+
+get key=c
+----
+conf=FALLBACK+Z+Y
+
+get key=b
+----
+conf=A+Z+Y
+
+# Ensure deletion works properly.
+apply
+delete {entire-keyspace}
+----
+deleted {entire-keyspace}
+
+get key=c
+----
+conf=FALLBACK+Y
+
+get key=b
+----
+conf=A+Y
+
+# Ensure deletion no-ops appear as such.
+apply
+delete {entire-keyspace}
+----
+
+# Ensure updates/deletes to the system span configuration that applies to tenant
+# keyspace also work as expected.
+apply
+set {source=1,target=1}:W
+----
+deleted {source=1,target=1}
+added {source=1,target=1}:W
+
+get key=b
+----
+conf=A+W
+
+apply
+delete {source=1,target=1}
+----
+deleted {source=1,target=1}
+
+get key=b
+----
+conf=A
+
+# Add a system span configuration to a secondary tenant; it shouldn't affect
+# hydration of key b which lies in the system tenant's keyspace.
+
+apply
+set {source=1,target=20}:V
+----
+added {source=1,target=20}:V
+
+apply
+set {source=20,target=20}:U
+----
+added {source=20,target=20}:U
+
+get key=b
+----
+conf=A

@@ -27,10 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // CreatedByScheduledJobs identifies the job that was created
@@ -180,7 +183,8 @@ func (s *jobScheduler) processSchedule(
 		schedule.ScheduleID(), schedule.ScheduleLabel(),
 		schedule.ScheduledRunTime(), schedule.NextRun())
 
-	if err := executor.ExecuteJob(ctx, s.JobExecutionConfig, s.env, schedule, txn); err != nil {
+	execCtx := logtags.AddTag(ctx, "schedule", schedule.ScheduleID())
+	if err := executor.ExecuteJob(execCtx, s.JobExecutionConfig, s.env, schedule, txn); err != nil {
 		return errors.Wrapf(err, "executing schedule %d", schedule.ScheduleID())
 	}
 
@@ -298,7 +302,21 @@ func (s *jobScheduler) executeSchedules(
 			continue
 		}
 
+		if !s.env.IsExecutorEnabled(schedule.ExecutorType()) {
+			log.Infof(ctx, "Ignoring schedule %d: %s executor disabled",
+				schedule.ScheduleID(), schedule.ExecutorType())
+			continue
+		}
+
+		timeout := schedulerScheduleExecutionTimeout.Get(&s.Settings.SV)
 		if processErr := withSavePoint(ctx, txn, func() error {
+			if timeout > 0 {
+				return contextutil.RunWithTimeout(
+					ctx, fmt.Sprintf("process-schedule-%d", schedule.ScheduleID()), timeout,
+					func(ctx context.Context) error {
+						return s.processSchedule(ctx, schedule, numRunning, stats, txn)
+					})
+			}
 			return s.processSchedule(ctx, schedule, numRunning, stats, txn)
 		}); processErr != nil {
 			if errors.HasType(processErr, (*savePointError)(nil)) {
@@ -343,8 +361,83 @@ func (s *jobScheduler) executeSchedules(
 	return err
 }
 
+// An internal, safety valve setting to revert scheduler execution to distributed mode.
+// This setting should be removed once scheduled job system no longer locks tables for excessive
+// periods of time.
+var schedulerRunsOnSingleNode = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"jobs.scheduler.single_node_scheduler.enabled",
+	"execute scheduler on a single node in a cluster",
+	false,
+)
+
+func (s *jobScheduler) schedulerEnabledOnThisNode(ctx context.Context) bool {
+	if s.ShouldRunScheduler == nil || !schedulerRunsOnSingleNode.Get(&s.Settings.SV) {
+		return true
+	}
+
+	enabled, err := s.ShouldRunScheduler(ctx, s.DB.Clock().NowAsClockTimestamp())
+	if err != nil {
+		log.Errorf(ctx, "error determining if the scheduler enabled: %v; will recheck after %s",
+			err, recheckEnabledAfterPeriod)
+		return false
+	}
+	return enabled
+}
+
+type syncCancelFunc struct {
+	syncutil.Mutex
+	context.CancelFunc
+}
+
+// newCancelWhenDisabled arranges for scheduler enabled setting callback to cancel
+// currently executing context.
+func newCancelWhenDisabled(sv *settings.Values) *syncCancelFunc {
+	sf := &syncCancelFunc{}
+	schedulerEnabledSetting.SetOnChange(sv, func(ctx context.Context) {
+		if !schedulerEnabledSetting.Get(sv) {
+			sf.Lock()
+			if sf.CancelFunc != nil {
+				sf.CancelFunc()
+			}
+			sf.Unlock()
+		}
+	})
+	return sf
+}
+
+// withCancelOnDisabled executes provided function with the context which will be cancelled
+// if scheduler is disabled.
+func (sf *syncCancelFunc) withCancelOnDisabled(
+	ctx context.Context, sv *settings.Values, f func(ctx context.Context) error,
+) error {
+	ctx, cancel := func() (context.Context, context.CancelFunc) {
+		sf.Lock()
+		defer sf.Unlock()
+
+		ctx, cancel := context.WithCancel(ctx)
+		sf.CancelFunc = cancel
+
+		if !schedulerEnabledSetting.Get(sv) {
+			cancel()
+		}
+
+		return ctx, func() {
+			sf.Lock()
+			defer sf.Unlock()
+			cancel()
+			sf.CancelFunc = nil
+		}
+	}()
+	defer cancel()
+	return f(ctx)
+}
+
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "job-scheduler", func(ctx context.Context) {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
 		log.Infof(ctx, "waiting %v before scheduled jobs daemon start", initialDelay)
 
@@ -352,46 +445,57 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 			log.Errorf(ctx, "error registering executor metrics: %+v", err)
 		}
 
+		whenDisabled := newCancelWhenDisabled(&s.Settings.SV)
+
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
-			getWaitPeriod(&s.Settings.SV, s.TestingKnobs)) {
+			getWaitPeriod(ctx, &s.Settings.SV, s.schedulerEnabledOnThisNode, jitter, s.TestingKnobs)) {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
-				if !schedulerEnabledSetting.Get(&s.Settings.SV) {
-					log.Info(ctx, "scheduled job daemon disabled")
+				if !schedulerEnabledSetting.Get(&s.Settings.SV) || !s.schedulerEnabledOnThisNode(ctx) {
 					continue
 				}
 
 				maxSchedules := schedulerMaxJobsPerIterationSetting.Get(&s.Settings.SV)
-				err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					return s.executeSchedules(ctx, maxSchedules, txn)
-				})
-				if err != nil {
+				if err := whenDisabled.withCancelOnDisabled(ctx, &s.Settings.SV, func(ctx context.Context) error {
+					return s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+						return s.executeSchedules(ctx, maxSchedules, txn)
+					})
+				}); err != nil {
 					log.Errorf(ctx, "error executing schedules: %+v", err)
 				}
-
 			}
 		}
 	})
 }
 
 var schedulerEnabledSetting = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"jobs.scheduler.enabled",
 	"enable/disable job scheduler",
 	true,
 )
 
 var schedulerPaceSetting = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"jobs.scheduler.pace",
 	"how often to scan system.scheduled_jobs table",
 	time.Minute,
 )
 
 var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(
+	settings.TenantWritable,
 	"jobs.scheduler.max_jobs_per_iteration",
 	"how many schedules to start per iteration; setting to 0 turns off this limit",
-	10,
+	5,
+)
+
+var schedulerScheduleExecutionTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"jobs.scheduler.schedule_execution.timeout",
+	"sets a timeout on for schedule execution; 0 disables timeout",
+	30*time.Second,
 )
 
 // Returns the amount of time to wait before starting initial scan.
@@ -412,8 +516,16 @@ const recheckEnabledAfterPeriod = 5 * time.Minute
 
 var warnIfPaceTooLow = log.Every(time.Minute)
 
+type jitterFn func(duration time.Duration) time.Duration
+
 // Returns duration to wait before scanning system.scheduled_jobs.
-func getWaitPeriod(sv *settings.Values, knobs base.ModuleTestingKnobs) time.Duration {
+func getWaitPeriod(
+	ctx context.Context,
+	sv *settings.Values,
+	enabledOnThisNode func(ctx context.Context) bool,
+	jitter jitterFn,
+	knobs base.ModuleTestingKnobs,
+) time.Duration {
 	if k, ok := knobs.(*TestingKnobs); ok && k.SchedulerDaemonScanDelay != nil {
 		return k.SchedulerDaemonScanDelay()
 	}
@@ -422,16 +534,20 @@ func getWaitPeriod(sv *settings.Values, knobs base.ModuleTestingKnobs) time.Dura
 		return recheckEnabledAfterPeriod
 	}
 
+	if enabledOnThisNode != nil && !enabledOnThisNode(ctx) {
+		return recheckEnabledAfterPeriod
+	}
+
 	pace := schedulerPaceSetting.Get(sv)
 	if pace < minPacePeriod {
 		if warnIfPaceTooLow.ShouldLog() {
-			log.Warningf(context.Background(),
+			log.Warningf(ctx,
 				"job.scheduler.pace setting too low (%s < %s)", pace, minPacePeriod)
 		}
 		pace = minPacePeriod
 	}
 
-	return pace
+	return jitter(pace)
 }
 
 // StartJobSchedulerDaemon starts a daemon responsible for periodically scanning
@@ -464,6 +580,10 @@ func StartJobSchedulerDaemon(
 				return scheduler.executeSchedules(ctx, maxSchedules, txn)
 			})
 		return
+	}
+
+	if daemonKnobs != nil && daemonKnobs.CaptureJobScheduler != nil {
+		daemonKnobs.CaptureJobScheduler(scheduler)
 	}
 
 	scheduler.runDaemon(ctx, stopper)

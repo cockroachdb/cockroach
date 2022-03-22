@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "exec_explain_gen.go",
         "exec_factory_gen.go",
+        "exec_plan_gist_gen.go",
         "explorer_gen.go",
         "exprs_gen.go",
         "factory_gen.go",

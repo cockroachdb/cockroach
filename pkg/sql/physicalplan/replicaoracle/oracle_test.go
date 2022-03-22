@@ -74,7 +74,8 @@ func TestClosest(t *testing.T) {
 
 func makeGossip(t *testing.T, stopper *stop.Stopper) (*gossip.Gossip, *hlc.Clock) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	ctx := context.Background()
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	server := rpc.NewServer(rpcContext)
 
 	const nodeID = 1

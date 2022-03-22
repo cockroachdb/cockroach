@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -119,12 +118,10 @@ func evalNewLease(
 	}
 
 	// Record information about the type of event that resulted in this new lease.
-	if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.AcquisitionTypeInLeaseHistory) {
-		if isTransfer {
-			lease.AcquisitionType = roachpb.LeaseAcquisitionType_Transfer
-		} else {
-			lease.AcquisitionType = roachpb.LeaseAcquisitionType_Request
-		}
+	if isTransfer {
+		lease.AcquisitionType = roachpb.LeaseAcquisitionType_Transfer
+	} else {
+		lease.AcquisitionType = roachpb.LeaseAcquisitionType_Request
 	}
 
 	// Store the lease to disk & in-memory.
@@ -145,8 +142,7 @@ func evalNewLease(
 	// only ever updates in-mem state) but it's easy to get things wrong (in
 	// which case they could easily take a catastrophic turn) and the benefit is
 	// low.
-	readSumActive := rec.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries)
-	if priorReadSum != nil && readSumActive {
+	if priorReadSum != nil {
 		if err := readsummary.Set(ctx, readWriter, rec.GetRangeID(), ms, priorReadSum); err != nil {
 			return newFailedLeaseTrigger(isTransfer), err
 		}

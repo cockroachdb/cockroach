@@ -1,9 +1,11 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "log",
     srcs = [
         "ambient_context.go",
+        "buffer_sink.go",
         "channels.go",
         "clog.go",
         "doc.go",
@@ -13,6 +15,7 @@ go_library(
         "file.go",
         "file_api.go",
         "file_log_gc.go",
+        "file_names.go",
         "file_sync_buffer.go",
         "flags.go",
         "fluent_client.go",
@@ -21,6 +24,7 @@ go_library(
         "format_crdb_v2.go",
         "format_json.go",
         "formats.go",
+        "formattable_tags.go",
         "get_stacks.go",
         "http_sink.go",
         "intercept.go",
@@ -32,6 +36,7 @@ go_library(
         "log_flush.go",
         "redact.go",
         "registry.go",
+        "server_ident.go",
         "sinks.go",
         "stderr_redirect.go",
         "stderr_redirect_unix.go",
@@ -70,6 +75,7 @@ go_library(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
         "@com_github_cockroachdb_ttycolor//:ttycolor",
         "@com_github_petermattis_goid//:goid",
         "@org_golang_x_net//trace",
@@ -125,26 +131,34 @@ go_test(
     size = "small",
     srcs = [
         "ambient_context_test.go",
+        "buffer_sink_test.go",
         "clog_test.go",
         "file_log_gc_test.go",
+        "file_names_test.go",
         "file_test.go",
         "flags_test.go",
         "fluent_client_test.go",
         "format_crdb_v1_test.go",
         "format_crdb_v2_test.go",
         "format_json_test.go",
+        "formats_test.go",
+        "formattable_tags_test.go",
         "helpers_test.go",
         "http_sink_test.go",
         "intercept_test.go",
+        "log_decoder_test.go",
         "main_test.go",
         "redact_test.go",
         "secondary_log_test.go",
+        "test_log_scope_test.go",
         "trace_client_test.go",
         "trace_test.go",
+        ":mock_logsink",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":log"],
     deps = [
+        "//pkg/build",
         "//pkg/cli/exit",
         "//pkg/settings/cluster",
         "//pkg/util/caller",
@@ -164,6 +178,7 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_golang_mock//gomock",  # keep
         "@com_github_kr_pretty//:pretty",
         "@com_github_pmezard_go_difflib//difflib",
         "@com_github_stretchr_testify//assert",
@@ -184,5 +199,25 @@ genrule(
        """,
     exec_tools = [
         "//pkg/util/log/gen",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+gomock(
+    name = "mock_logsink",
+    out = "mocks_generated_test.go",
+    interfaces = [
+        "TestingLogSink",
+    ],
+    library = ":log",
+    mock_names = {"TestingLogSink": "MockLogSink"},
+    package = "log",
+    self_package = "github.com/cockroachdb/cockroach/pkg/util/log",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )

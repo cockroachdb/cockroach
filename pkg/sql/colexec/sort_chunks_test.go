@@ -189,7 +189,7 @@ func TestSortChunks(t *testing.T) {
 
 	for _, tc := range sortChunksTestCases {
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, execinfra.DefaultMemoryLimit)
+			return NewSortChunks(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, execinfra.DefaultMemoryLimit), nil
 		})
 	}
 }
@@ -197,7 +197,7 @@ func TestSortChunks(t *testing.T) {
 func TestSortChunksRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nTups := 8
 	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
@@ -231,7 +231,7 @@ func TestSortChunksRandomized(t *testing.T) {
 				sort.Slice(expected, less(expected, ordCols))
 
 				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{sortedTups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen, execinfra.DefaultMemoryLimit)
+					return NewSortChunks(testAllocator, input[0], typs[:nCols], ordCols, matchLen, execinfra.DefaultMemoryLimit), nil
 				})
 			}
 		}
@@ -240,12 +240,12 @@ func TestSortChunksRandomized(t *testing.T) {
 
 func BenchmarkSortChunks(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
-	sorterConstructors := []func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.Ordering_Column, int, int64) (colexecop.Operator, error){
+	sorterConstructors := []func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.Ordering_Column, int, int64) colexecop.Operator{
 		NewSortChunks,
-		func(allocator *colmem.Allocator, input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, _ int, maxOutputBatchMemSize int64) (colexecop.Operator, error) {
+		func(allocator *colmem.Allocator, input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, _ int, maxOutputBatchMemSize int64) colexecop.Operator {
 			return NewSorter(allocator, input, inputTypes, orderingCols, maxOutputBatchMemSize)
 		},
 	}
@@ -271,35 +271,11 @@ func BenchmarkSortChunks(b *testing.B) {
 								}
 								batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 								batch.SetLength(coldata.BatchSize())
-								ordCols := make([]execinfrapb.Ordering_Column, nCols)
-								for i := range ordCols {
-									ordCols[i].ColIdx = uint32(i)
-									if i < matchLen {
-										ordCols[i].Direction = execinfrapb.Ordering_Column_ASC
-									} else {
-										ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
-									}
-
-									col := batch.ColVec(i).Int64()
-									col[0] = 0
-									for j := 1; j < coldata.BatchSize(); j++ {
-										if i < matchLen {
-											col[j] = col[j-1]
-											if rng.Float64() < 1.0/float64(avgChunkSize) {
-												col[j]++
-											}
-										} else {
-											col[j] = rng.Int63() % int64((i*1024)+1)
-										}
-									}
-								}
+								ordCols := generatePartiallyOrderedColumns(*rng, batch, nCols, matchLen, avgChunkSize)
 								b.ResetTimer()
 								for n := 0; n < b.N; n++ {
 									source := colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, matchLen)
-									sorter, err := sorterConstructor(testAllocator, source, typs, ordCols, matchLen, execinfra.DefaultMemoryLimit)
-									if err != nil {
-										b.Fatal(err)
-									}
+									sorter := sorterConstructor(testAllocator, source, typs, ordCols, matchLen, execinfra.DefaultMemoryLimit)
 
 									sorter.Init(ctx)
 									for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {

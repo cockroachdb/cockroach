@@ -88,7 +88,7 @@ http://docs.datastax.com/en/archived/cassandra/1.2/cassandra/upgrade/upgradeChan
 # High level design
 
 Bundle all execution methods (everything multiplexed to by `executeCmd`) in a
-collection `ReplicaMethods` which is to be specified (but sementically
+collection `ReplicaMethods` which is to be specified (but semantically
 speaking, it is a map of command to implementation of the command).
 It is this entity which is being versioned. Add `var MaxReplicaVersion int64`
 to the `storage` package. The version stored there is the version of the
@@ -174,7 +174,7 @@ Assume someone decides that our heartbeat interval needs to be smaller
 `base.DefaultHeartbeatInterval` without thinking it through. That variable
 is used in `PushTxn` to decide whether the transaction record is abandoned, so
 during an update we might have transactions which are both aborted and not
-aborted. Many such examples exist and I'm afraid even Sysiphus could get tired
+aborted. Many such examples exist and I'm afraid even Sisyphus could get tired
 of finding and building lints around them all.
 
 ### Model case: Simple proto change

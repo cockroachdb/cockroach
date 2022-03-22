@@ -58,7 +58,7 @@ func GenerateRRJar(jar string, bnf []byte) ([]byte, error) {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("%s: %s", err, out)
+		return nil, fmt.Errorf("%w: %s", err, out)
 	}
 	return out, nil
 }
@@ -105,11 +105,13 @@ func GenerateBNF(addr string, bnfAPITimeout time.Duration) (ebnf []byte, err err
 		if err != nil {
 			return nil, err
 		}
-		b, err = ioutil.ReadAll(resp.Body)
+		b, err = func() ([]byte, error) {
+			defer resp.Body.Close()
+			return ioutil.ReadAll(resp.Body)
+		}()
 		if err != nil {
 			return nil, err
 		}
-		resp.Body.Close()
 	} else {
 		body, err := ioutil.ReadFile(addr)
 		if err != nil {

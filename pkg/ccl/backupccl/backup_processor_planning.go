@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 func distBackupPlanSpecs(
@@ -31,6 +31,7 @@ func distBackupPlanSpecs(
 	planCtx *sql.PlanningCtx,
 	execCtx sql.JobExecContext,
 	dsp *sql.DistSQLPlanner,
+	jobID int64,
 	spans roachpb.Spans,
 	introducedSpans roachpb.Spans,
 	pkIDs map[uint64]bool,
@@ -39,7 +40,7 @@ func distBackupPlanSpecs(
 	encryption *jobspb.BackupEncryptionOptions,
 	mvccFilter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
-) (map[roachpb.NodeID]*execinfrapb.BackupDataSpec, error) {
+) (map[base.SQLInstanceID]*execinfrapb.BackupDataSpec, error) {
 	var span *tracing.Span
 	ctx, span = tracing.ChildSpan(ctx, "backup-plan-specs")
 	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
@@ -88,9 +89,10 @@ func distBackupPlanSpecs(
 
 	// First construct spans based on span partitions. Then add on
 	// introducedSpans based on how those partition.
-	nodeToSpec := make(map[roachpb.NodeID]*execinfrapb.BackupDataSpec)
+	sqlInstanceIDToSpec := make(map[base.SQLInstanceID]*execinfrapb.BackupDataSpec)
 	for _, partition := range spanPartitions {
 		spec := &execinfrapb.BackupDataSpec{
+			JobID:            jobID,
 			Spans:            partition.Spans,
 			DefaultURI:       defaultURI,
 			URIsByLocalityKV: urisByLocalityKV,
@@ -101,17 +103,18 @@ func distBackupPlanSpecs(
 			BackupEndTime:    endTime,
 			UserProto:        user.EncodeProto(),
 		}
-		nodeToSpec[partition.Node] = spec
+		sqlInstanceIDToSpec[partition.SQLInstanceID] = spec
 	}
 
 	for _, partition := range introducedSpanPartitions {
-		if spec, ok := nodeToSpec[partition.Node]; ok {
+		if spec, ok := sqlInstanceIDToSpec[partition.SQLInstanceID]; ok {
 			spec.IntroducedSpans = partition.Spans
 		} else {
 			// We may need to introduce a new spec in the case that there is a node
 			// which is not the leaseholder for any of the spans, but is for an
 			// introduced span.
 			spec := &execinfrapb.BackupDataSpec{
+				JobID:            jobID,
 				IntroducedSpans:  partition.Spans,
 				DefaultURI:       defaultURI,
 				URIsByLocalityKV: urisByLocalityKV,
@@ -122,21 +125,21 @@ func distBackupPlanSpecs(
 				BackupEndTime:    endTime,
 				UserProto:        user.EncodeProto(),
 			}
-			nodeToSpec[partition.Node] = spec
+			sqlInstanceIDToSpec[partition.SQLInstanceID] = spec
 		}
 	}
 
 	backupPlanningTraceEvent := BackupProcessorPlanningTraceEvent{
 		NodeToNumSpans: make(map[int32]int64),
 	}
-	for node, spec := range nodeToSpec {
+	for node, spec := range sqlInstanceIDToSpec {
 		numSpans := int64(len(spec.Spans) + len(spec.IntroducedSpans))
 		backupPlanningTraceEvent.NodeToNumSpans[int32(node)] = numSpans
 		backupPlanningTraceEvent.TotalNumSpans += numSpans
 	}
 	span.RecordStructured(&backupPlanningTraceEvent)
 
-	return nodeToSpec, nil
+	return sqlInstanceIDToSpec, nil
 }
 
 // distBackup is used to plan the processors for a distributed backup. It
@@ -148,11 +151,10 @@ func distBackup(
 	planCtx *sql.PlanningCtx,
 	dsp *sql.DistSQLPlanner,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-	backupSpecs map[roachpb.NodeID]*execinfrapb.BackupDataSpec,
+	backupSpecs map[base.SQLInstanceID]*execinfrapb.BackupDataSpec,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "backup-distsql")
 	defer span.Finish()
-	ctx = logtags.AddTag(ctx, "backup-distsql", nil)
 	evalCtx := execCtx.ExtendedEvalContext()
 	var noTxn *kv.Txn
 
@@ -164,8 +166,8 @@ func distBackup(
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(backupSpecs))
 	i := 0
-	for node, spec := range backupSpecs {
-		corePlacement[i].NodeID = node
+	for sqlInstanceID, spec := range backupSpecs {
+		corePlacement[i].SQLInstanceID = sqlInstanceID
 		corePlacement[i].Core.BackupData = spec
 		i++
 	}

@@ -13,6 +13,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -50,12 +51,18 @@ func (e *plannerJobExecContext) ExtendedEvalContext() *extendedEvalContext {
 func (e *plannerJobExecContext) SessionData() *sessiondata.SessionData {
 	return e.p.SessionData()
 }
+func (e *plannerJobExecContext) SessionDataMutatorIterator() *sessionDataMutatorIterator {
+	return e.p.SessionDataMutatorIterator()
+}
 func (e *plannerJobExecContext) ExecCfg() *ExecutorConfig        { return e.p.ExecCfg() }
 func (e *plannerJobExecContext) DistSQLPlanner() *DistSQLPlanner { return e.p.DistSQLPlanner() }
 func (e *plannerJobExecContext) LeaseMgr() *lease.Manager        { return e.p.LeaseMgr() }
 func (e *plannerJobExecContext) User() security.SQLUsername      { return e.p.User() }
 func (e *plannerJobExecContext) MigrationJobDeps() migration.JobDeps {
 	return e.p.MigrationJobDeps()
+}
+func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
+	return e.p.SpanConfigReconciler()
 }
 
 // JobExecContext provides the execution environment for a job. It is what is
@@ -71,9 +78,11 @@ type JobExecContext interface {
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
+	SessionDataMutatorIterator() *sessionDataMutatorIterator
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
 	User() security.SQLUsername
 	MigrationJobDeps() migration.JobDeps
+	SpanConfigReconciler() spanconfig.Reconciler
 }

@@ -14,26 +14,26 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraph"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scgraphviz"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraphviz"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,19 +44,20 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func TestPlanAlterTable(t *testing.T) {
+func TestPlanDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
 	ctx := context.Background()
 
-	datadriven.Walk(t, filepath.Join("testdata"), func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema":
+			case "create-view", "create-sequence", "create-table", "create-type", "create-database", "create-schema", "create-index":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				require.Len(t, stmts, 1)
@@ -74,6 +75,8 @@ func TestPlanAlterTable(t *testing.T) {
 					tableName = ""
 				case *tree.CreateSchema:
 					tableName = ""
+				case *tree.CreateIndex:
+					tableName = ""
 				default:
 					t.Fatal("not a CREATE TABLE/SEQUENCE/VIEW statement")
 				}
@@ -89,40 +92,37 @@ func TestPlanAlterTable(t *testing.T) {
 				}
 				return ""
 			case "ops", "deps":
-				deps, cleanup := newTestingPlanDeps(s)
-				defer cleanup()
-
-				stmts, err := parser.Parse(d.Input)
-				require.NoError(t, err)
-				var outputNodes scpb.State
-				for i := range stmts {
-					outputNodes, err = scbuild.Build(ctx, *deps, outputNodes, stmts[i].AST)
+				var plan scplan.Plan
+				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuild.Dependencies) {
+					stmts, err := parser.Parse(d.Input)
 					require.NoError(t, err)
-				}
+					var state scpb.CurrentState
+					for i := range stmts {
+						state, err = scbuild.Build(ctx, deps, state, stmts[i].AST)
+						require.NoError(t, err)
+					}
 
-				plan, err := scplan.MakePlan(outputNodes,
-					scplan.Params{
-						ExecutionPhase: scplan.PostCommitPhase,
-					})
-				require.NoError(t, err)
+					plan = sctestutils.MakePlan(t, state, scop.EarliestPhase)
+					sctestutils.TruncateJobOps(&plan)
+					validatePlan(t, &plan)
+				})
 
 				if d.Cmd == "ops" {
-					return marshalOps(t, &plan)
+					return marshalOps(t, plan.TargetState, plan.Stages)
 				}
 				return marshalDeps(t, &plan)
 			case "unimplemented":
-				deps, cleanup := newTestingPlanDeps(s)
-				defer cleanup()
+				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuild.Dependencies) {
+					stmts, err := parser.Parse(d.Input)
+					require.NoError(t, err)
+					require.Len(t, stmts, 1)
 
-				stmts, err := parser.Parse(d.Input)
-				require.NoError(t, err)
-				require.Len(t, stmts, 1)
-
-				stmt := stmts[0]
-				alter, ok := stmt.AST.(*tree.AlterTable)
-				require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-				_, err = scbuild.Build(ctx, *deps, nil, alter)
-				require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
+					stmt := stmts[0]
+					alter, ok := stmt.AST.(*tree.AlterTable)
+					require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
+					_, err = scbuild.Build(ctx, deps, scpb.CurrentState{}, alter)
+					require.Truef(t, scerrors.HasNotImplemented(err), "expected unimplemented, got %v", err)
+				})
 				return ""
 
 			default:
@@ -131,6 +131,37 @@ func TestPlanAlterTable(t *testing.T) {
 		}
 		datadriven.RunTest(t, path, run)
 	})
+}
+
+// validatePlan takes an existing plan and re-plans using the starting state of
+// an arbitrary stage in the existing plan: the results should be the same as in
+// the original plan, minus the stages prior to the selected stage.
+// This guarantees the idempotency of the planning scheme, which is a useful
+// property to have. For instance it guarantees that the output of EXPLAIN (DDL)
+// represents the plan that actually gets executed in the various execution
+// phases.
+func validatePlan(t *testing.T, plan *scplan.Plan) {
+	stages := plan.Stages
+	for i, stage := range stages {
+		expected := make([]scstage.Stage, len(stages[i:]))
+		for j, s := range stages[i:] {
+			if s.Phase == stage.Phase {
+				offset := stage.Ordinal - 1
+				s.Ordinal = s.Ordinal - offset
+				s.StagesInPhase = s.StagesInPhase - offset
+			}
+			expected[j] = s
+		}
+		e := marshalOps(t, plan.TargetState, expected)
+		cs := scpb.CurrentState{
+			TargetState: plan.TargetState,
+			Current:     stage.Before,
+		}
+		truncatedPlan := sctestutils.MakePlan(t, cs, stage.Phase)
+		sctestutils.TruncateJobOps(&truncatedPlan)
+		a := marshalOps(t, plan.TargetState, truncatedPlan.Stages)
+		require.Equalf(t, e, a, "plan mismatch when re-planning %d stage(s) later", i)
+	}
 }
 
 // indentText indents text for formatting out marshaled data.
@@ -150,13 +181,15 @@ func indentText(input string, tab string) string {
 // marshalDeps marshals dependencies in scplan.Plan to a string.
 func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 	var sortedDeps []string
-	err := plan.Graph.ForEachNode(func(n *scpb.Node) error {
+	err := plan.Graph.ForEachNode(func(n *screl.Node) error {
 		return plan.Graph.ForEachDepEdgeFrom(n, func(de *scgraph.DepEdge) error {
 			var deps strings.Builder
 			fmt.Fprintf(&deps, "- from: [%s, %s]\n",
-				scpb.AttributesString(de.From().Element()), de.From().Status)
+				screl.ElementString(de.From().Element()), de.From().CurrentStatus)
 			fmt.Fprintf(&deps, "  to:   [%s, %s]\n",
-				scpb.AttributesString(de.To().Element()), de.To().Status)
+				screl.ElementString(de.To().Element()), de.To().CurrentStatus)
+			fmt.Fprintf(&deps, "  kind: %s\n", de.Kind())
+			fmt.Fprintf(&deps, "  rule: %s\n", de.Name())
 			sortedDeps = append(sortedDeps, deps.String())
 			return nil
 		})
@@ -175,48 +208,47 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 }
 
 // marshalOps marshals operations in scplan.Plan to a string.
-func marshalOps(t *testing.T, plan *scplan.Plan) string {
-	stages := ""
-	for stageIdx, stage := range plan.Stages {
-		stages += fmt.Sprintf("Stage %d\n", stageIdx)
+func marshalOps(t *testing.T, ts scpb.TargetState, stages []scstage.Stage) string {
+	var sb strings.Builder
+	for _, stage := range stages {
+		sb.WriteString(stage.String())
+		sb.WriteString("\n  transitions:\n")
+		var transitionsBuf strings.Builder
+		for i, before := range stage.Before {
+			after := stage.After[i]
+			if before == after {
+				continue
+			}
+			n := &screl.Node{
+				Target:        &ts.Targets[i],
+				CurrentStatus: before,
+			}
+			_, _ = fmt.Fprintf(&transitionsBuf, "%s -> %s\n", screl.NodeString(n), after)
+		}
+		sb.WriteString(indentText(transitionsBuf.String(), "    "))
+		ops := stage.Ops()
+		if len(ops) == 0 {
+			// Although unlikely, it's possible for a stage to have no operations.
+			// This requires them to have been optimized out, and also requires that
+			// the resulting empty stage could not be collapsed into another.
+			sb.WriteString("  no ops\n")
+			continue
+		}
+		sb.WriteString("  ops:\n")
 		stageOps := ""
-		for _, op := range stage.Ops.Slice() {
+		for _, op := range ops {
+			if setJobStateOp, ok := op.(*scop.SetJobStateOnDescriptor); ok {
+				clone := *setJobStateOp
+				clone.State = scpb.DescriptorState{}
+				op = &clone
+			}
 			opMap, err := scgraphviz.ToMap(op)
 			require.NoError(t, err)
 			data, err := yaml.Marshal(opMap)
 			require.NoError(t, err)
 			stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
 		}
-		stages += indentText(stageOps, "  ")
+		sb.WriteString(indentText(stageOps, "    "))
 	}
-	return stages
-}
-
-func newTestingPlanDeps(s serverutils.TestServerInterface) (*scbuild.Dependencies, func()) {
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	ip, cleanup := sql.NewInternalPlanner(
-		"test",
-		kv.NewTxn(context.Background(), s.DB(), s.NodeID()),
-		security.RootUserName(),
-		&sql.MemoryMetrics{},
-		&execCfg,
-		// Setting the database on the session data to "defaultdb" in the obvious
-		// way doesn't seem to do what we want.
-		sessiondatapb.SessionData{},
-	)
-	planner := ip.(interface {
-		resolver.SchemaResolver
-		SemaCtx() *tree.SemaContext
-		EvalContext() *tree.EvalContext
-		Descriptors() *descs.Collection
-		scbuild.AuthorizationAccessor
-	})
-	buildDeps := scbuild.Dependencies{
-		Res:          planner,
-		SemaCtx:      planner.SemaCtx(),
-		EvalCtx:      planner.EvalContext(),
-		Descs:        planner.Descriptors(),
-		AuthAccessor: planner,
-	}
-	return &buildDeps, cleanup
+	return sb.String()
 }

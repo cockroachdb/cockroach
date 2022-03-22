@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -51,7 +53,7 @@ Uploads a single file, or, with the -r flag, all the files in the subtree rooted
 at a directory, to the user-scoped file storage using a SQL connection.
 `,
 	Args: cobra.MinimumNArgs(1),
-	RunE: maybeShoutError(runUserFileUpload),
+	RunE: clierrorplus.MaybeShoutError(runUserFileUpload),
 }
 
 var userFileListCmd = &cobra.Command{
@@ -63,7 +65,7 @@ using a SQL connection. If no pattern is provided, all files in the specified
 (or default, if unspecified) user scoped file storage will be listed.
 `,
 	Args:    cobra.MinimumNArgs(0),
-	RunE:    maybeShoutError(runUserFileList),
+	RunE:    clierrorplus.MaybeShoutError(runUserFileList),
 	Aliases: []string{"ls"},
 }
 
@@ -75,7 +77,7 @@ Fetch the files stored in the user scoped file storage which match the provided 
 using a SQL connection, to the current directory or 'destination' if provided.
 `,
 	Args: cobra.MinimumNArgs(1),
-	RunE: maybeShoutError(runUserFileGet),
+	RunE: clierrorplus.MaybeShoutError(runUserFileGet),
 }
 
 var userFileDeleteCmd = &cobra.Command{
@@ -88,7 +90,7 @@ using a SQL connection. If passed pattern '*', all files in the specified
 atomic, and all deletions prior to the first failure will occur.
 `,
 	Args:    cobra.MinimumNArgs(1),
-	RunE:    maybeShoutError(runUserFileDelete),
+	RunE:    clierrorplus.MaybeShoutError(runUserFileDelete),
 	Aliases: []string{"rm"},
 }
 
@@ -462,7 +464,7 @@ func downloadUserfile(
 	if err != nil {
 		return 0, err
 	}
-	defer remoteFile.Close()
+	defer remoteFile.Close(ctx)
 
 	localDir := path.Dir(dst)
 	if err := os.MkdirAll(localDir, 0700); err != nil {
@@ -476,7 +478,7 @@ func downloadUserfile(
 	}
 	defer localFile.Close()
 
-	return io.Copy(localFile, remoteFile)
+	return io.Copy(localFile, ioctx.ReaderCtxAdapter(ctx, remoteFile))
 }
 
 func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]string, error) {
@@ -562,7 +564,7 @@ func renameUserFile(
 			_, _ = ex.ExecContext(ctx, `ROLLBACK`, nil)
 		}
 	}()
-
+	//lint:ignore SA1019 DriverConn doesn't support go 1.8 API
 	_, err = stmt.Exec([]driver.Value{newFilename, oldFilename})
 	if err != nil {
 		return err
@@ -651,6 +653,7 @@ func uploadUserFile(
 		if n > 0 {
 			// TODO(adityamaru): Switch to StmtExecContext once the copyin driver
 			// supports it.
+			//lint:ignore SA1019 DriverConn doesn't support go 1.8 API
 			_, err = stmt.Exec([]driver.Value{string(send[:n])})
 			if err != nil {
 				return "", err
@@ -696,7 +699,7 @@ var userFileCmd = &cobra.Command{
 	Use:   "userfile [command]",
 	Short: "upload, list and delete user scoped files",
 	Long:  "Upload, list and delete files from the user scoped file storage.",
-	RunE:  usageAndErr,
+	RunE:  UsageAndErr,
 }
 
 func init() {

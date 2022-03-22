@@ -12,9 +12,11 @@ syntax = "proto3";
 package cockroach.sql.sessiondatapb;
 option go_package = "sessiondatapb";
 
+import "sql/lex/encode.proto";
 import "util/duration/duration.proto";
 import "util/timeutil/pgdate/pgdate.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
 
 // SessionData contains session parameters that are easily serializable and are
 // required to be propagated to the remote nodes for the correct execution of
@@ -64,6 +66,29 @@ message SessionData {
   // IntervalStyleEnabled allows the setting of IntervalStyle to different
   // values.
   bool interval_style_enabled = 13;
+  // DateStyleEnabled allows the setting of DateStyle to different
+  // values.
+  bool date_style_enabled = 14;
+  // LockTimeout is the maximum amount of time that a query will wait while
+  // attempting to acquire a lock on a key or while blocking on an existing
+  // lock in order to perform a non-locking read on a key.
+  google.protobuf.Duration lock_timeout = 15 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
+  // Internal is true if this query came from InternalExecutor or an internal
+  // planner.
+  bool internal = 16;
+  // OnUpdateRehomeRowEnabled controls whether the ON UPDATE rehome_row()
+  // will actually trigger on row updates.
+  bool on_update_rehome_row_enabled = 17;
+  // JoinReaderOrderingStrategyBatchSize is the size limit on the input rows to
+  // the joinReader processor (when ordering is required to be maintained) to
+  // construct a single lookup KV batch.
+  int64 join_reader_ordering_strategy_batch_size = 18;
+  // ParallelizeMultiKeyLookupJoinsEnabled is true when the join reader should
+  // parallelize lookup batches under all circumstances. Enabling this will
+  // increase the speed of lookup joins when each input row might get multiple
+  // looked up rows at the cost of increased memory usage.
+  bool parallelize_multi_key_lookup_joins_enabled = 19;
 }
 
 // DataConversionConfig contains the parameters that influence the output
@@ -79,21 +104,7 @@ message DataConversionConfig {
   // IntervalStyle indicates the style to parse and display intervals as.
   util.duration.IntervalStyle interval_style = 3;
   // DateStyle indicates the style to parse and display dates as.
-  util.timeutil.pgdate.DateStyle date_style = 4 [(gogoproto.nullable)=false];
-}
-
-// BytesEncodeFormat is the configuration for bytes to string conversions.
-enum BytesEncodeFormat {
-  option (gogoproto.goproto_enum_prefix) = false;
-  option (gogoproto.goproto_enum_stringer) = false;
-
-  // BytesEncodeHex uses the hex format: e'abc\n'::BYTES::STRING -> '\x61626312'.
-  // This is the default, for compatibility with PostgreSQL.
-  BytesEncodeHex = 0;
-  // BytesEncodeEscape uses the escaped format: e'abc\n'::BYTES::STRING -> 'abc\012'.
-  BytesEncodeEscape = 1;
-  // BytesEncodeBase64 uses base64 encoding.
-  BytesEncodeBase64 = 2;
+  util.timeutil.pgdate.DateStyle date_style = 4 [(gogoproto.nullable) = false];
 }
 
 // VectorizeExecMode controls if an when the Executor executes queries using

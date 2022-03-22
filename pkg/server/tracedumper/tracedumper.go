@@ -34,6 +34,7 @@ const (
 
 var (
 	totalDumpSizeLimit = settings.RegisterByteSizeSetting(
+		settings.TenantWritable,
 		"server.job_trace.total_dump_size_limit",
 		"total size of job trace dumps to be kept. "+
 			"Dumps are GC'ed in the order of creation time. The latest dump is "+
@@ -89,12 +90,12 @@ func (t *TraceDumper) Dump(
 		z := zipper.MakeInternalExecutorInflightTraceZipper(ie)
 		zipBytes, err := z.Zip(ctx, traceID)
 		if err != nil {
-			return errors.Newf("failed to collect inflight trace zip: %v", err)
+			return errors.Wrap(err, "failed to collect inflight trace zip")
 		}
 		path := t.store.GetFullPath(traceZipFile)
 		f, err := os.Create(path)
 		if err != nil {
-			return errors.Newf("error creating file %q for trace dump: %v", path, err)
+			return errors.Wrapf(err, "error creating file %q for trace dump", path)
 		}
 		defer f.Close()
 		_, err = f.Write(zipBytes)

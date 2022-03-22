@@ -38,7 +38,7 @@ communication and discussion.<sup>[1](#sql-syntax)</sup>
 It is encouraged to develop a [prototype](PROTOTYPING.md) concurrently
 with writing the RFC. One of the significant benefits of an RFC is
 that it forces bigger picture thinking which reviewers can then
-disect. In contrast, a prototype forces the details to be considered,
+dissect. In contrast, a prototype forces the details to be considered,
 shedding light on the unknown unknowns and helping to ensure that the
 RFC focuses on the important design considerations.
 

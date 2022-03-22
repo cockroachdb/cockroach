@@ -1,0 +1,19 @@
+# This test verifies the following condition:
+
+# Wait for the initial token bucket request.
+wait-for-event
+token-bucket-response
+----
+
+# Advance time enough for a "consumption reporting" request to go out, which
+# wouldn't request more RUs.
+advance
+40s
+----
+00:00:40.000
+
+# Fire off a big write. This will trigger a low RU notification, which may
+# happen while the token bucket request is still in progress. Verify that even
+# in this case, we can still satisfy the request without more time passing.
+write bytes=100000000
+----

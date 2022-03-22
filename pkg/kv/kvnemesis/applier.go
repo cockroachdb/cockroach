@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/protobuf/proto"
 )
@@ -49,19 +50,21 @@ func MakeApplier(env *Env, dbs ...*kv.DB) *Applier {
 // Apply executes the given Step and mutates it with the result of execution. An
 // error is only returned from Apply if there is an internal coding error within
 // Applier, errors from a Step execution are saved in the Step itself.
-func (a *Applier) Apply(ctx context.Context, step *Step) (retErr error) {
+func (a *Applier) Apply(ctx context.Context, step *Step) (trace tracing.Recording, retErr error) {
 	var db *kv.DB
 	db, step.DBID = a.getNextDBRoundRobin()
 
 	step.Before = db.Clock().Now()
+	recCtx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, db.Tracer, "txn step")
 	defer func() {
 		step.After = db.Clock().Now()
 		if p := recover(); p != nil {
 			retErr = errors.Errorf(`panic applying step %s: %v`, step, p)
 		}
+		trace = collectAndFinish()
 	}()
-	applyOp(ctx, a.env, db, &step.Op)
-	return nil
+	applyOp(recCtx, a.env, db, &step.Op)
+	return collectAndFinish(), nil
 }
 
 func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
@@ -74,8 +77,13 @@ func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
 
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
-	case *GetOperation, *PutOperation, *ScanOperation, *BatchOperation:
-		applyClientOp(ctx, db, op)
+	case *GetOperation,
+		*PutOperation,
+		*ScanOperation,
+		*BatchOperation,
+		*DeleteOperation,
+		*DeleteRangeOperation:
+		applyClientOp(ctx, db, op, false /* inTxn */)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
 		o.Result = resultError(ctx, err)
@@ -110,7 +118,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 			savedTxn = txn
 			for i := range o.Ops {
 				op := &o.Ops[i]
-				applyClientOp(ctx, txn, op)
+				applyClientOp(ctx, txn, op, true /* inTxn */)
 				// The KV api disallows use of a txn after an operation on it errors.
 				if r := op.Result(); r.Type == ResultType_Error {
 					return errors.DecodeError(ctx, *r.Err)
@@ -118,7 +126,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 			}
 			if o.CommitInBatch != nil {
 				b := txn.NewBatch()
-				applyBatchOp(ctx, b, txn.CommitInBatch, o.CommitInBatch)
+				applyBatchOp(ctx, b, txn.CommitInBatch, o.CommitInBatch, true)
 				// The KV api disallows use of a txn after an operation on it errors.
 				if r := o.CommitInBatch.Result; r.Type == ResultType_Error {
 					return errors.DecodeError(ctx, *r.Err)
@@ -150,10 +158,12 @@ type clientI interface {
 	ScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
+	Del(context.Context, ...interface{}) error
+	DelRange(context.Context, interface{}, interface{}, bool) ([]roachpb.Key, error)
 	Run(context.Context, *kv.Batch) error
 }
 
-func applyClientOp(ctx context.Context, db clientI, op *Operation) {
+func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation:
 		fn := db.Get
@@ -167,6 +177,8 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 			o.Result.Type = ResultType_Value
 			if kv.Value != nil {
 				o.Result.Value = kv.Value.RawBytes
+			} else {
+				o.Result.Value = nil
 			}
 		}
 	case *PutOperation:
@@ -194,16 +206,37 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 				}
 			}
 		}
+	case *DeleteOperation:
+		err := db.Del(ctx, o.Key)
+		o.Result = resultError(ctx, err)
+	case *DeleteRangeOperation:
+		if !inTxn {
+			panic(errors.AssertionFailedf(`non-transactional DelRange operations currently unsupported`))
+		}
+		deletedKeys, err := db.DelRange(ctx, o.Key, o.EndKey, true /* returnKeys */)
+		if err != nil {
+			o.Result = resultError(ctx, err)
+		} else {
+			o.Result.Type = ResultType_Keys
+			o.Result.Keys = make([][]byte, len(deletedKeys))
+			for i, deletedKey := range deletedKeys {
+				o.Result.Keys[i] = deletedKey
+			}
+		}
 	case *BatchOperation:
 		b := &kv.Batch{}
-		applyBatchOp(ctx, b, db.Run, o)
+		applyBatchOp(ctx, b, db.Run, o, inTxn)
 	default:
 		panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, o, o))
 	}
 }
 
 func applyBatchOp(
-	ctx context.Context, b *kv.Batch, runFn func(context.Context, *kv.Batch) error, o *BatchOperation,
+	ctx context.Context,
+	b *kv.Batch,
+	runFn func(context.Context, *kv.Batch) error,
+	o *BatchOperation,
+	inTxn bool,
 ) {
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
@@ -225,6 +258,13 @@ func applyBatchOp(
 			} else {
 				b.Scan(subO.Key, subO.EndKey)
 			}
+		case *DeleteOperation:
+			b.Del(subO.Key)
+		case *DeleteRangeOperation:
+			if !inTxn {
+				panic(errors.AssertionFailedf(`non-transactional batch DelRange operations currently unsupported`))
+			}
+			b.DelRange(subO.Key, subO.EndKey, true /* returnKeys */)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
@@ -241,6 +281,8 @@ func applyBatchOp(
 				result := b.Results[i].Rows[0]
 				if result.Value != nil {
 					subO.Result.Value = result.Value.RawBytes
+				} else {
+					subO.Result.Value = nil
 				}
 			}
 		case *PutOperation:
@@ -258,6 +300,20 @@ func applyBatchOp(
 						Key:   []byte(kv.Key),
 						Value: kv.Value.RawBytes,
 					}
+				}
+			}
+		case *DeleteOperation:
+			err := b.Results[i].Err
+			subO.Result = resultError(ctx, err)
+		case *DeleteRangeOperation:
+			keys, err := b.Results[i].Keys, b.Results[i].Err
+			if err != nil {
+				subO.Result = resultError(ctx, err)
+			} else {
+				subO.Result.Type = ResultType_Keys
+				subO.Result.Keys = make([][]byte, len(keys))
+				for j, key := range keys {
+					subO.Result.Keys[j] = key
 				}
 			}
 		default:
@@ -323,7 +379,7 @@ func updateZoneConfig(zone *zonepb.ZoneConfig, change ChangeZoneType) {
 }
 
 func updateZoneConfigInEnv(ctx context.Context, env *Env, change ChangeZoneType) error {
-	return env.UpdateZoneConfig(ctx, GeneratorDataTableID, func(zone *zonepb.ZoneConfig) {
+	return env.UpdateZoneConfig(ctx, int(GeneratorDataTableID), func(zone *zonepb.ZoneConfig) {
 		updateZoneConfig(zone, change)
 	})
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -56,6 +57,11 @@ const (
 
 	// ExprFmtHideStats does not show statistics in the output.
 	ExprFmtHideStats
+
+	// ExprFmtHideHistograms does not show statistics histograms in the output.
+	// Note that if ExprFmtHideStats is set, histograms are never included
+	// in the output.
+	ExprFmtHideHistograms
 
 	// ExprFmtHideCost does not show expression cost in the output.
 	ExprFmtHideCost
@@ -206,10 +212,21 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *SequenceSelectExpr,
 		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
 		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,
-		*AlterTableRelocateExpr, *ControlJobsExpr, *CancelQueriesExpr,
+		*AlterTableRelocateExpr, *AlterRangeRelocateExpr, *ControlJobsExpr, *CancelQueriesExpr,
 		*CancelSessionsExpr, *CreateViewExpr, *ExportExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
+
+	case *GroupByExpr:
+		fmt.Fprintf(f.Buffer, "%v ", e.Op())
+		groupingColOrderType := e.Private().(*GroupingPrivate).GroupingOrderType(&required.Ordering)
+		if groupingColOrderType == Streaming {
+			fmt.Fprintf(f.Buffer, "(streaming)")
+		} else if groupingColOrderType == PartialStreaming {
+			fmt.Fprintf(f.Buffer, "(partial streaming)")
+		} else {
+			fmt.Fprintf(f.Buffer, "(hash)")
+		}
 
 	case *SortExpr:
 		if t.InputOrdering.Any() {
@@ -302,6 +319,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !f.HasFlags(ExprFmtHideMiscProps) && private.ErrorOnDup != "" {
 			tp.Childf("error: \"%s\"", private.ErrorOnDup)
 		}
+
+	case *TopKExpr:
+		if !f.HasFlags(ExprFmtHidePhysProps) && !t.Ordering.Any() {
+			tp.Childf("internal-ordering: %s", t.Ordering)
+		}
+		tp.Childf("k: %d", t.K)
 
 	case *LimitExpr:
 		if !f.HasFlags(ExprFmtHidePhysProps) && !t.Ordering.Any() {
@@ -417,6 +440,26 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if private.Flags.NoZigzagJoin {
 				b.WriteString(" no-zigzag-join")
 			}
+			if private.Flags.NoFullScan {
+				b.WriteString(" no-full-scan")
+			}
+			if private.Flags.ForceZigzag {
+				if private.Flags.ZigzagIndexes.Empty() {
+					b.WriteString(" force-zigzag")
+				} else {
+					b.WriteString(" force-zigzag=")
+					s := private.Flags.ZigzagIndexes
+					needComma := false
+					for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+						idx := md.Table(private.Table).Index(i)
+						if needComma {
+							b.WriteByte(',')
+						}
+						b.WriteString(string(idx.Name()))
+						needComma = true
+					}
+				}
+			}
 			tp.Child(b.String())
 		}
 		if private.Locking != nil {
@@ -483,6 +526,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if t.LookupColsAreTableKey {
 			tp.Childf("lookup columns are key")
 		}
+		if t.IsFirstJoinInPairedJoiner {
+			f.formatColList(e, tp, "first join in paired joiner; continuation column:", opt.ColList{t.ContinuationCol})
+		}
 		if t.IsSecondJoinInPairedJoiner {
 			tp.Childf("second join in paired joiner")
 		}
@@ -532,12 +578,12 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *InsertExpr:
+		f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+		f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 		if !f.HasFlags(ExprFmtHideColumns) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
-			f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
-			f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 			f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
@@ -558,13 +604,13 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *UpsertExpr:
+		f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+		f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 		if !f.HasFlags(ExprFmtHideColumns) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
 			if t.CanaryCol != 0 {
-				f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
-				f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 				f.formatColList(e, tp, "canary column:", opt.ColList{t.CanaryCol})
 				f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
 				f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
@@ -670,6 +716,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *RecursiveCTEExpr:
 		if !f.HasFlags(ExprFmtHideColumns) {
+			if t.Deduplicate {
+				tp.Childf("deduplicate")
+			}
 			tp.Childf("working table binding: &%d", t.WithID)
 			f.formatColList(e, tp, "initial columns:", t.InitialCols)
 			f.formatColList(e, tp, "recursive columns:", t.RecursiveCols)
@@ -726,7 +775,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	}
 
 	if !f.HasFlags(ExprFmtHideStats) {
-		tp.Childf("stats: %s", &relational.Stats)
+		if f.HasFlags(ExprFmtHideHistograms) {
+			tp.Childf("stats: %s", relational.Stats.StringWithoutHistograms())
+		} else {
+			tp.Childf("stats: %s", &relational.Stats)
+		}
 	}
 
 	if !f.HasFlags(ExprFmtHideCost) {
@@ -767,6 +820,15 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 		if required.LimitHint != 0 {
 			tp.Childf("limit hint: %.2f", required.LimitHint)
+		}
+
+		// Show the required distribution, if any, and also show the provided input
+		// distribution if this is a Distribute expression.
+		if !required.Distribution.Any() {
+			tp.Childf("distribution: %s", required.Distribution.String())
+		}
+		if distribute, ok := e.(*DistributeExpr); ok {
+			tp.Childf("input distribution: %s", distribute.Input.ProvidedPhysical().Distribution.String())
 		}
 	}
 
@@ -909,10 +971,10 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			}
 			// Only show the frame if it differs from the default.
 			def := WindowFrame{
-				Mode:           tree.RANGE,
-				StartBoundType: tree.UnboundedPreceding,
-				EndBoundType:   tree.CurrentRow,
-				FrameExclusion: tree.NoExclusion,
+				Mode:           treewindow.RANGE,
+				StartBoundType: treewindow.UnboundedPreceding,
+				EndBoundType:   treewindow.CurrentRow,
+				FrameExclusion: treewindow.NoExclusion,
 			}
 			if item.Frame != def {
 				emitProp("frame=%q", item.Frame.String())
@@ -1042,8 +1104,9 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 		// We don't want to show the OriginalExpr.
 		private = nil
 
-	case *CastExpr:
-		private = t.Typ.SQLString()
+	case *CastExpr, *AssignmentCastExpr:
+		typ := scalar.Private().(*types.T)
+		private = typ.SQLString()
 
 	case *KVOptionsItem:
 		fmt.Fprintf(f.Buffer, " %s", t.Key)
@@ -1452,11 +1515,12 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 
 	case *AlterTableRelocatePrivate:
 		FormatPrivate(f, &t.AlterTableSplitPrivate, nil)
-		if t.RelocateLease {
+		switch t.SubjectReplicas {
+		case tree.RelocateLease:
 			f.Buffer.WriteString(" [lease]")
-		} else if t.RelocateNonVoters {
+		case tree.RelocateNonVoters:
 			f.Buffer.WriteString(" [non-voters]")
-		} else {
+		case tree.RelocateVoters:
 			f.Buffer.WriteString(" [voters]")
 		}
 

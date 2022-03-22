@@ -54,7 +54,7 @@ func (f *Factory) ConstructScan(
 		Params:      params,
 		ReqOrdering: reqOrdering,
 	}
-	_n, err := f.newNode(scanOp, args, reqOrdering)
+	_n, err := newNode(scanOp, args, reqOrdering)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (f *Factory) ConstructFilter(
 		Filter:      filter,
 		ReqOrdering: reqOrdering,
 	}
-	_n, err := f.newNode(filterOp, args, reqOrdering, inputNode)
+	_n, err := newNode(filterOp, args, reqOrdering, inputNode)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (f *Factory) ConstructHashJoin(
 		RightEqColsAreKey: rightEqColsAreKey,
 		ExtraOnCond:       extraOnCond,
 	}
-	_n, err := f.newNode(hashJoinOp, args, nil /* ordering */, leftNode, rightNode)
+	_n, err := newNode(hashJoinOp, args, nil /* ordering */, leftNode, rightNode)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +151,7 @@ const (
 	scanOp
 	filterOp
 	hashJoinOp
+	numOperators
 )
 
 type scanArgs struct {

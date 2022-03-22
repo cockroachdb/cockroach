@@ -41,25 +41,39 @@ func Get(
 		// This mirrors the logic in MVCCScan, though the logic in MVCCScan is
 		// slightly lower in the stack.
 		reply.ResumeSpan = &roachpb.Span{Key: args.Key}
-		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		if h.MaxSpanRequestKeys < 0 {
+			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		} else if h.TargetBytes < 0 {
+			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+		}
 		return result.Result{}, nil
 	}
+
 	var val *roachpb.Value
 	var intent *roachpb.Intent
 	var err error
 	val, intent, err = storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
-		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:                   h.Txn,
-		FailOnMoreRecent:      args.KeyLocking != lock.None,
-		LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
-		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
+		Inconsistent:     h.ReadConsistency != roachpb.CONSISTENT,
+		Txn:              h.Txn,
+		FailOnMoreRecent: args.KeyLocking != lock.None,
+		Uncertainty:      cArgs.Uncertainty,
+		MemoryAccount:    cArgs.EvalCtx.GetResponseMemoryAccount(),
 	})
 	if err != nil {
 		return result.Result{}, err
 	}
 	if val != nil {
+		// NB: This calculation is different from Scan, since Scan responses include
+		// the key/value pair while Get only includes the value.
+		numBytes := int64(len(val.RawBytes))
+		if h.TargetBytes > 0 && h.AllowEmpty && numBytes > h.TargetBytes {
+			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
+			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+			reply.ResumeNextBytes = numBytes
+			return result.Result{}, nil
+		}
 		reply.NumKeys = 1
-		reply.NumBytes = int64(len(val.RawBytes))
+		reply.NumBytes = numBytes
 	}
 	var intents []roachpb.Intent
 	if intent != nil {

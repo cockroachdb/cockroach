@@ -7,10 +7,10 @@ FROM registry.access.redhat.com/ubi8/ubi-minimal
 # tar - used by kubectl cp
 RUN microdnf update -y \
     && rpm --erase --nodeps tzdata \
-    && microdnf install tzdata hostname tar -y \
+    && microdnf install tzdata hostname tar gzip xz -y \
     && rm -rf /var/cache/yum
 
-RUN mkdir /usr/local/lib/cockroach /cockroach /licenses
+RUN mkdir /usr/local/lib/cockroach /cockroach /licenses /docker-entrypoint-initdb.d
 COPY cockroach.sh cockroach /cockroach/
 COPY licenses/* /licenses/
 # Install GEOS libraries.

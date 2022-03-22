@@ -4,7 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "gssapiccl",
     srcs = select({
-        "@io_bazel_rules_go//go/platform:linux_amd64": ["gssapi.go"],
+        "@io_bazel_rules_go//go/platform:linux_amd64": ["gssapi.go", "get_user.go"],
         "//conditions:default": ["empty.go"],
     }),
     cdeps = select({
@@ -22,9 +22,12 @@ go_library(
         "@io_bazel_rules_go//go/platform:linux_amd64": [
             "//pkg/ccl/utilccl",
             "//pkg/security",
+            "//pkg/settings",
             "//pkg/sql",
+            "//pkg/sql/sem/tree",
             "//pkg/sql/pgwire",
             "//pkg/sql/pgwire/hba",
+            "//pkg/sql/pgwire/identmap",
             "@com_github_cockroachdb_errors//:errors",
         ],
         "//conditions:default": [],

@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"os"
@@ -20,24 +21,28 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
 func registerSQLSmith(r registry.Registry) {
+	const numNodes = 4
 	setups := map[string]sqlsmith.Setup{
-		"empty":       sqlsmith.Setups["empty"],
-		"seed":        sqlsmith.Setups["seed"],
-		"rand-tables": sqlsmith.Setups["rand-tables"],
-		"tpch-sf1": func(r *rand.Rand) string {
-			return `RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup?AUTH=implicit' WITH into_db = 'defaultdb';`
+		"empty":                     sqlsmith.Setups["empty"],
+		"seed":                      sqlsmith.Setups["seed"],
+		sqlsmith.RandTableSetupName: sqlsmith.Setups[sqlsmith.RandTableSetupName],
+		"tpch-sf1": func(r *rand.Rand) []string {
+			return []string{`RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup?AUTH=implicit' WITH into_db = 'defaultdb';`}
 		},
-		"tpcc": func(r *rand.Rand) string {
+		"tpcc": func(r *rand.Rand) []string {
 			const version = "version=2.1.0,fks=true,interleaved=false,seed=1,warehouses=1"
-			var sb strings.Builder
+			var stmts []string
 			for _, t := range []string{
 				"customer",
 				"district",
@@ -49,9 +54,14 @@ func registerSQLSmith(r registry.Registry) {
 				"stock",
 				"warehouse",
 			} {
-				fmt.Fprintf(&sb, "RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures/workload/tpcc/%[2]s/%[1]s?AUTH=implicit' WITH into_db = 'defaultdb';\n", t, version)
+				stmts = append(
+					stmts,
+					fmt.Sprintf("RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures/workload/tpcc/%[2]s/%[1]s?AUTH=implicit' WITH into_db = 'defaultdb';",
+						t, version,
+					),
+				)
 			}
-			return sb.String()
+			return stmts
 		},
 	}
 	settings := map[string]sqlsmith.SettingFunc{
@@ -81,14 +91,14 @@ func registerSQLSmith(r registry.Registry) {
 			fmt.Fprint(smithLog, "\n\n")
 		}
 
-		rng, seed := randutil.NewPseudoRand()
+		rng, seed := randutil.NewTestRand()
 		t.L().Printf("seed: %d", seed)
 
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 		if err := c.PutLibraries(ctx, "./lib"); err != nil {
 			t.Fatalf("could not initialize libraries: %v", err)
 		}
-		c.Start(ctx)
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 		setupFunc, ok := setups[setupName]
 		if !ok {
@@ -102,13 +112,51 @@ func registerSQLSmith(r registry.Registry) {
 		setup := setupFunc(rng)
 		setting := settingFunc(rng)
 
-		conn := c.Conn(ctx, 1)
+		allConns := make([]*gosql.DB, 0, numNodes)
+		for node := 1; node <= numNodes; node++ {
+			allConns = append(allConns, c.Conn(ctx, t.L(), node))
+		}
+		conn := allConns[0]
 		t.Status("executing setup")
-		t.L().Printf("setup:\n%s", setup)
-		if _, err := conn.Exec(setup); err != nil {
-			t.Fatal(err)
-		} else {
-			logStmt(setup)
+		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
+		for _, stmt := range setup {
+			if _, err := conn.Exec(stmt); err != nil {
+				t.Fatal(err)
+			} else {
+				logStmt(stmt)
+			}
+		}
+
+		if settingName == "multi-region" {
+			regionsSet := make(map[string]struct{})
+			var region, zone string
+			rows, err := conn.Query("SHOW REGIONS FROM CLUSTER")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for rows.Next() {
+				if err := rows.Scan(&region, &zone); err != nil {
+					t.Fatal(err)
+				}
+				regionsSet[region] = struct{}{}
+			}
+
+			var regionList []string
+			for region := range regionsSet {
+				regionList = append(regionList, region)
+			}
+
+			if len(regionList) == 0 {
+				t.Fatal(errors.New("no regions, cannot run multi-region config"))
+			}
+
+			if _, err := conn.Exec(
+				fmt.Sprintf(`ALTER DATABASE defaultdb SET PRIMARY REGION "%s";
+ALTER TABLE seed_mr_table SET LOCALITY REGIONAL BY ROW;
+INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		const timeout = time.Minute
@@ -216,11 +264,6 @@ func registerSQLSmith(r registry.Registry) {
 						logStmt(stmt)
 						t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
 					}
-				} else if strings.Contains(es, "communication error") {
-					// A communication error can be because
-					// a non-gateway node has crashed.
-					logStmt(stmt)
-					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
 				} else if strings.Contains(es, "Empty statement returned by generate") ||
 					stmt == "" {
 					// Either were unable to generate a statement or
@@ -231,22 +274,31 @@ func registerSQLSmith(r registry.Registry) {
 				// frequently (due to sqlsmith not crafting
 				// executable queries 100% of the time) and are
 				// never interesting.
+				// TODO(yuzefovich): reevaluate this assumption.
 			}
 
-			// Ping the gateway to make sure it didn't crash.
-			if err := conn.PingContext(ctx); err != nil {
-				logStmt(stmt)
-				t.Fatalf("ping: %v\nprevious sql:\n%s;", err, stmt)
+			// Ping all nodes to make sure they didn't crash.
+			for idx, c := range allConns {
+				if err := c.PingContext(ctx); err != nil {
+					logStmt(stmt)
+					t.Fatalf("ping node %d: %v\nprevious sql:\n%s;", idx+1, err, stmt)
+				}
 			}
 		}
 	}
 
 	register := func(setup, setting string) {
+		var clusterSpec spec.ClusterSpec
+		if strings.Contains(setting, "multi-region") {
+			clusterSpec = r.MakeClusterSpec(numNodes, spec.Geo())
+		} else {
+			clusterSpec = r.MakeClusterSpec(numNodes)
+		}
 		r.Add(registry.TestSpec{
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
 			Owner:   registry.OwnerSQLQueries,
-			Cluster: r.MakeClusterSpec(4),
+			Cluster: clusterSpec,
 			Timeout: time.Minute * 20,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
@@ -259,9 +311,9 @@ func registerSQLSmith(r registry.Registry) {
 			register(setup, setting)
 		}
 	}
-	setups["seed-vec"] = sqlsmith.Setups["seed-vec"]
+	setups["seed-multi-region"] = sqlsmith.Setups["seed-multi-region"]
 	settings["ddl-nodrop"] = sqlsmith.Settings["ddl-nodrop"]
-	settings["vec"] = sqlsmith.SettingVectorize
-	register("seed-vec", "vec")
+	settings["multi-region"] = sqlsmith.Settings["multi-region"]
 	register("tpcc", "ddl-nodrop")
+	register("seed-multi-region", "multi-region")
 }

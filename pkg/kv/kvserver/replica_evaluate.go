@@ -16,20 +16,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
-	"golang.org/x/time/rate"
 )
-
-var sentryIssue46720Limiter = rate.NewLimiter(0.1, 1) // 1 every 10s
 
 // optimizePuts searches for contiguous runs of Put & CPut commands in
 // the supplied request union. Any run which exceeds a minimum length
@@ -150,7 +148,7 @@ func evaluateBatch(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
-	lul hlc.Timestamp,
+	ui uncertainty.Interval,
 	readOnly bool,
 ) (_ *roachpb.BatchResponse, _ result.Result, retErr *roachpb.Error) {
 
@@ -247,12 +245,13 @@ func evaluateBatch(
 		// If a unittest filter was installed, check for an injected error; otherwise, continue.
 		if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
-				Ctx:   ctx,
-				CmdID: idKey,
-				Index: index,
-				Sid:   rec.StoreID(),
-				Req:   args,
-				Hdr:   baHeader,
+				Ctx:     ctx,
+				CmdID:   idKey,
+				Index:   index,
+				Sid:     rec.StoreID(),
+				Req:     args,
+				Version: rec.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).Version,
+				Hdr:     baHeader,
 			}
 			if pErr := filter(filterArgs); pErr != nil {
 				if pErr.GetTxn() == nil {
@@ -269,7 +268,7 @@ func evaluateBatch(
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
-			ctx, idKey, index, readWriter, rec, ms, baHeader, args, reply, lul)
+			ctx, readWriter, rec, ms, baHeader, args, reply, ui)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
@@ -397,19 +396,14 @@ func evaluateBatch(
 		// of results from the limit going forward. Exhausting the limit results
 		// in a limit of -1. This makes sure that we still execute the rest of
 		// the batch, but with limit-aware operations returning no data.
-		if limit, retResults := baHeader.MaxSpanRequestKeys, reply.Header().NumKeys; limit > 0 {
+		h := reply.Header()
+		if limit, retResults := baHeader.MaxSpanRequestKeys, h.NumKeys; limit != 0 && retResults > 0 {
 			if retResults > limit {
 				index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
-				err := errorutil.UnexpectedWithIssueErrorf(46652,
+				return nil, mergedResult, roachpb.NewError(errors.AssertionFailedf(
 					"received %d results, limit was %d (original limit: %d, batch=%s idx=%d)",
-					errors.Safe(retResults), errors.Safe(limit),
-					errors.Safe(ba.Header.MaxSpanRequestKeys),
-					errors.Safe(ba.Summary()), errors.Safe(index))
-				if sentryIssue46720Limiter.Allow() {
-					log.Errorf(ctx, "%v", err)
-					errorutil.SendReport(ctx, &rec.ClusterSettings().SV, err)
-				}
-				return nil, mergedResult, roachpb.NewError(err)
+					retResults, limit, ba.Header.MaxSpanRequestKeys,
+					redact.Safe(ba.Summary()), index))
 			} else if retResults < limit {
 				baHeader.MaxSpanRequestKeys -= retResults
 			} else {
@@ -417,22 +411,16 @@ func evaluateBatch(
 				// mean "no limit").
 				baHeader.MaxSpanRequestKeys = -1
 			}
-		} else if limit < 0 {
-			if retResults > 0 {
-				index, retResults := index, retResults // don't alloc unless branch taken
-				log.Fatalf(ctx,
-					"received %d results, limit was exhausted (original limit: %d, batch=%s idx=%d)",
-					errors.Safe(retResults), errors.Safe(ba.Header.MaxSpanRequestKeys),
-					errors.Safe(ba.Summary()), errors.Safe(index))
-			}
 		}
-		// Same as for MaxSpanRequestKeys above, keep track of the limit and
-		// make sure to fall through to -1 instead of hitting zero (which
-		// means no limit).
+		// Same as for MaxSpanRequestKeys above, keep track of the limit and make
+		// sure to fall through to -1 instead of hitting zero (which means no
+		// limit). We have to check the ResumeReason as well, since e.g. a Scan
+		// response may not include the value that pushed it across the limit.
 		if baHeader.TargetBytes > 0 {
-			retBytes := reply.Header().NumBytes
-			if baHeader.TargetBytes > retBytes {
-				baHeader.TargetBytes -= retBytes
+			if h.ResumeReason == roachpb.RESUME_BYTE_LIMIT {
+				baHeader.TargetBytes = -1
+			} else if baHeader.TargetBytes > h.NumBytes {
+				baHeader.TargetBytes -= h.NumBytes
 			} else {
 				baHeader.TargetBytes = -1
 			}
@@ -481,26 +469,24 @@ func evaluateBatch(
 // remaining for this batch (MaxInt64 for no limit).
 func evaluateCommand(
 	ctx context.Context,
-	raftCmdID kvserverbase.CmdIDKey,
-	index int,
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	args roachpb.Request,
 	reply roachpb.Response,
-	lul hlc.Timestamp,
+	ui uncertainty.Interval,
 ) (result.Result, error) {
 	var err error
 	var pd result.Result
 
 	if cmd, ok := batcheval.LookupCommand(args.Method()); ok {
 		cArgs := batcheval.CommandArgs{
-			EvalCtx:               rec,
-			Header:                h,
-			Args:                  args,
-			Stats:                 ms,
-			LocalUncertaintyLimit: lul,
+			EvalCtx:     rec,
+			Header:      h,
+			Args:        args,
+			Stats:       ms,
+			Uncertainty: ui,
 		}
 
 		if cmd.EvalRW != nil {
@@ -512,8 +498,16 @@ func evaluateCommand(
 		return result.Result{}, errors.Errorf("unrecognized command %s", args.Method())
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "evaluated %s command %+v: %+v, err=%v", args.Method(), args, reply, err)
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		trunc := func(s string) string {
+			const maxLen = 256
+			if len(s) > maxLen {
+				return s[:maxLen-3] + "..."
+			}
+			return s
+		}
+		log.VEventf(ctx, 2, "evaluated %s command %s, txn=%v : resp=%s, err=%v",
+			args.Method(), trunc(args.String()), h.Txn, trunc(reply.String()), err)
 	}
 	return pd, err
 }
@@ -525,8 +519,16 @@ func evaluateCommand(
 // for transactional requests, retrying is possible if the transaction had not
 // performed any prior reads that need refreshing.
 //
+// This function is called both below and above latching, which is indicated by
+// the concurrency guard argument. The concurrency guard, if not nil, indicates
+// that the caller is holding latches and cannot adjust its timestamp beyond the
+// limits of what is protected by those latches. If the concurrency guard is
+// nil, the caller indicates that it is not holding latches and can therefore
+// more freely adjust its timestamp because it will re-acquire latches at
+// whatever timestamp the batch is bumped to.
+//
 // deadline, if not nil, specifies the highest timestamp (exclusive) at which
-// the request can be evaluated. If ba is a transactional request, then dealine
+// the request can be evaluated. If ba is a transactional request, then deadline
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
 //
 // If true is returned, ba and ba.Txn will have been updated with the new
@@ -536,7 +538,7 @@ func canDoServersideRetry(
 	pErr *roachpb.Error,
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
-	latchSpans *spanset.SpanSet,
+	g *concurrency.Guard,
 	deadline *hlc.Timestamp,
 ) bool {
 	if ba.Txn != nil {
@@ -551,42 +553,39 @@ func canDoServersideRetry(
 			deadline = et.Deadline
 		}
 	}
-	var newTimestamp hlc.Timestamp
 
-	if pErr != nil {
-		switch tErr := pErr.GetDetail().(type) {
-		case *roachpb.WriteTooOldError:
-			// Locking scans hit WriteTooOld errors if they encounter values at
-			// timestamps higher than their read timestamps. The encountered
-			// timestamps are guaranteed to be greater than the txn's read
-			// timestamp, but not its write timestamp. So, when determining what
-			// the new timestamp should be, we make sure to not regress the
-			// txn's write timestamp.
-			newTimestamp = tErr.ActualTimestamp
-			if ba.Txn != nil {
-				newTimestamp.Forward(pErr.GetTxn().WriteTimestamp)
-			}
-		case *roachpb.TransactionRetryError:
-			if ba.Txn == nil {
-				// TODO(andrei): I don't know if TransactionRetryError is possible for
-				// non-transactional batches, but some tests inject them for 1PC
-				// transactions. I'm not sure how to deal with them, so let's not retry.
+	var newTimestamp hlc.Timestamp
+	if ba.Txn != nil {
+		if pErr != nil {
+			var ok bool
+			ok, newTimestamp = roachpb.TransactionRefreshTimestamp(pErr)
+			if !ok {
 				return false
 			}
-			newTimestamp = pErr.GetTxn().WriteTimestamp
-		default:
-			// TODO(andrei): Handle other retriable errors too.
-			return false
+		} else {
+			if !br.Txn.WriteTooOld {
+				log.Fatalf(ctx, "expected the WriteTooOld flag to be set")
+			}
+			newTimestamp = br.Txn.WriteTimestamp
 		}
 	} else {
-		if !br.Txn.WriteTooOld {
-			log.Fatalf(ctx, "programming error: expected the WriteTooOld flag to be set")
+		if pErr == nil {
+			log.Fatalf(ctx, "canDoServersideRetry called for non-txn request without error")
 		}
-		newTimestamp = br.Txn.WriteTimestamp
+		switch tErr := pErr.GetDetail().(type) {
+		case *roachpb.WriteTooOldError:
+			newTimestamp = tErr.RetryTimestamp()
+
+		case *roachpb.ReadWithinUncertaintyIntervalError:
+			newTimestamp = tErr.RetryTimestamp()
+
+		default:
+			return false
+		}
 	}
 
-	if deadline != nil && deadline.LessEq(newTimestamp) {
+	if batcheval.IsEndTxnExceedingDeadline(newTimestamp, deadline) {
 		return false
 	}
-	return tryBumpBatchTimestamp(ctx, ba, newTimestamp, latchSpans)
+	return tryBumpBatchTimestamp(ctx, ba, g, newTimestamp)
 }

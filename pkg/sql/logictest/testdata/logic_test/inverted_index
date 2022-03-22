@@ -41,10 +41,9 @@ c  CREATE TABLE public.c (
    foo JSONB NULL,
    "bAr" JSONB NULL,
    "qUuX" JSONB NULL,
-   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   CONSTRAINT c_pkey PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX "c_bAr_idx" ("bAr"),
-   FAMILY "primary" (id, foo, "bAr", "qUuX")
+   INVERTED INDEX "c_bAr_idx" ("bAr")
 )
 
 # Regression test for #42944: make sure that mixed-case columns can be
@@ -69,11 +68,6 @@ CREATE TABLE d (
 
 statement ok
 CREATE TABLE t1 (id1 INT PRIMARY KEY, id2 INT, id3 INT);
-
-statement error pq: inverted indexes don't support interleaved tables
-CREATE INDEX c on t1 USING GIN (id2)
-   STORING (id1,id3)
-   INTERLEAVE in PARENT t1 (id2);
 
 statement error pq: inverted indexes don't support stored columns
 CREATE INDEX c on t1 USING GIN (id2) STORING (id1,id3);
@@ -695,7 +689,7 @@ SELECT * from update_cascade_test ORDER BY update_cascade;
 2  {"a": "b", "c": "d"}
 3  ["b", "c"]
 
-statement error pq: update on table "update_test" violates foreign key constraint "fk_delete_cascade_ref_update_test" on table "del_cascade_test"\nDETAIL: Key \(i\)=\(1\) is still referenced from table "del_cascade_test"\.
+statement error pq: update on table "update_test" violates foreign key constraint "del_cascade_test_delete_cascade_fkey" on table "del_cascade_test"\nDETAIL: Key \(i\)=\(1\) is still referenced from table "del_cascade_test"\.
 UPDATE update_test SET (i,j)  = (5, '{"a":"b", "a":"b"}') WHERE i = 1;
 
 statement ok
@@ -1121,10 +1115,9 @@ c  CREATE TABLE public.c (
    id INT8 NOT NULL,
    foo INT8[] NULL,
    bar STRING[] NULL,
-   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   CONSTRAINT c_pkey PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX c_bar_idx (bar),
-   FAMILY "primary" (id, foo, bar)
+   INVERTED INDEX c_bar_idx (bar)
 )
 
 query ITT
@@ -1237,13 +1230,13 @@ SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[]::INT[]
 ----
 {}
 
-query T
+query T rowsort
 SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[1]
 ----
 {}
 {1}
 
-query T
+query T rowsort
 SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[0,1,2]
 ----
 {}
@@ -1253,14 +1246,14 @@ SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[0,1,2]
 {0,1,2}
 {1,2,1}
 
-query T
+query T rowsort
 SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[1,2,3]
 ----
 {}
 {1}
 {1,2,1}
 
-query T
+query T rowsort
 SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[0,1,NULL]
 ----
 {}
@@ -1278,7 +1271,7 @@ SELECT words FROM cb@w WHERE words <@ ARRAY[]::STRING[]
 ----
 {}
 
-query T
+query T rowsort
 SELECT words FROM cb@w WHERE words <@ ARRAY['']::STRING[]
 ----
 {}
@@ -1290,14 +1283,14 @@ SELECT words FROM cb@w WHERE words <@ ARRAY[NULL]::STRING[]
 {}
 
 
-query T
+query T rowsort
 SELECT words FROM cb@w WHERE words <@ ARRAY['cat']
 ----
 {}
 {cat}
 
 
-query T
+query T rowsort
 SELECT words FROM cb@w WHERE words <@ ARRAY['cat', 'mouse']
 ----
 {}
@@ -1305,7 +1298,7 @@ SELECT words FROM cb@w WHERE words <@ ARRAY['cat', 'mouse']
 {mouse}
 {cat,mouse}
 
-query T
+query T rowsort
 SELECT words FROM cb@w WHERE words <@ ARRAY['cat', 'mouse', NULL]
 ----
 {}
@@ -1313,7 +1306,7 @@ SELECT words FROM cb@w WHERE words <@ ARRAY['cat', 'mouse', NULL]
 {mouse}
 {cat,mouse}
 
-query T
+query T rowsort
 SELECT words FROM cb@w WHERE words <@ ARRAY[NULL, 'rat']
 ----
 {}
@@ -1473,3 +1466,6 @@ SELECT j FROM cb2@i WHERE j <@ '[[1], [2]]' ORDER BY k
 []
 [[2]]
 [[1], [2]]
+
+statement error pq: index element j->'some_key' of type jsonb is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+CREATE TABLE t2 (j JSON, INDEX ((j->'some_key')))

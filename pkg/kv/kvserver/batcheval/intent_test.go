@@ -57,7 +57,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 		Timestamp:       ts,
 		ReadConsistency: roachpb.READ_UNCOMMITTED,
 	}
-	evalCtx := (&MockEvalCtx{ClusterSettings: cluster.MakeClusterSettings()}).EvalContext()
+	evalCtx := (&MockEvalCtx{ClusterSettings: cluster.MakeTestingClusterSettings()}).EvalContext()
 
 	testCases := []struct {
 		name              string
@@ -126,7 +126,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 
 				// Write an intent.
 				val := roachpb.MakeValueFromBytes([]byte("val"))
-				txn := roachpb.MakeTransaction("test", key, roachpb.NormalUserPriority, ts, 0)
+				txn := roachpb.MakeTransaction("test", key, roachpb.NormalUserPriority, ts, 0, 1)
 				var err error
 				if delete {
 					err = storage.MVCCDelete(ctx, db, nil, key, ts, &txn)

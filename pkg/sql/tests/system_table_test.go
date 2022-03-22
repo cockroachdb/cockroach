@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,9 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,10 +48,10 @@ func TestInitialKeys(t *testing.T) {
 		var nonDescKeys int
 		if systemTenant {
 			codec = keys.SystemSQLCodec
-			nonDescKeys = 9
+			nonDescKeys = 10
 		} else {
 			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
-			nonDescKeys = 2
+			nonDescKeys = 3
 		}
 
 		ms := bootstrap.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
@@ -59,18 +62,17 @@ func TestInitialKeys(t *testing.T) {
 		}
 
 		// Add an additional table.
-		descpb.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
 		desc, err := sql.CreateTestTableDescriptor(
 			context.Background(),
 			keys.SystemDatabaseID,
-			keys.MaxReservedDescID,
+			descpb.ID(1000 /* suitably large descriptor ID */),
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
-			descpb.NewDefaultPrivilegeDescriptor(security.NodeUserName()),
+			catpb.NewBasePrivilegeDescriptor(security.NodeUserName()),
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ms.AddDescriptor(keys.SystemDatabaseID, desc)
+		ms.AddDescriptor(desc)
 		kv, _ /* splits */ = ms.GetInitialValues()
 		expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 		if actual := len(kv); actual != expected {
@@ -97,7 +99,7 @@ func TestInitialKeys(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a, e := i, int64(keys.MinUserDescID); a != e {
+		if a, e := i, int64(desc.GetID()+1); a != e {
 			t.Fatalf("Expected next descriptor ID to be %d, was %d", e, a)
 		}
 	})
@@ -106,7 +108,7 @@ func TestInitialKeys(t *testing.T) {
 func TestInitialKeysAndSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	datadriven.RunTest(t, "testdata/initial_keys", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "initial_keys"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "initial-keys":
 			var tenant string
@@ -148,8 +150,9 @@ func TestInitialKeysAndSplits(t *testing.T) {
 // statement strings that describe each system table with the TableDescriptor
 // literals that are actually used at runtime. This ensures we can use the hand-
 // written literals instead of having to evaluate the `CREATE TABLE` statements
-// before initialization and with limited SQL machinery bootstraped, while still
-// confident that the result is the same as if `CREATE TABLE` had been run.
+// before initialization and with limited SQL machinery bootstrapped, while
+// still confident that the result is the same as if `CREATE TABLE` had been
+// run.
 //
 // This test may also be useful when writing a new system table:
 // adding the new schema along with a trivial, empty TableDescriptor literal
@@ -159,62 +162,53 @@ func TestSystemTableLiterals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	type testcase struct {
-		id     descpb.ID
 		schema string
 		pkg    catalog.TableDescriptor
 	}
 
-	for _, test := range []testcase{
-		{keys.NamespaceTableID, systemschema.NamespaceTableSchema, systemschema.NamespaceTable},
-		{keys.DescriptorTableID, systemschema.DescriptorTableSchema, systemschema.DescriptorTable},
-		{keys.UsersTableID, systemschema.UsersTableSchema, systemschema.UsersTable},
-		{keys.ZonesTableID, systemschema.ZonesTableSchema, systemschema.ZonesTable},
-		{keys.LeaseTableID, systemschema.LeaseTableSchema, systemschema.LeaseTable},
-		{keys.EventLogTableID, systemschema.EventLogTableSchema, systemschema.EventLogTable},
-		{keys.RangeEventTableID, systemschema.RangeEventTableSchema, systemschema.RangeEventTable},
-		{keys.UITableID, systemschema.UITableSchema, systemschema.UITable},
-		{keys.JobsTableID, systemschema.JobsTableSchema, systemschema.JobsTable},
-		{keys.SettingsTableID, systemschema.SettingsTableSchema, systemschema.SettingsTable},
-		{keys.DescIDSequenceID, systemschema.DescIDSequenceSchema, systemschema.DescIDSequence},
-		{keys.TenantsTableID, systemschema.TenantsTableSchema, systemschema.TenantsTable},
-		{keys.WebSessionsTableID, systemschema.WebSessionsTableSchema, systemschema.WebSessionsTable},
-		{keys.TableStatisticsTableID, systemschema.TableStatisticsTableSchema, systemschema.TableStatisticsTable},
-		{keys.LocationsTableID, systemschema.LocationsTableSchema, systemschema.LocationsTable},
-		{keys.RoleMembersTableID, systemschema.RoleMembersTableSchema, systemschema.RoleMembersTable},
-		{keys.CommentsTableID, systemschema.CommentsTableSchema, systemschema.CommentsTable},
-		{keys.ProtectedTimestampsMetaTableID, systemschema.ProtectedTimestampsMetaTableSchema, systemschema.ProtectedTimestampsMetaTable},
-		{keys.ProtectedTimestampsRecordsTableID, systemschema.ProtectedTimestampsRecordsTableSchema, systemschema.ProtectedTimestampsRecordsTable},
-		{keys.RoleOptionsTableID, systemschema.RoleOptionsTableSchema, systemschema.RoleOptionsTable},
-		{keys.StatementBundleChunksTableID, systemschema.StatementBundleChunksTableSchema, systemschema.StatementBundleChunksTable},
-		{keys.StatementDiagnosticsRequestsTableID, systemschema.StatementDiagnosticsRequestsTableSchema, systemschema.StatementDiagnosticsRequestsTable},
-		{keys.StatementDiagnosticsTableID, systemschema.StatementDiagnosticsTableSchema, systemschema.StatementDiagnosticsTable},
-		{keys.ScheduledJobsTableID, systemschema.ScheduledJobsTableSchema, systemschema.ScheduledJobsTable},
-		{keys.SqllivenessID, systemschema.SqllivenessTableSchema, systemschema.SqllivenessTable},
-		{keys.MigrationsID, systemschema.MigrationsTableSchema, systemschema.MigrationsTable},
-		{keys.JoinTokensTableID, systemschema.JoinTokensTableSchema, systemschema.JoinTokensTable},
-		{keys.StatementStatisticsTableID, systemschema.StatementStatisticsTableSchema, systemschema.StatementStatisticsTable},
-		{keys.TransactionStatisticsTableID, systemschema.TransactionStatisticsTableSchema, systemschema.TransactionStatisticsTable},
-		{keys.DatabaseRoleSettingsTableID, systemschema.DatabaseRoleSettingsTableSchema, systemschema.DatabaseRoleSettingsTable},
-		{keys.TenantUsageTableID, systemschema.TenantUsageTableSchema, systemschema.TenantUsageTable},
-		{keys.SQLInstancesTableID, systemschema.SQLInstancesTableSchema, systemschema.SQLInstancesTable},
-	} {
-		privs := *test.pkg.GetPrivileges()
-		gen, err := sql.CreateTestTableDescriptor(
-			context.Background(),
-			keys.SystemDatabaseID,
-			test.id,
-			test.schema,
-			&privs,
-		)
-		if err != nil {
-			t.Fatalf("test: %+v, err: %v", test, err)
+	testcases := make(map[string]testcase)
+	for schema, desc := range systemschema.SystemTableDescriptors {
+		if _, alreadyExists := testcases[desc.GetName()]; alreadyExists {
+			t.Fatalf("system table %q already exists", desc.GetName())
 		}
-		require.NoError(t, catalog.ValidateSelf(gen))
+		testcases[desc.GetName()] = testcase{
+			schema: schema,
+			pkg:    desc,
+		}
+	}
 
-		if !test.pkg.TableDesc().Equal(gen.TableDesc()) {
-			diff := strings.Join(pretty.Diff(test.pkg.TableDesc(), gen.TableDesc()), "\n")
+	const expectedNumberOfSystemTables = 38
+	require.Equal(t, expectedNumberOfSystemTables, len(testcases))
+
+	for name, test := range testcases {
+		t.Run(name, func(t *testing.T) {
+			privs := *test.pkg.GetPrivileges()
+			desc := test.pkg
+			// Allocate an ID to dynamically allocated system tables.
+			if desc.GetID() == 0 {
+				mut := desc.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
+				mut.ID = keys.MaxReservedDescID + 1
+				desc = mut.ImmutableCopy().(catalog.TableDescriptor)
+			}
+
+			gen, err := sql.CreateTestTableDescriptor(
+				context.Background(),
+				keys.SystemDatabaseID,
+				desc.GetID(),
+				test.schema,
+				&privs,
+			)
+			if err != nil {
+				t.Fatalf("test: %+v, err: %v", test, err)
+			}
+			require.NoError(t, descbuilder.ValidateSelf(gen, clusterversion.TestingClusterVersion))
+
+			if desc.TableDesc().Equal(gen.TableDesc()) {
+				return
+			}
+			diff := strings.Join(pretty.Diff(desc.TableDesc(), gen.TableDesc()), "\n")
 			t.Errorf("%s table descriptor generated from CREATE TABLE statement does not match "+
-				"hardcoded table descriptor:\n%s", test.pkg.GetName(), diff)
-		}
+				"hardcoded table descriptor:\n%s", desc.GetName(), diff)
+		})
 	}
 }

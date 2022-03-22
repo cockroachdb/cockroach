@@ -1,0 +1,128 @@
+# LogicTest: 3node-tenant
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+user host-cluster-root
+
+# TODO(radu): use the new ALTER TENANT statement when it is implemented.
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (10, 'sql.notices.enabled', 'false', 'b')
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+false
+
+
+user host-cluster-root
+
+statement ok
+DELETE FROM system.tenant_settings WHERE tenant_id = 10
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+user host-cluster-root
+
+# Set an all-tenant override.
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (0, 'sql.notices.enabled', 'false', 'b')
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+false
+
+user host-cluster-root
+
+# Now set a tenant-specific override which takes precedence.
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (10, 'sql.notices.enabled', 'true', 'b')
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+# Verify that we disallow setting a TenantWritable setting that is overridden.
+statement error cluster setting 'sql.notices.enabled' is currently overridden by the operator
+SET CLUSTER SETTING sql.notices.enabled = false
+
+statement error cluster setting 'sql.notices.enabled' is currently overridden by the operator
+RESET CLUSTER SETTING sql.notices.enabled
+
+user host-cluster-root
+
+# Remove the all-tenant override; should make no difference.
+statement ok
+DELETE FROM system.tenant_settings WHERE tenant_id = 0
+
+user root
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+# Verify that the tenant cannot modify TenantReadOnly settings.
+query T
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
+----
+00:05:00
+
+statement error only settable by the operator
+SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '45s'
+
+# Verify that even writing to the system table directly doesn't work.
+statement ok
+INSERT INTO system.settings (name, value, "valueType") VALUES ('kv.protectedts.reconciliation.interval', '45s', 'd')
+
+query T
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
+----
+00:05:00
+
+# Verify that we can control it from the operator.
+user host-cluster-root
+
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type)
+  VALUES (10, 'kv.protectedts.reconciliation.interval', '45s', 'd')
+
+user root
+
+query T retry
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
+----
+00:00:45
+
+user host-cluster-root
+
+# Verify that destroying a tenant cleans up any tenant-specific overrides.
+statement ok
+SELECT crdb_internal.create_tenant(1234)
+
+# TODO(radu): replace with ALTER TENANT when it's available.
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (1234, 'sql.notices.enabled', 'true', 'b')
+
+statement ok
+SELECT crdb_internal.destroy_tenant(1234, true)
+
+query I
+SELECT count(*) FROM system.tenant_settings WHERE tenant_id = 1234
+----
+0

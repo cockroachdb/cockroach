@@ -25,14 +25,14 @@ columns, each with an ascending/descending designation; and some
 information about each column. Each column has a numeric ID that is
 unique within the table, a SQL type, and a column family ID. A column
 family is a maximal subset of columns with the same column family ID.
-For more details, see [pkg/sql/sqlbase/structured.proto].
+For more details, see [pkg/sql/catalog/descpb/structured.proto].
 
 Each row of a table gives rise to one or more KV pairs, one per column
 family as needed (see subsection NULL below). CRDB stores primary key
 data in KV keys and other data in KV values so that it can use the KV
 layer to prevent duplicate primary keys. For encoding, see
-[pkg/sql/rowwriter.go]. For decoding, see
-[pkg/sql/sqlbase/multirowfetcher.go].
+[pkg/sql/row/writer.go]. For decoding, see
+[pkg/sql/row/fetcher.go].
 
 ### Key encoding
 
@@ -72,8 +72,8 @@ In conjunction with prefix freedom, the order property ensures that the
 SQL layer and the KV layer sort primary keys the same way.
 
 For more details on primary key encoding, see `EncodeTableKey`
-([pkg/sql/sqlbase/table.go]). See also `EncDatum`
-([pkg/sql/sqlbase/encoded\_datum.go]).
+([pkg/sql/rowenc/column\_type\_encoding.go]). See also `EncDatum`
+([pkg/sql/rowenc/encoded\_datum.go]).
 
 ### Value encoding
 
@@ -143,7 +143,7 @@ Before column families (i.e., in format version 1), non-sentinel KV keys
 had a column ID where the column family ID is now. Non-sentinel KV
 values contained exactly one datum, whose encoding was indicated by the
 one-byte value type (see `MarshalColumnValue` in
-[pkg/sql/sqlbase/table.go]). Unlike the `TUPLE` encoding, this encoding
+[pkg/sql/rowenc/column\_type\_encoding.go]). Unlike the `TUPLE` encoding, this encoding
 did not need to be prefix-free, which was a boon for strings.
 
 On upgrading to format version 2 or higher, CRDB puts each existing
@@ -151,7 +151,7 @@ column in a column family whose ID is the same as the column ID. This
 allows backward-compatible encoding and decoding. The encoder uses the
 old format for single-column column families when the ID of that column
 equals the `DefaultColumnID` of the column family
-([pkg/sql/sqlbase/structured.proto]).
+([pkg/sql/catalog/descpb/structured.proto]).
 
 ### NULL
 
@@ -296,7 +296,7 @@ present for a row so that each row in the index has at least one k/v entry.
 ### Key encoding
 
 The main encoding function for secondary indexes is
-`EncodeSecondaryIndex` in [pkg/sql/sqlbase/table.go]. Each row gives
+`EncodeSecondaryIndex` in [pkg/sql/rowenc/index\_encoding.go]. Each row gives
 rise to one KV pair per secondary index, whose KV key has fields
 mirroring the primary index encoding:
 
@@ -544,91 +544,18 @@ Index ID 2 is the secondary index `i2`.
                 ^------------------------------------------------------------                                        ^-^---------
                 Indexed column: Collation key for 'Ted'                                                          BYTES 'Ted'
 
-Interleaving
-------------
-
-By default, indexes (in CRDB terminology, so both primary and secondary)
-occupy disjoint KV key spans. Users can request that an index be
-interleaved with another index, which improves the efficiency of joining
-them.
-
-One index, the parent, must have a primary key that, ignoring column
-names, is a prefix (not necessarily proper) of the other index, the
-child. The parent, which currently must be a primary index, has its
-usual encoding. To encode a KV key in the child, encode it as if it were
-in the parent but with an interleaving sentinel
-(`EncodeNotNullDescending` in [pkg/util/encoding/encoding.go]) where the
-column family ID would be. Append the non-interleaved child encoding but
-without the parent columns. The sentinel informs the decoder that the
-row does not belong to the parent table.
-
-Note that the parent may itself be interleaved. In general, the
-interleaving relationships constitute an [arborescence].
-
-Example schema and data:
-
-    CREATE TABLE owners (
-      owner_id INT PRIMARY KEY,
-      owner STRING
-    );
-
-    CREATE TABLE accounts (
-      owner_id INT,
-      account_id INT,
-      balance DECIMAL,
-      PRIMARY KEY (owner_id, account_id)
-    ) INTERLEAVE IN PARENT owners (owner_id);
-
-    INSERT INTO owners VALUES (19, 'Alice');
-    INSERT INTO accounts VALUES (19, 83, 10000.50);
-
-Example dump:
-
-    /Table/51/1/19/0/1489433137.133889094,0 : 0xDBCE04550A2605416C696365
-           ^- ^ ^- ^                            ^-------^-^^^-----------
-           |  | |  |                            |       | |||
-           Table ID (owners)                    Checksum| |||
-              | |  |                                    | |||
-              Index ID                                  Value type (TUPLE)
-                |  |                                      |||
-                Primary key (owner_id = 19)               Column ID difference
-                   |                                       ||
-                   Column family ID                        Datum encoding type (Bytes)
-                                                            |
-                                                            Datum encoding ('Alice')
-
-    /Table/51/1/19/#/52/1/83/0/1489433137.137447008,0 : 0x691956790A3505348D0F4272
-           ^- ^ ^- ^ ^- ^ ^- ^                            ^-------^-^^^-----------
-           |  | |  | |  | |  |                            |       | |||
-           Table ID (owners) |                            Checksum| |||
-              | |  | |  | |  |                                    | |||
-              Index ID  | |  |                                    Value type (TUPLE)
-                |  | |  | |  |                                      |||
-                Primary key (owner_id = 19)                         Column ID difference
-                   | |  | |  |                                       ||
-                   Interleaving sentinel                             Datum encoding type (Decimal)
-                     |  | |  |                                        |
-                     Table ID (accounts)                              Datum encoding (10000.50)
-                        | |  |
-                        Index ID
-                          |  |
-                          Primary key (account_id = 83)
-                             |
-                             Column family ID
-
   [pkg/util/encoding/encoding.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/util/encoding/encoding.go
   [SQL in CockroachDB: Mapping Table Data to Key-Value Storage]: https://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/
   [Implementing Column Families in CockroachDB]: https://www.cockroachlabs.com/blog/sql-cockroachdb-column-families/
   [column families RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20151214_sql_column_families.md
   [interleaving RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160624_sql_interleaved_tables.md
-  [pkg/sql/sqlbase/structured.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/structured.proto
-  [pkg/sql/rowwriter.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/rowwriter.go
-  [pkg/sql/sqlbase/multirowfetcher.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/multirowfetcher.go
+  [pkg/sql/catalog/descpb/structured.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/catalog/descpb/structured.proto
+  [pkg/sql/row/writer.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/row/writer.go
+  [pkg/sql/row/fetcher.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/row/fetcher.go
   [prefix-free]: https://en.wikipedia.org/wiki/Prefix_code
   [new `DECIMAL` encoding]: https://github.com/cockroachdb/cockroach/issues/13384#issuecomment-277120394
-  [pkg/sql/sqlbase/table.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/table.go
-  [pkg/sql/sqlbase/encoded\_datum.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/encoded_datum.go
+  [pkg/sql/rowenc/column\_type\_encoding.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/rowenc/column_type_encoding.go
+  [pkg/sql/rowenc/encoded\_datum.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/rowenc/encoded_datum.go
   [pkg/roachpb/data.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/roachpb/data.proto
   [Unicode Collation Algorithm]: http://unicode.org/reports/tr10/
   [an efficient partial inverse]: http://stackoverflow.com/q/23609457/2144669
-  [arborescence]: https://en.wikipedia.org/wiki/Arborescence_(graph_theory)

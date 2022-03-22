@@ -146,7 +146,7 @@ func TestSort(t *testing.T) {
 	for _, tc := range sortAllTestCases {
 		colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols, execinfra.DefaultMemoryLimit)
+				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols, execinfra.DefaultMemoryLimit), nil
 			})
 	}
 }
@@ -154,7 +154,7 @@ func TestSort(t *testing.T) {
 func TestSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	nTups := coldata.BatchSize()*2 + 1
 	maxCols := 3
 	// TODO(yuzefovich/mgartner): randomize types as well.
@@ -166,17 +166,21 @@ func TestSortRandomized(t *testing.T) {
 		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
 			for _, k := range []int{0, rng.Intn(nTups) + 1} {
 				topK := k != 0
-				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/topK=%t", nCols, nOrderingCols, topK)
+				matchLen := 0
+				if topK {
+					matchLen = rng.Intn(nOrderingCols)
+				}
+				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/matchLen=%d/topK=%t", nCols, nOrderingCols, matchLen, topK)
 				log.Infof(context.Background(), "%s", name)
-				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
+				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols, matchLen)
 				if topK {
 					expected = expected[:k]
 				}
 				colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 					if topK {
-						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, uint64(k), execinfra.DefaultMemoryLimit), nil
+						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, matchLen, uint64(k), execinfra.DefaultMemoryLimit), nil
 					}
-					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
+					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols, execinfra.DefaultMemoryLimit), nil
 				})
 			}
 		}
@@ -189,9 +193,10 @@ func TestSortRandomized(t *testing.T) {
 // - expected - the same data but already sorted
 // - ordCols - ordering columns used in the sort operation.
 func generateRandomDataForTestSort(
-	rng *rand.Rand, nTups, nCols, nOrderingCols int,
+	rng *rand.Rand, nTups, nCols, nOrderingCols, matchLen int,
 ) (tups, expected colexectestutils.Tuples, ordCols []execinfrapb.Ordering_Column) {
 	ordCols = generateColumnOrdering(rng, nCols, nOrderingCols)
+	partialOrdCols := ordCols[:matchLen]
 	tups = make(colexectestutils.Tuples, nTups)
 	for i := range tups {
 		tups[i] = make(colexectestutils.Tuple, nCols)
@@ -208,6 +213,7 @@ func generateRandomDataForTestSort(
 		tups[i][ordCols[nOrderingCols-1].ColIdx] = int64(i)
 	}
 
+	sort.Slice(tups, less(tups, partialOrdCols))
 	expected = make(colexectestutils.Tuples, nTups)
 	copy(expected, tups)
 	sort.Slice(expected, less(expected, ordCols))
@@ -283,7 +289,7 @@ func TestAllSpooler(t *testing.T) {
 
 func BenchmarkSort(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	k := uint64(128)
 
@@ -316,13 +322,9 @@ func BenchmarkSort(b *testing.B) {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 						var sorter colexecop.Operator
 						if topK {
-							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k, execinfra.DefaultMemoryLimit)
+							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, 0 /* matchLen */, k, execinfra.DefaultMemoryLimit)
 						} else {
-							var err error
-							sorter, err = NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
-							if err != nil {
-								b.Fatal(err)
-							}
+							sorter = NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
 						}
 						sorter.Init(ctx)
 						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
@@ -335,7 +337,7 @@ func BenchmarkSort(b *testing.B) {
 }
 
 func BenchmarkSortUUID(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
@@ -343,12 +345,12 @@ func BenchmarkSortUUID(b *testing.B) {
 			for _, constAbbrPct := range []int{0, 50, 75, 90, 100} {
 				name := fmt.Sprintf("rows=%d/cols=%d/constAbbrPct=%d", nBatches*coldata.BatchSize(), nCols, constAbbrPct)
 				b.Run(name, func(b *testing.B) {
-					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
+					// 16 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 					// batch) * nCols (number of columns / row).
-					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+					b.SetBytes(int64(16 * nBatches * coldata.BatchSize() * nCols))
 					typs := make([]*types.T, nCols)
 					for i := range typs {
-						typs[i] = types.Bytes
+						typs[i] = types.Uuid
 					}
 					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 					batch.SetLength(coldata.BatchSize())
@@ -388,10 +390,7 @@ func BenchmarkSortUUID(b *testing.B) {
 					b.ResetTimer()
 					for n := 0; n < b.N; n++ {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
-						sorter, err := NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
-						if err != nil {
-							b.Fatal(err)
-						}
+						sorter := NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
 						sorter.Init(ctx)
 						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
 						}
@@ -404,7 +403,7 @@ func BenchmarkSortUUID(b *testing.B) {
 
 func BenchmarkAllSpooler(b *testing.B) {
 	defer log.Scope(b).Close(b)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {

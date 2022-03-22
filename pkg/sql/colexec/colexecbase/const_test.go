@@ -55,7 +55,7 @@ func TestConst(t *testing.T) {
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
-					"9" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
+					"9" /* projectingExpr */, testMemAcc,
 				)
 			})
 	}
@@ -92,7 +92,7 @@ func TestConstNull(t *testing.T) {
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
-					"NULL::INT" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
+					"NULL::INT" /* projectingExpr */, testMemAcc,
 				)
 			})
 	}

@@ -97,7 +97,7 @@ type columnEncoder struct {
 	scratch []byte
 	// types for the "key" columns (equality columns)
 	keyTypes   []*types.T
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 	encodeNull bool
 }
 
@@ -114,7 +114,7 @@ func (e *columnEncoder) init(typs []*types.T, keyCols columns, encodeNull bool) 
 // If the row contains any NULLs and encodeNull is false, hasNull is true and
 // no encoding is returned. If encodeNull is true, hasNull is never set.
 func encodeColumnsOfRow(
-	da *rowenc.DatumAlloc,
+	da *tree.DatumAlloc,
 	appendTo []byte,
 	row rowenc.EncDatumRow,
 	cols columns,

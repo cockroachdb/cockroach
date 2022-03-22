@@ -21,7 +21,7 @@ git checkout master
 git pull origin master
 
 git rev-parse HEAD
-build/builder/mkrelease.sh amd64-linux-gnu bin/workload bin/roachtest bin/roachprod
+build/builder/mkrelease.sh amd64-linux-gnu bin/workload bin/roachtest
 
 # release-2.0 names the cockroach binary differently.
 if [[ -f cockroach-linux-2.6.32-gnu-amd64 ]]; then
@@ -44,6 +44,9 @@ chmod o+rwx "${artifacts}"
 # NB(2): We specify --zones below so that nodes are created in us-central1-b
 # by default. This reserves us-east1-b (the roachprod default zone) for use
 # by manually created clusters.
+#
+# NB(3): If you make changes here, you should probably make the same change in
+# build/teamcity/cockroach/nightlies/roachtest_weekly_impl.sh.
 exit_status=0
 timeout -s INT $((7800*60)) bin/roachtest run \
   tag:weekly \
@@ -51,7 +54,6 @@ timeout -s INT $((7800*60)) bin/roachtest run \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --cockroach "$PWD/cockroach.linux-2.6.32-gnu-amd64" \
-  --roachprod "$PWD/bin/roachprod" \
   --workload "$PWD/bin/workload" \
   --artifacts "$artifacts" \
   --parallelism 5 \

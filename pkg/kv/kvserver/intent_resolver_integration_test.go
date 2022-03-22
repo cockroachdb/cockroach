@@ -79,7 +79,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
+	store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
 
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
@@ -422,7 +422,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 
 		// testTxnExecute executes a transaction for testTxn. It is a separate function
 		// so that any transaction errors can be retried as appropriate.
-		testTxnExecute := func(t *testing.T, spec testTxnSpec, txn *kv.Txn, txnKey roachpb.Key) error {
+		testTxnExecute := func(t *testing.T, ctx context.Context, spec testTxnSpec, txn *kv.Txn, txnKey roachpb.Key) error {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
@@ -445,7 +445,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 				// meanwhile, returning when heartbeat was aborted.
 				abortedC := abortHeartbeat(t, txnKey)
 				readyC := blockPut(t, txnKey)
-				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "unblock", func(ctx context.Context) {
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "unblock", func(_ context.Context) {
 					<-abortedC
 					unblockC := <-readyC
 					time.Sleep(100 * time.Millisecond)
@@ -468,6 +468,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 						roachpb.MaxUserPriority,
 						now.ToTimestamp(),
 						srv.Clock().MaxOffset().Nanoseconds(),
+						int32(srv.SQLInstanceID()),
 					)
 					pusher := kv.NewTxnFromProto(ctx, db, srv.NodeID(), now, kv.RootTxn, &pusherProto)
 					if err := pusher.Put(ctx, txnKey, []byte("pushit")); err != nil {
@@ -492,7 +493,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 			// evaluated in Raft.
 			if spec.finalize == "cancelAsync" {
 				readyC := blockPutEval(t, txnKey)
-				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "cancel", func(ctx context.Context) {
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "cancel", func(_ context.Context) {
 					unblockC := <-readyC
 					defer close(unblockC)
 					cancel()
@@ -559,16 +560,19 @@ func TestReliableIntentCleanup(t *testing.T) {
 			for attempt := 1; ; attempt++ {
 				txnKey := genKey(spec.singleRange)
 				txns[txn.ID()] = txnKey // before testTxnExecute, id may change on errors
-
-				err := testTxnExecute(t, spec, txn, txnKey)
+				retryErr := &roachpb.TransactionRetryWithProtoRefreshError{}
+				err := testTxnExecute(t, ctx, spec, txn, txnKey)
 				if err == nil {
 					break
 				} else if spec.abort != "" {
 					require.Error(t, err)
-					require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err, "err: %v", err)
-					require.True(t, err.(*roachpb.TransactionRetryWithProtoRefreshError).PrevTxnAborted())
+					if errors.As(err, retryErr) {
+						require.True(t, retryErr.PrevTxnAborted())
+					} else {
+						require.Fail(t, "expected TransactionRetryWithProtoRefreshError, got %v", err)
+					}
 					break
-				} else if retryErr, ok := err.(*roachpb.TransactionRetryWithProtoRefreshError); !ok {
+				} else if !errors.As(err, retryErr) {
 					require.NoError(t, err)
 				} else if attempt >= 3 {
 					require.Fail(t, "too many txn retries", "attempt %v errored: %v", attempt, err)

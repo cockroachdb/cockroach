@@ -20,13 +20,19 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // ExitCodeTestsFailed is the exit code that results from a run of
@@ -38,6 +44,28 @@ const ExitCodeTestsFailed = 10
 // and other runner-related logs (i.e. cluster creation logs) will be written.
 const runnerLogsDir = "_runner-logs"
 
+// Only used if passed otherwise refer to ClusterSpec.
+// If a new flag is added here it should also be added to createFlagsOverride().
+func parseCreateOpts(flags *pflag.FlagSet, opts *vm.CreateOpts) {
+	// roachprod create flags
+	flags.DurationVar(&opts.Lifetime,
+		"lifetime", opts.Lifetime, "Lifetime of the cluster")
+	flags.BoolVar(&opts.SSDOpts.UseLocalSSD,
+		"roachprod-local-ssd", opts.SSDOpts.UseLocalSSD, "Use local SSD")
+	flags.StringVar(&opts.SSDOpts.FileSystem,
+		"filesystem", opts.SSDOpts.FileSystem, "The underlying file system(ext4/zfs).")
+	flags.BoolVar(&opts.SSDOpts.NoExt4Barrier,
+		"local-ssd-no-ext4-barrier", opts.SSDOpts.NoExt4Barrier,
+		`Mount the local SSD with the "-o nobarrier" flag. `+
+			`Ignored if --local-ssd=false is specified.`)
+	flags.IntVarP(&overrideNumNodes,
+		"nodes", "n", -1, "Total number of nodes")
+	flags.IntVarP(&opts.OsVolumeSize,
+		"os-volume-size", "", opts.OsVolumeSize, "OS disk volume size in GB")
+	flags.BoolVar(&opts.GeoDistributed,
+		"geo", opts.GeoDistributed, "Create geo-distributed cluster")
+}
+
 func main() {
 	rand.Seed(timeutil.Now().UnixNano())
 	username := os.Getenv("ROACHPROD_USER")
@@ -46,6 +74,10 @@ func main() {
 	// Path to a local dir where the test logs and artifacts collected from
 	// cluster will be placed.
 	var artifacts string
+	// Path to the literal on-agent directory where artifacts are stored.
+	// May be different from `artifacts`. Only used for messages to
+	// ##teamcity[publishArtifacts] in Teamcity mode.
+	var literalArtifacts string
 	var httpPort int
 	var debugEnabled bool
 	var clusterID string
@@ -59,7 +91,7 @@ func main() {
 		Short: "roachtest tool for testing cockroach clusters",
 		Long: `roachtest is a tool for testing cockroach clusters.
 `,
-
+		Version: "details:\n" + build.GetInfo().Long(),
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			// Don't bother checking flags for the default help command.
 			if cmd.Name() == "help" {
@@ -98,6 +130,16 @@ func main() {
 	f := rootCmd.PersistentFlags().VarPF(
 		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
 	f.NoOptDefVal = "true"
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   `version`,
+		Short: `print version information`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			info := build.GetInfo()
+			fmt.Println(info.Long())
+			return nil
+		}},
+	)
 
 	var listBench bool
 
@@ -162,6 +204,9 @@ failed, it is 10. Any other exit status reports a problem with the test
 runner itself.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
+			if literalArtifacts == "" {
+				literalArtifacts = artifacts
+			}
 			return runTests(tests.RegisterTests, cliCfg{
 				args:                   args,
 				count:                  count,
@@ -170,6 +215,7 @@ runner itself.
 				httpPort:               httpPort,
 				parallelism:            parallelism,
 				artifactsDir:           artifacts,
+				literalArtifactsDir:    literalArtifacts,
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
@@ -197,6 +243,9 @@ runner itself.
 		Short:        "run automated benchmarks on cockroach cluster",
 		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
+			if literalArtifacts == "" {
+				literalArtifacts = artifacts
+			}
 			return runTests(tests.RegisterBenchmarks, cliCfg{
 				args:                   args,
 				count:                  count,
@@ -217,6 +266,8 @@ runner itself.
 		cmd.Flags().StringVar(
 			&artifacts, "artifacts", "artifacts", "path to artifacts directory")
 		cmd.Flags().StringVar(
+			&literalArtifacts, "artifacts-literal", "", "literal path to on-agent artifacts directory. Used for messages to ##teamcity[publishArtifacts] in --teamcity mode. May be different from --artifacts; defaults to the value of --artifacts if not provided")
+		cmd.Flags().StringVar(
 			&cloud, "cloud", cloud, "cloud provider to use (aws, azure, or gce)")
 		cmd.Flags().StringVar(
 			&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
@@ -227,7 +278,8 @@ runner itself.
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
-			&roachprod, "roachprod", "", "path to roachprod binary to use")
+			&deprecatedRoachprodBinary, "roachprod", "", "DEPRECATED")
+		_ = cmd.Flags().MarkDeprecated("roachprod", "roachtest now uses roachprod as a library")
 		cmd.Flags().BoolVar(
 			&clusterWipe, "wipe", true,
 			"wipe existing cluster before starting test (for use with --cluster)")
@@ -245,8 +297,6 @@ runner itself.
 			&httpPort, "port", 8080, "the port on which to serve the HTTP interface")
 		cmd.Flags().BoolVar(
 			&localSSDArg, "local-ssd", true, "Use a local SSD instead of an EBS volume (only for use with AWS) (defaults to true if instance type supports local SSDs)")
-		cmd.Flags().StringSliceVar(
-			&createArgs, "create-args", []string{}, "extra args to pass onto the roachprod create command")
 		cmd.Flags().StringToStringVar(
 			&versionsBinaryOverride, "versions-binary-override", nil,
 			"List of <version>=<path to cockroach binary>. If a certain version <ver> "+
@@ -255,9 +305,24 @@ runner itself.
 				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
 	}
 
+	parseCreateOpts(runCmd.Flags(), &overrideOpts)
+	overrideFlagset = runCmd.Flags()
+
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
+
+	var err error
+	config.OSUser, err = user.Current()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "unable to lookup current user: %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := roachprod.InitDirs(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
 
 	if err := rootCmd.Execute(); err != nil {
 		code := 1
@@ -277,6 +342,7 @@ type cliCfg struct {
 	httpPort               int
 	parallelism            int
 	artifactsDir           string
+	literalArtifactsDir    string
 	user                   string
 	clusterID              string
 	versionsBinaryOverride map[string]string
@@ -292,7 +358,9 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	}
 	register(&r)
 	cr := newClusterRegistry()
-	runner := newTestRunner(cr, r.buildVersion)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	runner := newTestRunner(cr, stopper, r.buildVersion)
 
 	filter := registry.NewTestFilter(cfg.args)
 	clusterType := roachprodCluster
@@ -303,6 +371,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 			cfg.parallelism = 1
 		}
 	}
+
 	opt := clustersOpt{
 		typ:                       clusterType,
 		clusterName:               clusterName,
@@ -329,12 +398,13 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
 	l, tee := testRunnerLogger(context.Background(), cfg.parallelism, runnerLogPath)
 	lopt := loggingOpt{
-		l:             l,
-		tee:           tee,
-		stdout:        os.Stdout,
-		stderr:        os.Stderr,
-		artifactsDir:  cfg.artifactsDir,
-		runnerLogPath: runnerLogPath,
+		l:                   l,
+		tee:                 tee,
+		stdout:              os.Stdout,
+		stderr:              os.Stderr,
+		artifactsDir:        cfg.artifactsDir,
+		literalArtifactsDir: cfg.literalArtifactsDir,
+		runnerLogPath:       runnerLogPath,
 	}
 
 	// We're going to run all the workers (and thus all the tests) in a context
@@ -345,7 +415,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	err = runner.Run(
 		ctx, tests, cfg.count, cfg.parallelism, opt,
 		testOpts{versionsBinaryOverride: cfg.versionsBinaryOverride},
-		lopt)
+		lopt, nil /* clusterAllocator */)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's
@@ -356,7 +426,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 
 	if teamCity {
 		// Collect the runner logs.
-		fmt.Printf("##teamcity[publishArtifacts '%s']\n", runnerDir)
+		fmt.Printf("##teamcity[publishArtifacts '%s']\n", filepath.Join(cfg.literalArtifactsDir, runnerLogsDir))
 	}
 	return err
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -28,9 +29,10 @@ import (
 func (p *planner) ResolveOIDFromString(
 	ctx context.Context, resultType *types.T, toResolve *tree.DString,
 ) (*tree.DOid, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 	return resolveOID(
 		ctx, p.Txn(),
-		p.extendedEvalCtx.InternalExecutor.(sqlutil.InternalExecutor),
+		ie,
 		resultType, toResolve,
 	)
 }
@@ -39,9 +41,10 @@ func (p *planner) ResolveOIDFromString(
 func (p *planner) ResolveOIDFromOID(
 	ctx context.Context, resultType *types.T, toResolve *tree.DOid,
 ) (*tree.DOid, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 	return resolveOID(
 		ctx, p.Txn(),
-		p.extendedEvalCtx.InternalExecutor.(sqlutil.InternalExecutor),
+		ie,
 		resultType, toResolve,
 	)
 }
@@ -55,7 +58,12 @@ func resolveOID(
 ) (*tree.DOid, error) {
 	info, ok := regTypeInfos[resultType.Oid()]
 	if !ok {
-		return nil, errors.AssertionFailedf("illegal oid type %v", resultType)
+		return nil, pgerror.Newf(
+			pgcode.InvalidTextRepresentation,
+			"invalid input syntax for type %s: %q",
+			resultType,
+			tree.AsStringWithFlags(toResolve, tree.FmtBareStrings),
+		)
 	}
 	queryCol := info.nameCol
 	if _, isOid := toResolve.(*tree.DOid); isOid {
@@ -65,7 +73,9 @@ func resolveOID(
 		"SELECT %s.oid, %s FROM pg_catalog.%s WHERE %s = $1",
 		info.tableName, info.nameCol, info.tableName, queryCol,
 	)
-	results, err := ie.QueryRow(ctx, "queryOid", txn, q, toResolve)
+
+	results, err := ie.QueryRowEx(ctx, "queryOid", txn,
+		sessiondata.NoSessionDataOverride, q, toResolve)
 	if err != nil {
 		if errors.HasType(err, (*tree.MultipleResultsError)(nil)) {
 			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
@@ -99,8 +109,9 @@ type regTypeInfo struct {
 // table that contains the entities of the type of the key.
 var regTypeInfos = map[oid.Oid]regTypeInfo{
 	oid.T_regclass:     {"pg_class", "relname", "relation", pgcode.UndefinedTable},
-	oid.T_regtype:      {"pg_type", "typname", "type", pgcode.UndefinedObject},
+	oid.T_regnamespace: {"pg_namespace", "nspname", "namespace", pgcode.UndefinedObject},
 	oid.T_regproc:      {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
 	oid.T_regprocedure: {"pg_proc", "proname", "function", pgcode.UndefinedFunction},
-	oid.T_regnamespace: {"pg_namespace", "nspname", "namespace", pgcode.UndefinedObject},
+	oid.T_regrole:      {"pg_authid", "rolname", "role", pgcode.UndefinedObject},
+	oid.T_regtype:      {"pg_type", "typname", "type", pgcode.UndefinedObject},
 }

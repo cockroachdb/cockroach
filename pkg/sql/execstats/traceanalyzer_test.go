@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -59,11 +58,11 @@ func TestTraceAnalyzer(t *testing.T) {
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					TestingSaveFlows: func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error {
+					TestingSaveFlows: func(stmt string) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execinfra.OpChains) error {
 						if stmt != testStmt {
-							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error { return nil }
+							return func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execinfra.OpChains) error { return nil }
 						}
-						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec, _ execinfra.OpChains) error {
+						return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execinfra.OpChains) error {
 							flowsMetadata := execstats.NewFlowsMetadata(flows)
 							analyzer := execstats.NewTraceAnalyzer(flowsMetadata)
 							analyzerChan <- analyzer
@@ -106,29 +105,25 @@ func TestTraceAnalyzer(t *testing.T) {
 		colexecTraceAnalyzer *execstats.TraceAnalyzer
 	)
 	for _, vectorizeMode := range []sessiondatapb.VectorizeExecMode{sessiondatapb.VectorizeOff, sessiondatapb.VectorizeOn} {
-		var sp *tracing.Span
-		ctx, sp = tracing.StartVerboseTrace(ctx, execCfg.AmbientCtx.Tracer, t.Name())
-		ie := execCfg.InternalExecutor
-		ie.SetSessionData(
-			&sessiondata.SessionData{
-				SessionData: sessiondatapb.SessionData{
-					VectorizeMode: vectorizeMode,
-				},
-				LocalOnlySessionData: sessiondata.LocalOnlySessionData{
-					DistSQLMode: sessiondata.DistSQLOn,
-				},
+		execCtx, finishAndCollect := tracing.ContextWithRecordingSpan(ctx, execCfg.AmbientCtx.Tracer, t.Name())
+		defer finishAndCollect()
+		ie := execCfg.InternalExecutorFactory(ctx, &sessiondata.SessionData{
+			SessionData: sessiondatapb.SessionData{
+				VectorizeMode: vectorizeMode,
 			},
-		)
+			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+				DistSQLMode: sessiondatapb.DistSQLOn,
+			},
+		})
 		_, err := ie.ExecEx(
-			ctx,
+			execCtx,
 			t.Name(),
 			nil, /* txn */
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			testStmt,
 		)
-		sp.Finish()
 		require.NoError(t, err)
-		trace := sp.GetRecording()
+		trace := finishAndCollect()
 		analyzer := <-analyzerChan
 		require.NoError(t, analyzer.AddTrace(trace, true /* makeDeterministic */))
 		require.NoError(t, analyzer.ProcessStats())

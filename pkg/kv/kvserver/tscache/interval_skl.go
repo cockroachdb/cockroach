@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // rangeOptions are passed to AddRange to indicate the bounds of the range. By
@@ -259,7 +260,7 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue
 			msg := fmt.Sprintf("inverted range (issue #32149): key lens = [%d,%d), diff @ index %d",
 				len(from), len(to), d)
 			log.Errorf(context.Background(), "%s, [%s,%s)", msg, from, to)
-			panic(log.Safe(msg))
+			panic(redact.Safe(msg))
 		case cmp == 0:
 			// Starting key is same as ending key, so just add single node.
 			if opt == (excludeFrom | excludeTo) {

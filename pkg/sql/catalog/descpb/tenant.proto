@@ -13,6 +13,7 @@ package cockroach.sql.sqlbase;
 option go_package = "descpb";
 
 import "gogoproto/gogo.proto";
+import "roachpb/api.proto";
 
 // TenantInfo represents a tenant in a multi-tenant cluster and is
 // stored in the "info" column of the "system.tenants" table. The
@@ -33,6 +34,27 @@ message TenantInfo {
 
   optional uint64 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
   optional State state = 2 [(gogoproto.nullable) = false];
+}
 
-  // TODO(nvanbenschoten): add per-tenant rate limits here.
+// TenantInfoAndUsage contains the information for a tenant in a multi-tenant
+// cluster plus metadata related to cost control and consumption.
+message TenantInfoWithUsage {
+  option (gogoproto.equal) = true;
+
+  // Usage contains metadata related to cost control and consumption. In a
+  // running cluster, this data is stored in the system.tenant_usage table.
+  // Each field corresponds has a corresponding column in that table.
+  message Usage {
+    option (gogoproto.equal) = true;
+
+    optional double ru_burst_limit = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RUBurstLimit"];
+    optional double ru_refill_rate = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "RURefillRate"];
+    optional double ru_current = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RUCurrent"];
+  
+    // All-time consumption for this tenant. Each field has a corresponding column
+    // in system.tenant_usage.
+    optional roachpb.TenantConsumption consumption = 4 [(gogoproto.nullable) = false];
+  }
+  optional TenantInfo info = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
+  optional Usage usage = 2;
 }

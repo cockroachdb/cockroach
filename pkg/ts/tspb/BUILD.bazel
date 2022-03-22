@@ -10,7 +10,7 @@ go_library(
     embed = [":tspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ts/tspb",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/roachpb:with-mocks"],
+    deps = ["//pkg/roachpb"],
 )
 
 proto_library(
@@ -35,7 +35,7 @@ go_proto_library(
     proto = ":tspb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
         "@com_github_golang_protobuf//descriptor:go_default_library_gen",  # keep
         "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",

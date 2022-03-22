@@ -41,8 +41,8 @@ var EmbeddedTenantIDs = func() []uint64 { return []uint64{10, 11, 20} }
 
 // Embedded certificates specific to multi-tenancy testing.
 const (
-	EmbeddedTenantClientCACert = "ca-client-tenant.crt" // CA for client connections
-	EmbeddedTenantClientCAKey  = "ca-client-tenant.key" // CA for client connections
+	EmbeddedTenantCACert = "ca-client-tenant.crt" // CA for client connections
+	EmbeddedTenantCAKey  = "ca-client-tenant.key" // CA for client connections
 )
 
 // newServerTLSConfig creates a server TLSConfig from the supplied byte strings containing
@@ -165,7 +165,7 @@ func newBaseTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
 		// Note that some TLS cipher suite guidance (such as Mozilla's[1])
 		// recommend replacing the CBC_SHA suites below with CBC_SHA384 or
 		// CBC_SHA256 variants. We do not do this because Go does not
-		// currerntly implement the CBC_SHA384 suites, and its CBC_SHA256
+		// currently implement the CBC_SHA384 suites, and its CBC_SHA256
 		// implementation is vulnerable to the Lucky13 attack and is disabled
 		// by default.[2]
 		//

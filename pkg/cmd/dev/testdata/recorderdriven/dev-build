@@ -1,0 +1,15 @@
+dev build pkg/roachpb:roachpb_test
+----
+bazel query pkg/roachpb:roachpb_test --output=label_kind
+bazel build //pkg/roachpb:roachpb_test --config=test
+bazel info workspace --color=no
+mkdir crdb-checkout/bin
+bazel info bazel-bin --color=no
+
+# TODO(irfansharif): This test case is skipped -- it's too verbose given it
+# scans through the sandbox for each generated file and copies them over
+# one-by-one manually. Probably we want to push the logic down into bazel
+# itself the same way we do now for protobufs.
+#
+# dev build cockroach-short
+# ----

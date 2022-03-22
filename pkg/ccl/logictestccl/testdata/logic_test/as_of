@@ -1,24 +1,29 @@
 # LogicTest: local
 
 statement ok
-CREATE TABLE t (i INT PRIMARY KEY, j INT UNIQUE, k INT, UNIQUE (k) STORING (j))
+CREATE TABLE t (
+  i INT PRIMARY KEY,
+  j INT UNIQUE,
+  k INT,
+  UNIQUE (k) STORING (j)
+)
 
 statement ok
 INSERT INTO t VALUES (2)
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 SELECT * FROM t AS OF SYSTEM TIME experimental_follower_read_timestamp()
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN; SET TRANSACTION AS OF SYSTEM TIME follower_read_timestamp(); SELECT * FROM t
 
 statement ok
 ROLLBACK
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN AS OF SYSTEM TIME follower_read_timestamp(); SELECT * FROM t
 
 statement ok
@@ -27,13 +32,13 @@ ROLLBACK
 statement ok
 SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO TRUE
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 SELECT * FROM t
 
 statement error pq: cannot execute CREATE DATABASE in a read-only transaction
 CREATE DATABASE IF NOT EXISTS d2
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN; SELECT * FROM t
 
 statement ok
@@ -69,13 +74,13 @@ BEGIN; CREATE DATABASE IF NOT EXISTS d2; COMMIT
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION AS OF SYSTEM TIME follower_read_timestamp()
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 SELECT * FROM t
 
 statement error pq: cannot execute CREATE DATABASE in a read-only transaction
 CREATE DATABASE IF NOT EXISTS d2
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN; SELECT * FROM t
 
 statement ok
@@ -169,21 +174,36 @@ SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms') WHERE j = 2 AND i = 1
 ----
-memo (optimized, ~7KB, required=[presentation: info:6])
- ├── G1: (explain G2 [presentation: i:1,j:2,k:3])
- │    └── [presentation: info:6]
- │         ├── best: (explain G2="[presentation: i:1,j:2,k:3]" [presentation: i:1,j:2,k:3])
- │         └── cost: 5.17
+memo (optimized, ~8KB, required=[presentation: info:6] [distribution: test])
+ ├── G1: (explain G2 [presentation: i:1,j:2,k:3] [distribution: test])
+ │    ├── [presentation: info:6] [distribution: test]
+ │    │    ├── best: (explain G2="[presentation: i:1,j:2,k:3] [distribution: test]" [presentation: i:1,j:2,k:3] [distribution: test])
+ │    │    └── cost: 5.18
+ │    └── []
+ │         ├── best: (explain G2="[presentation: i:1,j:2,k:3]" [presentation: i:1,j:2,k:3] [distribution: test])
+ │         └── cost: 5.18
  ├── G2: (select G3 G4) (select G5 G6)
- │    └── [presentation: i:1,j:2,k:3]
+ │    ├── [presentation: i:1,j:2,k:3]
+ │    │    ├── best: (select G5 G6)
+ │    │    └── cost: 5.16
+ │    ├── [presentation: i:1,j:2,k:3] [distribution: test]
+ │    │    ├── best: (select G5="[distribution: test]" G6)
+ │    │    └── cost: 5.16
+ │    └── []
  │         ├── best: (select G5 G6)
  │         └── cost: 5.16
  ├── G3: (scan t,cols=(1-3)) (scan t@t_k_key,cols=(1-3))
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan t,cols=(1-3))
+ │    │    └── cost: 1145.22
  │    └── []
  │         ├── best: (scan t,cols=(1-3))
- │         └── cost: 1146.41
+ │         └── cost: 1145.22
  ├── G4: (filters G7 G8)
  ├── G5: (scan t,cols=(1-3),constrained)
+ │    ├── [distribution: test]
+ │    │    ├── best: (scan t,cols=(1-3),constrained)
+ │    │    └── cost: 5.13
  │    └── []
  │         ├── best: (scan t,cols=(1-3),constrained)
  │         └── cost: 5.13
@@ -263,10 +283,10 @@ SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', false) WHERE i = 2
 statement ok
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms', false) WHERE i = 2
 
-statement ok
+statement error pgcode XCUBS bounded staleness read with minimum timestamp bound.*could not be satisfied by a local resolved timestamp
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms', true) WHERE i = 2
 
-statement ok
+statement error pgcode XCUBS bounded staleness read with minimum timestamp bound.*could not be satisfied by a local resolved timestamp
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms', true) WHERE i = 2
 
 #
@@ -286,8 +306,26 @@ ROLLBACK
 # Tests for bounded staleness with prepared statements.
 #
 
-statement error bounded staleness queries do not yet work with prepared statements
-PREPARE prep_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '10s'::interval)
+statement ok
+PREPARE with_min_timestamp_prep AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '10s'::interval) WHERE i = 2
 
-statement error bounded staleness queries do not yet work with prepared statements
-PREPARE prep_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
+statement ok
+EXECUTE with_min_timestamp_prep
+
+statement ok
+PREPARE with_max_staleness_prep AS SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE i = 2
+
+statement ok
+EXECUTE with_max_staleness_prep
+
+statement ok
+PREPARE bad_max_staleness_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1ms')
+
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+EXECUTE bad_max_staleness_stmt
+
+statement ok
+PREPARE bad_min_timestamp_stmt AS SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp() - '1ms')
+
+statement error unimplemented: cannot use bounded staleness for queries that may touch more than one range or require an index join
+EXECUTE bad_min_timestamp_stmt

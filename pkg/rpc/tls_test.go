@@ -61,9 +61,10 @@ func TestClientSSLSettings(t *testing.T) {
 				// always exists.
 				cfg.SSLCertsDir = "i-do-not-exist"
 			}
+			ctx := context.Background()
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-			rpcContext := NewContext(ContextOptions{
+			defer stopper.Stop(ctx)
+			rpcContext := NewContext(ctx, ContextOptions{
 				TenantID: roachpb.SystemTenantID,
 				Clock:    hlc.NewClock(hlc.UnixNano, 1),
 				Stopper:  stopper,
@@ -118,9 +119,10 @@ func TestServerSSLSettings(t *testing.T) {
 			if tc.hasCerts {
 				testutils.FillCerts(cfg)
 			}
+			ctx := context.Background()
 			stopper := stop.NewStopper()
-			defer stopper.Stop(context.Background())
-			rpcContext := NewContext(ContextOptions{
+			defer stopper.Stop(ctx)
+			rpcContext := NewContext(ctx, ContextOptions{
 				TenantID: roachpb.SystemTenantID,
 				Clock:    hlc.NewClock(hlc.UnixNano, 1),
 				Stopper:  stopper,

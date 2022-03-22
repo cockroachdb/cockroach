@@ -15,8 +15,6 @@ type Import struct {
 	Table      *TableName
 	Into       bool
 	IntoCols   NameList
-	CreateFile Expr
-	CreateDefs TableDefs
 	FileFormat string
 	Files      Exprs
 	Bundle     bool
@@ -52,16 +50,6 @@ func (node *Import) Format(ctx *FmtCtx) {
 		} else {
 			ctx.WriteString("TABLE ")
 			ctx.FormatNode(node.Table)
-
-			if node.CreateFile != nil {
-				ctx.WriteString(" CREATE USING ")
-				ctx.FormatNode(node.CreateFile)
-				ctx.WriteString(" ")
-			} else {
-				ctx.WriteString(" (")
-				ctx.FormatNode(&node.CreateDefs)
-				ctx.WriteString(") ")
-			}
 		}
 		ctx.WriteString(node.FileFormat)
 		ctx.WriteString(" DATA (")

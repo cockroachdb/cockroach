@@ -3,23 +3,32 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 go_library(
     name = "dev_lib",
     srcs = [
+        "acceptance.go",
         "bench.go",
         "build.go",
         "builder.go",
+        "cache.go",
+        "compose.go",
         "dev.go",
+        "doctor.go",
         "generate.go",
+        "go.go",
         "lint.go",
         "main.go",
+        "merge_test_xmls.go",
         "test.go",
+        "testlogic.go",
+        "ui.go",
         "util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/dev",
     visibility = ["//visibility:private"],
     deps = [
+        "//pkg/build/util",
         "//pkg/cmd/dev/io/exec",
         "//pkg/cmd/dev/io/os",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_alessio_shellescape//:shellescape",
+        "@com_github_google_shlex//:shlex",
         "@com_github_spf13_cobra//:cobra",
     ],
 )
@@ -32,15 +41,21 @@ go_binary(
 
 go_test(
     name = "dev_test",
-    srcs = ["datadriven_test.go"],
+    srcs = [
+        "datadriven_test.go",
+        "recorderdriven_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":dev_lib"],
     deps = [
+        "//pkg/build/bazel",
         "//pkg/cmd/dev/io/exec",
         "//pkg/cmd/dev/io/os",
-        "//pkg/cmd/dev/recorder",
         "//pkg/testutils",
+        "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_google_shlex//:shlex",
+        "@com_github_irfansharif_recorder//:recorder",
         "@com_github_stretchr_testify//require",
     ],
 )

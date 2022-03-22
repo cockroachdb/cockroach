@@ -183,9 +183,9 @@ func (b *AppendOnlyBufferedBatch) Reset([]*types.T, int, coldata.ColumnFactory) 
 }
 
 // ResetInternalBatch implements the coldata.Batch interface.
-func (b *AppendOnlyBufferedBatch) ResetInternalBatch() {
+func (b *AppendOnlyBufferedBatch) ResetInternalBatch() int64 {
 	b.SetLength(0 /* n */)
-	b.batch.ResetInternalBatch()
+	return b.batch.ResetInternalBatch()
 }
 
 // String implements the coldata.Batch interface.
@@ -305,8 +305,16 @@ func UpdateBatchState(batch coldata.Batch, length int, usesSel bool, sel []int) 
 	if usesSel {
 		copy(batch.Selection()[:length], sel[:length])
 	}
-	// Note: when usesSel is true, we have to set the length on the batch
-	// **after** setting the selection vector because we might use the values
-	// in the selection vector to maintain invariants (like for flat bytes).
 	batch.SetLength(length)
+}
+
+// DefaultSelectionVector contains all integers in [0, coldata.MaxBatchSize)
+// range.
+var DefaultSelectionVector []int
+
+func init() {
+	DefaultSelectionVector = make([]int, coldata.MaxBatchSize)
+	for i := range DefaultSelectionVector {
+		DefaultSelectionVector[i] = i
+	}
 }

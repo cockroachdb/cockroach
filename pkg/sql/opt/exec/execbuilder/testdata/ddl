@@ -23,7 +23,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/primary/1/f -> /9
+fetched: /t/t_pkey/1/f -> /9
 output row: [1 9]
 
 statement ok
@@ -40,7 +40,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/foo/NULL -> /1
+fetched: /t/foo/NULL -> /?
 output row: [NULL]
 
 statement ok
@@ -63,9 +63,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/primary/1/f -> /9
-fetched: /t/primary/2/f/b/c -> /9/1/1
-fetched: /t/primary/3/f/b/c -> /9/2/1
+fetched: /t/t_pkey/1/f -> /9
+fetched: /t/t_pkey/2/f/b/c -> /9/1/1
+fetched: /t/t_pkey/3/f/b/c -> /9/2/1
 output row: [1 9 NULL NULL]
 output row: [2 9 1 1]
 output row: [3 9 2 1]
@@ -81,9 +81,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/primary/1/f -> /9
-fetched: /t/primary/2/f -> /9
-fetched: /t/primary/3/f -> /9
+fetched: /t/t_pkey/1/f -> /9
+fetched: /t/t_pkey/2/f -> /9
+fetched: /t/t_pkey/3/f -> /9
 output row: [1 9]
 output row: [2 9]
 output row: [3 9]
@@ -101,12 +101,14 @@ vectorized: true
 • split
 │ columns: (key, pretty, split_enforced_until)
 │ estimated row count: 10 (missing stats)
+│ index: s@s_pkey
+│ expiry: CAST(NULL AS STRING)
 │
 └── • scan
       columns: (k1, k2)
       ordering: +k1
       estimated row count: 3 (missing stats)
-      table: s@primary
+      table: s@s_pkey
       spans: LIMITED SCAN
       limit: 3
 
@@ -135,8 +137,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/primary/1 -> NULL
-fetched: /t/primary/1/b -> 1
+fetched: /t/t_pkey/1 -> <undecoded>
+fetched: /t/t_pkey/1/b -> 1
 output row: [1 1]
 
 user root
@@ -144,7 +146,7 @@ user root
 statement ok
 CREATE INDEX foo ON t (b)
 
-statement error relation \"foo\" already exists
+statement error index with name \"foo\" already exists
 CREATE INDEX foo ON t (a)
 
 statement error column "c" does not exist
@@ -161,7 +163,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/foo/1/1 -> NULL
+fetched: /t/foo/1/1 -> <undecoded>
 output row: [1 1]
 
 statement ok
@@ -175,8 +177,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/foo/1/1 -> NULL
-fetched: /t/foo/1/2 -> NULL
+fetched: /t/foo/1/1 -> <undecoded>
+fetched: /t/foo/1/2 -> <undecoded>
 output row: [1 1]
 output row: [2 1]
 
@@ -211,10 +213,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/b_desc/2/2 -> NULL
-fetched: /t/b_desc/1/1 -> NULL
-fetched: /t/primary/1/b/c -> /1/1
-fetched: /t/primary/2/b/c -> /2/2
+fetched: /t/b_desc/2/2 -> <undecoded>
+fetched: /t/b_desc/1/1 -> <undecoded>
+fetched: /t/t_pkey/1/b/c -> /1/1
+fetched: /t/t_pkey/2/b/c -> /2/2
 output row: [1 1 1]
 output row: [2 2 2]
 
@@ -232,8 +234,6 @@ CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE TABLE test_kvr1(k INT PRIMARY KEY REFERENCES test_kv(k));
   CREATE TABLE test_kvr2(k INT, v INT UNIQUE REFERENCES test_kv(k));
   CREATE TABLE test_kvr3(k INT, v INT UNIQUE REFERENCES test_kv(v));
-  CREATE TABLE test_kvi1(k INT PRIMARY KEY) INTERLEAVE IN PARENT test_kv(k);
   CREATE TABLE test_kvi2(k INT PRIMARY KEY, v INT);
-  CREATE UNIQUE INDEX test_kvi2_idx ON test_kvi2(v) INTERLEAVE IN PARENT test_kv(v);
   CREATE VIEW test_v1 AS SELECT v FROM test_kv;
   CREATE VIEW test_v2 AS SELECT v FROM test_v1;

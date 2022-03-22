@@ -31,7 +31,7 @@ func newBoolAndOrderedAggAlloc(
 
 type boolAndOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []bool
+	col    coldata.Bools
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -177,10 +177,11 @@ func (a *boolAndOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 
@@ -223,7 +224,7 @@ func newBoolOrOrderedAggAlloc(
 
 type boolOrOrderedAgg struct {
 	orderedAggregateFuncBase
-	col    []bool
+	col    coldata.Bools
 	curAgg bool
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
@@ -369,10 +370,11 @@ func (a *boolOrOrderedAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		col[outputIdx] = a.curAgg
 	}
 }
 

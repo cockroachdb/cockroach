@@ -1,25 +1,28 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "sslocal",
     srcs = [
         "sql_stats.go",
         "sql_stats_controller.go",
+        "sslocal_iterator.go",
         "sslocal_provider.go",
         "sslocal_sink.go",
         "sslocal_stats_collector.go",
+        "temp_sql_stats.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/kv",
+        "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql/sem/tree",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/ssmemstorage",
+        "//pkg/sql/sqlutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/mon",
@@ -27,5 +30,38 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "sslocal_test",
+    srcs = [
+        "iterator_test.go",
+        "main_test.go",
+        "sql_stats_test.go",
+    ],
+    deps = [
+        ":sslocal",
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/sessionphase",
+        "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/sql/tests",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "@com_github_stretchr_testify//require",
     ],
 )

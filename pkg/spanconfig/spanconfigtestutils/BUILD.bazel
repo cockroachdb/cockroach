@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanconfigtestutils",
+    srcs = [
+        "recorder.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/roachpb",
+        "//pkg/spanconfig",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/hlc",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "spanconfigtestutils_test",
+    srcs = ["utils_test.go"],
+    embed = [":spanconfigtestutils"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

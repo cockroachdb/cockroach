@@ -4,7 +4,7 @@ services:
     image: ubuntu:xenial-20170214
     command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach
     volumes:
-      - ../../../../cockroach-linux-2.6.32-gnu-amd64:/cockroach/cockroach
+      - ${COCKROACH_BINARY:-../../../../cockroach-linux-2.6.32-gnu-amd64}:/cockroach/cockroach
   flyway:
     depends_on:
       - cockroach

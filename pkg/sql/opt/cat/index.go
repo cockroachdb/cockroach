@@ -63,6 +63,10 @@ type Index interface {
 	// the table.
 	ColumnCount() int
 
+	// ExplicitColumnCount returns the number of key columns that are explicitly
+	// specified in the index definition. This does not include stored columns.
+	ExplicitColumnCount() int
+
 	// KeyColumnCount returns the number of columns in the index that are part
 	// of its unique key. No two rows in the index will have the same values for
 	// those columns (where NULL values are treated as equal). Every index has a
@@ -155,71 +159,37 @@ type Index interface {
 	// Span returns the KV span associated with the index.
 	Span() roachpb.Span
 
-	// ImplicitPartitioningColumnCount returns the number of implicit partitioning
-	// columns at the front of the index. For example, consider the following
-	// table:
+	// ImplicitColumnCount returns the number of implicit columns at the front of
+	// the index including implicit partitioning columns and shard columns of hash
+	// sharded indexes. For example, consider the following table:
 	//
 	// CREATE TABLE t (
 	//   x INT,
 	//   y INT,
-	//   INDEX (y) PARTITION BY LIST (x) (
-	//     PARTITION p1 VALUES IN (1)
-	//   )
+	//   z INT,
+	//   INDEX (y),
+	//   INDEX (z) USING HASH
+	// ) PARTITION ALL BY LIST (x) (
+	//   PARTITION p1 VALUES IN (1)
 	// );
 	//
-	// In this case, the number of implicit partitioning columns in the index on
-	// y is 1, since x is implicitly added to the front of the index.
+	// In this case, the number of implicit columns in the index on y is 1, since
+	// x is implicitly added to the front of the index. The number of implicit
+	// columns in the index on z is 2, since x and a shard column are implicitly
+	// added to the front of the index.
 	//
 	// The implicit partitioning columns are always a prefix of the full column
-	// list, and ImplicitPartitioningColumnCount < LaxKeyColumnCount.
+	// list, and ImplicitColumnCount < LaxKeyColumnCount.
+	ImplicitColumnCount() int
+
+	// ImplicitPartitioningColumnCount returns the number of implicit columns at
+	// the front of the index that are implicit partitioning columns. The value
+	// returned is always <= ImplicitColumnCount.
 	ImplicitPartitioningColumnCount() int
 
-	// InterleaveAncestorCount returns the number of interleave ancestors for this
-	// index (or zero if this is not an interleaved index). Each ancestor is an
-	// index (usually from another table) with a key that shares a prefix with
-	// the key of this index.
-	//
-	// Each ancestor contributes one or more key columns; together these pieces
-	// form a prefix of an index key.
-	//
-	// The ancestors appear in the order they appear in an encoded key. This means
-	// they are always in the far-to-near ancestor order (e.g.
-	// grand-grand-parent, grand-parent, parent).
-	//
-	//
-	// Example:
-	//   Index 1 -> /a/b
-	//   Index 2 -> /a/b/c
-	//   Index 3 -> /a/b/c/d
-	//
-	// Index 3 has two ancestors; the first is index 1 (contributing 2 key
-	// columns) and the second is index 2 (contributing 1 key column).
-	InterleaveAncestorCount() int
-
-	// InterleaveAncestor returns information about an ancestor index.
-	//
-	// numKeyCols is the number of key columns that this ancestor contributes to
-	// an encoded key. In other words: each ancestor has a shared key prefix
-	// with this index; numKeyCols is the difference the shared prefix length for
-	// this ancestor and the shared prefix length for the previous ancestor.
-	// See InterleaveAncestorCount for an example.
-	InterleaveAncestor(i int) (table, index StableID, numKeyCols int)
-
-	// InterleavedByCount returns the number of indexes (usually from other
-	// tables) that are interleaved into this index.
-	//
-	// Note that these indexes can themselves be interleaved by other indexes, but
-	// this list contains only those for which this index is a direct interleave
-	// parent.
-	InterleavedByCount() int
-
-	// InterleavedBy returns information about an index that is interleaved into
-	// this index; see InterleavedByCount.
-	InterleavedBy(i int) (table, index StableID)
-
-	// GeoConfig returns a geospatial index configuration. If non-nil, it
+	// GeoConfig returns a geospatial index configuration. If not empty, it
 	// describes the configuration for this geospatial inverted index.
-	GeoConfig() *geoindex.Config
+	GeoConfig() geoindex.Config
 
 	// Version returns the IndexDescriptorVersion of the index.
 	Version() descpb.IndexDescriptorVersion

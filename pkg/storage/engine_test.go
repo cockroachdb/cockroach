@@ -857,7 +857,7 @@ func TestEngineScan1(t *testing.T) {
 			}
 
 			// Test iterator stats.
-			ro := engine.NewReadOnly()
+			ro := engine.NewReadOnly(StandardDurability)
 			iter := ro.NewMVCCIterator(MVCCKeyIterKind,
 				IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
 			iter.SeekGE(MVCCKey{Key: roachpb.Key("cat")})
@@ -870,6 +870,8 @@ func TestEngineScan1(t *testing.T) {
 				iter.Next()
 			}
 			stats := iter.Stats().Stats
+			// Setting non-deterministic InternalStats to empty.
+			stats.InternalStats = pebble.InternalIteratorStats{}
 			require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 5), (rev, 0, 0)), "+
 				"(internal (dir, seek, step): (fwd, 1, 5), (rev, 0, 0))", stats.String())
 			iter.Close()
@@ -877,11 +879,15 @@ func TestEngineScan1(t *testing.T) {
 				IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
 			// pebble.Iterator is reused, but stats are reset.
 			stats = iter.Stats().Stats
+			// Setting non-deterministic InternalStats to empty.
+			stats.InternalStats = pebble.InternalIteratorStats{}
 			require.Equal(t, "(interface (dir, seek, step): (fwd, 0, 0), (rev, 0, 0)), "+
 				"(internal (dir, seek, step): (fwd, 0, 0), (rev, 0, 0))", stats.String())
 			iter.SeekGE(MVCCKey{Key: roachpb.Key("french")})
 			iter.SeekLT(MVCCKey{Key: roachpb.Key("server")})
 			stats = iter.Stats().Stats
+			// Setting non-deterministic InternalStats to empty.
+			stats.InternalStats = pebble.InternalIteratorStats{}
 			require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 0), (rev, 1, 0)), "+
 				"(internal (dir, seek, step): (fwd, 1, 0), (rev, 1, 1))", stats.String())
 			iter.Close()
@@ -1285,7 +1291,7 @@ func TestEngineFS(t *testing.T) {
 				"9e: list-dir /dir1 == bar,baz",
 				"9f: delete /dir1/bar",
 				"9g: delete /dir1/baz",
-				"9h: delete-dir /dir1",
+				"9h: delete /dir1",
 			}
 
 			var f fs.File
@@ -1326,8 +1332,6 @@ func TestEngineFS(t *testing.T) {
 					err = e.Rename(s[1], s[2])
 				case "create-dir":
 					err = e.MkdirAll(s[1])
-				case "delete-dir":
-					err = e.RemoveDir(s[1])
 				case "list-dir":
 					result, err := e.List(s[1])
 					if err != nil {
@@ -1602,7 +1606,7 @@ func TestFS(t *testing.T) {
 	}
 }
 
-func TestScanSeparatedIntents(t *testing.T) {
+func TestScanIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1629,39 +1633,32 @@ func TestScanSeparatedIntents(t *testing.T) {
 		"offset last":     {keys[2], maxKey, 0, 0, keys[2:]},
 		"offset post":     {roachpb.Key("x"), maxKey, 0, 0, []roachpb.Key{}},
 		"nil end":         {keys[0], nil, 0, 0, []roachpb.Key{}},
-		"limit keys":      {keys[0], maxKey, 2, 0, keys[0:2]},
-		"one byte":        {keys[0], maxKey, 0, 1, keys[0:1]},
+		"-1 max":          {keys[0], maxKey, -1, 0, keys[:0]},
+		"2 max":           {keys[0], maxKey, 2, 0, keys[0:2]},
+		"-1 byte":         {keys[0], maxKey, 0, -1, keys[:0]},
+		"1 byte":          {keys[0], maxKey, 0, 1, keys[0:1]},
 		"80 bytes":        {keys[0], maxKey, 0, 80, keys[0:2]},
 		"80 bytes or one": {keys[0], maxKey, 1, 80, keys[0:1]},
 		"1000 bytes":      {keys[0], maxKey, 0, 1000, keys},
 	}
 
-	for name, enableSeparatedIntents := range map[string]bool{"interleaved": false, "separated": true} {
+	eng, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	require.NoError(t, err)
+	defer eng.Close()
+
+	for _, key := range keys {
+		err := MVCCPut(ctx, eng, nil, key, txn1.ReadTimestamp, roachpb.Value{RawBytes: key}, txn1)
+		require.NoError(t, err)
+	}
+
+	for name, tc := range testcases {
+		tc := tc
 		t.Run(name, func(t *testing.T) {
-			eng, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
-				Settings(makeSettingsForSeparatedIntents(false, enableSeparatedIntents)))
+			intents, err := ScanIntents(ctx, eng, tc.from, tc.to, tc.max, tc.targetBytes)
 			require.NoError(t, err)
-			defer eng.Close()
-
-			for _, key := range keys {
-				err := MVCCPut(ctx, eng, nil, key, txn1.ReadTimestamp, roachpb.Value{RawBytes: key}, txn1)
-				require.NoError(t, err)
-			}
-
-			for name, tc := range testcases {
-				tc := tc
-				t.Run(name, func(t *testing.T) {
-					intents, err := ScanSeparatedIntents(eng, tc.from, tc.to, tc.max, tc.targetBytes)
-					require.NoError(t, err)
-					if enableSeparatedIntents {
-						require.Len(t, intents, len(tc.expectIntents), "unexpected number of separated intents")
-						for i, intent := range intents {
-							require.Equal(t, tc.expectIntents[i], intent.Key)
-						}
-					} else {
-						require.Empty(t, intents)
-					}
-				})
+			require.Len(t, intents, len(tc.expectIntents), "unexpected number of separated intents")
+			for i, intent := range intents {
+				require.Equal(t, tc.expectIntents[i], intent.Key)
 			}
 		})
 	}

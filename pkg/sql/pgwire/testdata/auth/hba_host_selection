@@ -22,7 +22,7 @@ host   all      all  0.0.0.0/32 cert
 
 connect user=testuser
 ----
-ERROR: no server.host_based_authentication.configuration entry for host "127.0.0.1", user "testuser"
+ERROR: no server.host_based_authentication.configuration entry for host "127.0.0.1", user "testuser" (SQLSTATE 28000)
 
 subtest nomatch/root_override
 

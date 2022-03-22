@@ -20,10 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -45,7 +46,7 @@ type chunkBackfiller interface {
 	runChunk(
 		ctx context.Context,
 		span roachpb.Span,
-		chunkSize int64,
+		chunkSize rowinfra.RowLimit,
 		readAsOf hlc.Timestamp,
 	) (roachpb.Key, error)
 
@@ -141,13 +142,13 @@ func (b *backfiller) mainLoop(ctx context.Context) (roachpb.Spans, error) {
 
 	for i := range b.spec.Spans {
 		log.VEventf(ctx, 2, "%s backfiller starting span %d of %d: %s",
-			b.name, i+1, len(b.spec.Spans), b.spec.Spans[i].Span)
+			b.name, i+1, len(b.spec.Spans), b.spec.Spans[i])
 		chunks := 0
-		todo := b.spec.Spans[i].Span
+		todo := b.spec.Spans[i]
 		for todo.Key != nil {
 			log.VEventf(ctx, 3, "%s backfiller starting chunk %d: %s", b.name, chunks, todo)
 			var err error
-			todo.Key, err = b.chunks.runChunk(ctx, todo, b.spec.ChunkSize, b.spec.ReadAsOf)
+			todo.Key, err = b.chunks.runChunk(ctx, todo, rowinfra.RowLimit(b.spec.ChunkSize), b.spec.ReadAsOf)
 			if err != nil {
 				return nil, err
 			}
@@ -167,13 +168,13 @@ func (b *backfiller) mainLoop(ctx context.Context) (roachpb.Spans, error) {
 			log.VEventf(ctx, 2,
 				"%s backfiller ran out of time on span %d of %d, will resume it at %s next time",
 				b.name, i+1, len(b.spec.Spans), todo)
-			finishedSpans = append(finishedSpans, roachpb.Span{Key: b.spec.Spans[i].Span.Key, EndKey: todo.Key})
+			finishedSpans = append(finishedSpans, roachpb.Span{Key: b.spec.Spans[i].Key, EndKey: todo.Key})
 			break
 		}
 		log.VEventf(ctx, 2, "%s backfiller finished span %d of %d: %s",
-			b.name, i+1, len(b.spec.Spans), b.spec.Spans[i].Span)
+			b.name, i+1, len(b.spec.Spans), b.spec.Spans[i])
 		totalSpans++
-		finishedSpans = append(finishedSpans, b.spec.Spans[i].Span)
+		finishedSpans = append(finishedSpans, b.spec.Spans[i])
 	}
 
 	log.VEventf(ctx, 3, "%s backfiller flushing...", b.name)
@@ -192,11 +193,12 @@ func GetResumeSpans(
 	jobsRegistry *jobs.Registry,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
+	col *descs.Collection,
 	tableID descpb.ID,
 	mutationID descpb.MutationID,
 	filter backfill.MutationFilter,
 ) ([]roachpb.Span, *jobs.Job, int, error) {
-	tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tableID)
+	tableDesc, err := col.Direct().MustGetTableDescByID(ctx, txn, tableID)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -227,7 +229,7 @@ func GetResumeSpans(
 		// know which job it's associated with.
 		for _, job := range tableDesc.GetMutationJobs() {
 			if job.MutationID == mutationID {
-				jobID = jobspb.JobID(job.JobID)
+				jobID = job.JobID
 				break
 			}
 		}
@@ -248,8 +250,17 @@ func GetResumeSpans(
 		return nil, nil, 0, errors.AssertionFailedf(
 			"expected SchemaChangeDetails job type, got %T", job.Details())
 	}
+
+	spanList := details.ResumeSpanList[mutationIdx].ResumeSpans
+	prefix := codec.TenantPrefix()
+	for i := range spanList {
+		spanList[i], err = keys.RewriteSpanToTenantPrefix(spanList[i], prefix)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+	}
 	// Return the resume spans from the job using the mutation idx.
-	return details.ResumeSpanList[mutationIdx].ResumeSpans, job, mutationIdx, nil
+	return spanList, job, mutationIdx, nil
 }
 
 // SetResumeSpansInJob adds a list of resume spans into a job details field.

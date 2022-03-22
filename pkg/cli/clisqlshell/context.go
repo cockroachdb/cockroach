@@ -15,6 +15,7 @@ import (
 	"time"
 
 	democlusterapi "github.com/cockroachdb/cockroach/pkg/cli/democluster/api"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // Context represents the external configuration of the interactive
@@ -71,4 +72,11 @@ type internalContext struct {
 
 	// current database name, if known. This is maintained on a best-effort basis.
 	dbName string
+
+	// state about the current query.
+	mu struct {
+		syncutil.Mutex
+		cancelFn func()
+		doneCh   chan struct{}
+	}
 }

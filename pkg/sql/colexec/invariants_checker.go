@@ -17,13 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
-// InvariantsChecker is a helper Operator that will check that invariants that
+// invariantsChecker is a helper Operator that will check that invariants that
 // are present in the vectorized engine are maintained on all batches. It
 // should be planned between other Operators in tests.
-type InvariantsChecker struct {
+type invariantsChecker struct {
 	colexecop.OneInputNode
 	colexecop.InitHelper
 	colexecop.NonExplainable
@@ -31,12 +32,17 @@ type InvariantsChecker struct {
 	metadataSource colexecop.MetadataSource
 }
 
-var _ colexecop.DrainableOperator = &InvariantsChecker{}
-var _ colexecop.ClosableOperator = &InvariantsChecker{}
+var _ colexecop.DrainableOperator = &invariantsChecker{}
+var _ colexecop.ClosableOperator = &invariantsChecker{}
 
-// NewInvariantsChecker creates a new InvariantsChecker.
-func NewInvariantsChecker(input colexecop.Operator) *InvariantsChecker {
-	c := &InvariantsChecker{
+// NewInvariantsChecker creates a new invariantsChecker.
+func NewInvariantsChecker(input colexecop.Operator) colexecop.DrainableOperator {
+	if !buildutil.CrdbTestBuild {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"an invariantsChecker is attempted to be created in non-test build",
+		))
+	}
+	c := &invariantsChecker{
 		OneInputNode: colexecop.OneInputNode{Input: input},
 	}
 	if ms, ok := input.(colexecop.MetadataSource); ok {
@@ -45,8 +51,17 @@ func NewInvariantsChecker(input colexecop.Operator) *InvariantsChecker {
 	return c
 }
 
+// MaybeUnwrapInvariantsChecker checks whether op is an invariants checker and
+// returns its input if so, otherwise op is returned.
+func MaybeUnwrapInvariantsChecker(op colexecop.Operator) colexecop.Operator {
+	if i, ok := op.(*invariantsChecker); ok {
+		return i.Input
+	}
+	return op
+}
+
 // Init implements the colexecop.Operator interface.
-func (i *InvariantsChecker) Init(ctx context.Context) {
+func (i *invariantsChecker) Init(ctx context.Context) {
 	if !i.InitHelper.Init(ctx) {
 		return
 	}
@@ -56,7 +71,7 @@ func (i *InvariantsChecker) Init(ctx context.Context) {
 // assertInitWasCalled asserts that Init() has been called on the invariants
 // checker and returns a boolean indicating whether the execution should be
 // short-circuited (true means that the caller should just return right away).
-func (i *InvariantsChecker) assertInitWasCalled() bool {
+func (i *invariantsChecker) assertInitWasCalled() bool {
 	if i.Ctx == nil {
 		if c, ok := i.Input.(*Columnarizer); ok {
 			if c.removedFromFlow {
@@ -72,7 +87,7 @@ func (i *InvariantsChecker) assertInitWasCalled() bool {
 }
 
 // Next implements the colexecop.Operator interface.
-func (i *InvariantsChecker) Next() coldata.Batch {
+func (i *invariantsChecker) Next() coldata.Batch {
 	if shortCircuit := i.assertInitWasCalled(); shortCircuit {
 		return coldata.ZeroBatch
 	}
@@ -80,12 +95,6 @@ func (i *InvariantsChecker) Next() coldata.Batch {
 	n := b.Length()
 	if n == 0 {
 		return b
-	}
-	for colIdx := 0; colIdx < b.Width(); colIdx++ {
-		v := b.ColVec(colIdx)
-		if v.IsBytesLike() {
-			coldata.AssertOffsetsAreNonDecreasing(v, n)
-		}
 	}
 	if sel := b.Selection(); sel != nil {
 		for i := 1; i < n; i++ {
@@ -101,7 +110,7 @@ func (i *InvariantsChecker) Next() coldata.Batch {
 }
 
 // DrainMeta implements the colexecop.MetadataSource interface.
-func (i *InvariantsChecker) DrainMeta() []execinfrapb.ProducerMetadata {
+func (i *invariantsChecker) DrainMeta() []execinfrapb.ProducerMetadata {
 	if shortCircuit := i.assertInitWasCalled(); shortCircuit {
 		return nil
 	}
@@ -112,10 +121,10 @@ func (i *InvariantsChecker) DrainMeta() []execinfrapb.ProducerMetadata {
 }
 
 // Close is part of the colexecop.ClosableOperator interface.
-func (i *InvariantsChecker) Close() error {
+func (i *invariantsChecker) Close(ctx context.Context) error {
 	c, ok := i.Input.(colexecop.Closer)
 	if !ok {
 		return nil
 	}
-	return c.Close()
+	return c.Close(ctx)
 }

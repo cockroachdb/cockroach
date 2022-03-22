@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -87,8 +89,10 @@ func setUpService(
 			return nil, errors.Errorf("node %d not found", nodeID)
 		},
 	)
+	localNodeIDContainer := &base.NodeIDContainer{}
+	localNodeIDContainer.Set(context.Background(), localNodeID)
 	return NewBlobClientFactory(
-		localNodeID,
+		localNodeIDContainer,
 		localDialer,
 		localExternalDir,
 	)
@@ -111,8 +115,9 @@ func TestBlobClientReadFile(t *testing.T) {
 	localExternalDir, remoteExternalDir, stopper, cleanUpFn := createTestResources(t)
 	defer cleanUpFn()
 
+	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
 	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
@@ -174,7 +179,6 @@ func TestBlobClientReadFile(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
 			blobClient, err := blobClientFactory(ctx, tc.nodeID)
 			if err != nil {
 				t.Fatal(err)
@@ -188,7 +192,7 @@ func TestBlobClientReadFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Check that fetched file content is correct
-			content, err := ioutil.ReadAll(reader)
+			content, err := ioctx.ReadAll(ctx, reader)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -205,8 +209,9 @@ func TestBlobClientWriteFile(t *testing.T) {
 	localExternalDir, remoteExternalDir, stopper, cleanUpFn := createTestResources(t)
 	defer cleanUpFn()
 
+	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
 	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
@@ -245,7 +250,6 @@ func TestBlobClientWriteFile(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
 			blobClient, err := blobClientFactory(ctx, tc.nodeID)
 			if err != nil {
 				t.Fatal(err)
@@ -287,8 +291,9 @@ func TestBlobClientList(t *testing.T) {
 	localExternalDir, remoteExternalDir, stopper, cleanUpFn := createTestResources(t)
 	defer cleanUpFn()
 
+	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
 	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
@@ -370,7 +375,6 @@ func TestBlobClientList(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
 			blobClient, err := blobClientFactory(ctx, tc.nodeID)
 			if err != nil {
 				t.Fatal(err)
@@ -402,8 +406,9 @@ func TestBlobClientDeleteFrom(t *testing.T) {
 	localExternalDir, remoteExternalDir, stopper, cleanUpFn := createTestResources(t)
 	defer cleanUpFn()
 
+	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
 	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
@@ -452,7 +457,6 @@ func TestBlobClientDeleteFrom(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
 			blobClient, err := blobClientFactory(ctx, tc.nodeID)
 			if err != nil {
 				t.Fatal(err)
@@ -480,8 +484,9 @@ func TestBlobClientStat(t *testing.T) {
 	localExternalDir, remoteExternalDir, stopper, cleanUpFn := createTestResources(t)
 	defer cleanUpFn()
 
+	ctx := context.Background()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
 	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
@@ -528,7 +533,6 @@ func TestBlobClientStat(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
 			blobClient, err := blobClientFactory(ctx, tc.nodeID)
 			if err != nil {
 				t.Fatal(err)

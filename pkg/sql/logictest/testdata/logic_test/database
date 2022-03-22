@@ -21,6 +21,14 @@ system         node   NULL            {}       NULL
 test           root   NULL            {}       NULL
 
 statement ok
+CREATE ROLE newrole LOGIN
+
+query B
+SELECT has_database_privilege('newrole', 'a', 'CONNECT')
+----
+true
+
+statement ok
 COMMENT ON DATABASE a IS 'A'
 
 query TTTTTT colnames
@@ -141,11 +149,21 @@ DROP DATABASE IF EXISTS b
 
 statement ok
 DROP DATABASE b2 CASCADE;
-  DROP DATABASE b3 CASCADE;
-  DROP DATABASE b4 CASCADE;
-  DROP DATABASE b5 CASCADE;
-  DROP DATABASE b6 CASCADE;
-  DROP DATABASE b7 CASCADE
+
+statement ok
+DROP DATABASE b3 CASCADE;
+
+statement ok
+DROP DATABASE b4 CASCADE;
+
+statement ok
+DROP DATABASE b5 CASCADE;
+
+statement ok
+DROP DATABASE b6 CASCADE;
+
+statement ok
+DROP DATABASE b7 CASCADE
 
 statement error pgcode 42601 empty database name
 DROP DATABASE ""
@@ -219,23 +237,78 @@ user testuser
 statement error permission denied to create database
 CREATE DATABASE privs
 
-# Unit test for #61150
 user root
 
-statement ok
-CREATE DATABASE d1
+subtest missing-db-error-issue-68060
 
 statement ok
-BEGIN
+CREATE DATABASE db1;
+
+statement ok;
+USE db1;
 
 statement ok
-DROP DATABASE d1
-
-statement error pgcode 55000 database "d1" is being dropped, try again later
-CREATE DATABASE IF NOT EXISTS d1
+SET sql_safe_updates=false;
 
 statement ok
-END
+DROP DATABASE db1;
+
+statement error pq: database "db1" does not exist
+SELECT * FROM crdb_internal.session_variables;
+
+subtest missing-schema-error-69713
 
 statement ok
-DROP DATABASE d1
+CREATE DATABASE db69713;
+
+statement ok
+USE db69713;
+
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE TYPE s.testenum AS ENUM ('foo', 'bar', 'baz');
+
+statement ok
+CREATE TABLE db69713.s.pg_indexdef_test (
+    a INT PRIMARY KEY,
+    e s.testenum
+);
+
+statement ok
+CREATE TABLE db69713.s.pg_constraintdef_test (
+  a int,
+  FOREIGN KEY(a) REFERENCES db69713.s.pg_indexdef_test(a) ON DELETE CASCADE
+);
+
+statement ok
+DROP DATABASE db69713;
+
+# Ensure user must exist to create with owner.
+statement error role/user "fake_user" does not exist
+CREATE DATABASE aa with owner fake_user
+
+statement ok
+CREATE DATABASE a with owner testuser
+
+query TTTTT colnames
+SHOW DATABASES
+----
+database_name  owner     primary_region  regions  survival_goal
+a              testuser  NULL            {}       NULL
+b              root      NULL            {}       NULL
+c              root      NULL            {}       NULL
+defaultdb      root      NULL            {}       NULL
+postgres       root      NULL            {}       NULL
+system         node      NULL            {}       NULL
+test           root      NULL            {}       NULL
+
+# Non-superusers also must be a member of the new owning role.
+statement ok
+CREATE USER testuser2
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE d WITH OWNER testuser2

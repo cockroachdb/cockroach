@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/testutils/testcluster",
         "@com_github_cockroachdb_errors//:errors",
     ],

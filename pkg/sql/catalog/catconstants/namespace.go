@@ -19,9 +19,6 @@ const (
 	// namespace table.
 	NamespaceTablePrimaryIndexID = 1
 
-	// NamespaceTableName is the name of the namespace table.
-	NamespaceTableName = "namespace"
-
 	// PreMigrationNamespaceTableName is the name that was used on the descriptor
 	// of the current namespace table before the DeprecatedNamespaceTable was
 	// migrated away.

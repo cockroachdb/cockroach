@@ -9,3 +9,6 @@ show_backup_stmt ::=
 	| 'SHOW' 'BACKUP' 'SCHEMAS' location 'WITH' kv_option_list
 	| 'SHOW' 'BACKUP' 'SCHEMAS' location 'WITH' 'OPTIONS' '(' kv_option_list ')'
 	| 'SHOW' 'BACKUP' 'SCHEMAS' location 
+	| 'SHOW' 'BACKUP' 'SCHEMAS' location 'IN' string_or_placeholder 'WITH' kv_option_list
+	| 'SHOW' 'BACKUP' 'SCHEMAS' location 'IN' string_or_placeholder 'WITH' 'OPTIONS' '(' kv_option_list ')'
+	| 'SHOW' 'BACKUP' 'SCHEMAS' location 'IN' string_or_placeholder 

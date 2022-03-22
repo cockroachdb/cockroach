@@ -258,7 +258,7 @@ SELECT a*b, a*c, b*c, b*d, c*d FROM intdecfloat
 query RRRRR
 SELECT a/b, a/c, b/c, b/d, c/d FROM intdecfloat
 ----
-0.5  0.33333333333333333333  0.66666666666666666667  0.5  0.75
+0.50000000000000000000  0.33333333333333333333  0.66666666666666666667  0.50000000000000000000  0.75000000000000000000
 
 # vectorized decimal arithmetic
 statement ok
@@ -273,7 +273,7 @@ SELECT a*b FROM decimals
 query R
 SELECT a/b FROM decimals
 ----
-1.0E+201
+1.0000000000000000000E+201
 
 query R
 SELECT a+b FROM decimals
@@ -458,7 +458,7 @@ CREATE TABLE composite (d DECIMAL, INDEX d_idx (d));
 INSERT INTO composite VALUES (NULL), (1), (1.0), (1.00);
 
 query T rowsort
-SELECT d FROM composite@primary
+SELECT d FROM composite@composite_pkey
 ----
 NULL
 1
@@ -499,7 +499,7 @@ SELECT * FROM t38754
 query T
 SELECT a/b FROM a WHERE b = 2
 ----
-0.5
+0.50000000000000000000
 
 # Test mixed types comparison.
 query I
@@ -525,7 +525,7 @@ SELECT "hashedPassword" FROM system.users LIMIT 1
 query IITI
 SELECT * FROM system.namespace LIMIT 1
 ----
-0  0 defaultdb  50
+0  0  defaultdb  100
 
 # Regression test for issue with fetching from unique indexes with embedded
 # nulls.
@@ -836,6 +836,8 @@ CREATE TABLE t40732 AS SELECT g::INT8 AS _int8,
                               g::STRING AS _string,
                               g::STRING::BYTES AS _bytes
                          FROM generate_series(1, 5) AS g;
+
+statement ok
 SET vectorize = experimental_always;
 INSERT INTO t40732 DEFAULT VALUES;
 
@@ -1131,20 +1133,6 @@ SELECT * FROM mixed_type_a AS a INNER MERGE JOIN mixed_type_b AS b ON a.a = b.a 
 statement error .* dates and timestamp\(tz\) not supported in mixed-type expressions in the vectorized engine
 SELECT * FROM mixed_type_a AS a JOIN mixed_type_b AS b ON a.a = b.a AND a.b < (now() - b.b)
 
-# Regression for 46140.
-statement ok
-DROP TABLE IF EXISTS t0, t1;
-CREATE TABLE t0(c0 INT);
-CREATE TABLE t1(c0 BOOL) INTERLEAVE IN PARENT t0(rowid);
-INSERT INTO t0(c0) VALUES (0);
-INSERT INTO t1(rowid, c0) VALUES(0, TRUE);
-
-query I
-SELECT max(t1.rowid) FROM t1 WHERE t1.c0
-----
-0
-
-
 # Regression for #46183.
 statement ok
 CREATE TABLE t46183 (x INT PRIMARY KEY, y JSONB, INVERTED INDEX (y));
@@ -1154,19 +1142,6 @@ query I
 SELECT count(*) FROM t46183 WHERE y->'y' = to_jsonb('hello')
 ----
 1
-
-# Regression test for #47029 (not resetting nulls vector when cfetcher read a
-# NULL value in the interleaved table).
-statement ok
-CREATE TABLE t47029_0(c0 INT);
-CREATE TABLE t47029_1(c0 INT);
-INSERT INTO t47029_0(c0) VALUES(0);
-INSERT INTO t47029_1(c0) VALUES(NULL);
-CREATE INDEX ON t47029_1(c0) INTERLEAVE IN PARENT t47029_0(c0);
-
-query I
-SELECT * FROM t47029_0 WHERE (t47029_0.rowid > 0) IS NULL
-----
 
 # Regression for #47115 (cfetcher sometimes not reading value component
 # of composite encoded data).
@@ -1219,6 +1194,8 @@ CREATE TABLE t64793 AS
     g % 2 = 1 AS _bool, g::STRING AS _string
   FROM
     ROWS FROM (generate_series(1, 5)) AS g;
+
+statement ok
 SET vectorize=experimental_always;
 INSERT INTO t64793 DEFAULT VALUES;
 
@@ -1280,3 +1257,44 @@ query T
 SELECT c FROM t68040 WHERE c LIKE '%\\%'
 ----
 string with \ backslash
+
+# Regression test for #68979. The IN operator should evaluate correctly when the
+# tuple contents are not sorted by the optimizer.
+statement ok
+CREATE TABLE t68979 (
+  a INT
+)
+
+statement ok
+INSERT INTO t68979 VALUES (0)
+
+query B
+SELECT 'b' IN ('b', (SELECT NULL FROM t68979), 'a') FROM t68979
+----
+true
+
+statement ok
+CREATE TABLE t63792 (c INT);
+INSERT INTO t63792 VALUES (NULL), (1), (2)
+
+query IB rowsort
+SELECT c, c = c FROM t63792
+----
+NULL  NULL
+1     true
+2     true
+
+# Verify that binary operations on integers of any width return INT8.
+statement ok
+CREATE TABLE ints (_int2 INT2, _int4 INT4, _int8 INT8);
+INSERT INTO ints VALUES (1, 1, 1), (2, 2, 2)
+
+query T
+SELECT pg_typeof(_int2 - _int2) FROM ints LIMIT 1
+----
+bigint
+
+query I
+SELECT _int2 * _int2 FROM ints WHERE _int4 + _int4 = _int8 + 2
+----
+4

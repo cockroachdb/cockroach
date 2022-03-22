@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"google.golang.org/grpc"
 )
@@ -43,7 +41,7 @@ type Node struct {
 	Server    *grpc.Server
 	Listener  net.Listener
 	Registry  *metric.Registry
-	Resolvers []resolver.Resolver
+	Addresses []util.UnresolvedAddr
 }
 
 // Addr returns the address of the connected listener.
@@ -63,22 +61,23 @@ type Network struct {
 
 // NewNetwork creates nodeCount gossip nodes.
 func NewNetwork(
-	stopper *stop.Stopper, nodeCount int, createResolvers bool, defaultZoneConfig *zonepb.ZoneConfig,
+	stopper *stop.Stopper, nodeCount int, createAddresses bool, defaultZoneConfig *zonepb.ZoneConfig,
 ) *Network {
-	log.Infof(context.TODO(), "simulating gossip network with %d nodes", nodeCount)
+	ctx := context.TODO()
+	log.Infof(ctx, "simulating gossip network with %d nodes", nodeCount)
 
 	n := &Network{
 		Nodes:   []*Node{},
 		Stopper: stopper,
 	}
-	n.RPCContext = rpc.NewContext(rpc.ContextOptions{
-		TenantID:   roachpb.SystemTenantID,
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		Config:     &base.Config{Insecure: true},
-		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		Stopper:    n.Stopper,
-		Settings:   cluster.MakeTestingClusterSettings(),
-	})
+	n.RPCContext = rpc.NewContext(ctx,
+		rpc.ContextOptions{
+			TenantID: roachpb.SystemTenantID,
+			Config:   &base.Config{Insecure: true},
+			Clock:    hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+			Stopper:  n.Stopper,
+			Settings: cluster.MakeTestingClusterSettings(),
+		})
 	var err error
 	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()
 	if err != nil {
@@ -95,13 +94,10 @@ func NewNetwork(
 		if err != nil {
 			log.Fatalf(context.TODO(), "%v", err)
 		}
-		// Build a resolver for each instance or we'll get data races.
-		if createResolvers {
-			r, err := resolver.NewResolverFromAddress(n.Nodes[0].Addr())
-			if err != nil {
-				log.Fatalf(context.TODO(), "bad gossip address %s: %s", n.Nodes[0].Addr(), err)
+		if createAddresses {
+			node.Addresses = []util.UnresolvedAddr{
+				util.MakeUnresolvedAddr("tcp", n.Nodes[0].Addr().String()),
 			}
-			node.Resolvers = []resolver.Resolver{r}
 		}
 	}
 	return n
@@ -129,7 +125,7 @@ func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error
 // StartNode initializes a gossip instance for the simulation node and
 // starts it.
 func (n *Network) StartNode(node *Node) error {
-	node.Gossip.Start(node.Addr(), node.Resolvers)
+	node.Gossip.Start(node.Addr(), node.Addresses)
 	node.Gossip.EnableSimulationCycler(true)
 	n.nodeIDAllocator++
 	node.Gossip.NodeID.Set(context.TODO(), n.nodeIDAllocator)
@@ -143,7 +139,8 @@ func (n *Network) StartNode(node *Node) error {
 		encoding.EncodeUint64Ascending(nil, 0), time.Hour); err != nil {
 		return err
 	}
-	return n.Stopper.RunAsyncTask(context.TODO(), "start-node", func(context.Context) {
+	bgCtx := context.TODO()
+	return n.Stopper.RunAsyncTask(bgCtx, "start-node", func(context.Context) {
 		netutil.FatalIfUnexpected(node.Server.Serve(node.Listener))
 	})
 }

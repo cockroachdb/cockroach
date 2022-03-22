@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geodist"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/xy/lineintersector"
@@ -62,7 +64,7 @@ func DWithin(
 		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	if d < 0 {
-		return false, errors.Newf("dwithin distance cannot be less than zero")
+		return false, pgerror.Newf(pgcode.InvalidParameterValue, "dwithin distance cannot be less than zero")
 	}
 	if !a.CartesianBoundingBox().Buffer(d, d).Intersects(b.CartesianBoundingBox()) {
 		return false, nil
@@ -92,7 +94,7 @@ func DFullyWithin(
 		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	if d < 0 {
-		return false, errors.Newf("dwithin distance cannot be less than zero")
+		return false, pgerror.Newf(pgcode.InvalidParameterValue, "dwithin distance cannot be less than zero")
 	}
 	if !a.CartesianBoundingBox().Buffer(d, d).Covers(b.CartesianBoundingBox()) {
 		return false, nil
@@ -153,7 +155,7 @@ func distanceLineStringInternal(
 		coordA = u.coordA
 		coordB = u.coordB
 	default:
-		return geo.Geometry{}, errors.Newf("programmer error: unknown behavior")
+		return geo.Geometry{}, errors.AssertionFailedf("programmer error: unknown behavior")
 	}
 	lineCoords := []float64{coordA.X(), coordA.Y(), coordB.X(), coordB.Y()}
 	lineString := geom.NewLineStringFlat(geom.XY, lineCoords).SetSRID(int(a.SRID()))
@@ -273,7 +275,7 @@ func geomToGeodist(g geom.T) (geodist.Shape, error) {
 	case *geom.Polygon:
 		return &geomGeodistPolygon{Polygon: g}, nil
 	}
-	return nil, errors.Newf("could not find shape: %T", g)
+	return nil, pgerror.Newf(pgcode.InvalidParameterValue, "could not find shape: %T", g)
 }
 
 // geomGeodistLineString implements geodist.LineString.
@@ -825,13 +827,13 @@ func ClosestPoint(a, b geo.Geometry) (geo.Geometry, error) {
 
 func verifyDensifyFrac(f float64) error {
 	if f < 0 || f > 1 {
-		return errors.Newf("fraction must be in range [0, 1], got %f", f)
+		return pgerror.Newf(pgcode.InvalidParameterValue, "fraction must be in range [0, 1], got %f", f)
 	}
 	// Very small densifyFrac potentially causes a SIGFPE or generate a large
 	// amount of memory. Guard against this.
 	const fracTooSmall = 1e-6
 	if f > 0 && f < fracTooSmall {
-		return errors.Newf("fraction %f is too small, must be at least %f", f, fracTooSmall)
+		return pgerror.Newf(pgcode.InvalidParameterValue, "fraction %f is too small, must be at least %f", f, fracTooSmall)
 	}
 	return nil
 }
@@ -841,7 +843,7 @@ func findPointSideOfPolygon(point geom.T, polygon geom.T) (linearRingSide, error
 	// Convert point from a geom.T to a *geodist.Point.
 	_, ok := point.(*geom.Point)
 	if !ok {
-		return outsideLinearRing, errors.Newf("first geometry passed to findPointSideOfPolygon must be a point")
+		return outsideLinearRing, pgerror.Newf(pgcode.InvalidParameterValue, "first geometry passed to findPointSideOfPolygon must be a point")
 	}
 	pointGeodistShape, err := geomToGeodist(point)
 	if err != nil {
@@ -849,13 +851,13 @@ func findPointSideOfPolygon(point geom.T, polygon geom.T) (linearRingSide, error
 	}
 	pointGeodistPoint, ok := pointGeodistShape.(*geodist.Point)
 	if !ok {
-		return outsideLinearRing, errors.Newf("geomToGeodist failed to convert a *geom.Point to a *geodist.Point")
+		return outsideLinearRing, pgerror.Newf(pgcode.InvalidParameterValue, "geomToGeodist failed to convert a *geom.Point to a *geodist.Point")
 	}
 
 	// Convert polygon from a geom.T to a geodist.Polygon.
 	_, ok = polygon.(*geom.Polygon)
 	if !ok {
-		return outsideLinearRing, errors.Newf("second geometry passed to findPointSideOfPolygon must be a polygon")
+		return outsideLinearRing, pgerror.Newf(pgcode.InvalidParameterValue, "second geometry passed to findPointSideOfPolygon must be a polygon")
 	}
 	polygonGeodistShape, err := geomToGeodist(polygon)
 	if err != nil {
@@ -863,7 +865,7 @@ func findPointSideOfPolygon(point geom.T, polygon geom.T) (linearRingSide, error
 	}
 	polygonGeodistPolygon, ok := polygonGeodistShape.(geodist.Polygon)
 	if !ok {
-		return outsideLinearRing, errors.Newf("geomToGeodist failed to convert a *geom.Polygon to a geodist.Polygon")
+		return outsideLinearRing, pgerror.Newf(pgcode.InvalidParameterValue, "geomToGeodist failed to convert a *geom.Polygon to a geodist.Polygon")
 	}
 
 	// Point cannot be inside an empty polygon.
@@ -880,7 +882,7 @@ func findPointSideOfPolygon(point geom.T, polygon geom.T) (linearRingSide, error
 	case outsideLinearRing, onLinearRing:
 		return pointSide, nil
 	default:
-		return outsideLinearRing, errors.Newf("unknown linearRingSide %d", pointSide)
+		return outsideLinearRing, pgerror.Newf(pgcode.InvalidParameterValue, "unknown linearRingSide %d", pointSide)
 	}
 
 	// If the point is inside the main outer boundary of the polygon, we must
@@ -898,7 +900,7 @@ func findPointSideOfPolygon(point geom.T, polygon geom.T) (linearRingSide, error
 		case outsideLinearRing:
 			continue
 		default:
-			return outsideLinearRing, errors.Newf("unknown linearRingSide %d", pointSide)
+			return outsideLinearRing, pgerror.Newf(pgcode.InvalidParameterValue, "unknown linearRingSide %d", pointSide)
 		}
 	}
 

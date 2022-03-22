@@ -14,12 +14,13 @@
 package rdbms
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq/oid"
 )
 
@@ -31,11 +32,17 @@ const getServerVersion = `SELECT current_setting('server_version');`
 var unimplementedEquivalencies = map[oid.Oid]oid.Oid{
 	// These types only exists in information_schema.
 	// cardinal_number in postgres is an INT4 but we already implemented columns as INT8.
-	oid.Oid(13438): oid.T_int8,        // cardinal_number
-	oid.Oid(13450): oid.T_text,        // yes_or_no
-	oid.Oid(13441): oid.T_text,        // character_data
-	oid.Oid(13443): oid.T_text,        // sql_identifier
-	oid.Oid(13448): oid.T_timestamptz, // time_stamp
+	oid.Oid(12653): oid.T_int8,        // cardinal_number
+	oid.Oid(12665): oid.T_text,        // yes_or_no
+	oid.Oid(12656): oid.T_text,        // character_data
+	oid.Oid(12658): oid.T_text,        // sql_identifier
+	oid.Oid(12663): oid.T_timestamptz, // time_stamp
+
+	// pg_catalog
+	oid.Oid(2277): oid.T__text, // anyarray
+	oid.Oid(3361): oid.T_bytea, // pg_ndistinct
+	oid.Oid(3402): oid.T_bytea, // pg_dependencies
+	oid.Oid(5017): oid.T_bytea, // pg_mcv_list
 
 	// Other types
 	oid.T__aclitem:     oid.T__text,
@@ -57,11 +64,11 @@ type pgMetadataConnection struct {
 }
 
 func postgresConnect(address, user, catalog string) (DBMetadataConnection, error) {
-	conf, err := pgx.ParseURI(fmt.Sprintf("postgresql://%s@%s?sslmode=disable", user, address))
+	conf, err := pgx.ParseConfig(fmt.Sprintf("postgresql://%s@%s?sslmode=disable", user, address))
 	if err != nil {
 		return nil, err
 	}
-	conn, err := pgx.Connect(conf)
+	conn, err := pgx.ConnectConfig(context.Background(), conf)
 	if err != nil {
 		return nil, err
 	}
@@ -69,9 +76,9 @@ func postgresConnect(address, user, catalog string) (DBMetadataConnection, error
 	return pgMetadataConnection{conn, catalog}, nil
 }
 
-func (conn pgMetadataConnection) DescribeSchema() (*ColumnMetadataList, error) {
+func (conn pgMetadataConnection) DescribeSchema(ctx context.Context) (*ColumnMetadataList, error) {
 	var metadata []*columnMetadata
-	rows, err := conn.Query(sql.GetPGMetadataSQL, conn.catalog)
+	rows, err := conn.Query(ctx, sql.GetPGMetadataSQL, conn.catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +102,10 @@ func (conn pgMetadataConnection) DescribeSchema() (*ColumnMetadataList, error) {
 	return &ColumnMetadataList{data: metadata, exclusions: postgresExclusions}, nil
 }
 
-func (conn pgMetadataConnection) DatabaseVersion() (pgVersion string, err error) {
-	row := conn.QueryRow(getServerVersion)
+func (conn pgMetadataConnection) DatabaseVersion(
+	ctx context.Context,
+) (pgVersion string, err error) {
+	row := conn.QueryRow(ctx, getServerVersion)
 	err = row.Scan(&pgVersion)
 	return pgVersion, err
 }

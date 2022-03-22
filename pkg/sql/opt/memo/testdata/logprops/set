@@ -45,20 +45,20 @@ build
 SELECT x, y, x FROM xy INTERSECT SELECT v, u, rowid FROM (SELECT *, rowid FROM uv WHERE u=1) uv
 ----
 intersect
- ├── columns: x:1(int!null) y:2(int) x:1(int!null)
- ├── left columns: x:1(int!null) y:2(int) x:1(int!null)
+ ├── columns: x:10(int!null) y:11(int) x:12(int!null)
+ ├── left columns: xy.x:1(int) xy.y:2(int) xy.x:1(int)
  ├── right columns: v:6(int) u:5(int) rowid:7(int)
- ├── key: (1)
- ├── fd: ()-->(2)
- ├── interesting orderings: (+1)
+ ├── key: (12)
+ ├── fd: ()-->(11), (10)==(12), (12)==(10), (12)-->(10,11)
+ ├── interesting orderings: (+12)
  ├── project
- │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── scan xy
- │         ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+ │         ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-4)
  │         ├── prune: (1-4)
@@ -90,20 +90,20 @@ build
 SELECT x, x, y FROM xy EXCEPT SELECT u, v, v FROM (SELECT * FROM uv WHERE u=1) uv
 ----
 except
- ├── columns: x:1(int!null) x:1(int!null) y:2(int)
- ├── left columns: x:1(int!null) x:1(int!null) y:2(int)
+ ├── columns: x:10(int!null) x:11(int!null) y:12(int)
+ ├── left columns: xy.x:1(int) xy.x:1(int) xy.y:2(int)
  ├── right columns: u:5(int) v:6(int) v:6(int)
- ├── key: (1)
- ├── fd: (1)-->(2)
- ├── interesting orderings: (+1)
+ ├── key: (11)
+ ├── fd: (11)-->(10,12), (10)==(11), (11)==(10)
+ ├── interesting orderings: (+(10|11))
  ├── project
- │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── scan xy
- │         ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
+ │         ├── columns: xy.x:1(int!null) xy.y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) xy.tableoid:4(oid)
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-4)
  │         ├── prune: (1-4)

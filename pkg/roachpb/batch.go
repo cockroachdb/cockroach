@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-//go:generate go run -tags gen-batch gen/main.go
+//go:generate go run gen/main.go --filename batch_generated.go *.pb.go
 
 // WriteTimestamp returns the timestamps at which this request is writing. For
 // non-transactional requests, this is the same as the read timestamp. For
@@ -54,8 +54,8 @@ func (h Header) RequiredFrontier() hlc.Timestamp {
 // carried out. For transactional requests, ba.Timestamp must be zero initially
 // and it will be set to txn.ReadTimestamp (note though this mostly impacts
 // reads; writes use txn.WriteTimestamp). For non-transactional requests, if no
-// timestamp is specified, nowFn is used to create and set one.
-func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
+// timestamp is specified, clock is used to create and set one.
+func (ba *BatchRequest) SetActiveTimestamp(clock *hlc.Clock) error {
 	if txn := ba.Txn; txn != nil {
 		if !ba.Timestamp.IsEmpty() {
 			return errors.New("transactional request must not set batch timestamp")
@@ -71,10 +71,11 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		// txn.WriteTimestamp, regardless of the batch timestamp.
 		ba.Timestamp = txn.ReadTimestamp
 	} else {
-		// When not transactional, allow empty timestamp and use nowFn instead
+		// When not transactional, allow empty timestamp and use clock instead.
 		if ba.Timestamp.IsEmpty() {
-			ba.Timestamp = nowFn()
-			ba.TimestampFromServerClock = true
+			now := clock.NowAsClockTimestamp()
+			ba.Timestamp = now.ToTimestamp() // copies value, not aliasing reference
+			ba.TimestampFromServerClock = &now
 		}
 	}
 	return nil
@@ -91,7 +92,8 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 		switch t := ru.GetInner().(type) {
 		case *ExportRequest:
 			if !t.StartTime.IsEmpty() {
-				ts.Backward(t.StartTime)
+				// NB: StartTime.Next() because StartTime is exclusive.
+				ts.Backward(t.StartTime.Next())
 			}
 		case *RevertRangeRequest:
 			// This method is only used to check GC Threshold so Revert requests that
@@ -99,6 +101,30 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 			if !t.IgnoreGcThreshold {
 				ts.Backward(t.TargetTime)
 			}
+		case *RefreshRequest:
+			// A Refresh request needs to observe all MVCC versions between its
+			// exclusive RefreshFrom time and its inclusive RefreshTo time. If it were
+			// to permit MVCC GC between these times then it could miss conflicts that
+			// should cause the refresh to fail. This could in turn lead to violations
+			// of serializability. For example:
+			//
+			//  txn1 reads value k1@10
+			//  txn2 deletes (tombstones) k1@15
+			//  mvcc gc @ 20 clears versions k1@10 and k1@15
+			//  txn1 refreshes @ 25, sees no value between (10, 25], refresh successful
+			//
+			// In the example, the refresh erroneously succeeds because the request is
+			// permitted to evaluate after part of the MVCC history it needs to read
+			// has been GCed. By considering the RefreshFrom time to be the earliest
+			// active timestamp of the request, we avoid this hazard. Instead of being
+			// allowed to evaluate, the refresh request in the example would have hit
+			// a BatchTimestampBeforeGCError.
+			//
+			// NB: RefreshFrom.Next() because RefreshFrom is exclusive.
+			ts.Backward(t.RefreshFrom.Next())
+		case *RefreshRangeRequest:
+			// The same requirement applies to RefreshRange request.
+			ts.Backward(t.RefreshFrom.Next())
 		}
 	}
 	return ts
@@ -133,6 +159,13 @@ func (ba *BatchRequest) IsLeaseRequest() bool {
 	return ok
 }
 
+// AppliesTimestampCache returns whether the command is a write that applies the
+// timestamp cache (and closed timestamp), possibly pushing its write timestamp
+// into the future to avoid re-writing history.
+func (ba *BatchRequest) AppliesTimestampCache() bool {
+	return ba.hasFlag(appliesTSCache)
+}
+
 // IsAdmin returns true iff the BatchRequest contains an admin request.
 func (ba *BatchRequest) IsAdmin() bool {
 	return ba.hasFlag(isAdmin)
@@ -146,12 +179,6 @@ func (ba *BatchRequest) IsWrite() bool {
 // IsReadOnly returns true if all requests within are read-only.
 func (ba *BatchRequest) IsReadOnly() bool {
 	return len(ba.Requests) > 0 && !ba.hasFlag(isWrite|isAdmin)
-}
-
-// RequiresLeaseHolder returns true if the request can only be served by the
-// leaseholders of the ranges it addresses.
-func (ba *BatchRequest) RequiresLeaseHolder() bool {
-	return ba.IsLocking() || ba.Header.ReadConsistency.RequiresReadLease()
 }
 
 // IsReverse returns true iff the BatchRequest contains a reverse request.
@@ -191,10 +218,10 @@ func (ba *BatchRequest) IsSingleRequest() bool {
 	return len(ba.Requests) == 1
 }
 
-// IsSingleSkipLeaseCheckRequest returns true iff the batch contains a single
-// request, and that request has the skipLeaseCheck flag set.
-func (ba *BatchRequest) IsSingleSkipLeaseCheckRequest() bool {
-	return ba.IsSingleRequest() && ba.hasFlag(skipLeaseCheck)
+// IsSingleSkipsLeaseCheckRequest returns true iff the batch contains a single
+// request, and that request has the skipsLeaseCheck flag set.
+func (ba *BatchRequest) IsSingleSkipsLeaseCheckRequest() bool {
+	return ba.IsSingleRequest() && ba.hasFlag(skipsLeaseCheck)
 }
 
 func (ba *BatchRequest) isSingleRequestWithMethod(m Method) bool {
@@ -213,6 +240,12 @@ func (ba *BatchRequest) IsSingleLeaseInfoRequest() bool {
 	return ba.isSingleRequestWithMethod(LeaseInfo)
 }
 
+// IsSingleProbeRequest returns true iff the batch is a single
+// Probe request.
+func (ba *BatchRequest) IsSingleProbeRequest() bool {
+	return ba.isSingleRequestWithMethod(Probe)
+}
+
 // IsSinglePushTxnRequest returns true iff the batch contains a single
 // request, and that request is a PushTxn.
 func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
@@ -229,6 +262,17 @@ func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {
 // and that request is an EndTxnRequest.
 func (ba *BatchRequest) IsSingleEndTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(EndTxn)
+}
+
+// Require1PC returns true if the batch contains an EndTxn with the Require1PC
+// flag set.
+func (ba *BatchRequest) Require1PC() bool {
+	arg, ok := ba.GetArg(EndTxn)
+	if !ok {
+		return false
+	}
+	etArg := arg.(*EndTxnRequest)
+	return etArg.Require1PC
 }
 
 // IsSingleAbortTxnRequest returns true iff the batch contains a single request,
@@ -271,6 +315,14 @@ func (ba *BatchRequest) IsSingleComputeChecksumRequest() bool {
 // request, and that request is a CheckConsistencyRequest.
 func (ba *BatchRequest) IsSingleCheckConsistencyRequest() bool {
 	return ba.isSingleRequestWithMethod(CheckConsistency)
+}
+
+// RequiresConsensus returns true iff the batch contains a request that should
+// always force replication and proposal through raft, even if evaluation is
+// a no-op. The Barrier request requires consensus even though its evaluation
+// is a no-op.
+func (ba *BatchRequest) RequiresConsensus() bool {
+	return ba.isSingleRequestWithMethod(Barrier) || ba.isSingleRequestWithMethod(Probe)
 }
 
 // IsCompleteTransaction determines whether a batch contains every write in a
@@ -317,16 +369,9 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 	panic("unreachable")
 }
 
-// GetPrevLeaseForLeaseRequest returns the previous lease, at the time
-// of proposal, for a request lease or transfer lease request. If the
-// batch does not contain a single lease request, this method will panic.
-func (ba *BatchRequest) GetPrevLeaseForLeaseRequest() Lease {
-	return ba.Requests[0].GetInner().(leaseRequestor).prevLease()
-}
-
 // hasFlag returns true iff one of the requests within the batch contains the
 // specified flag.
-func (ba *BatchRequest) hasFlag(flag int) bool {
+func (ba *BatchRequest) hasFlag(flag flag) bool {
 	for _, union := range ba.Requests {
 		if (union.GetInner().flags() & flag) != 0 {
 			return true
@@ -337,7 +382,7 @@ func (ba *BatchRequest) hasFlag(flag int) bool {
 
 // hasFlagForAll returns true iff all of the requests within the batch contains
 // the specified flag.
-func (ba *BatchRequest) hasFlagForAll(flag int) bool {
+func (ba *BatchRequest) hasFlagForAll(flag flag) bool {
 	if len(ba.Requests) == 0 {
 		return false
 	}
@@ -521,7 +566,7 @@ func (ba *BatchRequest) Methods() []Method {
 // read that acquired a latch @ ts10 can't simply be bumped to ts 20 because
 // there might have been overlapping writes in the 10..20 window).
 func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
-	compatible := func(exFlags, newFlags int) bool {
+	compatible := func(exFlags, newFlags flag) bool {
 		// isAlone requests are never compatible.
 		if (exFlags&isAlone) != 0 || (newFlags&isAlone) != 0 {
 			return false
@@ -538,13 +583,28 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 		// enforcing are that a batch can't mix non-writes with writes.
 		// Checking isRead would cause ConditionalPut and Put to conflict,
 		// which is not what we want.
-		const mask = isWrite | isAdmin | isReverse
+		mask := isWrite | isAdmin
+		if (exFlags&isRange) != 0 && (newFlags&isRange) != 0 {
+			// The directions of requests in a batch need to be the same because
+			// the DistSender (in divideAndSendBatchToRanges) will perform a
+			// single traversal of all requests while advancing the
+			// RangeIterator. If we were to have requests with different
+			// directions in a single batch, the DistSender wouldn't know how to
+			// route the requests (without incurring a noticeable performance
+			// hit).
+			//
+			// At the same time, non-ranged operations are not directional, so
+			// we need to require the same value for isReverse flag iff the
+			// existing and the new requests are ranged. For example, this
+			// allows us to have Gets and ReverseScans in a single batch.
+			mask |= isReverse
+		}
 		return (mask & exFlags) == (mask & newFlags)
 	}
 	var parts [][]RequestUnion
 	for len(ba.Requests) > 0 {
 		part := ba.Requests
-		var gFlags, hFlags = -1, -1
+		var gFlags, hFlags flag = -1, -1
 		for i, union := range ba.Requests {
 			args := union.GetInner()
 			flags := args.flags()
@@ -615,7 +675,16 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 		req := arg.GetInner()
 		if et, ok := req.(*EndTxnRequest); ok {
 			h := req.Header()
-			s.Printf("%s(commit:%t", req.Method(), et.Commit)
+			s.Printf("%s(", req.Method())
+			if et.Commit {
+				if et.IsParallelCommit() {
+					s.Printf("parallel commit")
+				} else {
+					s.Printf("commit")
+				}
+			} else {
+				s.Printf("abort")
+			}
 			if et.InternalCommitTrigger != nil {
 				s.Printf(" %s", et.InternalCommitTrigger.Kind())
 			}
@@ -641,6 +710,16 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 	}
 	if ba.CanForwardReadTimestamp {
 		s.Printf(", [can-forward-ts]")
+	}
+	if cfg := ba.BoundedStaleness; cfg != nil {
+		s.Printf(", [bounded-staleness, min_ts_bound: %s", cfg.MinTimestampBound)
+		if cfg.MinTimestampBoundStrict {
+			s.Printf(", min_ts_bound_strict")
+		}
+		if !cfg.MaxTimestampBound.IsEmpty() {
+			s.Printf(", max_ts_bound: %s", cfg.MaxTimestampBound)
+		}
+		s.Printf("]")
 	}
 }
 

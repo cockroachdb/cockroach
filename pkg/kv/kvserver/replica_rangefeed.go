@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -28,16 +27,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
 // RangefeedEnabled is a cluster setting that enables rangefeed requests.
+// Certain ranges have span configs that specifically enable rangefeeds (system
+// ranges and ranges covering tables in the system database); this setting
+// covers everything else.
 var RangefeedEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	"kv.rangefeed.enabled",
 	"if set, rangefeed registration is enabled",
 	false,
@@ -46,6 +52,7 @@ var RangefeedEnabled = settings.RegisterBoolSetting(
 // RangeFeedRefreshInterval controls the frequency with which we deliver closed
 // timestamp updates to rangefeeds.
 var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"kv.rangefeed.closed_timestamp_refresh_interval",
 	"the interval at which closed-timestamp updates"+
 		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
@@ -53,11 +60,19 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// RangefeedTBIEnabled controls whether or not we use a TBI during catch-up scan.
+var RangefeedTBIEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"kv.rangefeed.catchup_scan_iterator_optimization.enabled",
+	"if true, rangefeeds will use time-bound iterators for catchup-scans when possible",
+	util.ConstantWithMetamorphicTestBool("kv.rangefeed.catchup_scan_iterator_optimization.enabled", true),
+)
+
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
 // support for concurrent calls to Send. Note that the default implementation of
 // grpc.Stream is not safe for concurrent calls to Send.
 type lockedRangefeedStream struct {
-	wrapped roachpb.Internal_RangeFeedServer
+	wrapped rangefeed.Stream
 	sendMu  syncutil.Mutex
 }
 
@@ -123,32 +138,20 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 	).GoError()
 }
 
-type iteratorWithCloser struct {
-	storage.SimpleMVCCIterator
-	close func()
-}
-
-func (i iteratorWithCloser) Close() {
-	i.SimpleMVCCIterator.Close()
-	i.close()
-}
-
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns with an optional error when the rangefeed is
 // complete. The provided ConcurrentRequestLimiter is used to limit the number
-// of rangefeeds using catchup iterators at the same time.
+// of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+	args *roachpb.RangeFeedRequest, stream rangefeed.Stream,
 ) *roachpb.Error {
 	return r.rangeFeedWithRangeID(r.RangeID, args, stream)
 }
 
 func (r *Replica) rangeFeedWithRangeID(
-	_forStacks roachpb.RangeID,
-	args *roachpb.RangeFeedRequest,
-	stream roachpb.Internal_RangeFeedServer,
+	_forStacks roachpb.RangeID, args *roachpb.RangeFeedRequest, stream rangefeed.Stream,
 ) *roachpb.Error {
-	if !r.isSystemRange() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+	if !r.isRangefeedEnabled() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
@@ -188,10 +191,10 @@ func (r *Replica) rangeFeedWithRangeID(
 
 	// If we will be using a catch-up iterator, wait for the limiter here before
 	// locking raftMu.
-	usingCatchupIter := false
+	usingCatchUpIter := false
 	var iterSemRelease func()
 	if !args.Timestamp.IsEmpty() {
-		usingCatchupIter = true
+		usingCatchUpIter = true
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(ctx)
 		if err != nil {
 			return roachpb.NewError(err)
@@ -199,10 +202,10 @@ func (r *Replica) rangeFeedWithRangeID(
 		// Finish the iterator limit if we exit before the iterator finishes.
 		// The release function will be hooked into the Close method on the
 		// iterator below. The sync.Once prevents any races between exiting early
-		// from this call and finishing the catchup scan underneath the
+		// from this call and finishing the catch-up scan underneath the
 		// rangefeed.Processor. We need to release here in case we fail to
 		// register the processor, or, more perniciously, in the case where the
-		// processor gets registered by shut down before starting the catchup
+		// processor gets registered by shut down before starting the catch-up
 		// scan.
 		var iterSemReleaseOnce sync.Once
 		iterSemRelease = func() {
@@ -222,26 +225,14 @@ func (r *Replica) rangeFeedWithRangeID(
 	}
 
 	// Register the stream with a catch-up iterator.
-	var catchUpIterFunc rangefeed.IteratorConstructor
-	if usingCatchupIter {
-		catchUpIterFunc = func() storage.SimpleMVCCIterator {
-
-			innerIter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-				UpperBound: args.Span.EndKey,
-				// RangeFeed originally intended to use the time-bound iterator
-				// performance optimization. However, they've had correctness issues in
-				// the past (#28358, #34819) and no-one has the time for the due-diligence
-				// necessary to be confidant in their correctness going forward. Not using
-				// them causes the total time spent in RangeFeed catchup on changefeed
-				// over tpcc-1000 to go from 40s -> 4853s, which is quite large but still
-				// workable. See #35122 for details.
-				// MinTimestampHint: args.Timestamp,
-			})
-			catchUpIter := iteratorWithCloser{
-				SimpleMVCCIterator: innerIter,
-				close:              iterSemRelease,
-			}
-			return catchUpIter
+	var catchUpIterFunc rangefeed.CatchUpIteratorConstructor
+	if usingCatchUpIter {
+		catchUpIterFunc = func() *rangefeed.CatchUpIterator {
+			// Assert that we still hold the raftMu when this is called to ensure
+			// that the catchUpIter reads from the current snapshot.
+			r.raftMu.AssertHeld()
+			return rangefeed.NewCatchUpIterator(r.Engine(),
+				args, RangefeedTBIEnabled.Get(&r.store.cfg.Settings.SV), iterSemRelease)
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
@@ -319,6 +310,23 @@ func (r *Replica) updateRangefeedFilterLocked() bool {
 // that.
 const defaultEventChanCap = 4096
 
+// Rangefeed registration takes place under the raftMu, so log if we ever hold
+// the mutex for too long, as this could affect foreground traffic.
+//
+// At the time of writing (09/2021), the blocking call to Processor.syncEventC
+// in Processor.Register appears to be mildly concerning, but we have no reason
+// to believe that is blocks the raftMu in practice.
+func logSlowRangefeedRegistration(ctx context.Context) func() {
+	const slowRaftMuWarnThreshold = 20 * time.Millisecond
+	start := timeutil.Now()
+	return func() {
+		elapsed := timeutil.Since(start)
+		if elapsed >= slowRaftMuWarnThreshold {
+			log.Warningf(ctx, "rangefeed registration took %s", elapsed)
+		}
+	}
+}
+
 // registerWithRangefeedRaftMuLocked sets up a Rangefeed registration over the
 // provided span. It initializes a rangefeed for the Replica if one is not
 // already running. Requires raftMu be locked.
@@ -326,18 +334,20 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchupIter rangefeed.IteratorConstructor,
+	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
 	errC chan<- *roachpb.Error,
 ) *rangefeed.Processor {
+	defer logSlowRangefeedRegistration(ctx)()
+
 	// Attempt to register with an existing Rangefeed processor, if one exists.
 	// The locking here is a little tricky because we need to handle the case
 	// of concurrent processor shutdowns (see maybeDisconnectEmptyRangefeed).
 	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
 	if p != nil {
-		reg, filter := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
+		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, errC)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -354,6 +364,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	}
 	r.rangefeedMu.Unlock()
 
+	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey)
+
 	// Create a new rangefeed.
 	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
@@ -368,30 +380,43 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		EventChanCap:     defaultEventChanCap,
 		EventChanTimeout: 50 * time.Millisecond,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
+		MemBudget:        feedBudget,
 	}
 	p = rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := func() storage.SimpleMVCCIterator {
-		return r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-			UpperBound: desc.EndKey.AsRawKey(),
-			// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed
-			// we should periodically persist the resolved timestamp so that we
-			// can initialize the rangefeed using an iterator that only needs to
-			// observe timestamps back to the last recorded resolved timestamp.
-			// This is safe because we know that there are no unresolved intents
-			// at times before a resolved timestamp.
-			// MinTimestampHint: r.ResolvedTimestamp,
+	rtsIter := func() rangefeed.IntentScanner {
+		// Assert that we still hold the raftMu when this is called to ensure
+		// that the rtsIter reads from the current snapshot. The replica
+		// synchronizes with the rangefeed Processor calling this function by
+		// waiting for the Register call below to return.
+		r.raftMu.AssertHeld()
+
+		lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
+		upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
+		iter := r.Engine().NewEngineIterator(storage.IterOptions{
+			LowerBound: lowerBound,
+			UpperBound: upperBound,
 		})
+		return rangefeed.NewSeparatedIntentScanner(iter)
 	}
-	p.Start(r.store.Stopper(), rtsIter)
+
+	// NB: This only errors if the stopper is stopping, and we have to return here
+	// in that case. We do check ShouldQuiesce() below, but that's not sufficient
+	// because the stopper has two states: stopping and quiescing. If this errors
+	// due to stopping, but before it enters the quiescing state, then the select
+	// below will fall through to the panic.
+	if err := p.Start(r.store.Stopper(), rtsIter); err != nil {
+		errC <- roachpb.NewError(err)
+		return nil
+	}
 
 	// Register with the processor *before* we attach its reference to the
 	// Replica struct. This ensures that the registration is in place before
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg, filter := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
+	reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, errC)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
@@ -410,7 +435,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
-	r.handleClosedTimestampUpdateRaftMuLocked(ctx)
+	r.handleClosedTimestampUpdateRaftMuLocked(ctx, r.GetClosedTimestamp(ctx))
 
 	return p
 }
@@ -437,6 +462,18 @@ func (r *Replica) maybeDisconnectEmptyRangefeed(p *rangefeed.Processor) {
 func (r *Replica) disconnectRangefeedWithErr(p *rangefeed.Processor, pErr *roachpb.Error) {
 	p.StopWithErr(pErr)
 	r.unsetRangefeedProcessor(p)
+}
+
+// disconnectRangefeedSpanWithErr broadcasts the provided error to all rangefeed
+// registrations that overlap the given span. Tears down the rangefeed Processor
+// if it has no remaining registrations.
+func (r *Replica) disconnectRangefeedSpanWithErr(span roachpb.Span, pErr *roachpb.Error) {
+	p := r.getRangefeedProcessor()
+	if p == nil {
+		return
+	}
+	p.DisconnectSpanWithErr(span, pErr)
+	r.maybeDisconnectEmptyRangefeed(p)
 }
 
 // disconnectRangefeedWithReason broadcasts the provided rangefeed retry reason
@@ -596,32 +633,57 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 
 	// Pass the ops to the rangefeed processor.
-	if !p.ConsumeLogicalOps(ops.Ops...) {
+	if !p.ConsumeLogicalOps(ctx, ops.Ops...) {
 		// Consumption failed and the rangefeed was stopped.
 		r.unsetRangefeedProcessor(p)
 	}
 }
 
-// handleClosedTimestampUpdate determines the current maximum closed timestamp
-// for the replica and informs the rangefeed, if one is running. No-op if a
+// handleSSTableRaftMuLocked emits an ingested SSTable from AddSSTable via the
+// rangefeed. These can be expected to have timestamps at the write timestamp
+// (i.e. submitted with SSTTimestampToRequestTimestamp) since we assert
+// elsewhere that MVCCHistoryMutation commands disconnect rangefeeds.
+//
+// NB: We currently don't have memory budgeting for rangefeeds, instead using a
+// large buffered channel, so this can easily OOM the node. This is "fine" for
+// now, since we do not currently expect AddSSTable across spans with
+// rangefeeds, but must be added before we start publishing SSTables in earnest.
+// See: https://github.com/cockroachdb/cockroach/issues/73616
+func (r *Replica) handleSSTableRaftMuLocked(
+	ctx context.Context, sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp,
+) {
+	p, _ := r.getRangefeedProcessorAndFilter()
+	if p == nil {
+		return
+	}
+	if !p.ConsumeSSTable(ctx, sst, sstSpan, writeTS) {
+		r.unsetRangefeedProcessor(p)
+	}
+}
+
+// handleClosedTimestampUpdate takes the a closed timestamp for the replica
+// and informs the rangefeed, if one is running. No-op if a
 // rangefeed is not active.
-func (r *Replica) handleClosedTimestampUpdate(ctx context.Context) {
+//
+// closeTS is generally expected to be the highest closed timestamp known, but
+// it doesn't need to be - handleClosedTimestampUpdate can be called with
+// updates out of order.
+func (r *Replica) handleClosedTimestampUpdate(ctx context.Context, closedTS hlc.Timestamp) {
 	ctx = r.AnnotateCtx(ctx)
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	r.handleClosedTimestampUpdateRaftMuLocked(ctx)
+	r.handleClosedTimestampUpdateRaftMuLocked(ctx, closedTS)
 }
 
 // handleClosedTimestampUpdateRaftMuLocked is like handleClosedTimestampUpdate,
 // but it requires raftMu to be locked.
-func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
+func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
+	ctx context.Context, closedTS hlc.Timestamp,
+) {
 	p := r.getRangefeedProcessor()
 	if p == nil {
 		return
 	}
-
-	// Determine what the maximum closed timestamp is for this replica.
-	closedTS, _ := r.maxClosed(ctx)
 
 	// If the closed timestamp is sufficiently stale, signal that we want an
 	// update to the leaseholder so that it will eventually begin to progress
@@ -643,10 +705,12 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 		// Ignore the result of DoChan since, to keep this all async, it always
 		// returns nil and any errors are logged by the closure passed to the
 		// `DoChan` call.
-		_, _ = m.RangeFeedSlowClosedTimestampNudge.DoChan(key, func() (interface{}, error) {
+		taskCtx, sp := tracing.EnsureForkSpan(ctx, r.AmbientContext.Tracer, key)
+		_, leader := m.RangeFeedSlowClosedTimestampNudge.DoChan(key, func() (interface{}, error) {
+			defer sp.Finish()
 			// Also ignore the result of RunTask, since it only returns errors when
 			// the task didn't start because we're shutting down.
-			_ = r.store.stopper.RunTask(ctx, key, func(context.Context) {
+			_ = r.store.stopper.RunTask(taskCtx, key, func(ctx context.Context) {
 				// Limit the amount of work this can suddenly spin up. In particular,
 				// this is to protect against the case of a system-wide slowdown on
 				// closed timestamps, which would otherwise potentially launch a huge
@@ -664,13 +728,18 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 			})
 			return nil, nil
 		})
+		if !leader {
+			// In the leader case, we've passed ownership of sp to the task. If the
+			// task was not triggered, though, it's up to us to Finish() it.
+			sp.Finish()
+		}
 	}
 
 	// If the closed timestamp is not empty, inform the Processor.
 	if closedTS.IsEmpty() {
 		return
 	}
-	if !p.ForwardClosedTS(closedTS) {
+	if !p.ForwardClosedTS(ctx, closedTS) {
 		// Consumption failed and the rangefeed was stopped.
 		r.unsetRangefeedProcessor(p)
 	}
@@ -711,25 +780,5 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 			return roachpb.NewError(err)
 		}
 	}
-
-	if r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
-		// In the "new closed timestamps subsystem", there's nothing more to do.
-		// Once there's a leaseholder, that node will connect to us and inform us of
-		// updates.
-		return nil
-	}
-
-	lease = r.CurrentLeaseStatus(ctx)
-	if lease.OwnedBy(r.StoreID()) {
-		// We have the lease. Request is essentially a wrapper for calling EmitMLAI
-		// on a remote node, so cut out the middleman.
-		r.EmitMLAI()
-		return nil
-	}
-	leaseholderNodeID := lease.Lease.Replica.NodeID
-	// Request fixes any issues where we've missed a closed timestamp update or
-	// where we're not connected to receive them from this node in the first
-	// place.
-	r.store.cfg.ClosedTimestamp.Clients.Request(leaseholderNodeID, r.RangeID)
 	return nil
 }

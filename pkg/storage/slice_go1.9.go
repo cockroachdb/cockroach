@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build gc && go1.9
 // +build gc,go1.9
 
 package storage

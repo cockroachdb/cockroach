@@ -142,7 +142,7 @@ var errEAgain = errors.New("try read again")
 func (b *buf) readLocked(size int) ([]byte, error) {
 	if len(b.data) == 0 && !b.closed {
 		b.readerWait.Wait()
-		// We were unblocked either by data arrving, or by a partition, or by
+		// We were unblocked either by data arriving, or by a partition, or by
 		// another uninteresting reason. Return to the caller, in case it's because
 		// of a partition.
 		return nil, errEAgain

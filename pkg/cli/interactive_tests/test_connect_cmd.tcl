@@ -28,6 +28,10 @@ start_test "Test initialization"
 send "create database t; set database = t;\r"
 eexpect root@
 eexpect "/t>"
+send "create user foo with password 'abc';\r"
+eexpect "CREATE ROLE"
+eexpect root@
+eexpect "/t>"
 
 start_test "Check that the client-side connect cmd prints the current conn details"
 send "\\c\r"
@@ -36,23 +40,14 @@ eexpect "You are connected to database \"t\" as user \"root\""
 eexpect root@
 eexpect "/t>"
 
-start_test "Check that the client-side connect cmd changes databases using a SET statement"
-send "\\c invaliddb\r"
-eexpect database
-eexpect "does not exist"
+start_test "Check that the client-side connect cmd can change databases"
+send "\\c postgres\r"
+eexpect "using new connection URL"
 eexpect root@
-eexpect "/t>"
-
-send "\\c system\r"
-eexpect SET
-eexpect root@
-eexpect "/system>"
+eexpect "/postgres>"
 end_test
 
 start_test "Check that the client-side connect cmd can change users using a password"
-send "create user foo with password 'abc';\r"
-eexpect "CREATE ROLE"
-eexpect root@
 
 send "\\c - foo\r"
 eexpect "using new connection URL"
@@ -68,18 +63,29 @@ send "\\c -\r"
 eexpect "Enter password:"
 send "abc\r"
 eexpect foo@
+eexpect "/postgres>"
+end_test
+
+start_test "Check that the client-side connect cmd can change databases"
+send "\\c system\r"
+eexpect "using new connection URL"
+eexpect "Connecting to server"
+eexpect "as user \"foo\""
+eexpect "Enter password:"
+send "abc\r"
+eexpect foo@
 eexpect "/system>"
 end_test
 
 start_test "Check that the user can recover from an invalid database"
-send "\\c invaliddb -\r"
+send "\\c invaliddb\r"
 eexpect "Enter password:"
 send "abc\r"
 eexpect "error retrieving the database name"
 eexpect foo@
 eexpect "?>"
 
-send "\\c system -\r"
+send "\\c system\r"
 eexpect "Enter password:"
 send "abc\r"
 eexpect foo@
@@ -126,7 +132,7 @@ start_test "Check that the client-side connect cmd can change users with certs u
 # first test that it can recover from an invalid database
 send "\\c postgres://root@localhost:26257/invaliddb?sslmode=require&sslcert=$certs_dir%2Fclient.root.crt&sslkey=$certs_dir%2Fclient.root.key&sslrootcert=$certs_dir%2Fca.crt\r"
 eexpect "using new connection URL"
-eexpect "error retrieving the database name"
+eexpect "error retrieving the database name: pq: database \"invaliddb\" does not exist"
 eexpect root@
 eexpect "?>"
 
@@ -139,5 +145,52 @@ end_test
 send "\\q\r"
 eexpect eof
 
+start_test "Check that extra URL params are preserved when changing database"
+
+spawn $argv sql --certs-dir=$certs_dir --url=postgres://root@localhost:26257/defaultdb?options=--search_path%3Dcustom_path&statement_timeout=1234
+eexpect root@
+eexpect "/defaultdb>"
+send "SHOW search_path;\r"
+eexpect "custom_path"
+send "SHOW statement_timeout;\r"
+eexpect "1234"
+eexpect root@
+eexpect "/defaultdb>"
+send "\\c postgres\r"
+eexpect "using new connection URL"
+eexpect root@
+eexpect "/postgres>"
+send "SHOW search_path;\r"
+eexpect "custom_path"
+send "SHOW statement_timeout;\r"
+eexpect "1234"
+
+end_test
+
+send "\\q\r"
+eexpect eof
 
 stop_secure_server $argv $certs_dir
+
+# Some more tests with the insecure mode.
+set ::env(COCKROACH_INSECURE) "true"
+start_server $argv
+
+spawn $argv sql
+eexpect root@
+eexpect "defaultdb>"
+
+start_test "Check that the connect cmd can switch dbs in insecure mode"
+send "\\c system\r"
+eexpect root@
+eexpect "system>"
+end_test
+
+start_test "Check that the connect cmd can switch users in insecure mode"
+send "\\c - foo\r"
+eexpect foo@
+eexpect "system>"
+end_test
+
+stop_server $argv
+

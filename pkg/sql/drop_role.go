@@ -14,15 +14,16 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -32,9 +33,9 @@ import (
 // DropRoleNode deletes entries from the system.users table.
 // This is called from DROP USER and DROP ROLE.
 type DropRoleNode struct {
-	ifExists bool
-	isRole   bool
-	names    func() ([]string, error)
+	ifExists  bool
+	isRole    bool
+	roleNames []security.SQLUsername
 }
 
 // DropRole represents a DROP ROLE statement.
@@ -45,22 +46,43 @@ func (p *planner) DropRole(ctx context.Context, n *tree.DropRole) (planNode, err
 
 // DropRoleNode creates a "drop user" plan node. This can be called from DROP USER or DROP ROLE.
 func (p *planner) DropRoleNode(
-	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
+	ctx context.Context, roleSpecs tree.RoleSpecList, ifExists bool, isRole bool, opName string,
 ) (*DropRoleNode, error) {
 	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
-	names, err := p.TypeAsStringArray(ctx, namesE, opName)
+	for _, r := range roleSpecs {
+		if r.RoleSpecType != tree.RoleName {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot use special role specifier in DROP ROLE")
+		}
+	}
+	roleNames, err := roleSpecs.ToSQLUsernames(p.SessionData(), security.UsernameCreation)
 	if err != nil {
 		return nil, err
 	}
 
 	return &DropRoleNode{
-		ifExists: ifExists,
-		isRole:   isRole,
-		names:    names,
+		ifExists:  ifExists,
+		isRole:    isRole,
+		roleNames: roleNames,
 	}, nil
+}
+
+type objectType string
+
+const (
+	database         objectType = "database"
+	table            objectType = "table"
+	schema           objectType = "schema"
+	typeObject       objectType = "type"
+	defaultPrivilege objectType = "default_privilege"
+)
+
+type objectAndType struct {
+	ObjectType   objectType
+	ObjectName   string
+	ErrorMessage error
 }
 
 func (n *DropRoleNode) startExec(params runParams) error {
@@ -73,41 +95,23 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		opName = "drop-user"
 	}
 
-	names, err := n.names()
+	hasAdmin, err := params.p.HasAdminRole(params.ctx)
 	if err != nil {
 		return err
 	}
 
 	// Now check whether the user still has permission or ownership on any
 	// object in the database.
-	type objectAndType struct {
-		ObjectType string
-		ObjectName string
-	}
 
-	// userNames maps users to the objects they own
 	userNames := make(map[security.SQLUsername][]objectAndType)
-	for i := range names {
-		name := names[i]
-		normalizedUsername, err := NormalizeAndValidateUsername(name)
-		if err != nil {
-			return err
+	for i, name := range n.roleNames {
+		// userNames maps users to the objects they own
+		userNames[n.roleNames[i]] = make([]objectAndType, 0)
+		if name.IsReserved() {
+			return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", name.Normalized())
 		}
-
-		// Update the name in the names slice since we will re-use the name later.
-		names[i] = normalizedUsername.Normalized()
-		userNames[normalizedUsername] = make([]objectAndType, 0)
-	}
-
-	// Non-admin users cannot drop admins.
-	hasAdmin, err := params.p.HasAdminRole(params.ctx)
-	if err != nil {
-		return err
-	}
-	if !hasAdmin {
-		for i := range names {
-			// Normalized above already.
-			name := security.MakeSQLUsernameFromPreNormalizedString(names[i])
+		// Non-admin users cannot drop admins.
+		if !hasAdmin {
 			targetIsAdmin, err := params.p.UserHasAdminRole(params.ctx, name)
 			if err != nil {
 				return err
@@ -118,8 +122,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	defer f.Close()
+	privilegeObjectFormatter := tree.NewFmtCtx(tree.FmtSimple)
+	defer privilegeObjectFormatter.Close()
 
 	// First check all the databases.
 	if err := forEachDatabaseDesc(params.ctx, params.p, nil /*nil prefix = all databases*/, true, /* requiresPrivileges */
@@ -128,20 +132,20 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				userNames[db.GetPrivileges().Owner()] = append(
 					userNames[db.GetPrivileges().Owner()],
 					objectAndType{
-						ObjectType: "database",
+						ObjectType: database,
 						ObjectName: db.GetName(),
 					})
 			}
 			for _, u := range db.GetPrivileges().Users {
 				if _, ok := userNames[u.User()]; ok {
-					if f.Len() > 0 {
-						f.WriteString(", ")
+					if privilegeObjectFormatter.Len() > 0 {
+						privilegeObjectFormatter.WriteString(", ")
 					}
-					f.FormatName(db.GetName())
+					privilegeObjectFormatter.FormatName(db.GetName())
 					break
 				}
 			}
-			return nil
+			return accumulateDependentDefaultPrivileges(db.GetDefaultPrivilegeDescriptor(), userNames, db.GetName(), "" /* schemaName */)
 		}); err != nil {
 		return err
 	}
@@ -152,39 +156,39 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	// the predefined forEachTableAll() function because we need to look
 	// at all _visible_ descriptors, not just those on which the current
 	// user has permission.
-	descs, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn)
+	all, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn)
 	if err != nil {
 		return err
 	}
 
-	lCtx := newInternalLookupCtx(params.ctx, descs, nil /*prefix - we want all descriptors */, nil /* fallback */)
+	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), nil /*prefix - we want all descriptors */)
 	// privileges are added.
 	for _, tbID := range lCtx.tbIDs {
-		table := lCtx.tbDescs[tbID]
-		if !descriptorIsVisible(table, true /*allowAdding*/) {
+		tableDescriptor := lCtx.tbDescs[tbID]
+		if !descriptorIsVisible(tableDescriptor, true /*allowAdding*/) {
 			continue
 		}
-		if _, ok := userNames[table.GetPrivileges().Owner()]; ok {
-			tn, err := getTableNameFromTableDescriptor(lCtx, table, "")
+		if _, ok := userNames[tableDescriptor.GetPrivileges().Owner()]; ok {
+			tn, err := getTableNameFromTableDescriptor(lCtx, tableDescriptor, "")
 			if err != nil {
 				return err
 			}
-			userNames[table.GetPrivileges().Owner()] = append(
-				userNames[table.GetPrivileges().Owner()],
+			userNames[tableDescriptor.GetPrivileges().Owner()] = append(
+				userNames[tableDescriptor.GetPrivileges().Owner()],
 				objectAndType{
-					ObjectType: "table",
+					ObjectType: table,
 					ObjectName: tn.String(),
 				})
 		}
-		for _, u := range table.GetPrivileges().Users {
+		for _, u := range tableDescriptor.GetPrivileges().Users {
 			if _, ok := userNames[u.User()]; ok {
-				if f.Len() > 0 {
-					f.WriteString(", ")
+				if privilegeObjectFormatter.Len() > 0 {
+					privilegeObjectFormatter.WriteString(", ")
 				}
-				parentName := lCtx.getDatabaseName(table)
-				schemaName := lCtx.getSchemaName(table)
-				tn := tree.MakeTableNameWithSchema(tree.Name(parentName), tree.Name(schemaName), tree.Name(table.GetName()))
-				f.FormatNode(&tn)
+				parentName := lCtx.getDatabaseName(tableDescriptor)
+				schemaName := lCtx.getSchemaName(tableDescriptor)
+				tn := tree.MakeTableNameWithSchema(tree.Name(parentName), tree.Name(schemaName), tree.Name(tableDescriptor.GetName()))
+				privilegeObjectFormatter.FormatNode(&tn)
 				break
 			}
 		}
@@ -200,9 +204,18 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			userNames[schemaDesc.GetPrivileges().Owner()] = append(
 				userNames[schemaDesc.GetPrivileges().Owner()],
 				objectAndType{
-					ObjectType: "schema",
+					ObjectType: schema,
 					ObjectName: schemaDesc.GetName(),
 				})
+		}
+
+		dbDesc, err := lCtx.getDatabaseByID(schemaDesc.GetParentID())
+		if err != nil {
+			return err
+		}
+
+		if err := accumulateDependentDefaultPrivileges(schemaDesc.GetDefaultPrivilegeDescriptor(), userNames, dbDesc.GetName(), schemaDesc.GetName()); err != nil {
+			return err
 		}
 	}
 	for _, typDesc := range lCtx.typDescs {
@@ -217,48 +230,74 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			userNames[typDesc.GetPrivileges().Owner()] = append(
 				userNames[typDesc.GetPrivileges().Owner()],
 				objectAndType{
-					ObjectType: "type",
+					ObjectType: typeObject,
 					ObjectName: tn.String(),
 				})
 		}
 	}
 
 	// Was there any object depending on that user?
-	if f.Len() > 0 {
+	if privilegeObjectFormatter.Len() > 0 {
 		fnl := tree.NewFmtCtx(tree.FmtSimple)
 		defer fnl.Close()
-		for i, name := range names {
+		for i, name := range n.roleNames {
 			if i > 0 {
 				fnl.WriteString(", ")
 			}
-			fnl.FormatName(name)
+			fnl.FormatName(name.Normalized())
 		}
 		return pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"cannot drop role%s/user%s %s: grants still exist on %s",
-			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))),
-			fnl.String(), f.String(),
+			util.Pluralize(int64(len(n.roleNames))), util.Pluralize(int64(len(n.roleNames))),
+			fnl.String(), privilegeObjectFormatter.String(),
 		)
 	}
 
-	for i := range names {
-		// Name already normalized above.
-		name := security.MakeSQLUsernameFromPreNormalizedString(names[i])
+	hasDependentDefaultPrivilege := false
+	for _, name := range n.roleNames {
 		// Did the user own any objects?
-		ownedObjects := userNames[name]
-		if len(ownedObjects) > 0 {
+		dependentObjects := userNames[name]
+
+		// Sort the slice so we're guaranteed the same ordering on errors.
+		sort.SliceStable(dependentObjects, func(i int, j int) bool {
+			if dependentObjects[i].ObjectType != dependentObjects[j].ObjectType {
+				return dependentObjects[i].ObjectType < dependentObjects[j].ObjectType
+			}
+
+			if dependentObjects[i].ObjectName != dependentObjects[j].ObjectName {
+				return dependentObjects[i].ObjectName < dependentObjects[j].ObjectName
+			}
+
+			return dependentObjects[i].ErrorMessage.Error() < dependentObjects[j].ErrorMessage.Error()
+		})
+		var hints []string
+		if len(dependentObjects) > 0 {
 			objectsMsg := tree.NewFmtCtx(tree.FmtSimple)
-			for _, obj := range ownedObjects {
-				objectsMsg.WriteString(fmt.Sprintf("\nowner of %s %s", obj.ObjectType, obj.ObjectName))
+			for _, obj := range dependentObjects {
+				switch obj.ObjectType {
+				case database, table, schema, typeObject:
+					objectsMsg.WriteString(fmt.Sprintf("\nowner of %s %s", obj.ObjectType, obj.ObjectName))
+				case defaultPrivilege:
+					hasDependentDefaultPrivilege = true
+					objectsMsg.WriteString(fmt.Sprintf("\n%s", obj.ErrorMessage))
+					hints = append(hints, errors.GetAllHints(obj.ErrorMessage)...)
+				}
 			}
 			objects := objectsMsg.CloseAndGetString()
-			return pgerror.Newf(pgcode.DependentObjectsStillExist,
+			err := pgerror.Newf(pgcode.DependentObjectsStillExist,
 				"role %s cannot be dropped because some objects depend on it%s",
 				name, objects)
+			if hasDependentDefaultPrivilege {
+				err = errors.WithHint(err,
+					strings.Join(hints, "\n"),
+				)
+			}
+			return err
 		}
 	}
 
 	// All safe - do the work.
-	var numRoleMembershipsDeleted int
+	var numRoleMembershipsDeleted, numRoleSettingsRowsDeleted int
 	for normalizedUsername := range userNames {
 		// Specifically reject special users and roles. Some (root, admin) would fail with
 		// "privileges still exist" first.
@@ -308,7 +347,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		// Drop all role memberships involving the user/role.
-		numRoleMembershipsDeleted, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		rowsDeleted, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
 			"drop-role-membership",
 			params.p.txn,
@@ -318,6 +357,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
+		numRoleMembershipsDeleted += rowsDeleted
 
 		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
@@ -325,7 +365,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			params.p.txn,
 			fmt.Sprintf(
 				`DELETE FROM %s WHERE username=$1`,
-				authentication.RoleOptionsTableName,
+				sessioninit.RoleOptionsTableName,
 			),
 			normalizedUsername,
 		)
@@ -333,32 +373,36 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			return err
 		}
 
-		// TODO(rafi): Remove this condition in 21.2.
-		if params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.DatabaseRoleSettings) {
-			_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
-				params.ctx,
-				opName,
-				params.p.txn,
-				fmt.Sprintf(
-					`DELETE FROM %s WHERE role_name = $1`,
-					authentication.DatabaseRoleSettingsTableName,
-				),
-				normalizedUsername,
-			)
-			if err != nil {
-				return err
-			}
+		rowsDeleted, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx,
+			opName,
+			params.p.txn,
+			fmt.Sprintf(
+				`DELETE FROM %s WHERE role_name = $1`,
+				sessioninit.DatabaseRoleSettingsTableName,
+			),
+			normalizedUsername,
+		)
+		if err != nil {
+			return err
 		}
+		numRoleSettingsRowsDeleted += rowsDeleted
+
 	}
 
-	// Bump role-related table versions to force a refresh of membership/password
+	// Bump role-related table versions to force a refresh of membership/auth
 	// caches.
-	if authentication.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
 		if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
 			return err
 		}
 		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 			return err
+		}
+		if numRoleSettingsRowsDeleted > 0 {
+			if err := params.p.bumpDatabaseRoleSettingsTableVersion(params.ctx); err != nil {
+				return err
+			}
 		}
 	}
 	if numRoleMembershipsDeleted > 0 {
@@ -367,8 +411,12 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	sort.Strings(names)
-	for _, name := range names {
+	normalizedNames := make([]string, len(n.roleNames))
+	for i, name := range n.roleNames {
+		normalizedNames[i] = name.Normalized()
+	}
+	sort.Strings(normalizedNames)
+	for _, name := range normalizedNames {
 		if err := params.p.logEvent(params.ctx,
 			0, /* no target */
 			&eventpb.DropRole{RoleName: name}); err != nil {
@@ -386,3 +434,106 @@ func (*DropRoleNode) Values() tree.Datums { return tree.Datums{} }
 
 // Close implements the planNode interface.
 func (*DropRoleNode) Close(context.Context) {}
+
+// accumulateDependentDefaultPrivileges checks for any default privileges
+// that the users in userNames have and append them to the objectAndType array.
+func accumulateDependentDefaultPrivileges(
+	defaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor,
+	userNames map[security.SQLUsername][]objectAndType,
+	dbName string,
+	schemaName string,
+) error {
+	// The func we pass into ForEachDefaultPrivilegeForRole will never
+	// err so no err will be returned.
+	return defaultPrivilegeDescriptor.ForEachDefaultPrivilegeForRole(func(
+		defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
+		role := catpb.DefaultPrivilegesRole{}
+		if defaultPrivilegesForRole.IsExplicitRole() {
+			role.Role = defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode()
+		} else {
+			role.ForAllRoles = true
+		}
+		for object, defaultPrivs := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
+			addDependentPrivileges(object, defaultPrivs, role, userNames, dbName, schemaName)
+		}
+		return nil
+	})
+}
+
+func addDependentPrivileges(
+	object tree.AlterDefaultPrivilegesTargetObject,
+	defaultPrivs catpb.PrivilegeDescriptor,
+	role catpb.DefaultPrivilegesRole,
+	userNames map[security.SQLUsername][]objectAndType,
+	dbName string,
+	schemaName string,
+) {
+	var objectType string
+	switch object {
+	case tree.Tables:
+		objectType = "relations"
+	case tree.Sequences:
+		objectType = "sequences"
+	case tree.Types:
+		objectType = "types"
+	case tree.Schemas:
+		objectType = "schemas"
+	}
+
+	inSchemaMsg := ""
+	if schemaName != "" {
+		inSchemaMsg = fmt.Sprintf(" in schema %s", schemaName)
+	}
+
+	createHint := func(
+		role catpb.DefaultPrivilegesRole,
+		grantee security.SQLUsername,
+	) string {
+
+		roleString := "ALL ROLES"
+		if !role.ForAllRoles {
+			roleString = fmt.Sprintf("ROLE %s", role.Role.SQLIdentifier())
+		}
+
+		return fmt.Sprintf("USE %s; ALTER DEFAULT PRIVILEGES FOR %s%s REVOKE ALL ON %s FROM %s;",
+			dbName, roleString, strings.ToUpper(inSchemaMsg), strings.ToUpper(object.String()), grantee.SQLIdentifier())
+	}
+
+	for _, privs := range defaultPrivs.Users {
+		grantee := privs.User()
+		if !role.ForAllRoles {
+			if _, ok := userNames[role.Role]; ok {
+				hint := createHint(role, grantee)
+				userNames[role.Role] = append(userNames[role.Role],
+					objectAndType{
+						ObjectType: defaultPrivilege,
+						ErrorMessage: errors.WithHint(
+							errors.Newf(
+								"owner of default privileges on new %s belonging to role %s in database %s%s",
+								objectType, role.Role, dbName, inSchemaMsg,
+							), hint),
+					})
+			}
+		}
+		if _, ok := userNames[grantee]; ok {
+			hint := createHint(role, grantee)
+			var err error
+			if role.ForAllRoles {
+				err = errors.Newf(
+					"privileges for default privileges on new %s for all roles in database %s%s",
+					objectType, dbName, inSchemaMsg,
+				)
+			} else {
+				err = errors.Newf(
+					"privileges for default privileges on new %s belonging to role %s in database %s%s",
+					objectType, role.Role, dbName, inSchemaMsg,
+				)
+			}
+			userNames[grantee] = append(userNames[grantee],
+				objectAndType{
+					ObjectType:   defaultPrivilege,
+					ErrorMessage: errors.WithHint(err, hint),
+				})
+		}
+	}
+}

@@ -10,7 +10,13 @@
 
 package delegate
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+)
 
 func (d *delegator) delegateShowTypes() (tree.Statement, error) {
 	// TODO (SQL Features, SQL Exec): Once more user defined types are added
@@ -22,4 +28,19 @@ FROM
   [SHOW ENUMS]
 ORDER BY
   (schema, name)`)
+}
+
+func (d *delegator) delegateShowCreateAllTypes() (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
+	const showCreateAllTypesQuery = `
+	SELECT crdb_internal.show_create_all_types(%[1]s) AS create_statement;
+`
+	databaseLiteral := d.evalCtx.SessionData().Database
+
+	query := fmt.Sprintf(showCreateAllTypesQuery,
+		lexbase.EscapeSQLString(databaseLiteral),
+	)
+
+	return parse(query)
 }

@@ -11,6 +11,7 @@
 package clisqlclient
 
 import (
+	"context"
 	"database/sql/driver"
 	"strings"
 
@@ -19,30 +20,36 @@ import (
 )
 
 // QueryFn is the type of functions produced by MakeQuery.
-type QueryFn func(conn Conn) (rows Rows, isMultiStatementQuery bool, err error)
+type QueryFn func(ctx context.Context, conn Conn) (rows Rows, isMultiStatementQuery bool, err error)
 
 // MakeQuery encapsulates a SQL query and its parameter into a
 // function that can be applied to a connection object.
-func MakeQuery(query string, parameters ...driver.Value) QueryFn {
-	return func(conn Conn) (Rows, bool, error) {
+func MakeQuery(query string, parameters ...interface{}) QueryFn {
+	return func(ctx context.Context, conn Conn) (Rows, bool, error) {
 		isMultiStatementQuery, _ := scanner.HasMultipleStatements(query)
-		// driver.Value is an alias for interface{}, but must adhere to a restricted
+		rows, err := conn.Query(ctx, query, parameters...)
+		err = handleCopyError(conn.(*sqlConn), err)
+		return rows, isMultiStatementQuery, err
+	}
+}
+
+func convertArgs(parameters []interface{}) ([]driver.NamedValue, error) {
+	dVals := make([]driver.NamedValue, len(parameters))
+	for i := range parameters {
+		// driver.NamedValue.Value is an alias for interface{}, but must adhere to a restricted
 		// set of types when being passed to driver.Queryer.Query (see
 		// driver.IsValue). We use driver.DefaultParameterConverter to perform the
 		// necessary conversion. This is usually taken care of by the sql package,
 		// but we have to do so manually because we're talking directly to the
 		// driver.
-		for i := range parameters {
-			var err error
-			parameters[i], err = driver.DefaultParameterConverter.ConvertValue(parameters[i])
-			if err != nil {
-				return nil, isMultiStatementQuery, err
-			}
+		var err error
+		dVals[i].Ordinal = i + 1
+		dVals[i].Value, err = driver.DefaultParameterConverter.ConvertValue(parameters[i])
+		if err != nil {
+			return nil, err
 		}
-		rows, err := conn.Query(query, parameters)
-		err = handleCopyError(conn.(*sqlConn), err)
-		return rows, isMultiStatementQuery, err
 	}
+	return dVals, nil
 }
 
 // handleCopyError ensures the user is properly informed when they issue

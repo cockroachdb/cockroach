@@ -13,10 +13,12 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -160,7 +162,7 @@ type avroDataRecord struct {
 	// Allocate Go native representation once, to avoid repeated map allocation
 	// when encoding.
 	native map[string]interface{}
-	alloc  rowenc.DatumAlloc
+	alloc  tree.DatumAlloc
 }
 
 // avroMetadata is the `avroEnvelopeRecord` metadata.
@@ -754,9 +756,22 @@ const (
 // If a name suffix is provided (as opposed to avroSchemaNoSuffix), it will be
 // appended to the end of the avro record's name.
 func tableToAvroSchema(
-	tableDesc catalog.TableDescriptor, nameSuffix string, namespace string,
+	tableDesc catalog.TableDescriptor,
+	familyID descpb.FamilyID,
+	nameSuffix string,
+	namespace string,
+	virtualColumnVisibility string,
 ) (*avroDataRecord, error) {
-	name := SQLNameToAvroName(tableDesc.GetName())
+	family, err := tableDesc.FindFamilyByID(familyID)
+	if err != nil {
+		return nil, err
+	}
+	var name string
+	if tableDesc.NumFamilies() > 1 {
+		name = SQLNameToAvroName(tableDesc.GetName() + family.Name)
+	} else {
+		name = SQLNameToAvroName(tableDesc.GetName())
+	}
 	if nameSuffix != avroSchemaNoSuffix {
 		name = name + `_` + nameSuffix
 	}
@@ -770,15 +785,29 @@ func tableToAvroSchema(
 		colIdxByFieldIdx: make(map[int]int),
 		fieldIdxByColIdx: make(map[int]int),
 	}
+
+	include := make(map[descpb.ColumnID]struct{}, len(family.ColumnIDs))
+	var yes struct{}
+	for _, colID := range family.ColumnIDs {
+		include[colID] = yes
+	}
+
 	for _, col := range tableDesc.PublicColumns() {
-		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}
-		schema.colIdxByFieldIdx[len(schema.Fields)] = col.Ordinal()
-		schema.fieldIdxByName[field.Name] = len(schema.Fields)
-		schema.fieldIdxByColIdx[col.Ordinal()] = len(schema.Fields)
-		schema.Fields = append(schema.Fields, field)
+		_, inFamily := include[col.GetID()]
+		virtual := col.IsVirtual() && virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+		if inFamily || virtual {
+			field, err := columnToAvroSchema(col)
+			if err != nil {
+				return nil, err
+			}
+			schema.colIdxByFieldIdx[len(schema.Fields)] = col.Ordinal()
+			schema.fieldIdxByName[field.Name] = len(schema.Fields)
+			schema.fieldIdxByColIdx[col.Ordinal()] = len(schema.Fields)
+			schema.Fields = append(schema.Fields, field)
+		}
 	}
 	schemaJSON, err := json.Marshal(schema)
 	if err != nil {
@@ -992,7 +1021,7 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 }
 
 // Refresh the metadata for user-defined types on a cached schema
-// The only user-defined type is enum, so this is usually a no-op
+// The only user-defined type is enum, so this is usually a no-op.
 func (r *avroDataRecord) refreshTypeMetadata(tbl catalog.TableDescriptor) {
 	for _, col := range tbl.UserDefinedTypeColumns() {
 		if fieldIdx, ok := r.fieldIdxByColIdx[col.Ordinal()]; ok {
@@ -1015,12 +1044,13 @@ func decimalToRat(dec apd.Decimal, scale int32) (big.Rat, error) {
 	if dec.Exponent >= 0 {
 		exp := big.NewInt(10)
 		exp = exp.Exp(exp, big.NewInt(int64(dec.Exponent)), nil)
-		var coeff big.Int
-		r.SetFrac(coeff.Mul(&dec.Coeff, exp), big.NewInt(1))
+		coeff := dec.Coeff.MathBigInt()
+		r.SetFrac(coeff.Mul(coeff, exp), big.NewInt(1))
 	} else {
 		exp := big.NewInt(10)
 		exp = exp.Exp(exp, big.NewInt(int64(-dec.Exponent)), nil)
-		r.SetFrac(&dec.Coeff, exp)
+		coeff := dec.Coeff.MathBigInt()
+		r.SetFrac(coeff, exp)
 	}
 	if dec.Negative {
 		r.Mul(&r, big.NewRat(-1, 1))
@@ -1036,7 +1066,8 @@ func ratToDecimal(rat big.Rat, scale int32) apd.Decimal {
 	exp := big.NewInt(10)
 	exp = exp.Exp(exp, big.NewInt(int64(scale)), nil)
 	sf := denom.Div(exp, denom)
-	coeff := num.Mul(num, sf)
-	dec := apd.NewWithBigInt(coeff, -scale)
+	var coeff apd.BigInt
+	coeff.SetMathBigInt(num.Mul(num, sf))
+	dec := apd.NewWithBigInt(&coeff, -scale)
 	return *dec
 }

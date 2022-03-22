@@ -57,7 +57,7 @@ func TestRandParseDatumStringAs(t *testing.T) {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	for _, typ := range tests {
 		const testsForTyp = 100
 		t.Run(typ.String(), func(t *testing.T) {

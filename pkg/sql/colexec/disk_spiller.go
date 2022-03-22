@@ -234,16 +234,16 @@ func (d *diskSpillerBase) Reset(ctx context.Context) {
 }
 
 // Close implements the Closer interface.
-func (d *diskSpillerBase) Close() error {
+func (d *diskSpillerBase) Close(ctx context.Context) error {
 	if !d.CloserHelper.Close() {
 		return nil
 	}
 	var retErr error
 	if c, ok := d.inMemoryOp.(colexecop.Closer); ok {
-		retErr = c.Close()
+		retErr = c.Close(ctx)
 	}
 	if c, ok := d.diskBackedOp.(colexecop.Closer); ok {
-		if err := c.Close(); err != nil {
+		if err := c.Close(ctx); err != nil {
 			retErr = err
 		}
 	}

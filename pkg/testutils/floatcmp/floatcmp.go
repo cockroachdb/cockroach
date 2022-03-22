@@ -41,7 +41,7 @@ const (
 // EqualApprox reports whether expected and actual are deeply equal with the
 // following modifications for float64 and float32 types:
 //
-// • If both expected and actual are not NaN or infinate, they are equal within
+// • If both expected and actual are not NaN or infinite, they are equal within
 // the larger of the relative fraction or absolute margin calculated from the
 // fraction and margin arguments.
 //

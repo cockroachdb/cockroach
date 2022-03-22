@@ -90,8 +90,16 @@ func (m *mockFlow) IsLocal() bool {
 	panic("not implemented")
 }
 
+func (m *mockFlow) HasInboundStreams() bool {
+	panic("not implemented")
+}
+
 func (m *mockFlow) IsVectorized() bool {
 	panic("not implemented")
+}
+
+func (m *mockFlow) StatementSQL() string {
+	return ""
 }
 
 func (m *mockFlow) GetFlowCtx() *execinfra.FlowCtx {
@@ -124,7 +132,7 @@ func TestFlowScheduler(t *testing.T) {
 	)
 	defer stopper.Stop(ctx)
 
-	scheduler := NewFlowScheduler(log.AmbientContext{}, stopper, settings)
+	scheduler := NewFlowScheduler(log.MakeTestingAmbientCtxWithNewTracer(), stopper, settings)
 	scheduler.Init(&metrics)
 	scheduler.Start()
 	getNumRunning := func() int {
@@ -163,7 +171,7 @@ func TestFlowScheduler(t *testing.T) {
 			atomic.AddInt32(&numCompletedFlows, 1)
 		}
 
-		rng, _ := randutil.NewPseudoRand()
+		rng, _ := randutil.NewTestRand()
 		maxNumActiveFlows := rng.Intn(5) + 1
 		scheduler.atomics.maxRunningFlows = int32(maxNumActiveFlows)
 		numFlows := maxNumActiveFlows*(rng.Intn(3)+1) + rng.Intn(2)

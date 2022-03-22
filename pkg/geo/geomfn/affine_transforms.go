@@ -11,11 +11,12 @@
 package geomfn
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -100,7 +101,10 @@ func translate(t geom.T, deltas []float64) (geom.T, error) {
 			Got:  len(deltas),
 			Want: t.Layout().Stride(),
 		}
-		return nil, errors.Wrap(err, "translating coordinates")
+		return nil, pgerror.WithCandidateCode(
+			errors.Wrap(err, "translating coordinates"),
+			pgcode.InvalidParameterValue,
+		)
 	}
 	var zOff float64
 	if t.Layout().ZIndex() != -1 {
@@ -156,7 +160,7 @@ func ScaleRelativeToOrigin(
 
 	factorPointG, ok := factorG.(*geom.Point)
 	if !ok {
-		return geo.Geometry{}, errors.Newf("the scaling factor must be a Point")
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "the scaling factor must be a Point")
 	}
 
 	originG, err := origin.AsGeomT()
@@ -166,7 +170,7 @@ func ScaleRelativeToOrigin(
 
 	originPointG, ok := originG.(*geom.Point)
 	if !ok {
-		return geo.Geometry{}, errors.Newf("the false origin must be a Point")
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "the false origin must be a Point")
 	}
 
 	if factorG.Stride() != originG.Stride() {
@@ -174,14 +178,17 @@ func ScaleRelativeToOrigin(
 			Got:  factorG.Stride(),
 			Want: originG.Stride(),
 		}
-		return geo.Geometry{}, errors.Wrap(err, "number of dimensions for the scaling factor and origin must be equal")
+		return geo.Geometry{}, pgerror.WithCandidateCode(
+			errors.Wrap(err, "number of dimensions for the scaling factor and origin must be equal"),
+			pgcode.InvalidParameterValue,
+		)
 	}
 
 	// This is inconsistent with PostGIS, which allows a POINT EMPTY, but whose
 	// behavior seems to depend on previous queries in the session, and not
 	// desirable to reproduce.
 	if len(originPointG.FlatCoords()) < 2 {
-		return geo.Geometry{}, errors.Newf("the origin must have at least 2 coordinates")
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "the origin must have at least 2 coordinates")
 	}
 
 	// Offset by the origin, scale, and translate it back to the origin.
@@ -246,7 +253,7 @@ func Rotate(g geo.Geometry, rotRadians float64) (geo.Geometry, error) {
 }
 
 // ErrPointOriginEmpty is an error to compare point origin is empty.
-var ErrPointOriginEmpty = fmt.Errorf("origin is an empty point")
+var ErrPointOriginEmpty = pgerror.Newf(pgcode.InvalidParameterValue, "origin is an empty point")
 
 // RotateWithPointOrigin returns a modified Geometry whose coordinates are rotated
 // around the pointOrigin by a rotRadians.
@@ -254,7 +261,7 @@ func RotateWithPointOrigin(
 	g geo.Geometry, rotRadians float64, pointOrigin geo.Geometry,
 ) (geo.Geometry, error) {
 	if pointOrigin.ShapeType() != geopb.ShapeType_Point {
-		return g, errors.New("origin is not a POINT")
+		return g, pgerror.Newf(pgcode.InvalidParameterValue, "origin is not a POINT")
 	}
 	t, err := pointOrigin.AsGeomT()
 	if err != nil {

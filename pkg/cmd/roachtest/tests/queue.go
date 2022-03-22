@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -43,7 +45,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Distribute programs to the correct nodes and start CockroachDB.
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, dbNodeCount))
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
-	c.Start(ctx, c.Range(1, dbNodeCount))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, dbNodeCount))
 
 	runQueueWorkload := func(duration time.Duration, initTables bool) {
 		m := c.NewMonitor(ctx, c.Range(1, dbNodeCount))
@@ -73,7 +75,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// getQueueScanTime samples the time to run a statement that scans the queue
 	// table.
 	getQueueScanTime := func() time.Duration {
-		db := c.Conn(ctx, 1)
+		db := c.Conn(ctx, t.L(), 1)
 		sampleCount := 5
 		samples := make([]time.Duration, sampleCount)
 		for i := 0; i < sampleCount; i++ {
@@ -100,7 +102,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	scanTimeBefore := getQueueScanTime()
 
 	// Set TTL on table queue.queue to 0, so that rows are deleted immediately
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	_, err := db.ExecContext(ctx, `ALTER TABLE queue.queue CONFIGURE ZONE USING gc.ttlseconds = 30`)
 	if err != nil && strings.Contains(err.Error(), "syntax error") {
 		// Pre-2.1 was EXPERIMENTAL.

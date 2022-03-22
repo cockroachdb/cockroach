@@ -93,10 +93,11 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS
 
 			kvRowsReadRegex := regexp.MustCompile(`KV rows read: (\d+)`)
 			batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
+			mvccStepCountRegex := regexp.MustCompile(`MVCC step count \(ext/int\): (\d+)/\d+`)
 			testutils.SucceedsSoon(t, func() error {
-				rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE, DISTSQL) `+testCase.query)
+				rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE) `+testCase.query)
 				assert.NoError(t, err)
-				foundKVRowsRead, foundBatches := -1, -1
+				foundKVRowsRead, foundBatches, foundMVCCSteps := -1, -1, -1
 				var sb strings.Builder
 				for rows.Next() {
 					var res string
@@ -109,6 +110,9 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS
 					} else if matches = batchCountRegex.FindStringSubmatch(res); len(matches) > 0 {
 						foundBatches, err = strconv.Atoi(matches[1])
 						assert.NoError(t, err)
+					} else if matches = mvccStepCountRegex.FindStringSubmatch(res); len(matches) > 0 {
+						foundMVCCSteps, err = strconv.Atoi(matches[1])
+						assert.NoError(t, err)
 					}
 				}
 				if foundKVRowsRead != testCase.expectedKVRowsRead {
@@ -116,6 +120,9 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS
 				}
 				if foundBatches != 1 {
 					return fmt.Errorf("should use just 1 batch to scan rows, found %d:\n%s", foundBatches, sb.String())
+				}
+				if foundMVCCSteps != testCase.expectedKVRowsRead {
+					return fmt.Errorf("expected to do %d MVCC steps, found %d", testCase.expectedKVRowsRead, foundMVCCSteps)
 				}
 				return nil
 			})
@@ -141,11 +148,13 @@ func TestCFetcherLimitsOutputBatch(t *testing.T) {
 	// such setup the cFetcher will allocate an output batch of capacity 50, yet
 	// after setting the 7th or so row the footprint of the batch will exceed
 	// the memory limit. As a result, we will get around 7 batches.
-	_, err := conn.ExecContext(ctx, `
-SET distsql_workmem='128KiB';
-CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, repeat('a', 16 * 1024) FROM generate_series(1, 50) AS g(i);
-ANALYZE t
-`)
+	_, err := conn.ExecContext(ctx, `SET distsql_workmem='128KiB';`)
+	assert.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `
+CREATE TABLE t (a PRIMARY KEY, b) AS
+SELECT i, repeat('a', 16 * 1024) FROM generate_series(1, 50) AS g(i);`)
+	assert.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `ANALYZE t`)
 	assert.NoError(t, err)
 
 	batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)

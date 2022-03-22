@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -26,7 +27,7 @@ func TestParseComputedColumnRewrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	path := "testdata/computed_column_rewrites"
+	path := testutils.TestDataPath(t, "computed_column_rewrites")
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "parse":

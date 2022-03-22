@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // unnestFuncs maps function names that are supported by
@@ -48,6 +48,10 @@ func (c *CustomFuncs) CanConstructValuesFromZips(zip memo.ZipExpr) bool {
 		}
 		if !c.IsStaticArray(fn.Args[0]) && !c.WrapsJSONArray(fn.Args[0]) {
 			// Argument is not an ArrayExpr or ConstExpr wrapping a DArray or DJSON.
+			return false
+		}
+		if fn.Overload.GeneratorWithExprs != nil {
+			// ConstructValuesFromZips does not handle GeneratorWithExprs.
 			return false
 		}
 	}
@@ -113,18 +117,21 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 			// Use a ValueGenerator to retrieve values from the datums wrapped
 			// in the ConstExpr. These generators are used at runtime to unnest
 			// values from regular and JSON arrays.
+			if function.Overload.GeneratorWithExprs != nil {
+				panic(errors.AssertionFailedf("unexpected GeneratorWithExprs"))
+			}
 			generator, err := function.Overload.Generator(c.f.evalCtx, tree.Datums{t.Value})
 			if err != nil {
-				panic(errors.AssertionFailedf("generator retrieval failed: %v", err))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator retrieval failed"))
 			}
 			if err = generator.Start(c.f.evalCtx.Context, c.f.evalCtx.Txn); err != nil {
-				panic(errors.AssertionFailedf("generator.Start failed: %v", err))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator.Start failed"))
 			}
 
 			for j := 0; ; j++ {
 				hasNext, err := generator.Next(c.f.evalCtx.Context)
 				if err != nil {
-					panic(errors.AssertionFailedf("generator.Next failed: %v", err))
+					panic(errors.NewAssertionErrorWithWrappedErrf(err, "generator.Next failed"))
 				}
 				if !hasNext {
 					break
@@ -132,11 +139,11 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 
 				vals, err := generator.Values()
 				if err != nil {
-					panic(errors.AssertionFailedf("failed to retrieve values: %v", err))
+					panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to retrieve values"))
 				}
 				if len(vals) != 1 {
 					panic(errors.AssertionFailedf(
-						"ValueGenerator didn't return exactly one value: %v", log.Safe(vals)))
+						"ValueGenerator didn't return exactly one value: %v", redact.Safe(vals)))
 				}
 				val := c.f.ConstructConstVal(vals[0], vals[0].ResolvedType())
 				addValToOutRows(val, j, i)

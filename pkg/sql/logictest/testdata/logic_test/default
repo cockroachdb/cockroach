@@ -30,11 +30,11 @@ CREATE TABLE t (
 query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default     generation_expression  indices    is_hidden
-a            INT8       false        42:::INT8          ·                      {primary}  false
-b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {primary}  false
-c            FLOAT8     true         random()           ·                      {primary}  false
-d            DATE       true         now():::DATE       ·                      {primary}  false
+column_name  data_type  is_nullable  column_default     generation_expression  indices   is_hidden
+a            INT8       false        42:::INT8          ·                      {t_pkey}  false
+b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {t_pkey}  false
+c            FLOAT8     true         random()           ·                      {t_pkey}  false
+d            DATE       true         now():::DATE       ·                      {t_pkey}  false
 
 statement ok
 COMMENT ON COLUMN t.a IS 'a'
@@ -42,11 +42,11 @@ COMMENT ON COLUMN t.a IS 'a'
 query TTBTTTBT colnames
 SHOW COLUMNS FROM t WITH COMMENT
 ----
-column_name  data_type  is_nullable  column_default     generation_expression  indices    is_hidden  comment
-a            INT8       false        42:::INT8          ·                      {primary}  false      a
-b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {primary}  false      NULL
-c            FLOAT8     true         random()           ·                      {primary}  false      NULL
-d            DATE       true         now():::DATE       ·                      {primary}  false      NULL
+column_name  data_type  is_nullable  column_default     generation_expression  indices   is_hidden  comment
+a            INT8       false        42:::INT8          ·                      {t_pkey}  false      a
+b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {t_pkey}  false      NULL
+c            FLOAT8     true         random()           ·                      {t_pkey}  false      NULL
+d            DATE       true         now():::DATE       ·                      {t_pkey}  false      NULL
 
 statement ok
 INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT, DEFAULT)
@@ -125,10 +125,10 @@ UPDATE v SET (a, c) = (DEFAULT, DEFAULT)
 query TTBTTTB colnames
 SHOW COLUMNS FROM v
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT8       false        NULL            ·                      {primary}  false
-b            TIMESTAMP  true         NULL            ·                      {primary}  false
-c            INT8       true         NULL            ·                      {primary}  false
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+a            INT8       false        NULL            ·                      {v_pkey}  false
+b            TIMESTAMP  true         NULL            ·                      {v_pkey}  false
+c            INT8       true         NULL            ·                      {v_pkey}  false
 
 # Regression test for #34901: verify that builtins can be used in default value
 # expressions without a "memory budget exceeded" error while backfilling

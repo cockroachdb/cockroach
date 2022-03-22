@@ -20,41 +20,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/kr/pretty"
 )
-
-// initialStats are the stats for a Replica which has been created through
-// bootstrapRangeOnly. These stats are not empty because we call
-// writeInitialState().
-func initialStats() enginepb.MVCCStats {
-	return enginepb.MVCCStats{
-		SysBytes: 66,
-		SysCount: 2,
-	}
-}
-func TestRangeStatsEmpty(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	tc := testContext{
-		bootstrapMode: bootstrapRangeOnly,
-	}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
-
-	ms := tc.repl.GetMVCCStats()
-	if exp := initialStats(); !reflect.DeepEqual(ms, exp) {
-		t.Errorf("unexpected stats diff(exp, actual):\n%s", pretty.Diff(exp, ms))
-	}
-}
 
 func TestRangeStatsInit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 	ms := enginepb.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,
@@ -69,10 +44,10 @@ func TestRangeStatsInit(t *testing.T) {
 		LastUpdateNanos: 11,
 	}
 	rsl := stateloader.Make(tc.repl.RangeID)
-	if err := rsl.SetMVCCStats(context.Background(), tc.engine, &ms); err != nil {
+	if err := rsl.SetMVCCStats(ctx, tc.engine, &ms); err != nil {
 		t.Fatal(err)
 	}
-	loadMS, err := rsl.LoadMVCCStats(context.Background(), tc.engine)
+	loadMS, err := rsl.LoadMVCCStats(ctx, tc.engine)
 	if err != nil {
 		t.Fatal(err)
 	}

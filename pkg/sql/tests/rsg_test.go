@@ -127,8 +127,21 @@ func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) er
 func (db *verifyFormatDB) execWithTimeout(
 	t *testing.T, ctx context.Context, sql string, duration time.Duration,
 ) error {
-	if err := verifyFormat(sql); err != nil {
-		db.verifyFormatErr = err
+	if err := func() (retErr error) {
+		defer func() {
+			if err := recover(); err != nil {
+				retErr = errors.CombineErrors(
+					errors.AssertionFailedf("panic executing %s: err %v", sql, err),
+					retErr,
+				)
+			}
+		}()
+		if err := verifyFormat(sql); err != nil {
+			db.verifyFormatErr = err
+			return err
+		}
+		return nil
+	}(); err != nil {
 		return err
 	}
 
@@ -152,7 +165,9 @@ func (db *verifyFormatDB) execWithTimeout(
 					}
 				}
 			}
-			if es := err.Error(); strings.Contains(es, "internal error") ||
+			// TODO(yuzefovich): allow "no volatility for cast tuple" errors to
+			// fail once #70831 is resolved.
+			if es := err.Error(); (strings.Contains(es, "internal error") && !strings.Contains(es, "no volatility for cast tuple")) ||
 				strings.Contains(es, "driver: bad connection") ||
 				strings.Contains(es, "unexpected error inside CockroachDB") {
 				return &crasher{
@@ -281,9 +296,12 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				switch lower {
 				case "pg_sleep":
 					continue
-				case "st_frechetdistance":
-					// Calculating the Frechet distance is slow and testing it here
+				case "st_frechetdistance", "st_buffer":
+					// Some spatial function are slow and testing them here
 					// is not worth it.
+					continue
+				case "crdb_internal.reset_sql_stats", "crdb_internal.check_consistency":
+					// Skipped due to long execution time.
 					continue
 				}
 				_, variations := builtins.GetBuiltinProperties(name)
@@ -525,6 +543,7 @@ var ignoredErrorPatterns = []string{
 	// TODO(mjibson): fix these
 	"column .* must appear in the GROUP BY clause or be used in an aggregate function",
 	"aggregate functions are not allowed in ON",
+	"ordered-set aggregations must have a WITHIN GROUP clause containing one ORDER BY column",
 }
 
 var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
@@ -538,14 +557,17 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 
 	tableStmts := make([]string, 0)
 	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		setups := []string{"rand-tables", "seed"}
+		setups := []string{sqlsmith.RandTableSetupName, "seed"}
 		for _, s := range setups {
 			randTables := sqlsmith.Setups[s](r.Rnd)
-			if err := db.exec(t, ctx, randTables); err != nil {
-				return err
+			for _, stmt := range randTables {
+				if err := db.exec(t, ctx, stmt); err != nil {
+					return err
+				}
+				tableStmts = append(tableStmts, stmt)
+				t.Logf("%s;", stmt)
 			}
-			tableStmts = append(tableStmts, randTables)
-			t.Logf("%s;", randTables)
+
 		}
 		var err error
 		smither, err = sqlsmith.NewSmither(db.db, r.Rnd, sqlsmith.DisableMutations())

@@ -10,7 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",
         "//pkg/sql/rowenc",

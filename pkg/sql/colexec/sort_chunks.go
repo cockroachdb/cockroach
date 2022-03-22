@@ -35,7 +35,7 @@ func NewSortChunks(
 	orderingCols []execinfrapb.Ordering_Column,
 	matchLen int,
 	maxOutputBatchMemSize int64,
-) (colexecop.Operator, error) {
+) colexecop.Operator {
 	if matchLen < 1 || matchLen == len(orderingCols) {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"sort chunks should only be used when the input is "+
@@ -46,15 +46,9 @@ func NewSortChunks(
 	for i := range alreadySortedCols {
 		alreadySortedCols[i] = orderingCols[i].ColIdx
 	}
-	chunker, err := newChunker(allocator, input, inputTypes, alreadySortedCols, false /* nullsAreDistinct */)
-	if err != nil {
-		return nil, err
-	}
-	sorter, err := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:], maxOutputBatchMemSize)
-	if err != nil {
-		return nil, err
-	}
-	return &sortChunksOp{allocator: allocator, input: chunker, sorter: sorter}, nil
+	chunker := newChunker(allocator, input, inputTypes, alreadySortedCols, false /* nullsAreDistinct */)
+	sorter := newSorter(allocator, chunker, inputTypes, orderingCols[matchLen:], maxOutputBatchMemSize)
+	return &sortChunksOp{allocator: allocator, input: chunker, sorter: sorter}
 }
 
 type sortChunksOp struct {
@@ -267,14 +261,10 @@ func newChunker(
 	inputTypes []*types.T,
 	alreadySortedCols []uint32,
 	nullsAreDistinct bool,
-) (*chunker, error) {
-	var err error
+) *chunker {
 	partitioners := make([]partitioner, len(alreadySortedCols))
 	for i, col := range alreadySortedCols {
-		partitioners[i], err = newPartitioner(inputTypes[col], nullsAreDistinct)
-		if err != nil {
-			return nil, err
-		}
+		partitioners[i] = newPartitioner(inputTypes[col], nullsAreDistinct)
 	}
 	deselector := colexecutils.NewDeselectorOp(allocator, input, inputTypes)
 	return &chunker{
@@ -285,7 +275,7 @@ func newChunker(
 		nullsAreDistinct:  nullsAreDistinct,
 		partitioners:      partitioners,
 		state:             chunkerReading,
-	}, nil
+	}
 }
 
 func (s *chunker) init(ctx context.Context) {

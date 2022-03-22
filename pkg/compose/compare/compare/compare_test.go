@@ -11,6 +11,7 @@
 // "make test" would normally test this file, but it should only be tested
 // within docker compose.
 
+//go:build compose
 // +build compose
 
 package compare
@@ -68,7 +69,7 @@ func TestCompare(t *testing.T) {
 	}
 	configs := map[string]testConfig{
 		"postgres": {
-			setup:           sqlsmith.Setups["rand-tables"],
+			setup:           sqlsmith.Setups[sqlsmith.RandTableSetupName],
 			setupMutators:   []randgen.Mutator{randgen.PostgresCreateTableMutator},
 			opts:            []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
 			ignoreSQLErrors: true,
@@ -84,7 +85,7 @@ func TestCompare(t *testing.T) {
 			},
 		},
 		"mutators": {
-			setup:           sqlsmith.Setups["rand-tables"],
+			setup:           sqlsmith.Setups[sqlsmith.RandTableSetupName],
 			opts:            []sqlsmith.SmitherOption{sqlsmith.CompareMode()},
 			ignoreSQLErrors: true,
 			conns: []testConn{
@@ -123,9 +124,11 @@ func TestCompare(t *testing.T) {
 	for confName, config := range configs {
 		t.Run(confName, func(t *testing.T) {
 			t.Logf("starting test: %s", confName)
-			rng, _ := randutil.NewPseudoRand()
+			rng, _ := randutil.NewTestRand()
 			setup := config.setup(rng)
-			setup, _ = randgen.ApplyString(rng, setup, config.setupMutators...)
+			for i := range setup {
+				setup[i], _ = randgen.ApplyString(rng, setup[i], config.setupMutators...)
+			}
 
 			conns := map[string]cmpconn.Conn{}
 			for _, testCn := range config.conns {
@@ -134,20 +137,26 @@ func TestCompare(t *testing.T) {
 				if !ok {
 					t.Fatalf("bad connection name: %s", testCn.name)
 				}
-				conn, err := cmpconn.NewConnWithMutators(uri.addr, rng, testCn.mutators)
+				conn, err := cmpconn.NewConnWithMutators(ctx, uri.addr, rng, testCn.mutators)
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer conn.Close()
+
+				defer func(conn cmpconn.Conn) {
+					conn.Close(ctx)
+				}(conn)
+
 				for _, init := range uri.init {
 					if err := conn.Exec(ctx, init); err != nil {
 						t.Fatalf("%s: %v", testCn.name, err)
 					}
 				}
-				connSetup, _ := randgen.ApplyString(rng, setup, testCn.mutators...)
-				if err := conn.Exec(ctx, connSetup); err != nil {
-					t.Log(connSetup)
-					t.Fatalf("%s: %v", testCn.name, err)
+				for i := range setup {
+					stmt, _ := randgen.ApplyString(rng, setup[i], testCn.mutators...)
+					if err := conn.Exec(ctx, stmt); err != nil {
+						t.Log(stmt)
+						t.Fatalf("%s: %v", testCn.name, err)
+					}
 				}
 				conns[testCn.name] = conn
 			}
@@ -181,10 +190,10 @@ func TestCompare(t *testing.T) {
 					ignoredErrCount++
 				}
 				totalQueryCount++
-				// Make sure we can still ping on a connection. If we can't we may have
+				// Make sure we can still ping on a connection. If we can't, we may have
 				// crashed something.
 				for name, conn := range conns {
-					if err := conn.Ping(); err != nil {
+					if err := conn.Ping(ctx); err != nil {
 						t.Log(query)
 						t.Fatalf("%s: ping: %v", name, err)
 					}

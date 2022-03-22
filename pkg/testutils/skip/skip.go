@@ -17,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // SkippableTest is a testing.TB with Skip methods.
@@ -48,6 +50,26 @@ func IgnoreLintf(t SkippableTest, format string, args ...interface{}) {
 	t.Skipf(format, args...)
 }
 
+// UnderDeadlock skips this test if the deadlock detector is enabled.
+func UnderDeadlock(t SkippableTest, args ...interface{}) {
+	t.Helper()
+	if syncutil.DeadlockEnabled {
+		t.Skip(append([]interface{}{"disabled under deadlock detector"}, args...))
+	}
+}
+
+// UnderDeadlockWithIssue skips this test if the deadlock detector is enabled,
+// logging the given issue ID as the reason.
+func UnderDeadlockWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	if syncutil.DeadlockEnabled {
+		t.Skip(append([]interface{}{fmt.Sprintf(
+			"disabled under deadlock detector. issue: https://github.com/cockroachdb/cockroach/issue/%d",
+			githubIssueID,
+		)}, args...))
+	}
+}
+
 // UnderRace skips this test if the race detector is enabled.
 func UnderRace(t SkippableTest, args ...interface{}) {
 	t.Helper()
@@ -67,6 +89,14 @@ func UnderRaceWithIssue(t SkippableTest, githubIssueID int, args ...interface{})
 	}
 }
 
+// UnderBazel skips this test if run under bazel.
+func UnderBazel(t SkippableTest, args ...interface{}) {
+	t.Helper()
+	if bazel.BuiltWithBazel() {
+		t.Skip(append([]interface{}{"disabled under bazel"}, args...))
+	}
+}
+
 // UnderBazelWithIssue skips this test if we are building inside bazel,
 // logging the given issue ID as the reason.
 func UnderBazelWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
@@ -77,6 +107,9 @@ func UnderBazelWithIssue(t SkippableTest, githubIssueID int, args ...interface{}
 		)}, args...))
 	}
 }
+
+// Ignore unused warnings.
+var _ = UnderBazelWithIssue
 
 // UnderShort skips this test if the -short flag is specified.
 func UnderShort(t SkippableTest, args ...interface{}) {
@@ -109,6 +142,14 @@ func UnderMetamorphic(t SkippableTest, args ...interface{}) {
 	t.Helper()
 	if util.IsMetamorphicBuild() {
 		t.Skip(append([]interface{}{"disabled under metamorphic"}, args...))
+	}
+}
+
+// UnderNonTestBuild skips this test if the build does not have the crdb_test
+// tag.
+func UnderNonTestBuild(t SkippableTest) {
+	if !buildutil.CrdbTestBuild {
+		t.Skip("crdb_test tag required for this test")
 	}
 }
 

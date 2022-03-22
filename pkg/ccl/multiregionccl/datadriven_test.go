@@ -19,11 +19,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -107,7 +113,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	skip.UnderRace(t, "flaky test")
 
 	ctx := context.Background()
-	datadriven.Walk(t, "testdata/", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		ds := datadrivenTestState{}
 		defer ds.cleanup(ctx)
 		var mu syncutil.Mutex
@@ -116,7 +122,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "sleep-for-follower-read":
-				time.Sleep(time.Millisecond * 4400)
+				time.Sleep(time.Second)
 			case "new-cluster":
 				if ds.tc != nil {
 					t.Fatal("cluster already exists, cleanup cluster first")
@@ -162,20 +168,13 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
-				// Speed up closing of timestamps, as we need in order to be able to use
-				// follower_read_timestamp().
-				// Every 0.2s we'll close the timestamp from 0.4s ago. We'll attempt
-				// follower reads for anything below 0.4s * (1 + 0.5 * 20) = 4.4s.
+				// Speed up closing of timestamps, in order to sleep less below before
+				// we can use follower_read_timestamp(). follower_read_timestamp() uses
+				// sum of the following settings.
 				_, err = sqlConn.Exec(
-					"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s'")
-				if err != nil {
-					return err.Error()
-				}
-				_, err = sqlConn.Exec("SET CLUSTER SETTING kv.closed_timestamp.close_fraction = 0.5")
-				if err != nil {
-					return err.Error()
-				}
-				_, err = sqlConn.Exec("SET CLUSTER SETTING kv.follower_read.target_multiple = 20")
+					"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s';" +
+						"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s';" +
+						"SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'")
 				if err != nil {
 					return err.Error()
 				}
@@ -277,30 +276,17 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				return entry.ClosedTimestampPolicy().String()
 
 			case "wait-for-zone-config-changes":
-				mustHaveArgOrFatal(t, d, tableName)
-				mustHaveArgOrFatal(t, d, serverIdx)
-
-				var idx int
-				d.ScanArgs(t, serverIdx, &idx)
-				sqlDB, err := ds.getSQLConn(idx)
+				lookupKey, err := getRangeKeyForInput(t, d, ds.tc)
 				if err != nil {
 					return err.Error()
 				}
-				var tbName string
-				d.ScanArgs(t, tableName, &tbName)
-				var tableID uint32
-				err = sqlDB.QueryRow(
-					`SELECT id from system.namespace WHERE name=$1`, tbName).Scan(&tableID)
-				if err != nil {
-					return err.Error()
-				}
-				tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
+				lookupRKey := keys.MustAddr(lookupKey)
 
 				// There's a lot going on here and things can fail at various steps, for
 				// completely legitimate reasons, which is why this thing needs to be
 				// wrapped in a succeeds soon.
 				if err := testutils.SucceedsSoonError(func() error {
-					desc, err := ds.tc.LookupRange(tablePrefix.AsRawKey())
+					desc, err := ds.tc.LookupRange(lookupKey)
 					if err != nil {
 						return err
 					}
@@ -320,7 +306,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					repl := store.LookupReplica(tablePrefix)
+					repl := store.LookupReplica(lookupRKey)
 					if repl == nil {
 						return errors.New(`could not find replica`)
 					}
@@ -408,6 +394,8 @@ const (
 	serverIdx        = "idx"
 	serverLocalities = "localities"
 	tableName        = "table-name"
+	dbName           = "db-name"
+	partitionName    = "partition-name"
 	numVoters        = "num-voters"
 	numNonVoters     = "num-non-voters"
 )
@@ -583,7 +571,7 @@ func parseReplicasFromRange(
 
 	leaseHolder, err := tc.FindRangeLeaseHolder(desc, nil)
 	if err != nil {
-		return nil, errors.Newf("could not get leaseholder: %v", err)
+		return nil, errors.Wrap(err, "could not get leaseholder")
 	}
 	leaseHolderIdx := nodeIdToIdx(t, tc, leaseHolder.NodeID)
 	replicaMap[leaseHolderIdx] = replicaTypeLeaseholder
@@ -669,4 +657,100 @@ func (r *replicaPlacement) getLeaseholder() int {
 
 func (r *replicaPlacement) getReplicaType(nodeIdx int) replicaType {
 	return r.nodeToReplicaType[nodeIdx]
+}
+
+func getRangeKeyForInput(
+	t *testing.T, d *datadriven.TestData, tc serverutils.TestClusterInterface,
+) (roachpb.Key, error) {
+	mustHaveArgOrFatal(t, d, dbName)
+	mustHaveArgOrFatal(t, d, tableName)
+
+	var tbName string
+	d.ScanArgs(t, tableName, &tbName)
+	var db string
+	d.ScanArgs(t, dbName, &db)
+
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+
+	tableDesc, err := lookupTable(&execCfg, db, tbName)
+	if err != nil {
+		return nil, err
+	}
+
+	if !d.HasArg(partitionName) {
+		return tableDesc.TableSpan(keys.SystemSQLCodec).Key, nil
+	}
+
+	var partition string
+	d.ScanArgs(t, partitionName, &partition)
+
+	primaryInd := tableDesc.GetPrimaryIndex()
+
+	part := primaryInd.GetPartitioning()
+	if part == nil {
+		return []byte{},
+			errors.Newf("could not get partitioning for primary index on table %s", tbName)
+	}
+
+	var listVal []byte
+	for _, val := range part.PartitioningDesc().List {
+		if val.Name == partition && len(val.Values) > 0 {
+			listVal = val.Values[0]
+		}
+	}
+	if listVal == nil {
+		return nil, errors.Newf(
+			"could not find list tuple for partition %s on table %s",
+			partition,
+			tbName,
+		)
+	}
+
+	_, keyPrefix, err := rowenc.DecodePartitionTuple(
+		&tree.DatumAlloc{},
+		keys.SystemSQLCodec,
+		tableDesc,
+		primaryInd,
+		part,
+		listVal,
+		tree.Datums{},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return keyPrefix, nil
+}
+
+func lookupTable(ec *sql.ExecutorConfig, database, table string) (catalog.TableDescriptor, error) {
+	tbName, err := parser.ParseQualifiedTableName(database + ".public." + table)
+	if err != nil {
+		return nil, err
+	}
+
+	var tableDesc catalog.TableDescriptor
+
+	err = sql.DescsTxn(
+		context.Background(),
+		ec,
+		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+			_, desc, err := col.GetImmutableTableByName(ctx, txn, tbName, tree.ObjectLookupFlags{
+				DesiredObjectKind: tree.TableObject,
+			})
+			if err != nil {
+				return err
+			}
+			tableDesc = desc
+			return nil
+		})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if tableDesc == nil {
+		return nil, errors.Newf("could not find table %s", table)
+	}
+
+	return tableDesc, nil
 }

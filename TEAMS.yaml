@@ -37,6 +37,7 @@ cockroachdb/sql-observability:
 cockroachdb/kv:
   aliases:
     cockroachdb/kv-triage: roachtest
+    cockroachdb/kv-prs: other
   triage_column_id: 14242655
 cockroachdb/geospatial:
   triage_column_id: 9487269
@@ -50,6 +51,8 @@ cockroachdb/test-eng:
   triage_column_id: 14041337
 cockroachdb/security:
   triage_column_id: 0 # TODO
+cockroachdb/prodsec:
+  triage_column_id: 0 # TODO as well
 cockroachdb/bulk-io:
   aliases:
     cockroachdb/bulk-prs: other
@@ -68,9 +71,7 @@ cockroachdb/cluster-ui:
   aliases:
     cockroachdb/cluster-ui-prs: other
   triage_column_id: 6598672
-cockroachdb/obs-inf:
-  aliases:
-    cockroachdb/obs-inf-prs: other
+cockroachdb/obs-inf-prs:
   triage_column_id: 14196277
 cockroachdb/unowned:
   aliases:

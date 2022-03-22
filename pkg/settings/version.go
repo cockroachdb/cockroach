@@ -46,7 +46,7 @@ type VersionSettingImpl interface {
 	// Validate checks whether an version update is permitted. It takes in the
 	// old and the proposed new value (both in encoded form). This is called by
 	// SET CLUSTER SETTING.
-	Validate(ctx context.Context, sv *Values, oldV, newV []byte) ([]byte, error)
+	ValidateVersionUpgrade(ctx context.Context, sv *Values, oldV, newV []byte) error
 
 	// ValidateBinaryVersions is a subset of Validate. It only checks that the
 	// current binary supports the proposed version. This is called when the
@@ -90,10 +90,8 @@ func (v *VersionSetting) Decode(val []byte) (ClusterVersionImpl, error) {
 // Validate checks whether an version update is permitted. It takes in the
 // old and the proposed new value (both in encoded form). This is called by
 // SET CLUSTER SETTING.
-func (v *VersionSetting) Validate(
-	ctx context.Context, sv *Values, oldV, newV []byte,
-) ([]byte, error) {
-	return v.impl.Validate(ctx, sv, oldV, newV)
+func (v *VersionSetting) Validate(ctx context.Context, sv *Values, oldV, newV []byte) error {
+	return v.impl.ValidateVersionUpgrade(ctx, sv, oldV, newV)
 }
 
 // SettingsListDefault returns the value that should be presented by
@@ -121,12 +119,12 @@ func (v *VersionSetting) String(sv *Values) string {
 	return cv.String()
 }
 
-// Encoded is part of the WritableSetting interface.
+// Encoded is part of the NonMaskedSetting interface.
 func (v *VersionSetting) Encoded(sv *Values) string {
 	return v.Get(sv)
 }
 
-// EncodedDefault is part of the WritableSetting interface.
+// EncodedDefault is part of the NonMaskedSetting interface.
 func (v *VersionSetting) EncodedDefault() string {
 	return "unsupported"
 }
@@ -140,19 +138,19 @@ func (v *VersionSetting) EncodedDefault() string {
 func (v *VersionSetting) Get(sv *Values) string {
 	encV := v.GetInternal(sv)
 	if encV == nil {
-		panic(fmt.Sprintf("missing value for version setting in slot %d", v.getSlotIdx()))
+		panic(fmt.Sprintf("missing value for version setting in slot %d", v.slot))
 	}
 	return string(encV.([]byte))
 }
 
 // GetInternal returns the setting's current value.
 func (v *VersionSetting) GetInternal(sv *Values) interface{} {
-	return sv.getGeneric(v.getSlotIdx())
+	return sv.getGeneric(v.slot)
 }
 
 // SetInternal updates the setting's value in the provided Values container.
 func (v *VersionSetting) SetInternal(ctx context.Context, sv *Values, newVal interface{}) {
-	sv.setGeneric(ctx, v.getSlotIdx(), newVal)
+	sv.setGeneric(ctx, v.slot, newVal)
 }
 
 // setToDefault is part of the extendingSetting interface. This is a no-op for
@@ -165,26 +163,6 @@ func (v *VersionSetting) setToDefault(ctx context.Context, sv *Values) {}
 
 // RegisterVersionSetting adds the provided version setting to the global
 // registry.
-func RegisterVersionSetting(key, desc string, setting *VersionSetting) {
-	register(key, desc, setting)
-}
-
-// TestingRegisterVersionSetting is like RegisterVersionSetting,
-// but it takes a VersionSettingImpl.
-func TestingRegisterVersionSetting(key, desc string, impl VersionSettingImpl) *VersionSetting {
-	setting := MakeVersionSetting(impl)
-	register(key, desc, &setting)
-	return &setting
-}
-
-// SetOnChange is part of the Setting interface, and is discouraged for use in
-// VersionSetting (we're implementing it here to not fall back on the embedded
-// `common` type definition).
-//
-// NB: VersionSetting is unique in more ways than one, and we might want to move
-// it out of the settings package before long (see TODO on the type itself). In
-// our current usage we don't rely on attaching pre-change triggers, so let's
-// not add it needlessly.
-func (v *VersionSetting) SetOnChange(sv *Values, fn func(ctx context.Context)) {
-	panic("unimplemented")
+func RegisterVersionSetting(class Class, key, desc string, setting *VersionSetting) {
+	register(class, key, desc, setting)
 }

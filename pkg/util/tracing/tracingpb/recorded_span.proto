@@ -24,10 +24,14 @@ message LogRecord {
                                      (gogoproto.stdtime) = true];
   message Field {
     string key = 1;
-    string value = 2;
+    string value = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
   }
-  // Fields with values converted to strings.
-  repeated Field fields = 2 [(gogoproto.nullable) = false];
+  // Fields with values converted to strings. In 22.1, the `message` field
+  // contains the log message, and this field is only used for compatibility
+  // with 21.2 nodes.
+  repeated Field deprecated_fields = 2 [(gogoproto.nullable) = false];
+  // The log message.
+  string message = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 }
 
 // StructuredRecord is a structured message recorded in a traced span.
@@ -46,16 +50,13 @@ message RecordedSpan {
 
   // ID of the trace; spans that are part of the same hierarchy share
   // the same trace ID.
-  uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
+  uint64 trace_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "TraceID"];
   // ID of the span.
-  uint64 span_id = 2 [(gogoproto.customname) = "SpanID"];
+  uint64 span_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SpanID", (gogoproto.customtype) = "SpanID"];
   // ID of the parent span.
-  uint64 parent_span_id = 3 [(gogoproto.customname) = "ParentSpanID"];
+  uint64 parent_span_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSpanID", (gogoproto.customtype) = "SpanID"];
   // Operation name.
   string operation = 4;
-  // Baggage items get passed from parent to child spans (even through gRPC).
-  // Notably, verbose tracing uses a special baggage item.
-  map<string, string> baggage = 5;
   // Tags associated with the span.
   map<string, string> tags = 6;
   // Time when the span was started.
@@ -70,16 +71,15 @@ message RecordedSpan {
   google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
 
+  // RedactableLogs determines whether the verbose log messages are redactable.
+  // This field was introduced in the 22.1 release. It can be removed in the 22.2
+  // release. On 22.1 this is always set to `true`.
+  bool redactable_logs = 15;
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
-
-  // DeprecatedInternalStructured are payloads attached to this Span.
-  //
-  // Do not use directly, but call Structured() instead.
-  //
-  // TODO(adityamaru): Remove in 22.1 as all nodes in 21.2+ will be using
-  // StructuredRecords instead.
-  repeated google.protobuf.Any deprecated_internal_structured = 11;
+  // verbose indicates whether the span was recording in verbose mode at the
+  // time the recording was produced.
+  bool verbose = 16;
 
   // The ID of the goroutine on which the span was created.
   uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];
@@ -87,13 +87,16 @@ message RecordedSpan {
   // True if the span has been Finish()ed, false otherwise.
   bool finished = 13;
 
-  // StructuredRecords contains StructuredRecord events recorded in the span.
+  // StructuredRecords contains StructuredRecord events recorded either in this
+  // span, or in children spans that have finished while our span was not
+  // recording verbosely.
+  //
   // A StructuredRecord wraps the Payload with a RecordedAt timestamp to expose
   // information about when this event occurred.
   // DeprecatedInternalStructured only stores the Payloads.
   repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
 
-  reserved 10;
+  reserved 5,10,11;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all

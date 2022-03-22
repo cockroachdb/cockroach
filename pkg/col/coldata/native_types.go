@@ -13,7 +13,7 @@ package coldata
 import (
 	"time"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -106,8 +106,6 @@ func (c Float64s) Set(idx int, val float64) { c[idx] = val }
 // Note that this method is usually inlined, but it isn't in case of the merge
 // joiner generated code (probably because of the size of the functions), so we
 // don't assert the inlining with the GCAssert linter.
-// TODO(yuzefovich): consider whether Get and Set on Decimals should operate on
-// pointers to apd.Decimal.
 func (c Decimals) Set(idx int, val apd.Decimal) { c[idx].Set(&val) }
 
 // Set sets the element at index idx of the vector to val.

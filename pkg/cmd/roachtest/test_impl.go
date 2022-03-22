@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -95,18 +95,6 @@ type testImpl struct {
 	//
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
-}
-
-func (t *testImpl) timedOut() bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.mu.timeout
-}
-
-func (t *testImpl) setTimedOut() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.mu.timeout = true
 }
 
 // BuildVersion exposes the build version of the cluster
@@ -188,7 +176,7 @@ func (t *testImpl) GetStatus() string {
 	defer t.mu.Unlock()
 	status, ok := t.mu.status[t.runnerID]
 	if ok {
-		return fmt.Sprintf("%s (set %s ago)", status.msg, timeutil.Now().Sub(status.time).Round(time.Second))
+		return fmt.Sprintf("%s (set %s ago)", status.msg, timeutil.Since(status.time).Round(time.Second))
 	}
 	return "N/A"
 }
@@ -213,7 +201,7 @@ func (t *testImpl) progress(id int64, frac float64) {
 }
 
 // Progress sets the progress (a fraction in the range [0,1]) associated with
-// the main test status messasge. When called from the main test goroutine
+// the main test status message. When called from the main test goroutine
 // (i.e. the goroutine on which TestSpec.Run is invoked), this is equivalent to
 // calling WorkerProgress.
 func (t *testImpl) Progress(frac float64) {
@@ -221,7 +209,7 @@ func (t *testImpl) Progress(frac float64) {
 }
 
 // WorkerProgress sets the progress (a fraction in the range [0,1]) associated
-// with the a worker status messasge.
+// with the a worker status message.
 func (t *testImpl) WorkerProgress(frac float64) {
 	t.progress(goid.Get(), frac)
 }
@@ -256,12 +244,14 @@ func (t *testImpl) Skipf(format string, args ...interface{}) {
 // ATTENTION: Since this calls panic(errTestFatal), it should only be called
 // from a test's closure. The test runner itself should never call this.
 func (t *testImpl) Fatal(args ...interface{}) {
-	t.fatalfInner("" /* format */, args...)
+	t.markFailedInner("" /* format */, args...)
+	panic(errTestFatal)
 }
 
 // Fatalf is like Fatal, but takes a format string.
 func (t *testImpl) Fatalf(format string, args ...interface{}) {
-	t.fatalfInner(format, args...)
+	t.markFailedInner(format, args...)
+	panic(errTestFatal)
 }
 
 // FailNow implements the TestingT interface.
@@ -271,17 +261,16 @@ func (t *testImpl) FailNow() {
 
 // Errorf implements the TestingT interface.
 func (t *testImpl) Errorf(format string, args ...interface{}) {
-	t.Fatalf(format, args...)
+	t.markFailedInner(format, args...)
 }
 
-func (t *testImpl) fatalfInner(format string, args ...interface{}) {
+func (t *testImpl) markFailedInner(format string, args ...interface{}) {
 	// Skip two frames: our own and the caller.
 	if format != "" {
 		t.printfAndFail(2 /* skip */, format, args...)
 	} else {
 		t.printAndFail(2 /* skip */, args...)
 	}
-	panic(errTestFatal)
 }
 
 func (t *testImpl) printAndFail(skip int, args ...interface{}) {
@@ -482,6 +471,10 @@ type loggingOpt struct {
 	// artifactsDir is that path to the dir that will contain the artifacts for
 	// all the tests.
 	artifactsDir string
+	// path to the literal on-agent directory where artifacts are stored. May
+	// be different from artifactsDir since the roachtest may be running in
+	// a container.
+	literalArtifactsDir string
 	// runnerLogPath is that path to the runner's log file.
 	runnerLogPath string
 }

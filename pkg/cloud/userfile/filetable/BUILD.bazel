@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlutil",
+        "//pkg/util/ioctx",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],

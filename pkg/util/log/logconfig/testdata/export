@@ -77,6 +77,7 @@ card p__3 as "strip"
 card p__4 as "format:json-fluent-compact"
 card p__5 as "format:crdb-v2-tty"
 card p__6 as "filter:W"
+card p__7 as "filter:W"
 artifact files {
  folder "/default-dir" {
   file f1 as "cockroach-everything.log"
@@ -95,8 +96,9 @@ SESSIONS --> p__4
 p__3 ..> s__local
 p__4 --> p__3
 DEV --> p__6
-SESSIONS --> p__6
+SESSIONS --> p__7
 p__5 --> stderr
 p__6 --> p__5
+p__7 --> p__5
 @enduml
-# http://www.plantuml.com/plantuml/uml/R58zRzim4DtlLnmqjOFSEebTG4EG8Hwwj8E1T2bWiEJHPaFprECfXL7ulnUav2X1Cebyx_4-tjDTLYCw72D4yehAA65_K7H1o6hW19QFFITAYfa7iPJn7tpuYFURX_BPRhRRhz-_RS567Xnc5ND2ax6ffv-9H5Xo0sVuCz10cDMH25WZ3llTRbcrGivORPxHgufwbgFHpehxrJvTpUprfNxeP_3cvPFVcLFhuq19spB-g-AhTugtggTPiHuL8If9zwC18ngyiOe-nBe-UewE19jFZhmPehOkI5E8Aa4_hcNPFWeRUsZfYUIaXv3sYyZxvg8RpQZ7r_gHcBHdE4_k9jA_B8-bqUJcRXVPcZWEN1VkK6tVLVJ0MRlLyildOl_zvW7RzhRQ2vVKPgHcKMv-2JM1YLd266cvpkE-AN03DPZ5ulPv9gYfJFpro_xhDy_NK8EPcq2DOM9NS4V9bN_qVm000F__
+# http://www.plantuml.com/plantuml/uml/R5AnRXin3Dtr5SHDxN1kdSGnS4EG8Hwwj8E1T2bWg19bgv55b-AbC0h_Uo7UsPSqcKvyxudalQVx8fQbtoUJC0W80SVjJi17HYUHid6qFr36B52ePuS5_feF7-5XzLW_wzLw_UNRrxLnYNeFHTWUmHPezFGZ8pDnQSp9_EwnHoZYaTauonuEcyrSjOpUEcakw9MYWNXlfNFiVxRFLnDxVUuV3nDuy_BAhqAv3Qd7B6rT_rNpnJlDMv7ZfBWT5349SlTzmfV_uPOb1ki4Gang2mHA7XcQJnw3xPEqFd9J2PL067xNaNjYicxNuZFoKNOnRsU9jirPDvYanzVwWHYr9tCQNSyeVuYVwg3HvSqcaRDfM5YDw43SeLDqHqMwnNpvkSRoi7g4jhrJsyqvpGdHZ6eLvaQJ6Pcv6QAkvRJkcmOtHWERpUukEnbDQ-IlNyw_VNDzQJImQOZHU4PsOJIKItMFsTUN_2y00F__

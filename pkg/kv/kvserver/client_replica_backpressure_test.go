@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +39,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rRand, _ := randutil.NewPseudoRand()
+	rRand, _ := randutil.NewTestRand()
 	ctx := context.Background()
 
 	// Some arbitrary data sizes we'll load into a table and then use to derive
@@ -102,7 +102,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		tc.SplitRangeOrFatal(t, tablePrefix)
 		require.NoError(t, tc.WaitForSplitAndInitialization(tablePrefix))
 
-		for i := 0; i < dataSize/rowSize; i++ {
+		for i := 0; i < numRows; i++ {
 			tdb.Exec(t, "UPSERT INTO foo VALUES ($1, $2)",
 				rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
 		}
@@ -127,14 +127,14 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		return tc, args, tdb, tablePrefix, unblockSplit, waitForBlockedRange
 	}
 
-	waitForZoneConfig := func(t *testing.T, tc *testcluster.TestCluster, tablePrefix roachpb.Key, exp int64) {
+	waitForSpanConfig := func(t *testing.T, tc *testcluster.TestCluster, tablePrefix roachpb.Key, exp int64) {
 		testutils.SucceedsSoon(t, func() error {
 			for i := 0; i < tc.NumServers(); i++ {
 				s := tc.Server(i)
 				_, r := getFirstStoreReplica(t, s, tablePrefix)
-				_, zone := r.DescAndZone()
-				if *zone.RangeMaxBytes != exp {
-					return fmt.Errorf("expected %d, got %d", exp, *zone.RangeMaxBytes)
+				conf := r.SpanConfig()
+				if conf.RangeMaxBytes != exp {
+					return fmt.Errorf("expected %d, got %d", exp, conf.RangeMaxBytes)
 				}
 			}
 			return nil
@@ -177,7 +177,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", dataSize/5, dataSize/10)
-		waitForZoneConfig(t, tc, tablePrefix, dataSize/5)
+		waitForSpanConfig(t, tc, tablePrefix, dataSize/5)
 
 		// Don't observe backpressure.
 		tdb.Exec(t, "UPSERT INTO foo VALUES ($1, $2)",
@@ -197,7 +197,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", dataSize/5, dataSize/10)
-		waitForZoneConfig(t, tc, tablePrefix, dataSize/5)
+		waitForSpanConfig(t, tc, tablePrefix, dataSize/5)
 
 		// Then we'll add a new server and move the table there.
 		moveTableToNewStore(t, tc, args, tablePrefix)
@@ -227,7 +227,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		newMin := newMax / 4
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", newMax, newMin)
-		waitForZoneConfig(t, tc, tablePrefix, newMax)
+		waitForSpanConfig(t, tc, tablePrefix, newMax)
 
 		// Don't observe backpressure because we remember the previous max size on
 		// this node.
@@ -263,10 +263,20 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		newMin := newMax / 4
 		tdb.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING "+
 			"range_max_bytes = $1, range_min_bytes = $2", newMax, newMin)
-		waitForZoneConfig(t, tc, tablePrefix, newMax)
+		waitForSpanConfig(t, tc, tablePrefix, newMax)
 
 		// Then we'll add a new server and move the table there.
 		moveTableToNewStore(t, tc, args, tablePrefix)
+
+		// Ensure that the new replica has applied the same config.
+		testutils.SucceedsSoon(t, func() error {
+			_, r := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
+			conf := r.SpanConfig()
+			if conf.RangeMaxBytes != newMax {
+				return fmt.Errorf("expected %d, got %d", newMax, conf.RangeMaxBytes)
+			}
+			return nil
+		})
 
 		s, repl := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
 		s.SetReplicateQueueActive(false)
@@ -283,16 +293,16 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		// Use pgx so that cancellation does something reasonable.
 		url, cleanup := sqlutils.PGUrl(t, tc.Server(1).ServingSQLAddr(), "", url.User("root"))
 		defer cleanup()
-		conf, err := pgx.ParseConnectionString(url.String())
+		conf, err := pgx.ParseConfig(url.String())
 		require.NoError(t, err)
-		c, err := pgx.Connect(conf)
+		c, err := pgx.ConnectConfig(ctx, conf)
 		require.NoError(t, err)
 		ctxWithCancel, cancel := context.WithCancel(ctx)
 		defer cancel()
 		upsertErrCh := make(chan error)
 		_ = tc.Stopper().RunAsyncTask(ctx, "upsert", func(ctx context.Context) {
-			_, err := c.ExecEx(ctxWithCancel, "UPSERT INTO foo VALUES ($1, $2)",
-				nil /* options */, rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
+			_, err := c.Exec(ctxWithCancel, "UPSERT INTO foo VALUES ($1, $2)",
+				rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
 			upsertErrCh <- err
 		})
 
@@ -302,6 +312,9 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		case err := <-upsertErrCh:
 			t.Fatalf("expected no error because the request should hang, got %v", err)
 		}
-		require.Equal(t, context.Canceled, <-upsertErrCh)
+		// Unfortunately we can't match on the error (context canceled) here since we can also
+		// get random other errors such as:
+		// "write failed: write tcp 127.0.0.1:37720->127.0.0.1:44313: i/o timeout"
+		require.Error(t, <-upsertErrCh)
 	})
 }

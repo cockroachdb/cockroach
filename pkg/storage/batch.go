@@ -12,9 +12,8 @@ package storage
 
 import (
 	"encoding/binary"
+	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -48,137 +47,9 @@ const (
 const (
 	// The batch header is composed of an 8-byte sequence number (all zeroes) and
 	// 4-byte count of the number of entries in the batch.
-	headerSize       int = 12
-	countPos             = 8
-	initialBatchSize     = 1 << 10 // 1 KB
+	headerSize int = 12
+	countPos   int = 8
 )
-
-// RocksDBBatchBuilder is used to construct the RocksDB batch representation.
-// From the RocksDB code, the representation of a batch is:
-//
-//   WriteBatch::rep_ :=
-//      sequence: fixed64
-//      count: fixed32
-//      data: record[count]
-//   record :=
-//      kTypeValue varstring varstring
-//      kTypeDeletion varstring
-//      [...] (see BatchType)
-//   varstring :=
-//      len: varint32
-//      data: uint8[len]
-//
-// The RocksDBBatchBuilder code currently only supports kTypeValue
-// (BatchTypeValue), kTypeDeletion (BatchTypeDeletion), kTypeMerge
-// (BatchTypeMerge), and kTypeSingleDeletion (BatchTypeSingleDeletion)
-// operations. Before a batch is written to the RocksDB write-ahead-log,
-// the sequence number is 0. The "fixed32" format is little endian.
-//
-// The keys encoded into the batch are MVCC keys: a string key with a timestamp
-// suffix. MVCC keys are encoded as:
-//
-//   <key>[<wall_time>[<logical>[<synthetic>]]]<#timestamp-bytes>
-//
-// The <wall_time>, <logical>, and <synthetic> portions of the key are encoded
-// as 64-bit, 32-bit, and 8-bit big-endian integers, respectively. A custom
-// RocksDB comparator is used to maintain the desired ordering as these keys do
-// not sort lexicographically correctly.
-//
-// TODO(bilal): This struct exists mostly as a historic artifact. Transition the
-// remaining few test uses of this struct over to pebble.Batch, and remove it
-// entirely.
-type RocksDBBatchBuilder struct {
-	batch pebble.Batch
-}
-
-// Finish returns the constructed batch representation. After calling Finish,
-// the builder may be used to construct another batch, but the returned []byte
-// is only valid until the next builder method is called.
-func (b *RocksDBBatchBuilder) Finish() []byte {
-	repr := b.batch.Repr()
-	b.batch.Reset()
-
-	return repr
-}
-
-// Len returns the number of bytes currently in the under construction repr.
-func (b *RocksDBBatchBuilder) Len() int {
-	return len(b.batch.Repr())
-}
-
-var _ = (*RocksDBBatchBuilder).Len
-
-// Put sets the given key to the value provided.
-//
-// It is safe to modify the contents of the arguments after Put returns.
-func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
-	keyLen := key.Len()
-	deferredOp := b.batch.SetDeferred(keyLen, len(value))
-	encodeKeyToBuf(deferredOp.Key, key, keyLen)
-	copy(deferredOp.Value, value)
-	// NB: the batch is not indexed, obviating the need to call
-	// deferredOp.Finish.
-}
-
-// EncodeKey encodes an engine.MVCC key into the RocksDB representation.
-func EncodeKey(key MVCCKey) []byte {
-	keyLen := key.Len()
-	buf := make([]byte, keyLen)
-	encodeKeyToBuf(buf, key, keyLen)
-	return buf
-}
-
-// EncodeKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
-func EncodeKeyToBuf(buf []byte, key MVCCKey) []byte {
-	keyLen := key.Len()
-	if cap(buf) < keyLen {
-		buf = make([]byte, keyLen)
-	} else {
-		buf = buf[:keyLen]
-	}
-	encodeKeyToBuf(buf, key, keyLen)
-	return buf
-}
-
-func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
-	const (
-		timestampSentinelLen = 1
-		walltimeEncodedLen   = 8
-		logicalEncodedLen    = 4
-		syntheticEncodedLen  = 1
-	)
-
-	copy(buf, key.Key)
-
-	pos := len(key.Key)
-	timestampLength := keyLen - pos - 1
-	if timestampLength > 0 {
-		buf[pos] = 0
-		pos += timestampSentinelLen
-		binary.BigEndian.PutUint64(buf[pos:], uint64(key.Timestamp.WallTime))
-		pos += walltimeEncodedLen
-		if key.Timestamp.Logical != 0 || key.Timestamp.Synthetic {
-			binary.BigEndian.PutUint32(buf[pos:], uint32(key.Timestamp.Logical))
-			pos += logicalEncodedLen
-		}
-		if key.Timestamp.Synthetic {
-			buf[pos] = 1
-			pos += syntheticEncodedLen
-		}
-	}
-	buf[len(buf)-1] = byte(timestampLength)
-}
-
-func encodeTimestamp(ts hlc.Timestamp) []byte {
-	_, encodedTS, _ := enginepb.SplitMVCCKey(EncodeKey(MVCCKey{Timestamp: ts}))
-	return encodedTS
-}
-
-// DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation.
-func DecodeMVCCKey(encodedKey []byte) (MVCCKey, error) {
-	k, ts, err := enginepb.DecodeKey(encodedKey)
-	return MVCCKey{k, ts}, err
-}
 
 // Decode the header of RocksDB batch repr, returning both the count of the
 // entries in the batch and the suffix of data remaining in the batch.
@@ -190,8 +61,11 @@ func rocksDBBatchDecodeHeader(repr []byte) (count int, orepr pebble.BatchReader,
 	if seq != 0 {
 		return 0, nil, errors.Errorf("bad sequence: expected 0, but found %d", seq)
 	}
-	count = int(binary.LittleEndian.Uint32(repr[countPos:headerSize]))
-	return count, pebble.MakeBatchReader(repr), nil
+	r, c := pebble.ReadBatch(repr)
+	if c > math.MaxInt32 {
+		return 0, nil, errors.Errorf("count %d would overflow max int", c)
+	}
+	return int(c), r, nil
 }
 
 // RocksDBBatchReader is used to iterate the entries in a RocksDB batch
@@ -266,14 +140,9 @@ func (r *RocksDBBatchReader) Key() []byte {
 	return r.key
 }
 
-func decodeMVCCKey(k []byte) (MVCCKey, error) {
-	k, ts, err := enginepb.DecodeKey(k)
-	return MVCCKey{k, ts}, err
-}
-
 // MVCCKey returns the MVCC key of the current batch entry.
 func (r *RocksDBBatchReader) MVCCKey() (MVCCKey, error) {
-	return decodeMVCCKey(r.Key())
+	return DecodeMVCCKey(r.Key())
 }
 
 // EngineKey returns the EngineKey for the current batch entry.
@@ -295,11 +164,24 @@ func (r *RocksDBBatchReader) Value() []byte {
 }
 
 // MVCCEndKey returns the MVCC end key of the current batch entry.
+//lint:ignore U1001 unused
 func (r *RocksDBBatchReader) MVCCEndKey() (MVCCKey, error) {
 	if r.typ != BatchTypeRangeDeletion {
-		panic("cannot only call Value on a range deletion entry")
+		panic("can only ask for EndKey on a range deletion entry")
 	}
-	return decodeMVCCKey(r.Value())
+	return DecodeMVCCKey(r.Value())
+}
+
+// EngineEndKey returns the engine end key of the current batch entry.
+func (r *RocksDBBatchReader) EngineEndKey() (EngineKey, error) {
+	if r.typ != BatchTypeRangeDeletion {
+		panic("can only ask for EndKey on a range deletion entry")
+	}
+	key, ok := DecodeEngineKey(r.Value())
+	if !ok {
+		return key, errors.Errorf("invalid encoded engine key: %x", r.Value())
+	}
+	return key, nil
 }
 
 // Next advances to the next entry in the batch, returning false when the batch

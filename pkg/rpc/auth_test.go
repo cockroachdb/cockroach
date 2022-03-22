@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -127,7 +128,7 @@ func TestTenantFromCert(t *testing.T) {
 			p := peer.Peer{AuthInfo: tlsInfo}
 			ctx := peer.NewContext(context.Background(), &p)
 
-			tenID, err := kvAuth{}.authenticate(ctx)
+			tenID, err := kvAuth{tenant: tenantAuthorizer{tenantID: roachpb.SystemTenantID}}.authenticate(ctx)
 
 			if tc.expErr == "" {
 				require.Equal(t, tc.expTenID, tenID)
@@ -163,10 +164,20 @@ func TestTenantAuthRequest(t *testing.T) {
 		h := roachpb.RequestHeaderFromSpan(s)
 		return &roachpb.ScanRequest{RequestHeader: h}
 	}
-	makeAdminReq := func(key string) roachpb.Request {
+	makeDisallowedAdminReq := func(key string) roachpb.Request {
+		s := makeSpan(key)
+		h := roachpb.RequestHeader{Key: s.Key}
+		return &roachpb.AdminUnsplitRequest{RequestHeader: h}
+	}
+	makeAdminSplitReq := func(key string) roachpb.Request {
 		s := makeSpan(key)
 		h := roachpb.RequestHeaderFromSpan(s)
 		return &roachpb.AdminSplitRequest{RequestHeader: h, SplitKey: s.Key}
+	}
+	makeAdminScatterReq := func(key string) roachpb.Request {
+		s := makeSpan(key)
+		h := roachpb.RequestHeaderFromSpan(s)
+		return &roachpb.AdminScatterRequest{RequestHeader: h}
 	}
 	makeReqs := func(reqs ...roachpb.Request) []roachpb.RequestUnion {
 		ru := make([]roachpb.RequestUnion, len(reqs))
@@ -174,6 +185,34 @@ func TestTenantAuthRequest(t *testing.T) {
 			ru[i].MustSetInner(r)
 		}
 		return ru
+	}
+	makeSystemSpanConfigTarget := func(source, target uint64) roachpb.SpanConfigTarget {
+		return roachpb.SpanConfigTarget{
+			Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
+				SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
+					SourceTenantID: roachpb.MakeTenantID(source),
+					Type:           roachpb.NewSpecificTenantKeyspaceTargetType(roachpb.MakeTenantID(target)),
+				},
+			},
+		}
+	}
+	makeSpanTarget := func(sp roachpb.Span) roachpb.SpanConfigTarget {
+		return spanconfig.MakeTargetFromSpan(sp).ToProto()
+	}
+	makeGetSpanConfigsReq := func(
+		target roachpb.SpanConfigTarget,
+	) *roachpb.GetSpanConfigsRequest {
+		return &roachpb.GetSpanConfigsRequest{Targets: []roachpb.SpanConfigTarget{target}}
+	}
+	makeUpdateSpanConfigsReq := func(target roachpb.SpanConfigTarget, delete bool) *roachpb.UpdateSpanConfigsRequest {
+		if delete {
+			return &roachpb.UpdateSpanConfigsRequest{ToDelete: []roachpb.SpanConfigTarget{target}}
+		}
+		return &roachpb.UpdateSpanConfigsRequest{ToUpsert: []roachpb.SpanConfigEntry{
+			{
+				Target: target,
+			},
+		}}
 	}
 
 	const noError = ""
@@ -238,35 +277,99 @@ func TestTenantAuthRequest(t *testing.T) {
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
-					makeAdminReq("a"),
+					makeDisallowedAdminReq("a"),
 				)},
-				expErr: `request \[1 AdmSplit\] not permitted`,
+				expErr: `request \[1 AdmUnsplit\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
-					makeAdminReq(prefix(10, "a")),
+					makeDisallowedAdminReq(prefix(10, "a")),
 				)},
-				expErr: `request \[1 AdmSplit\] not permitted`,
+				expErr: `request \[1 AdmUnsplit\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
-					makeAdminReq(prefix(50, "a")),
+					makeDisallowedAdminReq(prefix(50, "a")),
 				)},
-				expErr: `request \[1 AdmSplit\] not permitted`,
+				expErr: `request \[1 AdmUnsplit\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
-					makeAdminReq(prefix(10, "a")),
+					makeDisallowedAdminReq(prefix(10, "a")),
 					makeReq(prefix(10, "a"), prefix(10, "b")),
 				)},
-				expErr: `request \[1 Scan, 1 AdmSplit\] not permitted`,
+				expErr: `request \[1 Scan, 1 AdmUnsplit\] not permitted`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeReq(prefix(10, "a"), prefix(10, "b")),
-					makeAdminReq(prefix(10, "a")),
+					makeDisallowedAdminReq(prefix(10, "a")),
 				)},
-				expErr: `request \[1 Scan, 1 AdmSplit\] not permitted`,
+				expErr: `request \[1 Scan, 1 AdmUnsplit\] not permitted`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminSplitReq("a"),
+				)},
+				expErr: `requested key span a{-\\x00} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminSplitReq(prefix(10, "a")),
+				)},
+				expErr: noError,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminSplitReq(prefix(50, "a")),
+				)},
+				expErr: `requested key span /Tenant/50"a{"-\\x00"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminSplitReq(prefix(10, "a")),
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+				)},
+				expErr: noError,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+					makeAdminSplitReq(prefix(10, "a")),
+				)},
+				expErr: noError,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminScatterReq("a"),
+				)},
+				expErr: `requested key span a{-\\x00} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminScatterReq(prefix(10, "a")),
+				)},
+				expErr: noError,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminScatterReq(prefix(50, "a")),
+				)},
+				expErr: `requested key span /Tenant/50"a{"-\\x00"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeAdminScatterReq(prefix(10, "a")),
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+				)},
+				expErr: noError,
+			},
+			{
+				req: &roachpb.BatchRequest{Requests: makeReqs(
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+					makeAdminScatterReq(prefix(10, "a")),
+				)},
+				expErr: noError,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
@@ -374,6 +477,223 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: `token bucket request with unspecified tenant not permitted`,
 			},
 		},
+		"/cockroach.roachpb.Internal/GetSpanConfigs": {
+			{
+				req:    &roachpb.GetSpanConfigsRequest{},
+				expErr: noError,
+			},
+			{
+				req:    makeGetSpanConfigsReq(makeSpanTarget(makeSpan("a", "b"))),
+				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeGetSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(5, "a"), prefix(5, "b"))),
+				),
+				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeGetSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(10, "a"), prefix(10, "b"))),
+				),
+				expErr: noError,
+			},
+			{
+				req: makeGetSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(50, "a"), prefix(50, "b"))),
+				),
+				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeGetSpanConfigsReq(
+					makeSpanTarget(makeSpan("a", prefix(10, "b"))),
+				),
+				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeGetSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(10, "a"), prefix(20, "b"))),
+				),
+				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeGetSpanConfigsReq(makeSystemSpanConfigTarget(10, 10)),
+				expErr: noError,
+			},
+			{
+				req:    makeGetSpanConfigsReq(makeSystemSpanConfigTarget(10, 20)),
+				expErr: `secondary tenants cannot interact with system span configurations of other tenants`,
+			},
+			{
+				// Ensure tenant 10 (the tenant we test all these with) can't pretend
+				// to be tenant 20 to get access to system span configurations.
+				req:    makeGetSpanConfigsReq(makeSystemSpanConfigTarget(20, 20)),
+				expErr: `malformed source tenant field`,
+			},
+			{
+				req: makeGetSpanConfigsReq(roachpb.SpanConfigTarget{
+					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
+						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
+							SourceTenantID: roachpb.MakeTenantID(10),
+							Type:           roachpb.NewEntireKeyspaceTargetType(),
+						},
+					},
+				}),
+				expErr: `secondary tenants cannot target the entire keyspace`,
+			},
+			{
+				req: makeGetSpanConfigsReq(roachpb.SpanConfigTarget{
+					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
+						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
+							SourceTenantID: roachpb.MakeTenantID(20),
+							Type:           roachpb.NewEntireKeyspaceTargetType(),
+						},
+					},
+				}),
+				expErr: `malformed source tenant field`,
+			},
+		},
+		"/cockroach.roachpb.Internal/UpdateSpanConfigs": {
+			{
+				req:    &roachpb.UpdateSpanConfigsRequest{},
+				expErr: noError,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan("a", "b")),
+					true,
+				),
+				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(5, "a"), prefix(5, "b"))),
+					true,
+				),
+				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(10, "a"), prefix(10, "b"))),
+					true,
+				),
+				expErr: noError,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(50, "a"), prefix(50, "b"))),
+					true,
+				),
+				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan("a", prefix(10, "b"))),
+					true,
+				),
+				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(10, "a"), prefix(20, "b"))),
+					true,
+				),
+				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan("a", "b")),
+					false,
+				),
+				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(5, "a"), prefix(5, "b"))),
+					false,
+				),
+				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(10, "a"), prefix(10, "b"))),
+					false,
+				),
+				expErr: noError,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(50, "a"), prefix(50, "b"))),
+					false,
+				),
+				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan("a", prefix(10, "b"))),
+					false,
+				),
+				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(
+					makeSpanTarget(makeSpan(prefix(10, "a"), prefix(20, "b"))),
+					false,
+				),
+				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(makeSystemSpanConfigTarget(10, 10), false),
+				expErr: noError,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(makeSystemSpanConfigTarget(10, 20), false),
+				expErr: `secondary tenants cannot interact with system span configurations of other tenants`,
+			},
+			{
+				// Ensure tenant 10 (the tenant we test all these with) can't pretend
+				// to be tenant 20 to get access to system span configurations.
+				req:    makeUpdateSpanConfigsReq(makeSystemSpanConfigTarget(20, 20), false),
+				expErr: `malformed source tenant field`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(roachpb.SpanConfigTarget{
+					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
+						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
+							SourceTenantID: roachpb.MakeTenantID(10),
+							Type:           roachpb.NewEntireKeyspaceTargetType(),
+						},
+					},
+				}, false),
+				expErr: `secondary tenants cannot target the entire keyspace`,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(makeSystemSpanConfigTarget(10, 10), true),
+				expErr: noError,
+			},
+			{
+				req:    makeUpdateSpanConfigsReq(makeSystemSpanConfigTarget(10, 20), true),
+				expErr: `secondary tenants cannot interact with system span configurations of other tenants`,
+			},
+			{
+				// Ensure tenant 10 (the tenant we test all these with) can't pretend
+				// to be tenant 20 to get access to system span configurations.
+				req:    makeUpdateSpanConfigsReq(makeSystemSpanConfigTarget(20, 20), true),
+				expErr: `malformed source tenant field`,
+			},
+			{
+				req: makeUpdateSpanConfigsReq(roachpb.SpanConfigTarget{
+					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
+						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
+							SourceTenantID: roachpb.MakeTenantID(10),
+							Type:           roachpb.NewEntireKeyspaceTargetType(),
+						},
+					},
+				}, true),
+				expErr: `secondary tenants cannot target the entire keyspace`,
+			},
+		},
+
 		"/cockroach.rpc.Heartbeat/Ping": {
 			{req: &PingRequest{}, expErr: noError},
 		},

@@ -13,7 +13,7 @@ go_library(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/streamingccl",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",

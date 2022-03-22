@@ -13,13 +13,12 @@ package colrpc
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // flowStreamClient is a utility interface used to mock out the RPC layer.
@@ -147,12 +147,13 @@ func (o *Outbox) close(ctx context.Context) {
 func (o *Outbox) Run(
 	ctx context.Context,
 	dialer execinfra.Dialer,
-	nodeID roachpb.NodeID,
+	sqlInstanceID base.SQLInstanceID,
 	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
 	flowCtxCancel context.CancelFunc,
 	connectionTimeout time.Duration,
 ) {
+	flowCtx := ctx
 	// Derive a child context so that we can cancel all components rooted in
 	// this outbox.
 	var outboxCtxCancel context.CancelFunc
@@ -168,11 +169,11 @@ func (o *Outbox) Run(
 
 	o.runnerCtx = ctx
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
-	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
+	log.VEventf(ctx, 2, "Outbox Dialing %s", sqlInstanceID)
 
 	var stream execinfrapb.DistSQL_FlowStreamClient
 	if err := func() error {
-		conn, err := execinfra.GetConnForOutbox(ctx, dialer, nodeID, connectionTimeout)
+		conn, err := execinfra.GetConnForOutbox(ctx, dialer, sqlInstanceID, connectionTimeout)
 		if err != nil {
 			log.Warningf(
 				ctx,
@@ -183,7 +184,12 @@ func (o *Outbox) Run(
 		}
 
 		client := execinfrapb.NewDistSQLClient(conn)
-		stream, err = client.FlowStream(ctx)
+		// We use the flow context for the RPC so that when outbox context is
+		// canceled in case of a graceful shutdown, the gRPC stream keeps on
+		// running. If, however, the flow context is canceled, then the
+		// termination of the whole query is ungraceful, so we're ok with the
+		// gRPC stream being ungracefully shutdown too.
+		stream, err = client.FlowStream(flowCtx)
 		if err != nil {
 			log.Warningf(
 				ctx,
@@ -222,20 +228,21 @@ func (o *Outbox) Run(
 // called, for all other errors flowCtxCancel is. The given error is logged with
 // the associated opName.
 func handleStreamErr(
-	ctx context.Context, opName string, err error, flowCtxCancel, outboxCtxCancel context.CancelFunc,
+	ctx context.Context,
+	opName redact.SafeString,
+	err error,
+	flowCtxCancel, outboxCtxCancel context.CancelFunc,
 ) {
 	if err == io.EOF {
-		if log.V(1) {
-			log.Infof(ctx, "Outbox calling outboxCtxCancel after %s EOF", opName)
-		}
+		log.VEventf(ctx, 2, "Outbox calling outboxCtxCancel after %s EOF", opName)
 		outboxCtxCancel()
 	} else {
-		log.Warningf(ctx, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
 		flowCtxCancel()
 	}
 }
 
-func (o *Outbox) moveToDraining(ctx context.Context, reason string) {
+func (o *Outbox) moveToDraining(ctx context.Context, reason redact.RedactableString) {
 	if atomic.CompareAndSwapUint32(&o.draining, 0, 1) {
 		log.VEventf(ctx, 2, "Outbox moved to draining (%s)", reason)
 	}
@@ -406,9 +413,11 @@ func (o *Outbox) runWithStream(
 
 	terminatedGracefully, errToSend := o.sendBatches(ctx, stream, flowCtxCancel, outboxCtxCancel)
 	if terminatedGracefully || errToSend != nil {
-		reason := "terminated gracefully"
+		var reason redact.RedactableString
 		if errToSend != nil {
-			reason = fmt.Sprintf("encountered error when sending batches: %v", errToSend)
+			reason = redact.Sprintf("encountered error when sending batches: %v", errToSend)
+		} else {
+			reason = redact.Sprint(redact.SafeString("terminated gracefully"))
 		}
 		o.moveToDraining(ctx, reason)
 		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {

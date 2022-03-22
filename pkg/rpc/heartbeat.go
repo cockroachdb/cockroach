@@ -54,7 +54,7 @@ type HeartbeatService struct {
 	clusterName                    string
 	disableClusterNameVerification bool
 
-	onHandlePing func(*PingRequest) error // see ContextOptions.OnIncomingPing
+	onHandlePing func(context.Context, *PingRequest) error // see ContextOptions.OnIncomingPing
 
 	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
 	// disables errors in case a heartbeat requests a specific node ID but
@@ -116,8 +116,8 @@ func checkVersion(ctx context.Context, st *cluster.Settings, peerVersion roachpb
 // The requester should also estimate its offset from this server along
 // with the requester's address.
 func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
-	if log.V(2) {
-		log.Health.Infof(ctx, "received heartbeat: %+v vs local cluster %+v node %+v", args, hs.clusterID, hs.nodeID)
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.Dev.Infof(ctx, "received heartbeat: %+v vs local cluster %+v node %+v", args, hs.clusterID, hs.nodeID)
 	}
 	// Check that cluster IDs match.
 	clusterID := hs.clusterID.Get()
@@ -164,12 +164,12 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	// could very well have different max offsets.
 	mo, amo := hs.clock.MaxOffset(), time.Duration(args.OriginMaxOffsetNanos)
 	if mo != 0 && amo != 0 && mo != amo {
-		panic(fmt.Sprintf("locally configured maximum clock offset (%s) "+
-			"does not match that of node %s (%s)", mo, args.OriginAddr, amo))
+		log.Fatalf(ctx, "locally configured maximum clock offset (%s) "+
+			"does not match that of node %s (%s)", mo, args.OriginAddr, amo)
 	}
 
 	if fn := hs.onHandlePing; fn != nil {
-		if err := fn(args); err != nil {
+		if err := fn(ctx, args); err != nil {
 			return nil, err
 		}
 	}

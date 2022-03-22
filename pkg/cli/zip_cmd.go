@@ -10,7 +10,10 @@
 
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/spf13/cobra"
+)
 
 var debugZipCmd = &cobra.Command{
 	Use:   "zip <file>",
@@ -26,5 +29,5 @@ requires the node to be live and operating properly. Retrieval of SQL data
 requires the cluster to be live.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: MaybeDecorateGRPCError(runDebugZip),
+	RunE: clierrorplus.MaybeDecorateError(runDebugZip),
 }

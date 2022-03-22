@@ -441,6 +441,9 @@ func arrayOf(
 		if typ.Family() == types.UnknownFamily {
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "type unknown[] does not exist")
 		}
+		if typ.Family() == types.VoidFamily {
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "type void[] does not exist")
+		}
 		if err := types.CheckArrayElementType(typ); err != nil {
 			return nil, err
 		}

@@ -1,0 +1,143 @@
+# Walk through a full set of actions with the kvaccessor
+
+# Test with an empty slate.
+kvaccessor-get
+span [a,e)
+----
+
+kvaccessor-update
+delete [a,e)
+----
+err: expected to delete 1 row(s), deleted 0
+
+# Verify that reading, writing and deleting a single entry behaves as expected.
+kvaccessor-update
+upsert [a,b):A
+----
+ok
+
+kvaccessor-get
+span [a,e)
+span [a,b)
+span [b,c)
+----
+[a,b):A
+[a,b):A
+
+kvaccessor-update
+delete [a,b)
+----
+ok
+
+kvaccessor-get
+span [a,e)
+span [a,b)
+span [b,c)
+----
+
+# Verify that adding all entries does in fact add all entries.
+kvaccessor-update
+upsert [a,b):A
+upsert [b,c):B
+upsert [c,d):C
+upsert [d,e):D
+----
+ok
+
+kvaccessor-get
+span [a,e)
+----
+[a,b):A
+[b,c):B
+[c,d):C
+[d,e):D
+
+# Verify that updating entries (including noops) show up as such
+kvaccessor-update
+upsert [a,b):A
+upsert [b,c):x
+upsert [c,d):C
+upsert [d,e):x
+----
+ok
+
+kvaccessor-get
+span [a,e)
+----
+[a,b):A
+[b,c):x
+[c,d):C
+[d,e):x
+
+# Verify that fetching entries for multiple spans behaves as expected.
+kvaccessor-get
+span [a,b)
+span [b,c)
+----
+[a,b):A
+[b,c):x
+
+# Verify that deleting entries actually removes them.
+kvaccessor-update
+delete [a,b)
+delete [b,c)
+----
+ok
+
+kvaccessor-get
+span [a,e)
+----
+[c,d):C
+[d,e):x
+
+# Attempts to delete non-existent spans should error out.
+kvaccessor-update
+delete [a,b)
+delete [b,c)
+----
+err: expected to delete 2 row(s), deleted 0
+
+# Attempts to re-write non-existent spans should go through.
+kvaccessor-update
+upsert [a,b):A
+upsert [b,c):B
+----
+ok
+
+# Verify that we're able to merge span configs correctly.
+kvaccessor-get
+span [a,e)
+----
+[a,b):A
+[b,c):B
+[c,d):C
+[d,e):x
+
+kvaccessor-update
+delete [d,e)
+upsert [c,e):Z
+----
+ok
+
+kvaccessor-get
+span [a,e)
+----
+[a,b):A
+[b,c):B
+[c,e):Z
+
+# We should also be able to "unmerge" correctly.
+kvaccessor-update
+delete [c,e)
+upsert [c,d):C
+upsert [d,e):D
+----
+ok
+
+kvaccessor-get
+span [a,e)
+----
+[a,b):A
+[b,c):B
+[c,d):C
+[d,e):D

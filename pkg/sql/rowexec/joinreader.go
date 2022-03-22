@@ -12,21 +12,26 @@ package rowexec
 
 import (
 	"context"
+	"math"
 	"sort"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -73,9 +78,19 @@ type joinReader struct {
 	// ProcessorBase.State == StateRunning.
 	runningState joinReaderState
 
-	// memAcc is used to account for the memory used by the in-memory data structures
-	// used by the joinReader and different joinReader strategies.
+	// memAcc is used to account for the memory used by the in-memory data
+	// structures used directly by the joinReader. Note that the joinReader
+	// strategies and span generators have separate accounts.
 	memAcc mon.BoundAccount
+
+	// accountedFor tracks the memory usage of scratchInputRows and
+	// groupingState that is currently registered with memAcc.
+	accountedFor struct {
+		// scratchInputRows accounts only for the slice of scratchInputRows, not
+		// the actual rows.
+		scratchInputRows int64
+		groupingState    int64
+	}
 
 	// limitedMemMonitor is a limited memory monitor to account for the memory
 	// used by buffered rows in joinReaderOrderingStrategy. If the memory limit is
@@ -84,9 +99,9 @@ type joinReader struct {
 	limitedMemMonitor *mon.BytesMonitor
 	diskMonitor       *mon.BytesMonitor
 
-	desc      catalog.TableDescriptor
-	index     catalog.Index
-	colIdxMap catalog.TableColMap
+	fetchSpec      descpb.IndexFetchSpec
+	splitFamilyIDs []descpb.FamilyID
+
 	// Indicates that the join reader should maintain the ordering of the input
 	// stream. This is applicable to both lookup joins and index joins. For lookup
 	// joins, maintaining order is expensive because it requires buffering. For
@@ -98,10 +113,25 @@ type joinReader struct {
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
 	// joinReader to wrap the fetcher with a stat collector when necessary.
 	fetcher            rowFetcher
-	alloc              rowenc.DatumAlloc
+	alloc              tree.DatumAlloc
 	rowAlloc           rowenc.EncDatumRowAlloc
 	shouldLimitBatches bool
 	readerType         joinReaderType
+
+	keyLocking     descpb.ScanLockingStrength
+	lockWaitPolicy lock.WaitPolicy
+
+	// usesStreamer indicates whether the joinReader performs the lookups using
+	// the kvcoord.Streamer API.
+	usesStreamer bool
+	streamerInfo struct {
+		*kvstreamer.Streamer
+		unlimitedMemMonitor *mon.BytesMonitor
+		budgetAcc           mon.BoundAccount
+		budgetLimit         int64
+		maxKeysPerRow       int
+		diskMonitor         *mon.BytesMonitor
+	}
 
 	input execinfra.RowSource
 
@@ -133,6 +163,11 @@ type joinReader struct {
 	batchSizeBytes    int64
 	curBatchSizeBytes int64
 
+	// pendingRow tracks the row that has already been read from the input but
+	// was not included into the lookup batch because it would make the batch
+	// exceed batchSizeBytes.
+	pendingRow rowenc.EncDatumRow
+
 	// rowsRead is the total number of rows that this fetcher read from
 	// disk.
 	rowsRead int64
@@ -146,6 +181,9 @@ type joinReader struct {
 
 	// State variables for each batch of input rows.
 	scratchInputRows rowenc.EncDatumRows
+	// resetScratchWhenReadingInput tracks whether scratchInputRows needs to be
+	// reset the next time the joinReader is in the jrReadingInput state.
+	resetScratchWhenReadingInput bool
 
 	// Fields used when this is the second join in a pair of joins that are
 	// together implementing left {outer,semi,anti} joins where the first join
@@ -173,6 +211,15 @@ type joinReader struct {
 	// detailed comment in the spec). This can never be true for index joins,
 	// and requires that the spec has MaintainOrdering set to true.
 	outputGroupContinuationForLeftRow bool
+
+	// lookupBatchBytesLimit controls the TargetBytes of lookup requests. If 0, a
+	// default will be used. Regardless of this value, bytes limits aren't always
+	// used.
+	lookupBatchBytesLimit rowinfra.BytesLimit
+
+	// scanStats is collected from the trace after we finish doing work for this
+	// join.
+	scanStats execinfra.ScanStats
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -180,6 +227,17 @@ var _ execinfra.RowSource = &joinReader{}
 var _ execinfra.OpNode = &joinReader{}
 
 const joinReaderProcName = "join reader"
+
+// ParallelizeMultiKeyLookupJoinsEnabled determines whether the joinReader
+// parallelizes KV batches in all cases.
+var ParallelizeMultiKeyLookupJoinsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.distsql.parallelize_multi_key_lookup_joins.enabled",
+	"determines whether KV batches are executed in parallel for lookup joins in all cases. "+
+		"Enabling this will increase the speed of lookup joins when each input row might get "+
+		"multiple looked up rows at the cost of increased memory usage.",
+	false,
+)
 
 // newJoinReader returns a new joinReader.
 func newJoinReader(
@@ -191,9 +249,6 @@ func newJoinReader(
 	output execinfra.RowReceiver,
 	readerType joinReaderType,
 ) (execinfra.RowSourcedProcessor, error) {
-	if spec.IndexIdx != 0 && readerType == indexJoinReaderType {
-		return nil, errors.AssertionFailedf("index join must be against primary index")
-	}
 	if spec.OutputGroupContinuationForLeftRow && !spec.MaintainOrdering {
 		return nil, errors.AssertionFailedf(
 			"lookup join must maintain ordering since it is first join in paired-joins")
@@ -221,10 +276,9 @@ func newJoinReader(
 	}
 
 	var lookupCols []uint32
-	tableDesc := spec.BuildTableDescriptor()
 	switch readerType {
 	case indexJoinReaderType:
-		lookupCols = make([]uint32, tableDesc.GetPrimaryIndex().NumKeyColumns())
+		lookupCols = make([]uint32, len(spec.FetchSpec.KeyColumns()))
 		for i := range lookupCols {
 			lookupCols[i] = uint32(i)
 		}
@@ -233,57 +287,52 @@ func newJoinReader(
 	default:
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
+	// The joiner has a choice to make between getting DistSender-level
+	// parallelism for its lookup batches and setting row and memory limits (due
+	// to implementation limitations, you can't have both at the same time). We
+	// choose parallelism when we know that each lookup returns at most one row:
+	// in case of indexJoinReaderType, we know that there's exactly one lookup
+	// row for each input row. Similarly, in case of spec.LookupColumnsAreKey,
+	// we know that there's at most one lookup row per input row. In other
+	// cases, we use limits.
+	shouldLimitBatches := !spec.LookupColumnsAreKey && readerType == lookupJoinReaderType
+	if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
+		shouldLimitBatches = false
+	}
+	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
+		readerType == indexJoinReaderType &&
+		row.CanUseStreamer(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Settings)
+
 	jr := &joinReader{
-		desc:                              tableDesc,
+		fetchSpec:                         spec.FetchSpec,
+		splitFamilyIDs:                    spec.SplitFamilyIDs,
 		maintainOrdering:                  spec.MaintainOrdering,
 		input:                             input,
 		lookupCols:                        lookupCols,
 		outputGroupContinuationForLeftRow: spec.OutputGroupContinuationForLeftRow,
-		// The joiner has a choice to make between getting DistSender-level
-		// parallelism for its lookup batches and setting row and memory limits (due
-		// to implementation limitations, you can't have both at the same time). We
-		// choose parallelism when we know that each lookup returns at most one row:
-		// in case of indexJoinReaderType, we know that there's exactly one lookup
-		// row for each input row. Similarly, in case of spec.LookupColumnsAreKey,
-		// we know that there's at most one lookup row per input row. In other
-		// cases, we use limits.
-		shouldLimitBatches: !spec.LookupColumnsAreKey && readerType == lookupJoinReaderType,
-		readerType:         readerType,
+		shouldLimitBatches:                shouldLimitBatches,
+		readerType:                        readerType,
+		keyLocking:                        spec.LockingStrength,
+		lockWaitPolicy:                    row.GetWaitPolicy(spec.LockingWaitPolicy),
+		usesStreamer:                      useStreamer,
+		lookupBatchBytesLimit:             rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
 	}
-	var err error
-	var isSecondary bool
-	indexIdx := int(spec.IndexIdx)
-	if indexIdx >= len(jr.desc.ActiveIndexes()) {
-		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
-	}
-	jr.index = jr.desc.ActiveIndexes()[indexIdx]
-	isSecondary = !jr.index.Primary()
-	cols := jr.desc.PublicColumns()
-	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = jr.desc.DeletableColumns()
-	}
-	jr.colIdxMap = catalog.ColumnIDToOrdinalMap(cols)
-	columnTypes := catalog.ColumnTypes(cols)
 
-	columnIDs, _ := catalog.FullIndexColumnIDs(jr.index)
-	indexCols := make([]uint32, len(columnIDs))
-	for i, columnID := range columnIDs {
-		indexCols[i] = uint32(columnID)
-	}
-
-	// Add all requested system columns to the output.
-	if spec.HasSystemColumns {
-		for _, sysCol := range jr.desc.SystemColumns() {
-			columnTypes = append(columnTypes, sysCol.GetType())
-			jr.colIdxMap.Set(sysCol.GetID(), jr.colIdxMap.Len())
+	// Make sure the key column types are hydrated. The fetched column types will
+	// be hydrated in ProcessorBase.Init (via joinerBase.init).
+	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	for i := range spec.FetchSpec.KeyAndSuffixColumns {
+		if err := typedesc.EnsureTypeIsHydrated(
+			flowCtx.EvalCtx.Ctx(), spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
+		); err != nil {
+			return nil, err
 		}
 	}
 
 	var leftTypes []*types.T
-	var leftEqCols []uint32
 	switch readerType {
 	case indexJoinReaderType:
 		// Index join performs a join between a secondary index, the `input`,
@@ -293,24 +342,21 @@ func newJoinReader(
 		// will contain all columns from the table) whereas the columns that
 		// came from the secondary index (input rows) are ignored. As a result,
 		// we leave leftTypes as empty.
-		leftEqCols = indexCols
 	case lookupJoinReaderType:
 		leftTypes = input.OutputTypes()
-		leftEqCols = jr.lookupCols
 	default:
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
+	rightTypes := spec.FetchSpec.FetchedColumnTypes()
 
 	if err := jr.joinerBase.init(
 		jr,
 		flowCtx,
 		processorID,
 		leftTypes,
-		columnTypes,
+		rightTypes,
 		spec.Type,
 		spec.OnExpr,
-		leftEqCols,
-		indexCols,
 		spec.OutputGroupContinuationForLeftRow,
 		post,
 		output,
@@ -329,24 +375,20 @@ func newJoinReader(
 		return nil, err
 	}
 
-	rightCols := jr.neededRightCols()
-	if isSecondary {
-		set := getIndexColSet(jr.index, jr.colIdxMap)
-		if !rightCols.SubsetOf(set) {
-			return nil, errors.Errorf("joinreader index does not cover all columns")
-		}
-	}
-
 	var fetcher row.Fetcher
-	_, _, err = initRowFetcher(
-		flowCtx, &fetcher, jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
-		rightCols, false /* isCheck */, jr.EvalCtx.Mon, &jr.alloc, spec.Visibility, spec.LockingStrength,
-		spec.LockingWaitPolicy, spec.HasSystemColumns, nil, /* virtualColumn */
-	)
-
-	if err != nil {
+	if err := fetcher.Init(
+		flowCtx.EvalCtx.Context,
+		false, /* reverse */
+		spec.LockingStrength,
+		spec.LockingWaitPolicy,
+		flowCtx.EvalCtx.SessionData().LockTimeout,
+		&jr.alloc,
+		flowCtx.EvalCtx.Mon,
+		&spec.FetchSpec,
+	); err != nil {
 		return nil, err
 	}
+
 	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
@@ -356,11 +398,11 @@ func newJoinReader(
 	}
 
 	if !spec.LookupExpr.Empty() {
-		lookupExprTypes := make([]*types.T, 0, len(leftTypes)+len(columnTypes))
+		lookupExprTypes := make([]*types.T, 0, len(leftTypes)+len(rightTypes))
 		lookupExprTypes = append(lookupExprTypes, leftTypes...)
-		lookupExprTypes = append(lookupExprTypes, columnTypes...)
+		lookupExprTypes = append(lookupExprTypes, rightTypes...)
 
-		semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+		semaCtx := flowCtx.NewSemaContext(flowCtx.EvalCtx.Txn)
 		if err := jr.lookupExpr.Init(spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
 			return nil, err
 		}
@@ -373,11 +415,12 @@ func newJoinReader(
 		}
 	}
 
-	// We will create a memory monitor with at least 8MiB of memory limit since
-	// the join reader doesn't know how to spill to disk. It is most likely that
-	// if the target limit is below 8MiB, then we're in a test scenario and we
-	// don't want to error out.
-	const minMemoryLimit = 8 << 20
+	// We will create a memory monitor with at least 100KiB of memory limit
+	// since the join reader doesn't know how to spill its in-memory state to
+	// disk (separate from the buffered rows). It is most likely that if the
+	// target limit is below 100KiB, then we're in a test scenario and we don't
+	// want to error out.
+	const minMemoryLimit = 100 << 10
 	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
 	if memoryLimit < minMemoryLimit {
 		memoryLimit = minMemoryLimit
@@ -390,25 +433,49 @@ func newJoinReader(
 	jr.MemMonitor.Start(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
 
-	if err := jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), rightCols, readerType); err != nil {
+	if err := jr.initJoinReaderStrategy(flowCtx, rightTypes, readerType); err != nil {
 		return nil, err
 	}
-	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint()
+	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint(flowCtx.EvalCtx.SessionData())
+
+	if jr.usesStreamer {
+		// When using the Streamer API, we want to limit the batch size hint to
+		// at most a quarter of the workmem limit. Note that it is ok if it is
+		// set to zero since the joinReader will always include at least one row
+		// into the lookup batch.
+		if jr.batchSizeBytes > memoryLimit/4 {
+			jr.batchSizeBytes = memoryLimit / 4
+		}
+		// jr.batchSizeBytes will be used up by the input batch, and we'll give
+		// everything else to the streamer budget.
+		jr.streamerInfo.budgetLimit = memoryLimit - jr.batchSizeBytes
+		// We need to use an unlimited monitor for the streamer's budget since
+		// the streamer itself is responsible for staying under the limit.
+		jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
+			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.EvalCtx.Mon,
+		)
+		jr.streamerInfo.unlimitedMemMonitor.Start(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
+		jr.streamerInfo.maxKeysPerRow = int(jr.fetchSpec.MaxKeysPerRow)
+	} else {
+		// When not using the Streamer API, we want to limit the batch size hint
+		// to at most half of the workmem limit. Note that it is ok if it is set
+		// to zero since the joinReader will always include at least one row
+		// into the lookup batch.
+		if jr.batchSizeBytes > memoryLimit/2 {
+			jr.batchSizeBytes = memoryLimit / 2
+		}
+	}
 
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
 }
 
 func (jr *joinReader) initJoinReaderStrategy(
-	flowCtx *execinfra.FlowCtx,
-	typs []*types.T,
-	numKeyCols int,
-	neededRightCols util.FastIntSet,
-	readerType joinReaderType,
+	flowCtx *execinfra.FlowCtx, typs []*types.T, readerType joinReaderType,
 ) error {
-	spanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
-	spanBuilder.SetNeededColumns(neededRightCols)
-
+	strategyMemAcc := jr.MemMonitor.MakeBoundAccount()
+	spanGeneratorMemAcc := jr.MemMonitor.MakeBoundAccount()
 	var generator joinReaderSpanGenerator
 	if jr.lookupExpr.Expr == nil {
 		var keyToInputRowIndices map[string][]int
@@ -417,22 +484,35 @@ func (jr *joinReader) initJoinReaderStrategy(
 		if readerType != indexJoinReaderType {
 			keyToInputRowIndices = make(map[string][]int)
 		}
-		generator = &defaultSpanGenerator{
-			spanBuilder:          spanBuilder,
-			keyToInputRowIndices: keyToInputRowIndices,
-			numKeyCols:           numKeyCols,
-			lookupCols:           jr.lookupCols,
-			memAcc:               &jr.memAcc,
+		defGen := &defaultSpanGenerator{}
+		if err := defGen.init(
+			flowCtx.EvalCtx,
+			flowCtx.Codec(),
+			&jr.fetchSpec,
+			jr.splitFamilyIDs,
+			keyToInputRowIndices,
+			jr.lookupCols,
+			&spanGeneratorMemAcc,
+		); err != nil {
+			return err
 		}
+		generator = defGen
 	} else {
 		// Since jr.lookupExpr is set, we need to use either multiSpanGenerator or
 		// localityOptimizedSpanGenerator, which support looking up multiple spans
 		// per input row.
-		tableOrdToIndexOrd := util.FastIntMap{}
-		columnIDs, _ := catalog.FullIndexColumnIDs(jr.index)
-		for i, colID := range columnIDs {
-			tabOrd := jr.colIdxMap.GetDefault(colID)
-			tableOrdToIndexOrd.Set(tabOrd, i)
+
+		// Map fetched columns to index key columns.
+		var fetchedOrdToIndexKeyOrd util.FastIntMap
+		fullColumns := jr.fetchSpec.KeyFullColumns()
+		for keyOrdinal := range fullColumns {
+			keyColID := fullColumns[keyOrdinal].ColumnID
+			for fetchedOrdinal := range jr.fetchSpec.FetchedColumns {
+				if jr.fetchSpec.FetchedColumns[fetchedOrdinal].ColumnID == keyColID {
+					fetchedOrdToIndexKeyOrd.Set(fetchedOrdinal, keyOrdinal)
+					break
+				}
+			}
 		}
 
 		// If jr.remoteLookupExpr is set, this is a locality optimized lookup join
@@ -440,26 +520,32 @@ func (jr *joinReader) initJoinReaderStrategy(
 		if jr.remoteLookupExpr.Expr == nil {
 			multiSpanGen := &multiSpanGenerator{}
 			if err := multiSpanGen.init(
-				spanBuilder,
-				numKeyCols,
+				flowCtx.EvalCtx,
+				flowCtx.Codec(),
+				&jr.fetchSpec,
+				jr.splitFamilyIDs,
 				len(jr.input.OutputTypes()),
 				&jr.lookupExpr,
-				tableOrdToIndexOrd,
-				&jr.memAcc,
+				fetchedOrdToIndexKeyOrd,
+				&spanGeneratorMemAcc,
 			); err != nil {
 				return err
 			}
 			generator = multiSpanGen
 		} else {
 			localityOptSpanGen := &localityOptimizedSpanGenerator{}
+			remoteSpanGenMemAcc := jr.MemMonitor.MakeBoundAccount()
 			if err := localityOptSpanGen.init(
-				spanBuilder,
-				numKeyCols,
+				flowCtx.EvalCtx,
+				flowCtx.Codec(),
+				&jr.fetchSpec,
+				jr.splitFamilyIDs,
 				len(jr.input.OutputTypes()),
 				&jr.lookupExpr,
 				&jr.remoteLookupExpr,
-				tableOrdToIndexOrd,
-				&jr.memAcc,
+				fetchedOrdToIndexKeyOrd,
+				&spanGeneratorMemAcc,
+				&remoteSpanGenMemAcc,
 			); err != nil {
 				return err
 			}
@@ -471,6 +557,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		jr.strategy = &joinReaderIndexJoinStrategy{
 			joinerBase:              &jr.joinerBase,
 			joinReaderSpanGenerator: generator,
+			memAcc:                  &strategyMemAcc,
 		}
 		return nil
 	}
@@ -481,7 +568,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			joinReaderSpanGenerator: generator,
 			isPartialJoin:           jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
 			groupingState:           jr.groupingState,
-			memAcc:                  &jr.memAcc,
+			memAcc:                  &strategyMemAcc,
 		}
 		return nil
 	}
@@ -513,23 +600,9 @@ func (jr *joinReader) initJoinReaderStrategy(
 		lookedUpRows:                      drc,
 		groupingState:                     jr.groupingState,
 		outputGroupContinuationForLeftRow: jr.outputGroupContinuationForLeftRow,
-		memAcc:                            &jr.memAcc,
+		memAcc:                            &strategyMemAcc,
 	}
 	return nil
-}
-
-// getIndexColSet returns a set of all column indices for the given index.
-func getIndexColSet(index catalog.Index, colIdxMap catalog.TableColMap) util.FastIntSet {
-	cols := util.MakeFastIntSet()
-	{
-		colIDs := index.CollectKeyColumnIDs()
-		colIDs.UnionWith(index.CollectSecondaryStoredColumnIDs())
-		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
-		colIDs.ForEach(func(colID descpb.ColumnID) {
-			cols.Add(colIdxMap.GetDefault(colID))
-		})
-	}
-	return cols
 }
 
 // SetBatchSizeBytes sets the desired batch size. It should only be used in tests.
@@ -540,44 +613,6 @@ func (jr *joinReader) SetBatchSizeBytes(batchSize int64) {
 // Spilled returns whether the joinReader spilled to disk.
 func (jr *joinReader) Spilled() bool {
 	return jr.strategy.spilled()
-}
-
-// neededRightCols returns the set of column indices which need to be fetched
-// from the right side of the join (jr.desc).
-func (jr *joinReader) neededRightCols() util.FastIntSet {
-	neededCols := jr.OutputHelper.NeededColumns()
-
-	if jr.readerType == indexJoinReaderType {
-		// For index joins, all columns from the left side are not output, so no
-		// shift is needed. Also, onCond is always empty for index joins, so
-		// there is no need to iterate over it either.
-		return neededCols
-	}
-
-	// Get the columns from the right side of the join and shift them over by
-	// the size of the left side so the right side starts at 0.
-	numInputTypes := len(jr.input.OutputTypes())
-	neededRightCols := util.MakeFastIntSet()
-	var lastCol int
-	for i, ok := neededCols.Next(numInputTypes); ok; i, ok = neededCols.Next(i + 1) {
-		lastCol = i - numInputTypes
-		neededRightCols.Add(lastCol)
-	}
-	if jr.outputGroupContinuationForLeftRow {
-		// The lastCol is the bool continuation column and not a right
-		// column.
-		neededRightCols.Remove(lastCol)
-	}
-
-	// Add columns needed by OnExpr.
-	for _, v := range jr.onCond.Vars.GetIndexedVars() {
-		rightIdx := v.Idx - numInputTypes
-		if rightIdx >= 0 {
-			neededRightCols.Add(rightIdx)
-		}
-	}
-
-	return neededRightCols
 }
 
 // Next is part of the RowSource interface.
@@ -639,43 +674,86 @@ func (jr *joinReader) readInput() (
 		// did the reset for this batch.
 	}
 
-	sizeBefore := jr.memUsage()
+	if jr.resetScratchWhenReadingInput {
+		// Deeply reset the rows from the previous input batch.
+		for i := range jr.scratchInputRows {
+			jr.scratchInputRows[i] = nil
+		}
+		// We've just discarded the old rows, so we have to update the memory
+		// accounting accordingly.
+		newSz := jr.accountedFor.scratchInputRows + jr.accountedFor.groupingState
+		if err := jr.memAcc.ResizeTo(jr.Ctx, newSz); err != nil {
+			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
+		}
+		jr.scratchInputRows = jr.scratchInputRows[:0]
+		jr.resetScratchWhenReadingInput = false
+	}
 
 	// Read the next batch of input rows.
-	for jr.curBatchSizeBytes < jr.batchSizeBytes {
-		row, meta := jr.input.Next()
-		if meta != nil {
-			if meta.Err != nil {
-				jr.MoveToDraining(nil /* err */)
-				return jrStateUnknown, nil, meta
-			}
+	for {
+		var encDatumRow rowenc.EncDatumRow
+		var rowSize int64
+		if jr.pendingRow == nil {
+			// There is no pending row, so we have to get the next one from the
+			// input.
+			var meta *execinfrapb.ProducerMetadata
+			encDatumRow, meta = jr.input.Next()
+			if meta != nil {
+				if meta.Err != nil {
+					jr.MoveToDraining(nil /* err */)
+					return jrStateUnknown, nil, meta
+				}
 
-			// Perform memory accounting.
-			sizeAfter := jr.memUsage()
-			if err := jr.memAcc.Resize(jr.Ctx, sizeBefore, sizeAfter); err != nil {
-				jr.MoveToDraining(err)
-				return jrStateUnknown, nil, meta
-			}
+				if err := jr.performMemoryAccounting(); err != nil {
+					jr.MoveToDraining(err)
+					return jrStateUnknown, nil, meta
+				}
 
-			return jrReadingInput, nil, meta
+				return jrReadingInput, nil, meta
+			}
+			if encDatumRow == nil {
+				break
+			}
+			rowSize = int64(encDatumRow.Size())
+			if jr.curBatchSizeBytes > 0 && jr.curBatchSizeBytes+rowSize > jr.batchSizeBytes {
+				// Adding this row to the current batch will make the batch
+				// exceed jr.batchSizeBytes. Additionally, the batch is not
+				// empty, so we'll store this row as "pending" and will include
+				// it into the next batch.
+				//
+				// The batch being non-empty is important because in case it was
+				// empty and we decided to not include this (first) row into it,
+				// then we'd be stalled - we'd generate no spans, so we'd not
+				// perform the lookup of anything.
+				jr.pendingRow = encDatumRow
+				break
+			}
+		} else {
+			encDatumRow = jr.pendingRow
+			jr.pendingRow = nil
+			rowSize = int64(encDatumRow.Size())
 		}
-		if row == nil {
-			break
-		}
-		jr.curBatchSizeBytes += int64(row.Size())
+		jr.curBatchSizeBytes += rowSize
 		if jr.groupingState != nil {
 			// Lookup Join.
-			if err := jr.processContinuationValForRow(row); err != nil {
+			if err := jr.processContinuationValForRow(encDatumRow); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, nil, jr.DrainHelper()
 			}
 		}
-		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(row))
+		// Keep the copy of the row after accounting for its memory usage.
+		//
+		// We need to subtract the EncDatumRowOverhead because that is already
+		// tracked in jr.accountedFor.scratchInputRows.
+		if err := jr.memAcc.Grow(jr.Ctx, rowSize-int64(rowenc.EncDatumRowOverhead)); err != nil {
+			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
+		}
+		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(encDatumRow))
 	}
 
-	// Perform memory accounting.
-	sizeAfter := jr.memUsage()
-	if err := jr.memAcc.Resize(jr.Ctx, sizeBefore, sizeAfter); err != nil {
+	if err := jr.performMemoryAccounting(); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
@@ -709,7 +787,7 @@ func (jr *joinReader) readInput() (
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
 	jr.curBatchInputRowCount = int64(len(jr.scratchInputRows))
-	jr.scratchInputRows = jr.scratchInputRows[:0]
+	jr.resetScratchWhenReadingInput = true
 	jr.curBatchSizeBytes = 0
 	jr.curBatchRowsRead = 0
 	if len(spans) == 0 {
@@ -743,10 +821,35 @@ func (jr *joinReader) readInput() (
 	}
 
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
-	if err := jr.fetcher.StartScan(
-		jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
-		jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
-	); err != nil {
+	// Note that the fetcher takes ownership of the spans slice - it will modify
+	// it and perform the memory accounting. We don't care about the
+	// modification here, but we want to be conscious about the memory
+	// accounting - we don't double count for any memory of spans because the
+	// joinReaderStrategy doesn't account for any memory used by the spans.
+	if jr.usesStreamer {
+		var kvBatchFetcher *row.TxnKVStreamer
+		kvBatchFetcher, err = row.NewTxnKVStreamer(jr.Ctx, jr.streamerInfo.Streamer, spans, jr.keyLocking)
+		if err != nil {
+			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
+		}
+		err = jr.fetcher.StartScanFrom(jr.Ctx, kvBatchFetcher, jr.FlowCtx.TraceKV)
+	} else {
+		var bytesLimit rowinfra.BytesLimit
+		if !jr.shouldLimitBatches {
+			bytesLimit = rowinfra.NoBytesLimit
+		} else {
+			bytesLimit = jr.lookupBatchBytesLimit
+			if jr.lookupBatchBytesLimit == 0 {
+				bytesLimit = rowinfra.DefaultBatchBytesLimit
+			}
+		}
+		err = jr.fetcher.StartScan(
+			jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
+			jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+		)
+	}
+	if err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
@@ -773,7 +876,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		}
 
 		// Fetch the next row and tell the strategy to process it.
-		lookedUpRow, _, _, err := jr.fetcher.NextRow(jr.Ctx)
+		lookedUpRow, err := jr.fetcher.NextRow(jr.Ctx)
 		if err != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(err))
 			return jrStateUnknown, jr.DrainHelper()
@@ -813,8 +916,12 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			sort.Sort(spans)
 
 			log.VEventf(jr.Ctx, 1, "scanning %d remote spans", len(spans))
+			bytesLimit := rowinfra.DefaultBatchBytesLimit
+			if !jr.shouldLimitBatches {
+				bytesLimit = rowinfra.NoBytesLimit
+			}
 			if err := jr.fetcher.StartScan(
-				jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
+				jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
 				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 			); err != nil {
 				jr.MoveToDraining(err)
@@ -845,10 +952,43 @@ func (jr *joinReader) emitRow() (
 	return nextState, rowToEmit, nil
 }
 
+func (jr *joinReader) performMemoryAccounting() error {
+	oldSz := jr.accountedFor.scratchInputRows + jr.accountedFor.groupingState
+	jr.accountedFor.scratchInputRows = int64(cap(jr.scratchInputRows)) * int64(rowenc.EncDatumRowOverhead)
+	jr.accountedFor.groupingState = jr.groupingState.memUsage()
+	newSz := jr.accountedFor.scratchInputRows + jr.accountedFor.groupingState
+	return jr.memAcc.Resize(jr.Ctx, oldSz, newSz)
+}
+
 // Start is part of the RowSource interface.
 func (jr *joinReader) Start(ctx context.Context) {
 	ctx = jr.StartInternal(ctx, joinReaderProcName)
 	jr.input.Start(ctx)
+	if jr.usesStreamer {
+		jr.streamerInfo.Streamer = kvstreamer.NewStreamer(
+			jr.FlowCtx.Cfg.DistSender,
+			jr.FlowCtx.Stopper(),
+			jr.FlowCtx.Txn,
+			jr.FlowCtx.EvalCtx.Settings,
+			jr.lockWaitPolicy,
+			jr.streamerInfo.budgetLimit,
+			&jr.streamerInfo.budgetAcc,
+		)
+		mode := kvstreamer.OutOfOrder
+		if jr.maintainOrdering {
+			mode = kvstreamer.InOrder
+			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
+				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
+			)
+		}
+		jr.streamerInfo.Streamer.Init(
+			mode,
+			kvstreamer.Hints{UniqueRequests: true},
+			jr.streamerInfo.maxKeysPerRow,
+			jr.FlowCtx.Cfg.TempStorage,
+			jr.streamerInfo.diskMonitor,
+		)
+	}
 	jr.runningState = jrReadingInput
 }
 
@@ -862,6 +1002,19 @@ func (jr *joinReader) close() {
 	if jr.InternalClose() {
 		if jr.fetcher != nil {
 			jr.fetcher.Close(jr.Ctx)
+		}
+		if jr.usesStreamer {
+			// We have to cleanup the streamer after closing the fetcher because
+			// the latter might release some memory tracked by the budget of the
+			// streamer.
+			if jr.streamerInfo.Streamer != nil {
+				jr.streamerInfo.Streamer.Close(jr.Ctx)
+			}
+			jr.streamerInfo.budgetAcc.Close(jr.Ctx)
+			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx)
+			if jr.streamerInfo.diskMonitor != nil {
+				jr.streamerInfo.diskMonitor.Stop(jr.Ctx)
+			}
 		}
 		jr.strategy.close(jr.Ctx)
 		jr.memAcc.Close(jr.Ctx)
@@ -889,7 +1042,8 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 
 	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
-	return &execinfrapb.ComponentStats{
+	jr.scanStats = execinfra.GetScanStats(jr.Ctx)
+	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
@@ -899,6 +1053,8 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: jr.OutputHelper.Stats(),
 	}
+	execinfra.PopulateKVMVCCStats(&ret.KV, &jr.scanStats)
+	return ret
 }
 
 func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
@@ -997,26 +1153,6 @@ func (jr *joinReader) updateGroupingStateForNonEmptyBatch() {
 			jr.groupingState.setFirstGroupMatched()
 		}
 	}
-}
-
-// memUsage returns the size of the data structures in the joinReader for memory
-// accounting purposes.
-func (jr *joinReader) memUsage() int64 {
-	var size int64
-
-	// Account for scratchInputRows. Slice the full capacity so we can account for
-	// the memory used by rows past the length of scratchInputRows.
-	rowsCap := jr.scratchInputRows[:cap(jr.scratchInputRows)]
-	for i := range rowsCap {
-		size += int64(rowsCap[i].Size())
-	}
-
-	// Account for groupingState.
-	if jr.groupingState != nil {
-		size += int64(cap(jr.groupingState.groupState)) * int64(unsafe.Sizeof(groupState{}))
-		size += int64(cap(jr.groupingState.batchRowToGroupIndex)) * memsize.Int
-	}
-	return size
 }
 
 // inputBatchGroupingState encapsulates the state needed for all the
@@ -1124,4 +1260,12 @@ func (ib *inputBatchGroupingState) isUnmatched(rowIndex int) bool {
 	// group since for earlier rows, when at step (b), one does not know the
 	// match state of later rows in the group.
 	return !ib.groupState[groupIndex].matched && ib.groupState[groupIndex].lastRow == rowIndex
+}
+
+func (ib *inputBatchGroupingState) memUsage() int64 {
+	if ib == nil {
+		return 0
+	}
+	return int64(cap(ib.groupState))*int64(unsafe.Sizeof(groupState{})) +
+		int64(cap(ib.batchRowToGroupIndex))*memsize.Int
 }

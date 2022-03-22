@@ -20,6 +20,38 @@ CREATE DATABASE d PRIMARY REGION "us-east-1" REGION "ca-central-1"
 sql.multiregion.create_database
 sql.multiregion.create_database.survival_goal.survive_default
 
+exec
+SET enable_multiregion_placement_policy = true;
+----
+
+feature-usage
+CREATE DATABASE create_placement PRIMARY REGION "us-east-1" PLACEMENT RESTRICTED
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.placement.restricted
+sql.multiregion.create_database.survival_goal.survive_default
+
+feature-usage
+CREATE DATABASE create_placement_default PRIMARY REGION "us-east-1" PLACEMENT DEFAULT
+----
+sql.multiregion.create_database
+sql.multiregion.create_database.placement.default
+sql.multiregion.create_database.survival_goal.survive_default
+
+exec
+CREATE DATABASE to_be_restricted PRIMARY REGION "us-east-1"
+----
+
+feature-usage
+ALTER DATABASE to_be_restricted PLACEMENT RESTRICTED
+----
+sql.multiregion.alter_database.placement.restricted
+
+feature-usage
+ALTER DATABASE to_be_restricted PLACEMENT DEFAULT
+----
+sql.multiregion.alter_database.placement.default
+
 feature-usage
 ALTER DATABASE d DROP REGION "ca-central-1"
 ----
@@ -269,6 +301,9 @@ sql.multiregion.alter_table.locality.from.regional_by_row.to.regional_by_table_i
 
 exec
 ALTER TABLE t5 SET LOCALITY REGIONAL BY ROW;
+----
+
+exec
 ALTER TABLE t5 ADD COLUMN cr crdb_internal_region NOT NULL
 ----
 
@@ -352,6 +387,14 @@ IMPORT INTO t7 CSV DATA ('nodelocal://0/t7/export*.csv')
 sql.multiregion.import
 
 # Test for locality optimized search counter.
+
+# Lower the closed timestamp subsystem so system config info is transmitted
+# rapidly.
+exec
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5ms';
+----
+
 feature-allowlist
 sql.plan.opt.locality-optimized-search
 ----
@@ -359,6 +402,12 @@ sql.plan.opt.locality-optimized-search
 exec
 USE survive_region;
 CREATE TABLE t8 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+----
+
+# Sleep a large multiple of the closed timestamp target duration to ensure
+# that a fresh system config has made its way to the optimizer.
+exec
+SELECT pg_sleep(.05);
 ----
 
 feature-usage

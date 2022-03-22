@@ -90,7 +90,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 			// that a push on a STAGING transaction record immediately launches
 			// the transaction recovery process.
 			cfg.TestingKnobs.EvalKnobs.RecoverIndeterminateCommitsOnFailedPushes = true
-			store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+			store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 			// Create a transaction that will get stuck performing a parallel commit.
 			txn := newTransaction("txn", keyA, 1, store.Clock())
@@ -227,7 +227,7 @@ func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 		defer stopper.Stop(ctx)
 		manual := hlc.NewManualClock(123)
 		cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
-		store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+		store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 		// Create a transaction that will get stuck performing a parallel
 		// commit.
@@ -347,7 +347,7 @@ func TestTxnClearRangeIntents(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	// Immediately launch transaction recovery when pushing a STAGING txn.
 	cfg.TestingKnobs.EvalKnobs.RecoverIndeterminateCommitsOnFailedPushes = true
-	store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 	// Set up a couple of keys to write, and a range to clear that covers
 	// B and its intent.
@@ -399,46 +399,23 @@ func TestTxnClearRangeIntents(t *testing.T) {
 	require.Nil(t, pErr, "error: %s", pErr)
 
 	// If separated intents are enabled, all should be well.
-	if store.engine.IsSeparatedIntentsEnabledForTesting(ctx) {
-		// Reading A should succeed, but B should be gone.
-		get := getArgs(keyA)
-		reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &get)
-		require.Nil(t, pErr, "error: %s", pErr)
-		require.NotNil(t, reply.(*roachpb.GetResponse).Value, "expected value for A")
-		value, err := reply.(*roachpb.GetResponse).Value.GetBytes()
-		require.NoError(t, err)
-		require.Equal(t, value, valueA)
+	// Reading A should succeed, but B should be gone.
+	get := getArgs(keyA)
+	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &get)
+	require.Nil(t, pErr, "error: %s", pErr)
+	require.NotNil(t, reply.(*roachpb.GetResponse).Value, "expected value for A")
+	value, err := reply.(*roachpb.GetResponse).Value.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, value, valueA)
 
-		get = getArgs(keyB)
-		reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &get)
-		require.Nil(t, pErr, "error: %s", pErr)
-		require.Nil(t, reply.(*roachpb.GetResponse).Value, "unexpected value for B")
+	get = getArgs(keyB)
+	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &get)
+	require.Nil(t, pErr, "error: %s", pErr)
+	require.Nil(t, reply.(*roachpb.GetResponse).Value, "unexpected value for B")
 
-		// Query the original transaction, which should now be committed.
-		queryTxn := queryTxnArgs(txn.TxnMeta, false)
-		reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &queryTxn)
-		require.Nil(t, pErr, "error: %s", pErr)
-		require.Equal(t, roachpb.COMMITTED, reply.(*roachpb.QueryTxnResponse).QueriedTxn.Status)
-
-	} else {
-		// If separated intents are disabled, ClearRange will have removed B's
-		// intent without resolving it. When we read A, txn recovery will expect
-		// to find B's intent, but when missing it assumes the txn did not
-		// complete and aborts it, rolling back all writes (including A).
-		get := getArgs(keyA)
-		reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &get)
-		require.Nil(t, pErr, "error: %s", pErr)
-		require.Nil(t, reply.(*roachpb.GetResponse).Value, "unexpected value for A")
-
-		get = getArgs(keyB)
-		reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &get)
-		require.Nil(t, pErr, "error: %s", pErr)
-		require.Nil(t, reply.(*roachpb.GetResponse).Value, "unexpected value for B")
-
-		// Query the original transaction, which should now be aborted.
-		queryTxn := queryTxnArgs(txn.TxnMeta, false)
-		reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &queryTxn)
-		require.Nil(t, pErr, "error: %s", pErr)
-		require.Equal(t, roachpb.ABORTED, reply.(*roachpb.QueryTxnResponse).QueriedTxn.Status)
-	}
+	// Query the original transaction, which should now be committed.
+	queryTxn := queryTxnArgs(txn.TxnMeta, false)
+	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &queryTxn)
+	require.Nil(t, pErr, "error: %s", pErr)
+	require.Equal(t, roachpb.COMMITTED, reply.(*roachpb.QueryTxnResponse).QueriedTxn.Status)
 }

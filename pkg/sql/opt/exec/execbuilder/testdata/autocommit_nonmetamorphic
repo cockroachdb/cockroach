@@ -33,6 +33,8 @@ true
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (1, 1);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -41,7 +43,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 
 # Multi-row insert should auto-commit.
 query B
@@ -54,6 +56,8 @@ true
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (2, 2), (3, 3);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -62,7 +66,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
 # No auto-commit inside a transaction.
 statement ok
@@ -86,7 +90,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 2 CPut to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut to (n1,s1):1
 
 statement ok
 ROLLBACK
@@ -102,6 +106,8 @@ true
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -110,19 +116,20 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
-# TODO(radu): allow non-side-effecting projections.
 query B
 SELECT count(*) > 0 FROM [
-  EXPLAIN (VERBOSE) INSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a + b
+  EXPLAIN (VERBOSE) INSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a < b
 ] WHERE info LIKE '%auto commit%'
 ----
-false
+true
 
 statement ok
 SET TRACING=ON;
-  INSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a + b;
+  INSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a < b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -132,8 +139,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 2 CPut to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
 # Insert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -147,6 +153,8 @@ false
 statement ok
 SET TRACING=ON;
   INSERT INTO ab VALUES (10, 10), (11, 11) RETURNING a / b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -156,8 +164,8 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 2 CPut to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 # Another way to test the scenario above: generate an error and ensure that the
 # mutation was not committed.
@@ -184,6 +192,8 @@ true
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (1, 1);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -192,7 +202,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 1 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 Put, 1 EndTxn to (n1,s1):1
 
 # Multi-row upsert should auto-commit.
 query B
@@ -205,6 +215,8 @@ true
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (2, 2), (3, 3);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -213,7 +225,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # No auto-commit inside a transaction.
 statement ok
@@ -237,7 +249,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 2 Put to (n1,s1):1
+dist sender send  r44: sending batch 2 Put to (n1,s1):1
 
 statement ok
 ROLLBACK
@@ -253,6 +265,8 @@ true
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -261,7 +275,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
 query B
@@ -274,6 +288,8 @@ false
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (8, 8), (9, 9) RETURNING a + b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -283,8 +299,8 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 2 Put to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 Put to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 # Upsert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -298,6 +314,8 @@ false
 statement ok
 SET TRACING=ON;
   UPSERT INTO ab VALUES (10, 10), (11, 11) RETURNING a / b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -307,8 +325,8 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 2 Put to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 Put to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 # Another way to test the scenario above: generate an error and ensure that the
 # mutation was not committed.
@@ -335,6 +353,8 @@ true
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -343,8 +363,8 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # No auto-commit inside a transaction.
 statement ok
@@ -368,8 +388,8 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 2 Put to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 2 Put to (n1,s1):1
 
 statement ok
 ROLLBACK
@@ -385,6 +405,8 @@ true
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a, b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -393,8 +415,8 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 2 Put, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
 query B
@@ -407,6 +429,8 @@ false
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a + b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -416,9 +440,9 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 2 Put to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 2 Put to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 # Update with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -432,6 +456,8 @@ false
 statement ok
 SET TRACING=ON;
   UPDATE ab SET b=b+1 WHERE a < 3 RETURNING a / b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -441,9 +467,9 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 2 Put to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 2 Put to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 # Another way to test the scenario above: generate an error and ensure that the
 # mutation was not committed.
@@ -470,6 +496,8 @@ true
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a = 1;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -478,7 +506,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
 # Multi-row delete should auto-commit.
 query B
@@ -491,6 +519,8 @@ true
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (2, 3);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -499,7 +529,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
 # No auto-commit inside a transaction.
 statement ok
@@ -523,7 +553,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r44: sending batch 1 DelRng to (n1,s1):1
 
 statement ok
 ROLLBACK
@@ -539,6 +569,8 @@ true
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (6, 7) RETURNING a, b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -547,8 +579,8 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 2 Del, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 2 Del, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
 query B
@@ -561,6 +593,8 @@ false
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (8, 9) RETURNING a + b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -570,9 +604,9 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 2 Del to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 2 Del to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 # Insert with RETURNING statement with side-effects should not auto-commit.
 # In this case division can (in principle) error out.
@@ -586,6 +620,8 @@ false
 statement ok
 SET TRACING=ON;
   DELETE FROM ab WHERE a IN (10, 11) RETURNING a / b;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -595,9 +631,9 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 2 Del to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 2 Del to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
 INSERT INTO ab VALUES (12, 0);
@@ -635,6 +671,8 @@ false
 statement ok
 SET TRACING=ON;
   INSERT INTO fk_child VALUES (1, 1), (2, 2);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -644,9 +682,9 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 2 CPut to (n1,s1):1
-dist sender send  r42: sending batch 2 Get to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut to (n1,s1):1
+dist sender send  r44: sending batch 2 Get to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 query B
 SELECT count(*) > 0 FROM [
@@ -658,6 +696,8 @@ false
 statement ok
 SET TRACING=ON;
   UPDATE fk_child SET b=b+1 WHERE a < 2;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -667,10 +707,10 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 1 Put to (n1,s1):1
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 1 Put to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 query B
 SELECT count(*) > 0 FROM [
@@ -683,6 +723,8 @@ false
 statement ok
 SET TRACING=ON;
   DELETE FROM fk_parent WHERE p = 3;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -692,15 +734,19 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 1 Get to (n1,s1):1
-dist sender send  r42: sending batch 1 Del to (n1,s1):1
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 Get to (n1,s1):1
+dist sender send  r44: sending batch 1 Del to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 # Test with a single cascade, which should use autocommit.
 statement ok
 DROP TABLE fk_child;
+
+statement ok
 CREATE TABLE fk_child (a INT, b INT REFERENCES fk_parent(p) ON DELETE CASCADE, FAMILY f1 (a, b));
+
+statement ok
 INSERT INTO fk_child VALUES (1, 1), (2, 2)
 
 # Populate table descriptor cache.
@@ -710,6 +756,8 @@ SELECT * FROM fk_parent JOIN fk_child ON p = b
 statement ok
 SET TRACING=ON;
   DELETE FROM fk_parent WHERE p = 2;
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -719,9 +767,9 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 1 DelRng to (n1,s1):1
-dist sender send  r42: sending batch 1 Scan to (n1,s1):1
-dist sender send  r42: sending batch 1 Del, 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r44: sending batch 1 Scan to (n1,s1):1
+dist sender send  r44: sending batch 1 Del, 1 EndTxn to (n1,s1):1
 
 # -----------------------
 # Multiple mutation tests
@@ -740,6 +788,8 @@ SET TRACING=ON;
   INSERT INTO ab (
     SELECT a*10, b*10 FROM [ INSERT INTO ab VALUES (1, 1), (2, 2) RETURNING a, b ]
   );
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -749,9 +799,9 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 2 CPut to (n1,s1):1
-dist sender send  r42: sending batch 2 CPut to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
 
 query B
 SELECT count(*) > 0 FROM [
@@ -765,6 +815,8 @@ statement ok
 SET TRACING=ON;
   WITH cte AS (INSERT INTO ab VALUES (3, 3), (4, 4) RETURNING a, b)
   INSERT INTO ab (SELECT a*10, b*10 FROM cte);
+
+statement ok
 SET TRACING=OFF
 
 query TT
@@ -774,6 +826,85 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r42: sending batch 2 CPut to (n1,s1):1
-dist sender send  r42: sending batch 2 CPut to (n1,s1):1
-dist sender send  r42: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut to (n1,s1):1
+dist sender send  r44: sending batch 2 CPut to (n1,s1):1
+dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
+
+# Check that the statement can still be auto-committed when the txn rows written
+# erring guardrail is enabled.
+statement ok
+CREATE TABLE guardrails (i INT PRIMARY KEY);
+SET transaction_rows_written_err = 1
+
+# Get the range id.
+let $rangeid
+SELECT range_id FROM [ SHOW RANGES FROM TABLE guardrails ]
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO guardrails VALUES (1)
+] WHERE info LIKE '%auto commit%'
+----
+true
+
+# Now verify that writing a single row succeeds, but writing two doesn't.
+statement ok
+SET tracing = on;
+  INSERT INTO guardrails VALUES (1);
+
+statement ok
+SET tracing = off;
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message     LIKE '%r$rangeid: sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
+----
+dist sender send  r44: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+
+query error pq: txn has written 2 rows, which is above the limit
+INSERT INTO guardrails VALUES (2), (3)
+
+statement ok
+RESET transaction_rows_written_err
+
+# Check that the statement that can usually be auto-committed isn't when the txn
+# rows read erring guardrail is enabled.
+statement ok
+SET transaction_rows_read_err = 1
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO guardrails VALUES (1)
+] WHERE info LIKE '%auto commit%'
+----
+false
+
+statement ok
+RESET transaction_rows_read_err
+
+# Check that the auto commit is enabled when the logging guardrails are enabled
+# but the erring one is not.
+statement ok
+SET transaction_rows_written_log = 1;
+SET transaction_rows_read_log = 1;
+
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO guardrails VALUES (1)
+] WHERE info LIKE '%auto commit%'
+----
+true
+
+statement ok
+RESET transaction_rows_written_log;
+RESET transaction_rows_read_log
+
+# Check that the auto commit is enabled when the guardrails are disabled.
+query B
+SELECT count(*) > 0 FROM [
+  EXPLAIN (VERBOSE) INSERT INTO guardrails VALUES (1)
+] WHERE info LIKE '%auto commit%'
+----
+true

@@ -12,14 +12,9 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/authentication"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -30,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -79,7 +73,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc.GetID())
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +128,11 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 
+	// Drop all of the collected objects.
+	if err := n.d.dropAllCollectedObjects(ctx, p); err != nil {
+		return err
+	}
+
 	var schemasIDsToDelete []descpb.ID
 	for _, schemaWithDbDesc := range n.d.schemasToDelete {
 		schemaToDelete := schemaWithDbDesc.schema
@@ -169,19 +168,10 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	// Drop all of the collected objects.
-	if err := n.d.dropAllCollectedObjects(ctx, p); err != nil {
-		return err
-	}
+	n.dbDesc.SetDropped()
+	b := p.txn.NewBatch()
+	p.dropNamespaceEntry(ctx, b, n.dbDesc)
 
-	n.dbDesc.AddDrainingName(descpb.NameInfo{
-		ParentID:       keys.RootNamespaceID,
-		ParentSchemaID: keys.RootNamespaceID,
-		Name:           n.dbDesc.Name,
-	})
-	n.dbDesc.State = descpb.DescriptorState_DROP
-
-	b := &kv.Batch{}
 	// Note that a job was already queued above.
 	if err := p.writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {
 		return err
@@ -190,10 +180,20 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := p.removeDbComment(ctx, n.dbDesc.GetID()); err != nil {
+	metadataUpdater := p.ExecCfg().DescMetadaUpdaterFactory.NewMetadataUpdater(
+		ctx,
+		p.txn,
+		p.SessionData())
+	err := metadataUpdater.DeleteDescriptorComment(
+		int64(n.dbDesc.GetID()),
+		0,
+		keys.DatabaseCommentType)
+	if err != nil {
 		return err
 	}
-	if err := p.removeDbRoleSettings(ctx, n.dbDesc.GetID()); err != nil {
+
+	err = metadataUpdater.DeleteDatabaseRoleSettings(ctx, n.dbDesc.GetID())
+	if err != nil {
 		return err
 	}
 
@@ -308,36 +308,4 @@ func (p *planner) accumulateCascadingViews(
 		}
 	}
 	return nil
-}
-
-func (p *planner) removeDbComment(ctx context.Context, dbID descpb.ID) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-		ctx,
-		"delete-db-comment",
-		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
-		keys.DatabaseCommentType,
-		dbID)
-
-	return err
-}
-
-func (p *planner) removeDbRoleSettings(ctx context.Context, dbID descpb.ID) error {
-	// TODO(rafi): Remove this condition in 21.2.
-	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.DatabaseRoleSettings) {
-		return nil
-	}
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-		ctx,
-		"delete-db-role-settings",
-		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		fmt.Sprintf(
-			`DELETE FROM %s WHERE database_id = $1`,
-			authentication.DatabaseRoleSettingsTableName,
-		),
-		dbID)
-
-	return err
 }

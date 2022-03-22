@@ -3,51 +3,218 @@ CREATE SEQUENCE defaultdb.SQ1
 ----
 
 ops
-DROP SEQUENCE defaultdb.SQ1 CASCADE
+DROP SEQUENCE defaultdb.SQ1
 ----
-Stage 0
-  *scop.MarkDescriptorAsDropped
-    TableID: 52
-  *scop.DrainDescriptorName
-    TableID: 52
-  *scop.CreateGcJobForDescriptor
-    DescID: 52
+StatementPhase stage 1 of 1 with 1 MutationType ops
+  transitions:
+    [[Sequence:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
+  ops:
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 104
+PreCommitPhase stage 1 of 1 with 5 MutationType ops
+  transitions:
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Sequence:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[TableComment:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 104
+        Name: sq1
+        SchemaID: 101
+    *scop.MarkDescriptorAsDropped
+      DescID: 104
+    *scop.RemoveAllTableComments
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      JobID: 1
+      Statements:
+      - statement: DROP SEQUENCE defaultdb.sq1
+        redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1›
+        statementtag: DROP SEQUENCE
+PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
+  transitions:
+    [[Sequence:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
+  ops:
+    *scop.LogEvent
+      Authorization:
+        UserName: root
+      Element:
+        Sequence:
+          sequenceId: 104
+      Statement: DROP SEQUENCE ‹defaultdb›.public.‹sq1›
+      StatementTag: DROP SEQUENCE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      TargetStatus: 1
+    *scop.CreateGcJobForTable
+      TableID: 104
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 104
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
 
 create-table
-CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
+CREATE TABLE defaultdb.blog_posts (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING)
 ----
 
 create-table
-CREATE TABLE defaultdb.blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
+CREATE TABLE defaultdb.blog_posts2 (id INT8 PRIMARY KEY, val INT8 DEFAULT nextval('defaultdb.sq1'), title STRING)
 ----
 
 ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-Stage 0
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 53
-  *scop.UpdateRelationDeps
-    TableID: 53
-  *scop.RemoveColumnDefaultExpression
-    ColumnID: 2
-    TableID: 54
-  *scop.UpdateRelationDeps
-    TableID: 54
-Stage 1
-  *scop.MarkDescriptorAsDropped
-    TableID: 52
-  *scop.DrainDescriptorName
-    TableID: 52
-  *scop.CreateGcJobForDescriptor
-    DescID: 52
+StatementPhase stage 1 of 1 with 1 MutationType ops
+  transitions:
+    [[Sequence:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
+  ops:
+    *scop.MarkDescriptorAsDroppedSynthetically
+      DescID: 104
+PreCommitPhase stage 1 of 1 with 11 MutationType ops
+  transitions:
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Sequence:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[TableComment:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 104
+        Name: sq1
+        SchemaID: 101
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 105
+    *scop.UpdateBackReferencesInSequences
+      BackReferencedColumnID: 2
+      BackReferencedTableID: 105
+      SequenceIDs:
+      - 104
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 2
+      TableID: 106
+    *scop.UpdateBackReferencesInSequences
+      BackReferencedColumnID: 2
+      BackReferencedTableID: 106
+      SequenceIDs:
+      - 104
+    *scop.MarkDescriptorAsDropped
+      DescID: 104
+    *scop.RemoveAllTableComments
+      TableID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 106
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 105
+      - 106
+      JobID: 1
+      Statements:
+      - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+        redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+        statementtag: DROP SEQUENCE
+PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
+  transitions:
+    [[Sequence:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
+  ops:
+    *scop.LogEvent
+      Authorization:
+        UserName: root
+      Element:
+        Sequence:
+          sequenceId: 104
+      Statement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+      StatementTag: DROP SEQUENCE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      TargetStatus: 1
+    *scop.CreateGcJobForTable
+      TableID: 104
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 104
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 105
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 106
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
 
 
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- from: [Sequence:{DescID: 52}, PUBLIC]
-  to:   [DefaultExpression:{DescID: 53, ColumnID: 2}, ABSENT]
-- from: [Sequence:{DescID: 52}, PUBLIC]
-  to:   [DefaultExpression:{DescID: 54, ColumnID: 2}, ABSENT]
+- from: [ColumnDefaultExpression:{DescID: 105, ColumnID: 2}, ABSENT]
+  to:   [Sequence:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: column DEFAULT removed before dropping dependent types and sequences
+- from: [ColumnDefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT]
+  to:   [Sequence:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: column DEFAULT removed before dropping dependent types and sequences
+- from: [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT]
+  to:   [Sequence:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
+  to:   [Sequence:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [Owner:{DescID: 104}, ABSENT]
+  to:   [Sequence:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [TableComment:{DescID: 104}, ABSENT]
+  to:   [Sequence:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
+  to:   [Sequence:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [UserPrivileges:{DescID: 104, Name: public}, ABSENT]
+  to:   [Sequence:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
+  to:   [Sequence:{DescID: 104}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop

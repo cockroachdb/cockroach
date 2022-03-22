@@ -18,27 +18,20 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
-// TODO(josh): If I have some extra time, would folks want me to look into
-// setting up gomock? We use it a lot in CC; it is quite nice; I think it makes
-// for more readable tests than ones that use a custom mock. I see this issue:
-// https://github.com/cockroachdb/cockroach/issues/6933
-func TestProbe(t *testing.T) {
+func TestReadProbe(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("disabled by default", func(t *testing.T) {
 		m := &mock{
 			t:      t,
 			noPlan: true,
-			noGet:  true,
 		}
-		p := initTestProber(m)
-
-		p.probe(ctx, m)
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
 		require.Zero(t, p.Metrics().ProbePlanAttempts.Count())
 		require.Zero(t, p.Metrics().ReadProbeAttempts.Count())
@@ -47,11 +40,20 @@ func TestProbe(t *testing.T) {
 	})
 
 	t.Run("happy path", func(t *testing.T) {
-		m := &mock{t: t}
-		p := initTestProber(m)
-		readEnabled.Override(ctx, &p.settings.SV, true)
+		m := &mock{t: t, read: true}
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
-		p.probe(ctx, m)
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
+	})
+
+	t.Run("happy path with bypass cluster setting overridden", func(t *testing.T) {
+		m := &mock{t: t, bypass: true, read: true}
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
@@ -62,13 +64,11 @@ func TestProbe(t *testing.T) {
 	t.Run("planning fails", func(t *testing.T) {
 		m := &mock{
 			t:       t,
+			read:    true,
 			planErr: fmt.Errorf("inject plan failure"),
-			noGet:   true,
 		}
-		p := initTestProber(m)
-		readEnabled.Override(ctx, &p.settings.SV, true)
-
-		p.probe(ctx, m)
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Zero(t, p.Metrics().ReadProbeAttempts.Count())
@@ -76,15 +76,29 @@ func TestProbe(t *testing.T) {
 		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 	})
 
-	t.Run("get fails", func(t *testing.T) {
+	t.Run("txn fails", func(t *testing.T) {
 		m := &mock{
 			t:      t,
-			getErr: fmt.Errorf("inject get failure"),
+			read:   true,
+			txnErr: fmt.Errorf("inject txn failure"),
 		}
-		p := initTestProber(m)
-		readEnabled.Override(ctx, &p.settings.SV, true)
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
-		p.probe(ctx, m)
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeFailures.Count())
+	})
+
+	t.Run("read fails", func(t *testing.T) {
+		m := &mock{
+			t:       t,
+			read:    true,
+			readErr: fmt.Errorf("inject read failure"),
+		}
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
 
 		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
 		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
@@ -93,81 +107,162 @@ func TestProbe(t *testing.T) {
 	})
 }
 
-func initTestProber(m *mock) *Prober {
+func TestWriteProbe(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("disabled by default", func(t *testing.T) {
+		m := &mock{
+			t:      t,
+			noPlan: true,
+		}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
+
+		require.Zero(t, p.Metrics().ProbePlanAttempts.Count())
+		require.Zero(t, p.Metrics().WriteProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
+	})
+
+	t.Run("happy path", func(t *testing.T) {
+		m := &mock{t: t, write: true}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
+	})
+
+	t.Run("happy path with bypass cluster setting overridden", func(t *testing.T) {
+		m := &mock{t: t, bypass: true, write: true}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
+	})
+
+	t.Run("planning fails", func(t *testing.T) {
+		m := &mock{
+			t:       t,
+			write:   true,
+			planErr: fmt.Errorf("inject plan failure"),
+		}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Zero(t, p.Metrics().WriteProbeAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
+	})
+
+	t.Run("open txn fails", func(t *testing.T) {
+		m := &mock{
+			t:      t,
+			write:  true,
+			txnErr: fmt.Errorf("inject txn failure"),
+		}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeFailures.Count())
+	})
+
+	t.Run("write fails", func(t *testing.T) {
+		m := &mock{
+			t:        t,
+			write:    true,
+			writeErr: fmt.Errorf("inject write failure"),
+		}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeFailures.Count())
+	})
+}
+
+func initTestProber(ctx context.Context, m *mock) *Prober {
 	p := NewProber(Opts{
-		AmbientCtx: log.AmbientContext{
-			Tracer: tracing.NewTracer(),
-		},
+		Tracer:                  tracing.NewTracer(),
 		HistogramWindowInterval: time.Minute, // actual value not important to test
 		Settings:                cluster.MakeTestingClusterSettings(),
 	})
-	p.planner = m
+	readEnabled.Override(ctx, &p.settings.SV, m.read)
+	writeEnabled.Override(ctx, &p.settings.SV, m.write)
+	bypassAdmissionControl.Override(ctx, &p.settings.SV, m.bypass)
+	p.readPlanner = m
 	return p
 }
 
 type mock struct {
 	t *testing.T
 
+	bypass bool
+
 	noPlan  bool
 	planErr error
 
-	noGet  bool
-	getErr error
+	read     bool
+	write    bool
+	readErr  error
+	writeErr error
+	txnErr   error
 }
 
 func (m *mock) next(ctx context.Context) (Step, error) {
 	if m.noPlan {
-		m.t.Errorf("plan call made but not expected")
+		m.t.Error("plan call made but not expected")
 	}
 	return Step{}, m.planErr
 }
 
-func (m *mock) Get(ctx context.Context, key interface{}) (kv.KeyValue, error) {
-	if m.noGet {
-		m.t.Errorf("get call made but not expected")
+func (m *mock) Read(key interface{}) func(context.Context, *kv.Txn) error {
+	return func(context.Context, *kv.Txn) error {
+		if !m.read {
+			m.t.Error("read call made but not expected")
+		}
+		return m.readErr
 	}
-	return kv.KeyValue{}, m.getErr
 }
 
-func TestWithJitter(t *testing.T) {
-	cases := []struct {
-		desc string
-		in   time.Duration
-		intn func(n int64) int64
-		want time.Duration
-	}{
-		{
-			"no jitter added",
-			time.Minute,
-			func(n int64) int64 {
-				return 0
-			},
-			time.Minute,
-		},
-		{
-			"max jitter added",
-			time.Minute,
-			func(n int64) int64 {
-				return n - 1
-			},
-			72 * time.Second,
-		},
-		{
-			"max jitter subtracted",
-			time.Minute,
-			func(n int64) int64 {
-				if n == 2 {
-					return 0
-				}
-				return n - 1
-			},
-			48 * time.Second,
-		},
+func (m *mock) Write(key interface{}) func(context.Context, *kv.Txn) error {
+	return func(context.Context, *kv.Txn) error {
+		if !m.write {
+			m.t.Error("write call made but not expected")
+		}
+		return m.writeErr
 	}
-	for _, tc := range cases {
-		t.Run(tc.desc, func(t *testing.T) {
-			got := withJitter(tc.in, tc.intn)
-			require.InEpsilon(t, tc.want, got, 0.01)
-		})
+}
+
+func (m *mock) Txn(ctx context.Context, f func(ctx context.Context, txn *kv.Txn) error) error {
+	if !m.bypass {
+		m.t.Error("normal txn used but bypass is not set")
 	}
+	if m.txnErr != nil {
+		return m.txnErr
+	}
+	return f(ctx, &kv.Txn{})
+}
+
+func (m *mock) TxnRootKV(
+	ctx context.Context, f func(ctx context.Context, txn *kv.Txn) error,
+) error {
+	if m.bypass {
+		m.t.Error("root kv txn used but bypass is set")
+	}
+	if m.txnErr != nil {
+		return m.txnErr
+	}
+	return f(ctx, &kv.Txn{})
 }

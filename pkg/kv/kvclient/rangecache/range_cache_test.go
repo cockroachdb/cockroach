@@ -245,6 +245,7 @@ func staticSize(size int64) func() int64 {
 
 func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	db := newTestDescriptorDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
 		// Create splits on each character:
@@ -258,7 +259,7 @@ func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 	}
 	// TODO(andrei): don't leak this Stopper. Someone needs to Stop() it.
 	db.stopper = stop.NewStopper()
-	db.cache = NewRangeCache(st, db, staticSize(2<<10), db.stopper)
+	db.cache = NewRangeCache(st, db, staticSize(2<<10), db.stopper, tr)
 	return db
 }
 
@@ -481,9 +482,10 @@ func TestLookupByKeyMin(t *testing.T) {
 	ctx := context.Background()
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 	startToMeta2Desc := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
 		EndKey:   keys.RangeMetaKey(roachpb.RKey("a")),
@@ -890,9 +892,8 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 					var desc *roachpb.RangeDescriptor
 					// Each request goes to a different key.
 					var err error
-					ctx, getRecording, cancel := tracing.ContextWithRecordingSpan(
-						ctx, tracing.NewTracer(), "test")
-					defer cancel()
+					ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, db.cache.tracer, "test")
+					defer getRecAndFinish()
 					tok, err := db.cache.lookupInternal(
 						ctx, key, oldToken,
 						tc.reverseScan)
@@ -908,7 +909,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 						}
 					}
 					if expLog != "" {
-						rec := getRecording()
+						rec := getRecAndFinish()
 						_, ok := rec.FindLogMessage(expLog)
 						if !ok {
 							t.Errorf("didn't find expected message in trace for %s: %s. Recording:\n%s",
@@ -1009,9 +1010,10 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), &CacheEntry{desc: *defDesc})
 
 	// Now, add a new, overlapping set of descriptors.
@@ -1185,9 +1187,10 @@ func TestRangeCacheClearOlderOverlapping(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
+			tr := tracing.NewTracer()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			cache := NewRangeCache(st, nil /* db */, staticSize(2<<10), stopper)
+			cache := NewRangeCache(st, nil /* db */, staticSize(2<<10), stopper, tr)
 			for _, d := range tc.cachedDescs {
 				cache.Insert(ctx, roachpb.RangeInfo{Desc: d})
 			}
@@ -1237,9 +1240,10 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 	cache.Insert(ctx,
 		roachpb.RangeInfo{Desc: firstDesc},
 		roachpb.RangeInfo{Desc: restDesc})
@@ -1275,9 +1279,10 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 	for _, rd := range testData {
 		cache.Insert(ctx, roachpb.RangeInfo{
 			Desc: rd,
@@ -1413,9 +1418,10 @@ func TestRangeCacheGeneration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
+			tr := tracing.NewTracer()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
+			cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 			cache.Insert(ctx, roachpb.RangeInfo{Desc: *descAM2}, roachpb.RangeInfo{Desc: *descMZ4})
 			cache.Insert(ctx, roachpb.RangeInfo{Desc: *tc.insertDesc})
 
@@ -1479,9 +1485,10 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	startKey := desc1.StartKey
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 
 	ri := roachpb.RangeInfo{Desc: desc1}
 	cache.Insert(ctx, ri)
@@ -1563,13 +1570,16 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		StoreID:   4,
 		ReplicaID: 4,
 	}
+
+	staleRangeGeneration := roachpb.RangeGeneration(2)
+	nonStaleRangeGeneration := roachpb.RangeGeneration(3)
 	desc1 := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			rep1, rep2,
 		},
-		Generation: 0,
+		Generation: nonStaleRangeGeneration,
 	}
 	desc2 := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -1577,7 +1587,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			rep2, rep3,
 		},
-		Generation: 1,
+		Generation: nonStaleRangeGeneration + 1,
 	}
 	desc3 := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
@@ -1585,14 +1595,15 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			rep1, rep2,
 		},
-		Generation: 2,
+		Generation: nonStaleRangeGeneration + 2,
 	}
 	startKey := desc1.StartKey
 
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
 
 	cache.Insert(ctx, roachpb.RangeInfo{
 		Desc:                  desc1,
@@ -1613,7 +1624,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		Sequence: 1,
 	}
 	oldTok := tok
-	ok := tok.UpdateLease(ctx, l)
+	ok := tok.UpdateLease(ctx, l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.Equal(t, oldTok.Desc(), tok.Desc())
 	require.Equal(t, &l.Replica, tok.Leaseholder())
@@ -1635,13 +1646,21 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	require.True(t, ri.lease.Empty())
 	require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, ri.ClosedTimestampPolicy())
 
-	// Check that trying to update the lease to a non-member replica results
-	// in the entry's eviction and the token's invalidation.
+	// Check that trying to update the lease to a non-member replica results in
+	// the entry's eviction and the token's invalidation if the descriptor
+	// generation in the error is not older than the cached descriptor generation.
 	l = &roachpb.Lease{
 		Replica:  repNonMember,
 		Sequence: 2,
 	}
-	ok = tok.UpdateLease(ctx, l)
+	// Check that there's no eviction if the range desc generation in the error is
+	// stale.
+	ok = tok.UpdateLease(ctx, l, staleRangeGeneration)
+	require.False(t, ok)
+	require.True(t, tok.Valid())
+
+	// However, expect an eviction when the error's desc generation is non-stale.
+	ok = tok.UpdateLease(ctx, l, nonStaleRangeGeneration)
 	require.False(t, ok)
 	require.False(t, tok.Valid())
 	ri = cache.GetCached(ctx, startKey, false /* inverted */)
@@ -1664,10 +1683,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 		Desc:  desc2,
 		Lease: roachpb.Lease{},
 	})
-	ok = tok.UpdateLease(ctx,
-		// Specify a lease compatible with desc2.
-		&roachpb.Lease{Replica: rep2, Sequence: 3},
-	)
+	ok = tok.UpdateLease(ctx, &roachpb.Lease{Replica: rep2, Sequence: 3}, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.NotNil(t, tok)
 	require.Equal(t, &desc2, tok.Desc())
@@ -1682,7 +1698,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	})
 	// This time try to specify a lease that's not compatible with the desc. The
 	// entry should end up evicted from the cache.
-	ok = tok.UpdateLease(ctx, &roachpb.Lease{Replica: rep3, Sequence: 4})
+	ok = tok.UpdateLease(ctx, &roachpb.Lease{Replica: rep3, Sequence: 4}, 0 /* descGeneration */)
 	require.False(t, ok)
 	require.False(t, tok.Valid())
 	ri = cache.GetCached(ctx, startKey, false /* inverted */)
@@ -1726,7 +1742,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 1,
 	}
-	ok, e := e.updateLease(l)
+	ok, e := e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.True(t, l.Equal(e.Lease()))
 
@@ -1735,7 +1751,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 0,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.NotNil(t, e.Leaseholder())
 	require.True(t, l.Replica.Equal(*e.Leaseholder()))
@@ -1747,7 +1763,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep2,
 		Sequence: 0,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.NotNil(t, e.Leaseholder())
 	require.True(t, l.Replica.Equal(*e.Leaseholder()))
@@ -1757,7 +1773,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 0,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.NotNil(t, e.Leaseholder())
 	require.True(t, l.Replica.Equal(*e.Leaseholder()))
@@ -1767,7 +1783,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep1,
 		Sequence: 2,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.NotNil(t, e.Leaseholder())
 	require.True(t, l.Equal(*e.Lease()))
@@ -1777,7 +1793,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep2,
 		Sequence: 1,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.False(t, ok)
 	require.False(t, l.Equal(*e.Lease()))
 
@@ -1786,7 +1802,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  rep2,
 		Sequence: 2,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.True(t, l.Equal(e.Lease()))
 
@@ -1796,7 +1812,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Sequence: 2,
 	}
 	require.True(t, l.Equal(e.Lease()))
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.False(t, ok)
 	require.True(t, l.Equal(e.Lease()))
 
@@ -1806,7 +1822,7 @@ func TestRangeCacheEntryUpdateLease(t *testing.T) {
 		Replica:  repNonMember,
 		Sequence: 0,
 	}
-	ok, e = e.updateLease(l)
+	ok, e = e.updateLease(l, 0 /* descGeneration */)
 	require.True(t, ok)
 	require.Nil(t, e)
 }

@@ -12,22 +12,24 @@ package row
 
 import (
 	"context"
+	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
-// KVFetcher wraps kvBatchFetcher, providing a NextKV interface that returns the
+// KVFetcher wraps KVBatchFetcher, providing a NextKV interface that returns the
 // next kv from its input.
 type KVFetcher struct {
-	kvBatchFetcher
+	KVBatchFetcher
 
 	kvs []roachpb.KeyValue
 
@@ -35,37 +37,89 @@ type KVFetcher struct {
 	newSpan       bool
 
 	// Observability fields.
-	mu struct {
-		syncutil.Mutex
+	// Note: these need to be read via an atomic op.
+	atomics struct {
 		bytesRead int64
 	}
 }
 
 // NewKVFetcher creates a new KVFetcher.
-// If mon is non-nil, this fetcher will track its fetches and must be Closed.
+// If acc is non-nil, this fetcher will track its fetches and must be Closed.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly (if acc is non-nil). The
+// caller can only reuse the spans slice after the fetcher has been closed, and
+// if the caller does, it becomes responsible for the memory accounting.
 func NewKVFetcher(
+	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	bsHeader *roachpb.BoundedStalenessHeader,
 	reverse bool,
-	useBatchLimit bool,
-	firstBatchLimit int64,
+	batchBytesLimit rowinfra.BytesLimit,
+	firstBatchLimit rowinfra.KeyLimit,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
-	mon *mon.BytesMonitor,
+	lockTimeout time.Duration,
+	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 ) (*KVFetcher, error) {
+	var sendFn sendFunc
+	// Avoid the heap allocation by allocating sendFn specifically in the if.
+	if bsHeader == nil {
+		sendFn = makeKVBatchFetcherDefaultSendFunc(txn)
+	} else {
+		negotiated := false
+		sendFn = func(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, _ error) {
+			ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+			var pErr *roachpb.Error
+			// Only use NegotiateAndSend if we have not yet negotiated a timestamp.
+			// If we have, fallback to Send which will already have the timestamp
+			// fixed.
+			if !negotiated {
+				ba.BoundedStaleness = bsHeader
+				br, pErr = txn.NegotiateAndSend(ctx, ba)
+				negotiated = true
+			} else {
+				br, pErr = txn.Send(ctx, ba)
+			}
+			if pErr != nil {
+				return nil, pErr.GoError()
+			}
+			return br, nil
+		}
+	}
+
 	kvBatchFetcher, err := makeKVBatchFetcher(
-		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
-		lockWaitPolicy, mon, forceProductionKVBatchSize,
+		ctx,
+		sendFn,
+		spans,
+		reverse,
+		batchBytesLimit,
+		firstBatchLimit,
+		lockStrength,
+		lockWaitPolicy,
+		lockTimeout,
+		acc,
+		forceProductionKVBatchSize,
+		txn.AdmissionHeader(),
+		txn.DB().SQLKVResponseAdmissionQ,
 	)
 	return newKVFetcher(&kvBatchFetcher), err
 }
 
-func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
-	ret := &KVFetcher{
-		kvBatchFetcher: batchFetcher,
+// NewKVStreamingFetcher returns a new KVFetcher that utilizes the provided
+// TxnKVStreamer to perform KV reads.
+func NewKVStreamingFetcher(streamer *TxnKVStreamer) *KVFetcher {
+	return &KVFetcher{
+		KVBatchFetcher: streamer,
 	}
-	return ret
+}
+
+func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {
+	return &KVFetcher{
+		KVBatchFetcher: batchFetcher,
+	}
 }
 
 // GetBytesRead returns the number of bytes read by this fetcher. It is safe for
@@ -74,9 +128,17 @@ func (f *KVFetcher) GetBytesRead() int64 {
 	if f == nil {
 		return 0
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.mu.bytesRead
+	return atomic.LoadInt64(&f.atomics.bytesRead)
+}
+
+// ResetBytesRead resets the number of bytes read by this fetcher and returns
+// the number before the reset. It is safe for concurrent use and is able to
+// handle a case of uninitialized fetcher.
+func (f *KVFetcher) ResetBytesRead() int64 {
+	if f == nil {
+		return 0
+	}
+	return atomic.SwapInt64(&f.atomics.bytesRead, 0)
 }
 
 // MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
@@ -102,7 +164,7 @@ const (
 // unexpectedly.
 func (f *KVFetcher) NextKV(
 	ctx context.Context, mvccDecodeStrategy MVCCDecodingStrategy,
-) (moreKVs bool, kv roachpb.KeyValue, finalReferenceToBatch bool, err error) {
+) (ok bool, kv roachpb.KeyValue, finalReferenceToBatch bool, err error) {
 	for {
 		// Only one of f.kvs or f.batchResponse will be set at a given time. Which
 		// one is set depends on the format returned by a given BatchRequest.
@@ -144,17 +206,17 @@ func (f *KVFetcher) NextKV(
 			}, lastKey, nil
 		}
 
-		moreKVs, f.kvs, f.batchResponse, err = f.nextBatch(ctx)
-		if err != nil {
-			return moreKVs, kv, false, err
-		}
-		if !moreKVs {
-			return false, kv, false, nil
+		ok, f.kvs, f.batchResponse, err = f.nextBatch(ctx)
+		if err != nil || !ok {
+			return ok, kv, false, err
 		}
 		f.newSpan = true
-		f.mu.Lock()
-		f.mu.bytesRead += int64(len(f.batchResponse))
-		f.mu.Unlock()
+		nBytes := len(f.batchResponse)
+		for i := range f.kvs {
+			nBytes += len(f.kvs[i].Key)
+			nBytes += len(f.kvs[i].Value.RawBytes)
+		}
+		atomic.AddInt64(&f.atomics.bytesRead, int64(nBytes))
 	}
 }
 
@@ -162,15 +224,15 @@ func (f *KVFetcher) NextKV(
 // at the end of execution if the fetcher was provisioned with a memory
 // monitor.
 func (f *KVFetcher) Close(ctx context.Context) {
-	f.kvBatchFetcher.close(ctx)
+	f.KVBatchFetcher.close(ctx)
 }
 
-// SpanKVFetcher is a kvBatchFetcher that returns a set slice of kvs.
+// SpanKVFetcher is a KVBatchFetcher that returns a set slice of kvs.
 type SpanKVFetcher struct {
 	KVs []roachpb.KeyValue
 }
 
-// nextBatch implements the kvBatchFetcher interface.
+// nextBatch implements the KVBatchFetcher interface.
 func (f *SpanKVFetcher) nextBatch(
 	ctx context.Context,
 ) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, err error) {
@@ -184,7 +246,7 @@ func (f *SpanKVFetcher) nextBatch(
 
 func (f *SpanKVFetcher) close(context.Context) {}
 
-// BackupSSTKVFetcher is a kvBatchFetcher that wraps storage.SimpleMVCCIterator
+// BackupSSTKVFetcher is a KVBatchFetcher that wraps storage.SimpleMVCCIterator
 // and returns a batch of kv from backupSST.
 type BackupSSTKVFetcher struct {
 	iter          storage.SimpleMVCCIterator

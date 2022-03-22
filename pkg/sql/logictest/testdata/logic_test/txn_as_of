@@ -1,19 +1,28 @@
+# This test makes use of 'kv.gc_ttl.strict_enforcement.enabled = false', which
+# is not available to tenants. We use a cluster option instead.
+# cluster-opt: ignore-tenant-strict-gc-enforcement
+
 statement ok
 CREATE TABLE t (i INT)
 
 statement ok
 INSERT INTO t VALUES (2)
 
-# Verify that transacations can be used for historical reads using BEGIN
+# Verify that transactions can be used for historical reads using BEGIN
 # or SET TRANSACTION
 
-statement error pq: relation "t" does not exist
+# We're reading from timestamps that precede the GC thresholds, disable strict
+# enforcement.
+statement ok
+SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false
+
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN AS OF SYSTEM TIME '-1h'; SELECT * FROM t
 
 statement ok
 COMMIT
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN; SET TRANSACTION AS OF SYSTEM TIME '-1h'; SELECT * FROM t
 
 statement ok
@@ -59,13 +68,13 @@ BEGIN AS OF SYSTEM TIME '-1h'; SELECT * FROM t AS OF SYSTEM TIME '-1h'
 statement ok
 COMMIT
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN AS OF SYSTEM TIME '2018-12-30'; SELECT * FROM t AS OF SYSTEM TIME '2018-12-30'
 
 statement ok
 COMMIT
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN; SET TRANSACTION AS OF SYSTEM TIME '2018-12-30'; SELECT * FROM t AS OF SYSTEM TIME '2018-12-30'
 
 statement ok
@@ -111,7 +120,7 @@ COMMIT
 statement ok
 BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION PRIORITY HIGH;
 
-statement error pq: relation "t" does not exist
+statement error pgcode 3D000 pq: database "test" does not exist
 SELECT * FROM t
 
 statement ok

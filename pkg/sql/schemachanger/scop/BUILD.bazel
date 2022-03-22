@@ -7,24 +7,28 @@ go_library(
         "backfill.go",
         "mutation.go",
         "ops.go",
+        "phase.go",
         "validation.go",
         ":gen-backfill",  # keep
         ":gen-mutation",  # keep
+        ":gen-phase-stringer",  # keep
         ":gen-type-stringer",  # keep
         ":gen-validation",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/sql/schemachanger/scpb",
     ],
 )
 
 go_binary(
     name = "gen-visitors",
     srcs = ["generate_visitor.go"],
-    gotags = ["ignore"],
+    gotags = ["generator"],
     deps = [
         "//pkg/cli/exit",
         "@com_github_cockroachdb_errors//:errors",
@@ -42,6 +46,10 @@ genrule(
     exec_tools = [
         ":gen-visitors",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 genrule(
@@ -53,6 +61,10 @@ genrule(
        """,
     exec_tools = [
         ":gen-visitors",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )
 
@@ -66,10 +78,20 @@ genrule(
     exec_tools = [
         ":gen-visitors",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 stringer(
     name = "gen-type-stringer",
     src = "ops.go",
     typ = "Type",
+)
+
+stringer(
+    name = "gen-phase-stringer",
+    src = "phase.go",
+    typ = "Phase",
 )

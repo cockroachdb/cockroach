@@ -21,6 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+var tupleOfTwoInts = types.MakeTuple([]*types.T{types.Int, types.Int})
+var tupleOfStringAndInt = types.MakeTuple([]*types.T{types.String, types.Int})
+
 func TestParseArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -80,6 +83,39 @@ lo}`, types.String, Datums{NewDString(`hel`), NewDString(`lo`)}},
 		// occur.
 		{string([]byte{'{', 'a', 200, '}'}), types.String, Datums{NewDString("a\xc8")}},
 		{string([]byte{'{', 'a', 200, 'a', '}'}), types.String, Datums{NewDString("a\xc8a")}},
+
+		// Arrays of tuples can also be parsed from string literals.
+		{
+			`{"(3,4)"}`,
+			tupleOfTwoInts,
+			Datums{NewDTuple(tupleOfTwoInts, NewDInt(3), NewDInt(4))},
+		},
+		{
+			`{"(3,4)", null}`,
+			tupleOfTwoInts,
+			Datums{NewDTuple(tupleOfTwoInts, NewDInt(3), NewDInt(4)), DNull},
+		},
+		{
+			`{"(a12',4)"}`,
+			tupleOfStringAndInt,
+			Datums{NewDTuple(tupleOfStringAndInt, NewDString("a12'"), NewDInt(4))},
+		},
+		{
+			`{"(cat,4)", "(null,0)"}`,
+			tupleOfStringAndInt,
+			Datums{
+				NewDTuple(tupleOfStringAndInt, NewDString("cat"), NewDInt(4)),
+				NewDTuple(tupleOfStringAndInt, NewDString("null"), NewDInt(0)),
+			},
+		},
+		{
+			`{"(1,2)", "(3,)"}`,
+			tupleOfTwoInts,
+			Datums{
+				NewDTuple(tupleOfTwoInts, NewDInt(1), NewDInt(2)),
+				NewDTuple(tupleOfTwoInts, NewDInt(3), DNull),
+			},
+		},
 	}
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {
@@ -182,6 +218,12 @@ func TestParseArrayError(t *testing.T) {
 
 		{string([]byte{200}), types.String, `could not parse "\xc8" as type string[]: array must be enclosed in { and }`},
 		{string([]byte{'{', 'a', 200}), types.String, `could not parse "{a\xc8" as type string[]: malformed array`},
+
+		{`{"(1,2)", "(3,4,5)"}`, tupleOfTwoInts, `could not parse "{\"(1,2)\", \"(3,4,5)\"}" as type tuple{int, int}[]: could not parse "(3,4,5)" as type tuple{int, int}: malformed record literal`},
+		{`{"(1,2)", "(3,4,)"}`, tupleOfTwoInts, `could not parse "{\"(1,2)\", \"(3,4,)\"}" as type tuple{int, int}[]: could not parse "(3,4,)" as type tuple{int, int}: malformed record literal`},
+		{`{"(1,2)", "(3)"}`, tupleOfTwoInts, `could not parse "{\"(1,2)\", \"(3)\"}" as type tuple{int, int}[]: could not parse "(3)" as type tuple{int, int}: malformed record literal`},
+		{`{"(1,2)", "(3,4"}`, tupleOfTwoInts, `could not parse "{\"(1,2)\", \"(3,4\"}" as type tuple{int, int}[]: could not parse "(3,4" as type tuple{int, int}: malformed record literal`},
+		{`{"(1,2)", "(3,,4)"}`, tupleOfTwoInts, `could not parse "{\"(1,2)\", \"(3,,4)\"}" as type tuple{int, int}[]: could not parse "(3,,4)" as type tuple{int, int}: malformed record literal`},
 	}
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {

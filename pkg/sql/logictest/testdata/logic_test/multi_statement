@@ -19,7 +19,7 @@ c d
 
 # error if either statement returns an error
 # first statement returns an error. Second stmt shouldn't execute.
-statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\('a'\) already exists\.
+statement error duplicate key value violates unique constraint "kv_pkey"\nDETAIL: Key \(k\)=\('a'\) already exists\.
 INSERT INTO kv (k,v) VALUES ('a', 'b'); INSERT INTO kv (k,v) VALUES ('e', 'f')
 
 query TT rowsort
@@ -28,8 +28,8 @@ SELECT * FROM kv
 a b
 c d
 
-# second statement returns an error
-statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\('a'\) already exists\.
+# second statement returns an error, and causes the whole batch to rollbacl
+statement error duplicate key value violates unique constraint "kv_pkey"\nDETAIL: Key \(k\)=\('a'\) already exists\.
 INSERT INTO kv (k,v) VALUES ('g', 'h'); INSERT INTO kv (k,v) VALUES ('a', 'b')
 
 query TT rowsort
@@ -37,7 +37,6 @@ SELECT * FROM kv
 ----
 a b
 c d
-g h
 
 # parse error runs nothing
 statement error at or near "k": syntax error
@@ -48,7 +47,6 @@ SELECT * FROM kv
 ----
 a b
 c d
-g h
 
 statement error pq: relation "x.y" does not exist
 BEGIN; INSERT INTO x.y(a) VALUES (1); END

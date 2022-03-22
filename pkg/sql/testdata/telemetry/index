@@ -13,10 +13,6 @@ sql.schema.partitioned_inverted_index
 sql.schema.expression_index
 ----
 
-exec
-SET experimental_enable_expression_indexes=true
-----
-
 #### CREATE TABLE tests.
 
 feature-usage

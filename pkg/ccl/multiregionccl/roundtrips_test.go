@@ -20,8 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,6 +32,7 @@ import (
 // GLOBAL tables don't incur a network hop.
 func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// ensureOnlyLocalReads looks at a trace to ensure that reads were served
 	// locally. It returns true if the read was served as a follower read.
@@ -107,18 +111,26 @@ func TestEnsureLocalReadsOnGlobalTables(t *testing.T) {
 	tc.AddVotersOrFatal(t, tablePrefix.AsRawKey(), tc.Target(1), tc.Target(2))
 
 	for i := 0; i < numServers; i++ {
-		// Run a query to populate its cache.
 		conn := tc.ServerConn(i)
-		_, err = conn.Exec("SELECT * from t.test_table WHERE k=1")
-		require.NoError(t, err)
+		isLeaseHolder := false
+		testutils.SucceedsSoon(t, func() error {
+			// Run a query to populate its cache.
+			_, err = conn.Exec("SELECT * from t.test_table WHERE k=1")
+			require.NoError(t, err)
 
-		// Check that the cache was indeed populated.
-		cache := tc.Server(i).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-		entry := cache.GetCached(context.Background(), tablePrefix, false /* inverted */)
-		require.NotNil(t, entry.Lease().Empty())
-		require.NotNil(t, entry)
-		require.Equal(t, roachpb.LEAD_FOR_GLOBAL_READS, entry.ClosedTimestampPolicy())
-		isLeaseHolder := entry.Lease().Replica.NodeID == tc.Server(i).NodeID()
+			// Check that the cache was indeed populated.
+			cache := tc.Server(i).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
+			entry := cache.GetCached(context.Background(), tablePrefix, false /* inverted */)
+			require.NotNil(t, entry.Lease().Empty())
+			require.NotNil(t, entry)
+
+			if expected, got := roachpb.LEAD_FOR_GLOBAL_READS, entry.ClosedTimestampPolicy(); got != expected {
+				return errors.Newf("expected closedts policy %s, got %s", expected, got)
+			}
+
+			isLeaseHolder = entry.Lease().Replica.NodeID == tc.Server(i).NodeID()
+			return nil
+		})
 
 		// Run the query to ensure local read.
 		_, err = conn.Exec(presentTimeRead)

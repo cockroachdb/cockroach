@@ -12,169 +12,107 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
-	"go/build"
 	"io"
 	"io/ioutil"
 	"log"
-	stdos "os"
-	"path/filepath"
-	"strings"
 	"testing"
 
+	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/os"
-	"github.com/cockroachdb/cockroach/pkg/cmd/dev/recorder"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
+	"github.com/google/shlex"
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	recordFlag = flag.Bool(
-		"record", false,
-		"ignore existing recordings and rewrite them with results from an actual execution (see -from-checkout)",
-	)
-
-	fromCheckoutFlag = flag.String(
-		"from-checkout", crdbpath(),
-		"cockroach/cockroachdb checkout to generate recordings from",
-	)
+const (
+	crdbCheckoutPlaceholder = "crdb-checkout"
+	sandboxPlaceholder      = "sandbox"
 )
 
-func init() {
-	isTesting = true
-}
-
-// TestDatadriven makes use of datadriven and recorder to capture all operations
-// executed by individual `dev` invocations. The testcases are defined under
-// testdata/*, where each test files corresponds to a recording capture found in
-// testdata/recording/*.
+// TestDataDriven makes use of datadriven to capture all operations executed by
+// individual dev invocations. The testcases are defined under
+// testdata/datadriven/*.
 //
-// Datadriven divvies up these files as subtests, so individual "files" are
+// DataDriven divvies up these files as subtests, so individual "files" are
 // runnable through:
 //
-// 		go test -run TestDatadriven/<fname>
+//  		dev test pkg/cmd/dev -f TestDataDriven/<fname> [--rewrite]
+// 	OR  go test ./pkg/cmd/dev -run TestDataDriven/<fname> [-rewrite]
 //
-// To update the test file with new capture data, try:
-//
-// 		go test -run TestDatadriven/<fname> -rewrite -record \
-// 			[-from-checkout=<path to crdb checkout>]
-//
-// The -rewrite flag rewrites what is found under testdata/<fname>, while the
-// -record flag rewrites what is found under testdata/recording/<fname>.
-// Recordings are used to mock out "system" behavior. During these test runs
-// (unless -record is specified), attempts to shell out to `bazel` are
-// intercepted and responses are constructed using recorded data. The same is
-// true for attempts to run os operations (like creating/removing/symlinking
-// filepaths).
-//
-// In summary: the traces for all operations attempted as part of test run are
-// captured within testdata/<fname> and the mocked out responses for each
-// "external" command can be found under testadata/recording/<fname>. The former
-// is updated by specifying -rewrite, the latter is updated by specifying
-// -record (and optionally -from-checkout).
-func TestDatadriven(t *testing.T) {
+// NB: See commentary on TestRecorderDriven to see how they compare.
+// TestDataDriven is well suited for exercising flows that don't depend on
+// reading external state in order to function (simply translating a `dev test
+// <target>` to its corresponding bazel invocation for e.g.). It's not well
+// suited for flows that do (reading a list of go files in the bazel generated
+// sandbox and copying them over one-by-one).
+func TestDataDriven(t *testing.T) {
 	verbose := testing.Verbose()
-	testdata := testutils.TestDataPath(t)
+	testdata := testutils.TestDataPath(t, "datadriven")
 	datadriven.Walk(t, testdata, func(t *testing.T, path string) {
-		if strings.HasPrefix(path, filepath.Join(testdata, "recording")) {
-			return
-		}
-
-		dir, file := filepath.Split(path)
-		recordingPath := filepath.Join(dir, "recording", file) // path to the recording, if any
-
 		// We'll match against printed logs for datadriven.
 		var logger io.ReadWriter = bytes.NewBufferString("")
-		var recording io.ReadWriter
-		var exopts []exec.Option
-		var osopts []os.Option
-
-		exopts = append(exopts, exec.WithLogger(log.New(logger, "", 0)))
-		osopts = append(osopts, os.WithLogger(log.New(logger, "", 0)))
-
-		if !verbose {
-			// Suppress all internal output unless told otherwise.
-			exopts = append(exopts, exec.WithStdOutErr(ioutil.Discard, ioutil.Discard))
+		execOpts := []exec.Option{
+			exec.WithLogger(log.New(logger, "", 0)),
+			exec.WithDryrun(),
+			exec.WithIntercept(workspaceCmd(), crdbCheckoutPlaceholder),
+			exec.WithIntercept(bazelbinCmd(), sandboxPlaceholder),
+		}
+		osOpts := []os.Option{
+			os.WithLogger(log.New(logger, "", 0)),
+			os.WithDryrun(),
 		}
 
-		if *recordFlag {
-			recording = bytes.NewBufferString("")
-
-			r := recorder.New(recorder.WithRecordingTo(recording))          // the thing to record into
-			exopts = append(exopts, exec.WithWorkingDir(*fromCheckoutFlag)) // the path to run dev from
-			osopts = append(osopts, os.WithWorkingDir(*fromCheckoutFlag))   // the path to run dev from
-			exopts = append(exopts, exec.WithRecorder(r))
-			osopts = append(osopts, os.WithRecorder(r))
-		} else {
-			frecording, err := stdos.OpenFile(recordingPath, stdos.O_RDONLY, 0600)
-			require.NoError(t, err)
-			defer func() {
-				require.NoError(t, frecording.Close())
-			}()
-
-			r := recorder.New(recorder.WithReplayFrom(frecording, recordingPath)) // the recording we're playing back from
-			exopts = append(exopts, exec.WithRecorder(r))
-			osopts = append(osopts, os.WithRecorder(r))
+		if !verbose { // suppress all internal output unless told otherwise
+			execOpts = append(execOpts, exec.WithStdOutErr(ioutil.Discard, ioutil.Discard))
 		}
 
-		devExec := exec.New(exopts...)
-		devOS := os.New(osopts...)
+		devExec := exec.New(execOpts...)
+		devOS := os.New(osOpts...)
+
+		// TODO(irfansharif): Because these tests are run in dry-run mode, if
+		// "accidentally" adding a test for a mixed-io command (see top-level test
+		// comment), it may appear as a test failure where the output of a
+		// successful shell-out attempt returns an empty response, maybe resulting
+		// in NPEs. We could catch these panics/errors here and suggest a more
+		// informative error to test authors.
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			dev := makeDevCmd()
-			dev.exec = devExec
-			dev.os = devOS
-			require.NoError(t, setupPath(dev))
+			dev.exec, dev.os = devExec, devOS
+			dev.knobs.skipDoctorCheck = true
+			dev.knobs.devBinOverride = "dev"
+			dev.log = log.New(logger, "", 0)
 
 			if !verbose {
 				dev.cli.SetErr(ioutil.Discard)
 				dev.cli.SetOut(ioutil.Discard)
 			}
 
-			switch d.Cmd {
-			case "dev":
-				var args []string
-				for _, cmdArg := range d.CmdArgs {
-					args = append(args, cmdArg.Key)
-					if len(cmdArg.Vals) != 0 {
-						args = append(args, cmdArg.Vals[0])
-					}
-				}
-				dev.cli.SetArgs(args)
-				require.NoError(t, dev.cli.Execute())
+			require.Equalf(t, d.Cmd, "exec", "unknown command: %s", d.Cmd)
+			tokens, err := shlex.Split(d.Input)
+			require.NoError(t, err)
+			require.NotEmpty(t, tokens)
+			require.Equal(t, "dev", tokens[0])
 
-				logs, err := ioutil.ReadAll(logger)
-				require.NoError(t, err)
+			dev.cli.SetArgs(tokens[1:])
 
-				return fmt.Sprintf("%s", logs)
-			default:
-				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			if err := dev.cli.Execute(); err != nil {
+				return fmt.Sprintf("err: %s", err)
 			}
+			logs, err := ioutil.ReadAll(logger)
+			require.NoError(t, err)
+			return string(logs)
 		})
-
-		if *recordFlag {
-			recording, err := ioutil.ReadAll(recording)
-			require.NoError(t, err)
-
-			frecording, err := stdos.OpenFile(recordingPath, stdos.O_CREATE|stdos.O_WRONLY|stdos.O_TRUNC|stdos.O_SYNC, 0600)
-			require.NoError(t, err)
-			defer func() {
-				require.NoError(t, frecording.Close())
-			}()
-
-			_, err = frecording.Write(recording)
-			require.NoError(t, err)
-		}
 	})
 }
 
-func crdbpath() string {
-	gopath := stdos.Getenv("GOPATH")
-	if gopath == "" {
-		gopath = build.Default.GOPATH
-	}
-	return filepath.Join(gopath, "src", "github.com", "cockroachdb", "cockroach")
+func workspaceCmd() string {
+	return fmt.Sprintf("bazel %s", shellescape.QuoteCommand([]string{"info", "workspace", "--color=no"}))
+}
+
+func bazelbinCmd() string {
+	return fmt.Sprintf("bazel %s", shellescape.QuoteCommand([]string{"info", "bazel-bin", "--color=no"}))
 }

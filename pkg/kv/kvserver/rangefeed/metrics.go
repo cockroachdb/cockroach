@@ -19,17 +19,31 @@ import (
 )
 
 var (
-	metaRangeFeedCatchupScanNanos = metric.Metadata{
+	metaRangeFeedCatchUpScanNanos = metric.Metadata{
 		Name:        "kv.rangefeed.catchup_scan_nanos",
 		Help:        "Time spent in RangeFeed catchup scan",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRangeFeedExhausted = metric.Metadata{
+		Name:        "kv.rangefeed.budget_allocation_failed",
+		Help:        "Number of times RangeFeed failed because memory budget was exceeded",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedBudgetBlocked = metric.Metadata{
+		Name:        "kv.rangefeed.budget_allocation_blocked",
+		Help:        "Number of times RangeFeed waited for budget availability",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
-	RangeFeedCatchupScanNanos *metric.Counter
+	RangeFeedCatchUpScanNanos *metric.Counter
+	RangeFeedBudgetExhausted  *metric.Counter
+	RangeFeedBudgetBlocked    *metric.Counter
 
 	RangeFeedSlowClosedTimestampLogN  log.EveryN
 	RangeFeedSlowClosedTimestampNudge singleflight.Group
@@ -46,8 +60,39 @@ func (*Metrics) MetricStruct() {}
 // NewMetrics makes the metrics for RangeFeeds monitoring.
 func NewMetrics() *Metrics {
 	return &Metrics{
-		RangeFeedCatchupScanNanos:            metric.NewCounter(metaRangeFeedCatchupScanNanos),
+		RangeFeedCatchUpScanNanos:            metric.NewCounter(metaRangeFeedCatchUpScanNanos),
+		RangeFeedBudgetExhausted:             metric.NewCounter(metaRangeFeedExhausted),
+		RangeFeedBudgetBlocked:               metric.NewCounter(metaRangeFeedBudgetBlocked),
 		RangeFeedSlowClosedTimestampLogN:     log.Every(5 * time.Second),
 		RangeFeedSlowClosedTimestampNudgeSem: make(chan struct{}, 1024),
+	}
+}
+
+// FeedBudgetPoolMetrics holds metrics for RangeFeed budgets for the purpose
+// or registration in a metric registry.
+type FeedBudgetPoolMetrics struct {
+	SystemBytesCount *metric.Gauge
+	SharedBytesCount *metric.Gauge
+}
+
+// MetricStruct implements metrics.Struct interface.
+func (FeedBudgetPoolMetrics) MetricStruct() {}
+
+// NewFeedBudgetMetrics creates new metrics for RangeFeed budgets.
+func NewFeedBudgetMetrics(histogramWindow time.Duration) *FeedBudgetPoolMetrics {
+	makeMemMetricMetadata := func(name, help string) metric.Metadata {
+		return metric.Metadata{
+			Name:        "kv.rangefeed.mem_" + name,
+			Help:        help,
+			Measurement: "Memory",
+			Unit:        metric.Unit_BYTES,
+		}
+	}
+
+	return &FeedBudgetPoolMetrics{
+		SystemBytesCount: metric.NewGauge(makeMemMetricMetadata("system",
+			"Memory usage by rangefeeds on system ranges")),
+		SharedBytesCount: metric.NewGauge(makeMemMetricMetadata("shared",
+			"Memory usage by rangefeeds")),
 	}
 }

@@ -10,7 +10,8 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/geo/geoproj",
         "//pkg/geo/geoprojbase",
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "@com_github_twpayne_go_geom//:go-geom",
     ],
 )

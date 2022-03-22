@@ -25,7 +25,7 @@ type StringSetting struct {
 	common
 }
 
-var _ extendedSetting = &StringSetting{}
+var _ internalSetting = &StringSetting{}
 
 func (s *StringSetting) String(sv *Values) string {
 	return s.Get(sv)
@@ -56,7 +56,7 @@ var _ = (*StringSetting).Default
 
 // Get retrieves the string value in the setting.
 func (s *StringSetting) Get(sv *Values) string {
-	loaded := sv.getGeneric(s.slotIdx)
+	loaded := sv.getGeneric(s.slot)
 	if loaded == nil {
 		return ""
 	}
@@ -84,7 +84,7 @@ func (s *StringSetting) set(ctx context.Context, sv *Values, v string) error {
 		return err
 	}
 	if s.Get(sv) != v {
-		sv.setGeneric(ctx, s.slotIdx, v)
+		sv.setGeneric(ctx, s.slot, v)
 	}
 	return nil
 }
@@ -102,14 +102,14 @@ func (s *StringSetting) WithPublic() *StringSetting {
 }
 
 // RegisterStringSetting defines a new setting with type string.
-func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting {
-	return RegisterValidatedStringSetting(key, desc, defaultValue, nil)
+func RegisterStringSetting(class Class, key, desc string, defaultValue string) *StringSetting {
+	return RegisterValidatedStringSetting(class, key, desc, defaultValue, nil)
 }
 
 // RegisterValidatedStringSetting defines a new setting with type string with a
 // validation function.
 func RegisterValidatedStringSetting(
-	key, desc string, defaultValue string, validateFn func(*Values, string) error,
+	class Class, key, desc string, defaultValue string, validateFn func(*Values, string) error,
 ) *StringSetting {
 	if validateFn != nil {
 		if err := validateFn(nil, defaultValue); err != nil {
@@ -124,6 +124,6 @@ func RegisterValidatedStringSetting(
 	// PII and are thus non-reportable (to exclude them from telemetry
 	// reports).
 	setting.SetReportable(false)
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }

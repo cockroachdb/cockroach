@@ -833,7 +833,7 @@ if not hideheader:
     print("summary: Additions and changes in CockroachDB version", current_version, "since version", previous_version)
     print("---")
     print()
-    print("## " + time.strftime("%B %d, %Y"))
+    print("## " + time.strftime("%B %-d, %Y"))
     print()
 
 # Print the release notes sign-up and Downloads section.
@@ -848,7 +848,7 @@ if options.prod_release:
 if not hidedownloads:
     print("""Get future release notes emailed to you:
 
-{% include marketo.html %}
+{% include_cached marketo.html %}
 """)
     print()
 
@@ -858,17 +858,17 @@ if not hidedownloads:
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.linux-amd64.tgz"><button id="linux" class="filter-button" data-scope="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.darwin-10.9-amd64.tgz"><button id="mac" class="filter-button" data-scope="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.windows-6.2-amd64.zip"><button id="windows" class="filter-button" data-scope="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
-    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.src.tgz"><button id="source" class="filter-button" data-scope="source" data-eventcategory="source-release-notes">Source</button></a>
+    <a target="_blank" href="https://github.com/cockroachdb/cockroach/releases/tag/""" + current_version + '"' + """><button id="source" class="filter-button" data-scope="source" data-eventcategory="source-release-notes">Source</button></a>
 </div>
 
 <section class="filter-content" data-scope="windows">
-{% include windows_warning.md %}
+{% include_cached windows_warning.md %}
 </section>
 """)
 
     print("""### Docker image
 
-{% include copy-clipboard.html %}
+{% include_cached copy-clipboard.html %}
 ~~~shell
 $ docker pull cockroachdb/cockroach""" + (":" if options.prod_release else "-unstable:") + current_version + """
 ~~~
@@ -933,7 +933,7 @@ if len(missing_release_notes) > 0:
 # Print the Doc Updates section.
 print("### Doc updates")
 print()
-print("Docs team: Please add these manually.")
+print("{% comment %}Docs team: Please add these manually.{% endcomment %}")
 print()
 
 # Print the Contributors section.

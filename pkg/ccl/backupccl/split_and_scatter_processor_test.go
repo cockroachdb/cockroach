@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
@@ -60,6 +62,7 @@ func (s *mockScatterer) split(_ context.Context, _ keys.SQLCodec, _ roachpb.Key)
 // correct stream.
 func TestSplitAndScatterProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
@@ -196,7 +199,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			}
 			for stream := 0; stream < c.numStreams; stream++ {
 				// In this test, nodes are 1 indexed.
-				startBytes, endBytes, err := routingSpanForNode(roachpb.NodeID(stream + 1))
+				startBytes, endBytes, err := routingSpanForSQLInstance(base.SQLInstanceID(stream + 1))
 				require.NoError(t, err)
 
 				span := execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
@@ -232,6 +235,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 					Settings: st,
 					DB:       kvDB,
 					Codec:    keys.SystemSQLCodec,
+					Stopper:  tc.Stopper(),
 				},
 				EvalCtx:     &evalCtx,
 				DiskMonitor: testDiskMonitor,
@@ -243,6 +247,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			require.NoError(t, err)
 
 			post := execinfrapb.PostProcessSpec{}
+			c.procSpec.Validation = jobspb.RestoreValidation_DefaultRestore
 			proc, err := newSplitAndScatterProcessor(&flowCtx, 0 /* processorID */, c.procSpec, &post, out)
 			require.NoError(t, err)
 			ssp, ok := proc.(*splitAndScatterProcessor)

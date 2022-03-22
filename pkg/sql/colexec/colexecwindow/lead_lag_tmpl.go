@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for lag.eg.go and lead.eg.go. It's
 // formatted in a special way, so it's both valid Go and a valid text/template
@@ -54,6 +56,7 @@ func New_UPPERCASE_NAMEOperator(
 	// store a single column. TODO(drewk): play around with benchmarks to find a
 	// good empirically-supported fraction to use.
 	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
+	mainMemLimit := args.MemoryLimit - bufferMemLimit
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
 		args.FdSemaphore, args.InputTypes, args.DiskAcc, argIdx)
@@ -74,7 +77,8 @@ func New_UPPERCASE_NAMEOperator(
 		switch argType.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			return newBufferedWindowOperator(args, &_OP_NAME_TYPEWindow{_OP_NAMEBase: base}, argType), nil
+			return newBufferedWindowOperator(
+				args, &_OP_NAME_TYPEWindow{_OP_NAMEBase: base}, argType, mainMemLimit), nil
 			// {{end}}
 		}
 		// {{end}}
@@ -170,11 +174,11 @@ func (b *_OP_NAMEBase) Init(ctx context.Context) {
 	}
 }
 
-func (b *_OP_NAMEBase) Close() {
+func (b *_OP_NAMEBase) Close(ctx context.Context) {
 	if !b.CloserHelper.Close() {
 		return
 	}
-	b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(ctx)
 }
 
 // {{/*

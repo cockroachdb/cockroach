@@ -1,0 +1,170 @@
+diff -urN a/BUILD.bazel b/BUILD.bazel
+--- a/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -1,6 +1,4 @@
+ load("@bazel_gazelle//:def.bzl", "gazelle")
+-load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
+-load("@io_bazel_rules_docker//go:image.bzl", "go_image")
+ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+ 
+ gazelle(
+@@ -46,81 +44,3 @@ go_binary(
+ 
+ # The distroless static container image's nonroot user id.
+ BAZEL_REMOTE_USER_ID = 65532
+-
+-go_image(
+-    name = "bazel-remote-base",
+-    embed = [":go_default_library"],
+-    goarch = "amd64",
+-    goos = "linux",
+-    pure = "on",
+-    static = "on",
+-    visibility = ["//visibility:private"],
+-    x_defs = {"main.gitCommit": "{STABLE_GIT_COMMIT}"},
+-)
+-
+-go_image(
+-    name = "bazel-remote-base-arm64",
+-    embed = [":go_default_library"],
+-    goarch = "arm64",
+-    goos = "linux",
+-    pure = "on",
+-    static = "on",
+-    visibility = ["//visibility:private"],
+-    x_defs = {"main.gitCommit": "{STABLE_GIT_COMMIT}"},
+-)
+-
+-container_image(
+-    name = "bazel-remote-image",
+-    base = ":bazel-remote-base",
+-    cmd = ["--max_size=5"],
+-    entrypoint = [
+-        "/app/bazel-remote-base.binary",
+-        "--port=8080",
+-        "--dir=/data",
+-
+-        # Listen on all addresses, not just 127.0.0.1, so this can
+-        # be reached from outside the container (with a -p mapping).
+-        "--profile_host=",
+-        # Specify a port to enable the profiling http server.
+-        "--profile_port=6060",
+-    ],
+-    ports = ["8080"],
+-    tars = [
+-        "//docker:data_dir_tar",
+-    ],
+-    user = str(BAZEL_REMOTE_USER_ID),
+-    visibility = ["//visibility:public"],
+-)
+-
+-container_image(
+-    name = "bazel-remote-image-arm64",
+-    base = ":bazel-remote-base-arm64",
+-    cmd = ["--max_size=1"],
+-    entrypoint = [
+-        "/app/bazel-remote-base-arm64.binary",
+-        "--port=8080",
+-        "--dir=/data",
+-
+-        # Listen on all addresses, not just 127.0.0.1, so this can
+-        # be reached from outside the container (with a -p mapping).
+-        "--profile_host=",
+-        # Specify a port to enable the profiling http server.
+-        "--profile_port=6060",
+-    ],
+-    ports = ["8080"],
+-    tars = [
+-        "//docker:data_dir_tar",
+-    ],
+-    user = str(BAZEL_REMOTE_USER_ID),
+-    visibility = ["//visibility:public"],
+-)
+-
+-container_push(
+-    name = "push_to_dockerhub",
+-    format = "Docker",
+-    image = ":bazel-remote-image",
+-    registry = "index.docker.io",
+-    repository = "buchgr/bazel-remote-cache",
+-    tag = "latest",
+-    visibility = ["//visibility:public"],
+-)
+diff -urN a/docker/BUILD.bazel b/docker/BUILD.bazel
+--- a/docker/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ /dev/null	2000-01-01 00:00:00.000000000 -0000
+@@ -1,8 +0,0 @@
+-load("@io_bazel_rules_docker//container:container.bzl", "container_image")
+-
+-package(default_visibility = ["//visibility:public"])
+-
+-container_image(
+-    name = "data_dir_tar",
+-    tars = ["data.tar"],
+-)
+diff -urN a/genproto/build/bazel/remote/asset/v1/BUILD.bazel b/genproto/build/bazel/remote/asset/v1/BUILD.bazel
+--- a/genproto/build/bazel/remote/asset/v1/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/genproto/build/bazel/remote/asset/v1/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -8,10 +8,10 @@ go_library(
+     deps = [
+         "//genproto/build/bazel/remote/execution/v2:go_default_library",
+         "@com_github_golang_protobuf//proto:go_default_library",
+-        "@go_googleapis//google/api:annotations_go_proto",
+-        "@go_googleapis//google/rpc:status_go_proto",
+-        "@io_bazel_rules_go//proto/wkt:duration_go_proto",
+-        "@io_bazel_rules_go//proto/wkt:timestamp_go_proto",
++        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
++        "@org_golang_google_genproto//googleapis/rpc/status:go_default_library",
++        "@com_github_golang_protobuf//ptypes/duration:go_default_library",
++        "@com_github_golang_protobuf//ptypes/timestamp:go_default_library",
+         "@org_golang_google_grpc//:go_default_library",
+         "@org_golang_google_grpc//codes:go_default_library",
+         "@org_golang_google_grpc//status:go_default_library",
+diff -urN a/genproto/build/bazel/remote/execution/v2/BUILD.bazel b/genproto/build/bazel/remote/execution/v2/BUILD.bazel
+--- a/genproto/build/bazel/remote/execution/v2/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/genproto/build/bazel/remote/execution/v2/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -8,12 +8,12 @@ go_library(
+     deps = [
+         "//genproto/build/bazel/semver:go_default_library",
+         "@com_github_golang_protobuf//proto:go_default_library",
+-        "@go_googleapis//google/api:annotations_go_proto",
+-        "@go_googleapis//google/longrunning:longrunning_go_proto",
+-        "@go_googleapis//google/rpc:status_go_proto",
+-        "@io_bazel_rules_go//proto/wkt:duration_go_proto",
+-        "@io_bazel_rules_go//proto/wkt:timestamp_go_proto",
+-        "@io_bazel_rules_go//proto/wkt:wrappers_go_proto",
++        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
++        "@org_golang_google_genproto//googleapis/longrunning:go_default_library",
++        "@org_golang_google_genproto//googleapis/rpc/status:go_default_library",
++        "@com_github_golang_protobuf//ptypes/duration:go_default_library",
++        "@com_github_golang_protobuf//ptypes/timestamp:go_default_library",
++        "@com_github_golang_protobuf//ptypes/wrappers:go_default_library",
+         "@org_golang_google_grpc//:go_default_library",
+         "@org_golang_google_grpc//codes:go_default_library",
+         "@org_golang_google_grpc//status:go_default_library",
+diff --git a/server/BUILD.bazel b/server/BUILD.bazel
+index f60cf80..ba707d3 100644
+--- a/server/BUILD.bazel
++++ b/server/BUILD.bazel
+@@ -26,9 +26,9 @@ go_library(
+         "@com_github_golang_protobuf//proto:go_default_library",
+         "@com_github_mostynb_go_grpc_compression//snappy:go_default_library",
+         "@com_github_mostynb_go_grpc_compression//zstd:go_default_library",
+-        "@go_googleapis//google/bytestream:bytestream_go_proto",
+-        "@go_googleapis//google/rpc:code_go_proto",
+-        "@go_googleapis//google/rpc:status_go_proto",
++        "@org_golang_google_genproto//googleapis/bytestream:go_default_library",
++        "@org_golang_google_genproto//googleapis/rpc/code:go_default_library",
++        "@org_golang_google_genproto//googleapis/rpc/status:go_default_library",
+         "@org_golang_google_grpc//:go_default_library",
+         "@org_golang_google_grpc//codes:go_default_library",
+         "@org_golang_google_grpc//encoding/gzip:go_default_library",
+@@ -54,7 +54,7 @@ go_test(
+         "//utils:go_default_library",
+         "@com_github_golang_protobuf//proto:go_default_library",
+         "@com_github_google_uuid//:go_default_library",
+-        "@go_googleapis//google/bytestream:bytestream_go_proto",
++        "@org_golang_google_genproto//googleapis/bytestream:go_default_library",
+         "@org_golang_google_grpc//:go_default_library",
+         "@org_golang_google_grpc//codes:go_default_library",
+         "@org_golang_google_grpc//status:go_default_library",

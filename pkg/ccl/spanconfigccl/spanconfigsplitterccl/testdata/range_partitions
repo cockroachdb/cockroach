@@ -1,0 +1,44 @@
+# Test a bunch of range partitioned tables.
+
+exec-sql
+CREATE DATABASE db;
+----
+
+# Partitioning the primary index by range -- we should observe splits along
+# named values within the index.
+exec-sql
+CREATE TABLE db.range_partitions(i INT PRIMARY KEY, j INT) PARTITION BY RANGE (i) (
+  PARTITION less_than_five       VALUES FROM (MINVALUE) to (5),
+  PARTITION between_five_and_ten VALUES FROM (5) to (10),
+  PARTITION greater_than_ten     VALUES FROM (10) to (MAXVALUE)
+);
+----
+
+splits database=db table=range_partitions
+----
++ 1  between start of table and start of 1st index
++ 3  for 1st index
++ 1  between end of 1st index and end of table
+= 5
+
+# Try the same thing on a secondary index.
+exec-sql
+CREATE INDEX idx ON db.range_partitions (j);
+----
+
+exec-sql
+ALTER INDEX db.range_partitions@idx PARTITION BY RANGE (j) (
+  PARTITION less_than_five       VALUES FROM (minvalue) to (5),
+  PARTITION between_five_and_ten VALUES FROM (5) to (10),
+  PARTITION greater_than_ten     VALUES FROM (10) to (maxvalue)
+);
+----
+
+splits database=db table=range_partitions
+----
++ 1  between start of table and start of 1st index
++ 3  for 1st index
++ 3  for 2nd index
++ 1  gap(s) between 2 indexes
++ 1  between end of 2nd index and end of table
+= 9

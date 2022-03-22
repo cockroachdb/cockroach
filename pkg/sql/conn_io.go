@@ -136,6 +136,10 @@ type ExecStmt struct {
 	// stats reporting.
 	ParseStart time.Time
 	ParseEnd   time.Time
+
+	// LastInBatch indicates if this command contains the last query in a
+	// simple protocol Query message that contains a batch of 1 or more queries.
+	LastInBatch bool
 }
 
 // command implements the Command interface.
@@ -163,6 +167,9 @@ type ExecPortal struct {
 	// TimeReceived is the time at which the exec message was received
 	// from the client. Used to compute the service latency.
 	TimeReceived time.Time
+	// FollowedBySync is true if the next command after this is a Sync. This is
+	// used to enable the 1PC txn fast path in the extended protocol.
+	FollowedBySync bool
 }
 
 // command implements the Command interface.

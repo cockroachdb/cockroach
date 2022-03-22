@@ -53,3 +53,12 @@ func NormalizeName(n string) string {
 	}
 	return norm.NFC.String(lower)
 }
+
+// NormalizeString normalizes to Unicode Normalization Form C (NFC).
+// This function is specifically for double quoted identifiers.
+func NormalizeString(s string) string {
+	if isASCII(s) {
+		return s
+	}
+	return norm.NFC.String(s)
+}

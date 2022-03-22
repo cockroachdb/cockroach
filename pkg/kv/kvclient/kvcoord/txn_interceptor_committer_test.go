@@ -380,7 +380,7 @@ func TestTxnCommitterAsyncExplicitCommitTask(t *testing.T) {
 		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			defer close(explicitCommitCh)
 			require.Len(t, ba.Requests, 1)
-			require.True(t, ba.CanForwardReadTimestamp)
+			require.False(t, ba.CanForwardReadTimestamp)
 			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 
 			et := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)

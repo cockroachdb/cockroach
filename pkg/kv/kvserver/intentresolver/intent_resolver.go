@@ -211,6 +211,7 @@ func New(c Config) *IntentResolver {
 		gcBatchSize = c.TestingKnobs.MaxGCBatchSize
 	}
 	ir.gcBatcher = requestbatcher.New(requestbatcher.Config{
+		AmbientCtx:      c.AmbientCtx,
 		Name:            "intent_resolver_gc_batcher",
 		MaxMsgsPerBatch: gcBatchSize,
 		MaxWait:         c.MaxGCBatchWait,
@@ -225,6 +226,7 @@ func New(c Config) *IntentResolver {
 		intentResolutionRangeBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 	}
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
+		AmbientCtx:      c.AmbientCtx,
 		Name:            "intent_resolver_ir_batcher",
 		MaxMsgsPerBatch: intentResolutionBatchSize,
 		MaxWait:         c.MaxIntentResolutionBatchWait,
@@ -233,6 +235,7 @@ func New(c Config) *IntentResolver {
 		Sender:          c.DB.NonTransactionalSender(),
 	})
 	ir.irRangeBatcher = requestbatcher.New(requestbatcher.Config{
+		AmbientCtx:         c.AmbientCtx,
 		Name:               "intent_resolver_ir_range_batcher",
 		MaxMsgsPerBatch:    intentResolutionRangeBatchSize,
 		MaxKeysPerBatchReq: intentResolverRangeRequestSize,
@@ -547,8 +550,8 @@ func (ir *IntentResolver) CleanupIntents(
 // the txn record is GC'ed.
 //
 // WARNING: Since this GCs the txn record, it should only be called in response
-// to requests coming from the coordinator or the GC Queue. We don't want other
-// actors to GC a txn record, since that can cause ambiguities for the
+// to requests coming from the coordinator or the MVCC GC Queue. We don't want
+// other actors to GC a txn record, since that can cause ambiguities for the
 // coordinator: if it had STAGED the txn, it won't be able to tell the
 // difference between a txn that had been implicitly committed, recovered, and
 // GC'ed, and one that someone else aborted and GC'ed.
@@ -629,8 +632,8 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 		stop.TaskOpts{
 			TaskName: "processing txn intents",
 			Sem:      ir.sem,
-			// We really do not want to hang up the GC queue on this kind of
-			// processing, so it's better to just skip txns which we can't
+			// We really do not want to hang up the MVCC GC queue on this kind
+			// of processing, so it's better to just skip txns which we can't
 			// pass to the async processor (wait=false). Their intents will
 			// get cleaned up on demand, and we'll eventually get back to
 			// them. Not much harm in having old txn records lying around in

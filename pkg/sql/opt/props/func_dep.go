@@ -15,8 +15,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // FuncDepSet is a set of functional dependencies (FDs) that encode useful
@@ -677,6 +677,9 @@ func (f *FuncDepSet) ComputeClosure(cols opt.ColSet) opt.ColSet {
 
 // AreColsEquiv returns true if the two given columns are equivalent.
 func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
+	if col1 == col2 {
+		return true
+	}
 	for i := range f.deps {
 		fd := &f.deps[i]
 
@@ -697,11 +700,12 @@ func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
 //   (a)==(b)
 //   (b)==(c)
 //   (a)==(d)
+//   (e)==(f)
 //
-// The equivalence closure for (a) is (a,b,c,d) because (a) is transitively
-// equivalent to all other columns. Therefore, all columns must have equal
-// non-NULL values, or else all must be NULL (see definition for NULL= in the
-// comment for FuncDepSet).
+// The equivalence closure for (a,e) is (a,b,c,d,e,f) because all these columns
+// are transitively equal to either a or e. Therefore, all columns must have
+// equal non-NULL values, or else all must be NULL (see definition for NULL= in
+// the comment for FuncDepSet).
 func (f *FuncDepSet) ComputeEquivClosure(cols opt.ColSet) opt.ColSet {
 	// Don't need to get transitive closure, because equivalence closures are
 	// already maintained for every column.
@@ -887,8 +891,8 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 	f.addEquivalency(equiv)
 }
 
-// AddConstants adds a strict FD to the set that declares the given column as
-// having the same constant value for all rows. If the column is nullable, then
+// AddConstants adds a strict FD to the set that declares each given column as
+// having the same constant value for all rows. If a column is nullable, then
 // its value may be NULL, but then the column must be NULL for all rows. For
 // column "a", the FD looks like this:
 //
@@ -1373,6 +1377,26 @@ func (f *FuncDepSet) MakeLeftOuter(
 	// leftKey because nullExtendRightRows can remove FDs, such that the closure
 	// of oldKey ends up missing some columns from the right.
 	f.ensureKeyClosure(leftCols.Union(rightCols))
+
+	// If the left input has at most one row, any columns that - when the join
+	// filters hold - are functionally dependent on the left columns are constant
+	// in the left join output:
+	//  - either the one left row has a match, and all output rows have the same
+	//    values for the left columns
+	//  - or the left row has no match, and there is a single output row (where
+	//    any functional dependencies hold trivially).
+	//
+	// This does not hold in general when the left equality column is
+	// constant but the left input has more than one row, for example:
+	//   ab contains (1, 1), (1, 2)
+	//   cd contains (1, 1)
+	//   ab JOIN cd ON (a=c AND b=d) contains (1, 1, 1, 1), (1, 2, NULL, NULL)
+	// Here a is constant in ab but c is not constant in the result.
+	if leftFDs.HasMax1Row() {
+		constCols := filtersFDs.ComputeClosure(leftCols)
+		constCols.IntersectionWith(rightCols)
+		f.AddConstants(constCols)
+	}
 }
 
 // MakeFullOuter modifies the cartesian product FD set to reflect the impact of
@@ -1572,15 +1596,15 @@ func (f *FuncDepSet) Verify() {
 		fd := &f.deps[i]
 
 		if fd.from.Intersects(fd.to) {
-			panic(errors.AssertionFailedf("expected FD determinant and dependants to be disjoint: %s (%d)", log.Safe(f), log.Safe(i)))
+			panic(errors.AssertionFailedf("expected FD determinant and dependants to be disjoint: %s (%d)", redact.Safe(f), redact.Safe(i)))
 		}
 
 		if fd.isConstant() {
 			if i != 0 {
-				panic(errors.AssertionFailedf("expected constant FD to be first FD in set: %s (%d)", log.Safe(f), log.Safe(i)))
+				panic(errors.AssertionFailedf("expected constant FD to be first FD in set: %s (%d)", redact.Safe(f), redact.Safe(i)))
 			}
 			if !fd.strict {
-				panic(errors.AssertionFailedf("expected constant FD to be strict: %s", log.Safe(f)))
+				panic(errors.AssertionFailedf("expected constant FD to be strict: %s", redact.Safe(f)))
 			}
 		}
 
@@ -1590,11 +1614,11 @@ func (f *FuncDepSet) Verify() {
 			}
 
 			if fd.from.Len() != 1 {
-				panic(errors.AssertionFailedf("expected equivalence determinant to be single col: %s (%d)", log.Safe(f), log.Safe(i)))
+				panic(errors.AssertionFailedf("expected equivalence determinant to be single col: %s (%d)", redact.Safe(f), redact.Safe(i)))
 			}
 
 			if !f.ComputeEquivClosure(fd.from).Equals(fd.from.Union(fd.to)) {
-				panic(errors.AssertionFailedf("expected equivalence dependants to be its closure: %s (%d)", log.Safe(f), log.Safe(i)))
+				panic(errors.AssertionFailedf("expected equivalence dependants to be its closure: %s (%d)", redact.Safe(f), redact.Safe(i)))
 			}
 		}
 	}
@@ -1608,7 +1632,7 @@ func (f *FuncDepSet) Verify() {
 			allCols := f.ColSet()
 			allCols.UnionWith(f.key)
 			if !f.ComputeClosure(f.key).Equals(allCols) {
-				panic(errors.AssertionFailedf("expected closure of FD key to include all known cols: %s", log.Safe(f)))
+				panic(errors.AssertionFailedf("expected closure of FD key to include all known cols: %s", redact.Safe(f)))
 			}
 		}
 
@@ -1780,7 +1804,7 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 	// Delegate constant dependency.
 	if from.Empty() {
 		if !strict {
-			panic(errors.AssertionFailedf("expected constant FD to be strict: %s", log.Safe(f)))
+			panic(errors.AssertionFailedf("expected constant FD to be strict: %s", redact.Safe(f)))
 		}
 		f.AddConstants(to)
 		return

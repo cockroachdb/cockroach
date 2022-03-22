@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -106,14 +107,13 @@ var oracleFactories = map[Policy]OracleFactory{}
 // QueryState encapsulates the history of assignments of ranges to nodes
 // done by an oracle on behalf of one particular query.
 type QueryState struct {
-	RangesPerNode  map[roachpb.NodeID]int
+	RangesPerNode  util.FastIntMap
 	AssignedRanges map[roachpb.RangeID]roachpb.ReplicaDescriptor
 }
 
 // MakeQueryState creates an initialized QueryState.
 func MakeQueryState() QueryState {
 	return QueryState{
-		RangesPerNode:  make(map[roachpb.NodeID]int),
 		AssignedRanges: make(map[roachpb.RangeID]roachpb.ReplicaDescriptor),
 	}
 }
@@ -233,7 +233,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	minLoad := int(math.MaxInt32)
 	var leastLoadedIdx int
 	for i, repl := range replicas {
-		assignedRanges := queryState.RangesPerNode[repl.NodeID]
+		assignedRanges := queryState.RangesPerNode.GetDefault(int(repl.NodeID))
 		if assignedRanges != 0 && assignedRanges < o.maxPreferredRangesPerLeaseHolder {
 			return repl.ReplicaDescriptor, nil
 		}

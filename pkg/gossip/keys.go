@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
@@ -62,10 +63,18 @@ const (
 	// bi-level key addressing scheme. The value is a roachpb.RangeDescriptor.
 	KeyFirstRangeDescriptor = "first-range"
 
-	// KeySystemConfig is the gossip key for the system DB span.
+	// KeyDeprecatedSystemConfig is the gossip key for the system DB span.
 	// The value if a config.SystemConfig which holds all key/value
 	// pairs in the system DB span.
-	KeySystemConfig = "system-db"
+	//
+	// This key is used in the 21.2<->22.1 mixed version state. It is not used
+	// in 22.1. However, it was written without a TTL, so there no guarantee
+	// that it will actually be removed from the gossip network.
+	//
+	// TODO(ajwerner): Write a migration to remove the data, or release a
+	// a version which drops the key entirely, and then, in a subsequent
+	// release, delete this key.
+	KeyDeprecatedSystemConfig = "system-db"
 
 	// KeyDistSQLNodeVersionKeyPrefix is key prefix for each node's DistSQL
 	// version.
@@ -74,11 +83,6 @@ const (
 	// KeyDistSQLDrainingPrefix is the key prefix for each node's DistSQL
 	// draining state.
 	KeyDistSQLDrainingPrefix = "distsql-draining"
-
-	// KeyTableStatAddedPrefix is the prefix for keys that indicate a new table
-	// statistic was computed. The statistics themselves are not stored in gossip;
-	// the keys are used to notify nodes to invalidate table statistic caches.
-	KeyTableStatAddedPrefix = "table-stat-added"
 
 	// KeyGossipClientsPrefix is the prefix for keys that indicate which gossip
 	// client connections a node has open. This is used by other nodes in the
@@ -91,6 +95,13 @@ const (
 	// stmtDiagnosticsRequestRegistry listens for notifications and responds by
 	// polling for new requests.
 	KeyGossipStatementDiagnosticsRequest = "stmt-diag-req"
+
+	// KeyGossipStatementDiagnosticsRequestCancellation is the gossip key for
+	// canceling an existing diagnostics request. The values is the id of the
+	// request that needs to be canceled, as a little-endian-encoded uint64.
+	// stmtDiagnosticsRequestRegistry listens for notifications and responds by
+	// polling for new requests.
+	KeyGossipStatementDiagnosticsRequestCancellation = "stmt-diag-cancel-req"
 )
 
 // MakeKey creates a canonical key under which to gossip a piece of
@@ -170,20 +181,14 @@ func StoreIDFromKey(storeKey string) (roachpb.StoreID, error) {
 }
 
 // MakeDistSQLNodeVersionKey returns the gossip key for the given store.
-func MakeDistSQLNodeVersionKey(nodeID roachpb.NodeID) string {
-	return MakeKey(KeyDistSQLNodeVersionKeyPrefix, nodeID.String())
+func MakeDistSQLNodeVersionKey(instanceID base.SQLInstanceID) string {
+	return MakeKey(KeyDistSQLNodeVersionKeyPrefix, instanceID.String())
 }
 
 // MakeDistSQLDrainingKey returns the gossip key for the given node's distsql
 // draining state.
-func MakeDistSQLDrainingKey(nodeID roachpb.NodeID) string {
-	return MakeKey(KeyDistSQLDrainingPrefix, nodeID.String())
-}
-
-// MakeTableStatAddedKey returns the gossip key used to notify that a new
-// statistic is available for the given table.
-func MakeTableStatAddedKey(tableID uint32) string {
-	return MakeKey(KeyTableStatAddedPrefix, strconv.FormatUint(uint64(tableID), 10 /* base */))
+func MakeDistSQLDrainingKey(instanceID base.SQLInstanceID) string {
+	return MakeKey(KeyDistSQLDrainingPrefix, instanceID.String())
 }
 
 // removePrefixFromKey removes the key prefix and separator and returns what's

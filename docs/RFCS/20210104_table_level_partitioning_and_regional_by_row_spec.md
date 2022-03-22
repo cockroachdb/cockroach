@@ -450,7 +450,7 @@ tables”, in contrast with other tables that may have different “partitioned
 indexes”.
 
 Beyond helping with multi-region tables, partitioned tables might independently
-help once we get more strict about data sovereignity features and guarantees -
+help once we get more strict about data sovereignty features and guarantees -
 at which point data segregation has to be enforced across indexes.
 
 A big open question here is whether it'd be a good idea to go further: break

@@ -116,7 +116,6 @@ def _impl(ctx):
                 flag_groups = ([
                     flag_group(
                         flags = [
-                            "-g1",
                             "-Wall",
                             "-I%{repo_path}/%{target}/include/c++/6.5.0",
                         ],
@@ -126,8 +125,21 @@ def _impl(ctx):
         ],
     )
 
-    linker_flags = ["-lstdc++"]
-    if "%{target}" == "x86_64-unknown-linux-gnu":
+    linker_flags = []
+    if "%{target}" == "x86_64-w64-mingw32":
+        linker_flags.append("-static")
+    if "-linux-" in "%{target}":
+        # At various points in the build process we can use either clang or
+        # clang++ to link. The first of these arguments tells `clang` to link
+        # libstdc++/libgcc library, and the last two do the same for `clang++`.
+        linker_flags += [
+            "-Wl,-Bstatic,-lgcc,-lstdc++,-Bdynamic",
+            "-static-libgcc",
+            "-static-libstdc++",
+        ]
+    else:
+        linker_flags.append("-lstdc++")
+    if "%{target}" in ("x86_64-unknown-linux-gnu", "s390x-ibm-linux-gnu"):
         linker_flags.append("-lrt")
 
     default_linker_flags = feature(

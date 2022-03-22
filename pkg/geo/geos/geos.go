@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -95,7 +97,7 @@ func ensureInit(
 		)
 	})
 	if geosOnce.err != nil && errDisplay == EnsureInitErrorDisplayPublic {
-		return nil, errors.Newf("geos: this operation is not available")
+		return nil, pgerror.Newf(pgcode.System, "geos: this operation is not available")
 	}
 	return geosOnce.geos, geosOnce.err
 }
@@ -130,6 +132,12 @@ func findLibraryDirectories(flagLibraryDirectoryValue string, crdbBinaryLoc stri
 	if flagLibraryDirectoryValue != "" {
 		locs = append(locs, flagLibraryDirectoryValue)
 	}
+	// Account for the libraries to be in a bazel runfile path.
+	if bazel.BuiltWithBazel() {
+		if p, err := bazel.Runfile(path.Join("c-deps", "libgeos", "lib")); err == nil {
+			locs = append(locs, p)
+		}
+	}
 	locs = append(
 		append(
 			locs,
@@ -137,12 +145,6 @@ func findLibraryDirectories(flagLibraryDirectoryValue string, crdbBinaryLoc stri
 		),
 		findLibraryDirectoriesInParentingDirectories(cwd)...,
 	)
-	// Account for the libraries to be in a bazel runfile path.
-	if bazel.BuiltWithBazel() {
-		if p, err := bazel.Runfile(path.Join("c-deps", "libgeos", "lib")); err == nil {
-			locs = append(locs, p)
-		}
-	}
 	return locs
 }
 
@@ -194,10 +196,10 @@ func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 		}
 		err = errors.CombineErrors(
 			err,
-			errors.Newf(
-				"geos: cannot load GEOS from dir %q: %s",
-				dir,
+			errors.Wrapf(
 				newErr,
+				"geos: cannot load GEOS from dir %q",
+				dir,
 			),
 		)
 	}
@@ -654,11 +656,11 @@ func PrepareGeometry(a geopb.EWKB) (PreparedGeometry, error) {
 func PreparedGeomDestroy(a PreparedGeometry) {
 	g, err := ensureInitInternal()
 	if err != nil {
-		panic(errors.AssertionFailedf("trying to destroy PreparedGeometry with no GEOS: %v", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "trying to destroy PreparedGeometry with no GEOS"))
 	}
 	ap := (*C.CR_GEOS_PreparedGeometry)(unsafe.Pointer(a))
 	if err := statusToError(C.CR_GEOS_PreparedGeometryDestroy(g, ap)); err != nil {
-		panic(errors.AssertionFailedf("PreparedGeometryDestroy returned an error: %v", err))
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "PreparedGeometryDestroy returned an error"))
 	}
 }
 

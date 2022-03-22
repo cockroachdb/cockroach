@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -103,26 +103,18 @@ func findTransitioningMembers(desc *typedesc.Mutable) ([][]byte, bool) {
 func (p *planner) writeTypeSchemaChange(
 	ctx context.Context, typeDesc *typedesc.Mutable, jobDesc string,
 ) error {
-	// Check if there is an active job for this type, otherwise create one.
-	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[typeDesc.ID]
+	// Check if there is a cached specification for this type, otherwise create one.
+	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[typeDesc.ID]
 	transitioningMembers, beingDropped := findTransitioningMembers(typeDesc)
-	if jobExists {
+	if recordExists {
 		// Update it.
 		newDetails := jobspb.TypeSchemaChangeDetails{
 			TypeID:               typeDesc.ID,
 			TransitioningMembers: transitioningMembers,
 		}
-		if err := job.SetDetails(ctx, p.txn, newDetails); err != nil {
-			return err
-		}
-		if err := job.SetDescription(ctx, p.txn,
-			func(ctx context.Context, description string) (string, error) {
-				return description + "; " + jobDesc, nil
-			},
-		); err != nil {
-			return err
-		}
-		if err := job.SetNonCancelable(ctx, p.txn,
+		record.Details = newDetails
+		record.AppendDescription(jobDesc)
+		record.SetNonCancelable(ctx,
 			func(ctx context.Context, nonCancelable bool) bool {
 				// If the job is already cancelable, then it should stay as such
 				// regardless of if a member is being dropped or not in the current
@@ -133,13 +125,12 @@ func (p *planner) writeTypeSchemaChange(
 				// Type change jobs are non-cancelable unless an enum member is being
 				// dropped.
 				return !beingDropped
-			}); err != nil {
-			return err
-		}
-		log.Infof(ctx, "job %d: updated with type change for type %d", job.ID(), typeDesc.ID)
+			})
+		log.Infof(ctx, "job %d: updated with type change for type %d", record.JobID, typeDesc.ID)
 	} else {
 		// Or, create a new job.
-		jobRecord := jobs.Record{
+		newRecord := jobs.Record{
+			JobID:         p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID(),
 			Description:   jobDesc,
 			Username:      p.User(),
 			DescriptorIDs: descpb.IDs{typeDesc.ID},
@@ -152,12 +143,8 @@ func (p *planner) writeTypeSchemaChange(
 			// a transition that drops an enum member.
 			NonCancelable: !beingDropped,
 		}
-		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
-		if err != nil {
-			return err
-		}
-		p.extendedEvalCtx.SchemaChangeJobCache[typeDesc.ID] = newJob
-		log.Infof(ctx, "queued new type change job %d for type %d", newJob.ID(), typeDesc.ID)
+		p.extendedEvalCtx.SchemaChangeJobRecords[typeDesc.ID] = &newRecord
+		log.Infof(ctx, "queued new type change job %d for type %d", newRecord.JobID, typeDesc.ID)
 	}
 
 	return p.writeTypeDesc(ctx, typeDesc)
@@ -193,7 +180,7 @@ type TypeSchemaChangerTestingKnobs struct {
 	RunBeforeExec func() error
 	// RunBeforeEnumMemberPromotion runs before enum members are promoted from
 	// readable to all permissions in the typeSchemaChanger.
-	RunBeforeEnumMemberPromotion func() error
+	RunBeforeEnumMemberPromotion func(ctx context.Context) error
 	// RunAfterOnFailOrCancel runs after OnFailOrCancel completes, if
 	// OnFailOrCancel is triggered.
 	RunAfterOnFailOrCancel func() error
@@ -210,8 +197,8 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 	ctx context.Context,
 ) (catalog.TypeDescriptor, error) {
 	var typeDesc catalog.TypeDescriptor
-	if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		typeDesc, err = catalogkv.MustGetTypeDescByID(ctx, txn, t.execCfg.Codec, t.typeID)
+	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+		typeDesc, err = col.Direct().MustGetTypeDescByID(ctx, txn, t.typeID)
 		return err
 	}); err != nil {
 		return nil, err
@@ -231,7 +218,7 @@ func refreshTypeDescriptorLeases(
 		ids = append(ids, typeDesc.GetArrayTypeID())
 	}
 	for _, id := range ids {
-		if updateErr := WaitToUpdateLeases(ctx, leaseMgr, id); updateErr != nil {
+		if _, updateErr := WaitToUpdateLeases(ctx, leaseMgr, id); updateErr != nil {
 			// Swallow the descriptor not found error.
 			if errors.Is(updateErr, catalog.ErrDescriptorNotFound) {
 				log.Infof(ctx,
@@ -285,7 +272,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM) &&
 		len(t.transitioningMembers) != 0 {
 		if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeEnumMemberPromotion; fn != nil {
-			if err := fn(); err != nil {
+			if err := fn(ctx); err != nil {
 				return err
 			}
 		}
@@ -848,6 +835,19 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			}
 		}
 
+		// Examine all check constraints.
+		for _, chk := range desc.AllActiveAndInactiveChecks() {
+			foundUsage, err := findUsagesOfEnumValue(chk.Expr, member, typeDesc.ID)
+			if err != nil {
+				return err
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in a check constraint of %q",
+					member.LogicalRepresentation, desc.GetName())
+			}
+		}
+
 		for _, col := range desc.PublicColumns() {
 			// If this column has a default expression, check if it uses the enum member being dropped.
 			if col.HasDefault() {
@@ -871,6 +871,21 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				if foundUsage {
 					return pgerror.Newf(pgcode.DependentObjectsStillExist,
 						"could not remove enum value %q as it is being used in a computed column of %q",
+						member.LogicalRepresentation, desc.GetName())
+				}
+			}
+
+			// If this column has an ON UPDATE expression, check if it uses the enum
+			// member being dropped.
+			if col.HasOnUpdate() {
+				foundUsage, err := findUsagesOfEnumValue(col.GetOnUpdateExpr(), member, typeDesc.ID)
+				if err != nil {
+					return err
+				}
+				if foundUsage {
+					return pgerror.Newf(pgcode.DependentObjectsStillExist,
+						"could not remove enum value %q as it is being used in an ON UPDATE expression"+
+							" of %q",
 						member.LogicalRepresentation, desc.GetName())
 				}
 			}
@@ -942,7 +957,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			if err != nil {
 				return err
 			}
-			if descpb.RegionName(member.LogicalRepresentation) == homedRegion {
+			if catpb.RegionName(member.LogicalRepresentation) == homedRegion {
 				return errors.Newf("could not remove enum value %q as it is the home region for table %q",
 					member.LogicalRepresentation, desc.GetName())
 			}
@@ -1058,7 +1073,7 @@ func findUsageOfEnumValueInEncodedPartitioningValue(
 	foundUsage bool,
 	member *descpb.TypeDescriptor_EnumMember,
 ) (bool, error) {
-	var d rowenc.DatumAlloc
+	var d tree.DatumAlloc
 	tuple, _, err := rowenc.DecodePartitionTuple(
 		&d, codec, table, index, partitioning, v, fakePrefixDatums,
 	)
@@ -1162,7 +1177,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		if len(rows) > 0 {
 			// Use an FQN in the error message.
 			parentSchema, err := descsCol.GetImmutableSchemaByID(
-				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{})
+				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
 			if err != nil {
 				return err
 			}
@@ -1217,6 +1232,9 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 		Multiplier:     1.5,
 	}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		if err := t.execCfg.JobRegistry.CheckPausepoint("typeschemachanger.before.exec"); err != nil {
+			return err
+		}
 		tcErr := t.exec(ctx)
 		switch {
 		case tcErr == nil:
@@ -1306,7 +1324,7 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfac
 				tc.typeID,
 			)
 		case !IsPermanentSchemaChangeError(rollbackErr):
-			return jobs.NewRetryJobError(rollbackErr.Error())
+			return jobs.MarkAsRetryJobError(rollbackErr)
 		default:
 			return rollbackErr
 		}

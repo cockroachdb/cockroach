@@ -34,8 +34,21 @@ import (
 	"github.com/lib/pq"
 )
 
-// WaitForJob waits for the specified job ID to terminate.
-func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+// WaitForJobToSucceed waits for the specified job ID to succeed.
+func WaitForJobToSucceed(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusSucceeded)
+}
+
+// WaitForJobToPause waits for the specified job ID to be paused.
+func WaitForJobToPause(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusPaused)
+}
+
+func waitForJobToHaveStatus(
+	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
+) {
 	t.Helper()
 	if err := retry.ForDuration(time.Minute*2, func() error {
 		var status string
@@ -50,7 +63,7 @@ func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 			}
 			t.Fatalf("job failed")
 		}
-		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+		if e, a := expectedStatus, jobs.Status(status); e != a {
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
@@ -59,7 +72,7 @@ func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	}
 }
 
-// RunJob runs the provided job control statement, intializing, notifying and
+// RunJob runs the provided job control statement, initializing, notifying and
 // closing the chan at the passed pointer (see below for why) and returning the
 // jobID and error result. PAUSE JOB and CANCEL JOB are racy in that it's hard
 // to guarantee that the job is still running when executing a PAUSE or
@@ -154,6 +167,8 @@ func verifySystemJob(
 	sort.Sort(expected.DescriptorIDs)
 	expected.Details = nil
 	if e, a := expected, actual; !reflect.DeepEqual(e, a) {
+		fmt.Printf("%+v\n", expected)
+		fmt.Printf("%+v\n", actual)
 		return errors.Errorf("job %d did not match:\n%s",
 			offset, strings.Join(pretty.Diff(e, a), "\n"))
 	}

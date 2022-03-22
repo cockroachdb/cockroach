@@ -3,28 +3,34 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name 'NULL'
 	| 'CONSTRAINT' constraint_name 'NOT' 'VISIBLE'
 	| 'CONSTRAINT' constraint_name 'UNIQUE'
-	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY'
-	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
+	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' opt_with_storage_parameter_list
+	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' 'USING' 'HASH' opt_hash_sharded_bucket_count opt_with_storage_parameter_list
 	| 'CONSTRAINT' constraint_name 'CHECK' '(' a_expr ')'
 	| 'CONSTRAINT' constraint_name 'DEFAULT' b_expr
+	| 'CONSTRAINT' constraint_name 'ON' 'UPDATE' b_expr
 	| 'CONSTRAINT' constraint_name 'REFERENCES' table_name opt_name_parens key_match reference_actions
-	| 'CONSTRAINT' constraint_name 'AS' '(' a_expr ')' 'STORED'
-	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'STORED'
-	| 'CONSTRAINT' constraint_name 'AS' '(' a_expr ')' 'VIRTUAL'
-	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'VIRTUAL'
+	| 'CONSTRAINT' constraint_name generated_as '(' a_expr ')' 'STORED'
+	| 'CONSTRAINT' constraint_name generated_as '(' a_expr ')' 'VIRTUAL'
+	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
+	| 'CONSTRAINT' constraint_name 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
+	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY'
+	| 'CONSTRAINT' constraint_name 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY'
 	| 'NOT' 'NULL'
 	| 'NULL'
 	| 'NOT' 'VISIBLE'
 	| 'UNIQUE'
-	| 'PRIMARY' 'KEY'
-	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
+	| 'PRIMARY' 'KEY' opt_with_storage_parameter_list
+	| 'PRIMARY' 'KEY' 'USING' 'HASH' opt_hash_sharded_bucket_count opt_with_storage_parameter_list
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
+	| 'ON' 'UPDATE' b_expr
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
-	| 'AS' '(' a_expr ')' 'STORED'
-	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'STORED'
-	| 'AS' '(' a_expr ')' 'VIRTUAL'
-	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'VIRTUAL'
+	| generated_as '(' a_expr ')' 'STORED'
+	| generated_as '(' a_expr ')' 'VIRTUAL'
+	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
+	| 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
+	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY'
+	| 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY'
 	| 'COLLATE' collation_name
 	| 'FAMILY' family_name
 	| 'CREATE' 'FAMILY' family_name

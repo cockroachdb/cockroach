@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -24,7 +25,7 @@ func TestOptTester(t *testing.T) {
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps |
 		memo.ExprFmtHideQualifications
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		if strings.HasSuffix(path, ".json") {
 			// Skip any .json files; used for inject-stats
 			return

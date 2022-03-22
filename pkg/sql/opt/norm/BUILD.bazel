@@ -40,18 +40,20 @@ go_library(
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/parser",
         "//pkg/sql/privilege",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/arith",
+        "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/errorutil",
         "//pkg/util/json",
-        "//pkg/util/log",
-        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -79,10 +81,12 @@ go_test(
         "//pkg/sql/opt/xform",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -105,4 +109,8 @@ genrule(
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ factory $(locations //pkg/sql/opt:ops) $(locations :rules)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )

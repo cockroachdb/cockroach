@@ -13,11 +13,13 @@ package instanceprovider_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -38,7 +40,7 @@ func TestInstanceProvider(t *testing.T) {
 
 	ctx := context.Background()
 	setup := func(t *testing.T) (
-		*stop.Stopper, *slinstance.Instance, *hlc.Clock,
+		*stop.Stopper, *slinstance.Instance, *slstorage.FakeStorage, *hlc.Clock,
 	) {
 		timeSource := timeutil.NewTestTimeSource()
 		clock := hlc.NewClock(func() int64 {
@@ -48,40 +50,47 @@ func TestInstanceProvider(t *testing.T) {
 			clusterversion.TestingBinaryVersion,
 			clusterversion.TestingBinaryMinSupportedVersion,
 			true /* initializeVersion */)
+		// Override the default heartbeat interval to speed up the detection of
+		// deleted sessions.
+		slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, time.Millisecond)
+
 		stopper := stop.NewStopper()
 		fakeStorage := slstorage.NewFakeStorage()
-		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings)
-		return stopper, slInstance, clock
+		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+		return stopper, slInstance, fakeStorage, clock
 	}
 
 	t.Run("test-init-shutdown", func(t *testing.T) {
 		const addr = "addr"
 		const expectedInstanceID = base.SQLInstanceID(1)
-		stopper, slInstance, clock := setup(t)
+		stopper, slInstance, storage, clock := setup(t)
 		defer stopper.Stop(ctx)
 		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, slInstance, addr)
 		slInstance.Start(ctx)
-		instanceID, err := instanceProvider.Instance(ctx)
+		instanceID, sessionID, err := instanceProvider.Instance(ctx)
 		require.NoError(t, err)
 		require.Equal(t, expectedInstanceID, instanceID)
+		require.NotEqual(t, sqlliveness.SessionID(""), sessionID)
 
 		// Verify an additional call to Instance(), returns the same instance
-		instanceID, err = instanceProvider.Instance(ctx)
+		instanceID, sessionID2, err := instanceProvider.Instance(ctx)
 		require.NoError(t, err)
 		require.Equal(t, expectedInstanceID, instanceID)
+		require.Equal(t, sessionID, sessionID2)
+
 		session, err := slInstance.Session(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
+		require.Equal(t, session.ID(), sessionID)
 
 		// Update clock time to move ahead of session expiry to ensure session expiry callback is invoked.
 		newTime := session.Expiration().Add(1, 0).UnsafeToClockTimestamp()
 		clock.Update(newTime)
-		// Force call to clearSession by deleting the active session.
-		slInstance.ClearSessionForTest(ctx)
+		// Delete the session to shutdown the instance.
+		require.NoError(t, storage.Delete(ctx, sessionID))
+
 		// Verify that the SQL instance is shutdown on session expiry.
 		testutils.SucceedsSoon(t, func() error {
-			if _, err = instanceProvider.Instance(ctx); err != stop.ErrUnavailable {
+			if _, _, err = instanceProvider.Instance(ctx); !errors.Is(err, stop.ErrUnavailable) {
 				return errors.Errorf("sql instance is not shutdown on session expiry")
 			}
 			return nil
@@ -89,12 +98,12 @@ func TestInstanceProvider(t *testing.T) {
 	})
 
 	t.Run("test-shutdown-before-init", func(t *testing.T) {
-		stopper, slInstance, _ := setup(t)
+		stopper, slInstance, _, _ := setup(t)
 		defer stopper.Stop(ctx)
 		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, slInstance, "addr")
 		slInstance.Start(ctx)
 		instanceProvider.ShutdownSQLInstanceForTest(ctx)
-		_, err := instanceProvider.Instance(ctx)
+		_, _, err := instanceProvider.Instance(ctx)
 		require.Error(t, err)
 		require.Equal(t, "instance never initialized", err.Error())
 	})

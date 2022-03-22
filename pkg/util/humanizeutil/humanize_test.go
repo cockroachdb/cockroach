@@ -42,11 +42,11 @@ func TestBytes(t *testing.T) {
 
 	for i, testCase := range testCases {
 		// Test IBytes.
-		if actual := humanizeutil.IBytes(testCase.value); actual != testCase.exp {
+		if actual := string(humanizeutil.IBytes(testCase.value)); actual != testCase.exp {
 			t.Errorf("%d: IBytes(%d) actual:%s does not match expected:%s", i, testCase.value, actual, testCase.exp)
 		}
 		// Test negative IBytes.
-		if actual := humanizeutil.IBytes(-testCase.value); actual != testCase.expNeg {
+		if actual := string(humanizeutil.IBytes(-testCase.value)); actual != testCase.expNeg {
 			t.Errorf("%d: IBytes(%d) actual:%s does not match expected:%s", i, -testCase.value, actual,
 				testCase.expNeg)
 		}

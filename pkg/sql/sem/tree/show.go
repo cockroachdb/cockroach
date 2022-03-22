@@ -442,20 +442,25 @@ func (node *ShowTransactions) Format(ctx *FmtCtx) {
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
 type ShowConstraints struct {
-	Table *UnresolvedObjectName
+	Table       *UnresolvedObjectName
+	WithComment bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowConstraints) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CONSTRAINTS FROM ")
 	ctx.FormatNode(node.Table)
+
+	if node.WithComment {
+		ctx.WriteString(" WITH COMMENT")
+	}
 }
 
 // ShowGrants represents a SHOW GRANTS statement.
 // TargetList is defined in grant.go.
 type ShowGrants struct {
 	Targets  *TargetList
-	Grantees NameList
+	Grantees RoleSpecList
 }
 
 // Format implements the NodeFormatter interface.
@@ -473,8 +478,8 @@ func (node *ShowGrants) Format(ctx *FmtCtx) {
 
 // ShowRoleGrants represents a SHOW GRANTS ON ROLE statement.
 type ShowRoleGrants struct {
-	Roles    NameList
-	Grantees NameList
+	Roles    RoleSpecList
+	Grantees RoleSpecList
 }
 
 // Format implements the NodeFormatter interface.
@@ -521,12 +526,28 @@ func (node *ShowCreate) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Name)
 }
 
+// ShowCreateAllSchemas represents a SHOW CREATE ALL SCHEMAS statement.
+type ShowCreateAllSchemas struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateAllSchemas) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE ALL SCHEMAS")
+}
+
 // ShowCreateAllTables represents a SHOW CREATE ALL TABLES statement.
 type ShowCreateAllTables struct{}
 
 // Format implements the NodeFormatter interface.
 func (node *ShowCreateAllTables) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL TABLES")
+}
+
+// ShowCreateAllTypes represents a SHOW CREATE ALL TYPES statement.
+type ShowCreateAllTypes struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateAllTypes) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE ALL TYPES")
 }
 
 // ShowCreateSchedules represents a SHOW CREATE SCHEDULE statement.
@@ -750,11 +771,21 @@ const (
 	// ScheduledBackupExecutor is an executor responsible for
 	// the execution of the scheduled backups.
 	ScheduledBackupExecutor
+
+	// ScheduledSQLStatsCompactionExecutor is an executor responsible for the
+	// execution of the scheduled SQL Stats compaction.
+	ScheduledSQLStatsCompactionExecutor
+
+	// ScheduledRowLevelTTLExecutor is an executor responsible for the cleanup
+	// of rows on row level TTL tables.
+	ScheduledRowLevelTTLExecutor
 )
 
 var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
-	InvalidExecutor:         "unknown-executor",
-	ScheduledBackupExecutor: "scheduled-backup-executor",
+	InvalidExecutor:                     "unknown-executor",
+	ScheduledBackupExecutor:             "scheduled-backup-executor",
+	ScheduledSQLStatsCompactionExecutor: "scheduled-sql-stats-compaction-executor",
+	ScheduledRowLevelTTLExecutor:        "scheduled-row-level-ttl-executor",
 }
 
 // InternalName returns an internal executor name.
@@ -768,6 +799,10 @@ func (t ScheduledJobExecutorType) UserName() string {
 	switch t {
 	case ScheduledBackupExecutor:
 		return "BACKUP"
+	case ScheduledSQLStatsCompactionExecutor:
+		return "SQL STATISTICS"
+	case ScheduledRowLevelTTLExecutor:
+		return "ROW LEVEL TTL"
 	}
 	return "unsupported-executor"
 }
@@ -835,7 +870,8 @@ func (n *ShowSchedules) Format(ctx *FmtCtx) {
 
 // ShowDefaultPrivileges represents a SHOW DEFAULT PRIVILEGES statement.
 type ShowDefaultPrivileges struct {
-	Roles NameList
+	Roles       RoleSpecList
+	ForAllRoles bool
 }
 
 var _ Statement = &ShowDefaultPrivileges{}
@@ -852,5 +888,37 @@ func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&role)
 		}
 		ctx.WriteString(" ")
+	} else if n.ForAllRoles {
+		ctx.WriteString("FOR ALL ROLES ")
 	}
 }
+
+// ShowTransferState represents a SHOW TRANSFER STATE statement.
+type ShowTransferState struct {
+	TransferKey *StrVal
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTransferState) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW TRANSFER STATE")
+	if node.TransferKey != nil {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(node.TransferKey)
+	}
+}
+
+// ShowCompletions represents a SHOW COMPLETIONS statement.
+type ShowCompletions struct {
+	Statement *StrVal
+	Offset    *NumVal
+}
+
+// Format implements the NodeFormatter interface.
+func (s ShowCompletions) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW COMPLETIONS AT OFFSET ")
+	s.Offset.Format(ctx)
+	ctx.WriteString(" FOR ")
+	ctx.FormatNode(s.Statement)
+}
+
+var _ Statement = &ShowCompletions{}

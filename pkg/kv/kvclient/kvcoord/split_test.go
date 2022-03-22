@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvcoord
+package kvcoord_test
 
 import (
 	"context"
@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
 // startTestWriter creates a writer which initiates a sequence of
@@ -117,7 +117,7 @@ func TestRangeSplitMeta(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		if _, err := storage.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
-			return errors.Errorf("failed to verify no dangling intents: %s", err)
+			return errors.Wrap(err, "failed to verify no dangling intents")
 		}
 		return nil
 	})
@@ -176,21 +176,21 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// Override default zone config.
-	cfg := zonepb.DefaultZoneConfigRef()
-	cfg.RangeMaxBytes = proto.Int64(1 << 18)
+	// Override default span config.
+	cfg := roachpb.TestingDefaultSpanConfig()
+	cfg.RangeMaxBytes = 1 << 18
 
 	// Manually create the local test cluster so that the split queue
 	// is not disabled (LocalTestCluster disables it by default).
 	s := &localtestcluster.LocalTestCluster{
 		Cfg: kvserver.StoreConfig{
-			DefaultZoneConfig: cfg,
+			DefaultSpanConfig: cfg,
 		},
 		StoreTestingKnobs: &kvserver.StoreTestingKnobs{
 			DisableScanner: true,
 		},
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseContext(), kvcoord.InitFactoryForLocalTestCluster)
 
 	// This is purely to silence log spam.
 	config.TestingSetupZoneConfigHook(s.Stopper())
@@ -210,7 +210,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		// Scan the txn records.
 		rows, err := s.DB.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
-			return errors.Errorf("failed to scan meta2 keys: %s", err)
+			return errors.Wrap(err, "failed to scan meta2 keys")
 		}
 		if lr := len(rows); lr < 5 {
 			return errors.Errorf("expected >= 5 scans; got %d", lr)
@@ -229,7 +229,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// asynchronous split.
 	testutils.SucceedsSoon(t, func() error {
 		if _, err := storage.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
-			return errors.Errorf("failed to verify no dangling intents: %s", err)
+			return errors.Wrap(err, "failed to verify no dangling intents")
 		}
 		return nil
 	})
@@ -312,4 +312,45 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	if desc.GetStickyBit().IsEmpty() {
 		t.Fatal("Sticky bit not set after splitting")
 	}
+}
+
+func TestSplitPredicates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
+		DisableScanner:    true,
+		DisableSplitQueue: true,
+		DisableMergeQueue: true,
+	})
+	defer s.Stop()
+
+	ctx := context.Background()
+
+	expire := hlc.MaxTimestamp
+
+	// Setup a known-span range [c, g) for some simple single predicate checks.
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("b"), expire))
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("g"), expire))
+	// c is below split key f, and is in [b, g).
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("f"), expire, roachpb.Key("c")))
+	// e is above split key d, and is in [b, f).
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("d"), expire, roachpb.Key("e")))
+	// b is above split key c, and is in [b, d) although just barely.
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("c"), expire, roachpb.Key("b")))
+
+	// Setup another known span [g, n) and test rejections with it.
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("n"), expire))
+
+	// Reject split at h that wanted b to be in range [g, n).
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("b")))
+	// Reject split at h that wanted i, j, and z to be in range [g, n).
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("j"), roachpb.Key("z")))
+	// Reject split at h that wanted i, j, and n to be in range [g, n).
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("j"), roachpb.Key("n")))
+	// Reject split at h that wanted i, n and j to be in range [g, n).
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("n"), roachpb.Key("j")))
+
+	// Allow split at h that wanted i, k and j to be in range [g, n).
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("k"), roachpb.Key("j")))
 }

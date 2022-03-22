@@ -822,7 +822,7 @@ query error pq: column reference "unnest" is ambiguous
 SELECT ((unnest(ARRAY[1,2], ARRAY[1,2]))).unnest;
 
 # No labels
-query error pq: type tuple{int, int, int} is not composite
+query error pq: could not identify column "x" in record data type
 SELECT ((1,2,3)).x FROM tb
 
 query I colnames
@@ -968,3 +968,208 @@ SELECT (ARRAY[t58439.*][2]).* FROM t58439
 NULL  NULL
 NULL  NULL
 NULL  NULL
+
+# Regression test for #68308. Do not internally error with a cast of unknown to
+# unknown in a tuple.
+subtest regression_68308
+
+query T
+SELECT (1::INT2, NULL)
+UNION
+SELECT (1::INT, NULL)
+----
+(1,)
+
+# Regression test for #40297: make sure tuples and nulls type-check when
+# used together in a "same-typed expression" such as function arguments.
+subtest regression_40297
+
+statement ok
+CREATE TABLE t(x INT);
+CREATE TABLE t40297 AS SELECT g FROM generate_series(NULL, NULL) AS g
+
+query I
+SELECT COALESCE((SELECT ()), NULL) FROM t40297
+----
+
+# Adding a cast shouldn't affect the type-checking.
+query I
+SELECT COALESCE((SELECT ())::record, NULL) FROM t40297
+----
+
+# Tuples must be the same length.
+statement error incompatible COALESCE expressions: expected \(SELECT \(1,\)\) to be of type tuple, found type tuple{int}
+SELECT COALESCE((SELECT ()), (SELECT ROW (1))) FROM t40297
+
+# Adding a cast here should still work too.
+statement error incompatible COALESCE expressions: expected \(SELECT \(1,\)\)::T to be of type tuple, found type tuple{int AS x}
+SELECT COALESCE((SELECT ()), (SELECT ROW (1))::t) FROM t40297
+
+# If a NULL is casted, then it no longer can be coerced to the right type.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type tuple, found type tuple{int AS x}
+SELECT COALESCE((SELECT ()), NULL::t) FROM t40297
+
+# Type-checking should still work for non-empty tuples.
+query I
+SELECT COALESCE((SELECT '(1)'::t), NULL::t) FROM t40297
+----
+
+# (SELECT (1)) is interpreted as an INT.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type int, found type tuple{int AS x}
+SELECT COALESCE((SELECT (1)), NULL::t) FROM t40297
+
+# Adding ROW allows it to be interpreted as a tuple.
+query I
+SELECT COALESCE((SELECT ROW (1)), NULL::t) FROM t40297
+----
+
+# An anonymous tuple type only works if it is used with a tuple of the correct length.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type tuple{int, int}, found type tuple{int AS x}
+SELECT COALESCE((SELECT ROW (1, 2)), NULL::t) FROM t40297
+
+# It should still type-check correctly without using a subquery.
+statement error incompatible COALESCE expressions: expected NULL::T to be of type tuple{int, int}, found type tuple{int AS x}
+SELECT COALESCE(ROW (1, 2), NULL::t) FROM t40297
+
+# Regression test for #70767. Make sure we avoid encoding arrays where the
+# array content type is AnyTuple.
+subtest regression_70767
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[()])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{()}
+
+query T
+SELECT
+  col
+FROM
+  (VALUES (NULL), ((ARRAY[]::RECORD[])), ((ARRAY[()])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+NULL
+{}
+{()}
+
+# ARRAY[(1)] is type-checked as an int[] -- this also matches Postgres.
+statement error VALUES types int\[\] and tuple\[\] cannot be matched
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1)])))
+    AS t(col)
+ORDER BY
+  col ASC
+
+statement error VALUES types tuple{int, string}\[\] and tuple{int, int}\[\] cannot be matched
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,2)])), ((ARRAY[(1,'cat')])))
+    AS t(col)
+ORDER BY
+  col ASC
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,2)])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,2)"}
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[(1,2)])), ((ARRAY[]::RECORD[])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,2)"}
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])),  ((ARRAY[(1,2), (3,4)])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,2)","(3,4)"}
+
+statement error expected tuple \(3, 4, 5\) to have a length of 2
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])),  ((ARRAY[(1,2), (3,4), (3,4,5)])))
+    AS t(col)
+ORDER BY
+  col ASC
+
+query T
+SELECT
+  col
+FROM
+  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,'cat')])))
+    AS t(col)
+ORDER BY
+  col ASC
+----
+{}
+{"(1,cat)"}
+
+query T
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
+  )
+    AS t2 (c3, c4)
+----
+(1,{})
+(2,"{""(1,2)""}")
+
+statement error VALUES types tuple\{decimal, tuple\{int, int\}\[\]\} and tuple\{decimal, tuple\{int, int, int\}\[\]\} cannot be matched
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
+  )
+    AS t2 (c3, c4)
+
+statement error VALUES types tuple\{decimal, tuple\{int, int, int\}\[\]\} and tuple\{decimal, tuple\{int, int\}\[\]\} cannot be matched
+SELECT
+  t2.c4
+FROM
+  (
+    VALUES
+      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)])),
+      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)]))
+  )
+    AS t2 (c3, c4)

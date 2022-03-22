@@ -11,7 +11,6 @@ package kvevent_test
 import (
 	"context"
 	"math/rand"
-	"sync"
 	"testing"
 	"time"
 
@@ -20,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -30,14 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
 func makeKV(t *testing.T, rnd *rand.Rand) roachpb.KeyValue {
 	const tableID = 42
 
-	key, err := rowenc.EncodeTableKey(
+	key, err := keyside.Encode(
 		keys.SystemSQLCodec.TablePrefix(tableID),
 		randgen.RandDatumSimple(rnd, types.String),
 		encoding.Ascending,
@@ -72,19 +70,18 @@ func TestBlockingBuffer(t *testing.T) {
 	defer release()
 
 	// Arrange for mem buffer to notify us when it waits for resources.
-	var waitMu syncutil.Mutex
-	waited := sync.NewCond(&waitMu)
-	waitForBlockedBuffer := func() {
-		waitMu.Lock()
-		waited.Wait()
-		waitMu.Unlock()
-	}
+	waitCh := make(chan struct{}, 1)
 	notifyWait := func(ctx context.Context, poolName string, r quotapool.Request) {
-		waited.Signal()
+		select {
+		case waitCh <- struct{}{}:
+		default:
+		}
 	}
-
-	buf := kvevent.NewMemBuffer(ba, &metrics, quotapool.OnWaitStart(notifyWait))
-	defer buf.Close(context.Background())
+	st := cluster.MakeTestingClusterSettings()
+	buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics, quotapool.OnWaitStart(notifyWait))
+	defer func() {
+		require.NoError(t, buf.CloseWithReason(context.Background(), nil))
+	}()
 
 	producerCtx, stopProducers := context.WithCancel(context.Background())
 	wg := ctxgroup.WithContext(producerCtx)
@@ -94,21 +91,71 @@ func TestBlockingBuffer(t *testing.T) {
 
 	// Start adding KVs to the buffer until we block.
 	wg.GoCtx(func(ctx context.Context) error {
-		rnd, _ := randutil.NewTestPseudoRand()
+		rnd, _ := randutil.NewTestRand()
 		for {
-			err := buf.AddKV(ctx, makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{})
+			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}))
 			if err != nil {
-				return nil
+				return err
 			}
 		}
 	})
 
-	waitForBlockedBuffer()
+	<-waitCh
 
 	// Keep consuming events until we get pushback metrics updated.
 	for metrics.BufferPushbackNanos.Count() == 0 {
-		_, err := buf.Get(context.Background())
+		e, err := buf.Get(context.Background())
 		require.NoError(t, err)
+		a := e.DetachAlloc()
+		a.Release(context.Background())
 	}
 	stopProducers()
+}
+
+func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	metrics := kvevent.MakeMetrics(time.Minute)
+	ba, release := getBoundAccountWithBudget(4096)
+	defer release()
+
+	st := cluster.MakeTestingClusterSettings()
+	buf := kvevent.NewMemBuffer(ba, &st.SV, &metrics)
+	defer func() {
+		require.NoError(t, buf.CloseWithReason(context.Background(), nil))
+	}()
+
+	producerCtx, stopProducer := context.WithCancel(context.Background())
+	wg := ctxgroup.WithContext(producerCtx)
+	defer func() {
+		_ = wg.Wait() // Ignore error -- this group returns context cancellation.
+	}()
+
+	// Start adding KVs to the buffer until we block.
+	wg.GoCtx(func(ctx context.Context) error {
+		rnd, _ := randutil.NewTestRand()
+		for {
+			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(t, rnd), roachpb.Value{}, hlc.Timestamp{}))
+			if err != nil {
+				return err
+			}
+		}
+	})
+
+	// Consume events until we get a flush event.
+	var outstanding kvevent.Alloc
+	for i := 0; ; i++ {
+		e, err := buf.Get(context.Background())
+		require.NoError(t, err)
+		if e.Type() == kvevent.TypeFlush {
+			break
+		}
+
+		// detach alloc associated with an event and merge (but not release) it into outstanding.
+		a := e.DetachAlloc()
+		outstanding.Merge(&a)
+	}
+
+	stopProducer()
 }

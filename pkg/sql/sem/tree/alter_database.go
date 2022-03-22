@@ -10,14 +10,10 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/security"
-
 // AlterDatabaseOwner represents a ALTER DATABASE OWNER TO statement.
 type AlterDatabaseOwner struct {
-	Name Name
-	// TODO(solon): Adjust this, see
-	// https://github.com/cockroachdb/cockroach/issues/54696
-	Owner security.SQLUsername
+	Name  Name
+	Owner RoleSpec
 }
 
 // Format implements the NodeFormatter interface.
@@ -25,7 +21,7 @@ func (node *AlterDatabaseOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" OWNER TO ")
-	ctx.FormatUsername(node.Owner)
+	ctx.FormatNode(&node.Owner)
 }
 
 // AlterDatabaseAddRegion represents a ALTER DATABASE ADD REGION statement.
@@ -112,6 +108,48 @@ var _ Statement = &AlterDatabasePlacement{}
 func (node *AlterDatabasePlacement) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
-	ctx.WriteString(" SET ")
+	ctx.WriteString(" ")
 	node.Placement.Format(ctx)
+}
+
+// AlterDatabaseAddSuperRegion represents a
+// ALTER DATABASE ADD SUPER REGION ... statement.
+type AlterDatabaseAddSuperRegion struct {
+	DatabaseName    Name
+	SuperRegionName Name
+	Regions         []Name
+}
+
+var _ Statement = &AlterDatabaseAddSuperRegion{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseAddSuperRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" ADD SUPER REGION ")
+	ctx.FormatNode(&node.SuperRegionName)
+	ctx.WriteString(" VALUES ")
+	for i, region := range node.Regions {
+		if i != 0 {
+			ctx.WriteString(",")
+		}
+		ctx.FormatNode(&region)
+	}
+}
+
+// AlterDatabaseDropSuperRegion represents a
+// ALTER DATABASE DROP SUPER REGION ... statement.
+type AlterDatabaseDropSuperRegion struct {
+	DatabaseName    Name
+	SuperRegionName Name
+}
+
+var _ Statement = &AlterDatabaseDropSuperRegion{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseDropSuperRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" DROP SUPER REGION ")
+	ctx.FormatNode(&node.SuperRegionName)
 }

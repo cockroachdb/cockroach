@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -46,7 +47,7 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 CREATE SCHEMA s;
 CREATE TABLE s.a (a INT PRIMARY KEY);`)
 
-	base := "statement.txt trace.json trace.txt trace-jaeger.json env.sql"
+	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
 
 	// Set a small chunk size to test splitting into chunks. The bundle files are
@@ -140,6 +141,16 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		)
 		r.Exec(t, `RESET enable_insert_fast_path;`)
 	})
+
+	t.Run("basic when tracing already enabled", func(t *testing.T) {
+		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='100ms';")
+		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='0ms';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
+		checkBundle(
+			t, fmt.Sprint(rows), "public.abc",
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+		)
+	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
@@ -147,6 +158,8 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 // arbitrary number of strings; each string contains one or more filenames
 // separated by a space.
 func checkBundle(t *testing.T, text, tableName string, expectedFiles ...string) {
+	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
+
 	t.Helper()
 	reg := regexp.MustCompile("http://[a-zA-Z0-9.:]*/_admin/v1/stmtbundle/[0-9]*")
 	url := reg.FindString(text)
@@ -154,7 +167,7 @@ func checkBundle(t *testing.T, text, tableName string, expectedFiles ...string) 
 		t.Fatalf("couldn't find URL in response '%s'", text)
 	}
 	// Download the zip to a BytesBuffer.
-	resp, err := httputil.Get(context.Background(), url)
+	resp, err := httpClient.Get(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
 	}

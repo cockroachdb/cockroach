@@ -13,7 +13,6 @@ package kv
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -94,13 +93,15 @@ func (b *Batch) MustPErr() *roachpb.Error {
 	return b.pErr
 }
 
-func (b *Batch) prepare() error {
-	for _, r := range b.Results {
-		if r.Err != nil {
-			return r.Err
-		}
+// validate that there were no errors while marshaling keys and values.
+func (b *Batch) validate() error {
+	err := b.resultErr()
+	if err != nil {
+		// Set pErr just as sendAndFill does, so that higher layers can find it
+		// using MustPErr.
+		b.pErr = roachpb.NewError(err)
 	}
-	return nil
+	return err
 }
 
 func (b *Batch) initResult(calls, numRows int, raw bool, err error) {
@@ -271,6 +272,8 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.AddSSTableRequest:
 			case *roachpb.MigrateRequest:
 			case *roachpb.QueryResolvedTimestampRequest:
+			case *roachpb.BarrierRequest:
+			case *roachpb.ScanInterleavedIntentsRequest:
 			default:
 				if result.Err == nil {
 					result.Err = errors.Errorf("unsupported reply: %T for %T",
@@ -278,14 +281,11 @@ func (b *Batch) fillResults(ctx context.Context) {
 				}
 			}
 			// Fill up the resume span.
-			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
-				result.ResumeSpan = reply.Header().ResumeSpan
-				result.ResumeReason = reply.Header().ResumeReason
-				// The ResumeReason might be missing when talking to a 1.1 node; assume
-				// it's the key limit (which was the only reason why 1.1 would return a
-				// resume span). This can be removed in 2.1.
-				if result.ResumeReason == roachpb.RESUME_UNKNOWN {
-					result.ResumeReason = roachpb.RESUME_KEY_LIMIT
+			if result.Err == nil && reply != nil {
+				if h := reply.Header(); h.ResumeSpan != nil {
+					result.ResumeSpan = h.ResumeSpan
+					result.ResumeReason = h.ResumeReason
+					result.ResumeNextBytes = h.ResumeNextBytes
 				}
 			}
 		}
@@ -460,7 +460,7 @@ func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte)
 	b.cputInternal(key, value, expValue, true, false)
 }
 
-// cPutInline conditionally sets the value for a key if the existing value is
+// CPutInline conditionally sets the value for a key if the existing value is
 // equal to expValue, but does not maintain multi-version values. To
 // conditionally set a value only if the key doesn't currently exist, pass an
 // empty expValue. The most recent value is always overwritten. Inline values
@@ -474,14 +474,7 @@ func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte)
 //
 // A nil value can be used to delete the respective key, since there is no
 // DelInline(). This is different from CPut().
-//
-// Callers should check the version gate clusterversion.CPutInline to make sure
-// this is supported. The method is unexported to prevent external callers using
-// this without checking the version, since the CtxForCPutInline guard can't be
-// used with Batch.
-func (b *Batch) cPutInline(key, value interface{}, expValue []byte) {
-	// TODO(erikgrinaker): export once clusterversion.CPutInline is removed.
-	_ = clusterversion.CPutInline
+func (b *Batch) CPutInline(key, value interface{}, expValue []byte) {
 	b.cputInternal(key, value, expValue, false, true)
 }
 
@@ -675,7 +668,9 @@ func (b *Batch) adminMerge(key interface{}) {
 
 // adminSplit is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminSplit(splitKeyIn interface{}, expirationTime hlc.Timestamp) {
+func (b *Batch) adminSplit(
+	splitKeyIn interface{}, expirationTime hlc.Timestamp, predicateKeys []roachpb.Key,
+) {
 	splitKey, err := marshalKey(splitKeyIn)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -687,6 +682,7 @@ func (b *Batch) adminSplit(splitKeyIn interface{}, expirationTime hlc.Timestamp)
 		},
 		SplitKey:       splitKey,
 		ExpirationTime: expirationTime,
+		PredicateKeys:  predicateKeys,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
@@ -749,7 +745,9 @@ func (b *Batch) adminChangeReplicas(
 // adminRelocateRange is only exported on DB. It is here for symmetry with the
 // other operations.
 func (b *Batch) adminRelocateRange(
-	key interface{}, voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	key interface{},
+	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) {
 	k, err := marshalKey(key)
 	if err != nil {
@@ -760,8 +758,10 @@ func (b *Batch) adminRelocateRange(
 		RequestHeader: roachpb.RequestHeader{
 			Key: k,
 		},
-		VoterTargets:    voterTargets,
-		NonVoterTargets: nonVoterTargets,
+		VoterTargets:                      voterTargets,
+		NonVoterTargets:                   nonVoterTargets,
+		TransferLeaseToFirstVoter:         transferLeaseToFirstVoter,
+		TransferLeaseToFirstVoterAccurate: true,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
@@ -771,9 +771,12 @@ func (b *Batch) adminRelocateRange(
 func (b *Batch) addSSTable(
 	s, e interface{},
 	data []byte,
+	disallowConflicts bool,
 	disallowShadowing bool,
+	disallowShadowingBelow hlc.Timestamp,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
+	sstTimestampToRequestTimestamp hlc.Timestamp,
 ) {
 	begin, err := marshalKey(s)
 	if err != nil {
@@ -790,10 +793,13 @@ func (b *Batch) addSSTable(
 			Key:    begin,
 			EndKey: end,
 		},
-		Data:              data,
-		DisallowShadowing: disallowShadowing,
-		MVCCStats:         stats,
-		IngestAsWrites:    ingestAsWrites,
+		Data:                           data,
+		DisallowConflicts:              disallowConflicts,
+		DisallowShadowing:              disallowShadowing,
+		DisallowShadowingBelow:         disallowShadowingBelow,
+		MVCCStats:                      stats,
+		IngestAsWrites:                 ingestAsWrites,
+		SSTTimestampToRequestTimestamp: sstTimestampToRequestTimestamp,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
@@ -835,6 +841,48 @@ func (b *Batch) queryResolvedTimestamp(s, e interface{}) {
 		return
 	}
 	req := &roachpb.QueryResolvedTimestampRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) scanInterleavedIntents(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.ScanInterleavedIntentsRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) barrier(s, e interface{}) {
+	begin, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.BarrierRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    begin,
 			EndKey: end,

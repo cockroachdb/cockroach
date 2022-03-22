@@ -1,0 +1,95 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@import "src/core/index.module";
+
+.icon {
+  &__container {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  &--md {
+    height: 24px;
+    width: 24px;
+    margin-right: 12px;
+  }
+
+  &--s {
+    height: 16px;
+    width: 16px;
+    margin-right: 10px;
+  }
+
+  &--xxs {
+    height: 8px;
+    width: 8px;
+  }
+
+  &--title {
+    fill: $colors--title;
+  }
+
+  &--primary {
+    fill: $colors--primary-text;
+  }
+}
+
+.page-container {
+  padding-right: $spacing-medium;
+}
+
+.header-container {
+   align-items: baseline;
+   display: flex;
+   flex-direction: row;
+   justify-content: space-between;
+   width: 75%;
+   padding: 0 9px 12px;
+ }
+
+.reset-info {
+   display: flex;
+   flex-direction: row;
+ }
+
+.last-reset {
+  color: $colors--neutral-6;
+  margin-right: 6px;
+}
+
+.summary-card {
+  &--row {
+    background-color: $adminui-white;
+    letter-spacing: 0.33px;
+  }
+  &--label {
+    font-family: $font-family--base;
+    font-size: $font-size--medium;
+    font-weight: $font-weight--bold;
+    line-height: $line-height--medium-small;
+    letter-spacing: 0.1px;
+    color: $colors--neutral-6;
+    margin-right: 5px;
+    margin-bottom: 0;
+  }
+  &--label-cell {
+    width: 200px;
+  }
+  &--value {
+    font-family: $font-family--base;
+    font-size: $font-size--medium;
+    font-weight: $font-weight--light;
+    line-height: $line-height--medium-small;
+    letter-spacing: 0.1px;
+    color: $popover-color;
+    margin-bottom: 0;
+  }
+}

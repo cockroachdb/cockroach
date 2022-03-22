@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-//go:generate mockgen -package=kvcoord -destination=mocks_generated.go . Transport
+//go:generate mockgen -package=kvcoord -destination=mocks_generated_test.go . Transport
 
 // A SendOptions structure describes the algorithm for sending RPCs to one or
 // more replicas, depending on error conditions and how many successful
@@ -34,6 +34,11 @@ import (
 type SendOptions struct {
 	class   rpc.ConnectionClass
 	metrics *DistSenderMetrics
+	// dontConsiderConnHealth, if set, makes the transport not take into
+	// consideration the connection health when deciding the ordering for
+	// replicas. When not set, replicas on nodes with unhealthy connections are
+	// deprioritized.
+	dontConsiderConnHealth bool
 }
 
 // TransportFactory encapsulates all interaction with the RPC
@@ -109,9 +114,11 @@ func grpcTransportFactoryImpl(
 	} else {
 		replicas = replicas[:len(rs)]
 	}
+
 	// We'll map the index of the replica descriptor in its slice to its health.
 	var health util.FastIntMap
-	for i, r := range rs {
+	for i := range rs {
+		r := &rs[i]
 		replicas[i] = r.ReplicaDescriptor
 		healthy := nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
 		if healthy {
@@ -121,16 +128,20 @@ func grpcTransportFactoryImpl(
 		}
 	}
 
-	// Put known-healthy clients first, while otherwise respecting the existing
-	// ordering of the replicas.
-	splitHealthy(replicas, health)
-
 	*transport = grpcTransport{
-		opts:       opts,
-		nodeDialer: nodeDialer,
-		class:      opts.class,
-		replicas:   replicas,
+		opts:          opts,
+		nodeDialer:    nodeDialer,
+		class:         opts.class,
+		replicas:      replicas,
+		replicaHealth: health,
 	}
+
+	if !opts.dontConsiderConnHealth {
+		// Put known-healthy replica first, while otherwise respecting the existing
+		// ordering of the replicas.
+		transport.splitHealthy()
+	}
+
 	return transport, nil
 }
 
@@ -140,6 +151,9 @@ type grpcTransport struct {
 	class      rpc.ConnectionClass
 
 	replicas []roachpb.ReplicaDescriptor
+	// replicaHealth maps replica index within the replicas slice to healthHealthy
+	// if healthy, and healthUnhealthy if unhealthy. Used by splitHealthy.
+	replicaHealth util.FastIntMap
 	// nextReplicaIdx represents the index into replicas of the next replica to be
 	// tried.
 	nextReplicaIdx int
@@ -254,38 +268,30 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
 	}
 }
 
-// splitHealthy splits the provided client slice into healthy clients and
-// unhealthy clients, based on their connection state. Healthy clients will
-// be rearranged first in the slice, and unhealthy clients will be rearranged
-// last. Within these two groups, the rearrangement will be stable. The function
-// will then return the number of healthy clients.
-// The input FastIntMap maps index within the input replicas slice to an integer
-// healthHealthy or healthUnhealthy.
-func splitHealthy(replicas []roachpb.ReplicaDescriptor, health util.FastIntMap) {
-	sort.Stable(&byHealth{replicas: replicas, health: health})
+// splitHealthy splits the grpcTransport's replica slice into healthy replica
+// and unhealthy replica, based on their connection state. Healthy replicas will
+// be rearranged first in the replicas slice, and unhealthy replicas will be
+// rearranged last. Within these two groups, the rearrangement will be stable.
+func (gt *grpcTransport) splitHealthy() {
+	sort.Stable((*byHealth)(gt))
 }
 
-// byHealth sorts a slice of batchClients by their health with healthy first.
-type byHealth struct {
-	replicas []roachpb.ReplicaDescriptor
-	// This map maps replica index within the replicas slice to healthHealthy if
-	// healthy, and healthUnhealthy if unhealthy.
-	health util.FastIntMap
-}
+// byHealth sorts a slice of replicas by their health with healthy first.
+type byHealth grpcTransport
 
 func (h *byHealth) Len() int { return len(h.replicas) }
 func (h *byHealth) Swap(i, j int) {
 	h.replicas[i], h.replicas[j] = h.replicas[j], h.replicas[i]
-	oldI := h.health.GetDefault(i)
-	h.health.Set(i, h.health.GetDefault(j))
-	h.health.Set(j, oldI)
+	oldI := h.replicaHealth.GetDefault(i)
+	h.replicaHealth.Set(i, h.replicaHealth.GetDefault(j))
+	h.replicaHealth.Set(j, oldI)
 }
 func (h *byHealth) Less(i, j int) bool {
-	ih, ok := h.health.Get(i)
+	ih, ok := h.replicaHealth.Get(i)
 	if !ok {
 		panic(fmt.Sprintf("missing health info for %s", h.replicas[i]))
 	}
-	jh, ok := h.health.Get(j)
+	jh, ok := h.replicaHealth.Get(j)
 	if !ok {
 		panic(fmt.Sprintf("missing health info for %s", h.replicas[j]))
 	}

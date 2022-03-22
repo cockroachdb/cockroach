@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
@@ -50,83 +50,96 @@ func (e *explainPlanNode) startExec(params runParams) error {
 	ob := explain.NewOutputBuilder(e.flags)
 	plan := e.plan.WrappedPlan.(*planComponents)
 
-	// Determine the "distribution" and "vectorized" values, which we will emit as
-	// special rows.
-
-	distribution := getPlanDistribution(
-		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
-	)
-	ob.AddDistribution(distribution.String())
-
-	outerSubqueries := params.p.curPlan.subqueryPlans
-	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, plan.subqueryPlans, distribution)
-	defer func() {
-		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
-	}()
-	physicalPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, plan.main)
-	var diagramURL url.URL
-	var diagramJSON string
-	if err != nil {
-		if e.options.Mode == tree.ExplainDistSQL {
-			if len(plan.subqueryPlans) > 0 {
-				return errors.New("running EXPLAIN (DISTSQL) on this query is " +
-					"unsupported because of the presence of subqueries")
-			}
-			return err
-		}
-		// For regular EXPLAIN, simply skip emitting the "vectorized" information.
+	var rows []string
+	if e.options.Mode == tree.ExplainGist {
+		rows = []string{e.plan.Gist.String()}
 	} else {
-		// There might be an issue making the physical plan, but that should not
-		// cause an error or panic, so swallow the error. See #40677 for example.
-		distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
-		flows := physicalPlan.GenerateFlowSpecs()
-		flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p, &distSQLPlanner.rpcCtx.ClusterID)
+		// Determine the "distribution" and "vectorized" values, which we will emit as
+		// special rows.
 
-		ctxSessionData := flowCtx.EvalCtx.SessionData
-		var willVectorize bool
-		if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
-			willVectorize = false
+		// Note that we delay adding the annotation about the distribution until
+		// after the plan is finalized (when the physical plan is successfully
+		// created).
+		distribution := getPlanDistribution(
+			params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
+			params.extendedEvalCtx.SessionData().DistSQLMode, plan.main,
+		)
+
+		outerSubqueries := params.p.curPlan.subqueryPlans
+		distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
+		planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, plan.subqueryPlans, distribution)
+		defer func() {
+			planCtx.planner.curPlan.subqueryPlans = outerSubqueries
+		}()
+		physicalPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, plan.main)
+		var diagramURL url.URL
+		var diagramJSON string
+		if err != nil {
+			if e.options.Mode == tree.ExplainDistSQL {
+				if len(plan.subqueryPlans) > 0 {
+					return errors.New("running EXPLAIN (DISTSQL) on this query is " +
+						"unsupported because of the presence of subqueries")
+				}
+				return err
+			}
+			ob.AddDistribution(distribution.String())
+			// For regular EXPLAIN, simply skip emitting the "vectorized" information.
 		} else {
-			willVectorize = true
-			for _, flow := range flows {
-				if err := colflow.IsSupported(ctxSessionData.VectorizeMode, flow); err != nil {
-					willVectorize = false
-					break
+			// There might be an issue making the physical plan, but that should not
+			// cause an error or panic, so swallow the error. See #40677 for example.
+			distSQLPlanner.finalizePlanWithRowCount(planCtx, physicalPlan, plan.mainRowCount)
+			ob.AddDistribution(physicalPlan.Distribution.String())
+			flows := physicalPlan.GenerateFlowSpecs()
+
+			ctxSessionData := planCtx.EvalContext().SessionData()
+			var willVectorize bool
+			if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
+				willVectorize = false
+			} else {
+				willVectorize = true
+				for _, flow := range flows {
+					if err := colflow.IsSupported(ctxSessionData.VectorizeMode, flow); err != nil {
+						willVectorize = false
+						break
+					}
+				}
+			}
+			ob.AddVectorized(willVectorize)
+
+			if e.options.Mode == tree.ExplainDistSQL {
+				flags := execinfrapb.DiagramFlags{
+					ShowInputTypes: e.options.Flags[tree.ExplainFlagTypes],
+				}
+				diagram, err := execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, flags)
+				if err != nil {
+					return err
+				}
+
+				diagramJSON, diagramURL, err = diagram.ToURL()
+				if err != nil {
+					return err
 				}
 			}
 		}
-		ob.AddVectorized(willVectorize)
 
-		if e.options.Mode == tree.ExplainDistSQL {
-			flags := execinfrapb.DiagramFlags{
-				ShowInputTypes: e.options.Flags[tree.ExplainFlagTypes],
-			}
-			diagram, err := execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, flags)
-			if err != nil {
+		if e.options.Flags[tree.ExplainFlagJSON] {
+			// For the JSON flag, we only want to emit the diagram JSON.
+			rows = []string{diagramJSON}
+		} else {
+			if err := emitExplain(ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
 				return err
 			}
-
-			diagramJSON, diagramURL, err = diagram.ToURL()
-			if err != nil {
-				return err
+			rows = ob.BuildStringRows()
+			if e.options.Mode == tree.ExplainDistSQL {
+				rows = append(rows, "", fmt.Sprintf("Diagram: %s", diagramURL.String()))
 			}
 		}
 	}
-
-	var rows []string
-	if e.options.Flags[tree.ExplainFlagJSON] {
-		// For the JSON flag, we only want to emit the diagram JSON.
-		rows = []string{diagramJSON}
-	} else {
-		if err := emitExplain(ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
-			return err
-		}
-		rows = ob.BuildStringRows()
-		if e.options.Mode == tree.ExplainDistSQL {
-			rows = append(rows, "", fmt.Sprintf("Diagram: %s", diagramURL.String()))
-		}
+	// Add index recommendations to output, if they exist.
+	if params.p.instrumentation.indexRecommendations != nil {
+		// First add empty row.
+		rows = append(rows, "")
+		rows = append(rows, params.p.instrumentation.indexRecommendations...)
 	}
 	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, 0)
 	datums := make([]tree.DString, len(rows))
@@ -156,7 +169,7 @@ func emitExplain(
 			// manipulate locks.
 			// Note that we don't catch anything in debug builds, so that failures are
 			// more visible.
-			if ok, e := errorutil.ShouldCatch(r); ok && !util.CrdbTestBuild {
+			if ok, e := errorutil.ShouldCatch(r); ok && !buildutil.CrdbTestBuild {
 				err = e
 			} else {
 				// Other panic objects can't be considered "safe" and thus are
@@ -231,5 +244,8 @@ func newPhysPlanForExplainPurposes(
 	if plan.isPhysicalPlan() {
 		return plan.physPlan.PhysicalPlan, nil
 	}
-	return distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan.planNode)
+	physPlan, err := distSQLPlanner.createPhysPlanForPlanNode(planCtx, plan.planNode)
+	// Release the resources right away since we won't be running the plan.
+	planCtx.getCleanupFunc()()
+	return physPlan, err
 }

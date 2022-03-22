@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -32,8 +31,22 @@ func (s *statusServer) ResetSQLStats(
 	}
 
 	response := &serverpb.ResetSQLStatsResponse{}
+	controller := s.sqlServer.pgServer.SQLServer.GetSQLStatsController()
+
+	// If we need to reset persisted stats, we delegate to SQLStatsController,
+	// which will trigger a system table truncation and RPC fanout under the hood.
+	if req.ResetPersistedStats {
+		if err := controller.ResetClusterSQLStats(ctx); err != nil {
+			return nil, err
+		}
+
+		return response, nil
+	}
+
 	localReq := &serverpb.ResetSQLStatsRequest{
 		NodeID: "local",
+		// Only the top level RPC handler handles the reset persisted stats.
+		ResetPersistedStats: false,
 	}
 
 	if len(req.NodeID) > 0 {
@@ -42,7 +55,6 @@ func (s *statusServer) ResetSQLStats(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			controller := s.sqlServer.pgServer.SQLServer.GetSQLStatsController()
 			controller.ResetLocalSQLStats(ctx)
 			return response, nil
 		}
@@ -65,7 +77,7 @@ func (s *statusServer) ResetSQLStats(
 
 	var fanoutError error
 
-	if err := s.iterateNodes(ctx, fmt.Sprintf("reset SQL statistics for node %s", req.NodeID),
+	if err := s.iterateNodes(ctx, "reset SQL statistics",
 		dialFn,
 		resetSQLStats,
 		func(nodeID roachpb.NodeID, resp interface{}) {

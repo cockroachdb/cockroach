@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -57,10 +58,10 @@ func (w *windowInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 var _ tree.Expr = &windowInfo{}
 var _ tree.TypedExpr = &windowInfo{}
 
-var unboundedStartBound = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
-var unboundedEndBound = &tree.WindowFrameBound{BoundType: tree.UnboundedFollowing}
-var defaultStartBound = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
-var defaultEndBound = &tree.WindowFrameBound{BoundType: tree.CurrentRow}
+var unboundedStartBound = &tree.WindowFrameBound{BoundType: treewindow.UnboundedPreceding}
+var unboundedEndBound = &tree.WindowFrameBound{BoundType: treewindow.UnboundedFollowing}
+var defaultStartBound = &tree.WindowFrameBound{BoundType: treewindow.UnboundedPreceding}
+var defaultEndBound = &tree.WindowFrameBound{BoundType: treewindow.CurrentRow}
 
 // buildWindow adds any window functions on top of the expression.
 func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
@@ -173,7 +174,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 				pgerror.Newf(
 					pgcode.InvalidColumnReference,
 					"argument of %s must not contain variables",
-					tree.WindowModeName(windowFrames[i].Mode),
+					treewindow.WindowModeName(windowFrames[i].Mode),
 				),
 			)
 		}
@@ -305,7 +306,7 @@ func (b *Builder) buildAggregationAsWindow(
 
 	// Wrap with having filter if it exists.
 	if having != nil {
-		input := g.aggOutScope.expr.(memo.RelExpr)
+		input := g.aggOutScope.expr
 		filters := memo.FiltersExpr{b.factory.ConstructFiltersItem(having)}
 		g.aggOutScope.expr = b.factory.ConstructSelect(input, filters)
 	}
@@ -331,7 +332,7 @@ func (b *Builder) getTypedWindowArgs(w *windowInfo) []tree.TypedExpr {
 			argExprs = append(argExprs, tree.NewDInt(1))
 		}
 		if len(argExprs) < 3 {
-			null := tree.ReType(tree.DNull, argExprs[0].ResolvedType())
+			null := reType(tree.DNull, argExprs[0].ResolvedType())
 			argExprs = append(argExprs, null)
 		}
 	}

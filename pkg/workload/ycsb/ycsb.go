@@ -22,7 +22,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -643,7 +643,7 @@ func (yw *ycsbWorker) nextInsertKeyIndex() uint64 {
 
 var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
-// Gnerate a random string of alphabetic characters.
+// Generate a random string of alphabetic characters.
 func (yw *ycsbWorker) randString(length int) string {
 	str := make([]byte, length)
 	// prepend current timestamp matching the default CRDB UTC time format

@@ -12,6 +12,7 @@ package rowexec
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
@@ -63,6 +64,7 @@ type sampleAggregator struct {
 	sketchIdxCol int
 	numRowsCol   int
 	numNullsCol  int
+	sumSizeCol   int
 	sketchCol    int
 	invColIdxCol int
 	invIdxKeyCol int
@@ -109,7 +111,7 @@ func newSampleAggregator(
 	// The processor will disable histogram collection if this limit is not
 	// enough.
 	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, "sample-aggregator-mem")
-	rankCol := len(input.OutputTypes()) - 7
+	rankCol := len(input.OutputTypes()) - 8
 	s := &sampleAggregator{
 		spec:         spec,
 		input:        input,
@@ -123,9 +125,10 @@ func newSampleAggregator(
 		sketchIdxCol: rankCol + 1,
 		numRowsCol:   rankCol + 2,
 		numNullsCol:  rankCol + 3,
-		sketchCol:    rankCol + 4,
-		invColIdxCol: rankCol + 5,
-		invIdxKeyCol: rankCol + 6,
+		sumSizeCol:   rankCol + 4,
+		sketchCol:    rankCol + 5,
+		invColIdxCol: rankCol + 6,
+		invIdxKeyCol: rankCol + 7,
 		invSr:        make(map[uint32]*stats.SampleReservoir, len(spec.InvertedSketches)),
 		invSketch:    make(map[uint32]*sketchInfo, len(spec.InvertedSketches)),
 	}
@@ -149,8 +152,9 @@ func newSampleAggregator(
 	)
 	for i := range spec.InvertedSketches {
 		var sr stats.SampleReservoir
-		// The datums are converted to their inverted index bytes and
-		// sent as a single DBytes column.
+		// The datums are converted to their inverted index bytes and sent as a
+		// single DBytes column. We do not use DEncodedKey here because it would
+		// introduce backward compatibility complications.
 		var srCols util.FastIntSet
 		srCols.Add(0)
 		sr.Init(int(spec.SampleSize), int(spec.MinSampleSize), bytesRowType, &s.memAcc, srCols)
@@ -234,7 +238,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	var rowsProcessed uint64
 	progressUpdates := util.Every(SampleAggregatorProgressInterval)
-	var da rowenc.DatumAlloc
+	var da tree.DatumAlloc
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
@@ -336,7 +340,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 }
 
 func (s *sampleAggregator) processSketchRow(
-	sketch *sketchInfo, row rowenc.EncDatumRow, da *rowenc.DatumAlloc,
+	sketch *sketchInfo, row rowenc.EncDatumRow, da *tree.DatumAlloc,
 ) error {
 	var tmpSketch hyperloglog.Sketch
 
@@ -351,6 +355,12 @@ func (s *sampleAggregator) processSketchRow(
 		return err
 	}
 	sketch.numNulls += numNulls
+
+	size, err := row[s.sumSizeCol].GetInt()
+	if err != nil {
+		return err
+	}
+	sketch.size += size
 
 	// Decode the sketch.
 	if err := row[s.sketchCol].EnsureDecoded(s.inTypes[s.sketchCol], da); err != nil {
@@ -424,7 +434,6 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// closure.
 	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for _, si := range s.sketches {
-			distinctCount := int64(si.sketch.Estimate())
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
 				colIdx := int(si.spec.Columns[0])
@@ -437,7 +446,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 					colIdx,
 					typ,
 					si.numRows-si.numNulls,
-					distinctCount,
+					s.getDistinctCount(&si, false /* includeNulls */),
 					int(si.spec.HistogramMaxBuckets),
 				)
 				if err != nil {
@@ -455,7 +464,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				// by the existence of an inverted sketch on
 				// the column.
 
-				invDistinctCount := int64(invSketch.sketch.Estimate())
+				invDistinctCount := s.getDistinctCount(invSketch, false /* includeNulls */)
 				// Use 0 for the colIdx here because it refers
 				// to the column index of the samples, which
 				// only has a single bytes column with the
@@ -495,16 +504,17 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			// Insert the new stat.
 			if err := stats.InsertNewStat(
 				ctx,
+				s.FlowCtx.Cfg.Settings,
 				s.FlowCtx.Cfg.Executor,
 				txn,
 				s.tableID,
 				si.spec.StatName,
 				columnIDs,
 				si.numRows,
-				distinctCount,
+				s.getDistinctCount(&si, true /* includeNulls */),
 				si.numNulls,
-				histogram,
-			); err != nil {
+				s.getAvgSize(&si),
+				histogram); err != nil {
 				return err
 			}
 
@@ -517,11 +527,40 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 		return err
 	}
 
-	if g, ok := s.FlowCtx.Cfg.Gossip.Optional(47925); ok {
-		// Gossip refresh of the stat caches for this table.
-		return stats.GossipTableStatAdded(g, s.tableID)
-	}
 	return nil
+}
+
+// getAvgSize returns the average number of bytes per row in the given
+// sketch.
+func (s *sampleAggregator) getAvgSize(si *sketchInfo) int64 {
+	if si.numRows == 0 {
+		return 0
+	}
+	return int64(math.Ceil(float64(si.size) / float64(si.numRows)))
+}
+
+// getDistinctCount returns the number of distinct values in the given sketch,
+// optionally including null values.
+func (s *sampleAggregator) getDistinctCount(si *sketchInfo, includeNulls bool) int64 {
+	distinctCount := int64(si.sketch.Estimate())
+	if si.numNulls > 0 && !includeNulls {
+		// Nulls are included in the estimate, so reduce the count by 1 if nulls are
+		// not requested.
+		distinctCount--
+	}
+
+	// The maximum number of distinct values is the number of non-null rows plus 1
+	// if there are any nulls. It's possible that distinctCount was calculated to
+	// be greater than this number due to the approximate nature of HyperLogLog.
+	// If this is the case, set it equal to the max.
+	maxDistinctCount := si.numRows - si.numNulls
+	if si.numNulls > 0 && includeNulls {
+		maxDistinctCount++
+	}
+	if distinctCount > maxDistinctCount {
+		distinctCount = maxDistinctCount
+	}
+	return distinctCount
 }
 
 // generateHistogram returns a histogram (on a given column) from a set of
@@ -549,7 +588,8 @@ func (s *sampleAggregator) generateHistogram(
 			prevCapacity, sr.Cap(),
 		)
 	}
-	return stats.EquiDepthHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets)
+	h, _, err := stats.EquiDepthHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets)
+	return h, err
 }
 
 var _ execinfra.DoesNotUseTxn = &sampleAggregator{}

@@ -44,9 +44,10 @@ const histogramSamples = 10000
 // stats collection, used when creating statistics AS OF SYSTEM TIME. The
 // timestamp is advanced during long operations as needed. See TableReaderSpec.
 //
-// The lowest TTL we recommend is 10 minutes. This value must be be lower than
+// The lowest TTL we recommend is 10 minutes. This value must be lower than
 // that.
 var maxTimestampAge = settings.RegisterDurationSetting(
+	settings.TenantWritable,
 	"sql.stats.max_timestamp_age",
 	"maximum age of timestamp during table statistics collection",
 	5*time.Minute,
@@ -70,7 +71,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		for _, c := range s.columns {
 			if !tableColSet.Contains(c) {
 				tableColSet.Add(c)
-				colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(c))
+				colCfg.wantedColumns = append(colCfg.wantedColumns, c)
 			}
 		}
 	}
@@ -85,7 +86,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	for i, c := range scan.cols {
 		colIdxMap.Set(c.GetID(), i)
 	}
-	sb := span.MakeBuilder(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
+	var sb span.Builder
+	sb.Init(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return nil, err
@@ -172,7 +174,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		}
 	}
 
-	// The sampler outputs the original columns plus a rank column, four
+	// The sampler outputs the original columns plus a rank column, five
 	// sketch columns, and two inverted histogram columns.
 	outTypes := make([]*types.T, 0, len(p.GetResultTypes())+5)
 	outTypes = append(outTypes, p.GetResultTypes()...)
@@ -184,6 +186,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	outTypes = append(outTypes, types.Int)
 	// An INT column indicating the number of rows that have a NULL in any sketch
 	// column.
+	outTypes = append(outTypes, types.Int)
+	// An INT column indicating the size of the columns in this sketch.
 	outTypes = append(outTypes, types.Int)
 	// A BYTES column with the sketch data.
 	outTypes = append(outTypes, types.Bytes)
@@ -200,7 +204,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	)
 
 	// Estimate the expected number of rows based on existing stats in the cache.
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc.GetID())
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -228,9 +232,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		RowsExpected:     rowsExpected,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
-	node := dsp.gatewayNodeID
+	node := dsp.gatewaySQLInstanceID
 	if len(p.ResultRouters) == 1 {
-		node = p.Processors[p.ResultRouters[0]].Node
+		node = p.Processors[p.ResultRouters[0]].SQLInstanceID
 	}
 	p.AddSingleGroupStage(
 		node,
@@ -250,7 +254,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
 	for i := 0; i < len(reqStats); i++ {
 		histogram := details.ColumnStats[i].HasHistogram && histogramCollectionEnabled
-		var histogramMaxBuckets uint32 = defaultHistogramBuckets
+		var histogramMaxBuckets uint32 = stats.DefaultHistogramBuckets
 		if details.ColumnStats[i].HistogramMaxBuckets > 0 {
 			histogramMaxBuckets = details.ColumnStats[i].HistogramMaxBuckets
 		}

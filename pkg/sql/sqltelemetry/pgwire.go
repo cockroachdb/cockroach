@@ -19,7 +19,7 @@ import (
 
 // CancelRequestCounter is to be incremented every time a pgwire-level
 // cancel request is received from a client.
-var CancelRequestCounter = telemetry.GetCounterOnce("pgwire.unimplemented.cancel_request")
+var CancelRequestCounter = telemetry.GetCounterOnce("pgwire.cancel_request")
 
 // UnimplementedClientStatusParameterCounter is to be incremented
 // every time a client attempts to configure a status parameter

@@ -20,12 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -91,6 +91,14 @@ func AlterColumnType(
 		}
 	}
 
+	// Special handling for IDENTITY column to make sure it cannot be altered into
+	// a non-integer type.
+	if col.IsGeneratedAsIdentity() {
+		if typ.InternalType.Family != types.IntFamily {
+			return sqlerrors.NewIdentityColumnTypeError()
+		}
+	}
+
 	err = colinfo.ValidateColumnDefType(typ)
 	if err != nil {
 		return err
@@ -118,6 +126,29 @@ func AlterColumnType(
 			"the requested type conversion (%s -> %s) requires an explicit USING expression",
 			col.GetType().SQLString(), typ.SQLString())
 	case schemachange.ColumnConversionTrivial:
+		if col.HasDefault() {
+			if validCast := tree.ValidCast(col.GetType(), typ, tree.CastContextAssignment); !validCast {
+				return pgerror.Wrapf(
+					err,
+					pgcode.DatatypeMismatch,
+					"default for column %q cannot be cast automatically to type %s",
+					col.GetName(),
+					typ.SQLString(),
+				)
+			}
+		}
+		if col.HasOnUpdate() {
+			if validCast := tree.ValidCast(col.GetType(), typ, tree.CastContextAssignment); !validCast {
+				return pgerror.Wrapf(
+					err,
+					pgcode.DatatypeMismatch,
+					"on update for column %q cannot be cast automatically to type %s",
+					col.GetName(),
+					typ.SQLString(),
+				)
+			}
+		}
+
 		col.ColumnDesc().Type = typ
 	case schemachange.ColumnConversionGeneral, schemachange.ColumnConversionValidate:
 		if err := alterColumnTypeGeneral(ctx, tableDesc, col, typ, t.Using, params, cmds, tn); err != nil {
@@ -190,9 +221,18 @@ func alterColumnTypeGeneral(
 	// Disallow ALTER COLUMN TYPE general for columns that have a foreign key
 	// constraint.
 	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
-		for _, id := range append(fk.OriginColumnIDs, fk.ReferencedColumnIDs...) {
-			if col.GetID() == id {
-				return colWithConstraintNotSupportedErr
+		if fk.OriginTableID == tableDesc.GetID() {
+			for _, id := range fk.OriginColumnIDs {
+				if col.GetID() == id {
+					return colWithConstraintNotSupportedErr
+				}
+			}
+		}
+		if fk.ReferencedTableID == tableDesc.GetID() {
+			for _, id := range fk.ReferencedColumnIDs {
+				if col.GetID() == id {
+					return colWithConstraintNotSupportedErr
+				}
 			}
 		}
 	}
@@ -208,6 +248,13 @@ func alterColumnTypeGeneral(
 		for i := 0; i < idx.NumKeySuffixColumns(); i++ {
 			if idx.GetKeySuffixColumnID(i) == col.GetID() {
 				return colInIndexNotSupportedErr
+			}
+		}
+		if !idx.Primary() {
+			for i := 0; i < idx.NumSecondaryStoredColumns(); i++ {
+				if idx.GetStoredColumnID(i) == col.GetID() {
+					return colInIndexNotSupportedErr
+				}
 			}
 		}
 	}
@@ -310,32 +357,27 @@ func alterColumnTypeGeneral(
 		}
 		inverseExpr = tree.Serialize(&oldColComputeExpr)
 	}
-
 	// Create the default expression for the new column.
 	hasDefault := col.HasDefault()
-	var newColDefaultExpr *string
+	hasUpdate := col.HasOnUpdate()
 	if hasDefault {
-		if col.ColumnDesc().HasNullDefault() {
-			s := tree.Serialize(tree.DNull)
-			newColDefaultExpr = &s
-		} else {
-			// The default expression for the new column is applying the
-			// computed expression to the previous default expression.
-			expr, err := parser.ParseExpr(col.GetDefaultExpr())
-			if err != nil {
-				return err
-			}
-			typedExpr, err := expr.TypeCheck(ctx, &params.p.semaCtx, toType)
-			if err != nil {
-				return err
-			}
-			castExpr := tree.NewTypedCastExpr(typedExpr, toType)
-			newDefaultComputedExpr, err := castExpr.Eval(params.EvalContext())
-			if err != nil {
-				return err
-			}
-			s := tree.Serialize(newDefaultComputedExpr)
-			newColDefaultExpr = &s
+		if validCast := tree.ValidCast(col.GetType(), toType, tree.CastContextAssignment); !validCast {
+			return pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"default for column %q cannot be cast automatically to type %s",
+				col.GetName(),
+				toType.SQLString(),
+			)
+		}
+	}
+	if hasUpdate {
+		if validCast := tree.ValidCast(col.GetType(), toType, tree.CastContextAssignment); !validCast {
+			return pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"on update for column %q cannot be cast automatically to type %s",
+				col.GetName(),
+				toType.SQLString(),
+			)
 		}
 	}
 
@@ -343,12 +385,11 @@ func alterColumnTypeGeneral(
 		Name:            shadowColName,
 		Type:            toType,
 		Nullable:        col.IsNullable(),
-		DefaultExpr:     newColDefaultExpr,
+		DefaultExpr:     col.ColumnDesc().DefaultExpr,
 		UsesSequenceIds: col.ColumnDesc().UsesSequenceIds,
 		OwnsSequenceIds: col.ColumnDesc().OwnsSequenceIds,
 		ComputeExpr:     newColComputeExpr,
 	}
-
 	// Ensure new column is created in the same column family as the original
 	// so backfiller writes to the same column family.
 	family, err := tableDesc.GetFamilyOfColumn(col.GetID())
@@ -370,7 +411,8 @@ func alterColumnTypeGeneral(
 		tableDesc.SetPrimaryIndex(primaryIndex)
 	}
 
-	if err := tableDesc.AllocateIDs(ctx); err != nil {
+	version := params.ExecCfg().Settings.Version.ActiveVersion(ctx)
+	if err := tableDesc.AllocateIDs(ctx, version); err != nil {
 		return err
 	}
 
@@ -381,6 +423,5 @@ func alterColumnTypeGeneral(
 	}
 
 	tableDesc.AddComputedColumnSwapMutation(swapArgs)
-
 	return nil
 }

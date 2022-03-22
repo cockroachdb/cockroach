@@ -116,15 +116,14 @@ func NewSpillingBuffer(
 		storedTypes[i] = inputTypes[idx]
 	}
 
-	// Memory used by the AppendOnlyBufferedBatch cannot be partially released
-	// (and we would like to keep as many tuples in-memory as possible), so we
-	// must reserve memory for the disk queue and dequeue scratch batch.
-	diskReservedMem := colmem.EstimateBatchSizeBytes(storedTypes, coldata.BatchSize()) +
-		int64(diskQueueCfg.BufferSizeBytes)
 	// The SpillingBuffer disk queue always uses
 	// DiskQueueCacheModeClearAndReuseCache since all writes happen before any
 	// reads.
-	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
+	diskQueueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeClearAndReuseCache)
+	// Memory used by the AppendOnlyBufferedBatch cannot be partially released
+	// (and we would like to keep as many tuples in-memory as possible), so we
+	// must reserve memory for the disk queue and dequeue scratch batch.
+	diskReservedMem := colmem.EstimateBatchSizeBytes(storedTypes, coldata.BatchSize()) + int64(diskQueueCfg.BufferSizeBytes)
 	return &SpillingBuffer{
 		unlimitedAllocator: unlimitedAllocator,
 		memoryLimit:        memoryLimit,
@@ -217,6 +216,10 @@ func (b *SpillingBuffer) AppendTuples(
 // when tuples from a subsequent batch are accessed. If the index is less than
 // zero or greater than or equal to the buffer length, GetVecWithTuple will
 // panic.
+//
+// WARNING: the returned column vector is only valid until the next call to
+// GetVecWithTuple. If the caller wants to hold onto the vector, a copy must be
+// made.
 func (b *SpillingBuffer) GetVecWithTuple(
 	ctx context.Context, colIdx, idx int,
 ) (_ coldata.Vec, rowIdx int, length int) {

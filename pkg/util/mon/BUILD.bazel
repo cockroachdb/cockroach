@@ -15,11 +15,13 @@ go_library(
         "//pkg/util",
         "//pkg/util/envutil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/ioctx",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -32,6 +34,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
     ],

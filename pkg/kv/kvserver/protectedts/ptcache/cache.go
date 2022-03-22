@@ -126,6 +126,21 @@ func (c *Cache) Refresh(ctx context.Context, asOf hlc.Timestamp) error {
 	return nil
 }
 
+// GetProtectionTimestamps is part of the spanconfig.ProtectedTSReader
+// interface.
+func (c *Cache) GetProtectionTimestamps(
+	ctx context.Context, sp roachpb.Span,
+) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
+	readAt := c.Iterate(ctx,
+		sp.Key,
+		sp.EndKey,
+		func(rec *ptpb.Record) (wantMore bool) {
+			protectionTimestamps = append(protectionTimestamps, rec.Timestamp)
+			return true
+		})
+	return protectionTimestamps, readAt, nil
+}
+
 // Start starts the periodic fetching of the Cache. A Cache must not be used
 // until after it has been started. An error will be returned if it has
 // already been started.
@@ -245,7 +260,7 @@ func (c *Cache) doUpdate(ctx context.Context) error {
 		}
 		for i := range state.Records {
 			r := &state.Records[i]
-			c.mu.recordsByID[r.ID] = r
+			c.mu.recordsByID[r.ID.GetUUID()] = r
 		}
 	}
 	return nil
@@ -259,8 +274,8 @@ func (c *Cache) upToDate(asOf hlc.Timestamp) bool {
 }
 
 func overlaps(r *ptpb.Record, sp roachpb.Span) bool {
-	for i := range r.Spans {
-		if r.Spans[i].Overlaps(sp) {
+	for i := range r.DeprecatedSpans {
+		if r.DeprecatedSpans[i].Overlaps(sp) {
 			return true
 		}
 	}

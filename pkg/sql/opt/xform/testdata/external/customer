@@ -72,7 +72,7 @@ CREATE TABLE article (
 	UNIQUE INDEX article_hash_key (hash ASC),
 	UNIQUE INDEX article_idx_read_key (id ASC) STORING (read),
 	FAMILY "primary" (id, feed, folder, hash, title, summary, content, link, read, date, retrieved)
-) INTERLEAVE IN PARENT feed (folder, feed)
+)
 ----
 
 opt
@@ -283,7 +283,7 @@ CREATE TABLE vehicles (
 opt
 select v.owner_id, count(*) from rides r, vehicles v where v.id = r.vehicle_id group by v.owner_id
 ----
-group-by
+group-by (hash)
  ├── columns: owner_id:14 count:20!null
  ├── grouping columns: owner_id:14
  ├── key: (14)
@@ -327,7 +327,7 @@ CREATE TABLE data (
 opt
 SELECT id, sum(value) FROM data GROUP BY id
 ----
-group-by
+group-by (streaming)
  ├── columns: id:1 sum:16
  ├── grouping columns: id:1
  ├── internal-ordering: +1
@@ -378,35 +378,29 @@ WHERE last_sync_id>0
 ORDER BY last_sync_id ASC
 LIMIT 50
 ----
-limit
+top-k
  ├── columns: remote_id:1!null conflict_remote_id:2 user_id:3!null last_sync_id:4!null data_type:5!null sync_data:6 deleted:7!null create_device_id:8!null original_data_id:9!null create_time:10!null last_update_time:11!null
  ├── internal-ordering: +4 opt(3,5)
+ ├── k: 50
  ├── cardinality: [0 - 50]
  ├── key: (1)
  ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
  ├── ordering: +4 opt(3,5) [actual: +4]
- ├── sort
- │    ├── columns: remote_id:1!null conflict_remote_id:2 user_id:3!null last_sync_id:4!null data_type:5!null sync_data:6 deleted:7!null create_device_id:8!null original_data_id:9!null create_time:10!null last_update_time:11!null
- │    ├── key: (1)
- │    ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
- │    ├── ordering: +4 opt(3,5) [actual: +4]
- │    ├── limit hint: 50.00
- │    └── select
- │         ├── columns: remote_id:1!null conflict_remote_id:2 user_id:3!null last_sync_id:4!null data_type:5!null sync_data:6 deleted:7!null create_device_id:8!null original_data_id:9!null create_time:10!null last_update_time:11!null
- │         ├── key: (1)
- │         ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
- │         ├── index-join t_sync_data
- │         │    ├── columns: remote_id:1!null conflict_remote_id:2 user_id:3!null last_sync_id:4!null data_type:5!null sync_data:6 deleted:7!null create_device_id:8!null original_data_id:9!null create_time:10!null last_update_time:11!null
- │         │    ├── key: (1)
- │         │    ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
- │         │    └── scan t_sync_data@t_sync_data_user_id_data_type_idx
- │         │         ├── columns: remote_id:1!null user_id:3!null data_type:5!null
- │         │         ├── constraint: /3/5/1: [/'11cd19e4-837d-4bff-4a76-aefa0ddbec64'/'a01' - /'11cd19e4-837d-4bff-4a76-aefa0ddbec64'/'a01']
- │         │         ├── key: (1)
- │         │         └── fd: ()-->(3,5)
- │         └── filters
- │              └── last_sync_id:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
- └── 50
+ └── select
+      ├── columns: remote_id:1!null conflict_remote_id:2 user_id:3!null last_sync_id:4!null data_type:5!null sync_data:6 deleted:7!null create_device_id:8!null original_data_id:9!null create_time:10!null last_update_time:11!null
+      ├── key: (1)
+      ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
+      ├── index-join t_sync_data
+      │    ├── columns: remote_id:1!null conflict_remote_id:2 user_id:3!null last_sync_id:4!null data_type:5!null sync_data:6 deleted:7!null create_device_id:8!null original_data_id:9!null create_time:10!null last_update_time:11!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(3,5), (1)-->(2,4,6-11)
+      │    └── scan t_sync_data@t_sync_data_user_id_data_type_idx
+      │         ├── columns: remote_id:1!null user_id:3!null data_type:5!null
+      │         ├── constraint: /3/5/1: [/'11cd19e4-837d-4bff-4a76-aefa0ddbec64'/'a01' - /'11cd19e4-837d-4bff-4a76-aefa0ddbec64'/'a01']
+      │         ├── key: (1)
+      │         └── fd: ()-->(3,5)
+      └── filters
+           └── last_sync_id:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
 
 # ------------------------------------------------------------------------------
 # Github Issue 15649: Use order-matching index even with a high offset/limit.

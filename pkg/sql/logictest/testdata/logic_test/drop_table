@@ -1,6 +1,9 @@
 statement ok
 CREATE TABLE a (id INT PRIMARY KEY)
 
+let $t_id
+SELECT id FROM system.namespace WHERE name='a'
+
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
 
@@ -28,7 +31,17 @@ DROP TABLE a
 # TODO (lucy): Update this if/when we decide to change how these jobs queued by
 # the startup migration are handled.
 query TT
-SELECT job_type, status FROM [SHOW JOBS] WHERE user_name = 'root' AND (job_type = 'SCHEMA CHANGE GC' OR (job_type = 'SCHEMA CHANGE' AND description != 'updating privileges'))
+SELECT replace(job_type, 'NEW SCHEMA CHANGE', 'SCHEMA CHANGE'), status
+  FROM [SHOW JOBS]
+ WHERE (user_name = 'root' OR user_name = 'node')
+       AND (
+			job_type = 'SCHEMA CHANGE GC'
+			OR job_type = 'NEW SCHEMA CHANGE'
+			OR (
+					job_type = 'SCHEMA CHANGE'
+					AND description != 'updating privileges'
+				)
+		);
 ----
 SCHEMA CHANGE     succeeded
 SCHEMA CHANGE     succeeded
@@ -43,8 +56,8 @@ public  b  table  root  0  NULL
 statement error pgcode 42P01 relation "a" does not exist
 SELECT * FROM a
 
-statement error pq: \[53 AS a\]: descriptor is being dropped
-SELECT * FROM [53 AS a]
+statement error pq: \[\d+ AS a\]: descriptor is being dropped
+SELECT * FROM [$t_id AS a]
 
 statement error pgcode 42P01 relation "a" does not exist
 DROP TABLE a

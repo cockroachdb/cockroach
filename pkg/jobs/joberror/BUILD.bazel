@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "joberror",
+    srcs = ["errors.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/joberror",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/sql/flowinfra",
+        "//pkg/util/circuit",
+        "//pkg/util/grpcutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

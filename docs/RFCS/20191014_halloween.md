@@ -38,7 +38,7 @@ See above.
 # Guide-level explanation
 
 After this change, the "read" portion of SQL mutations operate using a
-snapshot of the database as per the moment the statment started. In
+snapshot of the database as per the moment the statement started. In
 particular it cannot see its own writes.
 
 This guarantees e.g. that a statement like `INSERT INTO t SELECT *
@@ -188,7 +188,7 @@ and existence checks. Cascading actions that result in mutations to
 other tables themselves append more triggers to run.
 
 Each subsequent step in this cascade of effects is able to read its
-own writes (for futher FK checks).
+own writes (for further FK checks).
 
 We emulate this in CockroachDB by introducing a step boundary between
 iterations of the cascading algorithm.

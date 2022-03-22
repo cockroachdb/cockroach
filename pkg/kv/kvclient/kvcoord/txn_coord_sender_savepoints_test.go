@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,7 +42,7 @@ func TestSavepoints(t *testing.T) {
 	abortKey := roachpb.Key("abort")
 	errKey := roachpb.Key("injectErr")
 
-	datadriven.Walk(t, "testdata/savepoints", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t, "savepoints"), func(t *testing.T, path string) {
 		// We want to inject txn abort errors in some cases.
 		//
 		// We do this by injecting the error from "underneath" the
@@ -122,11 +124,24 @@ func TestSavepoints(t *testing.T) {
 				}
 				fmt.Fprintf(&buf, "txn id %s\n", changed)
 
+			case "reset":
+				prevID := txn.ID()
+				txn.PrepareForRetry(ctx)
+				changed := "changed"
+				if prevID == txn.ID() {
+					changed = "not changed"
+				}
+				fmt.Fprintf(&buf, "txn error cleared\n")
+				fmt.Fprintf(&buf, "txn id %s\n", changed)
+
 			case "put":
 				b := txn.NewBatch()
 				b.Put(td.CmdArgs[0].Key, td.CmdArgs[1].Key)
 				if td.HasArg("nowait") {
 					b.Header.WaitPolicy = lock.WaitPolicy_Error
+				}
+				if td.HasArg("lock-timeout") {
+					b.Header.LockTimeout = 1 * time.Nanosecond
 				}
 				if err := txn.Run(ctx, b); err != nil {
 					fmt.Fprintf(&buf, "(%T) %v\n", err, err)
@@ -162,6 +177,9 @@ func TestSavepoints(t *testing.T) {
 				}
 				if td.HasArg("nowait") {
 					b.Header.WaitPolicy = lock.WaitPolicy_Error
+				}
+				if td.HasArg("lock-timeout") {
+					b.Header.LockTimeout = 1 * time.Nanosecond
 				}
 				if err := txn.Run(ctx, b); err != nil {
 					fmt.Fprintf(&buf, "(%T) %v\n", err, err)

@@ -29,7 +29,7 @@ func hilbertInverse(n, x, y uint64) uint64 {
 	return d
 }
 
-// hilberRoate rotates/flips a quadrant appropriately.
+// hilbertRotate rotates/flips a quadrant appropriately.
 // Adapted from `rot` in https://en.wikipedia.org/wiki/Hilbert_curve#Applications_and_mapping_algorithms.
 func hilbertRotate(n, x, y, rx, ry uint64) (uint64, uint64) {
 	if ry == 0 {

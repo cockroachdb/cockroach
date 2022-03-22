@@ -41,7 +41,7 @@ eexpect abcrootdef
 send "\\set prompt1 abc%/def\r"
 eexpect abcdefaultdbdef
 
-# Check promptw with no formatting code.
+# Check prompt with no formatting code.
 send "\\set prompt1 woo \r"
 eexpect woo
 

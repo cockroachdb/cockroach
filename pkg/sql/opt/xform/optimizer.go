@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -97,6 +98,15 @@ type Optimizer struct {
 	// JoinOrderBuilder adds new join orderings to the memo.
 	jb JoinOrderBuilder
 }
+
+// maxGroupPasses is the maximum allowed number of optimization passes for any
+// single memo group. The groupState.passes field is incremented every time
+// optimizeGroup is called on the group. If a groupState's passes exceeds this
+// limit, there is likely a cycle in the memo where a path exists from a group
+// member's children back to the group member's group. To avoid stack overflows
+// that these memo cycles cause, the optimizer throws an internal error when
+// this limit is reached.
+const maxGroupPasses = 100_000
 
 // Init initializes the Optimizer with a new, blank memo structure inside. This
 // must be called before the optimizer can be used (or reused).
@@ -440,6 +450,23 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 		return state
 	}
 
+	state.passes++
+	if state.passes > maxGroupPasses {
+		// If optimizeGroup has been called on a group more than maxGroupPasses
+		// times, there is likely a cycle in the memo. To avoid a stack
+		// overflow, throw an internal error. The formatted memo is included as
+		// an error detail to aid in debugging the cycle.
+		mf := makeMemoFormatter(o, FmtPretty)
+		panic(errors.WithDetail(
+			errors.AssertionFailedf(
+				"memo group optimization passes surpassed limit of %v; "+
+					"there may be a cycle in the memo",
+				maxGroupPasses,
+			),
+			mf.format(),
+		))
+	}
+
 	// Iterate until the group has been fully optimized.
 	for {
 		fullyOptimized := true
@@ -499,7 +526,7 @@ func (o *Optimizer) optimizeGroupMember(
 	// properties? That case is taken care of by enforceProps, which will
 	// recursively optimize the group with property subsets and then add
 	// enforcers to provide the remainder.
-	if CanProvidePhysicalProps(member, required) {
+	if CanProvidePhysicalProps(o.evalCtx, member, required) {
 		var cost memo.Cost
 		for i, n := 0, member.ChildCount(); i < n; i++ {
 			// Given required parent properties, get the properties required from
@@ -579,6 +606,12 @@ func (o *Optimizer) enforceProps(
 	// stripped by recursively optimizing the group with successively fewer
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
+	if !required.Distribution.Any() {
+		enforcer := &memo.DistributeExpr{Input: member}
+		memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
+		return o.optimizeEnforcer(state, enforcer, required, member, memberProps)
+	}
+
 	if !required.Ordering.Any() {
 		// Try Sort enforcer that requires no ordering from its input.
 		enforcer := &memo.SortExpr{Input: member}
@@ -633,7 +666,7 @@ func (o *Optimizer) optimizeEnforcer(
 // shouldExplore ensures that exploration is only triggered for optimizeGroup
 // calls that will not recurse via a call from enforceProps.
 func (o *Optimizer) shouldExplore(required *physical.Required) bool {
-	return required.Ordering.Any()
+	return required.Ordering.Any() && required.Distribution.Any()
 }
 
 // setLowestCostTree traverses the memo and recursively updates child pointers
@@ -711,6 +744,7 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.
 		provided.Ordering = ordering.BuildProvided(relParent, &parentProps.Ordering)
+		provided.Distribution = distribution.BuildProvided(o.evalCtx, relParent, &parentProps.Distribution)
 		o.mem.SetBestProps(relParent, parentProps, &provided, relCost)
 	}
 
@@ -848,6 +882,10 @@ type groupState struct {
 	// explore is used by the explorer to store intermediate state so that
 	// redundant work is minimized.
 	explore exploreState
+
+	// passes tracks the number of times optimizeGroup has been called on the
+	// group. It is used to detect cycles in the memo. See maxGroupPasses.
+	passes int
 }
 
 // isMemberFullyOptimized returns true if the group member at the given ordinal

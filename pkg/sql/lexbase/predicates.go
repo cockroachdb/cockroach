@@ -58,6 +58,7 @@ func init() {
 		"reset",
 		"role",
 		"user",
+		"on",
 	} {
 		reservedOrLookaheadKeywords[s] = struct{}{}
 	}

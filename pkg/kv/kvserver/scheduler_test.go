@@ -176,7 +176,7 @@ func newTestProcessor() *testProcessor {
 	return p
 }
 
-func (p *testProcessor) processReady(_ context.Context, rangeID roachpb.RangeID) {
+func (p *testProcessor) processReady(rangeID roachpb.RangeID) {
 	p.mu.Lock()
 	p.mu.raftReady[rangeID]++
 	p.mu.Unlock()
@@ -230,13 +230,15 @@ func TestSchedulerLoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	m := newStoreMetrics(metric.TestSampleInterval)
-	p := newTestProcessor()
-	s := newRaftScheduler(m, p, 1)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	s.Start(ctx, stopper)
+
+	m := newStoreMetrics(metric.TestSampleInterval)
+	p := newTestProcessor()
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1)
+
+	s.Start(stopper)
 	s.EnqueueRaftTicks(1, 2, 3)
 
 	testutils.SucceedsSoon(t, func() error {
@@ -256,13 +258,14 @@ func TestSchedulerBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	m := newStoreMetrics(metric.TestSampleInterval)
-	p := newTestProcessor()
-	s := newRaftScheduler(m, p, 1)
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	s.Start(ctx, stopper)
+
+	m := newStoreMetrics(metric.TestSampleInterval)
+	p := newTestProcessor()
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1)
+	s.Start(stopper)
 
 	testCases := []struct {
 		flag     raftScheduleFlags

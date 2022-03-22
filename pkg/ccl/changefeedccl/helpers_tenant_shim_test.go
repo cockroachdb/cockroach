@@ -10,9 +10,9 @@ package changefeedccl
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -63,7 +63,7 @@ func (t *testServerShim) RPCContext() *rpc.Context              { panic(unsuppor
 func (t *testServerShim) LeaseManager() interface{}             { panic(unsupportedShimMethod) }
 func (t *testServerShim) InternalExecutor() interface{}         { panic(unsupportedShimMethod) }
 func (t *testServerShim) ExecutorConfig() interface{}           { panic(unsupportedShimMethod) }
-func (t *testServerShim) Tracer() interface{}                   { panic(unsupportedShimMethod) }
+func (t *testServerShim) TracerI() interface{}                  { panic(unsupportedShimMethod) }
 func (t *testServerShim) GossipI() interface{}                  { panic(unsupportedShimMethod) }
 func (t *testServerShim) RangeFeedFactory() interface{}         { panic(unsupportedShimMethod) }
 func (t *testServerShim) Clock() *hlc.Clock                     { panic(unsupportedShimMethod) }
@@ -76,14 +76,6 @@ func (t *testServerShim) NodeLiveness() interface{}             { panic(unsuppor
 func (t *testServerShim) HeartbeatNodeLiveness() error          { panic(unsupportedShimMethod) }
 func (t *testServerShim) NodeDialer() interface{}               { panic(unsupportedShimMethod) }
 func (t *testServerShim) SetDistSQLSpanResolver(spanResolver interface{}) {
-	panic(unsupportedShimMethod)
-}
-func (t *testServerShim) AdminURL() string                    { panic(unsupportedShimMethod) }
-func (t *testServerShim) GetHTTPClient() (http.Client, error) { panic(unsupportedShimMethod) }
-func (t *testServerShim) GetAdminAuthenticatedHTTPClient() (http.Client, error) {
-	panic(unsupportedShimMethod)
-}
-func (t *testServerShim) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error) {
 	panic(unsupportedShimMethod)
 }
 func (t *testServerShim) MustGetSQLCounter(name string) int64        { panic(unsupportedShimMethod) }
@@ -123,3 +115,8 @@ func (t *testServerShim) ScratchRange() (roachpb.Key, error)       { panic(unsup
 func (t *testServerShim) Engines() []storage.Engine                { panic(unsupportedShimMethod) }
 func (t *testServerShim) MetricsRecorder() *status.MetricsRecorder { panic(unsupportedShimMethod) }
 func (t *testServerShim) CollectionFactory() interface{}           { panic(unsupportedShimMethod) }
+func (t *testServerShim) SystemTableIDResolver() interface{}       { panic(unsupportedShimMethod) }
+func (t *testServerShim) SpanConfigKVSubscriber() interface{}      { panic(unsupportedShimMethod) }
+func (t *testServerShim) SystemConfigProvider() config.SystemConfigProvider {
+	panic(unsupportedShimMethod)
+}

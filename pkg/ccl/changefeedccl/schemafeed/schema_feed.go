@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -78,9 +78,10 @@ func New(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
 	events changefeedbase.SchemaChangeEventClass,
-	targets jobspb.ChangefeedTargets,
+	targets []jobspb.ChangefeedTargetSpecification,
 	initialHighwater hlc.Timestamp,
 	metrics *Metrics,
+	changefeedOpts map[string]string,
 ) SchemaFeed {
 	m := &schemaFeed{
 		filter:            schemaChangeEventFilters[events],
@@ -92,6 +93,7 @@ func New(
 		ie:                cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
 		collectionFactory: cfg.CollectionFactory,
 		metrics:           metrics,
+		changefeedOpts:    changefeedOpts,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
@@ -110,13 +112,14 @@ func New(
 // invariant (via `validateFn`). An error timestamp is also kept, which is the
 // lowest timestamp where at least one table doesn't meet the invariant.
 type schemaFeed struct {
-	filter   tableEventFilter
-	db       *kv.DB
-	clock    *hlc.Clock
-	settings *cluster.Settings
-	targets  jobspb.ChangefeedTargets
-	ie       sqlutil.InternalExecutor
-	metrics  *Metrics
+	filter         tableEventFilter
+	db             *kv.DB
+	clock          *hlc.Clock
+	settings       *cluster.Settings
+	targets        []jobspb.ChangefeedTargetSpecification
+	ie             sqlutil.InternalExecutor
+	metrics        *Metrics
+	changefeedOpts map[string]string
 
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
@@ -273,15 +276,20 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	initialTableDescsFn := func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
+		seen := make(map[descpb.ID]struct{}, len(tf.targets))
 		initialDescs = initialDescs[:0]
 		if err := txn.SetFixedTimestamp(ctx, initialTableDescTs); err != nil {
 			return err
 		}
 		// Note that all targets are currently guaranteed to be tables.
-		for tableID := range tf.targets {
+		for _, table := range tf.targets {
+			if _, dup := seen[table.TableID]; dup {
+				continue
+			}
+			seen[table.TableID] = struct{}{}
 			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.AvoidCached = true
-			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, tableID, flags)
+			flags.AvoidLeased = true
+			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, table.TableID, flags)
 			if err != nil {
 				return err
 			}
@@ -525,7 +533,7 @@ func (tf *schemaFeed) validateDescriptor(
 		// manager to acquire the freshest version of the type.
 		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID())
 	case catalog.TableDescriptor:
-		if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
+		if err := changefeedbase.ValidateTable(tf.targets, desc, tf.changefeedOpts); err != nil {
 			return err
 		}
 		log.VEventf(ctx, 1, "validate %v", formatDesc(desc))
@@ -613,7 +621,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
 
-	var descs []catalog.Descriptor
+	var descriptors []catalog.Descriptor
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
 			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
@@ -636,8 +644,15 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 				if err != nil {
 					return err
 				}
-
-				origName, isTable := tf.targets[descpb.ID(id)]
+				var origName string
+				var isTable bool
+				for _, cts := range tf.targets {
+					if cts.TableID == descpb.ID(id) {
+						origName = cts.StatementTimeName
+						isTable = true
+						break
+					}
+				}
 				isType := tf.mu.typeDeps.containsType(descpb.ID(id))
 				// Check if the descriptor is an interesting table or type.
 				if !(isTable || isType) {
@@ -647,7 +662,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 
 				unsafeValue := it.UnsafeValue()
 				if unsafeValue == nil {
-					name := origName.StatementTimeName
+					name := origName
 					if name == "" {
 						name = fmt.Sprintf("desc(%d)", id)
 					}
@@ -661,16 +676,16 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 					return err
 				}
 
-				b := catalogkv.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
+				b := descbuilder.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
 				if b != nil && (b.DescriptorType() == catalog.Table || b.DescriptorType() == catalog.Type) {
-					descs = append(descs, b.BuildImmutable())
+					descriptors = append(descriptors, b.BuildImmutable())
 				}
 			}
 		}(); err != nil {
 			return nil, err
 		}
 	}
-	return descs, nil
+	return descriptors, nil
 }
 
 type doNothingSchemaFeed struct{}

@@ -84,7 +84,17 @@ func TestGeoBuiltinsPointEmptyArgs(t *testing.T) {
 								}
 								call.WriteByte(')')
 								t.Logf("calling: %s", call.String())
-								_, _ = overload.Fn(&tree.EvalContext{}, datums)
+								if overload.Fn != nil {
+									_, _ = overload.Fn(&tree.EvalContext{}, datums)
+								} else if overload.Generator != nil {
+									_, _ = overload.Generator(&tree.EvalContext{}, datums)
+								} else if overload.GeneratorWithExprs != nil {
+									exprs := make(tree.Exprs, len(datums))
+									for i := range datums {
+										exprs[i] = datums[i]
+									}
+									_, _ = overload.GeneratorWithExprs(&tree.EvalContext{}, exprs)
+								}
 							})
 						}
 					}

@@ -180,7 +180,9 @@ func (f *SSTSnapshotStorageFile) Write(contents []byte) (int, error) {
 	if err := f.ensureFile(); err != nil {
 		return 0, err
 	}
-	limitBulkIOWrite(f.ctx, f.scratch.storage.limiter, len(contents))
+	if err := limitBulkIOWrite(f.ctx, f.scratch.storage.limiter, len(contents)); err != nil {
+		return 0, err
+	}
 	return f.file.Write(contents)
 }
 

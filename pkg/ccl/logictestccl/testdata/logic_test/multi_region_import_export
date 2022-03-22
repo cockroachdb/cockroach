@@ -1,5 +1,8 @@
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off
 
+# Tests in this file assume no multi-region tenant setup as tenants have no
+# access to nodelocal.
+
 query TTTT colnames
 SHOW REGIONS
 ----
@@ -72,13 +75,14 @@ EXPORT INTO CSV 'nodelocal://1/team_export/' WITH DELIMITER = '|' FROM TABLE tea
 
 statement ok
 use multi_region_test_db;
-IMPORT TABLE team (
+CREATE TABLE team (
   id int PRIMARY KEY,
   name string,
   likes string[],
-  dislikes string[]
-)
-CSV DATA ('nodelocal://1/team_export/export*.csv') WITH DELIMITER = '|'
+  dislikes string[],
+  FAMILY "primary" (id, name, likes, dislikes)
+);
+IMPORT INTO team CSV DATA ('nodelocal://1/team_export/export*.csv') WITH DELIMITER = '|'
 
 query ITTT colnames
 SELECT * FROM team
@@ -95,6 +99,5 @@ team                                            CREATE TABLE public.team (
                                                 name STRING NULL,
                                                 likes STRING[] NULL,
                                                 dislikes STRING[] NULL,
-                                                CONSTRAINT "primary" PRIMARY KEY (id ASC),
-                                                FAMILY "primary" (id, name, likes, dislikes)
+                                                CONSTRAINT team_pkey PRIMARY KEY (id ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION

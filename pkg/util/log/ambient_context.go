@@ -54,6 +54,10 @@ type AmbientContext struct {
 	// Tracer is used to open spans (see AnnotateCtxWithSpan).
 	Tracer *tracing.Tracer
 
+	// ServerIDs will be embedded into contexts that don't already have
+	// one.
+	ServerIDs ServerIdentificationPayload
+
 	// eventLog will be embedded into contexts that don't already have an event
 	// log or an open span (if not nil).
 	eventLog *ctxEventLog
@@ -136,6 +140,9 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 		if ac.tags != nil {
 			ctx = logtags.WithTags(ctx, ac.tags)
 		}
+		if ac.ServerIDs != nil {
+			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
+		}
 		return ctx
 	}
 }
@@ -146,6 +153,9 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 	}
 	if ac.tags != nil {
 		ctx = logtags.AddTags(ctx, ac.tags)
+	}
+	if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
+		ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
 	}
 	return ctx
 }
@@ -171,7 +181,43 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 		if ac.tags != nil {
 			ctx = logtags.AddTags(ctx, ac.tags)
 		}
+		if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
+			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
+		}
 	}
 
 	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
+}
+
+// MakeTestingAmbientContext creates an AmbientContext for use in tests,
+// when a test does not have sufficient details to instantiate a fully
+// fledged server AmbientContext.
+func MakeTestingAmbientContext(tracer *tracing.Tracer) AmbientContext {
+	return AmbientContext{Tracer: tracer}
+}
+
+// MakeTestingAmbientCtxWithNewTracer is like MakeTestingAmbientContext() but it
+// also instantiates a new tracer.
+//
+// TODO(andrei): Remove this API.
+//
+// This is generally a bad idea because it creates a Tracer under the
+// hood, and if this Tracer ends up actually being used, chances are
+// it's going to crash because it'll end up mixing with some other
+// Tracer. When a test uses multiple tracers and does not crash,
+// either it's because one of the tracers is not being used (in which
+// case it'd be clearer to share the one being used using
+// MakeTestingAmbientContext), or, by happenstance, the trace in
+// question doesn't end up having more than one span. This is very
+// brittle.
+func MakeTestingAmbientCtxWithNewTracer() AmbientContext {
+	return MakeTestingAmbientContext(tracing.NewTracer())
+}
+
+// MakeServerAmbientContext creates an AmbientContext for use by
+// server processes.
+func MakeServerAmbientContext(
+	tracer *tracing.Tracer, idProvider ServerIdentificationPayload,
+) AmbientContext {
+	return AmbientContext{Tracer: tracer, ServerIDs: idProvider}
 }

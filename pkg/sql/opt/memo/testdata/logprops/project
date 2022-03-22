@@ -191,7 +191,7 @@ project
  ├── columns: "?column?":7(int!null)
  ├── fd: ()-->(7)
  ├── prune: (7)
- ├── scan xysd@secondary
+ ├── scan xysd@xysd_s_d_key
  └── projections
       └── const: 1 [as="?column?":7, type=int]
 

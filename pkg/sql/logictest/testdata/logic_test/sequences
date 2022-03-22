@@ -7,6 +7,10 @@ statement ok
 SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
 
 statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = TRUE
+
+
+statement ok
 SET DATABASE = test
 
 statement ok
@@ -110,10 +114,6 @@ CREATE SEQUENCE zero_test INCREMENT 0
 statement ok
 CREATE SEQUENCE high_minvalue_test MINVALUE 5
 
-# Test unimplemented syntax.
-statement error at or near "EOF": syntax error: unimplemented
-CREATE SEQUENCE err_test AS INT2
-
 # Verify validation of START vs MINVALUE/MAXVALUE.
 
 statement error pgcode 22023 START value \(11\) cannot be greater than MAXVALUE \(10\)
@@ -137,7 +137,7 @@ query ITTITTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
 database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                                     state   create_nofks                                                                                         alter_statements  validate_statements  has_partitions  is_multi_region  is_virtual  is_temporary
-52           test           public       63             sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                   false           false            false       false
+104          test           public       116            sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                   false           false            false       false
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
@@ -222,7 +222,7 @@ SELECT foo from select_test
 
 # USING THE `nextval` AND `currval` FUNCTIONS
 
-statement error pgcode 55000 pq: currval\(\): currval of sequence "foo" is not yet defined in this session
+statement error pgcode 55000 pq: currval\(\): currval of sequence "test.public.foo" is not yet defined in this session
 SELECT currval('foo')
 
 query I
@@ -350,11 +350,11 @@ SELECT nextval('spécial')
 statement ok
 CREATE TABLE kv (k bytes primary key, v bytes)
 
-statement error pgcode 42809 "kv" is not a sequence
+statement error pgcode 42809 nextval\(\): "test.public.kv" is not a sequence
 SELECT nextval('kv')
 
-# Parse errors in the argument to nextval are handled.
-statement error pq: nextval\(\): at or near "@": syntax error
+# This matches PG's error.
+statement error pq: nextval\(\): relation "@#%@!324234" does not exist
 SELECT nextval('@#%@!324234')
 
 # You can create and find sequences from other databases.
@@ -418,7 +418,8 @@ SELECT setval('setval_test', 10)
 ----
 10
 
-# Calling setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+# Calling setval with is_called=false doesn't affect currval or lastval; they
+# return the last value obtained with nextval.
 query I
 SELECT currval('setval_test')
 ----
@@ -432,31 +433,36 @@ SELECT lastval()
 query I
 SELECT nextval('setval_test')
 ----
-11
+10
 
 query I
 SELECT currval('setval_test')
 ----
-11
+10
 
 query I
 SELECT lastval()
 ----
-11
+10
 
 let $setval_test_id
 SELECT 'setval_test'::regclass::int
 
 query I
-SELECT setval($setval_test_id::regclass, 20)
+SELECT setval($setval_test_id::regclass, 20, true)
 ----
 20
 
-# Calling setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+# Calling setval with is_called=true does affect currval and lastval.
 query I
 SELECT currval($setval_test_id::regclass)
 ----
-11
+20
+
+query I
+SELECT lastval()
+----
+20
 
 query I
 SELECT nextval($setval_test_id::regclass)
@@ -947,11 +953,13 @@ user testuser
 
 # After the grant, testuser can select, increment, and set.
 
-statement ok
+query I
 SELECT nextval('priv_test')
+----
+1
 
 statement ok
-SELECT setval('priv_test', 5)
+SELECT setval('priv_test', 5, true)
 
 query I
 SELECT last_value FROM priv_test
@@ -1701,7 +1709,6 @@ SELECT nextval('cached_lower_bound_test_2');
 ----
 2
 
-
 query I
 SELECT nextval('cached_lower_bound_test_2');
 ----
@@ -1749,58 +1756,9 @@ SELECT last_value FROM cached_lower_bound_test_2;
 statement ok
 DROP SEQUENCE cached_lower_bound_test_2;
 
-
-# Unit test for #60737
-
-statement ok
-CREATE SEQUENCE s1 MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
-
-statement ok
-CREATE TABLE s2 (A int)
-
-# Case 1: Both s1's are sequences and the old one is being dropped.
-statement ok
-BEGIN
-
-statement ok
-DROP SEQUENCE s1
-
-statement error pgcode 55000 sequence "s1" is being dropped, try again later
-CREATE SEQUENCE IF NOT EXISTS s1 MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
-
-statement ok
-END
-
-# Case 2: Both s2's are different types and the old one is being dropped.
-statement ok
-BEGIN
-
-statement ok
-DROP TABLE s2
-
-statement error pgcode 42809 "s2" is not a sequence
-CREATE SEQUENCE IF NOT EXISTS s2 MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
-
-statement ok
-END
-
-# Case 3: Both s2's are a different type
-statement ok
-BEGIN
-
-statement error pgcode 42809 "s2" is not a sequence
-CREATE SEQUENCE IF NOT EXISTS s2 MINVALUE -4 START WITH -2 CACHE 5 INCREMENT BY -2;
-
-statement ok
-END
-
-statement ok
-DROP SEQUENCE s1
-
-statement ok
-DROP TABLE s2
-
 # Validate that cross DB sequences are detected by internal tables
+subtest cross_db_sequences
+
 statement ok
 CREATE DATABASE db3;
 
@@ -1816,3 +1774,301 @@ SELECT * FROM "".crdb_internal.cross_db_references;
 db2  public  seq   db1  public  t  sequences owning table
 db2  public  seq2  db1  public  t  sequences owning table
 test  public  tdb3ref  db3  public  s  table column refers to sequence
+
+# Testing parsing empty string for currval issue #34527.
+statement error pq: currval\(\): invalid table name:
+SELECT currval('')
+
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_references.enabled = FALSE
+
+# Validate that cross DB sequences are detected by internal tables
+statement ok
+CREATE DATABASE db4;
+
+statement ok
+CREATE SEQUENCE db4.s;
+
+statement error pq: sequence references cannot come from other databases; \(see the 'sql\.cross_db_sequence_references\.enabled' cluster setting\)
+CREATE TABLE tDb4Ref (i INT PRIMARY KEY DEFAULT (nextval('db4.s')));
+
+subtest cached_sequences_invalidate
+
+# Test for #71135 -- make sure that setval invalidates the cached sequence
+# values.
+
+statement ok
+CREATE SEQUENCE seq71135 CACHE 100
+
+query I
+SELECT nextval('seq71135')
+----
+1
+
+query I
+SELECT setval('seq71135', 200, true)
+----
+200
+
+query I
+SELECT lastval()
+----
+200
+
+query I
+SELECT currval('seq71135')
+----
+200
+
+query I
+SELECT nextval('seq71135')
+----
+201
+
+# The 2-parameter version of setval uses is_called=false.
+query I
+SELECT setval('seq71135'::regclass::oid, 500)
+----
+500
+
+query I
+SELECT lastval()
+----
+201
+
+query I
+SELECT currval('seq71135')
+----
+201
+
+query I
+SELECT nextval('seq71135')
+----
+500
+
+subtest sequence_in_txn
+
+# Make sure that setval and next work even if the transaction is rolled back;
+# they do not respect transaction boundaries.
+
+statement ok
+CREATE SEQUENCE seq_txn
+
+# Validate that cross DB sequences are detected by internal tables
+subtest cross_db_sequences
+
+statement ok
+BEGIN
+
+query I
+SELECT setval('seq_txn', 600, true)
+----
+600
+
+statement ok
+ROLLBACK
+
+query I
+SELECT nextval('seq_txn')
+----
+601
+
+statement ok
+BEGIN
+
+query I
+SELECT setval('seq_txn', 610, true)
+----
+610
+
+query I
+SELECT nextval('seq_txn')
+----
+611
+
+statement ok
+ROLLBACK
+
+query I
+SELECT nextval('seq_txn')
+----
+612
+
+# Sequence used for regression test for issue #63147
+statement ok
+CREATE SEQUENCE s63147
+
+statement ok
+CREATE TABLE t63147 (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t63147 (a) VALUES (1), (2)
+
+statement error pgcode 0A000 cannot evaluate scalar expressions containing sequence operations in this context
+ALTER TABLE t63147 ADD b INT DEFAULT nextval('s63147')
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+statement ok
+DROP TABLE t63147
+
+statement ok
+CREATE TABLE t63147 (a INT PRIMARY KEY, b INT DEFAULT (nextval('s63147')))
+
+statement ok
+CREATE VIEW v63147 AS SELECT nextval('s63147') FROM t63147
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+statement ok
+ALTER TABLE t63147 DROP COLUMN b CASCADE
+
+query I
+SELECT count(*) FROM crdb_internal.invalid_objects;
+----
+0
+
+# Verify CREATE SEQUENCE ... AS works as expected.
+statement ok
+CREATE SEQUENCE seqas_0 AS smallint
+
+statement ok
+CREATE SEQUENCE seqas_1 AS int4
+
+statement ok
+CREATE SEQUENCE seqas_2 AS bigint
+
+statement ok
+CREATE SEQUENCE public.seqas_3 AS int2 START WITH -4 INCREMENT BY -3
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_3
+----
+table_name        create_statement
+seqas_3           CREATE SEQUENCE public.seqas_3 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4
+
+statement ok
+CREATE SEQUENCE seqas_4 AS integer
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_4
+----
+table_name        create_statement
+seqas_4           CREATE SEQUENCE public.seqas_4 AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+
+statement ok
+CREATE SEQUENCE seqas_5 AS int8
+
+statement error pgcode 22023 pq: MAXVALUE \(2000000\) must be less than \(32767\) for type INT2
+CREATE SEQUENCE public.seqas_6 AS smallint MAXVALUE 2000000
+
+statement error pgcode 22023 pq: MINVALUE \(-2000000\) must be greater than \(-32768\) for type INT2
+CREATE SEQUENCE public.seqas_7 AS smallint MINVALUE -2000000
+
+statement error pgcode 22023 pq: MINVALUE \(-9999999999999999\) must be greater than \(-2147483648\) for type INT4
+CREATE SEQUENCE seqas_8 as int4 INCREMENT BY -1 MINVALUE -9999999999999999;
+
+statement ok
+SET default_int_size=4
+
+statement ok
+CREATE SEQUENCE seqas_9 AS integer
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_9
+----
+table_name        create_statement
+seqas_9           CREATE SEQUENCE public.seqas_9 AS INT4 MINVALUE 1 MAXVALUE 2147483647 INCREMENT 1 START 1
+
+statement ok
+ALTER SEQUENCE seqas_9 AS smallint
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_9
+----
+table_name        create_statement
+seqas_9           CREATE SEQUENCE public.seqas_9 AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1
+
+statement ok
+CREATE SEQUENCE seqas_10
+AS integer
+START WITH 1
+INCREMENT BY 1
+MAXVALUE 9001
+CACHE 1
+
+query TT colnames
+SHOW CREATE SEQUENCE seqas_10
+----
+table_name  create_statement
+seqas_10    CREATE SEQUENCE public.seqas_10 AS INT4 MINVALUE 1 MAXVALUE 9001 INCREMENT 1 START 1
+
+statement ok
+CREATE SEQUENCE seqas_11 AS integer
+				START WITH 2
+				INCREMENT BY 1
+				MINVALUE 0
+				MAXVALUE 234567
+				CACHE 1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_11]
+----
+CREATE SEQUENCE public.seqas_11 AS INT4 MINVALUE 0 MAXVALUE 234567 INCREMENT 1 START 2
+
+statement ok
+CREATE SEQUENCE seqas_12 AS smallint
+  START WITH -4
+  INCREMENT BY -3
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_12]
+----
+CREATE SEQUENCE public.seqas_12 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4
+
+statement ok
+CREATE SEQUENCE seqas_13
+  AS integer
+  START WITH 1
+  INCREMENT BY 1
+  MAXVALUE 9001
+  CACHE 1
+
+query T
+SELECT create_statement FROM [SHOW CREATE SEQUENCE seqas_13]
+----
+CREATE SEQUENCE public.seqas_13 AS INT4 MINVALUE 1 MAXVALUE 9001 INCREMENT 1 START 1
+
+statement error START value \(45678\) cannot be greater than MAXVALUE \(32767\)
+CREATE SEQUENCE seq_error AS smallint
+  START WITH 45678
+  INCREMENT BY 1
+
+statement error syntax error: invalid integer type: STRING
+CREATE SEQUENCE seqas_error
+  AS string
+  START WITH 1
+  INCREMENT BY 1
+  CACHE 1
+
+statement error MINVALUE \(-1000000\) must be greater than \(-32768\) for type INT2
+CREATE SEQUENCE seqas_error
+  AS smallint
+  START WITH 1
+  INCREMENT BY 1
+  MINVALUE -1000000
+  CACHE 1
+
+statement error pq: MAXVALUE \(123456\) must be less than \(32767\) for type INT2
+CREATE SEQUENCE seqas_error
+  AS smallint
+  START WITH 1
+  INCREMENT BY 1
+  MAXVALUE 123456
+  CACHE 1

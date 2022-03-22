@@ -17,12 +17,17 @@ import (
 
 // AlterDefaultPrivileges represents an ALTER DEFAULT PRIVILEGES statement.
 type AlterDefaultPrivileges struct {
-	Roles NameList
+	Roles RoleSpecList
 	// True if `ALTER DEFAULT PRIVILEGES FOR ALL ROLES` is executed.
 	ForAllRoles bool
 	// If Schema is not specified, ALTER DEFAULT PRIVILEGES is being
 	// run on the current database.
 	Schemas ObjectNamePrefixList
+
+	// Database is only used when converting a granting / revoking incompatible
+	// database privileges to an alter default privileges statement.
+	// If it is not set, the current database is used.
+	Database *Name
 
 	// Only one of Grant or Revoke should be set. IsGrant is used to determine
 	// which one is set.
@@ -82,6 +87,17 @@ const (
 	Schemas   AlterDefaultPrivilegesTargetObject = 4
 )
 
+// GetAlterDefaultPrivilegesTargetObjects returns a slice of all the
+// AlterDefaultPrivilegesTargetObjects.
+func GetAlterDefaultPrivilegesTargetObjects() []AlterDefaultPrivilegesTargetObject {
+	return []AlterDefaultPrivilegesTargetObject{
+		Tables,
+		Sequences,
+		Types,
+		Schemas,
+	}
+}
+
 func (t AlterDefaultPrivilegesTargetObject) String() string {
 	switch t {
 	case Tables:
@@ -97,12 +113,12 @@ func (t AlterDefaultPrivilegesTargetObject) String() string {
 	}
 }
 
-// AbbreviatedGrant represents an the GRANT part of an
+// AbbreviatedGrant represents the GRANT part of an
 // ALTER DEFAULT PRIVILEGES statement.
 type AbbreviatedGrant struct {
 	Privileges      privilege.List
 	Target          AlterDefaultPrivilegesTargetObject
-	Grantees        NameList
+	Grantees        RoleSpecList
 	WithGrantOption bool
 }
 
@@ -128,12 +144,12 @@ func (n *AbbreviatedGrant) Format(ctx *FmtCtx) {
 	}
 }
 
-// AbbreviatedRevoke represents an the REVOKE part of an
+// AbbreviatedRevoke represents the REVOKE part of an
 // ALTER DEFAULT PRIVILEGES statement.
 type AbbreviatedRevoke struct {
 	Privileges     privilege.List
 	Target         AlterDefaultPrivilegesTargetObject
-	Grantees       NameList
+	Grantees       RoleSpecList
 	GrantOptionFor bool
 }
 

@@ -13,9 +13,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -24,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -89,7 +94,7 @@ func streamKVs(
 	}
 
 	details := jobspb.ChangefeedDetails{
-		Targets:       nil, // Not interested in schema changes
+		Tables:        nil, // Not interested in schema changes
 		Opts:          cfOpts,
 		SinkURI:       "", // TODO(yevgeniy): Support sinks
 		StatementTime: statementTime,
@@ -144,13 +149,13 @@ func doCreateReplicationStream(
 	}
 
 	var spans []roachpb.Span
-	if eval.Targets.Tenant == (roachpb.TenantID{}) {
+	if !eval.Targets.TenantID.IsSet() {
 		// TODO(yevgeniy): Only tenant streaming supported now; Support granular streaming.
 		return pgerror.New(pgcode.FeatureNotSupported, "granular replication streaming not supported")
 	}
 
 	telemetry.Count(`replication.create.tenant`)
-	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(eval.Targets.Tenant.ToUint64()))
+	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(eval.Targets.TenantID.ToUint64()))
 	spans = append(spans, roachpb.Span{
 		Key:    prefix,
 		EndKey: prefix.PrefixEnd(),
@@ -207,6 +212,58 @@ func createReplicationStreamHook(
 	return fn, replicationStreamHeader, nil, avoidBuffering, nil
 }
 
+func getReplicationStreamSpec(
+	evalCtx *tree.EvalContext, txn *kv.Txn, streamID streaming.StreamID,
+) (*streampb.ReplicationStreamSpec, error) {
+	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
+	// Returns error if the replication stream is not active
+	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJob(evalCtx.Ctx(), jobspb.JobID(streamID))
+	if err != nil {
+		return nil, errors.Wrapf(err, "Replication stream %d has error", streamID)
+	}
+	if j.Status() != jobs.StatusRunning {
+		return nil, errors.Errorf("Replication stream %d is not running", streamID)
+	}
+
+	// Partition the spans with SQLPlanner
+	var noTxn *kv.Txn
+	dsp := jobExecCtx.DistSQLPlanner()
+	planCtx := dsp.NewPlanningCtx(evalCtx.Ctx(), jobExecCtx.ExtendedEvalContext(),
+		nil /* planner */, noTxn, sql.DistributionTypeSystemTenantOnly)
+
+	replicatedSpans := j.Details().(jobspb.StreamReplicationDetails).Spans
+	spans := make([]roachpb.Span, 0, len(replicatedSpans))
+	for _, span := range replicatedSpans {
+		spans = append(spans, *span)
+	}
+	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &streampb.ReplicationStreamSpec{
+		Partitions: make([]streampb.ReplicationStreamSpec_Partition, 0, len(spanPartitions)),
+	}
+	for _, sp := range spanPartitions {
+		nodeInfo, err := dsp.GetSQLInstanceInfo(sp.SQLInstanceID)
+		if err != nil {
+			return nil, err
+		}
+		res.Partitions = append(res.Partitions, streampb.ReplicationStreamSpec_Partition{
+			NodeID:     roachpb.NodeID(sp.SQLInstanceID),
+			SQLAddress: nodeInfo.SQLAddress,
+			Locality:   nodeInfo.Locality,
+			PartitionSpec: &streampb.StreamPartitionSpec{
+				Spans: sp.Spans,
+				Config: streampb.StreamPartitionSpec_ExecutionConfig{
+					MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
+				},
+			},
+		})
+	}
+	return res, nil
+}
+
 func init() {
-	sql.AddPlanHook(createReplicationStreamHook)
+	sql.AddPlanHook("replication stream", createReplicationStreamHook)
 }

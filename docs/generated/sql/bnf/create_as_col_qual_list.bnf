@@ -1,2 +1,2 @@
 create_as_col_qual_list ::=
-	 ( ( ( ( 'PRIMARY' 'KEY' ) | 'FAMILY' family_name ) ) )*
+	 ( ( ( ( 'PRIMARY' 'KEY' opt_with_storage_parameter_list ) | 'FAMILY' family_name ) ) )*

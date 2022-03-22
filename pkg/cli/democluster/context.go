@@ -53,6 +53,10 @@ type Context struct {
 	// WorkloadGenerator is the desired workload generator.
 	WorkloadGenerator workload.Generator
 
+	// WorkloadMaxQPS controls the amount of queries that can be run per
+	// second.
+	WorkloadMaxQPS int
+
 	// Localities configures the list of localities available for use
 	// by instantiated servers.
 	Localities DemoLocalityList
@@ -88,6 +92,14 @@ type Context struct {
 	// HTTPPort is the first HTTP port number to use when instantiating
 	// servers. Use zero for auto-allocated random ports.
 	HTTPPort int
+
+	// ListeningURLFile can be set to a file which is written to after
+	// the demo cluster has started, to contain a valid connection URL.
+	ListeningURLFile string
+
+	// Multitenant is true if we're starting the demo cluster in
+	// multi-tenant mode.
+	Multitenant bool
 }
 
 // IsInteractive returns true if the demo cluster configuration

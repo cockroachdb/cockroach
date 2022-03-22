@@ -25,11 +25,13 @@ import (
 // TestingKnobs groups testing knobs for the Server.
 type TestingKnobs struct {
 	// DisableAutomaticVersionUpgrade, if set, temporarily disables the server's
-	// automatic version upgrade mechanism.
-	DisableAutomaticVersionUpgrade int32 // accessed atomically
-	// DefaultZoneConfigOverride, if set, overrides the default zone config defined in `pkg/config/zone.go`
+	// automatic version upgrade mechanism (until the channel is closed).
+	DisableAutomaticVersionUpgrade chan struct{}
+	// DefaultZoneConfigOverride, if set, overrides the default zone config
+	// defined in `pkg/config/zone.go`.
 	DefaultZoneConfigOverride *zonepb.ZoneConfig
-	// DefaultSystemZoneConfigOverride, if set, overrides the default system zone config defined in `pkg/config/zone.go`
+	// DefaultSystemZoneConfigOverride, if set, overrides the default system
+	// zone config defined in `pkg/config/zone.go`
 	DefaultSystemZoneConfigOverride *zonepb.ZoneConfig
 	// SignalAfterGettingRPCAddress, if non-nil, is closed after the server gets
 	// an RPC server address, and prior to waiting on PauseAfterGettingRPCAddress below.
@@ -93,14 +95,16 @@ type TestingKnobs struct {
 	// ImportTimeseriesFile, if set, is a file created via `DumpRaw` that written
 	// back to the KV layer upon server start.
 	ImportTimeseriesFile string
+	// ImportTimeseriesMappingFile points to a file containing a YAML map from storeID
+	// to nodeID, for use with ImportTimeseriesFile.
+	ImportTimeseriesMappingFile string
 	// DrainSleepFn used in testing to override the usual sleep function with
 	// a custom function that counts the number of times the sleep function is called.
 	DrainSleepFn func(time.Duration)
 
-	// TenantBlobClientFactory supplies a BlobClientFactory for
-	// use by tenants. By default, tenants have no blob client
-	// factory.
-	TenantBlobClientFactory blobs.BlobClientFactory
+	// BlobClientFactory supplies a BlobClientFactory for
+	// use by servers.
+	BlobClientFactory blobs.BlobClientFactory
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

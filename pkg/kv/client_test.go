@@ -369,10 +369,10 @@ func TestClientPutInline(t *testing.T) {
 func TestClientCPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 	db := createTestClient(t, s)
-	ctx := kv.CtxForCPutInline(context.Background())
 	key := testUser + "/key"
 	value := []byte("value")
 
@@ -733,7 +733,7 @@ func TestConcurrentIncrements(t *testing.T) {
 	// Convenience loop: Crank up this number for testing this
 	// more often. It'll increase test duration though.
 	for k := 0; k < 5; k++ {
-		if err := db.DelRange(context.Background(), testUser+"/value-0", testUser+"/value-1x"); err != nil {
+		if _, err := db.DelRange(context.Background(), testUser+"/value-0", testUser+"/value-1x", false /* returnKeys */); err != nil {
 			t.Fatalf("%d: unable to clean up: %s", k, err)
 		}
 		concurrentIncrements(db, t)
@@ -768,7 +768,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 				})
 
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
+			db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
 
 			prepWithRC := func() *kv.Batch {
 				b := &kv.Batch{}
@@ -916,9 +916,9 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 		if nodeID != 0 {
 			c.Set(context.Background(), nodeID)
 		}
-		dbCtx.NodeID = base.NewSQLIDContainer(0, &c)
+		dbCtx.NodeID = base.NewSQLIDContainerForNode(&c)
 
-		db := kv.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
+		db := kv.NewDBWithContext(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, dbCtx)
 		return db
 	}
 
@@ -937,7 +937,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 		t.Run(fmt.Sprintf("direct-txn-%d", i), func(t *testing.T) {
 			db := setup(test.nodeID)
 			now := db.Clock().NowAsClockTimestamp()
-			kvTxn := roachpb.MakeTransaction("unnamed", nil /*baseKey*/, roachpb.NormalUserPriority, now.ToTimestamp(), db.Clock().MaxOffset().Nanoseconds())
+			kvTxn := roachpb.MakeTransaction("unnamed", nil /* baseKey */, roachpb.NormalUserPriority, now.ToTimestamp(), db.Clock().MaxOffset().Nanoseconds(), int32(test.nodeID))
 			txn := kv.NewTxnFromProto(ctx, db, test.nodeID, now, test.typ, &kvTxn)
 			ots := txn.TestingCloneTxn().ObservedTimestamps
 			if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {

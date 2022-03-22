@@ -162,6 +162,10 @@ func TestTenantRateLimiter(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
+	// Set a small rate limit so the test doesn't take a long time.
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, `SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = 200`)
+
 	tenantID := serverutils.TestTenantID()
 	codec := keys.MakeSQLCodec(tenantID)
 
@@ -180,8 +184,8 @@ func TestTenantRateLimiter(t *testing.T) {
 
 	// We don't know the exact size of the write, but we can set lower and upper
 	// bounds.
-	writeCostLower := float64(cfg.CostModel.KVWriteRequest)
-	writeCostUpper := writeCostLower + 32*float64(cfg.CostModel.KVWriteByte)
+	writeCostLower := cfg.WriteRequestUnits
+	writeCostUpper := cfg.WriteRequestUnits + float64(32)*cfg.WriteUnitsPerByte
 	// burstWrites is a number of writes that don't exceed the burst limit.
 	burstWrites := int(cfg.Burst / writeCostUpper)
 	// tooManyWrites is a number of writes which definitely exceed the burst
@@ -222,9 +226,8 @@ func TestTenantRateLimiter(t *testing.T) {
 
 	// Create some tooling to read and verify metrics off of the prometheus
 	// endpoint.
-	sqlutils.MakeSQLRunner(sqlDB).Exec(t,
-		`SET CLUSTER SETTING server.child_metrics.enabled = true`)
-	httpClient, err := s.GetHTTPClient()
+	runner.Exec(t, `SET CLUSTER SETTING server.child_metrics.enabled = true`)
+	httpClient, err := s.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 	getMetrics := func() string {
 		resp, err := httpClient.Get(s.AdminURL() + "/_status/vars")
@@ -245,5 +248,9 @@ func TestTenantRateLimiter(t *testing.T) {
 
 	// Ensure that the metric for the admitted requests reflects the number of
 	// admitted requests.
-	require.Contains(t, getMetrics(), makeMetricStr(int64(tooManyWrites)))
+	// TODO(radu): this is fragile because a background write could sneak in and
+	// the count wouldn't match exactly.
+	m := getMetrics()
+	exp := makeMetricStr(int64(tooManyWrites))
+	require.Contains(t, m, exp, "could not find %s in metrics: \n%s\n", exp, m)
 }

@@ -252,7 +252,7 @@ func loadKeyFile(keyPath string) (key []byte, err error) {
 }
 
 // Simple wrapper to make it easier to store certs somewhere else later.
-// Unless overwrite is true, this function will error if a file alread exists
+// Unless overwrite is true, this function will error if a file already exists
 // at certFilePath.
 // TODO(aaron-crl): This was lifted from 'pkg/security' and modified. It might
 // make sense to refactor these calls back to 'pkg/security' rather than
@@ -267,7 +267,7 @@ func writeCertificateFile(certFilePath string, certificatePEM *pem.Block, overwr
 }
 
 // Simple wrapper to make it easier to store certs somewhere else later.
-// Unless overwrite is true, this function will error if a file alread exists
+// Unless overwrite is true, this function will error if a file already exists
 // at keyFilePath.
 // TODO(aaron-crl): This was lifted from 'pkg/security' and modified. It might
 // make sense to refactor these calls back to 'pkg/security' rather than

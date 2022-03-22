@@ -1288,6 +1288,9 @@ define Op {
 
 [LetNonCustomFunc]
 (Op $input:"foo" & (Let ($a $b):(Op $input) $b)) => (Op)
+
+[LetResultDeclaredOutsideLet]
+(Op $input:"foo" & (Func $a:(Func2 $input)) & (Let ($b $c):(Func3 $input) $a)) => (Op)
 ----
 test.opt:5:1: duplicate 'Op' define statement
 test.opt:12:1: unrecognized match name 'Unknown'
@@ -1323,6 +1326,7 @@ test.opt:102:25: duplicate bind label 'a'
 test.opt:105:25: duplicate bind label 'input'
 test.opt:108:37: match pattern cannot use variable references
 test.opt:108:25: let target must be a custom function
+test.opt:111:75: unrecognized variable name 'a'
 
 # Type inference errors.
 compile

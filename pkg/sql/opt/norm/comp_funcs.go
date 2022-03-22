@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // CommuteInequality swaps the operands of an inequality comparison expression,
@@ -38,7 +38,7 @@ func (c *CustomFuncs) CommuteInequality(
 	case opt.LtOp:
 		return c.f.ConstructGt(right, left)
 	}
-	panic(errors.AssertionFailedf("called commuteInequality with operator %s", log.Safe(op)))
+	panic(errors.AssertionFailedf("called commuteInequality with operator %s", redact.Safe(op)))
 }
 
 // NormalizeTupleEquality remaps the elements of two tuples compared for

@@ -19,8 +19,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/errors"
 )
 
 var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>\w+)\s+\[.+]$`)
@@ -29,13 +32,6 @@ var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<mino
 // TODO(arul): Investigate why we need this and can't install sql alchemy using
 //  pip.
 var supportedSQLAlchemyTag = "rel_1_4_17"
-
-// TODO(arul): This manual install of alembic is only there until alembic 1.7
-//  comes out. Once that happens, all of this can be removed and we can simply
-// 	install alembic when installing dependencies.
-var supportedAlembicTag = "rel_1_6_5"
-
-var alembicReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
@@ -67,13 +63,6 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.L().Printf("Latest sqlalchemy release is %s.", latestTag)
 	t.L().Printf("Supported sqlalchemy release is %s.", supportedSQLAlchemyTag)
 
-	latestAlembicTag, err := repeatGetLatestTag(ctx, t, "sqlalchemy", "alembic", alembicReleaseTagRegex)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.L().Printf("Latest alembic release is %s.", latestAlembicTag)
-	t.L().Printf("Supported alembic release is %s.", supportedAlembicTag)
-
 	if err := repeatRunE(ctx, t, c, node, "update apt-get", `
 		sudo add-apt-repository ppa:deadsnakes/ppa &&
 		sudo apt-get -qq update
@@ -102,7 +91,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	if err := repeatRunE(ctx, t, c, node, "install pytest", `
-		sudo pip3 install --upgrade --force-reinstall setuptools pytest==6.0.1 pytest-xdist psycopg2
+		sudo pip3 install --upgrade --force-reinstall setuptools pytest==6.0.1 pytest-xdist psycopg2 alembic
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -122,25 +111,6 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Status("installing sqlalchemy-cockroachdb")
 	if err := repeatRunE(ctx, t, c, node, "installing sqlalchemy=cockroachdb", `
 		cd /mnt/data1/sqlalchemy-cockroachdb && sudo pip3 install .
-	`); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := repeatRunE(ctx, t, c, node, "remove old sqlalchemy-alembic", `
-		sudo rm -rf /mnt/data1/sqlalchemy-alembic
-	`); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := repeatGitCloneE(ctx, t, c,
-		"https://github.com/sqlalchemy/alembic", "/mnt/data1/sqlalchemy-alembic",
-		"master", node); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Status("installing alembic from github")
-	if err := repeatRunE(ctx, t, c, node, "installing sqlalchemy-alembic", `
-		cd /mnt/data1/sqlalchemy-alembic && sudo pip3 install .
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -168,14 +138,14 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	t.Status("setting up cockroach")
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-	c.Start(ctx, c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-	version, err := fetchCockroachVersion(ctx, c, node[0])
+	version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+	if err := alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0]); err != nil {
 		t.Fatal(err)
 	}
 
@@ -189,11 +159,25 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Status("running sqlalchemy test suite")
 	// Note that this is expected to return an error, since the test suite
 	// will fail. And it is safe to swallow it here.
-	rawResults, _ := c.RunWithBuffer(ctx, t.L(), node,
+	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
 		`cd /mnt/data1/sqlalchemy-cockroachdb/ && pytest --maxfail=0 \
-		--dburi=cockroachdb://root@localhost:26257/defaultdb?sslmode=disable \
+		--dburi='cockroachdb://root@localhost:26257/defaultdb?sslmode=disable&disable_cockroachdb_telemetry=true' \
 		test/test_suite_sqlalchemy.py
 	`)
+
+	// Expected to fail but we should still scan the error to check if
+	// there's an SSH/roachprod error.
+	if err != nil {
+		// install.NonZeroExitCode includes unrelated to SSH errors ("255")
+		// or roachprod errors, so we call t.Fatal if the error is not an
+		// install.NonZeroExitCode error
+		commandError := (*install.NonZeroExitCode)(nil)
+		if !errors.As(err, &commandError) {
+			t.Fatal(err)
+		}
+	}
+
+	rawResults := []byte(result.Stdout + result.Stderr)
 
 	t.Status("collating the test results")
 	t.L().Printf("Test Results: %s", rawResults)

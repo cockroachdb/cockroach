@@ -13,12 +13,18 @@ package tests
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/stretchr/testify/require"
 )
+
+const envYCSBFlags = "ROACHTEST_YCSB_FLAGS"
 
 func registerYCSB(r registry.Registry) {
 	workloads := []string{"A", "B", "C", "D", "E", "F"}
@@ -53,18 +59,23 @@ func registerYCSB(r registry.Registry) {
 
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes))
-		WaitFor3XReplication(t, c.Conn(ctx, 1))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), 1))
+		require.NoError(t, err)
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
-			sfu := fmt.Sprintf(" --select-for-update=%t", t.IsBuildVersion("v19.2.0"))
-			ramp := " --ramp=" + ifLocal(c, "0s", "2m")
-			duration := " --duration=" + ifLocal(c, "10s", "10m")
+			var args string
+			args += fmt.Sprintf(" --select-for-update=%t", t.IsBuildVersion("v19.2.0"))
+			args += " --ramp=" + ifLocal(c, "0s", "2m")
+			args += " --duration=" + ifLocal(c, "10s", "30m")
+			if envFlags := os.Getenv(envYCSBFlags); envFlags != "" {
+				args += " " + envFlags
+			}
 			cmd := fmt.Sprintf(
 				"./workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
-					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+sfu+ramp+duration+
+					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+args+
 					" {pgurl:1-%d}",
 				wl, conc, nodes, nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)

@@ -16,7 +16,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -27,16 +26,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
@@ -65,14 +65,14 @@ func TestNoLinkForbidden(t *testing.T) {
 			"testing",  // defines flags
 			"go/build", // probably not something we want in the main binary
 			"github.com/cockroachdb/cockroach/pkg/security/securitytest", // contains certificates
+			"github.com/cockroachdb/cockroach/pkg/sql/randgen",           // meant for testing code only
 		},
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/testutils", // meant for testing code only
 		},
-		// Sentry and the errors library use go/build to determine
+		// The errors library uses go/build to determine
 		// the list of source directories (used to strip the source prefix
 		// in stack trace reports).
-		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/sentry-go",
 		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/errors/withstack",
 	)
 }
@@ -138,51 +138,61 @@ func TestClusterNameFlag(t *testing.T) {
 	}
 }
 
-func TestSQLMemoryPoolFlagValue(t *testing.T) {
+func TestMemoryPoolFlagValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Avoid leaking configuration changes after the test ends.
-	defer initCLIDefaults()
-
-	f := startCmd.Flags()
-
-	// Check absolute values.
-	testCases := []struct {
-		value    string
-		expected int64
+	for _, tc := range []struct {
+		flag   string
+		config *int64
 	}{
-		{"100MB", 100 * 1000 * 1000},
-		{".5GiB", 512 * 1024 * 1024},
-		{"1.3", 1},
-	}
-	for _, c := range testCases {
-		args := []string{"--max-sql-memory", c.value}
-		if err := f.Parse(args); err != nil {
-			t.Fatal(err)
-		}
-		if c.expected != serverCfg.MemoryPoolSize {
-			t.Errorf("expected %d, but got %d", c.expected, serverCfg.MemoryPoolSize)
-		}
-	}
+		{flag: "--max-sql-memory", config: &serverCfg.MemoryPoolSize},
+		{flag: "--max-tsdb-memory", config: &serverCfg.TimeSeriesServerConfig.QueryMemoryMax},
+	} {
+		t.Run(tc.flag, func(t *testing.T) {
+			// Avoid leaking configuration changes after the test ends.
+			defer initCLIDefaults()
 
-	for _, c := range []string{".30", "0.3"} {
-		args := []string{"--max-sql-memory", c}
-		if err := f.Parse(args); err != nil {
-			t.Fatal(err)
-		}
+			f := startCmd.Flags()
 
-		// Check fractional values.
-		maxMem, err := status.GetTotalMemory(context.Background())
-		if err != nil {
-			t.Logf("total memory unknown: %v", err)
-			return
-		}
-		expectedLow := (maxMem * 28) / 100
-		expectedHigh := (maxMem * 32) / 100
-		if serverCfg.MemoryPoolSize < expectedLow || serverCfg.MemoryPoolSize > expectedHigh {
-			t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, serverCfg.MemoryPoolSize)
-		}
+			// Check absolute values.
+			testCases := []struct {
+				value    string
+				expected int64
+			}{
+				{"100MB", 100 * 1000 * 1000},
+				{".5GiB", 512 * 1024 * 1024},
+				{"1.3", 1},
+			}
+			for _, c := range testCases {
+				args := []string{tc.flag, c.value}
+				if err := f.Parse(args); err != nil {
+					t.Fatal(err)
+				}
+				if c.expected != *tc.config {
+					t.Errorf("expected %d, but got %d", c.expected, tc.config)
+				}
+			}
+
+			for _, c := range []string{".30", "0.3"} {
+				args := []string{tc.flag, c}
+				if err := f.Parse(args); err != nil {
+					t.Fatal(err)
+				}
+
+				// Check fractional values.
+				maxMem, err := status.GetTotalMemory(context.Background())
+				if err != nil {
+					t.Logf("total memory unknown: %v", err)
+					return
+				}
+				expectedLow := (maxMem * 28) / 100
+				expectedHigh := (maxMem * 32) / 100
+				if *tc.config < expectedLow || *tc.config > expectedHigh {
+					t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, *tc.config)
+				}
+			}
+		})
 	}
 }
 
@@ -222,19 +232,13 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 	defer initCLIDefaults()
 
 	// Prepare a dummy default certificate directory.
-	defCertsDirPath, err := ioutil.TempDir("", "defCerts")
-	if err != nil {
-		t.Fatal(err)
-	}
+	defCertsDirPath := t.TempDir()
 	defCertsDirPath, _ = filepath.Abs(defCertsDirPath)
 	cleanup := securitytest.CreateTestCerts(defCertsDirPath)
 	defer func() { _ = cleanup() }()
 
 	// Prepare a custom certificate directory.
-	testCertsDirPath, err := ioutil.TempDir("", "customCerts")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testCertsDirPath := t.TempDir()
 	testCertsDirPath, _ = filepath.Abs(testCertsDirPath)
 	cleanup2 := securitytest.CreateTestCerts(testCertsDirPath)
 	defer func() { _ = cleanup2() }()
@@ -331,6 +335,11 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslrootcert=blih/loh.crt"}, nil, `invalid file name for "sslrootcert": expected .* got .*`, ""},
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslcert=blih/loh.crt"}, nil, `invalid file name for "sslcert": expected .* got .*`, ""},
 		{anyNonSQL, []string{"--url=postgresql://foo?sslmode=verify-full&sslkey=blih/loh.crt"}, nil, `invalid file name for "sslkey": expected .* got .*`, ""},
+
+		// Check that not specifying a certs dir will cause Go to use root trust store.
+		{anyCmd, []string{"--url=postgresql://foo?sslmode=verify-full"}, []string{"--host=foo"}, "", ""},
+		{anySQL, []string{"--url=postgresql://foo?sslmode=verify-ca"}, []string{"--host=foo"}, "", ""},
+		{anySQL, []string{"--url=postgresql://foo?sslmode=require"}, []string{"--host=foo"}, "", ""},
 	}
 
 	type capturedFlags struct {
@@ -479,14 +488,14 @@ func TestServerConnSettings(t *testing.T) {
 			"192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", ":"},
-			":", ":",
-			":", ":",
-			":", ":",
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1:"},
-			"127.0.0.1:", "127.0.0.1:",
-			"127.0.0.1:", "127.0.0.1:",
-			"127.0.0.1:", "127.0.0.1:",
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", ":12345"},
 			":12345", ":12345",
@@ -886,15 +895,11 @@ func TestServerJoinSettings(t *testing.T) {
 
 		var actual []string
 		myHostname, _ := os.Hostname()
-		for _, addr := range serverCfg.JoinList {
-			res, err := resolver.NewResolver(addr)
-			if err != nil {
-				t.Error(err)
-			}
-			actualAddr := res.Addr()
+		for _, j := range serverCfg.JoinList {
+			addr := util.MakeUnresolvedAddrWithDefaults("tcp", j, base.DefaultPort)
+
 			// Normalize the local hostname to make the test location-agnostic.
-			actualAddr = strings.ReplaceAll(actualAddr, myHostname, "HOSTNAME")
-			actual = append(actual, actualAddr)
+			actual = append(actual, strings.ReplaceAll(addr.String(), myHostname, "HOSTNAME"))
 		}
 		if !reflect.DeepEqual(td.expectedJoin, actual) {
 			t.Errorf("%d. serverCfg.JoinList expected %#v, but got %#v. td.args was '%#v'.",
@@ -1230,6 +1235,28 @@ Use "cockroach [command] --help" for more information about a command.
 			got := strings.Join(final, "\n")
 
 			assert.Equal(t, test.expected, got)
+		})
+	}
+}
+
+func TestSQLPodStorageDefaults(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer initCLIDefaults()
+
+	for _, td := range []struct {
+		args      []string
+		storePath string
+	}{{[]string{"mt", "start-sql", "--tenant-id", "9"}, "cockroach-data-tenant-9"},
+		{[]string{"mt", "start-sql", "--tenant-id", "9", "--store", "/tmp/data"}, "/tmp/data"},
+	} {
+		t.Run(strings.Join(td.args, ","), func(t *testing.T) {
+			initCLIDefaults()
+			f := mtStartSQLCmd.Flags()
+			require.NoError(t, f.Parse(td.args))
+			require.NoError(t, mtStartSQLCmd.PersistentPreRunE(mtStartSQLCmd, td.args))
+			assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
 		})
 	}
 }

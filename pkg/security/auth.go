@@ -28,7 +28,15 @@ var certPrincipalMap struct {
 // UserAuthHook authenticates a user based on their username and whether their
 // connection originates from a client or another node in the cluster. It
 // returns an optional func that is run at connection close.
-type UserAuthHook func(context.Context, SQLUsername, bool) (connClose func(), _ error)
+//
+// The systemIdentity is the external identity, from GSSAPI or an X.509
+// certificate, while databaseUsername reflects any username mappings
+// that may have been applied to the given connection.
+type UserAuthHook func(
+	ctx context.Context,
+	systemIdentity SQLUsername,
+	clientConnection bool,
+) error
 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
 // list must either be empty or have the format <source>:<dest>. The principal
@@ -110,67 +118,80 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		}
 	}
 
-	return func(ctx context.Context, requestedUser SQLUsername, clientConnection bool) (func(), error) {
+	return func(ctx context.Context, systemIdentity SQLUsername, clientConnection bool) error {
 		// TODO(marc): we may eventually need stricter user syntax rules.
-		if requestedUser.Undefined() {
-			return nil, errors.New("user is missing")
+		if systemIdentity.Undefined() {
+			return errors.New("user is missing")
 		}
 
-		if !clientConnection && !requestedUser.IsNodeUser() {
-			return nil, errors.Errorf("user %s is not allowed", requestedUser)
+		if !clientConnection && !systemIdentity.IsNodeUser() {
+			return errors.Errorf("user %s is not allowed", systemIdentity)
 		}
 
 		// If running in insecure mode, we have nothing to verify it against.
 		if insecureMode {
-			return nil, nil
+			return nil
 		}
 
 		// The client certificate should not be a tenant client type. For now just
 		// check that it doesn't have OU=Tenants. It would make sense to add
 		// explicit OU=Users to all client certificates and to check for match.
-		ous := tlsState.PeerCertificates[0].Subject.OrganizationalUnit
-		if Contains(ous, TenantsOU) {
-			return nil,
-				errors.Errorf("using tenant client certificate as user certificate is not allowed")
+		if IsTenantCertificate(tlsState.PeerCertificates[0]) {
+			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
-		// The client certificate user must match the requested user,
-		// except if the certificate user is NodeUser, which is allowed to
-		// act on behalf of all other users.
-		if !Contains(certUsers, requestedUser.Normalized()) && !Contains(certUsers, NodeUser) {
-			return nil, errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUsers)
+		// The client certificate user must match the requested user.
+		if !Contains(certUsers, systemIdentity.Normalized()) {
+			return errors.Errorf("requested user is %s, but certificate is for %s", systemIdentity, certUsers)
 		}
 
-		return nil, nil
+		return nil
 	}, nil
+}
+
+// IsTenantCertificate returns true if the passed certificate indicates an
+// inbound Tenant connection.
+func IsTenantCertificate(cert *x509.Certificate) bool {
+	return Contains(cert.Subject.OrganizationalUnit, TenantsOU)
 }
 
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
-func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
-	return func(ctx context.Context, requestedUser SQLUsername, clientConnection bool) (func(), error) {
-		if requestedUser.Undefined() {
-			return nil, errors.New("user is missing")
+func UserAuthPasswordHook(
+	insecureMode bool, password string, hashedPassword PasswordHash,
+) UserAuthHook {
+	return func(ctx context.Context, systemIdentity SQLUsername, clientConnection bool) error {
+		if systemIdentity.Undefined() {
+			return errors.New("user is missing")
 		}
 
 		if !clientConnection {
-			return nil, errors.New("password authentication is only available for client connections")
+			return errors.New("password authentication is only available for client connections")
 		}
 
 		if insecureMode {
-			return nil, nil
+			return nil
 		}
 
 		// If the requested user has an empty password, disallow authentication.
-		if len(password) == 0 || CompareHashAndPassword(ctx, hashedPassword, password) != nil {
-			return nil, errors.Errorf(ErrPasswordUserAuthFailed, requestedUser)
+		if len(password) == 0 {
+			return NewErrPasswordUserAuthFailed(systemIdentity)
+		}
+		ok, err := CompareHashAndCleartextPassword(ctx, hashedPassword, password)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return NewErrPasswordUserAuthFailed(systemIdentity)
 		}
 
-		return nil, nil
+		return nil
 	}
 }
 
-// ErrPasswordUserAuthFailed is the error template for failed password auth
-// of a user. It should be used when the password is incorrect or the user
-// does not exist.
-const ErrPasswordUserAuthFailed = "password authentication failed for user %s"
+// NewErrPasswordUserAuthFailed constructs an error that represents
+// failed password authentication for a user. It should be used when
+// the password is incorrect or the user does not exist.
+func NewErrPasswordUserAuthFailed(username SQLUsername) error {
+	return errors.Newf("password authentication failed for user %s", username)
+}

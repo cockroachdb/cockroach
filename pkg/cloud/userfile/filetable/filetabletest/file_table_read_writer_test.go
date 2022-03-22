@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sort"
 	"testing"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors/oserror"
@@ -45,7 +45,7 @@ func uploadFile(
 	db *kv.DB,
 ) ([]byte, error) {
 	data := make([]byte, fileSize)
-	randGen, _ := randutil.NewPseudoRand()
+	randGen, _ := randutil.NewTestRand()
 	randutil.ReadTestdataBytes(randGen, data)
 
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -169,8 +169,9 @@ func TestReadWriteFile(t *testing.T) {
 		reader, size, err := fileTableReadWriter.ReadFile(ctx, filename, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(len(expected)), size)
-		got, err := ioutil.ReadAll(reader)
+		got, err := ioctx.ReadAll(ctx, reader)
 		require.NoError(t, err)
+		require.NoError(t, reader.Close(ctx))
 		return bytes.Equal(got, expected)
 	}
 
@@ -279,7 +280,7 @@ func TestReadWriteFile(t *testing.T) {
 		fileSize := 1024
 
 		data := make([]byte, fileSize)
-		randGen, _ := randutil.NewPseudoRand()
+		randGen, _ := randutil.NewTestRand()
 		randutil.ReadTestdataBytes(randGen, data)
 
 		writer, err := fileTableReadWriter.NewFileWriter(ctx, testFileName, chunkSize)
@@ -355,9 +356,10 @@ func TestUserGrants(t *testing.T) {
 	reader, size, err := fileTableReadWriter.ReadFile(ctx, "file1", 0)
 	require.NoError(t, err)
 	require.Equal(t, int64(len(expected)), size)
-	got, err := ioutil.ReadAll(reader)
+	got, err := ioctx.ReadAll(ctx, reader)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(got, expected))
+	require.NoError(t, reader.Close(ctx))
 
 	// Delete file to test DELETE privilege.
 	require.NoError(t, fileTableReadWriter.DeleteFile(ctx, "file1"))
@@ -436,14 +438,15 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	// payload tables created by john above. FileToTableSystem should have revoked
 	// these privileges.
 	//
-	// Only grantees on the table should be admin, root and john (5 privileges).
+	// Only grantees on the table should be admin, root and john
+	// (each user has ALL).
 	grantees, err := getTableGrantees(ctx, fileTableReadWriter.GetFQFileTableName(), conn)
 	require.NoError(t, err)
-	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
+	require.Equal(t, []string{"admin", "john", "root"}, grantees)
 
 	grantees, err = getTableGrantees(ctx, fileTableReadWriter.GetFQPayloadTableName(), conn)
 	require.NoError(t, err)
-	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
+	require.Equal(t, []string{"admin", "john", "root"}, grantees)
 }
 
 // TestDifferentRoleDisallowed tests that a user who does not own the file and
@@ -493,14 +496,15 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	// payload tables created by john above. FileToTableSystem should have
 	// revoked these privileges.
 	//
-	// Only grantees on the table should be admin, root and john (5 privileges).
+	// Only grantees on the table should be admin, root and john
+	// (each user has ALL).
 	grantees, err := getTableGrantees(ctx, fileTableReadWriter.GetFQFileTableName(), conn)
 	require.NoError(t, err)
-	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
+	require.Equal(t, []string{"admin", "john", "root"}, grantees)
 
 	grantees, err = getTableGrantees(ctx, fileTableReadWriter.GetFQPayloadTableName(), conn)
 	require.NoError(t, err)
-	require.Equal(t, []string{"admin", "john", "john", "john", "john", "john", "root"}, grantees)
+	require.Equal(t, []string{"admin", "john", "root"}, grantees)
 }
 
 // TestDatabaseScope tests that the FileToTableSystem executes all of its
@@ -526,9 +530,10 @@ func TestDatabaseScope(t *testing.T) {
 	oldDBReader, oldDBSize, err := fileTableReadWriter.ReadFile(ctx, "file1", 0)
 	require.NoError(t, err)
 	require.Equal(t, int64(len(uploadedContent)), oldDBSize)
-	oldDBContent, err := ioutil.ReadAll(oldDBReader)
+	oldDBContent, err := ioctx.ReadAll(ctx, oldDBReader)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(uploadedContent, oldDBContent))
+	require.NoError(t, oldDBReader.Close(ctx))
 
 	// Switch database and attempt to read the file.
 	_, err = sqlDB.Exec(`CREATE DATABASE newdb`)

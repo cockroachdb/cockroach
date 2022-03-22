@@ -216,6 +216,7 @@ func (d *DiskBackedNumberedRowContainer) Close(ctx context.Context) {
 	if d.deduper != nil {
 		d.deduper.Close(ctx)
 	}
+	d.cacheMap = nil
 }
 
 // numberedDiskRowIterator wraps a numberedRowIterator and adds two pieces
@@ -293,7 +294,7 @@ type numberedDiskRowIterator struct {
 	// EncDatumRow. The top element has the highest nextAccess and is the
 	// best candidate to evict.
 	cacheHeap  cacheMaxNextAccessHeap
-	datumAlloc rowenc.DatumAlloc
+	datumAlloc tree.DatumAlloc
 	rowAlloc   rowenc.EncDatumRowAlloc
 
 	hitCount  int

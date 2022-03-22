@@ -20,11 +20,11 @@ type BoolSetting struct {
 	defaultValue bool
 }
 
-var _ extendedSetting = &BoolSetting{}
+var _ internalSetting = &BoolSetting{}
 
 // Get retrieves the bool value in the setting.
 func (b *BoolSetting) Get(sv *Values) bool {
-	return sv.getInt64(b.slotIdx) != 0
+	return sv.getInt64(b.slot) != 0
 }
 
 func (b *BoolSetting) String(sv *Values) string {
@@ -60,12 +60,7 @@ var _ = (*BoolSetting).Default
 // For testing usage only.
 func (b *BoolSetting) Override(ctx context.Context, sv *Values, v bool) {
 	b.set(ctx, sv, v)
-
-	vInt := int64(0)
-	if v {
-		vInt = 1
-	}
-	sv.setDefaultOverrideInt64(b.slotIdx, vInt)
+	sv.setDefaultOverride(b.slot, v)
 }
 
 func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) {
@@ -73,14 +68,13 @@ func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) {
 	if v {
 		vInt = 1
 	}
-	sv.setInt64(ctx, b.slotIdx, vInt)
+	sv.setInt64(ctx, b.slot, vInt)
 }
 
 func (b *BoolSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
-	ok, val, _ := sv.getDefaultOverride(b.slotIdx)
-	if ok {
-		b.set(ctx, sv, val > 0)
+	if val := sv.getDefaultOverride(b.slot); val != nil {
+		b.set(ctx, sv, val.(bool))
 		return
 	}
 	b.set(ctx, sv, b.defaultValue)
@@ -92,18 +86,9 @@ func (b *BoolSetting) WithPublic() *BoolSetting {
 	return b
 }
 
-// WithSystemOnly marks this setting as system-only and can be chained.
-func (b *BoolSetting) WithSystemOnly() *BoolSetting {
-	b.common.systemOnly = true
-	return b
-}
-
-// Defeat the linter.
-var _ = (*BoolSetting).WithSystemOnly
-
 // RegisterBoolSetting defines a new setting with type bool.
-func RegisterBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
+func RegisterBoolSetting(class Class, key, desc string, defaultValue bool) *BoolSetting {
 	setting := &BoolSetting{defaultValue: defaultValue}
-	register(key, desc, setting)
+	register(class, key, desc, setting)
 	return setting
 }

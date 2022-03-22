@@ -266,8 +266,8 @@ eexpect Description
 eexpect root@
 end_test
 
-# Finally terminate with Ctrl+C.
-interrupt
+# Finally terminate with Ctrl+D.
+send_eof
 eexpect eof
 
 spawn /bin/bash
@@ -301,7 +301,7 @@ eexpect "errexit,false"
 eexpect "prompt1,%n@"
 eexpect "show_times,true"
 eexpect root@
-interrupt
+send_eof
 eexpect ":/# "
 
 # Then verify that the defaults can be overridden.
@@ -316,7 +316,7 @@ eexpect "errexit,true"
 eexpect "prompt1,%n@haa"
 eexpect "show_times,false"
 eexpect root@
-interrupt
+send_eof
 eexpect ":/# "
 
 end_test

@@ -16,12 +16,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 )
 
 func TestCompiler(t *testing.T) {
-	datadriven.RunTest(t, "testdata/compiler", func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testutils.TestDataPath(t, "compiler"), func(t *testing.T, d *datadriven.TestData) string {
 		// Only compile command supported.
 		if d.Cmd != "compile" {
 			t.FailNow()

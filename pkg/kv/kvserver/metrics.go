@@ -12,6 +12,8 @@ package kvserver
 
 import (
 	"context"
+	"runtime/debug"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -63,6 +65,12 @@ var (
 	metaQuiescentCount = metric.Metadata{
 		Name:        "replicas.quiescent",
 		Help:        "Number of quiesced replicas",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaUninitializedCount = metric.Metadata{
+		Name:        "replicas.uninitialized",
+		Help:        "Number of uninitialized replicas, this does not include uninitialized replicas that can lie dormant in a persistent state.",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -494,6 +502,16 @@ var (
 		Measurement: "Leader Transfers",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeLossOfQuorumRecoveries = metric.Metadata{
+		Name: "range.recoveries",
+		Help: `Count of offline loss of quorum recovery operations performed on ranges.
+
+This count increments for every range recovered in offline loss of quorum
+recovery operation. Metric is updated when node on which survivor replica
+is located starts following the recovery.`,
+		Measurement: "Quorum Recoveries",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Raft processing metrics.
 	metaRaftTicks = metric.Metadata{
@@ -503,8 +521,12 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRaftWorkingDurationNanos = metric.Metadata{
-		Name:        "raft.process.workingnanos",
-		Help:        "Nanoseconds spent in store.processRaft() working",
+		Name: "raft.process.workingnanos",
+		Help: `Nanoseconds spent in store.processRaft() working.
+
+This is the sum of the measurements passed to the raft.process.handleready.latency
+histogram.
+`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -515,38 +537,102 @@ var (
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftCommandsApplied = metric.Metadata{
-		Name:        "raft.commandsapplied",
-		Help:        "Count of Raft commands applied",
+		Name: "raft.commandsapplied",
+		Help: `Count of Raft commands applied.
+
+This measurement is taken on the Raft apply loops of all Replicas (leaders and
+followers alike), meaning that it does not measure the number of Raft commands
+*proposed* (in the hypothetical extreme case, all Replicas may apply all commands
+through snapshots, thus not increasing this metric at all).
+Instead, it is a proxy for how much work is being done advancing the Replica
+state machines on this node.`,
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRaftLogCommitLatency = metric.Metadata{
-		Name:        "raft.process.logcommit.latency",
-		Help:        "Latency histogram for committing Raft log entries",
+		Name: "raft.process.logcommit.latency",
+		Help: `Latency histogram for committing Raft log entries to stable storage
+
+This measures the latency of durably committing a group of newly received Raft
+entries as well as the HardState entry to disk. This excludes any data
+processing, i.e. we measure purely the commit latency of the resulting Engine
+write. Homogeneous bands of p50-p99 latencies (in the presence of regular Raft
+traffic), make it likely that the storage layer is healthy. Spikes in the
+latency bands can either hint at the presence of large sets of Raft entries
+being received, or at performance issues at the storage layer.
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftCommandCommitLatency = metric.Metadata{
-		Name:        "raft.process.commandcommit.latency",
-		Help:        "Latency histogram for committing Raft commands",
+		Name: "raft.process.commandcommit.latency",
+		Help: `Latency histogram for applying a batch of Raft commands to the state machine.
+
+This metric is misnamed: it measures the latency for *applying* a batch of
+committed Raft commands to a Replica state machine. This requires only
+non-durable I/O (except for replication configuration changes).
+
+Note that a "batch" in this context is really a sub-batch of the batch received
+for application during raft ready handling. The
+'raft.process.applycommitted.latency' histogram is likely more suitable in most
+cases, as it measures the total latency across all sub-batches (i.e. the sum of
+commandcommit.latency for a complete batch).
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	// TODO(tbg): I think this metric skews low because we will often handle Readies
+	// for which the result is that there is nothing to do. Do we want to change this
+	// metric to only record ready handling when there is a Ready? That seems more
+	// useful, experimentally it seems that we're recording 50% no-ops right now.
+	// Though they aren't really no-ops, they still have to get a mutex and check
+	// for a Ready, etc, but I still think it would be better to avoid those measure-
+	// ments and to count the number of noops instead if we really want to.
 	metaRaftHandleReadyLatency = metric.Metadata{
-		Name:        "raft.process.handleready.latency",
-		Help:        "Latency histogram for handling a Raft ready",
+		Name: "raft.process.handleready.latency",
+		Help: `Latency histogram for handling a Raft ready.
+
+This measures the end-to-end-latency of the Raft state advancement loop, and
+in particular includes:
+- snapshot application
+- SST ingestion
+- durably appending to the Raft log (i.e. includes fsync)
+- entry application (incl. replicated side effects, notably log truncation)
+as well as updates to in-memory structures.
+
+The above steps include the work measured in 'raft.process.commandcommit.latency',
+as well as 'raft.process.applycommitted.latency'. Note that matching percentiles
+of these metrics may nevertheless be *higher* than that of the handlready latency.
+This is because not every handleready cycle leads to an update to the applycommitted
+and commandcommit latencies. For example, under tpcc-100 on a single node, the
+handleready count is approximately twice the logcommit count (and logcommit count
+tracks closely with applycommitted count).
+
+High percentile outliers can be caused by individual large Raft commands or
+storage layer blips. An increase in lower (say the 50th) percentile is often
+driven by either CPU exhaustion or a slowdown at the storage layer.
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftApplyCommittedLatency = metric.Metadata{
-		Name:        "raft.process.applycommitted.latency",
-		Help:        "Latency histogram for applying all committed Raft commands in a Raft ready",
+		Name: "raft.process.applycommitted.latency",
+		Help: `Latency histogram for applying all committed Raft commands in a Raft ready.
+
+This measures the end-to-end latency of applying all commands in a Raft ready. Note that
+this closes over possibly multiple measurements of the 'raft.process.commandcommit.latency'
+metric, which receives datapoints for each sub-batch processed in the process.`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaRaftSchedulerLatency = metric.Metadata{
-		Name:        "raft.scheduler.latency",
-		Help:        "Nanoseconds spent waiting for a range to be processed by the Raft scheduler",
+		Name: "raft.scheduler.latency",
+		Help: `Queueing durations for ranges waiting to be processed by the Raft scheduler.
+
+This histogram measures the delay from when a range is registered with the scheduler
+for processing to when it is actually processed. This does not include the duration
+of processing.
+`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -637,8 +723,11 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRaftEnqueuedPending = metric.Metadata{
-		Name:        "raft.enqueued.pending",
-		Help:        "Number of pending outgoing messages in the Raft Transport queue",
+		Name: "raft.enqueued.pending",
+		Help: `Number of pending outgoing messages in the Raft Transport queue.
+
+The queue is bounded in size, so instead of unbounded growth one would observe a
+ceiling value in the tens of thousands.`,
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -651,8 +740,15 @@ var (
 
 	// Raft log metrics.
 	metaRaftLogFollowerBehindCount = metric.Metadata{
-		Name:        "raftlog.behind",
-		Help:        "Number of Raft log entries followers on other stores are behind",
+		Name: "raftlog.behind",
+		Help: `Number of Raft log entries followers on other stores are behind.
+
+This gauge provides a view of the aggregate number of log entries the Raft leaders
+on this node think the followers are behind. Since a raft leader may not always
+have a good estimate for this information for all of its followers, and since
+followers are expected to be behind (when they are not required as part of a
+quorum) *and* the aggregate thus scales like the count of such followers, it is
+difficult to meaningfully interpret this metric.`,
 		Measurement: "Log Entries",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -664,27 +760,27 @@ var (
 	}
 
 	// Replica queue metrics.
-	metaGCQueueSuccesses = metric.Metadata{
+	metaMVCCGCQueueSuccesses = metric.Metadata{
 		Name:        "queue.gc.process.success",
-		Help:        "Number of replicas successfully processed by the GC queue",
+		Help:        "Number of replicas successfully processed by the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaGCQueueFailures = metric.Metadata{
+	metaMVCCGCQueueFailures = metric.Metadata{
 		Name:        "queue.gc.process.failure",
-		Help:        "Number of replicas which failed processing in the GC queue",
+		Help:        "Number of replicas which failed processing in the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaGCQueuePending = metric.Metadata{
+	metaMVCCGCQueuePending = metric.Metadata{
 		Name:        "queue.gc.pending",
-		Help:        "Number of pending replicas in the GC queue",
+		Help:        "Number of pending replicas in the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaGCQueueProcessingNanos = metric.Metadata{
+	metaMVCCGCQueueProcessingNanos = metric.Metadata{
 		Name:        "queue.gc.processingnanos",
-		Help:        "Nanoseconds spent processing replicas in the GC queue",
+		Help:        "Nanoseconds spent processing replicas in the MVCC GC queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -999,28 +1095,59 @@ var (
 
 	// Slow request metrics.
 	metaLatchRequests = metric.Metadata{
-		Name:        "requests.slow.latch",
-		Help:        "Number of requests that have been stuck for a long time acquiring latches",
+		Name: "requests.slow.latch",
+		Help: `Number of requests that have been stuck for a long time acquiring latches.
+
+Latches moderate access to the KV keyspace for the purpose of evaluating and
+replicating commands. A slow latch acquisition attempt is often caused by
+another request holding and not releasing its latches in a timely manner. This
+in turn can either be caused by a long delay in evaluation (for example, under
+severe system overload) or by delays at the replication layer.
+
+This gauge registering a nonzero value usually indicates a serious problem and
+should be investigated.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSlowLeaseRequests = metric.Metadata{
-		Name:        "requests.slow.lease",
-		Help:        "Number of requests that have been stuck for a long time acquiring a lease",
+		Name: "requests.slow.lease",
+		Help: `Number of requests that have been stuck for a long time acquiring a lease.
+
+This gauge registering a nonzero value usually indicates range or replica
+unavailability, and should be investigated. In the common case, we also
+expect to see 'requests.slow.raft' to register a nonzero value, indicating
+that the lease requests are not getting a timely response from the replication
+layer.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSlowRaftRequests = metric.Metadata{
-		Name:        "requests.slow.raft",
-		Help:        "Number of requests that have been stuck for a long time in raft",
+		Name: "requests.slow.raft",
+		Help: `Number of requests that have been stuck for a long time in the replication layer.
+
+An (evaluated) request has to pass through the replication layer, notably the
+quota pool and raft. If it fails to do so within a highly permissive duration,
+the gauge is incremented (and decremented again once the request is either
+applied or returns an error).
+
+A nonzero value indicates range or replica unavailability, and should be investigated.
+`,
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 
 	// Backpressure metrics.
 	metaBackpressuredOnSplitRequests = metric.Metadata{
-		Name:        "requests.backpressure.split",
-		Help:        "Number of backpressured writes waiting on a Range split",
+		Name: "requests.backpressure.split",
+		Help: `Number of backpressured writes waiting on a Range split.
+
+A Range will backpressure (roughly) non-system traffic when the range is above
+the configured size until the range splits. When the rate of this metric is
+nonzero over extended periods of time, it should be investigated why splits are
+not occurring.
+`,
 		Measurement: "Writes",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1041,6 +1168,18 @@ var (
 	metaAddSSTableApplicationCopies = metric.Metadata{
 		Name:        "addsstable.copies",
 		Help:        "number of SSTable ingestions that required copying files during application",
+		Measurement: "Ingestions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaAddSSTableAsWrites = metric.Metadata{
+		Name: "addsstable.aswrites",
+		Help: `Number of SSTables ingested as normal writes.
+
+These AddSSTable requests do not count towards the addsstable metrics
+'proposals', 'applications', or 'copies', as they are not ingested as AddSSTable
+Raft commands, but rather normal write commands. However, if these requests get
+throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
+`,
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1081,6 +1220,20 @@ var (
 		Measurement: "Locks",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaConcurrencyAverageLockHoldDurationNanos = metric.Metadata{
+		Name: "kv.concurrency.avg_lock_hold_duration_nanos",
+		Help: "Average lock hold duration across locks currently held in lock tables. " +
+			"Does not include replicated locks (intents) that are not held in memory",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaConcurrencyMaxLockHoldDurationNanos = metric.Metadata{
+		Name: "kv.concurrency.max_lock_hold_duration_nanos",
+		Help: "Maximum length of time any lock in a lock table is held. " +
+			"Does not include replicated locks (intents) that are not held in memory",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaConcurrencyLocksWithWaitQueues = metric.Metadata{
 		Name:        "kv.concurrency.locks_with_wait_queues",
 		Help:        "Number of active locks held in lock tables with active wait-queues",
@@ -1092,6 +1245,18 @@ var (
 		Help:        "Number of requests actively waiting in a lock wait-queue",
 		Measurement: "Lock-Queue Waiters",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyAverageLockWaitDurationNanos = metric.Metadata{
+		Name:        "kv.concurrency.avg_lock_wait_duration_nanos",
+		Help:        "Average lock wait duration across requests currently waiting in lock wait-queues",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaConcurrencyMaxLockWaitDurationNanos = metric.Metadata{
+		Name:        "kv.concurrency.max_lock_wait_duration_nanos",
+		Help:        "Maximum lock wait duration across requests currently waiting in lock wait-queues",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaConcurrencyMaxLockWaitQueueWaitersForLock = metric.Metadata{
 		Name:        "kv.concurrency.max_lock_wait_queue_waiters_for_lock",
@@ -1113,6 +1278,26 @@ var (
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	// Replica circuit breaker.
+	metaReplicaCircuitBreakerCurTripped = metric.Metadata{
+		Name: "kv.replica_circuit_breaker.num_tripped_replicas",
+		Help: `Number of Replicas for which the per-Replica circuit breaker is currently tripped.
+
+A nonzero value indicates range or replica unavailability, and should be investigated.
+Replicas in this state will fail-fast all inbound requests.
+`,
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	// Replica circuit breaker.
+	metaReplicaCircuitBreakerCumTripped = metric.Metadata{
+		Name:        "kv.replica_circuit_breaker.num_tripped_events",
+		Help:        `Number of times the per-Replica circuit breakers tripped since process start.`,
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1130,6 +1315,7 @@ type StoreMetrics struct {
 	RaftLeaderNotLeaseHolderCount *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
+	UninitializedCount            *metric.Gauge
 
 	// Range metrics.
 	RangeCount                *metric.Gauge
@@ -1207,6 +1393,7 @@ type StoreMetrics struct {
 	RangeSnapshotsAppliedForInitialUpreplication *metric.Counter
 	RangeSnapshotsAppliedByNonVoters             *metric.Counter
 	RangeRaftLeaderTransfers                     *metric.Counter
+	RangeLossOfQuorumRecoveries                  *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -1234,10 +1421,10 @@ type StoreMetrics struct {
 	RaftCoalescedHeartbeatsPending *metric.Gauge
 
 	// Replica queue metrics.
-	GCQueueSuccesses                          *metric.Counter
-	GCQueueFailures                           *metric.Counter
-	GCQueuePending                            *metric.Gauge
-	GCQueueProcessingNanos                    *metric.Counter
+	MVCCGCQueueSuccesses                      *metric.Counter
+	MVCCGCQueueFailures                       *metric.Counter
+	MVCCGCQueuePending                        *metric.Gauge
+	MVCCGCQueueProcessingNanos                *metric.Counter
 	MergeQueueSuccesses                       *metric.Counter
 	MergeQueueFailures                        *metric.Counter
 	MergeQueuePending                         *metric.Gauge
@@ -1307,6 +1494,7 @@ type StoreMetrics struct {
 	AddSSTableProposals           *metric.Counter
 	AddSSTableApplications        *metric.Counter
 	AddSSTableApplicationCopies   *metric.Counter
+	AddSSTableAsWrites            *metric.Counter
 	AddSSTableProposalTotalDelay  *metric.Counter
 	AddSSTableProposalEngineDelay *metric.Counter
 
@@ -1322,13 +1510,43 @@ type StoreMetrics struct {
 
 	// Concurrency control metrics.
 	Locks                          *metric.Gauge
+	AverageLockHoldDurationNanos   *metric.Gauge
+	MaxLockHoldDurationNanos       *metric.Gauge
 	LocksWithWaitQueues            *metric.Gauge
 	LockWaitQueueWaiters           *metric.Gauge
+	AverageLockWaitDurationNanos   *metric.Gauge
+	MaxLockWaitDurationNanos       *metric.Gauge
 	MaxLockWaitQueueWaitersForLock *metric.Gauge
 
 	// Closed timestamp metrics.
-	ClosedTimestampMaxBehindNanos  *metric.Gauge
-	ClosedTimestampFailuresToClose *metric.Gauge
+	ClosedTimestampMaxBehindNanos *metric.Gauge
+
+	// Replica circuit breaker.
+	ReplicaCircuitBreakerCurTripped *metric.Gauge
+	ReplicaCircuitBreakerCumTripped *metric.Counter
+}
+
+type tenantMetricsRef struct {
+	// All fields are internal. Don't access them.
+
+	_tenantID roachpb.TenantID
+	_state    int32 // atomic; 0=usable 1=poisoned
+
+	// _stack helps diagnose use-after-release when it occurs.
+	// This field is populated in releaseTenant and printed
+	// in assertions on failure.
+	_stack struct {
+		syncutil.Mutex
+		string
+	}
+}
+
+func (ref *tenantMetricsRef) assert(ctx context.Context) {
+	if atomic.LoadInt32(&ref._state) != 0 {
+		ref._stack.Lock()
+		defer ref._stack.Unlock()
+		log.FatalfDepth(ctx, 1, "tenantMetricsRef already finalized in:\n%s", ref._stack.string)
+	}
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -1353,7 +1571,12 @@ type TenantsStorageMetrics struct {
 	AbortSpanBytes *aggmetric.AggGauge
 
 	// This struct is invisible to the metric package.
-	tenants syncutil.IntMap // map[roachpb.TenantID]*tenantStorageMetrics
+	//
+	// NB: note that the int64 conversion in this map is lossless, so
+	// everything will work with tenantsIDs in excess of math.MaxInt64
+	// except that should one ever look at this map through a debugger
+	// the int64->uint64 conversion has to be done manually.
+	tenants syncutil.IntMap // map[int64(roachpb.TenantID)]*tenantStorageMetrics
 }
 
 var _ metric.Struct = (*TenantsStorageMetrics)(nil)
@@ -1365,7 +1588,7 @@ func (sm *TenantsStorageMetrics) MetricStruct() {}
 // method are reference counted with decrements occurring in the corresponding
 // releaseTenant call. This method must be called prior to adding or subtracting
 // MVCC stats.
-func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) {
+func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenantMetricsRef {
 	// incRef increments the reference count if it is not already zero indicating
 	// that the struct has already been destroyed.
 	incRef := func(m *tenantStorageMetrics) (alreadyDestroyed bool) {
@@ -1382,7 +1605,9 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) {
 		if mPtr, ok := sm.tenants.Load(key); ok {
 			m := (*tenantStorageMetrics)(mPtr)
 			if alreadyDestroyed := incRef(m); !alreadyDestroyed {
-				return
+				return &tenantMetricsRef{
+					_tenantID: tenantID,
+				}
 			}
 			// Somebody else concurrently took the reference count to zero, go back
 			// around. Because of the locking in releaseTenant, we know that we'll
@@ -1414,7 +1639,9 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) {
 			m.SysCount = sm.SysCount.AddChild(tenantIDStr)
 			m.AbortSpanBytes = sm.AbortSpanBytes.AddChild(tenantIDStr)
 			m.mu.Unlock()
-			return
+			return &tenantMetricsRef{
+				_tenantID: tenantID,
+			}
 		}
 	}
 }
@@ -1422,13 +1649,20 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) {
 // releaseTenant releases the reference to the metrics for this tenant which was
 // acquired with acquireTenant. It will fatally log if no entry exists for this
 // tenant.
-func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, tenantID roachpb.TenantID) {
-	m := sm.getTenant(ctx, tenantID)
+func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantMetricsRef) {
+	m := sm.getTenant(ctx, ref) // NB: asserts against use-after-release
+	if atomic.SwapInt32(&ref._state, 1) != 0 {
+		ref.assert(ctx) // this will fatal
+		return          // unreachable
+	}
+	ref._stack.Lock()
+	ref._stack.string = string(debug.Stack())
+	ref._stack.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.refCount--
 	if m.mu.refCount < 0 {
-		log.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", tenantID, m.mu.refCount)
+		log.Fatalf(ctx, "invalid refCount on metrics for tenant %v: %d", ref._tenantID, m.mu.refCount)
 	} else if m.mu.refCount > 0 {
 		return
 	}
@@ -1450,18 +1684,19 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, tenantID roa
 	m.SysBytes.Destroy()
 	m.SysCount.Destroy()
 	m.AbortSpanBytes.Destroy()
-	sm.tenants.Delete(int64(tenantID.ToUint64()))
+	sm.tenants.Delete(int64(ref._tenantID.ToUint64()))
 }
 
 // getTenant is a helper method used to retrieve the metrics for a tenant. The
 // call will log fatally if no such tenant has been previously acquired.
 func (sm *TenantsStorageMetrics) getTenant(
-	ctx context.Context, tenantID roachpb.TenantID,
+	ctx context.Context, ref *tenantMetricsRef,
 ) *tenantStorageMetrics {
-	key := int64(tenantID.ToUint64())
+	ref.assert(ctx)
+	key := int64(ref._tenantID.ToUint64())
 	mPtr, ok := sm.tenants.Load(key)
 	if !ok {
-		log.Fatalf(ctx, "no metrics exist for tenant %v", tenantID)
+		log.Fatalf(ctx, "no metrics exist for tenant %v", ref._tenantID)
 	}
 	return (*tenantStorageMetrics)(mPtr)
 }
@@ -1522,6 +1757,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftLeaderNotLeaseHolderCount: metric.NewGauge(metaRaftLeaderNotLeaseHolderCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
+		UninitializedCount:            metric.NewGauge(metaUninitializedCount),
 
 		// Range metrics.
 		RangeCount:                metric.NewGauge(metaRangeCount),
@@ -1593,6 +1829,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotsAppliedForInitialUpreplication: metric.NewCounter(metaRangeSnapshotsAppliedForInitialUpreplication),
 		RangeSnapshotsAppliedByNonVoters:             metric.NewCounter(metaRangeSnapshotsAppliedByNonVoter),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
+		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 
 		// Raft processing metrics.
 		RaftTicks:                 metric.NewCounter(metaRaftTicks),
@@ -1634,10 +1871,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftCoalescedHeartbeatsPending: metric.NewGauge(metaRaftCoalescedHeartbeatsPending),
 
 		// Replica queue metrics.
-		GCQueueSuccesses:                          metric.NewCounter(metaGCQueueSuccesses),
-		GCQueueFailures:                           metric.NewCounter(metaGCQueueFailures),
-		GCQueuePending:                            metric.NewGauge(metaGCQueuePending),
-		GCQueueProcessingNanos:                    metric.NewCounter(metaGCQueueProcessingNanos),
+		MVCCGCQueueSuccesses:                      metric.NewCounter(metaMVCCGCQueueSuccesses),
+		MVCCGCQueueFailures:                       metric.NewCounter(metaMVCCGCQueueFailures),
+		MVCCGCQueuePending:                        metric.NewGauge(metaMVCCGCQueuePending),
+		MVCCGCQueueProcessingNanos:                metric.NewCounter(metaMVCCGCQueueProcessingNanos),
 		MergeQueueSuccesses:                       metric.NewCounter(metaMergeQueueSuccesses),
 		MergeQueueFailures:                        metric.NewCounter(metaMergeQueueFailures),
 		MergeQueuePending:                         metric.NewGauge(metaMergeQueuePending),
@@ -1703,6 +1940,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// AddSSTable proposal + applications counters.
 		AddSSTableProposals:           metric.NewCounter(metaAddSSTableProposals),
 		AddSSTableApplications:        metric.NewCounter(metaAddSSTableApplications),
+		AddSSTableAsWrites:            metric.NewCounter(metaAddSSTableAsWrites),
 		AddSSTableApplicationCopies:   metric.NewCounter(metaAddSSTableApplicationCopies),
 		AddSSTableProposalTotalDelay:  metric.NewCounter(metaAddSSTableEvalTotalDelay),
 		AddSSTableProposalEngineDelay: metric.NewCounter(metaAddSSTableEvalEngineDelay),
@@ -1718,13 +1956,20 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Concurrency control metrics.
 		Locks:                          metric.NewGauge(metaConcurrencyLocks),
+		AverageLockHoldDurationNanos:   metric.NewGauge(metaConcurrencyAverageLockHoldDurationNanos),
+		MaxLockHoldDurationNanos:       metric.NewGauge(metaConcurrencyMaxLockHoldDurationNanos),
 		LocksWithWaitQueues:            metric.NewGauge(metaConcurrencyLocksWithWaitQueues),
 		LockWaitQueueWaiters:           metric.NewGauge(metaConcurrencyLockWaitQueueWaiters),
+		AverageLockWaitDurationNanos:   metric.NewGauge(metaConcurrencyAverageLockWaitDurationNanos),
+		MaxLockWaitDurationNanos:       metric.NewGauge(metaConcurrencyMaxLockWaitDurationNanos),
 		MaxLockWaitQueueWaitersForLock: metric.NewGauge(metaConcurrencyMaxLockWaitQueueWaitersForLock),
 
 		// Closed timestamp metrics.
-		ClosedTimestampMaxBehindNanos:  metric.NewGauge(metaClosedTimestampMaxBehindNanos),
-		ClosedTimestampFailuresToClose: metric.NewGauge(metaClosedTimestampFailuresToClose),
+		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),
+
+		// Replica circuit breaker.
+		ReplicaCircuitBreakerCurTripped: metric.NewGauge(metaReplicaCircuitBreakerCurTripped),
+		ReplicaCircuitBreakerCumTripped: metric.NewCounter(metaReplicaCircuitBreakerCumTripped),
 	}
 	storeRegistry.AddMetricStruct(sm)
 
@@ -1736,9 +1981,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 // single snapshot of these gauges in the registry might mix the values of two
 // subsequent updates.
 func (sm *TenantsStorageMetrics) incMVCCGauges(
-	ctx context.Context, tenantID roachpb.TenantID, delta enginepb.MVCCStats,
+	ctx context.Context, ref *tenantMetricsRef, delta enginepb.MVCCStats,
 ) {
-	tm := sm.getTenant(ctx, tenantID)
+	ref.assert(ctx)
+	tm := sm.getTenant(ctx, ref)
 	tm.LiveBytes.Inc(delta.LiveBytes)
 	tm.KeyBytes.Inc(delta.KeyBytes)
 	tm.ValBytes.Inc(delta.ValBytes)
@@ -1756,17 +2002,17 @@ func (sm *TenantsStorageMetrics) incMVCCGauges(
 }
 
 func (sm *TenantsStorageMetrics) addMVCCStats(
-	ctx context.Context, tenantID roachpb.TenantID, delta enginepb.MVCCStats,
+	ctx context.Context, ref *tenantMetricsRef, delta enginepb.MVCCStats,
 ) {
-	sm.incMVCCGauges(ctx, tenantID, delta)
+	sm.incMVCCGauges(ctx, ref, delta)
 }
 
 func (sm *TenantsStorageMetrics) subtractMVCCStats(
-	ctx context.Context, tenantID roachpb.TenantID, delta enginepb.MVCCStats,
+	ctx context.Context, ref *tenantMetricsRef, delta enginepb.MVCCStats,
 ) {
 	var neg enginepb.MVCCStats
 	neg.Subtract(delta)
-	sm.incMVCCGauges(ctx, tenantID, neg)
+	sm.incMVCCGauges(ctx, ref, neg)
 }
 
 func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
@@ -1818,6 +2064,9 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 	metric.ResolveAbort = 0
 	sm.ResolvePoisonCount.Inc(int64(metric.ResolvePoison))
 	metric.ResolvePoison = 0
+
+	sm.AddSSTableAsWrites.Inc(int64(metric.AddSSTableAsWrites))
+	metric.AddSSTableAsWrites = 0
 
 	if metric != (result.Metrics{}) {
 		log.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)

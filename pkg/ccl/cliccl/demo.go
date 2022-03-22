@@ -41,7 +41,7 @@ func getLicense(clusterID uuid.UUID) (string, error) {
 	q := req.URL.Query()
 	// Let the endpoint know we are requesting a demo license.
 	q.Add("kind", "demo")
-	q.Add("version", build.VersionPrefix())
+	q.Add("version", build.BinaryVersionPrefix())
 	q.Add("clusterid", clusterID.String())
 	req.URL.RawQuery = q.Encode()
 

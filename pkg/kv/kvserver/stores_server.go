@@ -162,7 +162,7 @@ func (is Server) CompactEngineSpan(
 	resp := &CompactEngineSpanResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			return s.Engine().CompactRange(req.Span.Key, req.Span.EndKey, true /* forceBottommost */)
+			return s.Engine().CompactRange(req.Span.Key, req.Span.EndKey)
 		})
 	return resp, err
 }

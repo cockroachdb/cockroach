@@ -9,7 +9,7 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/gossip/simulation",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/encoding",
         "//pkg/util/log",
         "//pkg/util/randutil",

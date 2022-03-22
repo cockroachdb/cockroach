@@ -11,6 +11,8 @@
 package security_test
 
 import (
+	"crypto/ed25519"
+	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -25,13 +27,13 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func()) {
-	certsDir, cleanup = tempDir(t)
+func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string) {
+	certsDir = t.TempDir()
 
 	// Make certs for the tenant CA (= auth broker). In production, these would be
 	// given to a dedicated service.
 	tenantCAKey := filepath.Join(certsDir, "tenant-ca-name-irrelevant.key")
-	require.NoError(t, security.CreateTenantClientCAPair(
+	require.NoError(t, security.CreateTenantCAPair(
 		certsDir,
 		tenantCAKey,
 		2048,
@@ -41,13 +43,13 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func
 	))
 
 	// That dedicated service can make client certs for a tenant as follows:
-	tenantCerts, err := security.CreateTenantClientPair(
-		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenant,
+	tenantCerts, err := security.CreateTenantPair(
+		certsDir, tenantCAKey, testKeySize, 48*time.Hour, tenant, []string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
 	// We write the certs to disk, though in production this would not necessarily
 	// happen (it may be enough to just have them in-mem, we will see).
-	require.NoError(t, security.WriteTenantClientPair(certsDir, tenantCerts, false /* overwrite */))
+	require.NoError(t, security.WriteTenantPair(certsDir, tenantCerts, false /* overwrite */))
 
 	// The server also needs to show certs trusted by the client. These are the
 	// node certs.
@@ -57,7 +59,10 @@ func makeTenantCerts(t *testing.T, tenant uint64) (certsDir string, cleanup func
 	))
 	require.NoError(t, security.CreateNodePair(
 		certsDir, serverCAKeyPath, testKeySize, 500*time.Hour, false, []string{"127.0.0.1"}))
-	return certsDir, cleanup
+
+	// Also check that the tenant signing cert gets created.
+	require.NoError(t, security.CreateTenantSigningPair(certsDir, 500*time.Hour, false /* overwrite */, tenant))
+	return certsDir
 }
 
 // TestTenantCertificates creates a tenant CA and from it client certificates
@@ -88,9 +93,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 		security.ResetAssetLoader()
 		defer ResetTest()
 		tenant = uint64(rand.Int63())
-		var cleanup func()
-		certsDir, cleanup = makeTenantCerts(t, tenant)
-		defer cleanup()
+		certsDir = makeTenantCerts(t, tenant)
 	} else {
 		certsDir = security.EmbeddedCertsDir
 		tenant = security.EmbeddedTenantIDs()[0]
@@ -112,7 +115,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 
 	// The client in turn trusts the server CA and presents its tenant certs to the
 	// server (which will validate them using the tenant CA).
-	clientTLSConfig, err := cm.GetTenantClientTLSConfig()
+	clientTLSConfig, err := cm.GetTenantTLSConfig()
 	require.NoError(t, err)
 	require.NotNil(t, clientTLSConfig)
 
@@ -145,4 +148,16 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	b, err := ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, fmt.Sprintf("hello, tenant %d", tenant), string(b))
+
+	// Verify that the tenant signing cert was set up correctly.
+	signingCert, err := cm.GetTenantSigningCert()
+	require.NoError(t, err)
+	privateKey, err := security.PEMToPrivateKey(signingCert.KeyFileContents)
+	require.NoError(t, err)
+	ed25519PrivateKey, isEd25519 := privateKey.(ed25519.PrivateKey)
+	require.True(t, isEd25519)
+	payload := []byte{1, 2, 3}
+	signature := ed25519.Sign(ed25519PrivateKey, payload)
+	err = signingCert.ParsedCertificates[0].CheckSignature(x509.PureEd25519, payload, signature)
+	require.NoError(t, err)
 }

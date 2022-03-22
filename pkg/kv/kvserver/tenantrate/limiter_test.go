@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -46,8 +47,8 @@ func TestCloser(t *testing.T) {
 	})
 	tenant := roachpb.MakeTenantID(2)
 	closer := make(chan struct{})
-	limiter := factory.GetTenant(tenant, closer)
 	ctx := context.Background()
+	limiter := factory.GetTenant(ctx, tenant, closer)
 	// First Wait call will not block.
 	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(true, 1)))
 	errCh := make(chan error, 1)
@@ -64,7 +65,7 @@ func TestCloser(t *testing.T) {
 
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
 		datadriven.RunTest(t, path, new(testState).run)
 	})
@@ -371,6 +372,17 @@ func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 		d.Fatalf(t, "failed to compile pattern: %v", err)
 	}
 
+	// If we are rewriting the test, just sleep a bit before returning the
+	// metrics.
+	if d.Rewrite {
+		time.Sleep(time.Second)
+		result, err := metrictestutils.GetMetricsText(ts.m, re)
+		if err != nil {
+			d.Fatalf(t, "failed to scrape metrics: %v", err)
+		}
+		return result
+	}
+
 	exp := strings.TrimSpace(d.Expected)
 	if err := testutils.SucceedsSoonError(func() error {
 		got, err := metrictestutils.GetMetricsText(ts.m, re)
@@ -401,12 +413,18 @@ func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 //  00:00:02.000
 //
 func (ts *testState) timers(t *testing.T, d *datadriven.TestData) string {
+	// If we are rewriting the test, just sleep a bit before returning the
+	// timers.
+	if d.Rewrite {
+		time.Sleep(time.Second)
+		return timesToString(ts.clock.Timers())
+	}
+
 	exp := strings.TrimSpace(d.Expected)
 	if err := testutils.SucceedsSoonError(func() error {
-		got := timesToStrings(ts.clock.Timers())
-		gotStr := strings.Join(got, "\n")
-		if gotStr != exp {
-			return errors.Errorf("got: %q, exp: %q", gotStr, exp)
+		got := timesToString(ts.clock.Timers())
+		if got != exp {
+			return errors.Errorf("got: %q, exp: %q", got, exp)
 		}
 		return nil
 	}); err != nil {
@@ -415,12 +433,12 @@ func (ts *testState) timers(t *testing.T, d *datadriven.TestData) string {
 	return d.Expected
 }
 
-func timesToStrings(times []time.Time) []string {
+func timesToString(times []time.Time) string {
 	strs := make([]string, len(times))
 	for i, t := range times {
 		strs[i] = t.Format(timeFormat)
 	}
-	return strs
+	return strings.Join(strs, "\n")
 }
 
 // getTenants acquires references to tenants. It is a prerequisite to launching
@@ -436,10 +454,11 @@ func timesToStrings(times []time.Time) []string {
 //  [2#2, 3#1]
 //
 func (ts *testState) getTenants(t *testing.T, d *datadriven.TestData) string {
+	ctx := context.Background()
 	tenantIDs := parseTenantIDs(t, d)
 	for i := range tenantIDs {
 		id := roachpb.MakeTenantID(tenantIDs[i])
-		ts.tenants[id] = append(ts.tenants[id], ts.rl.GetTenant(id, nil /* closer */))
+		ts.tenants[id] = append(ts.tenants[id], ts.rl.GetTenant(ctx, id, nil /* closer */))
 	}
 	return ts.FormatTenants()
 }
@@ -500,15 +519,21 @@ func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 	config := tenantrate.DefaultConfig()
 
 	calculateIOPS := func(rate float64) float64 {
-		readCost := config.CostModel.KVReadCost(workload.ReadSize)
-		writeCost := config.CostModel.KVWriteCost(workload.WriteSize)
-		readFraction := tenantcostmodel.RU(workload.ReadPercentage) / 100.0
+		readCost := config.ReadRequestUnits + float64(workload.ReadSize)*config.ReadUnitsPerByte
+		writeCost := config.WriteRequestUnits + float64(workload.WriteSize)*config.WriteUnitsPerByte
+		readFraction := float64(workload.ReadPercentage) / 100.0
 		avgCost := readFraction*readCost + (1-readFraction)*writeCost
-		return rate / float64(avgCost)
+		return rate / avgCost
 	}
 
 	sustained := calculateIOPS(config.Rate)
 	burst := calculateIOPS(config.Burst)
+
+	// By default, the rate scales with GOMAXPROCS.
+	numProcs := float64(runtime.GOMAXPROCS(0))
+	sustained /= numProcs
+	burst /= numProcs
+
 	fmtFloat := func(val float64) string {
 		if val < 10 {
 			return fmt.Sprintf("%.1f", val)
@@ -518,17 +543,17 @@ func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 	switch workload.ReadPercentage {
 	case 0:
 		return fmt.Sprintf(
-			"Write-only workload (%s writes): %s sustained IOPS, %s burst.",
+			"Write-only workload (%s writes): %s sustained IOPS/CPU, %s burst.",
 			humanize.IBytes(uint64(workload.WriteSize)), fmtFloat(sustained), fmtFloat(burst),
 		)
 	case 100:
 		return fmt.Sprintf(
-			"Read-only workload (%s reads): %s sustained IOPS, %s burst.",
+			"Read-only workload (%s reads): %s sustained IOPS/CPU, %s burst.",
 			humanize.IBytes(uint64(workload.ReadSize)), fmtFloat(sustained), fmtFloat(burst),
 		)
 	default:
 		return fmt.Sprintf(
-			"Mixed workload (%d%% reads; %s reads; %s writes): %s sustained IOPS, %s burst.",
+			"Mixed workload (%d%% reads; %s reads; %s writes): %s sustained IOPS/CPU, %s burst.",
 			workload.ReadPercentage,
 			humanize.IBytes(uint64(workload.ReadSize)), humanize.IBytes(uint64(workload.WriteSize)),
 			fmtFloat(sustained), fmtFloat(burst),
@@ -589,23 +614,17 @@ func parseSettings(t *testing.T, d *datadriven.TestData, config *tenantrate.Conf
 		d.Fatalf(t, "failed to unmarshal limits: %v", err)
 	}
 
-	override := func(dest interface{}, val float64) {
-		if val == 0 {
-			return
-		}
-		switch dest := dest.(type) {
-		case *float64:
+	override := func(dest *float64, val float64) {
+		if val != 0 {
 			*dest = val
-		case *tenantcostmodel.RU:
-			*dest = tenantcostmodel.RU(val)
 		}
 	}
 	override(&config.Rate, vals.Rate)
 	override(&config.Burst, vals.Burst)
-	override(&config.CostModel.KVReadRequest, vals.Read.Base)
-	override(&config.CostModel.KVReadByte, vals.Read.PerByte)
-	override(&config.CostModel.KVWriteRequest, vals.Write.Base)
-	override(&config.CostModel.KVWriteByte, vals.Write.PerByte)
+	override(&config.ReadRequestUnits, vals.Read.Base)
+	override(&config.ReadUnitsPerByte, vals.Read.PerByte)
+	override(&config.WriteRequestUnits, vals.Write.Base)
+	override(&config.WriteUnitsPerByte, vals.Write.PerByte)
 }
 
 func parseStrings(t *testing.T, d *datadriven.TestData) []string {

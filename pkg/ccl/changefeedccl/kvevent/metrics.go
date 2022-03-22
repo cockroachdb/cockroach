@@ -27,6 +27,24 @@ var (
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedBufferEntriesReleased = metric.Metadata{
+		Name:        "changefeed.buffer_entries.released",
+		Help:        "Total entries processed, emitted and acknowledged by the sinks",
+		Measurement: "Entries",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedBufferMemAcquired = metric.Metadata{
+		Name:        "changefeed.buffer_entries_mem.acquired",
+		Help:        "Total amount of memory acquired for entries as they enter the system",
+		Measurement: "Entries",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedBufferMemReleased = metric.Metadata{
+		Name:        "changefeed.buffer_entries_mem.released",
+		Help:        "Total amount of memory released by the entries after they have been emitted",
+		Measurement: "Entries",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaChangefeedBufferPushbackNanos = metric.Metadata{
 		Name:        "changefeed.buffer_pushback_nanos",
 		Help:        "Total time spent waiting while the buffer was full",
@@ -37,17 +55,23 @@ var (
 
 // Metrics is a metric.Struct for kvfeed metrics.
 type Metrics struct {
-	BufferEntriesIn     *metric.Counter
-	BufferEntriesOut    *metric.Counter
-	BufferPushbackNanos *metric.Counter
+	BufferEntriesIn          *metric.Counter
+	BufferEntriesOut         *metric.Counter
+	BufferEntriesReleased    *metric.Counter
+	BufferPushbackNanos      *metric.Counter
+	BufferEntriesMemAcquired *metric.Counter
+	BufferEntriesMemReleased *metric.Counter
 }
 
 // MakeMetrics constructs a Metrics struct with the provided histogram window.
 func MakeMetrics(histogramWindow time.Duration) Metrics {
 	return Metrics{
-		BufferEntriesIn:     metric.NewCounter(metaChangefeedBufferEntriesIn),
-		BufferEntriesOut:    metric.NewCounter(metaChangefeedBufferEntriesOut),
-		BufferPushbackNanos: metric.NewCounter(metaChangefeedBufferPushbackNanos),
+		BufferEntriesIn:          metric.NewCounter(metaChangefeedBufferEntriesIn),
+		BufferEntriesOut:         metric.NewCounter(metaChangefeedBufferEntriesOut),
+		BufferEntriesReleased:    metric.NewCounter(metaChangefeedBufferEntriesReleased),
+		BufferEntriesMemAcquired: metric.NewCounter(metaChangefeedBufferMemAcquired),
+		BufferEntriesMemReleased: metric.NewCounter(metaChangefeedBufferMemReleased),
+		BufferPushbackNanos:      metric.NewCounter(metaChangefeedBufferPushbackNanos),
 	}
 }
 

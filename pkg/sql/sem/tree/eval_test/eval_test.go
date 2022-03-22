@@ -137,6 +137,8 @@ func TestEval(t *testing.T) {
 	})
 
 	t.Run("vectorized", func(t *testing.T) {
+		var monitorRegistry colexecargs.MonitorRegistry
+		defer monitorRegistry.Close(ctx)
 		walk(t, func(t *testing.T, d *datadriven.TestData) string {
 			st := cluster.MakeTestingClusterSettings()
 			flowCtx := &execinfra.FlowCtx{
@@ -188,12 +190,11 @@ func TestEval(t *testing.T) {
 						}},
 				},
 				},
-				StreamingMemAccount: &acc,
 				// Unsupported post processing specs are wrapped and run through the
 				// row execution engine.
 				ProcessorConstructor: rowexec.NewProcessor,
+				MonitorRegistry:      &monitorRegistry,
 			}
-			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 			result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
 			require.NoError(t, err)
 

@@ -10,11 +10,6 @@ query T
 SELECT aclexplode(ARRAY['foo'])
 ----
 
-query O
-SELECT pg_my_temp_schema()
-----
-0
-
 # Regression test for #43166.
 statement ok
 SELECT has_table_privilege('root'::NAME, 0, 'select')
@@ -177,47 +172,48 @@ WHERE c.relname IN ('is_updatable', 'is_updatable_view', 'pg_class')
 ORDER BY c.oid, a.attnum
 ----
 relname            attname              oid         attnum  pg_relation_is_updatable  pg_column_is_updatable
-is_updatable       a                    66          1       28                        true
-is_updatable       b                    66          2       28                        true
-is_updatable       c                    66          3       28                        false
-is_updatable_view  a                    67          1       0                         false
-is_updatable_view  b                    67          2       0                         false
-pg_class           oid                  4294967137  1       0                         false
-pg_class           relname              4294967137  2       0                         false
-pg_class           relnamespace         4294967137  3       0                         false
-pg_class           reltype              4294967137  4       0                         false
-pg_class           reloftype            4294967137  5       0                         false
-pg_class           relowner             4294967137  6       0                         false
-pg_class           relam                4294967137  7       0                         false
-pg_class           relfilenode          4294967137  8       0                         false
-pg_class           reltablespace        4294967137  9       0                         false
-pg_class           relpages             4294967137  10      0                         false
-pg_class           reltuples            4294967137  11      0                         false
-pg_class           relallvisible        4294967137  12      0                         false
-pg_class           reltoastrelid        4294967137  13      0                         false
-pg_class           relhasindex          4294967137  14      0                         false
-pg_class           relisshared          4294967137  15      0                         false
-pg_class           relpersistence       4294967137  16      0                         false
-pg_class           relistemp            4294967137  17      0                         false
-pg_class           relkind              4294967137  18      0                         false
-pg_class           relnatts             4294967137  19      0                         false
-pg_class           relchecks            4294967137  20      0                         false
-pg_class           relhasoids           4294967137  21      0                         false
-pg_class           relhaspkey           4294967137  22      0                         false
-pg_class           relhasrules          4294967137  23      0                         false
-pg_class           relhastriggers       4294967137  24      0                         false
-pg_class           relhassubclass       4294967137  25      0                         false
-pg_class           relfrozenxid         4294967137  26      0                         false
-pg_class           relacl               4294967137  27      0                         false
-pg_class           reloptions           4294967137  28      0                         false
-pg_class           relforcerowsecurity  4294967137  29      0                         false
-pg_class           relispartition       4294967137  30      0                         false
-pg_class           relispopulated       4294967137  31      0                         false
-pg_class           relreplident         4294967137  32      0                         false
-pg_class           relrewrite           4294967137  33      0                         false
-pg_class           relrowsecurity       4294967137  34      0                         false
-pg_class           relpartbound         4294967137  35      0                         false
-pg_class           relminmxid           4294967137  36      0                         false
+is_updatable       a                    120         1       28                        true
+is_updatable       b                    120         2       28                        true
+is_updatable       c                    120         3       28                        false
+is_updatable_view  a                    121         1       0                         false
+is_updatable_view  b                    121         2       0                         false
+pg_class           oid                  4294967128  1       0                         false
+pg_class           relname              4294967128  2       0                         false
+pg_class           relnamespace         4294967128  3       0                         false
+pg_class           reltype              4294967128  4       0                         false
+pg_class           reloftype            4294967128  5       0                         false
+pg_class           relowner             4294967128  6       0                         false
+pg_class           relam                4294967128  7       0                         false
+pg_class           relfilenode          4294967128  8       0                         false
+pg_class           reltablespace        4294967128  9       0                         false
+pg_class           relpages             4294967128  10      0                         false
+pg_class           reltuples            4294967128  11      0                         false
+pg_class           relallvisible        4294967128  12      0                         false
+pg_class           reltoastrelid        4294967128  13      0                         false
+pg_class           relhasindex          4294967128  14      0                         false
+pg_class           relisshared          4294967128  15      0                         false
+pg_class           relpersistence       4294967128  16      0                         false
+pg_class           relistemp            4294967128  17      0                         false
+pg_class           relkind              4294967128  18      0                         false
+pg_class           relnatts             4294967128  19      0                         false
+pg_class           relchecks            4294967128  20      0                         false
+pg_class           relhasoids           4294967128  21      0                         false
+pg_class           relhaspkey           4294967128  22      0                         false
+pg_class           relhasrules          4294967128  23      0                         false
+pg_class           relhastriggers       4294967128  24      0                         false
+pg_class           relhassubclass       4294967128  25      0                         false
+pg_class           relfrozenxid         4294967128  26      0                         false
+pg_class           relacl               4294967128  27      0                         false
+pg_class           reloptions           4294967128  28      0                         false
+pg_class           relforcerowsecurity  4294967128  29      0                         false
+pg_class           relispartition       4294967128  30      0                         false
+pg_class           relispopulated       4294967128  31      0                         false
+pg_class           relreplident         4294967128  32      0                         false
+pg_class           relrewrite           4294967128  33      0                         false
+pg_class           relrowsecurity       4294967128  34      0                         false
+pg_class           relpartbound         4294967128  35      0                         false
+pg_class           relminmxid           4294967128  36      0                         false
+
 
 # Check that the oid does not exist. If this test fail, change the oid here and in
 # the next test at 'relation does not exist' value.
@@ -239,3 +235,378 @@ relation does not exist               0
 relation does not exist               false
 relation exists, but column does not  true
 system column                         false
+
+query T
+SELECT current_setting('statement_timeout')
+----
+0
+
+query T
+SELECT current_setting('statement_timeout', false)
+----
+0
+
+# check returns null on unsupported session var.
+query T
+SELECT IFNULL(current_setting('woo', true), 'OK')
+----
+OK
+
+# check that current_setting handles null.
+query T
+SELECT current_setting(NULL, false)
+----
+NULL
+
+# check that multiple settings can be queried at once.
+query TT
+SELECT current_setting('statement_timeout'), current_setting('search_path')
+----
+0  "$user", public
+
+# check error on nonexistent session var.
+query error unrecognized configuration parameter
+SELECT pg_catalog.current_setting('woo', false)
+
+# check error on unsupported session var.
+query error configuration setting.*not supported
+SELECT current_setting('vacuum_cost_delay', false)
+
+query T
+SHOW application_name
+----
+·
+
+query T
+SELECT set_config('application_name', 'woo', false)
+----
+woo
+
+query T
+SHOW application_name
+----
+woo
+
+# check that multiple settings can be set at once
+query TTT
+SELECT
+  set_config('application_name', 'foo', false),
+  set_config('statement_timeout', '60s', false),
+  set_config(NULL, 'foo', false)
+----
+foo  60000  NULL
+
+# check that the value doesn't change with isLocal=true outside of a
+# transaction. Note: in Postgres, set_config returns 'woo' here even though
+# the value doesn't change. This difference doesn't seem too important.
+query T
+SELECT set_config('application_name', 'woo', true)
+----
+foo
+
+query T
+SELECT current_setting('application_name')
+----
+foo
+
+# verify that the setting change is scoped to the transaction with isLocal=true.
+statement ok
+BEGIN
+
+query T
+SELECT set_config('application_name', 'woo', true)
+----
+woo
+
+query TT
+SELECT current_setting('application_name'), current_setting('statement_timeout')
+----
+woo  60000
+
+statement ok
+COMMIT
+
+query T
+SELECT current_setting('application_name')
+----
+foo
+
+query error unrecognized configuration parameter
+SELECT pg_catalog.set_config('woo', 'woo', false)
+
+query error configuration setting.*not supported
+SELECT set_config('vacuum_cost_delay', '0', false)
+
+# pg_my_temp_schema
+#
+# Before a temporary schema is created, it returns 0. Afterwards, it returns the
+# OID of session's temporary schema.
+
+query O
+SELECT pg_my_temp_schema()
+----
+0
+
+statement ok
+SET experimental_enable_temp_tables = true;
+
+statement ok
+CREATE TEMP TABLE temp1 (a int);
+
+query B
+SELECT pg_my_temp_schema()::TEXT LIKE 'pg_temp_%'
+----
+true
+
+# If the user changes databases, it no longer has access to its temp tables.
+# pg_my_temp_schema reverts to returning 0 again.
+
+statement ok
+SET DATABASE = db2;
+
+query O
+SELECT pg_my_temp_schema()
+----
+0
+
+statement ok
+CREATE TEMP TABLE temp2 (a int);
+
+query B
+SELECT pg_my_temp_schema()::TEXT LIKE 'pg_temp_%'
+----
+true
+
+statement ok
+SET DATABASE = test;
+
+# pg_is_other_temp_schema
+#
+# Returns true if the provided OID meets the following conditions:
+# - is a reference to a schema
+# - that is temporary
+# - and is owned by a different session
+
+query B
+SELECT pg_is_other_temp_schema((SELECT oid FROM pg_type LIMIT 1))
+----
+false
+
+query B
+SELECT pg_is_other_temp_schema((SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog'))
+----
+false
+
+query TB
+SELECT user, pg_is_other_temp_schema((SELECT oid FROM pg_namespace WHERE nspname LIKE 'pg_temp_%'))
+----
+root  false
+
+# Switch users as a means of switching sessions. GRANT to ensure visibility.
+
+statement ok
+GRANT root TO testuser
+
+user testuser
+
+query TB
+SELECT user, pg_is_other_temp_schema((SELECT oid FROM pg_namespace WHERE nspname LIKE 'pg_temp_%'))
+----
+testuser  true
+
+user root
+
+# information_schema._pg_truetypid and information_schema._pg_truetypmod
+#
+# We can't exhaustively test these until we support domain types.
+
+statement ok
+CREATE TABLE types (
+  a TEXT PRIMARY KEY,
+  b FLOAT,
+  c BPCHAR,
+  d VARCHAR(64),
+  e BIT,
+  f VARBIT(16),
+  g DECIMAL(12, 2)
+);
+
+query TOI
+SELECT typname,
+       information_schema._pg_truetypid(a.*, t.*),
+       information_schema._pg_truetypmod(a.*, t.*)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE attrelid = 'types'::regclass
+ORDER BY t.oid
+----
+text     25    -1
+float8   701   -1
+bpchar   1042  5
+varchar  1043  68
+bit      1560  1
+varbit   1562  16
+numeric  1700  786438
+
+# information_schema._pg_char_max_length
+
+query TI
+SELECT typname, information_schema._pg_char_max_length(a.atttypid, a.atttypmod)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE attrelid = 'types'::regclass
+ORDER BY t.oid
+----
+text     NULL
+float8   NULL
+bpchar   1
+varchar  64
+bit      1
+varbit   16
+numeric  NULL
+
+query TI
+SELECT typname, information_schema._pg_char_max_length(
+  information_schema._pg_truetypid(a.*, t.*),
+  information_schema._pg_truetypmod(a.*, t.*)
+)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE attrelid = 'types'::regclass
+ORDER BY t.oid
+----
+text     NULL
+float8   NULL
+bpchar   1
+varchar  64
+bit      1
+varbit   16
+numeric  NULL
+
+# information_schema._pg_index_position
+
+statement ok
+CREATE TABLE indexed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX (b, d),
+  INDEX (c, a)
+);
+
+# NOTE, we cast indkey to an INT2[], because an INT2VECTOR's formatting appears
+# to be dependent on whether the result set spilled to disk or not. It was being
+# formatted differently with the "local" test config (and others) than with the
+# "fakedist-disk" test config.
+statement ok
+CREATE TEMPORARY VIEW indexes AS
+  SELECT i.relname, indkey::INT2[], indexrelid
+    FROM pg_catalog.pg_index
+    JOIN pg_catalog.pg_class AS t ON indrelid   = t.oid
+    JOIN pg_catalog.pg_class AS i ON indexrelid = i.oid
+   WHERE t.relname = 'indexed'
+ORDER BY i.relname
+
+query TT
+SELECT relname, indkey FROM indexes ORDER BY relname DESC
+----
+indexed_pkey     {1}
+indexed_c_a_idx  {3,1}
+indexed_b_d_idx  {2,4}
+
+query TTII
+SELECT relname,
+       indkey,
+       generate_series(1, 4) input,
+       information_schema._pg_index_position(indexrelid, generate_series(1, 4))
+FROM indexes
+ORDER BY relname DESC, input
+----
+indexed_pkey     {1}    1  1
+indexed_pkey     {1}    2  NULL
+indexed_pkey     {1}    3  NULL
+indexed_pkey     {1}    4  NULL
+indexed_c_a_idx  {3,1}  1  2
+indexed_c_a_idx  {3,1}  2  NULL
+indexed_c_a_idx  {3,1}  3  1
+indexed_c_a_idx  {3,1}  4  NULL
+indexed_b_d_idx  {2,4}  1  NULL
+indexed_b_d_idx  {2,4}  2  1
+indexed_b_d_idx  {2,4}  3  NULL
+indexed_b_d_idx  {2,4}  4  2
+
+# information_schema._pg_numeric_precision and information_schema._pg_numeric_precision_radix
+# and information_schema._pg_numeric_scale
+
+statement ok
+CREATE TABLE numeric (
+  a SMALLINT,
+  b INT4,
+  c BIGINT,
+  d FLOAT(1),
+  e FLOAT4,
+  f FLOAT8,
+  g FLOAT(40),
+  h FLOAT,
+  i DECIMAL(12,2),
+  j DECIMAL(4,4)
+);
+
+query TTIII
+SELECT a.attname,
+       t.typname,
+       information_schema._pg_numeric_precision(a.atttypid,a.atttypmod),
+       information_schema._pg_numeric_precision_radix(a.atttypid,a.atttypmod),
+       information_schema._pg_numeric_scale(a.atttypid,a.atttypmod)
+FROM pg_attribute a
+JOIN pg_type t
+ON a.atttypid = t.oid
+WHERE a.attrelid = 'numeric'::regclass
+ORDER BY a.attname
+----
+a      int2     16  2   0
+b      int4     32  2   0
+c      int8     64  2   0
+d      float4   24  2   NULL
+e      float4   24  2   NULL
+f      float8   53  2   NULL
+g      float8   53  2   NULL
+h      float8   53  2   NULL
+i      numeric  12  10  2
+j      numeric  4   10  4
+rowid  int8     64  2   0
+
+statement error null array element not allowed in this context
+SELECT * FROM pg_options_to_table(array['b', NULL, 'a']::text[])
+
+query TT colnames
+SELECT * FROM pg_options_to_table(array[]::text[]);
+----
+option_name  option_value
+
+query TT colnames
+SELECT * FROM pg_options_to_table(array['a', 'b=c', '=d', 'e=f=g']::text[]);
+----
+option_name  option_value
+a            NULL
+b            c
+·            d
+e            f=g
+
+query TT colnames
+SELECT * FROM pg_options_to_table(null)
+----
+option_name  option_value
+
+query TT colnames
+SELECT * FROM pg_options_to_table('{a, b=c, =d, e=f=g}')
+----
+option_name  option_value
+a            NULL
+b            c
+·            d
+e            f=g

@@ -59,7 +59,6 @@
 // - An operation name
 // - Timing information (start timestamp, duration)
 // - A set of zero or more tags (for annotation, visible when rendering spans)
-// - A set of zero or more baggage items (data that crosses process boundaries)
 // - References to other spans (mediated by the relations described above)
 // - Recording data[7] (structured data/messages visible when rendering spans)
 //
@@ -80,14 +79,14 @@
 // configured). This then lets us short-circuit work that would be discarded
 // anyway.
 //
-// The tracing package internally makes use of an opentracing[2]-compatible
-// library. This gives us the ability to configure external collectors for
-// tracing information[14], like lightstep or zipkin.
+// The tracing package internally makes use of OpenTelemetry[2]. This gives us
+// the ability to configure external collectors for tracing information,
+// like Jaeger, DataDog, Lightstep or Zipkin.
 //
 // -----------------------------------------------------------------------------
 //
 // [1]: https://research.google/pubs/pub36356/
-// [2]: https://opentracing.io/specification/
+// [2]: https://opentelemetry.io
 // [3]: `Recording.String`
 // [4]: `ChildSpan`
 // [5]: `ForkSpan`. "forking" a Span is the same as creating a new one
@@ -95,12 +94,11 @@
 // [6]: `crdbSpan`
 // [7]: `Span.SetVerbose`. To understand the specifics of what exactly is
 //      captured in Span recording, when Spans have children that may be either
-//      local or remote, look towards `WithParentAnd{Auto,Manual}Collection`
+//      local or remote, look towards `WithParent` and `WithDetachedRecording`.
 // [8]: `Tracer.{InjectMetaInto,ExtractMetaFrom}`
 // [9]: `SpanMeta`
 // [10]: `{Client,Server}Interceptor`
 // [11]: `SpanFromContext`
 // [12]: WithForceRealSpan
 // [13]: `Span.isNoop`
-// [14]: `shadowTracer`
 package tracing

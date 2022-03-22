@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -48,8 +51,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -134,6 +138,7 @@ func TestConn(t *testing.T) {
 	expectDescribeStmt(ctx, t, "p1", pgwirebase.PrepareStatement, &rd, conn)
 	expectSync(ctx, t, &rd)
 	expectBindStmt(ctx, t, "p1", &rd, conn)
+	expectDescribeStmt(ctx, t, "", pgwirebase.PreparePortal, &rd, conn)
 	expectExecPortal(ctx, t, "", &rd, conn)
 	// Check that a query string with multiple queries sent using the simple
 	// protocol is broken up.
@@ -145,34 +150,17 @@ func TestConn(t *testing.T) {
 
 	// Check that the batching works like the client intended.
 
-	// pgx wraps batchs in transactions.
+	// This batch was wrapped in a transaction.
 	expectExecStmt(ctx, t, "BEGIN TRANSACTION", &rd, conn, queryStringComplete)
-	expectSync(ctx, t, &rd)
-	expectPrepareStmt(ctx, t, "", "SELECT 7", &rd, conn)
-	expectBindStmt(ctx, t, "", &rd, conn)
-	expectDescribeStmt(ctx, t, "", pgwirebase.PreparePortal, &rd, conn)
-	expectExecPortal(ctx, t, "", &rd, conn)
-	expectPrepareStmt(ctx, t, "", "SELECT 8", &rd, conn)
+	expectExecStmt(ctx, t, "SELECT 7", &rd, conn, queryStringComplete)
+	expectExecStmt(ctx, t, "SELECT 8", &rd, conn, queryStringComplete)
 	// Now we'll send an error, in the middle of this batch. pgx will stop waiting
 	// for results for commands in the batch. We'll then test that seeking to the
 	// next batch advances us to the correct statement.
 	if err := finishQuery(generateError, conn); err != nil {
 		t.Fatal(err)
 	}
-	// We're about to seek to the next batch but, as per seek's contract, seeking
-	// can only be called when there is something in the buffer. Since the buffer
-	// is filled concurrently with this code, we call CurCmd to ensure that
-	// there's something in there.
-	if _, err := rd.CurCmd(); err != nil {
-		t.Fatal(err)
-	}
-	// Skip all the remaining messages in the batch.
-	if err := rd.SeekToNextBatch(); err != nil {
-		t.Fatal(err)
-	}
-	// We got to the COMMIT that pgx pushed to match the BEGIN it generated for
-	// the batch.
-	expectSync(ctx, t, &rd)
+	// We got to the COMMIT at the end of the batch.
 	expectExecStmt(ctx, t, "COMMIT TRANSACTION", &rd, conn, queryStringComplete)
 	expectSync(ctx, t, &rd)
 	expectExecStmt(ctx, t, "SELECT 9", &rd, conn, queryStringComplete)
@@ -192,6 +180,7 @@ func TestConnMessageTooBig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer mainDB.Close()
@@ -217,15 +206,15 @@ func TestConnMessageTooBig(t *testing.T) {
 		{
 			desc: "simple query",
 			shortStrAction: func(c *pgx.Conn) error {
-				_, err := c.Exec(fmt.Sprintf(`SELECT '%s'`, shortStr))
+				_, err := c.Exec(ctx, fmt.Sprintf(`SELECT '%s'`, shortStr))
 				return err
 			},
 			longStrAction: func(c *pgx.Conn) error {
-				_, err := c.Exec(fmt.Sprintf(`SELECT '%s'`, longStr))
+				_, err := c.Exec(ctx, fmt.Sprintf(`SELECT '%s'`, longStr))
 				return err
 			},
 			postLongStrAction: func(c *pgx.Conn) error {
-				_, err := c.Exec("SELECT 1")
+				_, err := c.Exec(ctx, "SELECT 1")
 				return err
 			},
 			expectedErrRegex: "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
@@ -233,59 +222,55 @@ func TestConnMessageTooBig(t *testing.T) {
 		{
 			desc: "copy",
 			shortStrAction: func(c *pgx.Conn) error {
-				_, err := c.CopyFrom(
-					pgx.Identifier{"tbl"},
-					[]string{"str"},
-					pgx.CopyFromRows([][]interface{}{
-						{shortStr},
-					}),
+				_, err := c.PgConn().CopyFrom(
+					ctx,
+					strings.NewReader(fmt.Sprintf("%s\n", shortStr)),
+					"COPY tbl(str) FROM STDIN",
 				)
 				return err
 			},
 			longStrAction: func(c *pgx.Conn) error {
-				_, err := c.CopyFrom(
-					pgx.Identifier{"tbl"},
-					[]string{"str"},
-					pgx.CopyFromRows([][]interface{}{
-						{longStr},
-					}),
+				_, err := c.PgConn().CopyFrom(
+					ctx,
+					strings.NewReader(fmt.Sprintf("%s\n", longStr)),
+					"COPY tbl(str) FROM STDIN",
 				)
 				return err
 			},
 			postLongStrAction: func(c *pgx.Conn) error {
-				_, err := c.CopyFrom(
-					pgx.Identifier{"tbl"},
-					[]string{"str"},
-					pgx.CopyFromRows([][]interface{}{
-						{shortStr},
-					}),
+				_, err := c.PgConn().CopyFrom(
+					ctx,
+					strings.NewReader(fmt.Sprintf("%s\n", shortStr)),
+					"COPY tbl(str) FROM STDIN",
 				)
 				return err
 			},
-			expectedErrRegex: "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
+			// pgx breaks up the data into 64 KiB chunks. See
+			// https://github.com/jackc/pgconn/blob/53f5fed36c570f0b5c98d6ec2415658c7b9bd11c/pgconn.go#L1217
+			expectedErrRegex: "message size 64 KiB bigger than maximum allowed message size 32 KiB",
 		},
 		{
 			desc: "prepared statement has string",
 			shortStrAction: func(c *pgx.Conn) error {
-				_, err := c.Prepare("short_statement", fmt.Sprintf("SELECT $1::string, '%s'", shortStr))
+				_, err := c.Prepare(ctx, "short_statement", fmt.Sprintf("SELECT $1::string, '%s'", shortStr))
 				if err != nil {
 					return err
 				}
-				r := c.QueryRow("short_statement", shortStr)
+				r := c.QueryRow(ctx, "short_statement", shortStr)
 				var str string
 				return r.Scan(&str, &str)
 			},
 			longStrAction: func(c *pgx.Conn) error {
-				_, err := c.Prepare("long_statement", fmt.Sprintf("SELECT $1::string, '%s'", longStr))
+				_, err := c.Prepare(ctx, "long_statement", fmt.Sprintf("SELECT $1::string, '%s'", longStr))
 				if err != nil {
 					return err
 				}
-				r := c.QueryRow("long_statement", longStr)
+				r := c.QueryRow(ctx, "long_statement", longStr)
 				var str string
 				return r.Scan(&str, &str)
 			},
 			postLongStrAction: func(c *pgx.Conn) error {
-				_, err := c.Exec("SELECT 1")
+				_, err := c.Exec(ctx, "SELECT 1")
 				return err
 			},
 			expectedErrRegex: "message size 1.0 MiB bigger than maximum allowed message size 32 KiB",
@@ -293,20 +278,20 @@ func TestConnMessageTooBig(t *testing.T) {
 		{
 			desc: "prepared statement with argument",
 			shortStrAction: func(c *pgx.Conn) error {
-				_, err := c.Prepare("short_arg", "SELECT $1::string")
+				_, err := c.Prepare(ctx, "short_arg", "SELECT $1::string")
 				if err != nil {
 					return err
 				}
-				r := c.QueryRow("short_arg", shortStr)
+				r := c.QueryRow(ctx, "short_arg", shortStr)
 				var str string
 				return r.Scan(&str)
 			},
 			longStrAction: func(c *pgx.Conn) error {
-				_, err := c.Prepare("long_arg", "SELECT $1::string")
+				_, err := c.Prepare(ctx, "long_arg", "SELECT $1::string")
 				if err != nil {
 					return err
 				}
-				r := c.QueryRow("long_arg", longStr)
+				r := c.QueryRow(ctx, "long_arg", longStr)
 				var str string
 				return r.Scan(&str)
 			},
@@ -319,7 +304,7 @@ func TestConnMessageTooBig(t *testing.T) {
 				// properly. (The request has 16 other bytes to send besides our
 				// string and 8 more bytes for the name of the prepared statement.)
 				borderlineStr := string(make([]byte, (32*1024)-24))
-				r := c.QueryRow("long_arg", borderlineStr)
+				r := c.QueryRow(ctx, "long_arg", borderlineStr)
 				var str string
 				return r.Scan(&str)
 			},
@@ -338,20 +323,20 @@ func TestConnMessageTooBig(t *testing.T) {
 	t.Run("allow big messages", func(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.desc, func(t *testing.T) {
-				conf, err := pgx.ParseConnectionString(pgURL.String())
+				conf, err := pgx.ParseConfig(pgURL.String())
 				require.NoError(t, err)
 
 				t.Run("short string", func(t *testing.T) {
-					c, err := pgx.Connect(conf)
+					c, err := pgx.ConnectConfig(ctx, conf)
 					require.NoError(t, err)
-					defer func() { _ = c.Close() }()
+					defer func() { _ = c.Close(ctx) }()
 					require.NoError(t, tc.shortStrAction(c))
 				})
 
 				t.Run("long string", func(t *testing.T) {
-					c, err := pgx.Connect(conf)
+					c, err := pgx.ConnectConfig(ctx, conf)
 					require.NoError(t, err)
-					defer func() { _ = c.Close() }()
+					defer func() { _ = c.Close(ctx) }()
 					require.NoError(t, tc.longStrAction(c))
 				})
 			})
@@ -365,13 +350,13 @@ func TestConnMessageTooBig(t *testing.T) {
 	t.Run("disallow big messages", func(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.desc, func(t *testing.T) {
-				conf, err := pgx.ParseConnectionString(pgURL.String())
+				conf, err := pgx.ParseConfig(pgURL.String())
 				require.NoError(t, err)
 
 				t.Run("short string", func(t *testing.T) {
-					c, err := pgx.Connect(conf)
+					c, err := pgx.ConnectConfig(ctx, conf)
 					require.NoError(t, err)
-					defer func() { _ = c.Close() }()
+					defer func() { _ = c.Close(ctx) }()
 					require.NoError(t, tc.shortStrAction(c))
 				})
 
@@ -380,13 +365,13 @@ func TestConnMessageTooBig(t *testing.T) {
 					var c *pgx.Conn
 					defer func() {
 						if c != nil {
-							_ = c.Close()
+							_ = c.Close(ctx)
 						}
 					}()
 					// Allow the cluster setting to propagate.
 					testutils.SucceedsSoon(t, func() error {
 						var err error
-						c, err = pgx.Connect(conf)
+						c, err = pgx.ConnectConfig(ctx, conf)
 						require.NoError(t, err)
 
 						err = tc.longStrAction(c)
@@ -394,7 +379,7 @@ func TestConnMessageTooBig(t *testing.T) {
 							gotErr = err
 							return nil
 						}
-						defer func() { _ = c.Close() }()
+						defer func() { _ = c.Close(ctx) }()
 						return errors.Newf("expected error")
 					})
 
@@ -477,68 +462,70 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	if err != nil {
 		return err
 	}
-	conn, err := pgx.Connect(
-		pgx.ConnConfig{
-			Logger: pgxTestLogger{},
-			Host:   host,
-			Port:   uint16(port),
-			User:   "root",
-			// Setting this so that the queries sent by pgx to initialize the
-			// connection are not using prepared statements. That simplifies the
-			// scaffolding of the test.
-			PreferSimpleProtocol: true,
-			Database:             "system",
-		})
+	cfg, err := pgx.ParseConfig(
+		fmt.Sprintf("postgresql://%s@%s:%d/system?sslmode=disable", security.RootUser, host, port),
+	)
+	if err != nil {
+		return err
+	}
+	cfg.Logger = pgxTestLogger{}
+	// Setting this so that the queries sent by pgx to initialize the
+	// connection are not using prepared statements. That simplifies the
+	// scaffolding of the test.
+	cfg.PreferSimpleProtocol = true
+	conn, err := pgx.ConnectConfig(ctx, cfg)
 	if err != nil {
 		return err
 	}
 
-	if _, err := conn.Exec("select 1"); err != nil {
+	if _, err := conn.Exec(ctx, "select 1"); err != nil {
 		return err
 	}
-	if _, err := conn.Exec("select 2"); err != nil {
+	if _, err := conn.Exec(ctx, "select 2"); err != nil {
 		return err
 	}
-	if _, err := conn.Prepare("p1", "select 'p1'"); err != nil {
+	if _, err := conn.Prepare(ctx, "p1", "select 'p1'"); err != nil {
 		return err
 	}
-	if _, err := conn.ExecEx(
+	if _, err := conn.Exec(
 		ctx, "p1",
 		// We set these options because apparently that's how I tell pgx that it
 		// should check whether "p1" is a prepared statement.
-		&pgx.QueryExOptions{SimpleProtocol: false}); err != nil {
+		pgx.QuerySimpleProtocol(false),
+	); err != nil {
 		return err
 	}
 
 	// Send a group of statements as one query string using the simple protocol.
 	// We'll check that we receive them one by one, but marked as a batch.
-	if _, err := conn.Exec("select 4; select 5; select 6;"); err != nil {
+	if _, err := conn.Exec(ctx, "select 4; select 5; select 6;"); err != nil {
 		return err
 	}
 
-	batch := conn.BeginBatch()
-	batch.Queue("select 7", nil, nil, nil)
-	batch.Queue("select 8", nil, nil, nil)
-	if err := batch.Send(context.Background(), &pgx.TxOptions{}); err != nil {
-		return err
-	}
-	if err := batch.Close(); err != nil {
+	batch := &pgx.Batch{}
+	batch.Queue("BEGIN")
+	batch.Queue("select 7")
+	batch.Queue("select 8")
+	batch.Queue("COMMIT")
+
+	batchResults := conn.SendBatch(ctx, batch)
+	if err := batchResults.Close(); err != nil {
 		// Swallow the error that we injected.
 		if !strings.Contains(err.Error(), "injected") {
 			return err
 		}
 	}
 
-	if _, err := conn.Exec("select 9"); err != nil {
+	if _, err := conn.Exec(ctx, "select 9"); err != nil {
 		return err
 	}
-	if _, err := conn.Exec("bogus statement failing to parse"); err != nil {
+	if _, err := conn.Exec(ctx, "bogus statement failing to parse"); err != nil {
 		return err
 	}
 
 	wg.Wait()
 
-	return conn.Close()
+	return conn.Close(ctx)
 }
 
 // waitForClientConn blocks until a client connects and performs the pgwire
@@ -583,7 +570,7 @@ func getSessionArgs(ln net.Listener, trustRemoteAddr bool) (net.Conn, sql.Sessio
 
 func makeTestingConvCfg() (sessiondatapb.DataConversionConfig, *time.Location) {
 	return sessiondatapb.DataConversionConfig{
-		BytesEncodeFormat: sessiondatapb.BytesEncodeHex,
+		BytesEncodeFormat: lex.BytesEncodeHex,
 	}, time.UTC
 }
 
@@ -879,8 +866,10 @@ func finishQuery(t finishType, c *conn) error {
 
 type pgxTestLogger struct{}
 
-func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]interface{}) {
-	log.Infof(context.Background(), "pgx log [%s] %s - %s", level, msg, data)
+func (l pgxTestLogger) Log(
+	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
+) {
+	log.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.
@@ -910,22 +899,22 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 		r.Exec(t, "CREATE DATABASE test")
 		r.Exec(t, "CREATE TABLE test.t (x int primary key)")
 
-		pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+		pgxConfig, err := pgx.ParseConfig(pgURL.String())
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		conn, err := pgx.Connect(pgxConfig)
+		conn, err := pgx.ConnectConfig(ctx, pgxConfig)
 		require.NoError(t, err)
-		tx, err := conn.Begin()
+		tx, err := conn.Begin(ctx)
 		require.NoError(t, err)
-		_, err = tx.Exec("INSERT INTO test.t(x) values (1)")
+		_, err = tx.Exec(ctx, "INSERT INTO test.t(x) values (1)")
 		require.NoError(t, err)
 		readCh := make(chan error)
 		go func() {
-			conn2, err := pgx.Connect(pgxConfig)
+			conn2, err := pgx.ConnectConfig(ctx, pgxConfig)
 			require.NoError(t, err)
-			_, err = conn2.Exec("SELECT * FROM test.t")
+			_, err = conn2.Exec(ctx, "SELECT * FROM test.t")
 			readCh <- err
 		}()
 
@@ -936,10 +925,10 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 		}
 
 		if !open {
-			_, err = tx.Exec("bogus")
+			_, err = tx.Exec(ctx, "bogus")
 			require.NotNil(t, err)
 		}
-		err = conn.Close()
+		err = conn.Close(ctx)
 		require.NoError(t, err)
 		select {
 		case readErr := <-readCh:
@@ -987,14 +976,14 @@ func TestConnCloseWhileProducingRows(t *testing.T) {
 	r.Exec(t, "CREATE DATABASE test")
 	r.Exec(t, "CREATE TABLE test.test AS SELECT * FROM generate_series(1,100)")
 
-	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
 	// We test both with and without DistSQL, as the way that network errors are
 	// observed depends on the engine.
 	testutils.RunTrueAndFalse(t, "useDistSQL", func(t *testing.T, useDistSQL bool) {
-		conn, err := pgx.Connect(pgxConfig)
+		conn, err := pgx.ConnectConfig(ctx, pgxConfig)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1004,17 +993,17 @@ func TestConnCloseWhileProducingRows(t *testing.T) {
 		} else {
 			query = `SET DISTSQL = 'off'`
 		}
-		if _, err := conn.Exec(query); err != nil {
+		if _, err := conn.Exec(ctx, query); err != nil {
 			t.Fatal(err)
 		}
-		rows, err := conn.Query("SELECT * FROM test.test")
+		rows, err := conn.Query(ctx, "SELECT * FROM test.test")
 		if err != nil {
 			t.Fatal(err)
 		}
 		if hasResults := rows.Next(); !hasResults {
 			t.Fatal("expected results")
 		}
-		if err := conn.Close(); err != nil {
+		if err := conn.Close(ctx); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -1133,7 +1122,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 			}
 			defer c.Close()
 
-			readTimeoutConn := newReadTimeoutConn(c, func() error { return ctx.Err() })
+			readTimeoutConn := NewReadTimeoutConn(c, func() error { return ctx.Err() })
 			// Assert that reads are performed normally.
 			readBytes := make([]byte, len(expectedRead))
 			if _, err := readTimeoutConn.Read(readBytes); err != nil {
@@ -1289,16 +1278,59 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 	<-authBlocked
 }
 
+// TestConnServerAbortsOnRepeatedErrors checks that if the server keeps seeing
+// a non-connection-closed error repeatedly, then it eventually the server
+// aborts the connection.
+func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	var shouldError uint32 = 0
+	testingKnobError := fmt.Errorf("a random error")
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Insecure: true,
+			Knobs: base.TestingKnobs{
+				PGWireTestingKnobs: &sql.PGWireTestingKnobs{
+					AfterReadMsgTestingKnob: func(ctx context.Context) error {
+						if atomic.LoadUint32(&shouldError) == 0 {
+							return nil
+						}
+						return testingKnobError
+					},
+				},
+			},
+		})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	conn, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	atomic.StoreUint32(&shouldError, 1)
+	for i := 0; i < maxRepeatedErrorCount+100; i++ {
+		var s int
+		err := conn.QueryRowContext(ctx, "SELECT 1").Scan(&s)
+		if err != nil {
+			if strings.Contains(err.Error(), testingKnobError.Error()) {
+				continue
+			}
+			if errors.Is(err, driver.ErrBadConn) {
+				// The server closed the connection, which is what we want!
+				require.GreaterOrEqualf(t, i, maxRepeatedErrorCount,
+					"the server should have aborted after seeing %d errors",
+					maxRepeatedErrorCount,
+				)
+				return
+			}
+		}
+	}
+	require.FailNow(t, "should have seen ErrBadConn before getting here")
+}
+
 func TestParseClientProvidedSessionParameters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// The test server is used only incidentally by this test: this is not the
-	// server that the client will connect to; we just use it on the side to
-	// execute some metadata queries that pgx sends whenever it opens a
-	// connection.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true, UseDatabase: "system"})
-	defer s.Stopper().Stop(context.Background())
 
 	// Start a pgwire "server".
 	addr := util.TestAddr
@@ -1381,6 +1413,15 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 			},
 		},
 		{
+			desc:  "success parsing options with a tab (%09) separating the options",
+			query: "user=root&options=-csearch_path=default,test%09-coptimizer_use_multicol_stats=true",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "default,test", args.SessionDefaults["search_path"])
+				require.Equal(t, "true", args.SessionDefaults["optimizer_use_multicol_stats"])
+			},
+		},
+		{
 			desc:  "error when no leading '-c'",
 			query: "user=root&options=search_path=default",
 			assert: func(t *testing.T, args sql.SessionArgs, err error) {
@@ -1453,6 +1494,22 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 				require.Equal(t, "2.3.4.5:5432", args.RemoteAddr.String())
 			},
 		},
+		{
+			desc:  "normalize to lower case in options parameter",
+			query: "user=root&options=-c DateStyle=YMD,ISO",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "YMD,ISO", args.SessionDefaults["datestyle"])
+			},
+		},
+		{
+			desc:  "normalize to lower case in query parameters",
+			query: "user=root&DateStyle=ISO,YMD",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "ISO,YMD", args.SessionDefaults["datestyle"])
+			},
+		},
 	}
 
 	baseURL := fmt.Sprintf("postgres://%s/system?sslmode=disable", serverAddr)
@@ -1460,20 +1517,22 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 
+			var connErr error
 			go func() {
-				url := fmt.Sprintf("%s&%s", baseURL, tc.query)
-				c, err := gosql.Open("postgres", url)
-				require.NoError(t, err)
-
 				ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 				defer cancel()
+				url := fmt.Sprintf("%s&%s", baseURL, tc.query)
+				var c *pgx.Conn
+				c, connErr = pgx.Connect(ctx, url)
+				if connErr != nil {
+					return
+				}
 				// ignore the error because there is no answer from the server, we are
 				// interested in parsing session arguments only
-				_ = c.PingContext(ctx)
+				_ = c.Ping(ctx)
 				// closing connection immediately, since getSessionArgs is blocking
-				_ = c.Close()
+				_ = c.Close(ctx)
 			}()
-
 			// Wait for the client to connect and perform the handshake.
 			_, args, err := getSessionArgs(ln, true /* trustRemoteAddr */)
 			tc.assert(t, args, err)
@@ -1484,9 +1543,15 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	_, err := db.Exec("SET CLUSTER SETTING sql.defaults.datestyle.enabled = true")
+	require.NoError(t, err)
+	_, err = db.Exec("SET CLUSTER SETTING sql.defaults.intervalstyle.enabled = true")
+	require.NoError(t, err)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(security.RootUser),
@@ -1494,7 +1559,12 @@ func TestSetSessionArguments(t *testing.T) {
 	defer cleanupFunc()
 
 	q := pgURL.Query()
-	q.Add("options", "  --user=test -c    search_path=public,testsp %20 --default-transaction-isolation=read\\ uncommitted   -capplication_name=test  --datestyle=iso\\ ,\\ mdy\\  ")
+	q.Add("options", "  --user=test -c    search_path=public,testsp %20 "+
+		"--default-transaction-isolation=read\\ uncommitted   "+
+		"-capplication_name=test  "+
+		"--DateStyle=ymd\\ ,\\ iso\\  "+
+		"-c intervalstyle%3DISO_8601 "+
+		"-ccustom_option.custom_option=test2")
 	pgURL.RawQuery = q.Encode()
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
 
@@ -1503,17 +1573,17 @@ func TestSetSessionArguments(t *testing.T) {
 	}
 	defer noBufferDB.Close()
 
-	pgxConfig, err := pgx.ParseConnectionString(pgURL.String())
+	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	conn, err := pgx.Connect(pgxConfig)
+	conn, err := pgx.ConnectConfig(ctx, pgxConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rows, err := conn.Query("show all")
+	rows, err := conn.Query(ctx, "show all")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1524,7 +1594,8 @@ func TestSetSessionArguments(t *testing.T) {
 		// all transactions execute with serializable isolation.
 		"default_transaction_isolation": "serializable",
 		"application_name":              "test",
-		"datestyle":                     "ISO, MDY",
+		"datestyle":                     "ISO, YMD",
+		"intervalstyle":                 "iso_8601",
 	}
 	expectedFoundOptions := len(expectedOptions)
 
@@ -1544,51 +1615,320 @@ func TestSetSessionArguments(t *testing.T) {
 	}
 	require.Equal(t, expectedFoundOptions, foundOptions)
 
-	if err := conn.Close(); err != nil {
+	// Custom session options don't show up on SHOW ALL
+	var customOption string
+	require.NoError(t, conn.QueryRow(ctx, "SHOW custom_option.custom_option").Scan(&customOption))
+	require.Equal(t, "test2", customOption)
+
+	if err := conn.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// TestCancelQuery uses the pgwire-level query cancellation protocol provided
-// by lib/pq to make sure that canceling a query has no effect, and makes sure
-// the dummy BackendKeyData does not cause problems.
-func TestCancelQuery(t *testing.T) {
+func TestRoleDefaultSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	cancelCtx, cancel := context.WithCancel(context.Background())
-	args := base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLExecutor: &sql.ExecutorTestingKnobs{
-				BeforeExecute: func(ctx context.Context, stmt string) {
-					if strings.Contains(stmt, "pg_sleep") {
-						cancel()
-					}
-				},
-			},
-		},
-	}
-	s, _, _ := serverutils.StartServer(t, args)
-	defer s.Stopper().Stop(cancelCtx)
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	_, err := db.ExecContext(ctx, "CREATE ROLE testuser WITH LOGIN")
+	require.NoError(t, err)
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(), "TestCancelQuery" /* prefix */, url.User(security.RootUser),
+		t, s.ServingSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User("testuser"),
 	)
 	defer cleanupFunc()
 
-	db, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer db.Close()
+	for i, tc := range []struct {
+		setupStmt             string
+		postConnectStmt       string
+		databaseOverride      string
+		searchPathOptOverride string
+		userOverride          string
+		expectedSearchPath    string
+	}{
+		// The test cases need to be in order since the default settings have
+		// an order of precedence that is being checked here.
+		{
+			setupStmt:          "ALTER ROLE ALL SET search_path = 'a'",
+			expectedSearchPath: "a",
+		},
+		{
+			setupStmt:          "ALTER ROLE ALL IN DATABASE defaultdb SET search_path = 'b'",
+			expectedSearchPath: "b",
+		},
+		{
+			setupStmt:          "ALTER ROLE testuser SET search_path = 'c'",
+			expectedSearchPath: "c",
+		},
+		{
+			setupStmt:          "ALTER ROLE testuser IN DATABASE defaultdb SET search_path = 'd'",
+			expectedSearchPath: "d",
+		},
+		{
+			// Connecting to a different database should use the role-wide default.
+			databaseOverride:   "postgres",
+			expectedSearchPath: "c",
+		},
+		{
+			// Connecting to a non-existent database should use the role-wide default
+			// (and should not error). After connecting, we need to switch to a
+			// real database so that `SHOW var` works correctly.
+			databaseOverride:   "this_is_not_a_database",
+			postConnectStmt:    "SET DATABASE = defaultdb",
+			expectedSearchPath: "c",
+		},
+		{
+			// The setting in the connection URL should take precedence.
+			searchPathOptOverride: "e",
+			expectedSearchPath:    "e",
+		},
+		{
+			// Connecting as a different user, should use the database-wide default.
+			setupStmt:          "CREATE ROLE testuser2 WITH LOGIN",
+			userOverride:       "testuser2",
+			databaseOverride:   "defaultdb",
+			expectedSearchPath: "b",
+		},
+		{
+			// Connecting as a different user and to a different database should
+			// use the global default.
+			userOverride:       "testuser2",
+			databaseOverride:   "postgres",
+			expectedSearchPath: "a",
+		},
+		{
+			// Test that RESETing the global default works.
+			setupStmt:          "ALTER ROLE ALL RESET search_path",
+			userOverride:       "testuser2",
+			databaseOverride:   "postgres",
+			expectedSearchPath: `"$user", public`,
+		},
+		{
+			// Change an existing default setting.
+			setupStmt:          "ALTER ROLE testuser IN DATABASE defaultdb SET search_path = 'f'",
+			expectedSearchPath: "f",
+		},
+		{
+			// RESET after connecting should go back to the per-role default setting.
+			setupStmt:          "",
+			postConnectStmt:    "SET search_path = 'new'; RESET search_path;",
+			expectedSearchPath: "f",
+		},
+		{
+			// RESET should use the query param as the default if it was provided.
+			setupStmt:             "",
+			searchPathOptOverride: "g",
+			postConnectStmt:       "SET search_path = 'new'; RESET ALL;",
+			expectedSearchPath:    "g",
+		},
+		{
+			setupStmt:          "ALTER ROLE testuser IN DATABASE defaultdb SET search_path = DEFAULT",
+			expectedSearchPath: "c",
+		},
+		{
+			setupStmt:          "ALTER ROLE testuser SET search_path TO DEFAULT",
+			expectedSearchPath: "b",
+		},
+		{
+			// Add a default setting for a different variable.
+			setupStmt:          "ALTER ROLE ALL IN DATABASE defaultdb SET serial_normalization = sql_sequence",
+			expectedSearchPath: "b",
+		},
+		{
+			// RESETing the other variable should not affect search_path.
+			setupStmt:          "ALTER ROLE ALL IN DATABASE defaultdb RESET serial_normalization",
+			expectedSearchPath: "b",
+		},
+		{
+			// The global default was already reset earlier, so there should be
+			// no default setting after this.
+			setupStmt:          "ALTER ROLE ALL IN DATABASE defaultdb RESET ALL",
+			expectedSearchPath: `"$user", public`,
+		},
+	} {
+		t.Run(fmt.Sprintf("TestRoleDefaultSettings-%d", i), func(t *testing.T) {
+			_, err := db.ExecContext(ctx, tc.setupStmt)
+			require.NoError(t, err)
 
-	// Cancellation has no effect on ongoing query.
-	if _, err := db.QueryContext(cancelCtx, "select pg_sleep(0)"); err != nil {
-		t.Fatalf("unexpected error: %s", err)
+			pgURLCopy := pgURL
+			if tc.userOverride != "" {
+				newPGURL, cleanupFunc := sqlutils.PGUrl(
+					t, s.ServingSQLAddr(), "TestRoleDefaultSettings" /* prefix */, url.User(tc.userOverride),
+				)
+				defer cleanupFunc()
+				pgURLCopy = newPGURL
+			}
+			pgURLCopy.Path = tc.databaseOverride
+			if tc.searchPathOptOverride != "" {
+				q := pgURLCopy.Query()
+				q.Add("search_path", tc.searchPathOptOverride)
+				pgURLCopy.RawQuery = q.Encode()
+			}
+
+			thisDB, err := gosql.Open("postgres", pgURLCopy.String())
+			require.NoError(t, err)
+			defer thisDB.Close()
+
+			if tc.postConnectStmt != "" {
+				_, err = thisDB.ExecContext(ctx, tc.postConnectStmt)
+				require.NoError(t, err)
+			}
+
+			var actual string
+			err = thisDB.QueryRow("SHOW search_path").Scan(&actual)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedSearchPath, actual)
+		})
+	}
+}
+
+func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer testServer.Stopper().Stop(ctx)
+
+	// Users.
+	admin := security.RootUser
+	nonAdmin := security.TestUser
+
+	// openConnWithUser opens a connection to the testServer for the given user
+	// and always returns an associated cleanup function, even in case of error,
+	// which should be called. The returned cleanup function is idempotent.
+	openConnWithUser := func(user string) (*pgx.Conn, func(), error) {
+		pgURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
+			t,
+			testServer.ServingSQLAddr(),
+			t.Name(),
+			url.UserPassword(user, user),
+			user == admin,
+		)
+		defer cleanup()
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		if err != nil {
+			return nil, func() {}, err
+		}
+		return conn, func() {
+			require.NoError(t, conn.Close(ctx))
+		}, nil
 	}
 
-	// Context is already canceled, so error should come before execution.
-	if _, err := db.QueryContext(cancelCtx, "select 1"); err == nil {
-		t.Fatal("expected error")
-	} else if err.Error() != "context canceled" {
-		t.Fatalf("unexpected error: %s", err)
+	openConnWithUserSuccess := func(user string) (*pgx.Conn, func()) {
+		conn, cleanup, err := openConnWithUser(user)
+		if err != nil {
+			defer cleanup()
+			t.FailNow()
+		}
+		return conn, cleanup
 	}
+
+	openConnWithUserError := func(user string) {
+		_, cleanup, err := openConnWithUser(user)
+		defer cleanup()
+		require.Error(t, err)
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, pgcode.TooManyConnections.String(), pgErr.Code)
+	}
+
+	getConnectionCount := func() int {
+		return int(testServer.SQLServer().(*sql.Server).GetConnectionCount())
+	}
+
+	getMaxConnections := func() int {
+		conn, cleanup := openConnWithUserSuccess(admin)
+		defer cleanup()
+		var maxConnections int
+		err := conn.QueryRow(ctx, "SHOW CLUSTER SETTING server.max_connections_per_gateway").Scan(&maxConnections)
+		require.NoError(t, err)
+		return maxConnections
+	}
+
+	setMaxConnections := func(maxConnections int) {
+		conn, cleanup := openConnWithUserSuccess(admin)
+		defer cleanup()
+		_, err := conn.Exec(ctx, "SET CLUSTER SETTING server.max_connections_per_gateway = $1", maxConnections)
+		require.NoError(t, err)
+	}
+
+	createUser := func(user string) {
+		conn, cleanup := openConnWithUserSuccess(admin)
+		defer cleanup()
+		_, err := conn.Exec(ctx, fmt.Sprintf("CREATE USER %[1]s WITH PASSWORD '%[1]s'", user))
+		require.NoError(t, err)
+	}
+
+	// create nonAdmin
+	createUser(nonAdmin)
+	require.Equal(t, 0, getConnectionCount())
+
+	// assert default value
+	require.Equal(t, -1, getMaxConnections())
+	require.Equal(t, 0, getConnectionCount())
+
+	t.Run("0 max_connections", func(t *testing.T) {
+		setMaxConnections(0)
+		require.Equal(t, 0, getConnectionCount())
+		// can't connect with nonAdmin
+		openConnWithUserError(nonAdmin)
+		require.Equal(t, 0, getConnectionCount())
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		require.Equal(t, 1, getConnectionCount())
+		adminCleanup()
+		require.Equal(t, 0, getConnectionCount())
+	})
+
+	t.Run("1 max_connections nonAdmin -> admin", func(t *testing.T) {
+		setMaxConnections(1)
+		require.Equal(t, 0, getConnectionCount())
+		// can connect with nonAdmin
+		_, nonAdminCleanup := openConnWithUserSuccess(nonAdmin)
+		require.Equal(t, 1, getConnectionCount())
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		require.Equal(t, 2, getConnectionCount())
+		adminCleanup()
+		require.Equal(t, 1, getConnectionCount())
+		nonAdminCleanup()
+		require.Equal(t, 0, getConnectionCount())
+	})
+
+	t.Run("1 max_connections admin -> nonAdmin", func(t *testing.T) {
+		setMaxConnections(1)
+		require.Equal(t, 0, getConnectionCount())
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		require.Equal(t, 1, getConnectionCount())
+		// can't connect with nonAdmin
+		openConnWithUserError(nonAdmin)
+		require.Equal(t, 1, getConnectionCount())
+		adminCleanup()
+		require.Equal(t, 0, getConnectionCount())
+	})
+
+	t.Run("-1 max_connections", func(t *testing.T) {
+		setMaxConnections(-1)
+		require.Equal(t, 0, getConnectionCount())
+		// can connect with multiple nonAdmin
+		_, nonAdminCleanup1 := openConnWithUserSuccess(nonAdmin)
+		require.Equal(t, 1, getConnectionCount())
+		_, nonAdminCleanup2 := openConnWithUserSuccess(nonAdmin)
+		require.Equal(t, 2, getConnectionCount())
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		require.Equal(t, 3, getConnectionCount())
+		adminCleanup()
+		require.Equal(t, 2, getConnectionCount())
+		nonAdminCleanup1()
+		require.Equal(t, 1, getConnectionCount())
+		nonAdminCleanup2()
+		require.Equal(t, 0, getConnectionCount())
+	})
 }

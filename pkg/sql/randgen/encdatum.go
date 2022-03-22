@@ -163,3 +163,36 @@ func MakeRepeatedIntRows(n int, numRows int, numCols int) rowenc.EncDatumRows {
 	}
 	return rows
 }
+
+// GenEncDatumRowsString converts rows of strings to rows of EncDatum Strings.
+// If a string is empty, the corresponding value is NULL.
+func GenEncDatumRowsString(inputRows [][]string) rowenc.EncDatumRows {
+	rows := make(rowenc.EncDatumRows, len(inputRows))
+	for i, inputRow := range inputRows {
+		for _, x := range inputRow {
+			if x == "" {
+				rows[i] = append(rows[i], NullEncDatum())
+			} else {
+				rows[i] = append(rows[i], stringEncDatum(x))
+			}
+		}
+	}
+	return rows
+}
+
+// stringEncDatum returns an EncDatum representation of a string.
+func stringEncDatum(s string) rowenc.EncDatum {
+	return rowenc.EncDatum{Datum: tree.NewDString(s)}
+}
+
+// GenEncDatumRowsBytes converts rows of bytes to rows of EncDatum value encoded
+// bytes.
+func GenEncDatumRowsBytes(inputRows [][][]byte) rowenc.EncDatumRows {
+	rows := make(rowenc.EncDatumRows, len(inputRows))
+	for i, inputRow := range inputRows {
+		for _, x := range inputRow {
+			rows[i] = append(rows[i], rowenc.EncDatumFromEncoded(descpb.DatumEncoding_VALUE, x))
+		}
+	}
+	return rows
+}

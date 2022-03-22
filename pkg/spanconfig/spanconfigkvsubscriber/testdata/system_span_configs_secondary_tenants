@@ -1,0 +1,34 @@
+
+start
+----
+
+update
+upsert {source=1,target=20}:Z
+upsert {source=10, target=10}:W
+----
+
+updates
+----
+[/Min,/Max)
+[/Tenant/10,/Tenant/11)
+[/Tenant/20,/Tenant/21)
+
+# Delete system span configs that target secondary and ensure handlers are
+# invoked correctly.
+update
+delete {source=1,target=20}
+----
+
+updates
+----
+[/Tenant/20,/Tenant/21)
+
+# Lastly, update a system span config set on a secondary tenant's keyspace and
+# ensure handlers are invoked correctly.
+update
+upsert {source=10, target=10}:U
+----
+
+updates
+----
+[/Tenant/10,/Tenant/11)

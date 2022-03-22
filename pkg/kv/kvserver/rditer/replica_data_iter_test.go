@@ -82,11 +82,7 @@ func createRangeData(
 		{keys.AbortSpanKey(desc.RangeID, testTxnID2), ts0},
 		{keys.RangeGCThresholdKey(desc.RangeID), ts0},
 		{keys.RangeAppliedStateKey(desc.RangeID), ts0},
-		{keys.RaftAppliedIndexLegacyKey(desc.RangeID), ts0},
-		{keys.RaftTruncatedStateLegacyKey(desc.RangeID), ts0},
 		{keys.RangeLeaseKey(desc.RangeID), ts0},
-		{keys.LeaseAppliedIndexLegacyKey(desc.RangeID), ts0},
-		{keys.RangeStatsLegacyKey(desc.RangeID), ts0},
 		{keys.RangeTombstoneKey(desc.RangeID), ts0},
 		{keys.RaftHardStateKey(desc.RangeID), ts0},
 		{keys.RaftLogKey(desc.RangeID, 1), ts0},
@@ -130,7 +126,7 @@ func verifyRDReplicatedOnlyMVCCIter(
 ) {
 	t.Helper()
 	verify := func(t *testing.T, useSpanSet, reverse bool) {
-		readWriter := eng.NewReadOnly()
+		readWriter := eng.NewReadOnly(storage.StandardDurability)
 		defer readWriter.Close()
 		if useSpanSet {
 			var spans spanset.SpanSet
@@ -193,7 +189,7 @@ func verifyRDReplicatedOnlyMVCCIter(
 func verifyRDEngineIter(
 	t *testing.T, desc *roachpb.RangeDescriptor, eng storage.Engine, expectedKeys []storage.MVCCKey,
 ) {
-	readWriter := eng.NewReadOnly()
+	readWriter := eng.NewReadOnly(storage.StandardDurability)
 	defer readWriter.Close()
 	iter := NewReplicaEngineDataIterator(desc, readWriter, false)
 	defer iter.Close()
@@ -318,7 +314,7 @@ func TestReplicaDataIterator(t *testing.T) {
 
 func checkOrdering(t *testing.T, ranges []KeyRange) {
 	for i := 1; i < len(ranges); i++ {
-		if ranges[i].Start.Less(ranges[i-1].End) {
+		if ranges[i].Start.Compare(ranges[i-1].End) < 0 {
 			t.Fatalf("ranges need to be ordered and non-overlapping, but %s > %s",
 				ranges[i-1].End, ranges[i].Start)
 		}

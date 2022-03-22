@@ -34,8 +34,6 @@ func populateHashOverloads() {
 		ov := newLastArgTypeOverload(hashOverloadBase, family)
 		for _, width := range widths {
 			// Note that we pass in types.Bool as the return type just to make
-			//
-			// Note that we pass in types.Bool as the return type just to make
 			// overloads initialization happy. We don't actually care about the
 			// return type since we know that it will be represented physically
 			// as uint64.
@@ -43,7 +41,7 @@ func populateHashOverloads() {
 			sameTypeCustomizer := typeCustomizers[typePair{family, width, family, width}]
 			if sameTypeCustomizer != nil {
 				if b, ok := sameTypeCustomizer.(hashTypeCustomizer); ok {
-					lawo.AssignFunc = b.getHashAssignFunc()
+					lawo.HashFunc = b.getHashFunc()
 				}
 			}
 		}
@@ -56,11 +54,11 @@ func populateHashOverloads() {
 // hashTypeCustomizer is a type customizer that changes how the templater
 // produces hash output for a particular type.
 type hashTypeCustomizer interface {
-	getHashAssignFunc() assignFunc
+	getHashFunc() hashFunc
 }
 
-func (boolCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+func (boolCustomizer) getHashFunc() hashFunc {
+	return func(targetElem, vElem, _, _ string) string {
 		return fmt.Sprintf(`
 			x := 0
 			if %[2]s {
@@ -80,26 +78,26 @@ const hashByteSliceString = `
 			%[1]s = memhash(unsafe.Pointer(sh.Data), %[1]s, uintptr(len(%[2]s)))
 `
 
-func (bytesCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+func (bytesCustomizer) getHashFunc() hashFunc {
+	return func(targetElem, vElem, _, _ string) string {
 		return fmt.Sprintf(hashByteSliceString, targetElem, vElem)
 	}
 }
 
-func (decimalCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+func (decimalCustomizer) getHashFunc() hashFunc {
+	return func(targetElem, vElem, _, _ string) string {
 		return fmt.Sprintf(`
 			// In order for equal decimals to hash to the same value we need to
 			// remove the trailing zeroes if there are any.
-			tmpDec := &_overloadHelper.TmpDec1
+			var tmpDec apd.Decimal //gcassert:noescape
 			tmpDec.Reduce(&%[1]s)
 			b := []byte(tmpDec.String())`, vElem) +
 			fmt.Sprintf(hashByteSliceString, targetElem, "b")
 	}
 }
 
-func (c floatCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+func (c floatCustomizer) getHashFunc() hashFunc {
+	return func(targetElem, vElem, _, _ string) string {
 		// TODO(yuzefovich): think through whether this is appropriate way to hash
 		// NaNs.
 		return fmt.Sprintf(
@@ -113,8 +111,8 @@ func (c floatCustomizer) getHashAssignFunc() assignFunc {
 	}
 }
 
-func (c intCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+func (c intCustomizer) getHashFunc() hashFunc {
+	return func(targetElem, vElem, _, _ string) string {
 		return fmt.Sprintf(`
 				// In order for integers with different widths but of the same value to
 				// to hash to the same value, we upcast all of them to int64.
@@ -124,8 +122,8 @@ func (c intCustomizer) getHashAssignFunc() assignFunc {
 	}
 }
 
-func (c timestampCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+func (c timestampCustomizer) getHashFunc() hashFunc {
+	return func(targetElem, vElem, _, _ string) string {
 		return fmt.Sprintf(`
 		  s := %[2]s.UnixNano()
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&s)), %[1]s)
@@ -133,8 +131,8 @@ func (c timestampCustomizer) getHashAssignFunc() assignFunc {
 	}
 }
 
-func (c intervalCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+func (c intervalCustomizer) getHashFunc() hashFunc {
+	return func(targetElem, vElem, _, _ string) string {
 		return fmt.Sprintf(`
 		  months, days, nanos := %[2]s.Months, %[2]s.Days, %[2]s.Nanos()
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&months)), %[1]s)
@@ -144,27 +142,20 @@ func (c intervalCustomizer) getHashAssignFunc() assignFunc {
 	}
 }
 
-func (c jsonCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
-		// TODO(yuzefovich): consider refactoring this to avoid decoding-encoding of
-		// JSON altogether. This will require changing `assignFunc` to also have an
-		// access to the index of the current element and then some trickery to get
-		// to the bytes underlying the JSON.
+func (c jsonCustomizer) getHashFunc() hashFunc {
+	return func(targetElem, _, vVec, vIdx string) string {
 		return fmt.Sprintf(`
-        scratch := _overloadHelper.ByteScratch[:0]
-        _b, _err := json.EncodeJSON(scratch, %[2]s)
-        if _err != nil {
-          colexecerror.ExpectedError(_err)
-        }
-        _overloadHelper.ByteScratch = _b
-        %[1]s`, fmt.Sprintf(hashByteSliceString, targetElem, "_b"), vElem)
+        // Access the underlying []byte directly which allows us to skip
+        // decoding-encoding of the JSON object.
+        _b := %[2]s.Bytes.Get(%[3]s)
+        %[1]s`, fmt.Sprintf(hashByteSliceString, targetElem, "_b"), vVec, vIdx)
 	}
 }
 
-func (c datumCustomizer) getHashAssignFunc() assignFunc {
-	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+func (c datumCustomizer) getHashFunc() hashFunc {
+	return func(targetElem, vElem, _, _ string) string {
 		// Note that this overload assumes that there exists
-		//   var datumAlloc *rowenc.DatumAlloc.
+		//   var datumAlloc *tree.DatumAlloc.
 		// in the scope.
 		return fmt.Sprintf(`b := coldataext.Hash(%s.(tree.Datum), datumAlloc)`, vElem) +
 			fmt.Sprintf(hashByteSliceString, targetElem, "b")

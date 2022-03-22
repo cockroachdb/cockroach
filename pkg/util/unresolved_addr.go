@@ -13,6 +13,9 @@ package util
 import (
 	"fmt"
 	"net"
+	"os"
+
+	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 )
 
 // TestAddr is an address to use for test servers. Listening on port 0
@@ -50,6 +53,33 @@ func MakeUnresolvedAddr(network, addr string) UnresolvedAddr {
 // address string.
 func NewUnresolvedAddr(network, addr string) *UnresolvedAddr {
 	return &UnresolvedAddr{
+		NetworkField: network,
+		AddressField: addr,
+	}
+}
+
+// MakeUnresolvedAddrWithDefaults creates a new UnresolvedAddr from a network and
+// raw address string, using the following defaults if not given:
+//
+// - Network: tcp
+// - Host: local hostname or 127.0.0.1
+// - Port: given default port
+func MakeUnresolvedAddrWithDefaults(network, addr, defaultPort string) UnresolvedAddr {
+	if network == "" {
+		network = "tcp"
+	}
+	if host, port, err := addrutil.SplitHostPort(addr, defaultPort); err != nil {
+		addr = net.JoinHostPort(addr, defaultPort)
+	} else {
+		if host == "" {
+			host, err = os.Hostname()
+			if err != nil {
+				host = "127.0.0.1"
+			}
+		}
+		addr = net.JoinHostPort(host, port)
+	}
+	return UnresolvedAddr{
 		NetworkField: network,
 		AddressField: addr,
 	}

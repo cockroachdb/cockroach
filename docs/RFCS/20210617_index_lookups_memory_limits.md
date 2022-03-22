@@ -457,7 +457,7 @@ type Result struct {
 	//
 	// Internally, Results are refcounted. Multiple Results referencing the same
 	// GetResp/ScanResp can be returned from separate `GetResults()` calls, and
-	// the Streamer internally does bufferring and caching of Results - which also
+	// the Streamer internally does buffering and caching of Results - which also
 	// contributes to the refcounts.
 	MemoryTok ResultMemoryToken
 }
@@ -730,7 +730,7 @@ back into the request pool, waiting for budget to open up.
 There's a tension between the desire to effectively batch requests into
 single-range batches, and the desire to send requests as soon as there's some
 budget available. Simply sending a `BatchRequest` with all the requests
-targetting a range is not enough; that `BatchRequest` also needs to have a
+targeting a range is not enough; that `BatchRequest` also needs to have a
 decent budget. Otherwise, we might as well have sent the requests one by one. If
 there's very little budget available, we're better off waiting for more budget
 to become available. We could define a minimum budget required in order to send
@@ -753,12 +753,12 @@ Once a particular result is received, the ownership of its memory might be share
 - when the `Result` is returned to the client (through `GetResults()`), the
 client takes a reference
 - if we're buffering results (`InOrder` execution), the buffer takes a reference
-(or possibly multiple references if the `Result` satisifies multiple duplicate
+(or possibly multiple references if the `Result` satisfies multiple duplicate
 requests)
 - if the result is cached, the cache takes a reference
 
 For its part, the client is responsable for destroying its reference when it's
-done with the `Result`. It does this through the `MemoryToken` encorporated in
+done with the `Result`. It does this through the `MemoryToken` incorporated in
 the `Result`. This is generally expected to happen very soon after the
 `GetResults()` call - the caller will generally take over the results under its
 own accounting/budget quickly. The caller is, however, allowed to delay - but
@@ -1032,7 +1032,7 @@ contention). Even in `InOrder` mode, pipelining lookups can be beneficial, even
 if a slow request does block the delivery of results (but it doesn't need to
 immediately block performing and buffering new lookups).
 
-I think the `Streamer` should offer pipelinig, although not necessarily from
+I think the `Streamer` should offer pipelining, although not necessarily from
 the start. My hope is that, depending on the details of the implementation,
 pipelining would come pretty much for free: given that the `Streamer` by nature
 needs to keep track of requests that are in different phases of completion, does

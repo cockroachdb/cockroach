@@ -21,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -36,8 +38,6 @@ import (
 func TestRevertTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
 
 	s, sqlDB, kv := serverutils.StartServer(
 		t, base.TestServerArgs{UseDatabase: "test"})
@@ -58,7 +58,7 @@ func TestRevertTable(t *testing.T) {
 	var ts string
 	var before int
 	db.QueryRow(t, `SELECT cluster_logical_timestamp(), xor_agg(k # rev) FROM test`).Scan(&ts, &before)
-	targetTime, err := sql.ParseHLC(ts)
+	targetTime, err := tree.ParseHLC(ts)
 	require.NoError(t, err)
 
 	const ignoreGC = false
@@ -80,52 +80,13 @@ func TestRevertTable(t *testing.T) {
 		require.Equal(t, before, aost)
 
 		// Revert the table to ts.
-		desc := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
 		desc.TableDesc().State = descpb.DescriptorState_OFFLINE // bypass the offline check.
 		require.NoError(t, sql.RevertTables(context.Background(), kv, &execCfg, []catalog.TableDescriptor{desc}, targetTime, ignoreGC, 10))
 
 		var reverted int
 		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)
 		require.Equal(t, before, reverted, "expected reverted table after edits to match before")
-	})
-
-	t.Run("interleaved", func(t *testing.T) {
-		db.Exec(t, `CREATE TABLE child (a INT, b INT, rev INT DEFAULT 0, INDEX (rev), PRIMARY KEY (a, b)) INTERLEAVE IN PARENT test (a)`)
-		db.Exec(t, `INSERT INTO child (a, b) SELECT generate_series(1, $1, 2), generate_series(2, $1, 2)`, numRows)
-		db.Exec(t, `UPDATE child SET rev = 1 WHERE a % 3 = 0`)
-
-		db.QueryRow(t, `SELECT cluster_logical_timestamp() FROM test`).Scan(&ts)
-		targetTime, err = sql.ParseHLC(ts)
-		require.NoError(t, err)
-
-		var beforeChild int
-		db.QueryRow(t, `SELECT xor_agg(a # b # rev) FROM child`).Scan(&beforeChild)
-
-		db.Exec(t, `UPDATE child SET rev = 2 WHERE a % 5 = 0`)
-		db.Exec(t, `UPDATE child SET rev = 3 WHERE a > 450 and a < 700`)
-		db.Exec(t, `DELETE FROM child WHERE a % 7 = 0`)
-
-		// Revert the table to ts.
-		desc := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
-		desc.TableDesc().State = descpb.DescriptorState_OFFLINE
-		child := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "child")
-		child.TableDesc().State = descpb.DescriptorState_OFFLINE
-		t.Run("reject only parent", func(t *testing.T) {
-			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []catalog.TableDescriptor{desc}, targetTime, ignoreGC, 10))
-		})
-		t.Run("reject only child", func(t *testing.T) {
-			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []catalog.TableDescriptor{child}, targetTime, ignoreGC, 10))
-		})
-
-		t.Run("rollback parent and child", func(t *testing.T) {
-			require.NoError(t, sql.RevertTables(ctx, kv, &execCfg, []catalog.TableDescriptor{desc, child}, targetTime, ignoreGC, sql.RevertTableDefaultBatchSize))
-
-			var reverted, revertedChild int
-			db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)
-			require.Equal(t, before, reverted, "expected reverted table after edits to match before")
-			db.QueryRow(t, `SELECT xor_agg(a # b # rev) FROM child`).Scan(&revertedChild)
-			require.Equal(t, beforeChild, revertedChild, "expected reverted table after edits to match before")
-		})
 	})
 }
 
@@ -139,7 +100,7 @@ func TestRevertGCThreshold(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	req := &roachpb.RevertRangeRequest{
-		RequestHeader:                       roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
+		RequestHeader:                       roachpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
 		TargetTime:                          hlc.Timestamp{WallTime: -1},
 		EnableTimeBoundIteratorOptimization: true,
 	}

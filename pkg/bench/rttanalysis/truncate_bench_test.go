@@ -12,8 +12,9 @@ package rttanalysis
 
 import "testing"
 
-func BenchmarkTruncate(b *testing.B) {
-	tests := []RoundTripBenchTestCase{
+func BenchmarkTruncate(b *testing.B) { reg.Run(b) }
+func init() {
+	reg.Register("Truncate", []RoundTripBenchTestCase{
 		{
 			Name:  "truncate 1 column 0 rows",
 			Setup: "CREATE TABLE t(x INT);",
@@ -50,7 +51,5 @@ INSERT INTO t (x, y) VALUES (1, 1);
 INSERT INTO t (x,y) VALUES (2, 2);`,
 			Stmt: "TRUNCATE t",
 		},
-	}
-
-	RunRoundTripBenchmark(b, tests)
+	})
 }

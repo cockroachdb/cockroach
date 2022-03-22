@@ -12,7 +12,7 @@ package tree
 
 // AlterRole represents an `ALTER ROLE ... WITH options` statement.
 type AlterRole struct {
-	Name      Expr
+	Name      RoleSpec
 	IfExists  bool
 	IsRole    bool
 	KVOptions KVOptions
@@ -29,7 +29,7 @@ func (node *AlterRole) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 
 	if len(node.KVOptions) > 0 {
 		ctx.WriteString(" WITH")
@@ -39,7 +39,7 @@ func (node *AlterRole) Format(ctx *FmtCtx) {
 
 // AlterRoleSet represents an `ALTER ROLE ... SET` statement.
 type AlterRoleSet struct {
-	RoleName     Expr
+	RoleName     RoleSpec
 	IfExists     bool
 	IsRole       bool
 	AllRoles     bool
@@ -61,7 +61,7 @@ func (node *AlterRoleSet) Format(ctx *FmtCtx) {
 	if node.AllRoles {
 		ctx.WriteString("ALL ")
 	} else {
-		ctx.FormatNode(node.RoleName)
+		ctx.FormatNode(&node.RoleName)
 		ctx.WriteString(" ")
 	}
 	if node.DatabaseName != "" {

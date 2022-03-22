@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // FlowCoordinator is the execinfra.Processor that is responsible for shutting
@@ -253,23 +254,27 @@ func (f *BatchFlowCoordinator) pushError(err error) execinfra.ConsumerStatus {
 // then shuts it down.
 func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 	status := execinfra.NeedMoreRows
-	// Make sure that we close the coordinator and notify the batch receiver in
-	// all cases.
-	defer func() {
-		if err := f.close(); err != nil && status != execinfra.ConsumerClosed {
-			f.pushError(err)
-		}
-		f.output.ProducerDone()
-	}()
 
 	ctx, span := execinfra.ProcessorSpan(ctx, "batch flow coordinator")
 	if span != nil {
 		if span.IsVerbose() {
-			span.SetTag(execinfrapb.FlowIDTagKey, f.flowCtx.ID.String())
-			span.SetTag(execinfrapb.ProcessorIDTagKey, f.processorID)
+			span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(f.flowCtx.ID.String()))
+			span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(f.processorID)))
 		}
-		defer span.Finish()
 	}
+
+	// Make sure that we close the coordinator and notify the batch receiver in
+	// all cases.
+	defer func() {
+		if err := f.close(ctx); err != nil && status != execinfra.ConsumerClosed {
+			f.pushError(err)
+		}
+		f.output.ProducerDone()
+		// Note that f.close is only safe to call before finishing the tracing
+		// span because some components might still use the span when they are
+		// being closed.
+		span.Finish()
+	}()
 
 	if err := f.init(ctx); err != nil {
 		f.pushError(err)
@@ -327,11 +332,11 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 
 // close cancels the flow and closes all colexecop.Closers the coordinator is
 // responsible for.
-func (f *BatchFlowCoordinator) close() error {
+func (f *BatchFlowCoordinator) close(ctx context.Context) error {
 	f.cancelFlow()
 	var lastErr error
 	for _, toClose := range f.input.ToClose {
-		if err := toClose.Close(); err != nil {
+		if err := toClose.Close(ctx); err != nil {
 			lastErr = err
 		}
 	}

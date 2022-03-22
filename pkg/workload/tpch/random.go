@@ -220,8 +220,8 @@ func randSyllables(
 	for i, syl := range syllables {
 		if i != 0 {
 			buf = append(buf, ' ')
-			buf = append(buf, syl[rng.Intn(len(syl))]...)
 		}
+		buf = append(buf, syl[rng.Intn(len(syl))]...)
 	}
 	return buf
 }

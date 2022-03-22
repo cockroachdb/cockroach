@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func Example_sql() {
@@ -34,6 +37,7 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `-e`, `begin`, `-e`, `select 3 as "3"`, `-e`, `commit`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select * from t.f`})
 	c.RunWithArgs([]string{`sql`, `--execute=SELECT database_name, owner FROM [show databases]`})
+	c.RunWithArgs([]string{`sql`, `-e`, `\l`, `-e`, `\echo hello`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1 as "1"; select 2 as "2"`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1 as "1"; select 2 as "@" where false`})
 	// CREATE TABLE AS returns a SELECT tag with a row count, check this.
@@ -55,6 +59,8 @@ func Example_sql() {
 	// first batch consisting of 1 row has been returned to the client.
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(@1-2) from generate_series(1,3)`})
 	c.RunWithArgs([]string{`sql`, `-e`, `SELECT '20:01:02+03:04:05'::timetz AS regression_65066`})
+	c.RunWithArgs([]string{`sql`, `-e`, `CREATE USER my_user WITH CREATEDB; GRANT admin TO my_user;`})
+	c.RunWithArgs([]string{`sql`, `-e`, `\du my_user`})
 
 	// Output:
 	// sql -e show application_name
@@ -81,6 +87,13 @@ func Example_sql() {
 	// postgres	root
 	// system	node
 	// t	root
+	// sql -e \l -e \echo hello
+	// database_name	owner	primary_region	regions	survival_goal
+	// defaultdb	root	NULL	{}	NULL
+	// postgres	root	NULL	{}	NULL
+	// system	node	NULL	{}	NULL
+	// t	root	NULL	{}	NULL
+	// hello
 	// sql -e select 1 as "1"; select 2 as "2"
 	// 1
 	// 1
@@ -99,16 +112,21 @@ func Example_sql() {
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
 	// x
 	// sql -e copy t.f from stdin
-	// ERROR: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
+	// ERROR: -e: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// sql -e select 1/(@1-2) from generate_series(1,3)
 	// ?column?
-	// -1
+	// -1.0000000000000000000
 	// (error encountered after some results were delivered)
 	// ERROR: division by zero
 	// SQLSTATE: 22012
 	// sql -e SELECT '20:01:02+03:04:05'::timetz AS regression_65066
 	// regression_65066
 	// 20:01:02+03:04:05
+	// sql -e CREATE USER my_user WITH CREATEDB; GRANT admin TO my_user;
+	// GRANT
+	// sql -e \du my_user
+	// username	options	member_of
+	// my_user	CREATEDB	{admin}
 }
 
 func Example_sql_config() {
@@ -151,14 +169,13 @@ func Example_sql_config() {
 	// # 1 row
 	// sql --set unknownoption -e select 123 as "123"
 	// invalid syntax: \set unknownoption. Try \? for help.
-	// ERROR: invalid syntax
+	// ERROR: -e: invalid syntax
 	// sql --set display_format=invalidvalue -e select 123 as "123"
 	// \set display_format invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
-	// ERROR: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+	// ERROR: -e: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 	// sql -e \set display_format=invalidvalue -e select 123 as "123"
 	// \set display_format invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
-	// ERROR: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
-
+	// ERROR: -e: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 }
 
 func Example_sql_watch() {
@@ -173,9 +190,9 @@ func Example_sql_watch() {
 	// INSERT 1
 	// sql --watch .1s -e update d set x=x-1 returning 1/x as dec
 	// dec
-	// 0.5
+	// 0.50000000000000000000
 	// dec
-	// 1
+	// 1.0000000000000000000
 	// ERROR: division by zero
 	// SQLSTATE: 22012
 }
@@ -199,14 +216,14 @@ func Example_misc_table() {
 	// sql --format=table -e explain select s, 'foo' from t.t
 	//            info
 	// --------------------------
-	//   distribution: full
+	//   distribution: local
 	//   vectorized: true
 	//
 	//   • render
 	//   │
 	//   └── • scan
 	//         missing stats
-	//         table: t@primary
+	//         table: t@t_pkey
 	//         spans: FULL SCAN
 	// (9 rows)
 }
@@ -450,4 +467,26 @@ func setupTestCliStateWithConn(conn clisqlclient.Conn) clisqlshell.Shell {
 	sqlCtx := &clisqlshell.Context{}
 	c := clisqlshell.NewShell(cliCtx, sqlConnCtx, sqlExecCtx, sqlCtx, conn)
 	return c
+}
+
+// TestAutoTraceInAutoRunStatements checks that auto_trace works
+// for statements specified via -e.
+func TestAutoTraceInAutoRunStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := cli.NewCLITest(cli.TestCLIParams{T: t})
+	defer c.Cleanup()
+
+	stmt := []string{`sql`, `-e`, `\set auto_trace on`, `-e`, `select 'hel'||'lo'`}
+	out, err := c.RunWithCaptureArgs(stmt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("output:\n%s", out)
+	if !strings.HasPrefix(out, strings.Join(stmt, " ")+"\n?column?\nhello") {
+		t.Errorf("output does not start with statement result")
+	}
+	if !strings.Contains(out, "SPAN START") {
+		t.Errorf("output does not contain trace")
+	}
 }

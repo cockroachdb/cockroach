@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -22,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -212,6 +213,9 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		}
 	}
 
+	// Check if this table has already been mutated in another subquery.
+	b.checkMultipleMutations(tab, ins.OnConflict == nil /* simpleInsert */)
+
 	var mb mutationBuilder
 	if ins.OnConflict != nil && ins.OnConflict.IsUpsertAlias() {
 		mb.init(b, "upsert", tab, alias)
@@ -289,8 +293,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// Wrap the input in one ANTI JOIN per UNIQUE index, and filter out rows
 		// that have conflicts. See the buildInputForDoNothing comment for more
 		// details.
-		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
-		mb.buildInputForDoNothing(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate)
+		mb.buildInputForDoNothing(inScope, ins.OnConflict)
 
 		// Since buildInputForDoNothing filters out rows with conflicts, always
 		// insert rows that are not filtered.
@@ -307,8 +310,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		if mb.needExistingRows() {
 			// Left-join each input row to the target table, using conflict columns
 			// derived from the primary index as the join condition.
-			primaryOrds := getExplicitPrimaryKeyOrdinals(mb.tab)
-			mb.buildInputForUpsert(inScope, primaryOrds, nil /* arbiterPredicate */, nil /* whereClause */)
+			mb.buildInputForUpsert(inScope, nil /* onConflict */, nil /* whereClause */)
 
 			// Add additional columns for computed expressions that may depend on any
 			// updated columns, as well as mutation columns with default values.
@@ -322,8 +324,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	default:
 		// Left-join each input row to the target table, using the conflict columns
 		// as the join condition.
-		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
-		mb.buildInputForUpsert(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate, ins.OnConflict.Where)
+		mb.buildInputForUpsert(inScope, ins.OnConflict, ins.OnConflict.Where)
 
 		// Derive the columns that will be updated from the SET expressions.
 		mb.addTargetColsForUpdate(ins.OnConflict.Exprs)
@@ -605,14 +606,25 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 
 	// Loop over input columns and:
 	//   1. Type check each column
+	//   2. Check if the INSERT violates a GENERATED ALWAYS AS IDENTITY column.
 	//   2. Assign name to each column
 	//   3. Add column ID to the insertColIDs list.
 	for i := range mb.outScope.cols {
 		inCol := &mb.outScope.cols[i]
 		ord := mb.tabID.ColumnOrdinal(mb.targetColList[i])
 
-		// Type check the input column against the corresponding table column.
-		checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
+		// Raise an error if the target column is a `GENERATED ALWAYS AS
+		// IDENTITY` column. Such a column is not allowed to be explicitly
+		// written to.
+		//
+		// TODO(janexing): Implement the OVERRIDING SYSTEM VALUE syntax for
+		// INSERT which allows a GENERATED ALWAYS AS IDENTITY column to be
+		// overwritten.
+		// See https://github.com/cockroachdb/cockroach/issues/68201.
+		if col := mb.tab.Column(ord); col.IsGeneratedAlwaysAsIdentity() {
+			colName := string(col.ColName())
+			panic(sqlerrors.NewGeneratedAlwaysAsIdentityColumnOverrideError(colName))
+		}
 
 		// Assign name of input column.
 		inCol.name = scopeColName(tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias))
@@ -621,6 +633,9 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		// into the corresponding target table column.
 		mb.insertColIDs[ord] = inCol.id
 	}
+
+	// Add assignment casts for insert columns.
+	mb.addAssignmentCasts(mb.insertColIDs)
 }
 
 // addSynthesizedColsForInsert wraps an Insert input expression with a Project
@@ -632,17 +647,20 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 	// Start by adding non-computed columns that have not already been explicitly
 	// specified in the query. Do this before adding computed columns, since those
 	// may depend on non-computed columns.
-	mb.addSynthesizedDefaultCols(mb.insertColIDs, true /* includeOrdinary */)
+	mb.addSynthesizedDefaultCols(
+		mb.insertColIDs,
+		true,  /* includeOrdinary */
+		false, /* applyOnUpdate */
+	)
 
-	// Possibly round DECIMAL-related columns containing insertion values (whether
-	// synthesized or not).
-	mb.roundDecimalValues(mb.insertColIDs, false /* roundComputedCols */)
+	// Add assignment casts for default column values.
+	mb.addAssignmentCasts(mb.insertColIDs)
 
 	// Now add all computed columns.
 	mb.addSynthesizedComputedCols(mb.insertColIDs, false /* restrict */)
 
-	// Possibly round DECIMAL-related computed columns.
-	mb.roundDecimalValues(mb.insertColIDs, true /* roundComputedCols */)
+	// Add assignment casts for computed column values.
+	mb.addAssignmentCasts(mb.insertColIDs)
 }
 
 // buildInsert constructs an Insert operator, possibly wrapped by a Project
@@ -673,13 +691,10 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 // buildInputForDoNothing wraps the input expression in ANTI JOIN expressions,
 // one for each arbiter on the target table. See the comment header for
 // Builder.buildInsert for an example.
-func (mb *mutationBuilder) buildInputForDoNothing(
-	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
-) {
+func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tree.OnConflict) {
 	// Determine the set of arbiter indexes and constraints to use to check for
 	// conflicts.
-	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
-
+	mb.arbiters = mb.findArbiters(onConflict)
 	insertColScope := mb.outScope.replace()
 	insertColScope.appendColumnsFromScope(mb.outScope)
 
@@ -721,12 +736,11 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 // given insert row conflicts with an existing row in the table. If it is null,
 // then there is no conflict.
 func (mb *mutationBuilder) buildInputForUpsert(
-	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr, whereClause *tree.Where,
+	inScope *scope, onConflict *tree.OnConflict, whereClause *tree.Where,
 ) {
 	// Determine the set of arbiter indexes and constraints to use to check for
 	// conflicts.
-	mb.arbiters = mb.findArbiters(conflictOrds, arbiterPredicate)
-
+	mb.arbiters = mb.findArbiters(onConflict)
 	// TODO(mgartner): Add support for multiple arbiter indexes or constraints,
 	//  similar to buildInputForDoNothing.
 	if mb.arbiters.Len() > 1 {
@@ -789,7 +803,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 			Type: whereClause.Type,
 			Expr: &tree.OrExpr{
 				Left: &tree.ComparisonExpr{
-					Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom),
+					Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom),
 					Left:     canaryCol,
 					Right:    tree.DNull,
 				},
@@ -978,27 +992,4 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
-}
-
-// mapPublicColumnNamesToOrdinals returns the set of ordinal positions within
-// the target table that correspond to the given names. Mutation and system
-// columns are ignored.
-func (mb *mutationBuilder) mapPublicColumnNamesToOrdinals(names tree.NameList) util.FastIntSet {
-	var ords util.FastIntSet
-	for _, name := range names {
-		found := false
-		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			tabCol := mb.tab.Column(i)
-			if tabCol.ColName() == name && !tabCol.IsMutation() && tabCol.Kind() != cat.System {
-				ords.Add(i)
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			panic(colinfo.NewUndefinedColumnError(string(name)))
-		}
-	}
-	return ords
 }

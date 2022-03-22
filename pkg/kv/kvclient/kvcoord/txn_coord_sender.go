@@ -20,18 +20,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
 	// OpTxnCoordSender represents a txn coordinator send operation.
 	OpTxnCoordSender = "txn coordinator send"
 )
+
+// DisableCommitSanityCheck allows opting out of a fatal assertion error that was observed in the wild
+// and for which a root cause is not yet available.
+//
+// See: https://github.com/cockroachdb/cockroach/pull/73512.
+var DisableCommitSanityCheck = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_COMMIT_SANITY_CHECK", false)
 
 // txnState represents states relating to whether an EndTxn request needs
 // to be sent.
@@ -41,6 +49,12 @@ type txnState int
 const (
 	// txnPending is the normal state for ongoing transactions.
 	txnPending txnState = iota
+
+	// txnRetryableError means that the transaction encountered a
+	// TransactionRetryWithProtoRefreshError, and calls to Send() fail in this
+	// state. It is possible to move back to txnPending by calling
+	// ClearTxnRetryableErr().
+	txnRetryableError
 
 	// txnError means that a batch encountered a non-retriable error. Further
 	// batches except EndTxn(commit=false) will be rejected.
@@ -97,6 +111,11 @@ type TxnCoordSender struct {
 		syncutil.Mutex
 
 		txnState txnState
+
+		// storedRetryableErr is set when txnState == txnRetryableError. This
+		// storedRetryableErr is returned to clients on Send().
+		storedRetryableErr *roachpb.TransactionRetryWithProtoRefreshError
+
 		// storedErr is set when txnState == txnError. This storedErr is returned to
 		// clients on Send().
 		storedErr *roachpb.Error
@@ -434,7 +453,7 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 	et := ba.Requests[0].GetEndTxn()
 	if et.Commit {
 		deadline := et.Deadline
-		if deadline != nil && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
+		if deadline != nil && !deadline.IsEmpty() && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
 			txn := tc.mu.txn.Clone()
 			pErr := generateTxnDeadlineExceededErr(txn, *deadline)
 			// We need to bump the epoch and transform this retriable error.
@@ -486,7 +505,7 @@ func (tc *TxnCoordSender) Send(
 		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
 	if sp.IsVerbose() {
-		sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
+		sp.SetTag("txnID", attribute.StringValue(tc.mu.txn.ID.String()))
 		ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
 		if log.V(2) {
 			ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.WriteTimestamp)
@@ -585,9 +604,25 @@ func (tc *TxnCoordSender) Send(
 // transactions are guaranteed to start with higher timestamps, regardless
 // of the gateway they use. This ensures that all causally dependent
 // transactions commit with higher timestamps, even if their read and writes
-// sets do not conflict with the original transaction's. This obviates the
-// need for uncertainty intervals and prevents the "causal reverse" anamoly
-// which can be observed by a third, concurrent transaction.
+// sets do not conflict with the original transaction's. This prevents the
+// "causal reverse" anomaly which can be observed by a third, concurrent
+// transaction.
+//
+// Even when in linearizable mode and performing this extra wait on the commit
+// of read-write transactions, uncertainty intervals are still necessary. This
+// is to ensure that any two reads that touch overlapping keys but are executed
+// on different nodes obey real-time ordering and do not violate the "monotonic
+// reads" property. Without uncertainty intervals, it would be possible for a
+// read on a node with a fast clock (ts@15) to observe a committed value (ts@10)
+// and then a later read on a node with a slow clock (ts@5) to miss the
+// committed value. When contrasting this with Google Spanner, we notice that
+// Spanner performs a similar commit-wait but then does not include uncertainty
+// intervals. The reason this works in Spanner is that read-write transactions
+// in Spanner hold their locks across the commit-wait duration, which blocks
+// concurrent readers and enforces real-time ordering between any two readers as
+// well between the writer and any future reader. Read-write transactions in
+// CockroachDB do not hold locks across commit-wait (they release them before),
+// so the uncertainty interval is still needed.
 //
 // For more, see https://www.cockroachlabs.com/blog/consistency-model/ and
 // docs/RFCS/20200811_non_blocking_txns.md.
@@ -645,11 +680,16 @@ func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) er
 func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
-	if ba != nil && ba.IsSingleAbortTxnRequest() {
+	if ba != nil && ba.IsSingleAbortTxnRequest() && tc.mu.txn.Status != roachpb.COMMITTED {
 		// As a special case, we allow rollbacks to be sent at any time. Any
 		// rollback attempt moves the TxnCoordSender state to txnFinalized, but higher
 		// layers are free to retry rollbacks if they want (and they do, for
 		// example, when the context was canceled while txn.Rollback() was running).
+		//
+		// However, we reject this if we know that the transaction has been
+		// committed, to avoid sending the rollback concurrently with the
+		// txnCommitter asynchronously making the commit explicit. See:
+		// https://github.com/cockroachdb/cockroach/issues/68643
 		return nil
 	}
 
@@ -657,6 +697,8 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	switch tc.mu.txnState {
 	case txnPending:
 		// All good.
+	case txnRetryableError:
+		return roachpb.NewError(tc.mu.storedRetryableErr)
 	case txnError:
 		return tc.mu.storedErr
 	case txnFinalized:
@@ -664,7 +706,11 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			"Trying to execute: %s", ba.Summary())
 		stack := string(debug.Stack())
 		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
-		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(msg), &tc.mu.txn)
+		reason := roachpb.TransactionStatusError_REASON_UNKNOWN
+		if tc.mu.txn.Status == roachpb.COMMITTED {
+			reason = roachpb.TransactionStatusError_REASON_TXN_COMMITTED
+		}
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(reason, msg), &tc.mu.txn)
 	}
 
 	// Check the transaction proto state, along with any finalized transaction
@@ -679,19 +725,10 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// The transaction heartbeat observed an aborted transaction record and
 		// this was not due to a synchronous transaction commit and transaction
 		// record garbage collection.
-		// See the comment on txnHeartbeater.mu.finalizedStatus for more details.
+		// See the comment on txnHeartbeater.mu.finalObservedStatus for more details.
 		abortedErr := roachpb.NewErrorWithTxn(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
-		if tc.typ == kv.LeafTxn {
-			// Leaf txns return raw retriable errors (which get handled by the
-			// root) rather than TransactionRetryWithProtoRefreshError.
-			return abortedErr
-		}
-		// Root txns handle retriable errors.
-		newTxn := roachpb.PrepareTransactionForRetry(
-			ctx, abortedErr, roachpb.NormalUserPriority, tc.clock)
-		return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
-			abortedErr.String(), tc.mu.txn.ID, newTxn))
+		return roachpb.NewError(tc.handleRetryableErrLocked(ctx, abortedErr))
 	case protoStatus != roachpb.PENDING || hbObservedStatus != roachpb.PENDING:
 		// The transaction proto is in an unexpected state.
 		return roachpb.NewErrorf(
@@ -753,6 +790,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 			tc.metrics.RestartsSerializable.Inc()
 		case roachpb.RETRY_ASYNC_WRITE_FAILURE:
 			tc.metrics.RestartsAsyncWriteFailure.Inc()
+		case roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED:
+			tc.metrics.RestartsCommitDeadlineExceeded.Inc()
 		default:
 			tc.metrics.RestartsUnknown.Inc()
 		}
@@ -780,6 +819,11 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		pErr.String(),
 		errTxnID, // the id of the transaction that encountered the error
 		newTxn)
+
+	// Move to a retryable error state, where all Send() calls fail until the
+	// state is cleared.
+	tc.mu.txnState = txnRetryableError
+	tc.mu.storedRetryableErr = retErr
 
 	// If the ID changed, it means we had to start a new transaction and the
 	// old one is toast. This TxnCoordSender cannot be used any more - future
@@ -881,35 +925,60 @@ func (tc *TxnCoordSender) updateStateLocked(
 
 	// Update our transaction with any information the error has.
 	if errTxn := pErr.GetTxn(); errTxn != nil {
-		if errTxn.Status == roachpb.COMMITTED {
-			sanityCheckCommittedErr(ctx, pErr, ba)
+		if err := sanityCheckErrWithTxn(ctx, pErr, ba, &tc.testingKnobs); err != nil {
+			return roachpb.NewError(err)
 		}
 		tc.mu.txn.Update(errTxn)
 	}
 	return pErr
 }
 
-// sanityCheckCommittedErr verifies the circumstances in which we're receiving
-// an error indicating a COMMITTED transaction. Only rollbacks should be
-// encountering such errors. Marking a transaction as explicitly-committed can
-// also encounter these errors, but those errors don't make it to the
-// TxnCoordSender.
-func sanityCheckCommittedErr(ctx context.Context, pErr *roachpb.Error, ba roachpb.BatchRequest) {
-	errTxn := pErr.GetTxn()
-	if errTxn == nil || errTxn.Status != roachpb.COMMITTED {
-		// We shouldn't have been called.
-		return
+// sanityCheckErrWithTxn verifies whether the error (which must have a txn
+// attached) contains a COMMITTED transaction. Only rollbacks should be able to
+// encounter such errors. Marking a transaction as explicitly-committed can also
+// encounter these errors, but those errors don't make it to the TxnCoordSender.
+//
+// Returns the passed-in error or fatals (depending on DisableCommitSanityCheck
+// env var), wrapping the input error in case of an assertion violation.
+//
+// The assertion is known to have failed in the wild, see:
+// https://github.com/cockroachdb/cockroach/issues/67765
+func sanityCheckErrWithTxn(
+	ctx context.Context,
+	pErrWithTxn *roachpb.Error,
+	ba roachpb.BatchRequest,
+	knobs *ClientTestingKnobs,
+) error {
+	txn := pErrWithTxn.GetTxn()
+	if txn.Status != roachpb.COMMITTED {
+		return nil
 	}
 	// The only case in which an error can have a COMMITTED transaction in it is
 	// when the request was a rollback. Rollbacks can race with commits if a
 	// context timeout expires while a commit request is in flight.
 	if ba.IsSingleAbortTxnRequest() {
-		return
+		return nil
 	}
+
 	// Finding out about our transaction being committed indicates a serious bug.
 	// Requests are not supposed to be sent on transactions after they are
 	// committed.
-	log.Fatalf(ctx, "transaction unexpectedly committed: %s. ba: %s. txn: %s.", pErr, ba, errTxn)
+	err := errors.Wrapf(pErrWithTxn.GoError(),
+		"transaction unexpectedly committed, ba: %s. txn: %s",
+		ba, pErrWithTxn.GetTxn(),
+	)
+	err = errors.WithAssertionFailure(
+		errors.WithIssueLink(err, errors.IssueLink{
+			IssueURL: "https://github.com/cockroachdb/cockroach/issues/67765",
+			Detail: "you have encountered a known bug in CockroachDB, please consider " +
+				"reporting on the Github issue or reach out via Support. " +
+				"This assertion can be disabled by setting the environment variable " +
+				"COCKROACH_DISABLE_COMMIT_SANITY_CHECK=true",
+		}))
+	if !DisableCommitSanityCheck && !knobs.DisableCommitSanityCheck {
+		log.Fatalf(ctx, "%s", err)
+	}
+	return err
 }
 
 // setTxnAnchorKey sets the key at which to anchor the transaction record. The
@@ -1079,7 +1148,16 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 
 // Epoch is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) Epoch() enginepb.TxnEpoch {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
 	return tc.mu.txn.Epoch
+}
+
+// IsLocking is part of the client.TxnSender interface.
+func (tc *TxnCoordSender) IsLocking() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.IsLocking()
 }
 
 // IsTracking returns true if the heartbeat loop is running.
@@ -1100,19 +1178,19 @@ func (tc *TxnCoordSender) Active() bool {
 // GetLeafTxnInputState is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) GetLeafTxnInputState(
 	ctx context.Context, opt kv.TxnStatusOpt,
-) (roachpb.LeafTxnInputState, error) {
+) (*roachpb.LeafTxnInputState, error) {
+	tis := new(roachpb.LeafTxnInputState)
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
 	if err := tc.checkTxnStatusLocked(ctx, opt); err != nil {
-		return roachpb.LeafTxnInputState{}, err
+		return nil, err
 	}
 
 	// Copy mutable state so access is safe for the caller.
-	var tis roachpb.LeafTxnInputState
 	tis.Txn = tc.mu.txn
 	for _, reqInt := range tc.interceptorStack {
-		reqInt.populateLeafInputState(&tis)
+		reqInt.populateLeafInputState(tis)
 	}
 
 	// Also mark the TxnCoordSender as "active".  This prevents changing
@@ -1127,15 +1205,14 @@ func (tc *TxnCoordSender) GetLeafTxnInputState(
 // GetLeafTxnFinalState is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) GetLeafTxnFinalState(
 	ctx context.Context, opt kv.TxnStatusOpt,
-) (roachpb.LeafTxnFinalState, error) {
+) (*roachpb.LeafTxnFinalState, error) {
+	tfs := new(roachpb.LeafTxnFinalState)
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
 	if err := tc.checkTxnStatusLocked(ctx, opt); err != nil {
-		return roachpb.LeafTxnFinalState{}, err
+		return nil, err
 	}
-
-	var tfs roachpb.LeafTxnFinalState
 
 	// For compatibility with pre-20.1 nodes: populate the command
 	// count.
@@ -1148,7 +1225,7 @@ func (tc *TxnCoordSender) GetLeafTxnFinalState(
 	// Copy mutable state so access is safe for the caller.
 	tfs.Txn = tc.mu.txn
 	for _, reqInt := range tc.interceptorStack {
-		reqInt.populateLeafFinalState(&tfs)
+		reqInt.populateLeafFinalState(tfs)
 	}
 
 	return tfs, nil
@@ -1234,6 +1311,18 @@ func (tc *TxnCoordSender) Step(ctx context.Context) error {
 	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked(ctx)
 }
 
+// SetReadSeqNum is part of the TxnSender interface.
+func (tc *TxnCoordSender) SetReadSeqNum(seq enginepb.TxnSeq) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if seq < 0 || seq > tc.interceptorAlloc.txnSeqNumAllocator.writeSeq {
+		return errors.AssertionFailedf("invalid read seq num < 0 || > writeSeq (%d): %d",
+			tc.interceptorAlloc.txnSeqNumAllocator.writeSeq, seq)
+	}
+	tc.interceptorAlloc.txnSeqNumAllocator.readSeq = seq
+	return nil
+}
+
 // ConfigureStepping is part of the TxnSender interface.
 func (tc *TxnCoordSender) ConfigureStepping(
 	ctx context.Context, mode kv.SteppingMode,
@@ -1290,5 +1379,27 @@ func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Cont
 			return nil
 		}
 		return tc.maybeCommitWait(ctx, true /* deferred */)
+	}
+}
+
+// GetTxnRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) GetTxnRetryableErr(
+	ctx context.Context,
+) *roachpb.TransactionRetryWithProtoRefreshError {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		return tc.mu.storedRetryableErr
+	}
+	return nil
+}
+
+// ClearTxnRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		tc.mu.storedRetryableErr = nil
+		tc.mu.txnState = txnPending
 	}
 }

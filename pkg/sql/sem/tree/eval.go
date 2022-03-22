@@ -14,13 +14,12 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/big"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -35,7 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -48,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -62,7 +65,10 @@ var (
 	ErrInt2OutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range for type int2")
 	// ErrFloatOutOfRange is reported when float arithmetic overflows.
 	ErrFloatOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
-	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
+	// ErrDecOutOfRange is reported when decimal arithmetic overflows.
+	ErrDecOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
+	// errCharOutOfRange is reported when int cast to ASCII byte overflows.
+	errCharOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "\"char\" out of range")
 
 	// ErrDivByZero is reported on a division by zero.
 	ErrDivByZero       = pgerror.New(pgcode.DivisionByZero, "division by zero")
@@ -71,8 +77,8 @@ var (
 	// ErrShiftArgOutOfRange is reported when a shift argument is out of range.
 	ErrShiftArgOutOfRange = pgerror.New(pgcode.InvalidParameterValue, "shift argument out of range")
 
-	big10E6  = big.NewInt(1e6)
-	big10E10 = big.NewInt(1e10)
+	big10E6  = apd.NewBigInt(1e6)
+	big10E10 = apd.NewBigInt(1e10)
 )
 
 // NewCannotMixBitArraySizesError creates an error for the case when a bitwise
@@ -284,12 +290,13 @@ type TwoArgFn func(*EvalContext, Datum, Datum) (Datum, error)
 
 // BinOp is a binary operator.
 type BinOp struct {
-	LeftType     *types.T
-	RightType    *types.T
-	ReturnType   *types.T
-	NullableArgs bool
-	Fn           TwoArgFn
-	Volatility   Volatility
+	LeftType          *types.T
+	RightType         *types.T
+	ReturnType        *types.T
+	NullableArgs      bool
+	Fn                TwoArgFn
+	Volatility        Volatility
+	PreferredOverload bool
 
 	types   TypeList
 	retType ReturnTyper
@@ -311,8 +318,8 @@ func (op *BinOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (*BinOp) preferred() bool {
-	return false
+func (op *BinOp) preferred() bool {
+	return op.PreferredOverload
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
@@ -356,7 +363,7 @@ func PrependToMaybeNullArray(typ *types.T, left Datum, right Datum) (Datum, erro
 func initArrayElementConcatenation() {
 	for _, t := range types.Scalar {
 		typ := t
-		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
 			LeftType:     types.MakeArray(typ),
 			RightType:    typ,
 			ReturnType:   types.MakeArray(typ),
@@ -367,7 +374,7 @@ func initArrayElementConcatenation() {
 			Volatility: VolatilityImmutable,
 		})
 
-		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
 			LeftType:     typ,
 			RightType:    types.MakeArray(typ),
 			ReturnType:   types.MakeArray(typ),
@@ -448,7 +455,7 @@ func JSONExistsAny(_ *EvalContext, json DJSON, dArray *DArray) (*DBool, error) {
 func initArrayToArrayConcatenation() {
 	for _, t := range types.Scalar {
 		typ := t
-		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
 			LeftType:     types.MakeArray(typ),
 			RightType:    types.MakeArray(typ),
 			ReturnType:   types.MakeArray(typ),
@@ -465,7 +472,7 @@ func initArrayToArrayConcatenation() {
 // and nonarrayelement + string concatenation.
 func initNonArrayToNonArrayConcatenation() {
 	addConcat := func(leftType, rightType *types.T, volatility Volatility) {
-		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
 			LeftType:     leftType,
 			RightType:    rightType,
 			ReturnType:   types.String,
@@ -490,19 +497,19 @@ func initNonArrayToNonArrayConcatenation() {
 			Volatility: volatility,
 		})
 	}
-	fromTypeToVolatility := make(map[types.Family]Volatility)
-	for _, cast := range validCasts {
-		if cast.to == types.StringFamily {
-			fromTypeToVolatility[cast.from] = cast.volatility
+	fromTypeToVolatility := make(map[oid.Oid]Volatility)
+	ForEachCast(func(src, tgt oid.Oid) {
+		if tgt == oid.T_text {
+			fromTypeToVolatility[src] = castMap[src][tgt].volatility
 		}
-	}
+	})
 	// We allow tuple + string concatenation, as well as any scalar types.
 	for _, t := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
 		// Do not re-add String+String or String+Bytes, as they already exist
 		// and have predefined correct behavior.
 		if t != types.String && t != types.Bytes {
-			addConcat(t, types.String, fromTypeToVolatility[t.Family()])
-			addConcat(types.String, t, fromTypeToVolatility[t.Family()])
+			addConcat(t, types.String, fromTypeToVolatility[t.Oid()])
+			addConcat(types.String, t, fromTypeToVolatility[t.Oid()])
 		}
 	}
 }
@@ -552,8 +559,8 @@ func GetJSONPath(j json.JSON, ary DArray) (json.JSON, error) {
 }
 
 // BinOps contains the binary operations indexed by operation type.
-var BinOps = map[BinaryOperatorSymbol]binOpOverload{
-	Bitand: {
+var BinOps = map[treebin.BinaryOperatorSymbol]binOpOverload{
+	treebin.Bitand: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -593,7 +600,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Bitor: {
+	treebin.Bitor: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -633,7 +640,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Bitxor: {
+	treebin.Bitxor: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -661,7 +668,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Plus: {
+	treebin.Plus: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -956,7 +963,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Minus: {
+	treebin.Minus: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1270,7 +1277,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Mult: {
+	treebin.Mult: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1414,7 +1421,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Div: {
+	treebin.Div: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1424,10 +1431,11 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 				if rInt == 0 {
 					return nil, ErrDivByZero
 				}
-				div := ctx.getTmpDec().SetInt64(int64(rInt))
+				var div apd.Decimal
+				div.SetInt64(int64(rInt))
 				dd := &DDecimal{}
 				dd.SetInt64(int64(MustBeDInt(left)))
-				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, div)
+				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &div)
 				return dd, err
 			},
 			Volatility: VolatilityImmutable,
@@ -1523,7 +1531,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	FloorDiv: {
+	treebin.FloorDiv: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1603,7 +1611,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Mod: {
+	treebin.Mod: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1683,7 +1691,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Concat: {
+	treebin.Concat: {
 		&BinOp{
 			LeftType:   types.String,
 			RightType:  types.String,
@@ -1731,7 +1739,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 	},
 
 	// TODO(pmattis): Check that the shift is valid.
-	LShift: {
+	treebin.LShift: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1772,7 +1780,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	RShift: {
+	treebin.RShift: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1813,7 +1821,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Pow: {
+	treebin.Pow: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1876,7 +1884,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	JSONFetchVal: {
+	treebin.JSONFetchVal: {
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.String,
@@ -1891,7 +1899,8 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 				}
 				return &DJSON{j}, nil
 			},
-			Volatility: VolatilityImmutable,
+			PreferredOverload: true,
+			Volatility:        VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -1911,7 +1920,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	JSONFetchValPath: {
+	treebin.JSONFetchValPath: {
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.MakeArray(types.String),
@@ -1930,7 +1939,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	JSONFetchText: {
+	treebin.JSONFetchText: {
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.String,
@@ -1952,7 +1961,8 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 				}
 				return NewDString(*text), nil
 			},
-			Volatility: VolatilityImmutable,
+			PreferredOverload: true,
+			Volatility:        VolatilityImmutable,
 		},
 		&BinOp{
 			LeftType:   types.Jsonb,
@@ -1979,7 +1989,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	JSONFetchTextPath: {
+	treebin.JSONFetchTextPath: {
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.MakeArray(types.String),
@@ -2026,7 +2036,7 @@ type CmpOp struct {
 
 	Volatility Volatility
 
-	isPreferred bool
+	PreferredOverload bool
 }
 
 func (op *CmpOp) params() TypeList {
@@ -2044,14 +2054,14 @@ func (op *CmpOp) returnType() ReturnTyper {
 }
 
 func (op *CmpOp) preferred() bool {
-	return op.isPreferred
+	return op.PreferredOverload
 }
 
 func cmpOpFixups(
-	cmpOps map[ComparisonOperatorSymbol]cmpOpOverload,
-) map[ComparisonOperatorSymbol]cmpOpOverload {
-	findVolatility := func(op ComparisonOperatorSymbol, t *types.T) Volatility {
-		for _, impl := range cmpOps[EQ] {
+	cmpOps map[treecmp.ComparisonOperatorSymbol]cmpOpOverload,
+) map[treecmp.ComparisonOperatorSymbol]cmpOpOverload {
+	findVolatility := func(op treecmp.ComparisonOperatorSymbol, t *types.T) Volatility {
+		for _, impl := range cmpOps[treecmp.EQ] {
 			o := impl.(*CmpOp)
 			if o.LeftType.Equivalent(t) && o.RightType.Equivalent(t) {
 				return o.Volatility
@@ -2061,32 +2071,32 @@ func cmpOpFixups(
 	}
 
 	// Array equality comparisons.
-	for _, t := range types.Scalar {
-		cmpOps[EQ] = append(cmpOps[EQ], &CmpOp{
+	for _, t := range append(types.Scalar, types.AnyEnum) {
+		cmpOps[treecmp.EQ] = append(cmpOps[treecmp.EQ], &CmpOp{
 			LeftType:   types.MakeArray(t),
 			RightType:  types.MakeArray(t),
 			Fn:         cmpOpScalarEQFn,
-			Volatility: findVolatility(EQ, t),
+			Volatility: findVolatility(treecmp.EQ, t),
 		})
-		cmpOps[LE] = append(cmpOps[LE], &CmpOp{
+		cmpOps[treecmp.LE] = append(cmpOps[treecmp.LE], &CmpOp{
 			LeftType:   types.MakeArray(t),
 			RightType:  types.MakeArray(t),
 			Fn:         cmpOpScalarLEFn,
-			Volatility: findVolatility(LE, t),
+			Volatility: findVolatility(treecmp.LE, t),
 		})
-		cmpOps[LT] = append(cmpOps[LT], &CmpOp{
+		cmpOps[treecmp.LT] = append(cmpOps[treecmp.LT], &CmpOp{
 			LeftType:   types.MakeArray(t),
 			RightType:  types.MakeArray(t),
 			Fn:         cmpOpScalarLTFn,
-			Volatility: findVolatility(LT, t),
+			Volatility: findVolatility(treecmp.LT, t),
 		})
 
-		cmpOps[IsNotDistinctFrom] = append(cmpOps[IsNotDistinctFrom], &CmpOp{
+		cmpOps[treecmp.IsNotDistinctFrom] = append(cmpOps[treecmp.IsNotDistinctFrom], &CmpOp{
 			LeftType:     types.MakeArray(t),
 			RightType:    types.MakeArray(t),
 			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
-			Volatility:   findVolatility(IsNotDistinctFrom, t),
+			Volatility:   findVolatility(treecmp.IsNotDistinctFrom, t),
 		})
 	}
 
@@ -2143,8 +2153,8 @@ func makeIsFn(a, b *types.T, v Volatility) *CmpOp {
 }
 
 // CmpOps contains the comparison operations indexed by operation type.
-var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
-	EQ: {
+var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
+	treecmp.EQ: {
 		// Single-type comparisons.
 		makeEqFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
 		makeEqFn(types.Bool, types.Bool, VolatilityLeakProof),
@@ -2195,13 +2205,13 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 			LeftType:  types.AnyTuple,
 			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), MakeComparisonOperator(EQ)), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.EQ)), nil
 			},
 			Volatility: VolatilityImmutable,
 		},
 	},
 
-	LT: {
+	treecmp.LT: {
 		// Single-type comparisons.
 		makeLtFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
 		makeLtFn(types.Bool, types.Bool, VolatilityLeakProof),
@@ -2251,13 +2261,13 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 			LeftType:  types.AnyTuple,
 			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), MakeComparisonOperator(LT)), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.LT)), nil
 			},
 			Volatility: VolatilityImmutable,
 		},
 	},
 
-	LE: {
+	treecmp.LE: {
 		// Single-type comparisons.
 		makeLeFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
 		makeLeFn(types.Bool, types.Bool, VolatilityLeakProof),
@@ -2307,21 +2317,28 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 			LeftType:  types.AnyTuple,
 			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), MakeComparisonOperator(LE)), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.LE)), nil
 			},
 			Volatility: VolatilityImmutable,
 		},
 	},
 
-	IsNotDistinctFrom: {
+	treecmp.IsNotDistinctFrom: {
 		&CmpOp{
 			LeftType:     types.Unknown,
 			RightType:    types.Unknown,
 			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
-			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
-			isPreferred: true,
-			Volatility:  VolatilityLeakProof,
+			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL.
+			PreferredOverload: true,
+			Volatility:        VolatilityLeakProof,
+		},
+		&CmpOp{
+			LeftType:     types.AnyArray,
+			RightType:    types.Unknown,
+			Fn:           cmpOpScalarIsFn,
+			NullableArgs: true,
+			Volatility:   VolatilityLeakProof,
 		},
 		// Single-type comparisons.
 		makeIsFn(types.AnyEnum, types.AnyEnum, VolatilityImmutable),
@@ -2377,13 +2394,13 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 				if left == DNull || right == DNull {
 					return MakeDBool(left == DNull && right == DNull), nil
 				}
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), MakeComparisonOperator(IsNotDistinctFrom)), nil
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom)), nil
 			},
 			Volatility: VolatilityImmutable,
 		},
 	},
 
-	In: {
+	treecmp.In: {
 		makeEvalTupleIn(types.AnyEnum, VolatilityLeakProof),
 		makeEvalTupleIn(types.Bool, VolatilityLeakProof),
 		makeEvalTupleIn(types.Bytes, VolatilityLeakProof),
@@ -2409,7 +2426,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 		makeEvalTupleIn(types.VarBit, VolatilityLeakProof),
 	},
 
-	Like: {
+	treecmp.Like: {
 		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
@@ -2420,7 +2437,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 		},
 	},
 
-	ILike: {
+	treecmp.ILike: {
 		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
@@ -2431,7 +2448,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 		},
 	},
 
-	SimilarTo: {
+	treecmp.SimilarTo: {
 		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
@@ -2443,7 +2460,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 		},
 	},
 
-	RegMatch: append(
+	treecmp.RegMatch: append(
 		cmpOpOverload{
 			&CmpOp{
 				LeftType:  types.String,
@@ -2462,7 +2479,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 		)...,
 	),
 
-	RegIMatch: {
+	treecmp.RegIMatch: {
 		&CmpOp{
 			LeftType:  types.String,
 			RightType: types.String,
@@ -2474,7 +2491,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 		},
 	},
 
-	JSONExists: {
+	treecmp.JSONExists: {
 		&CmpOp{
 			LeftType:  types.Jsonb,
 			RightType: types.String,
@@ -2492,7 +2509,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 		},
 	},
 
-	JSONSomeExists: {
+	treecmp.JSONSomeExists: {
 		&CmpOp{
 			LeftType:  types.Jsonb,
 			RightType: types.StringArray,
@@ -2503,7 +2520,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 		},
 	},
 
-	JSONAllExists: {
+	treecmp.JSONAllExists: {
 		&CmpOp{
 			LeftType:  types.Jsonb,
 			RightType: types.StringArray,
@@ -2527,7 +2544,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 		},
 	},
 
-	Contains: {
+	treecmp.Contains: {
 		&CmpOp{
 			LeftType:  types.AnyArray,
 			RightType: types.AnyArray,
@@ -2552,7 +2569,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 		},
 	},
 
-	ContainedBy: {
+	treecmp.ContainedBy: {
 		&CmpOp{
 			LeftType:  types.AnyArray,
 			RightType: types.AnyArray,
@@ -2576,7 +2593,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 			Volatility: VolatilityImmutable,
 		},
 	},
-	Overlaps: append(
+	treecmp.Overlaps: append(
 		cmpOpOverload{
 			&CmpOp{
 				LeftType:  types.AnyArray,
@@ -2624,6 +2641,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 const experimentalBox2DClusterSettingName = "sql.spatial.experimental_box2d_comparison_operators.enabled"
 
 var experimentalBox2DClusterSetting = settings.RegisterBoolSetting(
+	settings.TenantWritable,
 	experimentalBox2DClusterSettingName,
 	"enables the use of certain experimental box2d comparison operators",
 	false,
@@ -2710,13 +2728,12 @@ func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bo
 
 // This map contains the inverses for operators in the CmpOps map that have
 // inverses.
-var cmpOpsInverse map[ComparisonOperatorSymbol]ComparisonOperatorSymbol
+var cmpOpsInverse map[treecmp.ComparisonOperatorSymbol]treecmp.ComparisonOperatorSymbol
 
 func init() {
-	cmpOpsInverse = make(map[ComparisonOperatorSymbol]ComparisonOperatorSymbol)
-	for cmpOpIdx := range comparisonOpName {
-		cmpOp := ComparisonOperatorSymbol(cmpOpIdx)
-		newOp, _, _, _, _ := FoldComparisonExpr(MakeComparisonOperator(cmpOp), DNull, DNull)
+	cmpOpsInverse = make(map[treecmp.ComparisonOperatorSymbol]treecmp.ComparisonOperatorSymbol)
+	for cmpOp := treecmp.ComparisonOperatorSymbol(0); cmpOp < treecmp.NumComparisonOperatorSymbols; cmpOp++ {
+		newOp, _, _, _, _ := FoldComparisonExpr(treecmp.MakeComparisonOperator(cmpOp), DNull, DNull)
 		if newOp.Symbol != cmpOp {
 			cmpOpsInverse[newOp.Symbol] = cmpOp
 			cmpOpsInverse[cmpOp] = newOp.Symbol
@@ -2724,26 +2741,33 @@ func init() {
 	}
 }
 
-func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
+// CmpOpInverse returns the inverse of the comparison operator if it exists. The
+// second return value is true if it exists, and false otherwise.
+func CmpOpInverse(i treecmp.ComparisonOperatorSymbol) (treecmp.ComparisonOperatorSymbol, bool) {
+	inverse, ok := cmpOpsInverse[i]
+	return inverse, ok
+}
+
+func boolFromCmp(cmp int, op treecmp.ComparisonOperator) *DBool {
 	switch op.Symbol {
-	case EQ, IsNotDistinctFrom:
+	case treecmp.EQ, treecmp.IsNotDistinctFrom:
 		return MakeDBool(cmp == 0)
-	case LT:
+	case treecmp.LT:
 		return MakeDBool(cmp < 0)
-	case LE:
+	case treecmp.LE:
 		return MakeDBool(cmp <= 0)
 	default:
 		panic(errors.AssertionFailedf("unexpected ComparisonOperator in boolFromCmp: %v", errors.Safe(op)))
 	}
 }
 
-func cmpOpScalarFn(ctx *EvalContext, left, right Datum, op ComparisonOperator) Datum {
+func cmpOpScalarFn(ctx *EvalContext, left, right Datum, op treecmp.ComparisonOperator) Datum {
 	// Before deferring to the Datum.Compare method, check for values that should
 	// be handled differently during SQL comparison evaluation than they should when
 	// ordering Datum values.
 	if left == DNull || right == DNull {
 		switch op.Symbol {
-		case IsNotDistinctFrom:
+		case treecmp.IsNotDistinctFrom:
 			return MakeDBool((left == DNull) == (right == DNull))
 
 		default:
@@ -2756,19 +2780,19 @@ func cmpOpScalarFn(ctx *EvalContext, left, right Datum, op ComparisonOperator) D
 }
 
 func cmpOpScalarEQFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, MakeComparisonOperator(EQ)), nil
+	return cmpOpScalarFn(ctx, left, right, treecmp.MakeComparisonOperator(treecmp.EQ)), nil
 }
 func cmpOpScalarLTFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, MakeComparisonOperator(LT)), nil
+	return cmpOpScalarFn(ctx, left, right, treecmp.MakeComparisonOperator(treecmp.LT)), nil
 }
 func cmpOpScalarLEFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, MakeComparisonOperator(LE)), nil
+	return cmpOpScalarFn(ctx, left, right, treecmp.MakeComparisonOperator(treecmp.LE)), nil
 }
 func cmpOpScalarIsFn(ctx *EvalContext, left, right Datum) (Datum, error) {
-	return cmpOpScalarFn(ctx, left, right, MakeComparisonOperator(IsNotDistinctFrom)), nil
+	return cmpOpScalarFn(ctx, left, right, treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom)), nil
 }
 
-func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) Datum {
+func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op treecmp.ComparisonOperator) Datum {
 	cmp := 0
 	sawNull := false
 	for i, leftElem := range left.D {
@@ -2777,7 +2801,7 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 		// differently than when ordering Datums.
 		if leftElem == DNull || rightElem == DNull {
 			switch op.Symbol {
-			case EQ:
+			case treecmp.EQ:
 				// If either Datum is NULL and the op is EQ, we continue the
 				// comparison and the result is only NULL if the other (non-NULL)
 				// elements are equal. This is because NULL is thought of as "unknown",
@@ -2785,7 +2809,7 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 				// being proven false, but does prevent it from being proven true.
 				sawNull = true
 
-			case IsNotDistinctFrom:
+			case treecmp.IsNotDistinctFrom:
 				// For IS NOT DISTINCT FROM, NULLs are "equal".
 				if leftElem != DNull || rightElem != DNull {
 					return DBoolFalse
@@ -2864,7 +2888,7 @@ func makeEvalTupleIn(typ *types.T, v Volatility) *CmpOp {
 						sawNull = true
 					} else {
 						// Use the EQ function which properly handles NULLs.
-						if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), MakeComparisonOperator(EQ)); res == DNull {
+						if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), treecmp.MakeComparisonOperator(treecmp.EQ)); res == DNull {
 							sawNull = true
 						} else if res == DBoolTrue {
 							return DBoolTrue, nil
@@ -2897,9 +2921,9 @@ func makeEvalTupleIn(typ *types.T, v Volatility) *CmpOp {
 // evalArrayCmp would be called with:
 //   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
 func evalDatumsCmp(
-	ctx *EvalContext, op, subOp ComparisonOperator, fn *CmpOp, left Datum, right Datums,
+	ctx *EvalContext, op, subOp treecmp.ComparisonOperator, fn *CmpOp, left Datum, right Datums,
 ) (Datum, error) {
-	all := op.Symbol == All
+	all := op.Symbol == treecmp.All
 	any := !all
 	sawNull := false
 	for _, elem := range right {
@@ -2970,8 +2994,8 @@ func MatchLikeEscape(
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, escapeRune)
 	if err != nil {
-		return DBoolFalse, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return DBoolFalse, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 
 	if like == nil {
@@ -2995,8 +3019,8 @@ func ConvertLikeToRegexp(
 	key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escape}
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
-		return nil, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return nil, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 	return re, nil
 }
@@ -3020,8 +3044,8 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, '\\')
 	if err != nil {
-		return DBoolFalse, pgerror.Newf(
-			pgcode.InvalidRegularExpression, "LIKE regexp compilation failed: %v", err)
+		return DBoolFalse, pgerror.Wrap(
+			err, pgcode.InvalidRegularExpression, "LIKE regexp compilation failed")
 	}
 
 	if like == nil {
@@ -3040,7 +3064,7 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 func matchRegexpWithKey(ctx *EvalContext, str Datum, key RegexpCacheKey) (Datum, error) {
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
-		return DBoolFalse, err
+		return DBoolFalse, pgerror.Wrap(err, pgcode.InvalidRegularExpression, "invalid regular expression")
 	}
 	return MakeDBool(DBool(re.MatchString(string(MustBeDString(str))))), nil
 }
@@ -3062,25 +3086,21 @@ type DatabaseRegionConfig interface {
 	PrimaryRegionString() string
 }
 
+// HasAnyPrivilegeResult represents the non-error results of calling HasAnyPrivilege
+type HasAnyPrivilegeResult = int8
+
+const (
+	// HasPrivilege means at least one of the specified privileges is granted.
+	HasPrivilege HasAnyPrivilegeResult = 1
+	// HasNoPrivilege means no privileges are granted.
+	HasNoPrivilege HasAnyPrivilegeResult = 0
+	// ObjectNotFound means the object that privileges are being checked on was not found.
+	ObjectNotFound HasAnyPrivilegeResult = -1
+)
+
 // EvalDatabase consists of functions that reference the session database
 // and is to be used from EvalContext.
 type EvalDatabase interface {
-	// CurrentDatabaseRegionConfig returns the RegionConfig of the current
-	// session database.
-	CurrentDatabaseRegionConfig(ctx context.Context) (DatabaseRegionConfig, error)
-
-	// ValidateAllMultiRegionZoneConfigsInCurrentDatabase validates whether the current
-	// database's multi-region zone configs are correctly setup. This includes
-	// all tables within the database.
-	ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error
-
-	// ResetMultiRegionZoneConfigsForTable resets the given table's zone
-	// configuration to its multi-region default.
-	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error
-
-	// ResetMultiRegionZoneConfigsForDatabase resets the given database's zone
-	// configuration to its multi-region default.
-	ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error
 
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
@@ -3110,25 +3130,37 @@ type EvalDatabase interface {
 		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 	) (isVisible bool, exists bool, err error)
 
-	// HasPrivilege returns whether the current user has privilege to access
+	// HasAnyPrivilege returns whether the current user has privilege to access
 	// the given object.
-	HasPrivilege(
-		ctx context.Context,
-		specifier HasPrivilegeSpecifier,
-		user security.SQLUsername,
-		kind privilege.Kind,
-		withGrantOpt bool,
-	) (bool, error)
+	HasAnyPrivilege(ctx context.Context, specifier HasPrivilegeSpecifier, user security.SQLUsername, privs []privilege.Privilege) (HasAnyPrivilegeResult, error)
 }
 
 // HasPrivilegeSpecifier specifies an object to lookup privilege for.
+// Only one of { DatabaseName, DatabaseOID, SchemaName, TableName, TableOID } is filled.
 type HasPrivilegeSpecifier struct {
-	// Only one of these is filled.
+
+	// Database privilege
+	DatabaseName *string
+	DatabaseOID  *oid.Oid
+
+	// Schema privilege
+	// Schema OID must be converted to name before using HasPrivilegeSpecifier.
+	SchemaName *string
+	// SchemaDatabaseName is required when SchemaName is used.
+	SchemaDatabaseName *string
+	// Because schemas cannot be looked up by OID directly,
+	// this controls whether the result is nil (originally queried by OID) or an error (originally queried by name).
+	SchemaIsRequired *bool
+
+	// Table privilege
 	TableName *string
 	TableOID  *oid.Oid
+	// Sequences are stored internally as a table.
+	IsSequence *bool
 
-	// Only one of these is filled.
-	// Only used if TableName or TableOID is specified.
+	// Column privilege
+	// Requires TableName or TableOID.
+	// Only one of ColumnName, ColumnAttNum is filled.
 	ColumnName   *Name
 	ColumnAttNum *uint32
 }
@@ -3162,6 +3194,9 @@ type TypeResolver interface {
 type EvalPlanner interface {
 	EvalDatabase
 	TypeResolver
+
+	// ExecutorConfig returns *ExecutorConfig
+	ExecutorConfig() interface{}
 
 	// GetImmutableTableInterfaceByID returns an interface{} with
 	// catalog.TableDescriptor to avoid a circular dependency.
@@ -3209,6 +3244,13 @@ type EvalPlanner interface {
 		force bool,
 	) error
 
+	// UserHasAdminRole returns tuple of bool and error:
+	// (true, nil) means that the user has an admin role (i.e. root or node)
+	// (false, nil) means that the user has NO admin role
+	// (false, err) means that there was an error running the query on
+	// the `system.users` table
+	UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error)
+
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner
 	// implementation in authorization.go
@@ -3222,6 +3264,101 @@ type EvalPlanner interface {
 
 	// ExternalWriteFile writes the content to an external file URI.
 	ExternalWriteFile(ctx context.Context, uri string, content []byte) error
+
+	// DecodeGist exposes gist functionality to the builtin functions.
+	DecodeGist(gist string) ([]string, error)
+
+	// SerializeSessionState serializes the variables in the current session
+	// and returns a state, in bytes form.
+	SerializeSessionState() (*DBytes, error)
+
+	// DeserializeSessionState deserializes the state as serialized variables
+	// into the current session.
+	DeserializeSessionState(state *DBytes) (*DBool, error)
+
+	// CreateSessionRevivalToken creates a token that can be used to log in
+	// as the current user, in bytes form.
+	CreateSessionRevivalToken() (*DBytes, error)
+
+	// ValidateSessionRevivalToken checks if the given bytes are a valid
+	// session revival token.
+	ValidateSessionRevivalToken(token *DBytes) (*DBool, error)
+
+	// RevalidateUniqueConstraintsInCurrentDB verifies that all unique constraints
+	// defined on tables in the current database are valid. In other words, it
+	// verifies that for every table in the database with one or more unique
+	// constraints, all rows in the table have unique values for every unique
+	// constraint defined on the table.
+	RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) error
+
+	// RevalidateUniqueConstraintsInTable verifies that all unique constraints
+	// defined on the given table are valid. In other words, it verifies that all
+	// rows in the table have unique values for every unique constraint defined on
+	// the table.
+	RevalidateUniqueConstraintsInTable(ctx context.Context, tableID int) error
+
+	// RevalidateUniqueConstraint verifies that the given unique constraint on the
+	// given table is valid. In other words, it verifies that all rows in the
+	// table have unique values for the columns in the constraint. Returns an
+	// error if validation fails or if constraintName is not actually a unique
+	// constraint on the table.
+	RevalidateUniqueConstraint(ctx context.Context, tableID int, constraintName string) error
+
+	// QueryRowEx executes the supplied SQL statement and returns a single row, or
+	// nil if no row is found, or an error if more that one row is returned.
+	//
+	// The fields set in session that are set override the respective fields if
+	// they have previously been set through SetSessionData().
+	QueryRowEx(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		override sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{}) (Datums, error)
+
+	// QueryIteratorEx executes the query, returning an iterator that can be used
+	// to get the results. If the call is successful, the returned iterator
+	// *must* be closed.
+	//
+	// The fields set in session that are set override the respective fields if they
+	// have previously been set through SetSessionData().
+	QueryIteratorEx(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		override sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) (InternalRows, error)
+}
+
+// InternalRows is an iterator interface that's exposed by the internal
+// executor. It provides access to the rows from a query.
+// InternalRows is a copy of the one in sql/internal.go excluding the
+// Types function - we don't need the Types function for use cases where
+// QueryIteratorEx is used from the InternalExecutor on the EvalPlanner.
+// Furthermore, we cannot include the Types function due to a cyclic
+// dependency on colinfo.ResultColumns - we cannot import colinfo in tree.
+type InternalRows interface {
+	// Next advances the iterator by one row, returning false if there are no
+	// more rows in this iterator or if an error is encountered (the latter is
+	// then returned).
+	//
+	// The iterator is automatically closed when false is returned, consequent
+	// calls to Next will return the same values as when the iterator was
+	// closed.
+	Next(context.Context) (bool, error)
+
+	// Cur returns the row at the current position of the iterator. The row is
+	// safe to hold onto (meaning that calling Next() or Close() will not
+	// invalidate it).
+	Cur() Datums
+
+	// Close closes this iterator, releasing any resources it held open. Close
+	// is idempotent and *must* be called once the caller is done with the
+	// iterator.
+	Close() error
 }
 
 // CompactEngineSpanFunc is used to compact an engine key span at the given
@@ -3234,11 +3371,12 @@ type CompactEngineSpanFunc func(
 
 // EvalSessionAccessor is a limited interface to access session variables.
 type EvalSessionAccessor interface {
-	// SetConfig sets a session variable to a new value.
+	// SetSessionVar sets a session variable to a new value. If isLocal is true,
+	// the setting change is scoped to the current transaction (as in SET LOCAL).
 	//
 	// This interface only supports strings as this is sufficient for
 	// pg_catalog.set_config().
-	SetSessionVar(ctx context.Context, settingName, newValue string) error
+	SetSessionVar(ctx context.Context, settingName, newValue string, isLocal bool) error
 
 	// GetSessionVar retrieves the current value of a session variable.
 	GetSessionVar(ctx context.Context, settingName string, missingOk bool) (bool, string, error)
@@ -3246,9 +3384,20 @@ type EvalSessionAccessor interface {
 	// HasAdminRole returns true iff the current session user has the admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
 
-	// HasAdminRole returns nil iff the current session user has the specified
+	// HasRoleOption returns nil iff the current session user has the specified
 	// role option.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
+}
+
+// PreparedStatementState is a limited interface that exposes metadata about
+// prepared statements.
+type PreparedStatementState interface {
+	// HasActivePortals returns true if there are portals in the session.
+	HasActivePortals() bool
+	// MigratablePreparedStatements returns a mapping of all prepared statements.
+	MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement
+	// HasPortal returns true if there exists a given named portal in the session.
+	HasPortal(s string) bool
 }
 
 // ClientNoticeSender is a limited interface to send notices to the
@@ -3263,25 +3412,6 @@ type ClientNoticeSender interface {
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 }
 
-// InternalExecutor is a subset of sqlutil.InternalExecutor (which, in turn, is
-// implemented by sql.InternalExecutor) used by this sem/tree package which
-// can't even import sqlutil.
-//
-// Note that the functions offered here should be avoided when possible. They
-// execute the query as root if an user hadn't been previously set on the
-// executor through SetSessionData(). These functions are deprecated in
-// sql.InternalExecutor in favor of a safer interface. Unfortunately, those
-// safer functions cannot be exposed through this interface because they depend
-// on sqlbase, and this package cannot import sqlbase. When possible, downcast
-// this to sqlutil.InternalExecutor or sql.InternalExecutor, and use the
-// alternatives.
-type InternalExecutor interface {
-	// QueryRow is part of the sqlutil.InternalExecutor interface.
-	QueryRow(
-		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
-	) (Datums, error)
-}
-
 // PrivilegedAccessor gives access to certain queries that would otherwise
 // require someone with RootUser access to query a given data source.
 // It is defined independently to prevent a circular dependency on sql, tree and sqlbase.
@@ -3291,40 +3421,47 @@ type PrivilegedAccessor interface {
 	// Returns the id, a bool representing whether the namespace exists, and an error
 	// if there is one.
 	LookupNamespaceID(
-		ctx context.Context, parentID int64, name string,
+		ctx context.Context, parentID int64, parentSchemaID int64, name string,
 	) (DInt, bool, error)
 
-	// LookupZoneConfig returns the zone config given a namespace id.
+	// LookupZoneConfigByNamespaceID returns the zone config given a namespace id.
 	// It is meant as a replacement for looking up system.zones directly.
 	// Returns the config byte array, a bool representing whether the namespace exists,
 	// and an error if there is one.
 	LookupZoneConfigByNamespaceID(ctx context.Context, id int64) (DBytes, bool, error)
 }
 
+// RegionOperator gives access to the current region, validation for all
+// regions, and the ability to reset the zone configurations for tables
+// or databases.
+type RegionOperator interface {
+
+	// CurrentDatabaseRegionConfig returns the RegionConfig of the current
+	// session database.
+	CurrentDatabaseRegionConfig(ctx context.Context) (DatabaseRegionConfig, error)
+
+	// ValidateAllMultiRegionZoneConfigsInCurrentDatabase validates whether the current
+	// database's multi-region zone configs are correctly setup. This includes
+	// all tables within the database.
+	ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error
+
+	// ResetMultiRegionZoneConfigsForTable resets the given table's zone
+	// configuration to its multi-region default.
+	ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error
+
+	// ResetMultiRegionZoneConfigsForDatabase resets the given database's zone
+	// configuration to its multi-region default.
+	ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error
+}
+
 // SequenceOperators is used for various sql related functions that can
 // be used from EvalContext.
 type SequenceOperators interface {
-	EvalDatabase
 
 	// GetSerialSequenceNameFromColumn returns the sequence name for a given table and column
 	// provided it is part of a SERIAL sequence.
 	// Returns an empty string if the sequence name does not exist.
 	GetSerialSequenceNameFromColumn(ctx context.Context, tableName *TableName, columnName Name) (*TableName, error)
-
-	// IncrementSequence increments the given sequence and returns the result.
-	// It returns an error if the given name is not a sequence.
-	// The caller must ensure that seqName is fully qualified already.
-	IncrementSequence(ctx context.Context, seqName *TableName) (int64, error)
-
-	// GetLatestValueInSessionForSequence returns the value most recently obtained by
-	// nextval() for the given sequence in this session.
-	GetLatestValueInSessionForSequence(ctx context.Context, seqName *TableName) (int64, error)
-
-	// SetSequenceValue sets the sequence's value.
-	// If isCalled is false, the sequence is set such that the next time nextval() is called,
-	// `newVal` is returned. Otherwise, the next call to nextval will return
-	// `newVal + seqOpts.Increment`.
-	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64, isCalled bool) error
 
 	// IncrementSequenceByID increments the given sequence and returns the result.
 	// It returns an error if the given ID is not a sequence.
@@ -3341,7 +3478,7 @@ type SequenceOperators interface {
 	// `newVal` is returned. Otherwise, the next call to nextval will return
 	// `newVal + seqOpts.Increment`.
 	// Takes in a sequence ID rather than a name, unlike SetSequenceValue.
-	SetSequenceValueByID(ctx context.Context, seqID int64, newVal int64, isCalled bool) error
+	SetSequenceValueByID(ctx context.Context, seqID uint32, newVal int64, isCalled bool) error
 }
 
 // TenantOperator is capable of interacting with tenant state, allowing SQL
@@ -3354,8 +3491,9 @@ type TenantOperator interface {
 	CreateTenant(ctx context.Context, tenantID uint64) error
 
 	// DestroyTenant attempts to uninstall an existing tenant from the system.
-	// It returns an error if the tenant does not exist.
-	DestroyTenant(ctx context.Context, tenantID uint64) error
+	// It returns an error if the tenant does not exist. If synchronous is true
+	// the gc job will not wait for a GC ttl.
+	DestroyTenant(ctx context.Context, tenantID uint64, synchronous bool) error
 
 	// GCTenant attempts to garbage collect a DROP tenant from the system. Upon
 	// success it also removes the tenant record.
@@ -3423,6 +3561,14 @@ func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 // to avoid circular dependency.
 type SQLStatsController interface {
 	ResetClusterSQLStats(ctx context.Context) error
+	CreateSQLStatsCompactionSchedule(ctx context.Context) error
+}
+
+// IndexUsageStatsController is an interface embedded in EvalCtx which can be
+// used by the builtins to reset index usage stats in the cluster. This interface
+// is introduced to avoid circular dependency.
+type IndexUsageStatsController interface {
+	ResetIndexUsageStats(ctx context.Context) error
 }
 
 // EvalContext defines the context in which to evaluate an expression, allowing
@@ -3441,9 +3587,10 @@ type SQLStatsController interface {
 // more fields from the sql package. Through that extendedEvalContext, this
 // struct now generally used by planNodes.
 type EvalContext struct {
-	// Session variables. This is a read-only copy of the values owned by the
-	// Session.
-	SessionData *sessiondata.SessionData
+	// SessionDataStack stores the session variables accessible by the correct
+	// context. Each element on the stack represents the beginning of a new
+	// transaction or nested transaction (savepoints).
+	SessionDataStack *sessiondata.Stack
 	// TxnState is a string representation of the current transactional state.
 	TxnState string
 	// TxnReadOnly specifies if the current transaction is read-only.
@@ -3463,6 +3610,8 @@ type EvalContext struct {
 	//   [region=us,dc=east]
 	//
 	Locality roachpb.Locality
+
+	Tracer *tracing.Tracer
 
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().
@@ -3503,14 +3652,10 @@ type EvalContext struct {
 	// Context holds the context in which the expression is evaluated.
 	Context context.Context
 
-	// InternalExecutor gives access to an executor to be used for running
-	// "internal" statements. It may seem bizarre that "expression evaluation" may
-	// need to run a statement, and yet many builtin functions do it.
-	// Note that the executor will be "session-bound" - it will inherit session
-	// variables from a parent session.
-	InternalExecutor InternalExecutor
-
 	Planner EvalPlanner
+
+	// Not using sql.JobExecContext type to avoid cycle dependency with sql package
+	JobExecContext interface{}
 
 	PrivilegedAccessor PrivilegedAccessor
 
@@ -3522,7 +3667,12 @@ type EvalContext struct {
 
 	Tenant TenantOperator
 
+	// Regions stores information about regions.
+	Regions RegionOperator
+
 	JoinTokenCreator JoinTokenCreator
+
+	PreparedStatementState PreparedStatementState
 
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn
@@ -3530,7 +3680,6 @@ type EvalContext struct {
 	DB *kv.DB
 
 	ReCache *RegexpCache
-	tmpDec  apd.Decimal
 
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
 	// that is also able to save the plan to skip work during the exec step.
@@ -3561,6 +3710,8 @@ type EvalContext struct {
 
 	SQLStatsController SQLStatsController
 
+	IndexUsageStatsController IndexUsageStatsController
+
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc
 }
@@ -3584,11 +3735,11 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) EvalContext {
 	ctx := EvalContext{
-		Codec:       keys.SystemSQLCodec,
-		Txn:         &kv.Txn{},
-		SessionData: &sessiondata.SessionData{},
-		Settings:    st,
-		NodeID:      base.TestingIDContainer,
+		Codec:            keys.SystemSQLCodec,
+		Txn:              &kv.Txn{},
+		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+		Settings:         st,
+		NodeID:           base.TestingIDContainer,
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor
@@ -3597,6 +3748,14 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
 	return ctx
+}
+
+// SessionData returns the SessionData the current EvalCtx should use to eval.
+func (ctx *EvalContext) SessionData() *sessiondata.SessionData {
+	if ctx.SessionDataStack == nil {
+		return nil
+	}
+	return ctx.SessionDataStack.Top()
 }
 
 // Copy returns a deep copy of ctx.
@@ -3622,6 +3781,16 @@ func (ctx *EvalContext) PopIVarContainer() {
 	ctx.iVarContainerStack = ctx.iVarContainerStack[:len(ctx.iVarContainerStack)-1]
 }
 
+// QualityOfService returns the current value of session setting
+// default_transaction_quality_of_service if session data is available,
+// otherwise the default value (0).
+func (ctx *EvalContext) QualityOfService() sessiondatapb.QoSLevel {
+	if ctx.SessionData() == nil {
+		return sessiondatapb.Normal
+	}
+	return ctx.SessionData().DefaultTxnQualityOfService
+}
+
 // NewTestingEvalContext is a convenience version of MakeTestingEvalContext
 // that returns a pointer.
 func NewTestingEvalContext(st *cluster.Settings) *EvalContext {
@@ -3631,14 +3800,19 @@ func NewTestingEvalContext(st *cluster.Settings) *EvalContext {
 
 // Stop closes out the EvalContext and must be called once it is no longer in use.
 func (ctx *EvalContext) Stop(c context.Context) {
-	ctx.Mon.Stop(c)
+	if r := recover(); r != nil {
+		ctx.Mon.EmergencyStop(c)
+		panic(r)
+	} else {
+		ctx.Mon.Stop(c)
+	}
 }
 
 // FmtCtx creates a FmtCtx with the given options as well as the EvalContext's session data.
 func (ctx *EvalContext) FmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
-	if ctx.SessionData != nil {
+	if ctx.SessionData() != nil {
 		opts = append(
-			[]FmtCtxOption{FmtDataConversionConfig(ctx.SessionData.DataConversionConfig)},
+			[]FmtCtxOption{FmtDataConversionConfig(ctx.SessionData().DataConversionConfig)},
 			opts...,
 		)
 	}
@@ -3675,6 +3849,14 @@ func (ctx *EvalContext) HasPlaceholders() bool {
 	return ctx.Placeholders != nil
 }
 
+const regionKey = "region"
+
+// GetLocalRegion returns the region name of the local processor
+// on which we're executing.
+func (ctx *EvalContext) GetLocalRegion() (regionName string, ok bool) {
+	return ctx.Locality.Find(regionKey)
+}
+
 // TimestampToDecimal converts the logical timestamp into a decimal
 // value with the number of nanoseconds in the integer part and the
 // logical counter in the decimal part.
@@ -3686,7 +3868,7 @@ func TimestampToDecimal(ts hlc.Timestamp) apd.Decimal {
 	val := &res.Coeff
 	val.SetInt64(ts.WallTime)
 	val.Mul(val, big10E10)
-	val.Add(val, big.NewInt(int64(ts.Logical)))
+	val.Add(val, apd.NewBigInt(int64(ts.Logical)))
 
 	// val must be positive. If it was set to a negative value above,
 	// transfer the sign to res.Negative.
@@ -3711,7 +3893,7 @@ func DecimalToInexactDTimestampTZ(d *DDecimal) (*DTimestampTZ, error) {
 }
 
 func decimalToHLC(d *DDecimal) (hlc.Timestamp, error) {
-	var coef big.Int
+	var coef apd.BigInt
 	coef.Set(&d.Decimal.Coeff)
 	// The physical portion of the HLC is stored shifted up by 10^10, so shift
 	// it down and clear out the logical component.
@@ -3820,32 +4002,28 @@ func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 
 // GetLocation returns the session timezone.
 func (ctx *EvalContext) GetLocation() *time.Location {
-	return ctx.SessionData.GetLocation()
+	return ctx.SessionData().GetLocation()
 }
 
 // GetIntervalStyle returns the session interval style.
 func (ctx *EvalContext) GetIntervalStyle() duration.IntervalStyle {
-	if ctx.SessionData == nil {
+	if ctx.SessionData() == nil {
 		return duration.IntervalStyle_POSTGRES
 	}
-	return ctx.SessionData.GetIntervalStyle()
+	return ctx.SessionData().GetIntervalStyle()
 }
 
 // GetDateStyle returns the session date style.
 func (ctx *EvalContext) GetDateStyle() pgdate.DateStyle {
-	if ctx.SessionData == nil {
+	if ctx.SessionData() == nil {
 		return pgdate.DefaultDateStyle()
 	}
-	return ctx.SessionData.GetDateStyle()
+	return ctx.SessionData().GetDateStyle()
 }
 
 // Ctx returns the session's context.
 func (ctx *EvalContext) Ctx() context.Context {
 	return ctx.Context
-}
-
-func (ctx *EvalContext) getTmpDec() *apd.Decimal {
-	return &ctx.tmpDec
 }
 
 // Eval implements the TypedExpr interface.
@@ -3921,7 +4099,7 @@ func (expr *CaseExpr) Eval(ctx *EvalContext) (Datum, error) {
 			if err != nil {
 				return nil, err
 			}
-			d, err := evalComparison(ctx, MakeComparisonOperator(EQ), val, arg)
+			d, err := evalComparison(ctx, treecmp.MakeComparisonOperator(treecmp.EQ), val, arg)
 			if err != nil {
 				return nil, err
 			}
@@ -4113,6 +4291,9 @@ func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator,
 	if expr.fn == nil || expr.fnProps.Class != GeneratorClass {
 		return nil, errors.AssertionFailedf("cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
 	}
+	if expr.fn.GeneratorWithExprs != nil {
+		return expr.fn.GeneratorWithExprs(ctx, expr.Exprs)
+	}
 	nullArg, args, err := expr.evalArgs(ctx)
 	if err != nil || nullArg {
 		return nil, err
@@ -4157,6 +4338,10 @@ func (expr *FuncExpr) MaybeWrapError(err error) error {
 
 // Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
+	if expr.fn.FnWithExprs != nil {
+		return expr.fn.FnWithExprs(ctx, expr.Exprs)
+	}
+
 	nullResult, args, err := expr.evalArgs(ctx)
 	if err != nil {
 		return nil, err
@@ -4313,7 +4498,7 @@ func (expr *NullIfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	cond, err := evalComparison(ctx, MakeComparisonOperator(EQ), expr1, expr2)
+	cond, err := evalComparison(ctx, treecmp.MakeComparisonOperator(treecmp.EQ), expr1, expr2)
 	if err != nil {
 		return nil, err
 	}
@@ -4499,6 +4684,11 @@ func (t *DBytes) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
+func (t *DEncodedKey) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
 func (t *DUuid) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
@@ -4604,6 +4794,11 @@ func (t *DArray) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
+func (t *DVoid) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
 func (t *DOid) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
@@ -4642,14 +4837,17 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 		// checking, since the placeholder's type hint didn't match the desired
 		// type for the placeholder. In this case, we cast the expression to
 		// the desired type.
-		// TODO(jordan): introduce a restriction on what casts are allowed here.
+		// TODO(jordan,mgartner): Introduce a restriction on what casts are
+		// allowed here. Most likely, only implicit casts should be allowed.
 		cast := NewTypedCastExpr(e, typ)
 		return cast.Eval(ctx)
 	}
 	return e.Eval(ctx)
 }
 
-func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {
+func evalComparison(
+	ctx *EvalContext, op treecmp.ComparisonOperator, left, right Datum,
+) (Datum, error) {
 	if left == DNull || right == DNull {
 		return DNull, nil
 	}
@@ -4667,41 +4865,41 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 // this new operation, along with potentially flipped operands and "flipped"
 // and "not" flags.
 func FoldComparisonExpr(
-	op ComparisonOperator, left, right Expr,
-) (newOp ComparisonOperator, newLeft Expr, newRight Expr, flipped bool, not bool) {
+	op treecmp.ComparisonOperator, left, right Expr,
+) (newOp treecmp.ComparisonOperator, newLeft Expr, newRight Expr, flipped bool, not bool) {
 	switch op.Symbol {
-	case NE:
+	case treecmp.NE:
 		// NE(left, right) is implemented as !EQ(left, right).
-		return MakeComparisonOperator(EQ), left, right, false, true
-	case GT:
+		return treecmp.MakeComparisonOperator(treecmp.EQ), left, right, false, true
+	case treecmp.GT:
 		// GT(left, right) is implemented as LT(right, left)
-		return MakeComparisonOperator(LT), right, left, true, false
-	case GE:
+		return treecmp.MakeComparisonOperator(treecmp.LT), right, left, true, false
+	case treecmp.GE:
 		// GE(left, right) is implemented as LE(right, left)
-		return MakeComparisonOperator(LE), right, left, true, false
-	case NotIn:
+		return treecmp.MakeComparisonOperator(treecmp.LE), right, left, true, false
+	case treecmp.NotIn:
 		// NotIn(left, right) is implemented as !IN(left, right)
-		return MakeComparisonOperator(In), left, right, false, true
-	case NotLike:
+		return treecmp.MakeComparisonOperator(treecmp.In), left, right, false, true
+	case treecmp.NotLike:
 		// NotLike(left, right) is implemented as !Like(left, right)
-		return MakeComparisonOperator(Like), left, right, false, true
-	case NotILike:
+		return treecmp.MakeComparisonOperator(treecmp.Like), left, right, false, true
+	case treecmp.NotILike:
 		// NotILike(left, right) is implemented as !ILike(left, right)
-		return MakeComparisonOperator(ILike), left, right, false, true
-	case NotSimilarTo:
+		return treecmp.MakeComparisonOperator(treecmp.ILike), left, right, false, true
+	case treecmp.NotSimilarTo:
 		// NotSimilarTo(left, right) is implemented as !SimilarTo(left, right)
-		return MakeComparisonOperator(SimilarTo), left, right, false, true
-	case NotRegMatch:
+		return treecmp.MakeComparisonOperator(treecmp.SimilarTo), left, right, false, true
+	case treecmp.NotRegMatch:
 		// NotRegMatch(left, right) is implemented as !RegMatch(left, right)
-		return MakeComparisonOperator(RegMatch), left, right, false, true
-	case NotRegIMatch:
+		return treecmp.MakeComparisonOperator(treecmp.RegMatch), left, right, false, true
+	case treecmp.NotRegIMatch:
 		// NotRegIMatch(left, right) is implemented as !RegIMatch(left, right)
-		return MakeComparisonOperator(RegIMatch), left, right, false, true
-	case IsDistinctFrom:
+		return treecmp.MakeComparisonOperator(treecmp.RegIMatch), left, right, false, true
+	case treecmp.IsDistinctFrom:
 		// IsDistinctFrom(left, right) is implemented as !IsNotDistinctFrom(left, right)
 		// Note: this seems backwards, but IS NOT DISTINCT FROM is an extended
 		// version of IS and IS DISTINCT FROM is an extended version of IS NOT.
-		return MakeComparisonOperator(IsNotDistinctFrom), left, right, false, true
+		return treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), left, right, false, true
 	}
 	return op, left, right, false, false
 }
@@ -4882,6 +5080,13 @@ type likeKey struct {
 	s               string
 	caseInsensitive bool
 	escape          rune
+}
+
+// LikeEscape converts a like pattern to a regexp pattern.
+func LikeEscape(pattern string) (string, error) {
+	key := likeKey{s: pattern, caseInsensitive: false, escape: '\\'}
+	re, err := key.patternNoAnchor()
+	return re, err
 }
 
 // unescapePattern unescapes a pattern for a given escape token.
@@ -5243,11 +5448,7 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 	return changed, retLen, nil
 }
 
-// Pattern implements the RegexpCacheKey interface.
-// The strategy for handling custom escape character
-// is to convert all unescaped escape character into '\'.
-// k.escape can either be empty or a single character.
-func (k likeKey) Pattern() (string, error) {
+func (k likeKey) patternNoAnchor() (string, error) {
 	// QuoteMeta escapes all regexp metacharacters (`\.+*?()|[]{}^$`) with a `\`.
 	pattern := regexp.QuoteMeta(k.s)
 	var err error
@@ -5324,6 +5525,18 @@ func (k likeKey) Pattern() (string, error) {
 		}
 	}
 
+	return pattern, nil
+}
+
+// Pattern implements the RegexpCacheKey interface.
+// The strategy for handling custom escape character
+// is to convert all unescaped escape character into '\'.
+// k.escape can either be empty or a single character.
+func (k likeKey) Pattern() (string, error) {
+	pattern, err := k.patternNoAnchor()
+	if err != nil {
+		return "", err
+	}
 	return anchorPattern(pattern, k.caseInsensitive), nil
 }
 
@@ -5486,7 +5699,7 @@ func anchorPattern(pattern string, caseInsensitive bool) string {
 // FindEqualComparisonFunction looks up an overload of the "=" operator
 // for a given pair of input operand types.
 func FindEqualComparisonFunction(leftType, rightType *types.T) (TwoArgFn, bool) {
-	fn, found := CmpOps[EQ].LookupImpl(leftType, rightType)
+	fn, found := CmpOps[treecmp.EQ].LookupImpl(leftType, rightType)
 	if found {
 		return fn.Fn, true
 	}
@@ -5516,9 +5729,9 @@ func PickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) 
 		var eval Datum
 		var err error
 		if greatest {
-			eval, err = evalComparison(ctx, MakeComparisonOperator(LT), g, d)
+			eval, err = evalComparison(ctx, treecmp.MakeComparisonOperator(treecmp.LT), g, d)
 		} else {
-			eval, err = evalComparison(ctx, MakeComparisonOperator(LT), d, g)
+			eval, err = evalComparison(ctx, treecmp.MakeComparisonOperator(treecmp.LT), d, g)
 		}
 		if err != nil {
 			return nil, err

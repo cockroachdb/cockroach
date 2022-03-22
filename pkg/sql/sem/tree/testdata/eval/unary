@@ -43,7 +43,7 @@ eval
 eval
 |/ 9.0::decimal
 ----
-3
+3.0000000000000000000
 
 eval
 |/ NULL

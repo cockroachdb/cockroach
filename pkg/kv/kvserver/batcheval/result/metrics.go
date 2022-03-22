@@ -20,6 +20,7 @@ type Metrics struct {
 	ResolveCommit        int // intent commit evaluated successfully
 	ResolveAbort         int // non-poisoning intent abort evaluated successfully
 	ResolvePoison        int // poisoning intent abort evaluated successfully
+	AddSSTableAsWrites   int // AddSSTable requests with IngestAsWrites set
 }
 
 // Add absorbs the supplied Metrics into the receiver.
@@ -31,4 +32,5 @@ func (mt *Metrics) Add(o Metrics) {
 	mt.ResolveCommit += o.ResolveCommit
 	mt.ResolveAbort += o.ResolveAbort
 	mt.ResolvePoison += o.ResolvePoison
+	mt.AddSSTableAsWrites += o.AddSSTableAsWrites
 }

@@ -236,7 +236,7 @@ sort
       ├── immutable
       ├── key: (3)
       ├── fd: (3)-->(19,22,23)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: name:3 sum:19 sum:20 sum:21
       │    ├── grouping columns: name:3
       │    ├── immutable
@@ -349,7 +349,7 @@ sort
       ├── immutable
       ├── key: (31)
       ├── fd: (31)-->(36,38,39)
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: route:31 sum:35 sum:36 sum:37
       │    ├── grouping columns: route:31
       │    ├── immutable
@@ -510,7 +510,7 @@ sort
  └── project
       ├── columns: popn_per_sqkm:20 name:15!null
       ├── immutable
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: name:15!null n.geom:16!null sum:19
       │    ├── grouping columns: name:15!null n.geom:16!null
       │    ├── immutable

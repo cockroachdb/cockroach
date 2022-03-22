@@ -10,64 +10,36 @@ package throttler
 
 import (
 	"context"
-	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-)
-
-const (
-	// The maximum size of localService's address map.
-	maxMapSize = 1e6 // 1 million
 )
 
 var errRequestDenied = errors.New("request denied")
 
 type timeNow func() time.Time
 
-type limiter struct {
-	// The next time an operation on this limiter can proceed.
-	nextTime time.Time
-	// The number of operation attempts that have been performed. On success, the
-	// limiter will be removed.
-	attempts int
-	// The index of the limiter in the addresses array.
-	index int
-}
-
 // localService is an throttler service that manages state purely in local
-// memory. Internally, it maintains a map from IP address to rate limiting info
-// for that address. In order to put a cap on memory usage, the map is capped
-// at a maximum size, at which point a random IP address will be evicted.
+// memory.
 //
-// TODO(peter): Rather than a per-IP count, at some point we should use a
-// count-min-sketch: https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch.
-//
-// The count-min-sketch structure is essentially a counting bloom filter and
-// provides a probabilistic count of the number of times a key (i.e. an IP
-// address) has been seen. A challenge with using count-min-sketch is that they
-// do not support eviction. The general idea for handling this (courtesy of
-// Aaron) is to maintain a laddered set of sketches. For example, 1 for each of
-// the past 30 days. Each day, we would discard the oldest sketch and
-// instantiated a new one. Whenever an IP address performs an action we update
-// all of the sketched, but checks for activity are only performed against the
-// oldest sketch. The end result is that the oldest sketch has the activity for
-// the past 30 days.
+// localService tracks throttling state for (ip, tenant) pairs. Exponential backoff
+// is used to limit authentication attempts for a given (ip, tenant). The connection
+// limit for an (ip, tenant) is removed once there is a successful connection between
+// the ip address and the tenant. The primary intent of this mechanism is to limit
+// the number of credential guesses an ip address can make.
 type localService struct {
-	clock      timeNow
-	baseDelay  time.Duration
-	maxDelay   time.Duration
-	maxMapSize int
+	clock        timeNow
+	maxCacheSize int
+	baseDelay    time.Duration
+	maxDelay     time.Duration
 
 	mu struct {
 		syncutil.Mutex
-		// Map from IP address to limiter.
-		limiters map[string]*limiter
-		// Array of addresses, used for randomly evicting an address when the max
-		// entries is reached.
-		addrs []string
+		// throttleCache is effectively a map[ConnectionTags]*throttle
+		throttleCache *cache.UnorderedCache
 	}
 }
 
@@ -85,77 +57,74 @@ func WithBaseDelay(d time.Duration) LocalOption {
 // local memory.
 func NewLocalService(opts ...LocalOption) Service {
 	s := &localService{
-		clock:      time.Now,
-		maxDelay:   60 * 60 * time.Second,
-		maxMapSize: maxMapSize,
+		clock:        time.Now,
+		maxCacheSize: 1e6, /* 1 million */
+		baseDelay:    time.Second,
+		maxDelay:     time.Hour,
 	}
-	WithBaseDelay(2 * time.Second)(s)
-	s.mu.limiters = make(map[string]*limiter)
+	cacheConfig := cache.Config{
+		Policy:      cache.CacheLRU,
+		ShouldEvict: func(size int, key, value interface{}) bool { return s.maxCacheSize < size },
+	}
+	s.mu.throttleCache = cache.NewUnorderedCache(cacheConfig)
 
 	for _, opt := range opts {
 		opt(s)
 	}
+
 	return s
 }
 
-func (s *localService) LoginCheck(ipAddress string, now time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	l := s.mu.limiters[ipAddress]
-	if l == nil {
-		l = s.addLocked(ipAddress)
+func (s *localService) lockedGetThrottle(connection ConnectionTags) *throttle {
+	l, ok := s.mu.throttleCache.Get(connection)
+	if ok && l != nil {
+		return l.(*throttle)
 	}
-	if now.Before(l.nextTime) {
-		return errRequestDenied
-	}
-	s.nextLimitLocked(l)
 	return nil
 }
 
-func (s *localService) addLocked(addr string) *limiter {
-	if len(s.mu.addrs) >= s.maxMapSize {
-		addrToEvict := s.mu.addrs[rand.Intn(len(s.mu.limiters))]
-		log.Infof(context.Background(), "evicting due to map size limit - addr: %s", addrToEvict)
-		s.evictLocked(addrToEvict)
-	}
-
-	l := &limiter{
-		index: len(s.mu.limiters),
-	}
-	s.mu.limiters[addr] = l
-	s.mu.addrs = append(s.mu.addrs, addr)
+func (s *localService) lockedInsertThrottle(connection ConnectionTags) *throttle {
+	l := newThrottle(s.baseDelay)
+	s.mu.throttleCache.Add(connection, l)
 	return l
 }
 
-func (s *localService) evictLocked(addr string) {
-	l := s.mu.limiters[addr]
-	if l == nil {
-		return
-	}
+func (s *localService) LoginCheck(connection ConnectionTags) (time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	// Swap the address we're evicting to the end of the address array.
-	n := len(s.mu.addrs) - 1
-	s.mu.addrs[l.index], s.mu.addrs[n] = s.mu.addrs[n], s.mu.addrs[l.index]
-	// Fix-up the index of the limiter we're keeping.
-	s.mu.limiters[s.mu.addrs[l.index]].index = l.index
-	// Trim the evicted address from the address array.
-	s.mu.addrs = s.mu.addrs[:n]
-	// Delete the address from the limiters map.
-	delete(s.mu.limiters, addr)
+	now := s.clock()
+	throttle := s.lockedGetThrottle(connection)
+	if throttle != nil && throttle.isThrottled(now) {
+		return now, errRequestDenied
+	}
+	return now, nil
 }
 
-func (s *localService) nextLimitLocked(l *limiter) {
-	// This calculation implements a simple capped exponential backoff. No
-	// randomization is done. We could use github.com/cenkalti/backoff, but this
-	// gives us a more control over the precise calculation and is about half the
-	// size in terms of memory usage. The latter part may be important for IP
-	// address based admission control.
-	delay := s.baseDelay * (1 << l.attempts)
-	if delay >= s.maxDelay {
-		delay = s.maxDelay
-	}
-	l.attempts++
+func (s *localService) ReportAttempt(
+	ctx context.Context, connection ConnectionTags, throttleTime time.Time, status AttemptStatus,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	l.nextTime = s.clock().Add(delay)
+	throttle := s.lockedGetThrottle(connection)
+	if throttle == nil {
+		throttle = s.lockedInsertThrottle(connection)
+	}
+
+	if throttle.isThrottled(throttleTime) {
+		return errRequestDenied
+	}
+
+	switch {
+	case status == AttemptInvalidCredentials:
+		throttle.triggerThrottle(s.clock(), s.maxDelay)
+		if throttle.nextBackoff == s.maxDelay {
+			log.Warningf(ctx, "connection %v at max throttle delay %s", connection, s.maxDelay)
+		}
+	case status == AttemptOK:
+		throttle.disable()
+	}
+
+	return nil
 }

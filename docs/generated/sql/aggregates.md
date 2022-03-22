@@ -27,15 +27,21 @@
 </span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a>[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
+<tr><td><a name="array_agg"></a><code>array_agg(arg1: anyenum) &rarr; anyenum[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
+</span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: box2d) &rarr; box2d[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: geography) &rarr; geography[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: geometry) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
+<tr><td><a name="array_agg"></a><code>array_agg(arg1: jsonb) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
+</span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
+</span></td></tr>
+<tr><td><a name="array_agg"></a><code>array_agg(arg1: tuple) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: varbit) &rarr; varbit[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>

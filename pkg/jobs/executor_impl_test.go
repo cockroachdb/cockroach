@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/gorhill/cronexpr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +27,7 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	argsFn := func(args *base.TestServerArgs) {
-		args.Knobs.JobsTestingKnobs = NewTestingKnobsWithIntervals(time.Millisecond, time.Millisecond)
+		args.Knobs.JobsTestingKnobs = NewTestingKnobsWithShortIntervals()
 	}
 
 	h, cleanup := newTestHelperWithServerArgs(t, argsFn)
@@ -40,7 +39,7 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 	}{
 		{
 			onError:         jobspb.ScheduleDetails_RETRY_SCHED,
-			expectedNextRun: cronexpr.MustParse("@daily").Next(h.env.Now()).Round(time.Microsecond),
+			expectedNextRun: cronMustParse(t, "@daily").Next(h.env.Now()).Round(time.Microsecond),
 		},
 		{
 			onError:         jobspb.ScheduleDetails_RETRY_SOON,

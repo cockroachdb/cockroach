@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -45,8 +46,8 @@ func (t *testingProvider) setSystemConfig(cfg *config.SystemConfig) {
 	t.cfg = cfg
 }
 
-func (t *testingProvider) RegisterSystemConfigChannel() <-chan struct{} {
-	return t.ch
+func (t *testingProvider) RegisterSystemConfigChannel() (<-chan struct{}, func()) {
+	return t.ch, func() {}
 }
 
 var _ config.SystemConfigProvider = (*testingProvider)(nil)
@@ -142,9 +143,9 @@ func expectSend(t *testing.T, ch <-chan struct{}) {
 	}
 }
 
-func mkZoneConfigKV(id config.SystemTenantObjectID, ts int64, value string) roachpb.KeyValue {
+func mkZoneConfigKV(id descpb.ID, ts int64, value string) roachpb.KeyValue {
 	kv := roachpb.KeyValue{
-		Key: config.MakeZoneKey(id),
+		Key: config.MakeZoneKey(keys.SystemSQLCodec, id),
 		Value: roachpb.Value{
 			Timestamp: hlc.Timestamp{WallTime: ts},
 		},

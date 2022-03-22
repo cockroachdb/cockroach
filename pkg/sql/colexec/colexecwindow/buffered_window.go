@@ -15,7 +15,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -30,24 +29,27 @@ import (
 // newBufferedWindowOperator creates a new Operator that computes the given
 // window function.
 func newBufferedWindowOperator(
-	args *WindowArgs, windower bufferedWindower, outputColType *types.T,
+	args *WindowArgs, windower bufferedWindower, outputColType *types.T, memoryLimit int64,
 ) colexecop.Operator {
 	outputTypes := make([]*types.T, len(args.InputTypes), len(args.InputTypes)+1)
 	copy(outputTypes, args.InputTypes)
 	outputTypes = append(outputTypes, outputColType)
 	input := colexecutils.NewVectorTypeEnforcer(
 		args.MainAllocator, args.Input, outputColType, args.OutputColIdx)
+	queueCfg := args.QueueCfg
+	// bufferedWindowOp intertwines calls to Enqueue and Dequeue, so we have to
+	// use the corresponding disk queue cache mode.
+	queueCfg.SetCacheMode(colcontainer.DiskQueueCacheModeIntertwinedCalls)
 	return &bufferedWindowOp{
 		windowInitFields: windowInitFields{
 			OneInputNode: colexecop.NewOneInputNode(input),
 			allocator:    args.MainAllocator,
-			memoryLimit:  args.MemoryLimit,
-			diskQueueCfg: args.QueueCfg,
+			memoryLimit:  memoryLimit,
+			diskQueueCfg: queueCfg,
 			fdSemaphore:  args.FdSemaphore,
 			outputTypes:  outputTypes,
 			diskAcc:      args.DiskAcc,
 			outputColIdx: args.OutputColIdx,
-			outputColFam: typeconv.TypeFamilyToCanonicalTypeFamily(outputColType.Family()),
 		},
 		windower: windower,
 	}
@@ -109,7 +111,7 @@ const (
 // buffer all tuples from each partition.
 type bufferedWindower interface {
 	Init(ctx context.Context)
-	Close()
+	Close(context.Context)
 
 	// seekNextPartition is called during the windowSeeking state on the current
 	// batch. It gives windowers a chance to perform any necessary pre-processing,
@@ -149,7 +151,6 @@ type windowInitFields struct {
 	outputTypes  []*types.T
 	diskAcc      *mon.BoundAccount
 	outputColIdx int
-	outputColFam types.Family
 }
 
 // bufferedWindowOp extracts common fields for the various window operators
@@ -235,6 +236,8 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 			// Load the next batch into currentBatch. If currentBatch still has data,
 			// move it into the queue.
 			if b.currentBatch != nil && b.currentBatch.Length() > 0 {
+				// TODO(yuzefovich): it is quite unfortunate that the output
+				// vector is being spilled to disk. Consider refactoring this.
 				b.bufferQueue.Enqueue(b.Ctx, b.currentBatch)
 			}
 			// We have to copy the input batch data because calling Next on the input
@@ -295,14 +298,6 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 				if output, err = b.bufferQueue.Dequeue(b.Ctx); err != nil {
 					colexecerror.InternalError(err)
 				}
-				// The spilling queue sets 'maxSetLength' to the length of the batch for
-				// bytes-like types, so we have to reset it so that `Set` can be used.
-				switch b.outputColFam {
-				case types.BytesFamily:
-					output.ColVec(b.outputColIdx).Bytes().Truncate(b.processingIdx)
-				case types.JsonFamily:
-					output.ColVec(b.outputColIdx).JSON().Truncate(b.processingIdx)
-				}
 				// Set all the window output values that remain unset, then emit this
 				// batch. Note that because the beginning of the next partition will
 				// always be located in currentBatch, the current partition will always
@@ -315,18 +310,12 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 					// first of the tuples yet to be processed was somewhere in the batch.
 					b.processingIdx = 0
 				}
-				// Although we didn't change the length of the batch, it is necessary to
-				// set the length anyway (to maintain the invariant of flat bytes).
-				output.SetLength(output.Length())
 				return output
 			}
 			if b.currentBatch.Length() > 0 {
 				b.windower.processBatch(b.currentBatch, b.processingIdx, b.nextPartitionIdx)
 				if b.nextPartitionIdx >= b.currentBatch.Length() {
-					// This was the last batch and it has been entirely filled. Although
-					// we didn't change the length of the batch, it is necessary to set
-					// the length anyway (to maintain the invariant of flat bytes).
-					b.currentBatch.SetLength(b.currentBatch.Length())
+					// This was the last batch and it has been entirely filled.
 					b.state = windowFinished
 					return b.currentBatch
 				}
@@ -341,7 +330,7 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 			colexecerror.InternalError(
 				errors.AssertionFailedf("window operator in processing state without buffered rows"))
 		case windowFinished:
-			if err = b.Close(); err != nil {
+			if err = b.Close(b.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -353,16 +342,16 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 	}
 }
 
-func (b *bufferedWindowOp) Close() error {
+func (b *bufferedWindowOp) Close(ctx context.Context) error {
 	if !b.CloserHelper.Close() || b.Ctx == nil {
 		// Either Close() has already been called or Init() was never called. In
 		// both cases there is nothing to do.
 		return nil
 	}
-	if err := b.bufferQueue.Close(b.EnsureCtx()); err != nil {
+	if err := b.bufferQueue.Close(ctx); err != nil {
 		return err
 	}
-	b.windower.Close()
+	b.windower.Close(ctx)
 	return nil
 }
 

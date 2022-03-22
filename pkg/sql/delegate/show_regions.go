@@ -44,7 +44,7 @@ ORDER BY database_name
 		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromDatabase)
 		dbName := string(n.DatabaseName)
 		if dbName == "" {
-			dbName = d.evalCtx.SessionData.Database
+			dbName = d.evalCtx.SessionData().Database
 		}
 		// Note the LEFT JOIN here -- in the case where regions no longer exist on the cluster
 		// but still exist on the database config, we want to still see this database region

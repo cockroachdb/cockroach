@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 )
 
@@ -58,19 +59,19 @@ type ExternalStorage interface {
 	// ReadFile is shorthand for ReadFileAt with offset 0.
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
 	// This can be leveraged for an existence check.
-	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
+	ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error)
 
 	// ReadFileAt returns a Reader for requested name reading at offset.
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
 	// This can be leveraged for an existence check.
-	ReadFileAt(ctx context.Context, basename string, offset int64) (io.ReadCloser, int64, error)
+	ReadFileAt(ctx context.Context, basename string, offset int64) (ioctx.ReadCloserCtx, int64, error)
 
 	// Writer returns a writer for the requested name.
 	//
 	// A Writer *must* be closed via either Close, and if closing returns a
 	// non-nil error, that error should be handled or reported to the user -- an
 	// implementation may buffer written data until Close and only then return
-	// an error, or Write may retrun an opaque io.EOF with the underlying cause
+	// an error, or Write may return an opaque io.EOF with the underlying cause
 	// returned by the subsequent Close().
 	Writer(ctx context.Context, basename string) (io.WriteCloser, error)
 
@@ -148,7 +149,7 @@ type ExternalStorageContext struct {
 }
 
 // ExternalStorageConstructor is a function registered to create instances
-// of a given external storage implamentation.
+// of a given external storage implementation.
 type ExternalStorageConstructor func(
 	context.Context, ExternalStorageContext, roachpb.ExternalStorage,
 ) (ExternalStorage, error)

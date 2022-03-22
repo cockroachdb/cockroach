@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "internal.go",
         "search_path.go",
-        "sequence_cache.go",
         "sequence_state.go",
         "session_data.go",
     ],
@@ -17,19 +16,26 @@ go_library(
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/sessiondatapb",
         "//pkg/util/duration",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "sessiondata_test",
     size = "small",
-    srcs = ["search_path_test.go"],
+    srcs = [
+        "search_path_test.go",
+        "session_data_test.go",
+    ],
     embed = [":sessiondata"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "//pkg/sql/sessiondatapb",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )

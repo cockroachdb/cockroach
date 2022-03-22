@@ -1,4 +1,8 @@
-# LogicTest: !metamorphic
+# LogicTest: !metamorphic !3node-tenant
+
+# Note: this test is disabled on 3node-tenant because it sometimes causes one of
+# the UPDATE statements below (where we update more than 20% of the table) to be
+# flaky. See comments there for details.
 
 # Disable automatic stats
 statement ok
@@ -63,6 +67,18 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
 statement ok
 UPDATE data SET d = 12 WHERE d = 10
 
+# Note: this statement is flaky on 3node-tenant (which is why that config is
+# disabled). Normally, the entire UPDATE in the previous statement is performed
+# as a single batch, since the total number of rows updated is 270, which is
+# less than the kv batch size of 100k rows (the kv batch size doesn't change in
+# this test since the metamorphic config is disabled). The target row count to
+# trigger a stats refresh is 205, since 20% of 1000 rows is 200, and
+# sql.stats.automatic_collection.min_stale_rows is set to 5 for logictests.
+# Since 270 > 205, we should always trigger a refresh.
+#
+# For some reason, 3node-tenant occasionally splits the UPDATE into 4 pieces,
+# with each one affecting at most 88 rows. Since 88 < 205, the refresh is not
+# guaranteed, making this test flaky.
 query TTIII colnames,rowsort,retry
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC

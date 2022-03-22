@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cmdccl/enc_utils",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
+        "//pkg/ccl/storageccl/engineccl/enginepbccl",
         "//pkg/storage/enginepb",
         "//pkg/util/log",
         "//pkg/util/protoutil",

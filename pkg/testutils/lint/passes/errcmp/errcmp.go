@@ -103,7 +103,7 @@ Alternatives:
 func isEOFError(e ast.Expr) bool {
 	if s, ok := e.(*ast.SelectorExpr); ok {
 		if io, ok := s.X.(*ast.Ident); ok && io.Name == "io" && io.Obj == (*ast.Object)(nil) {
-			if s.Sel.Name == "EOF" {
+			if s.Sel.Name == "EOF" || s.Sel.Name == "ErrUnexpectedEOF" {
 				return true
 			}
 		}
@@ -116,9 +116,9 @@ func checkErrCmp(pass *analysis.Pass, binaryExpr *ast.BinaryExpr) {
 	case token.NEQ, token.EQL:
 		if pass.TypesInfo.Types[binaryExpr.X].Type == errorType &&
 			!pass.TypesInfo.Types[binaryExpr.Y].IsNil() {
-			// We have a special case: when the RHS is io.EOF.
-			// This is nearly always used with APIs that return
-			// it undecorated.
+			// We have a special case: when the RHS is io.EOF or io.ErrUnexpectedEOF.
+			// They are nearly always used with APIs that return
+			// an undecorated error.
 			if isEOFError(binaryExpr.Y) {
 				return
 			}

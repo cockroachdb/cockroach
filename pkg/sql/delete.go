@@ -62,6 +62,8 @@ type deleteRun struct {
 	rowIdxToRetIdx []int
 }
 
+var _ mutationPlanNode = &deleteNode{}
+
 func (d *deleteNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
@@ -71,7 +73,7 @@ func (d *deleteNode) startExec(params runParams) error {
 			params.EvalContext().Mon.MakeBoundAccount(),
 			colinfo.ColTypeInfoFromResCols(d.columns))
 	}
-	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())
+	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)
 }
 
 // Next is required because batchedPlanNode inherits from planNode, but
@@ -132,6 +134,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
+		d.run.td.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 		if err := d.run.td.finalize(params.ctx); err != nil {
 			return false, err
 		}
@@ -140,10 +143,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(
-		d.run.td.tableDesc().GetID(),
-		d.run.td.lastBatchSize,
-	)
+	params.ExecCfg().StatsRefresher.NotifyMutation(d.run.td.tableDesc(), d.run.td.lastBatchSize)
 
 	return d.run.td.lastBatchSize > 0, nil
 }
@@ -177,10 +177,9 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 
 	// If result rows need to be accumulated, do it.
 	if d.run.td.rows != nil {
-		// The new values can include all columns, the construction of the
-		// values has used execinfra.ScanVisibilityPublicAndNotPublic so the
-		// values may contain additional columns for every newly dropped column
-		// not visible. We do not want them to be available for RETURNING.
+		// The new values can include all columns, so the values may contain
+		// additional columns for every newly dropped column not visible. We do not
+		// want them to be available for RETURNING.
 		//
 		// d.run.rows.NumCols() is guaranteed to only contain the requested
 		// public columns.
@@ -210,6 +209,10 @@ func (d *deleteNode) Close(ctx context.Context) {
 	d.run.td.close(ctx)
 	*d = deleteNode{}
 	deleteNodePool.Put(d)
+}
+
+func (d *deleteNode) rowsWritten() int64 {
+	return d.run.td.rowsWritten
 }
 
 func (d *deleteNode) enableAutoCommit() {

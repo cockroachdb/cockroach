@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -59,10 +60,10 @@ func testSlidingWindow(t *testing.T, count int) {
 	defer evalCtx.Stop(context.Background())
 	wfr := makeTestWindowFrameRun(count)
 	wfr.Frame = &tree.WindowFrame{
-		Mode: tree.ROWS,
+		Mode: treewindow.ROWS,
 		Bounds: tree.WindowFrameBounds{
-			StartBound: &tree.WindowFrameBound{BoundType: tree.OffsetPreceding},
-			EndBound:   &tree.WindowFrameBound{BoundType: tree.OffsetFollowing},
+			StartBound: &tree.WindowFrameBound{BoundType: treewindow.OffsetPreceding},
+			EndBound:   &tree.WindowFrameBound{BoundType: treewindow.OffsetFollowing},
 		},
 	}
 	testMin(t, evalCtx, wfr)

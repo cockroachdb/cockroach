@@ -39,3 +39,18 @@ func (node *DataPlacement) Format(ctx *FmtCtx) {
 		panic(errors.AssertionFailedf("unknown data placement strategy: %d", *node))
 	}
 }
+
+// TelemetryName returns a representation of DataPlacement suitable for
+// telemetry.
+func (node *DataPlacement) TelemetryName() string {
+	switch *node {
+	case DataPlacementRestricted:
+		return "restricted"
+	case DataPlacementDefault:
+		return "default"
+	case DataPlacementUnspecified:
+		return "unspecified"
+	default:
+		panic(errors.AssertionFailedf("unknown data placement: %d", *node))
+	}
+}

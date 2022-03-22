@@ -1,0 +1,76 @@
+# LogicTest: local local-spec-planning
+
+# Make sure that the zigzag join is used in the regression tests for #71093.
+statement ok
+CREATE TABLE t71093 (a INT, b INT, c INT, d INT, INDEX a_idx(a) STORING (b), INDEX c_idx(c) STORING (d));
+INSERT INTO t71093 VALUES (0, 1, 2, 3)
+
+query T
+EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • zigzag join
+      pred: ((a = 0) AND (b = 1)) AND (c = 2)
+      left table: t71093@a_idx
+      left columns: (a, b)
+      left fixed values: 1 column
+      right table: t71093@c_idx
+      right columns: (c)
+      right fixed values: 1 column
+
+query T
+EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND c = 2 AND d = 3
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • zigzag join
+      pred: ((a = 0) AND (c = 2)) AND (d = 3)
+      left table: t71093@a_idx
+      left columns: (a)
+      left fixed values: 1 column
+      right table: t71093@c_idx
+      right columns: (c, d)
+      right fixed values: 1 column
+
+query T
+EXPLAIN SELECT count(*) FROM t71093 WHERE a = 0 AND b = 1 AND c = 2 AND d = 3
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • zigzag join
+      pred: (((a = 0) AND (b = 1)) AND (c = 2)) AND (d = 3)
+      left table: t71093@a_idx
+      left columns: (a, b)
+      left fixed values: 1 column
+      right table: t71093@c_idx
+      right columns: (c, d)
+      right fixed values: 1 column
+
+# Make sure that the zigzag join is used in the regression test for #71271.
+statement ok
+CREATE TABLE t71271(a INT, b INT, c INT, d INT, INDEX (c), INDEX (d))
+
+query T
+EXPLAIN SELECT d FROM t71271 WHERE c = 3 AND d = 4
+----
+distribution: local
+vectorized: true
+·
+• zigzag join
+  pred: (c = 3) AND (d = 4)
+  left table: t71271@t71271_c_idx
+  left columns: (c)
+  left fixed values: 1 column
+  right table: t71271@t71271_d_idx
+  right columns: (d)
+  right fixed values: 1 column

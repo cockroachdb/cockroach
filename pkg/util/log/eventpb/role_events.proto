@@ -55,3 +55,15 @@ message AlterRole {
   // The options set on the user/role.
   repeated string options = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
+
+// PasswordHashConverted is recorded when the password credentials
+// are automatically converted server-side.
+message PasswordHashConverted {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the user/role whose credentials have been converted.
+  string role_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The previous hash method.
+  string old_method = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The new hash method.
+  string new_method = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}

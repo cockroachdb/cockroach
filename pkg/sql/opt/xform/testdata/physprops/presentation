@@ -68,7 +68,7 @@ inner-join (cross)
 opt
 SELECT max(y), y, y, x FROM a GROUP BY a.x, a.y
 ----
-group-by
+group-by (streaming)
  ├── columns: max:5 y:2 y:2 x:1!null
  ├── grouping columns: x:1!null
  ├── internal-ordering: +1

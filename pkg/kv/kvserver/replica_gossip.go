@@ -19,8 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -79,7 +80,14 @@ func (r *Replica) shouldGossip(ctx context.Context) bool {
 //
 // TODO(nvanbenschoten,bdarnell): even though this is best effort, we should log
 // louder when we continually fail to gossip system config.
+//
+// TODO(ajwerner): Remove this in 22.2.
 func (r *Replica) MaybeGossipSystemConfigRaftMuLocked(ctx context.Context) error {
+	if r.ClusterSettings().Version.IsActive(
+		ctx, clusterversion.DisableSystemConfigGossipTrigger,
+	) {
+		return nil
+	}
 	r.raftMu.AssertHeld()
 	if r.store.Gossip() == nil {
 		log.VEventf(ctx, 2, "not gossiping system config because gossip isn't initialized")
@@ -110,8 +118,9 @@ func (r *Replica) MaybeGossipSystemConfigRaftMuLocked(ctx context.Context) error
 		return errors.Wrap(err, "could not load SystemConfig span")
 	}
 
-	if gossipedCfg := r.store.Gossip().GetSystemConfig(); gossipedCfg != nil && gossipedCfg.Equal(loadedCfg) &&
-		r.store.Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+	if gossipedCfg := r.store.Gossip().DeprecatedGetSystemConfig(); gossipedCfg != nil &&
+		gossipedCfg.Equal(loadedCfg) &&
+		r.store.Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
 		log.VEventf(ctx, 2, "not gossiping unchanged system config")
 		// Clear the failure bit if all intents have been resolved but there's
 		// nothing new to gossip.
@@ -120,7 +129,7 @@ func (r *Replica) MaybeGossipSystemConfigRaftMuLocked(ctx context.Context) error
 	}
 
 	log.VEventf(ctx, 2, "gossiping system config")
-	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, loadedCfg, 0); err != nil {
+	if err := r.store.Gossip().AddInfoProto(gossip.KeyDeprecatedSystemConfig, loadedCfg, 0); err != nil {
 		return errors.Wrap(err, "failed to gossip system config")
 	}
 	r.markSystemConfigGossipSuccess()
@@ -166,11 +175,11 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
-	rw := r.Engine().NewReadOnly()
+	rw := r.Engine().NewReadOnly(storage.StandardDurability)
 	defer rw.Close()
 
 	br, result, pErr :=
-		evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, hlc.Timestamp{} /* lul */, true /* readOnly */)
+		evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, uncertainty.Interval{}, true /* readOnly */)
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
@@ -191,15 +200,6 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 				continue
 			}
 		}
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.NodeMembershipStatus) {
-			// We can't transmit liveness records with a backwards incompatible
-			// representation unless we're told by the user that there are no
-			// pre-v20.1 nodes around. We should never get here.
-			if kvLiveness.Membership.Decommissioned() {
-				log.Fatal(ctx, "programming error: illegal membership status: decommissioned")
-			}
-		}
-
 		if err := r.store.Gossip().AddInfoProto(key, &kvLiveness, 0); err != nil {
 			return errors.Wrapf(err, "failed to gossip node liveness (%+v)", kvLiveness)
 		}
@@ -218,11 +218,11 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemConfigSpan)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
-	rw := r.Engine().NewReadOnly()
+	rw := r.Engine().NewReadOnly(storage.StandardDurability)
 	defer rw.Close()
 
 	br, result, pErr := evaluateBatch(
-		ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, hlc.Timestamp{} /* lul */, true, /* readOnly */
+		ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, uncertainty.Interval{}, true, /* readOnly */
 	)
 	if pErr != nil {
 		return nil, pErr.GoError()
@@ -270,7 +270,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *roachpb.Error) 
 					}
 				default:
 					// Any other error is worth being logged visibly.
-					log.Warningf(ctx, "could not acquire lease for range gossip: %s", e)
+					log.Warningf(ctx, "could not acquire lease for range gossip: %s", pErr)
 				}
 			}
 		}); err != nil {

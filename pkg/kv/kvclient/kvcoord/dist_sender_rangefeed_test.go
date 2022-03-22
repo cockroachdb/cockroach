@@ -18,8 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache/rangecachemock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb/roachpbmock"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -58,7 +58,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			defer cancel()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 			g := makeGossip(t, stopper, rpcContext)
 
 			desc := roachpb.RangeDescriptor{
@@ -81,7 +81,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 
 			ctrl := gomock.NewController(t)
 			transport := NewMockTransport(ctrl)
-			rangeDB := rangecache.NewMockRangeDescriptorDB(ctrl)
+			rangeDB := rangecachemock.NewMockRangeDescriptorDB(ctrl)
 
 			// We start off with a cached lease on r1.
 			cachedLease := roachpb.Lease{
@@ -117,9 +117,9 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			// cancels the context and closes the range feed stream.
 			if spec.expectRetry {
 				rangeDB.EXPECT().FirstRange().Return(&desc, nil)
-				stream := roachpb.NewMockInternal_RangeFeedClient(ctrl)
+				stream := roachpbmock.NewMockInternal_RangeFeedClient(ctrl)
 				stream.EXPECT().Recv().Do(cancel).Return(nil, io.EOF)
-				client := roachpb.NewMockInternalClient(ctrl)
+				client := roachpbmock.NewMockInternalClient(ctrl)
 				client.EXPECT().RangeFeed(gomock.Any(), gomock.Any()).Return(stream, nil)
 				transport.EXPECT().IsExhausted().Return(false)
 				transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0])
@@ -128,7 +128,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			}
 
 			ds := NewDistSender(DistSenderConfig{
-				AmbientCtx:      log.AmbientContext{Tracer: tracing.NewTracer()},
+				AmbientCtx:      log.MakeTestingAmbientCtxWithNewTracer(),
 				Clock:           clock,
 				NodeDescs:       g,
 				RPCRetryOptions: &retry.Options{MaxRetries: 10},
@@ -147,7 +147,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 				Lease: cachedLease,
 			})
 
-			err := ds.RangeFeed(ctx, roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}, hlc.Timestamp{}, false, nil)
+			err := ds.RangeFeed(ctx, []roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}}, hlc.Timestamp{}, false, nil)
 			require.Error(t, err)
 		})
 	}

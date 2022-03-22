@@ -21,6 +21,7 @@ go_test(
     name = "colexeccmp_test",
     srcs = ["dep_test.go"],
     embed = [":colexeccmp"],
+    tags = ["no-remote"],
     deps = ["//pkg/testutils/buildutil"],
 )
 

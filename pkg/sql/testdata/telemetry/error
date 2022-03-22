@@ -7,47 +7,88 @@ unimplemented.*
 sql.schema.validation_errors.*
 ----
 
+rewrite
+((relation|type) "\w*") \(\d+\)
+${1} (...)
+----
+
+exec
+CREATE TABLE fktbl (id INT PRIMARY KEY);
+----
+
+exec
+CREATE TABLE tbl (customer INT NOT NULL REFERENCES fktbl (id));
+----
+
+exec
+WITH base AS (
+                SELECT id, crdb_internal.pb_to_json('desc', descriptor) AS d
+                  FROM system.descriptor
+                 WHERE id = 'fktbl'::REGCLASS
+            ),
+       updated AS (
+                SELECT id,
+                       json_set(
+                        json_remove_path(d, ARRAY['table', 'inboundFks', '0']),
+                        ARRAY['table', 'version'],
+                        ((d->'table'->>'version')::INT8 + 1)::STRING::JSONB
+                       ) AS d
+                  FROM base
+               )
+SELECT crdb_internal.unsafe_upsert_descriptor(id, crdb_internal.json_to_pb('desc', d)), d
+  FROM updated;
+----
+
 # Table descriptor validation failure on read.
 feature-usage
-CREATE TABLE fktbl (id INT PRIMARY KEY);
-CREATE TABLE tbl (customer INT NOT NULL REFERENCES fktbl (id));
-INSERT INTO system.users VALUES ('node', NULL, true);
-GRANT node TO root;
-UPDATE system.descriptor
-  SET descriptor=decode('0a86020a05666b74626c1834203228023a00422f0a02696410011a1a080110401800300050145a0c0800100018003000501060006000200030006800700078008001004802524d0a077072696d6172791001180122026964300140004a10080010001a00200028003000380040005a007a0408002000800100880100900102980100a20106080012001800a80100b20100ba010060026a1d0a090a0561646d696e10020a080a04726f6f7410021204726f6f741801800101880103980100b201130a077072696d61727910001a02696420012800b80101c20100e80100f2010408001200f801008002009202009a020a08f8e8fdaba793e2b816b20200b80200c0021dc80200e00200', 'hex')
-  WHERE id IN (SELECT id FROM system.namespace WHERE name='fktbl');
-REVOKE node FROM root;
-DELETE FROM system.users WHERE username = 'node';
 SELECT * FROM tbl;
 ----
-error: pq: internal error: relation "tbl" (53): missing fk back reference "fk_customer_ref_fktbl" to "tbl" from "fktbl"
+error: pq: internal error: relation "tbl" (...): missing fk back reference "tbl_customer_fkey" to "tbl" from "fktbl"
 errorcodes.XX000
 sql.schema.validation_errors.read.cross_references.relation
 
+exec
+CREATE TYPE greeting AS ENUM('hello', 'hi');
+----
+
+exec
+WITH base AS (
+              SELECT id, crdb_internal.pb_to_json('desc', descriptor) AS d
+                FROM system.descriptor
+               WHERE id IN (SELECT id FROM system.namespace WHERE name = 'greeting')
+          ),
+       updated AS (
+                SELECT id,
+                       json_set(
+                        json_set(d, ARRAY['type', 'name'], '""'::JSONB),
+                        ARRAY['type', 'version'],
+                        ((d->'type'->>'version')::INT8 + 1)::STRING::JSONB
+                       ) AS d
+                  FROM base
+               )
+SELECT crdb_internal.unsafe_upsert_descriptor(id, crdb_internal.json_to_pb('desc', d), true)
+  FROM updated;
+----
+
 # Type descriptor validation failure on read.
 feature-usage
-CREATE TYPE greeting AS ENUM('hello', 'hi');
-INSERT INTO system.users VALUES ('node', NULL, true);
-GRANT node TO root;
-UPDATE system.descriptor
-  SET descriptor=decode('1a5d0832101d1a0020362800320e0a0140120568656c6c6f18002000320b0a018012026869180020004037480152006800722a0a090a0561646d696e10020a0b0a067075626c69631080040a080a04726f6f7410021204726f6f7418017a00', 'hex')
-  WHERE id IN (SELECT id FROM system.namespace WHERE name='greeting');
-REVOKE node FROM root;
-DELETE FROM system.users WHERE username = 'node';
 SELECT 'hi'::greeting
 ----
-error: pq: type "" (54): empty type name
+error: pq: type "" (...): empty type name
 errorcodes.42601
 sql.schema.validation_errors.read.self.type
 
+exec
+CREATE TABLE t (x INT PRIMARY KEY);
+----
+
 # Table descriptor validation failure on transaction commit.
 feature-usage
-CREATE TABLE t (x INT PRIMARY KEY);
 BEGIN;
-ALTER TABLE t DROP CONSTRAINT "primary";
+ALTER TABLE t DROP CONSTRAINT t_pkey;
 COMMIT;
 ----
-error: pq: relation "t" (56): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
+error: pq: relation "t" (...): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 errorcodes.0A000
 sql.schema.validation_errors.write.pre_txn_commit.relation
 unimplemented.#48026
@@ -88,14 +129,6 @@ error: pq: crdb_internal.set_vmodule(): syntax error: expect comma-separated lis
 errorcodes.XXUUU
 othererror.XXUUU
 othererror.XXUUU.crdb_internal.set_vmodule()
-
-# 0A000 is pgcode.FeatureNotSupported.
-feature-usage
-CREATE TABLE foo (a INT8 PRIMARY KEY, b INT8, INDEX (b) INTERLEAVE IN PARENT foo (b))
-----
-error: pq: unimplemented: use CREATE INDEX to make interleaved indexes
-errorcodes.0A000
-unimplemented.#9148
 
 # 22012 is pgcode.DivisionByZero.
 feature-usage

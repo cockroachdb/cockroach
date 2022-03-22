@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -33,14 +32,16 @@ import (
 
 // Limiters is the collection of per-store limits used during cmd evaluation.
 type Limiters struct {
-	BulkIOWriteRate              *rate.Limiter
-	ConcurrentExportRequests     limit.ConcurrentRequestLimiter
-	ConcurrentAddSSTableRequests limit.ConcurrentRequestLimiter
+	BulkIOWriteRate                      *rate.Limiter
+	ConcurrentExportRequests             limit.ConcurrentRequestLimiter
+	ConcurrentAddSSTableRequests         limit.ConcurrentRequestLimiter
+	ConcurrentAddSSTableAsWritesRequests limit.ConcurrentRequestLimiter
 	// concurrentRangefeedIters is a semaphore used to limit the number of
 	// rangefeeds in the "catch-up" state across the store. The "catch-up" state
 	// is a temporary state at the beginning of a rangefeed which is expensive
 	// because it uses an engine iterator.
-	ConcurrentRangefeedIters limit.ConcurrentRequestLimiter
+	ConcurrentRangefeedIters         limit.ConcurrentRequestLimiter
+	ConcurrentScanInterleavedIntents limit.ConcurrentRequestLimiter
 }
 
 // EvalContext is the interface through which command evaluation accesses the
@@ -63,7 +64,6 @@ type EvalContext interface {
 	GetFirstIndex() (uint64, error)
 	GetTerm(uint64) (uint64, error)
 	GetLeaseAppliedIndex() uint64
-	GetTracker() closedts.TrackerI
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
@@ -98,6 +98,7 @@ type EvalContext interface {
 	GetLastSplitQPS() float64
 
 	GetGCThreshold() hlc.Timestamp
+	ExcludeDataFromBackup() bool
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
 	GetRangeInfo(context.Context) roachpb.RangeInfo
@@ -109,11 +110,11 @@ type EvalContext interface {
 	// requests on the range.
 	GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary
 
-	// GetClosedTimestampV2 returns the current closed timestamp on the range.
+	// GetClosedTimestamp returns the current closed timestamp on the range.
 	// It is expected that a caller will have performed some action (either
 	// calling RevokeLease or WatchForMerge) to freeze further progression of
 	// the closed timestamp before calling this method.
-	GetClosedTimestampV2(ctx context.Context) hlc.Timestamp
+	GetClosedTimestamp(ctx context.Context) hlc.Timestamp
 
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
 	GetExternalStorageFromURI(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
@@ -208,9 +209,6 @@ func (m *mockEvalCtxImpl) GetTerm(uint64) (uint64, error) {
 func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() uint64 {
 	panic("unimplemented")
 }
-func (m *mockEvalCtxImpl) GetTracker() closedts.TrackerI {
-	panic("unimplemented")
-}
 func (m *mockEvalCtxImpl) Desc() *roachpb.RangeDescriptor {
 	return m.MockEvalCtx.Desc
 }
@@ -234,6 +232,9 @@ func (m *mockEvalCtxImpl) CanCreateTxnRecord(
 func (m *mockEvalCtxImpl) GetGCThreshold() hlc.Timestamp {
 	return m.GCThreshold
 }
+func (m *mockEvalCtxImpl) ExcludeDataFromBackup() bool {
+	return false
+}
 func (m *mockEvalCtxImpl) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {
 	panic("unimplemented")
 }
@@ -246,7 +247,7 @@ func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 func (m *mockEvalCtxImpl) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	return m.CurrentReadSummary
 }
-func (m *mockEvalCtxImpl) GetClosedTimestampV2(ctx context.Context) hlc.Timestamp {
+func (m *mockEvalCtxImpl) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
 	return m.ClosedTimestamp
 }
 func (m *mockEvalCtxImpl) GetExternalStorage(

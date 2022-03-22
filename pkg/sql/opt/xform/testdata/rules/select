@@ -263,43 +263,43 @@ CREATE INDEX idx2 ON p (s) WHERE i > 0
 memo expect=GeneratePartialIndexScans
 SELECT * FROM p WHERE i > 0 AND s = 'foo'
 ----
-memo (optimized, ~14KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+memo (optimized, ~17KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
  ├── G1: (select G2 G3) (index-join G4 p,cols=(1-5)) (index-join G5 p,cols=(1-5)) (index-join G6 p,cols=(1-5)) (index-join G7 p,cols=(1-5))
  │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
  │         ├── best: (index-join G4 p,cols=(1-5))
- │         └── cost: 59.80
+ │         └── cost: 59.03
  ├── G2: (scan p,cols=(1-5))
  │    └── []
  │         ├── best: (scan p,cols=(1-5))
- │         └── cost: 1126.01
+ │         └── cost: 1125.02
  ├── G3: (filters G8 G9)
  ├── G4: (select G10 G11)
  │    └── []
  │         ├── best: (select G10 G11)
- │         └── cost: 25.73
+ │         └── cost: 24.95
  ├── G5: (select G12 G13)
  │    └── []
  │         ├── best: (select G12 G13)
- │         └── cost: 364.43
+ │         └── cost: 364.05
  ├── G6: (scan p@idx,partial,cols=(1-4),constrained)
  │    └── []
  │         ├── best: (scan p@idx,partial,cols=(1-4),constrained)
- │         └── cost: 24.89
+ │         └── cost: 24.10
  ├── G7: (scan p@idx2,partial,cols=(1,4),constrained)
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(1,4),constrained)
- │         └── cost: 24.12
+ │         └── cost: 23.73
  ├── G8: (gt G14 G15)
  ├── G9: (eq G16 G17)
  ├── G10: (scan p@idx,partial,cols=(1-4))
  │    └── []
  │         ├── best: (scan p@idx,partial,cols=(1-4))
- │         └── cost: 25.61
+ │         └── cost: 24.82
  ├── G11: (filters G8)
  ├── G12: (scan p@idx2,partial,cols=(1,4))
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(1,4))
- │         └── cost: 361.08
+ │         └── cost: 360.69
  ├── G13: (filters G9)
  ├── G14: (variable i)
  ├── G15: (const 0)
@@ -311,20 +311,20 @@ memo (optimized, ~14KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
 memo expect-not=GeneratePartialIndexScans
 SELECT i FROM p WHERE s = 'bar'
 ----
-memo (optimized, ~8KB, required=[presentation: i:2])
+memo (optimized, ~10KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 1105.54
+ │         └── cost: 1104.87
  ├── G2: (select G4 G5)
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1105.43
+ │         └── cost: 1104.75
  ├── G3: (projections)
  ├── G4: (scan p,cols=(2,4))
  │    └── []
  │         ├── best: (scan p,cols=(2,4))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable s)
@@ -461,7 +461,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan virtual@secondary,partial
+ └── scan virtual@virtual_a_idx,partial
       ├── columns: k:1!null
       └── key: (1)
 
@@ -492,11 +492,11 @@ project
       │    │    └── upper_s:7
       │    │         └── upper(s:5)
       │    ├── partial index predicates
-      │    │    ├── secondary: filters
+      │    │    ├── virtual_a_idx: filters
       │    │    │    └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
-      │    │    ├── secondary: filters
+      │    │    ├── virtual_a_idx1: filters
       │    │    │    └── upper(s:5) = 'FOO' [outer=(5), immutable]
-      │    │    └── secondary: filters
+      │    │    └── virtual_c_idx: filters
       │    │         └── b:3 > 90 [outer=(3), constraints=(/3: [/91 - ]; tight)]
       │    ├── key: (1)
       │    └── fd: (1)-->(3)
@@ -510,7 +510,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan virtual@secondary,partial
+ └── scan virtual@virtual_a_idx,partial
       ├── columns: k:1!null
       └── key: (1)
 
@@ -531,7 +531,7 @@ scan a
 memo
 SELECT k FROM a WHERE k = 1
 ----
-memo (optimized, ~5KB, required=[presentation: k:1])
+memo (optimized, ~6KB, required=[presentation: k:1])
  ├── G1: (select G2 G3) (scan a,cols=(1),constrained)
  │    └── [presentation: k:1]
  │         ├── best: (scan a,cols=(1),constrained)
@@ -539,7 +539,7 @@ memo (optimized, ~5KB, required=[presentation: k:1])
  ├── G2: (scan a,cols=(1)) (scan a@u,cols=(1)) (scan a@v,cols=(1))
  │    └── []
  │         ├── best: (scan a,cols=(1))
- │         └── cost: 1064.81
+ │         └── cost: 1064.42
  ├── G3: (filters G4)
  ├── G4: (eq G5 G6)
  ├── G5: (variable k)
@@ -560,20 +560,20 @@ project
 memo
 SELECT k FROM a WHERE v > 1
 ----
-memo (optimized, ~6KB, required=[presentation: k:1])
+memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
- │         └── cost: 364.67
+ │         └── cost: 364.19
  ├── G2: (select G4 G5) (scan a@v,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan a@v,cols=(1,3),constrained)
- │         └── cost: 361.36
+ │         └── cost: 360.87
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,3)) (scan a@u,cols=(1,3)) (scan a@v,cols=(1,3))
  │    └── []
  │         ├── best: (scan a,cols=(1,3))
- │         └── cost: 1075.01
+ │         └── cost: 1074.52
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
  ├── G7: (variable v)
@@ -597,7 +597,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k = 5
 ----
-memo (optimized, ~8KB, required=[presentation: k:1])
+memo (optimized, ~9KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -610,7 +610,7 @@ memo (optimized, ~8KB, required=[presentation: k:1])
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1075.01
+ │         └── cost: 1074.52
  ├── G5: (filters G8 G9)
  ├── G6: (scan a,cols=(1,2),constrained)
  │    └── []
@@ -643,7 +643,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
-memo (optimized, ~8KB, required=[presentation: k:1])
+memo (optimized, ~9KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -656,7 +656,7 @@ memo (optimized, ~8KB, required=[presentation: k:1])
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
- │         └── cost: 1075.01
+ │         └── cost: 1074.52
  ├── G5: (filters G8 G9)
  ├── G6: (scan a,cols=(1,2),constrained)
  │    └── []
@@ -695,7 +695,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
 ----
-memo (optimized, ~9KB, required=[presentation: k:1])
+memo (optimized, ~10KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -708,12 +708,12 @@ memo (optimized, ~9KB, required=[presentation: k:1])
  ├── G4: (scan a,cols=(1-3)) (scan a@u,cols=(1-3)) (scan a@v,cols=(1-3))
  │    └── []
  │         ├── best: (scan a,cols=(1-3))
- │         └── cost: 1085.21
+ │         └── cost: 1084.62
  ├── G5: (filters G10 G11)
  ├── G6: (scan a@u,cols=(1-3),constrained)
  │    └── []
  │         ├── best: (scan a@u,cols=(1-3),constrained)
- │         └── cost: 25.21
+ │         └── cost: 24.62
  ├── G7: (filters G11)
  ├── G8: (scan a@v,cols=(1-3),constrained)
  │    └── []
@@ -787,7 +787,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10
 ----
-memo (optimized, ~6KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (index-join G4 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G4 b,cols=(1-4))
@@ -795,7 +795,7 @@ memo (optimized, ~6KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G2: (scan b,cols=(1-4))
  │    └── []
  │         ├── best: (scan b,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.82
  ├── G3: (filters G5)
  ├── G4: (scan b@v,cols=(1,3),constrained)
  │    └── []
@@ -849,7 +849,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
-memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~10KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G6 b,cols=(1-4))
@@ -857,12 +857,12 @@ memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G2: (scan b,cols=(1-4))
  │    └── []
  │         ├── best: (scan b,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.82
  ├── G3: (filters G7 G8)
  ├── G4: (scan b,cols=(1-4),constrained)
  │    └── []
  │         ├── best: (scan b,cols=(1-4),constrained)
- │         └── cost: 374.81
+ │         └── cost: 374.02
  ├── G5: (filters G7)
  ├── G6: (select G9 G10)
  │    └── []
@@ -947,7 +947,7 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1
 ----
-memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G5)
@@ -955,7 +955,7 @@ memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G2: (scan b,cols=(1-4))
  │    └── []
  │         ├── best: (scan b,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.82
  ├── G3: (filters G6 G7)
  ├── G4: (index-join G8 b,cols=(1-4))
  │    └── []
@@ -1011,7 +1011,7 @@ select
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k+u = 1 AND k > 5
 ----
-memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G6 G7)
@@ -1019,12 +1019,12 @@ memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G2: (scan b,cols=(1-4))
  │    └── []
  │         ├── best: (scan b,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.82
  ├── G3: (filters G8 G9 G10)
  ├── G4: (scan b,cols=(1-4),constrained)
  │    └── []
  │         ├── best: (scan b,cols=(1-4),constrained)
- │         └── cost: 374.81
+ │         └── cost: 374.02
  ├── G5: (filters G8 G9)
  ├── G6: (index-join G11 b,cols=(1-4))
  │    └── []
@@ -1079,26 +1079,26 @@ select
 memo
 SELECT * FROM b WHERE (u, k, v) > (1, 2, 3) AND (u, k, v) < (8, 9, 10)
 ----
-memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G3)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G3)
- │         └── cost: 584.05
+ │         └── cost: 583.68
  ├── G2: (scan b,cols=(1-4))
  │    └── []
  │         ├── best: (scan b,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.82
  ├── G3: (filters G5 G6)
  ├── G4: (index-join G7 b,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G7 b,cols=(1-4))
- │         └── cost: 583.22
+ │         └── cost: 582.84
  ├── G5: (gt G8 G9)
  ├── G6: (lt G8 G10)
  ├── G7: (scan b@u,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan b@u,cols=(1,2),constrained)
- │         └── cost: 97.61
+ │         └── cost: 97.22
  ├── G8: (tuple G11)
  ├── G9: (tuple G12)
  ├── G10: (tuple G13)
@@ -1240,32 +1240,32 @@ New expression 2 of 2:
 memo
 SELECT s, i, f FROM kifs WHERE s='foo' ORDER BY s DESC, i
 ----
-memo (optimized, ~6KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
+memo (optimized, ~7KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
  ├── G1: (select G2 G3) (scan kifs@s_idx,cols=(2-4),constrained) (index-join G4 kifs,cols=(2-4))
  │    ├── [presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 26.58
+ │    │    └── cost: 25.90
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(2-4),constrained)
- │         └── cost: 25.41
+ │         └── cost: 24.72
  ├── G2: (scan kifs,cols=(2-4)) (scan kifs@s_idx,cols=(2-4))
  │    ├── [ordering: +2 opt(4)]
  │    │    ├── best: (sort G2="[ordering: +4]")
- │    │    └── cost: 1178.64
+ │    │    └── cost: 1177.96
  │    ├── [ordering: +4]
  │    │    ├── best: (scan kifs@s_idx,cols=(2-4))
- │    │    └── cost: 1095.41
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(2-4))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G3: (filters G5)
  ├── G4: (scan kifs@si_idx,cols=(1,2,4),constrained)
  │    ├── [ordering: +2 opt(4)]
  │    │    ├── best: (scan kifs@si_idx,rev,cols=(1,2,4),constrained)
- │    │    └── cost: 26.07
+ │    │    └── cost: 25.05
  │    └── []
  │         ├── best: (scan kifs@si_idx,cols=(1,2,4),constrained)
- │         └── cost: 25.41
+ │         └── cost: 24.72
  ├── G5: (eq G6 G7)
  ├── G6: (variable s)
  └── G7: (const 'foo')
@@ -1273,25 +1273,25 @@ memo (optimized, ~6KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
 memo
 SELECT j FROM kifs WHERE s = 'foo'
 ----
-memo (optimized, ~7KB, required=[presentation: j:5])
+memo (optimized, ~8KB, required=[presentation: j:5])
  ├── G1: (project G2 G3 j)
  │    └── [presentation: j:5]
  │         ├── best: (project G2 G3 j)
- │         └── cost: 25.32
+ │         └── cost: 24.74
  ├── G2: (select G4 G5) (index-join G6 kifs,cols=(4,5)) (scan kifs@si_idx,cols=(4,5),constrained)
  │    └── []
  │         ├── best: (scan kifs@si_idx,cols=(4,5),constrained)
- │         └── cost: 25.21
+ │         └── cost: 24.62
  ├── G3: (projections)
  ├── G4: (scan kifs,cols=(4,5)) (scan kifs@si_idx,cols=(4,5))
  │    └── []
  │         ├── best: (scan kifs@si_idx,cols=(4,5))
- │         └── cost: 1085.21
+ │         └── cost: 1084.62
  ├── G5: (filters G7)
  ├── G6: (scan kifs@s_idx,cols=(1,4),constrained)
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(1,4),constrained)
- │         └── cost: 25.21
+ │         └── cost: 24.62
  ├── G7: (eq G8 G9)
  ├── G8: (variable s)
  └── G9: (const 'foo')
@@ -1299,20 +1299,20 @@ memo (optimized, ~7KB, required=[presentation: j:5])
 memo
 SELECT i, k FROM kifs WHERE s >= 'foo'
 ----
-memo (optimized, ~6KB, required=[presentation: i:2,k:1])
+memo (optimized, ~8KB, required=[presentation: i:2,k:1])
  ├── G1: (project G2 G3 k i)
  │    └── [presentation: i:2,k:1]
  │         ├── best: (project G2 G3 k i)
- │         └── cost: 374.72
+ │         └── cost: 374.04
  ├── G2: (select G4 G5) (scan kifs@s_idx,cols=(1,2,4),constrained) (scan kifs@si_idx,cols=(1,2,4),constrained)
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(1,2,4),constrained)
- │         └── cost: 371.38
+ │         └── cost: 370.69
  ├── G3: (projections)
  ├── G4: (scan kifs,cols=(1,2,4)) (scan kifs@s_idx,cols=(1,2,4)) (scan kifs@si_idx,cols=(1,2,4))
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(1,2,4))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G5: (filters G6)
  ├── G6: (ge G7 G8)
  ├── G7: (variable s)
@@ -1449,8 +1449,6 @@ select
  └── filters
       └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
 
-# TODO(ridwanmsharif): Confirm if this makes sense. I would've expected that the primary index
-#  would be used here. But it isn't the plan being picked. Curious.
 opt
 SELECT * FROM xyz WHERE x > 5
 ----
@@ -1543,7 +1541,7 @@ CREATE TABLE with_time_index (k INT PRIMARY KEY, time TIMESTAMP, INDEX(time))
 opt
 SELECT * FROM with_time_index WHERE time > now() - INTERVAL '1 hour'
 ----
-scan with_time_index@secondary
+scan with_time_index@with_time_index_"time"_idx
  ├── columns: k:1!null time:2!null
  ├── constraint: /2/1: [/'2017-05-10 12:00:00.000001' - ]
  ├── key: (1)
@@ -1552,7 +1550,7 @@ scan with_time_index@secondary
 opt
 SELECT * FROM with_time_index WHERE time >= 'today'
 ----
-scan with_time_index@secondary
+scan with_time_index@with_time_index_"time"_idx
  ├── columns: k:1!null time:2!null
  ├── constraint: /2/1: [/'2017-05-10 00:00:00' - ]
  ├── key: (1)
@@ -1567,7 +1565,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan virtual@secondary
+ └── scan virtual@virtual_lower_s_idx
       ├── columns: k:1!null
       ├── constraint: /6/1: [/'foo' - /'foo']
       └── key: (1)
@@ -1710,53 +1708,53 @@ CREATE INDEX idx2 ON p (i) WHERE s = 'foo'
 memo
 SELECT i FROM p WHERE i = 3 AND s = 'foo'
 ----
-memo (optimized, ~18KB, required=[presentation: i:2])
+memo (optimized, ~21KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 15.30
+ │         └── cost: 15.03
  ├── G2: (select G4 G5) (select G6 G7) (select G8 G7) (select G9 G7) (project G10 G11 i)
  │    └── []
  │         ├── best: (project G10 G11 i)
- │         └── cost: 15.28
+ │         └── cost: 15.00
  ├── G3: (projections)
  ├── G4: (scan p,cols=(2,4))
  │    └── []
  │         ├── best: (scan p,cols=(2,4))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G5: (filters G12 G13)
  ├── G6: (index-join G14 p,cols=(2,4))
  │    └── []
  │         ├── best: (index-join G14 p,cols=(2,4))
- │         └── cost: 385.03
+ │         └── cost: 384.66
  ├── G7: (filters G12)
  ├── G8: (project G15 G11 i)
  │    └── []
  │         ├── best: (project G15 G11 i)
- │         └── cost: 24.82
+ │         └── cost: 24.54
  ├── G9: (index-join G16 p,cols=(2,4))
  │    └── []
  │         ├── best: (index-join G16 p,cols=(2,4))
- │         └── cost: 80.78
+ │         └── cost: 80.40
  ├── G10: (scan p@idx2,partial,cols=(2),constrained)
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(2),constrained)
- │         └── cost: 15.25
+ │         └── cost: 14.96
  ├── G11: (projections G17)
  ├── G12: (eq G18 G19)
  ├── G13: (eq G20 G17)
  ├── G14: (select G21 G22)
  │    └── []
  │         ├── best: (select G21 G22)
- │         └── cost: 364.43
+ │         └── cost: 364.05
  ├── G15: (scan p@idx2,partial,cols=(2))
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(2))
- │         └── cost: 24.61
+ │         └── cost: 24.32
  ├── G16: (scan p@idx,partial,cols=(1,4),constrained)
  │    └── []
  │         ├── best: (scan p@idx,partial,cols=(1,4),constrained)
- │         └── cost: 24.12
+ │         └── cost: 23.73
  ├── G17: (const 'foo')
  ├── G18: (variable i)
  ├── G19: (const 3)
@@ -1764,7 +1762,7 @@ memo (optimized, ~18KB, required=[presentation: i:2])
  ├── G21: (scan p@idx,partial,cols=(1,4))
  │    └── []
  │         ├── best: (scan p@idx,partial,cols=(1,4))
- │         └── cost: 361.08
+ │         └── cost: 360.69
  └── G22: (filters G13)
 
 exec-ddl
@@ -1784,20 +1782,20 @@ CREATE INDEX idx ON p (i) WHERE s = 'foo'
 memo expect-not=GenerateConstrainedScans
 SELECT i FROM p WHERE s = 'bar' AND i = 5
 ----
-memo (optimized, ~7KB, required=[presentation: i:2])
+memo (optimized, ~9KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 1105.46
+ │         └── cost: 1104.79
  ├── G2: (select G4 G5)
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1105.44
+ │         └── cost: 1104.76
  ├── G3: (projections)
  ├── G4: (scan p,cols=(2,4))
  │    └── []
  │         ├── best: (scan p,cols=(2,4))
- │         └── cost: 1095.41
+ │         └── cost: 1094.72
  ├── G5: (filters G6 G7)
  ├── G6: (eq G8 G9)
  ├── G7: (eq G10 G11)
@@ -1940,7 +1938,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan virtual@secondary,partial
+ └── scan virtual@virtual_a_idx,partial
       ├── columns: k:1!null a:2!null
       ├── constraint: /2/1: [/11 - /19]
       ├── key: (1)
@@ -1973,11 +1971,11 @@ project
       │    │    └── upper_s:7
       │    │         └── upper(s:5)
       │    ├── partial index predicates
-      │    │    ├── secondary: filters
+      │    │    ├── virtual_a_idx: filters
       │    │    │    └── (b:3 + 10) IN (10, 20, 30) [outer=(3), immutable]
-      │    │    ├── secondary: filters
+      │    │    ├── virtual_a_idx1: filters
       │    │    │    └── upper(s:5) = 'FOO' [outer=(5), immutable]
-      │    │    └── secondary: filters
+      │    │    └── virtual_c_idx: filters
       │    │         └── b:3 > 90 [outer=(3), constraints=(/3: [/91 - ]; tight)]
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3)
@@ -1994,7 +1992,7 @@ project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── scan virtual@secondary,partial
+ └── scan virtual@virtual_a_idx1,partial
       ├── columns: k:1!null a:2!null
       ├── constraint: /2/1: [/2 - /9]
       ├── key: (1)
@@ -2019,7 +2017,7 @@ project
       │    ├── columns: k:1!null b:3
       │    ├── key: (1)
       │    ├── fd: (1)-->(3)
-      │    └── scan virtual@secondary,partial
+      │    └── scan virtual@virtual_c_idx,partial
       │         ├── columns: k:1!null
       │         ├── constraint: /4/1: [/150 - /150]
       │         └── key: (1)
@@ -2045,7 +2043,7 @@ project
       │    ├── columns: k:1!null b:3
       │    ├── key: (1)
       │    ├── fd: (1)-->(3)
-      │    └── scan virtual@secondary,partial
+      │    └── scan virtual@virtual_c_idx,partial
       │         ├── columns: k:1!null
       │         ├── constraint: /4/1: [/150 - /150]
       │         └── key: (1)
@@ -2082,7 +2080,7 @@ project
       │         ├── columns: k:1!null b:3!null
       │         ├── key: (1)
       │         ├── fd: (1)-->(3)
-      │         ├── scan t55387@secondary,partial
+      │         ├── scan t55387@t55387_b_idx,partial
       │         │    ├── columns: k:1!null b:3!null
       │         │    ├── key: (1)
       │         │    └── fd: (1)-->(3)
@@ -2138,24 +2136,24 @@ project
 memo expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j @> '{"a": "b"}'
 ----
-memo (optimized, ~7KB, required=[presentation: k:1])
+memo (optimized, ~8KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k) (project G4 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G4 G3 k)
- │         └── cost: 129.86
+ │         └── cost: 129.58
  ├── G2: (select G5 G6) (index-join G4 b,cols=(1,4))
  │    └── []
  │         ├── best: (index-join G4 b,cols=(1,4))
- │         └── cost: 799.81
+ │         └── cost: 799.53
  ├── G3: (projections)
  ├── G4: (scan b@j_inv_idx,cols=(1),constrained inverted)
  │    └── []
  │         ├── best: (scan b@j_inv_idx,cols=(1),constrained inverted)
- │         └── cost: 128.75
+ │         └── cost: 128.46
  ├── G5: (scan b,cols=(1,4))
  │    └── []
  │         ├── best: (scan b,cols=(1,4))
- │         └── cost: 1085.21
+ │         └── cost: 1084.62
  ├── G6: (filters G7)
  ├── G7: (contains G8 G9)
  ├── G8: (variable j)
@@ -4428,31 +4426,31 @@ CREATE INVERTED INDEX idx2 ON pi (j) WHERE s = 'bar'
 memo expect=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'bar'
 ----
-memo (optimized, ~11KB, required=[presentation: k:1,s:2,j:3])
+memo (optimized, ~13KB, required=[presentation: k:1,s:2,j:3])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 pi,cols=(1-3))
  │    └── [presentation: k:1,s:2,j:3]
  │         ├── best: (index-join G6 pi,cols=(1-3))
- │         └── cost: 22.17
+ │         └── cost: 21.89
  ├── G2: (scan pi,cols=(1-3))
  │    └── []
  │         ├── best: (scan pi,cols=(1-3))
- │         └── cost: 1085.21
+ │         └── cost: 1084.62
  ├── G3: (filters G7 G8)
  ├── G4: (index-join G9 pi,cols=(1-3))
  │    └── []
  │         ├── best: (index-join G9 pi,cols=(1-3))
- │         └── cost: 30.08
+ │         └── cost: 29.80
  ├── G5: (filters G8)
  ├── G6: (scan pi@idx2,partial,cols=(1),constrained inverted)
  │    └── []
  │         ├── best: (scan pi@idx2,partial,cols=(1),constrained inverted)
- │         └── cost: 15.45
+ │         └── cost: 15.16
  ├── G7: (contains G10 G11)
  ├── G8: (eq G12 G13)
  ├── G9: (scan pi@idx,partial,cols=(1),constrained inverted)
  │    └── []
  │         ├── best: (scan pi@idx,partial,cols=(1),constrained inverted)
- │         └── cost: 16.60
+ │         └── cost: 16.31
  ├── G10: (variable j)
  ├── G11: (const '{"a": "b"}')
  ├── G12: (variable s)
@@ -4476,15 +4474,15 @@ CREATE INVERTED INDEX idx ON pi (j) WHERE s IN ('foo', 'bar')
 memo expect-not=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'baz'
 ----
-memo (optimized, ~7KB, required=[presentation: k:1,s:2,j:3])
+memo (optimized, ~8KB, required=[presentation: k:1,s:2,j:3])
  ├── G1: (select G2 G3)
  │    └── [presentation: k:1,s:2,j:3]
  │         ├── best: (select G2 G3)
- │         └── cost: 1095.24
+ │         └── cost: 1094.66
  ├── G2: (scan pi,cols=(1-3))
  │    └── []
  │         ├── best: (scan pi,cols=(1-3))
- │         └── cost: 1085.21
+ │         └── cost: 1084.62
  ├── G3: (filters G4 G5)
  ├── G4: (contains G6 G7)
  ├── G5: (eq G8 G9)
@@ -5183,6 +5181,8 @@ CREATE TABLE pqr
     r INT,
     s STRING,
     t STRING,
+    u STRING NOT NULL,
+    v STRING,
     INDEX q (q),
     INDEX r (r),
     INDEX s (s) STORING (r),
@@ -5261,44 +5261,44 @@ inner-join (zigzag pqr@q pqr@r)
 memo expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~13KB, required=[presentation: q:2,r:3])
+memo (optimized, ~16KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 22.83
+ │         └── cost: 11.94
  ├── G2: (scan pqr,cols=(2,3))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,3))
- │         └── cost: 10725.41
+ │         └── cost: 10924.92
  ├── G3: (filters G9 G10)
  ├── G4: (index-join G11 pqr,cols=(2,3))
  │    └── []
  │         ├── best: (index-join G11 pqr,cols=(2,3))
- │         └── cost: 84.88
+ │         └── cost: 84.70
  ├── G5: (filters G10)
  ├── G6: (index-join G12 pqr,cols=(2,3))
  │    └── []
  │         ├── best: (index-join G12 pqr,cols=(2,3))
- │         └── cost: 725.42
+ │         └── cost: 727.04
  ├── G7: (filters G9)
  ├── G8: (index-join G13 pqr,cols=(2,3))
  │    └── []
  │         ├── best: (index-join G13 pqr,cols=(2,3))
- │         └── cost: 726.52
+ │         └── cost: 728.04
  ├── G9: (eq G14 G15)
  ├── G10: (eq G16 G17)
  ├── G11: (scan pqr@q,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 24.72
+ │         └── cost: 24.33
  ├── G12: (scan pqr@r,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 118.41
+ │         └── cost: 118.02
  ├── G13: (scan pqr@rs,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan pqr@rs,cols=(1,3),constrained)
- │         └── cost: 119.51
+ │         └── cost: 119.02
  ├── G14: (variable q)
  ├── G15: (const 1)
  ├── G16: (variable r)
@@ -5342,49 +5342,49 @@ inner-join (lookup pqr)
 memo expect=GenerateZigzagJoins
 SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~15KB, required=[presentation: q:2,r:3,s:4])
+memo (optimized, ~18KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
- │         └── cost: 28.47
+ │         └── cost: 17.51
  ├── G2: (scan pqr,cols=(2-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2-4))
- │         └── cost: 10825.61
+ │         └── cost: 11025.02
  ├── G3: (filters G11 G12)
  ├── G4: (index-join G13 pqr,cols=(2-4))
  │    └── []
  │         ├── best: (index-join G13 pqr,cols=(2-4))
- │         └── cost: 84.98
+ │         └── cost: 84.80
  ├── G5: (filters G12)
  ├── G6: (index-join G14 pqr,cols=(2-4))
  │    └── []
  │         ├── best: (index-join G14 pqr,cols=(2-4))
- │         └── cost: 726.42
+ │         └── cost: 728.04
  ├── G7: (filters G11)
  ├── G8: (index-join G15 pqr,cols=(2-4))
  │    └── []
  │         ├── best: (index-join G15 pqr,cols=(2-4))
- │         └── cost: 727.62
+ │         └── cost: 729.04
  ├── G9: (zigzag-join G3 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 22.94
+ │         └── cost: 11.95
  ├── G10: (filters)
  ├── G11: (eq G16 G17)
  ├── G12: (eq G18 G19)
  ├── G13: (scan pqr@q,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 24.72
+ │         └── cost: 24.33
  ├── G14: (scan pqr@r,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 118.41
+ │         └── cost: 118.02
  ├── G15: (scan pqr@rs,cols=(1,3,4),constrained)
  │    └── []
  │         ├── best: (scan pqr@rs,cols=(1,3,4),constrained)
- │         └── cost: 120.61
+ │         └── cost: 120.02
  ├── G16: (variable q)
  ├── G17: (const 1)
  ├── G18: (variable r)
@@ -5407,50 +5407,76 @@ inner-join (zigzag pqr@q pqr@s)
 memo expect=GenerateZigzagJoins
 SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
 ----
-memo (optimized, ~11KB, required=[presentation: q:2,s:4])
+memo (optimized, ~13KB, required=[presentation: q:2,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (zigzag-join G3 pqr@q pqr@s)
  │    └── [presentation: q:2,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 23.13
+ │         └── cost: 12.14
  ├── G2: (scan pqr,cols=(2,4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,4))
- │         └── cost: 10725.41
+ │         └── cost: 10924.92
  ├── G3: (filters G8 G9)
  ├── G4: (index-join G10 pqr,cols=(2,4))
  │    └── []
  │         ├── best: (index-join G10 pqr,cols=(2,4))
- │         └── cost: 84.88
+ │         └── cost: 84.70
  ├── G5: (filters G9)
  ├── G6: (index-join G11 pqr,cols=(2,4))
  │    └── []
  │         ├── best: (index-join G11 pqr,cols=(2,4))
- │         └── cost: 7134.52
+ │         └── cost: 7154.04
  ├── G7: (filters G8)
  ├── G8: (eq G12 G13)
  ├── G9: (eq G14 G15)
  ├── G10: (scan pqr@q,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 24.72
+ │         └── cost: 24.33
  ├── G11: (scan pqr@s,cols=(1,4),constrained)
  │    └── []
  │         ├── best: (scan pqr@s,cols=(1,4),constrained)
- │         └── cost: 1064.51
+ │         └── cost: 1064.02
  ├── G12: (variable q)
  ├── G13: (const 1)
  ├── G14: (variable s)
  └── G15: (const 'foo')
 
-# Zigzag with implicit equality column in addition to primary key:
-# indexes on (r,s) and (t,s) should be chosen even though s is not being fixed
-# in the ON clause.
+# A zig-zag join cannot be planned on rs and ts because s is nullable, so it
+# cannot be an implicit equality column.
+opt expect-not=GenerateZigzagJoins
+SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
+----
+select
+ ├── columns: r:3!null t:5!null
+ ├── fd: ()-->(3,5)
+ ├── index-join pqr
+ │    ├── columns: r:3 t:5
+ │    ├── fd: ()-->(5)
+ │    └── scan pqr@ts
+ │         ├── columns: p:1!null t:5!null
+ │         ├── constraint: /5/4/1: [/'foo' - /'foo']
+ │         ├── key: (1)
+ │         └── fd: ()-->(5)
+ └── filters
+      └── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+
+exec-ddl
+CREATE INDEX ru ON pqr (r, u)
+----
+
+exec-ddl
+CREATE INDEX tu ON pqr (t, u)
+----
+
+# A zig-zag join can be planned on ru and tu because u is non-nullable, so it
+# is an implicit equality column in addition to the primary key.
 opt expect=GenerateZigzagJoins
 SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
 ----
-inner-join (zigzag pqr@rs pqr@ts)
+inner-join (zigzag pqr@ru pqr@tu)
  ├── columns: r:3!null t:5!null
- ├── eq columns: [4 1] = [4 1]
+ ├── eq columns: [6 1] = [6 1]
  ├── left fixed columns: [3] = [1]
  ├── right fixed columns: [5] = ['foo']
  ├── fd: ()-->(3,5)
@@ -5458,51 +5484,40 @@ inner-join (zigzag pqr@rs pqr@ts)
       ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
       └── t:5 = 'foo' [outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
 
-memo expect=GenerateZigzagJoins
-SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo'
+exec-ddl
+DROP INDEX ru
 ----
-memo (optimized, ~13KB, required=[presentation: r:3,t:5])
- ├── G1: (select G2 G3) (select G4 G5) (select G6 G5) (select G7 G8) (zigzag-join G3 pqr@rs pqr@ts)
- │    └── [presentation: r:3,t:5]
- │         ├── best: (zigzag-join G3 pqr@rs pqr@ts)
- │         └── cost: 23.05
- ├── G2: (scan pqr,cols=(3,5))
- │    └── []
- │         ├── best: (scan pqr,cols=(3,5))
- │         └── cost: 10725.41
- ├── G3: (filters G9 G10)
- ├── G4: (index-join G11 pqr,cols=(3,5))
- │    └── []
- │         ├── best: (index-join G11 pqr,cols=(3,5))
- │         └── cost: 725.42
- ├── G5: (filters G10)
- ├── G6: (index-join G12 pqr,cols=(3,5))
- │    └── []
- │         ├── best: (index-join G12 pqr,cols=(3,5))
- │         └── cost: 726.52
- ├── G7: (index-join G13 pqr,cols=(3,5))
- │    └── []
- │         ├── best: (index-join G13 pqr,cols=(3,5))
- │         └── cost: 85.08
- ├── G8: (filters G9)
- ├── G9: (eq G14 G15)
- ├── G10: (eq G16 G17)
- ├── G11: (scan pqr@r,cols=(1,3),constrained)
- │    └── []
- │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 118.41
- ├── G12: (scan pqr@rs,cols=(1,3),constrained)
- │    └── []
- │         ├── best: (scan pqr@rs,cols=(1,3),constrained)
- │         └── cost: 119.51
- ├── G13: (scan pqr@ts,cols=(1,5),constrained)
- │    └── []
- │         ├── best: (scan pqr@ts,cols=(1,5),constrained)
- │         └── cost: 24.92
- ├── G14: (variable r)
- ├── G15: (const 1)
- ├── G16: (variable t)
- └── G17: (const 'foo')
+
+exec-ddl
+DROP INDEX tu
+----
+
+exec-ddl
+CREATE INDEX tv ON pqr (t, v)
+----
+
+# A zig-zag join can be planned on rs and tv even though s and v are nullable
+# because they are explicit equality columns. The query filters out rows where s
+# IS NULL or v IS NULL.
+opt expect=GenerateZigzagJoins
+SELECT r,t FROM pqr WHERE r = 1 AND t = 'foo' AND s = v
+----
+project
+ ├── columns: r:3!null t:5!null
+ ├── fd: ()-->(3,5)
+ └── inner-join (zigzag pqr@rs pqr@tv)
+      ├── columns: r:3!null s:4!null t:5!null v:7!null
+      ├── eq columns: [4 1] = [7 1]
+      ├── left fixed columns: [3] = [1]
+      ├── right fixed columns: [5] = ['foo']
+      ├── fd: ()-->(3,5), (4)==(7), (7)==(4)
+      └── filters
+           ├── r:3 = 1 [outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+           └── t:5 = 'foo' [outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
+
+exec-ddl
+DROP INDEX tv
+----
 
 # Zigzag with choice between indexes for multiple equality predicates.
 opt expect=GenerateZigzagJoins
@@ -5895,63 +5910,63 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~37KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 23.15
+ │         └── cost: 11.96
  ├── G2: (scan pqr,cols=(1-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(1-4))
- │         └── cost: 10925.81
+ │         └── cost: 11125.12
  ├── G3: (filters G14 G15 G16)
  ├── G4: (index-join G17 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G17 pqr,cols=(1-4))
- │         └── cost: 84.98
+ │         └── cost: 84.80
  ├── G5: (filters G15 G16)
  ├── G6: (index-join G18 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G18 pqr,cols=(1-4))
- │         └── cost: 726.42
+ │         └── cost: 728.04
  ├── G7: (filters G14 G16)
  ├── G8: (index-join G19 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G19 pqr,cols=(1-4))
- │         └── cost: 1145.34
+ │         └── cost: 1144.97
  ├── G9: (filters G14)
  ├── G10: (index-join G20 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G20 pqr,cols=(1-4))
- │         └── cost: 85.92
+ │         └── cost: 85.54
  ├── G11: (zigzag-join G21 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G21 pqr@q pqr@r)
- │         └── cost: 22.94
+ │         └── cost: 11.95
  ├── G12: (filters G16)
  ├── G13: (zigzag-join G5 pqr@r pqr@s)
  │    └── []
  │         ├── best: (zigzag-join G5 pqr@r pqr@s)
- │         └── cost: 42.23
+ │         └── cost: 31.14
  ├── G14: (eq G22 G23)
  ├── G15: (eq G24 G23)
  ├── G16: (eq G25 G26)
  ├── G17: (scan pqr@q,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 24.72
+ │         └── cost: 24.33
  ├── G18: (scan pqr@r,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan pqr@r,cols=(1,3),constrained)
- │         └── cost: 118.41
+ │         └── cost: 118.02
  ├── G19: (select G27 G28)
  │    └── []
  │         ├── best: (select G27 G28)
- │         └── cost: 1084.63
+ │         └── cost: 1084.05
  ├── G20: (scan pqr@rs,cols=(1,3,4),constrained)
  │    └── []
  │         ├── best: (scan pqr@rs,cols=(1,3,4),constrained)
- │         └── cost: 25.21
+ │         └── cost: 24.62
  ├── G21: (filters G14 G15)
  ├── G22: (variable q)
  ├── G23: (const 1)
@@ -5961,7 +5976,7 @@ memo (optimized, ~31KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G27: (scan pqr@s,cols=(1,3,4),constrained)
  │    └── []
  │         ├── best: (scan pqr@s,cols=(1,3,4),constrained)
- │         └── cost: 1074.61
+ │         └── cost: 1074.02
  └── G28: (filters G15)
 
 # Zigzag joins cannot be planned for indexes where equality columns do not
@@ -5987,36 +6002,36 @@ select
 memo
 SELECT q,t FROM pqr WHERE q = 1 AND t = 'foo'
 ----
-memo (optimized, ~9KB, required=[presentation: q:2,t:5])
+memo (optimized, ~10KB, required=[presentation: q:2,t:5])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: q:2,t:5]
  │         ├── best: (select G4 G5)
- │         └── cost: 85.00
+ │         └── cost: 84.83
  ├── G2: (scan pqr,cols=(2,5))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,5))
- │         └── cost: 10725.41
+ │         └── cost: 10924.92
  ├── G3: (filters G8 G9)
  ├── G4: (index-join G10 pqr,cols=(2,5))
  │    └── []
  │         ├── best: (index-join G10 pqr,cols=(2,5))
- │         └── cost: 84.88
+ │         └── cost: 84.70
  ├── G5: (filters G9)
  ├── G6: (index-join G11 pqr,cols=(2,5))
  │    └── []
  │         ├── best: (index-join G11 pqr,cols=(2,5))
- │         └── cost: 85.08
+ │         └── cost: 84.80
  ├── G7: (filters G8)
  ├── G8: (eq G12 G13)
  ├── G9: (eq G14 G15)
  ├── G10: (scan pqr@q,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan pqr@q,cols=(1,2),constrained)
- │         └── cost: 24.72
+ │         └── cost: 24.33
  ├── G11: (scan pqr@ts,cols=(1,5),constrained)
  │    └── []
  │         ├── best: (scan pqr@ts,cols=(1,5),constrained)
- │         └── cost: 24.92
+ │         └── cost: 24.43
  ├── G12: (variable q)
  ├── G13: (const 1)
  ├── G14: (variable t)
@@ -6026,20 +6041,20 @@ memo (optimized, ~9KB, required=[presentation: q:2,t:5])
 memo
 SELECT c FROM zz_redundant WHERE b = 1
 ----
-memo (optimized, ~6KB, required=[presentation: c:3])
+memo (optimized, ~8KB, required=[presentation: c:3])
  ├── G1: (project G2 G3 c)
  │    └── [presentation: c:3]
  │         ├── best: (project G2 G3 c)
- │         └── cost: 25.12
+ │         └── cost: 24.64
  ├── G2: (select G4 G5) (scan zz_redundant@idx_u,cols=(2,3),constrained) (scan zz_redundant@idx_v,cols=(2,3),constrained)
  │    └── []
  │         ├── best: (scan zz_redundant@idx_u,cols=(2,3),constrained)
- │         └── cost: 25.01
+ │         └── cost: 24.52
  ├── G3: (projections)
  ├── G4: (scan zz_redundant,cols=(2,3)) (scan zz_redundant@idx_u,cols=(2,3)) (scan zz_redundant@idx_v,cols=(2,3))
  │    └── []
  │         ├── best: (scan zz_redundant,cols=(2,3))
- │         └── cost: 1075.01
+ │         └── cost: 1074.52
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable b)
@@ -6066,6 +6081,122 @@ select
  │         └── fd: ()-->(2)
  └── filters
       └── r:3 = 2 [outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+
+# Zigzag join hinting tests
+exec-ddl
+CREATE TABLE zigzag
+(
+    n INT PRIMARY KEY,
+    a INT,
+    b INT,
+    c STRING,
+    INDEX a_idx(a),
+    INDEX b_idx(b),
+    UNIQUE INDEX c_idx(b,c),
+    INDEX bc_idx(b,c)
+)
+----
+
+# Verify naked hint.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with one index.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with other index.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify plan with both indexes hinted.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=b_idx} WHERE a = 3 AND b = 7;
+----
+inner-join (lookup zigzag)
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── inner-join (zigzag zigzag@a_idx zigzag@b_idx)
+ │    ├── columns: n:1!null a:2!null b:3!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [3]
+ │    ├── right fixed columns: [3] = [7]
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+ │         └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+ └── filters (true)
+
+# Verify force selection when there's multiple valid choices.
+opt
+SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=bc_idx} WHERE a = 3 AND b = 7;
+----
+select
+ ├── columns: n:1!null a:2!null b:3!null c:4
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
+ ├── scan zigzag
+ │    ├── columns: n:1!null a:2 b:3 c:4
+ │    ├── flags: force-zigzag=a_idx,bc_idx
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── filters
+      ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+      └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
 
 # --------------------------------------------------
 # GenerateInvertedIndexZigzagJoins
@@ -6383,6 +6514,56 @@ project
       │              └── b
       └── filters
            └── j @> '{"a": 1, "b": 2}'
+
+# Generate a zigzag join with a hint.
+opt expect=GenerateInvertedIndexZigzagJoins
+SELECT k FROM inv_zz_partial@{FORCE_ZIGZAG} WHERE j @> '{"a": 1, "b": 2}' AND b AND s = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup inv_zz_partial)
+      ├── columns: k:1!null j:2!null b:3!null s:4!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3,4), (1)-->(2)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [7] = ['\x376100012a0200']
+      │    ├── right fixed columns: [7] = ['\x376200012a0400']
+      │    └── filters (true)
+      └── filters
+           ├── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Generate an inverted zigzag join with a hint.
+opt expect=GenerateInvertedIndexZigzagJoins
+SELECT k FROM inv_zz_partial@{FORCE_ZIGZAG=zz_idx} WHERE j @> '{"a": 1, "b": 2}' AND b AND s = 'foo'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup inv_zz_partial)
+      ├── columns: k:1!null j:2!null b:3!null s:4!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(3,4), (1)-->(2)
+      ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [7] = ['\x376100012a0200']
+      │    ├── right fixed columns: [7] = ['\x376200012a0400']
+      │    └── filters (true)
+      └── filters
+           ├── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+           └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 exec-ddl
 DROP INDEX zz_idx
@@ -7623,43 +7804,43 @@ CREATE TABLE t58390 (
 memo
 SELECT * FROM t58390 WHERE a > 1 OR b > 1
 ----
-memo (optimized, ~19KB, required=[presentation: k:1,a:2,b:3,c:4])
+memo (optimized, ~22KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G1: (select G2 G3) (index-join G4 t58390,cols=(1-4)) (distinct-on G5 G6 cols=(1)) (distinct-on G5 G6 cols=(1),ordering=+1)
  │    └── [presentation: k:1,a:2,b:3,c:4]
  │         ├── best: (select G2 G3)
- │         └── cost: 1115.63
+ │         └── cost: 1114.85
  ├── G2: (scan t58390,cols=(1-4))
  │    └── []
  │         ├── best: (scan t58390,cols=(1-4))
- │         └── cost: 1105.61
+ │         └── cost: 1104.82
  ├── G3: (filters G7)
- ├── G4: (scan t58390@secondary,partial,cols=(1,4))
+ ├── G4: (scan t58390@t58390_c_idx,partial,cols=(1,4))
  │    └── []
- │         ├── best: (scan t58390@secondary,partial,cols=(1,4))
- │         └── cost: 707.74
+ │         ├── best: (scan t58390@t58390_c_idx,partial,cols=(1,4))
+ │         └── cost: 707.35
  ├── G5: (union-all G8 G9)
  │    ├── [ordering: +1]
  │    │    ├── best: (union-all G8="[ordering: +7]" G9="[ordering: +13]")
- │    │    └── cost: 2237.94
+ │    │    └── cost: 2236.39
  │    └── []
  │         ├── best: (union-all G8 G9)
- │         └── cost: 2237.94
+ │         └── cost: 2236.39
  ├── G6: (aggregations G10 G11 G12)
  ├── G7: (or G13 G14)
  ├── G8: (select G15 G16) (select G17 G16)
  │    ├── [ordering: +7]
  │    │    ├── best: (select G15="[ordering: +7]" G16)
- │    │    └── cost: 1115.63
+ │    │    └── cost: 1114.85
  │    └── []
  │         ├── best: (select G15 G16)
- │         └── cost: 1115.63
+ │         └── cost: 1114.85
  ├── G9: (select G18 G19) (select G20 G19)
  │    ├── [ordering: +13]
  │    │    ├── best: (select G18="[ordering: +13]" G19)
- │    │    └── cost: 1115.63
+ │    │    └── cost: 1114.85
  │    └── []
  │         ├── best: (select G18 G19)
- │         └── cost: 1115.63
+ │         └── cost: 1114.85
  ├── G10: (const-agg G21)
  ├── G11: (const-agg G22)
  ├── G12: (const-agg G23)
@@ -7668,53 +7849,53 @@ memo (optimized, ~19KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G15: (scan t58390,cols=(7-10))
  │    ├── [ordering: +7]
  │    │    ├── best: (scan t58390,cols=(7-10))
- │    │    └── cost: 1105.61
+ │    │    └── cost: 1104.82
  │    └── []
  │         ├── best: (scan t58390,cols=(7-10))
- │         └── cost: 1105.61
+ │         └── cost: 1104.82
  ├── G16: (filters G25)
  ├── G17: (index-join G26 t58390,cols=(7-10))
  │    ├── [ordering: +7]
  │    │    ├── best: (index-join G26="[ordering: +7]" t58390,cols=(7-10))
- │    │    └── cost: 4906.24
+ │    │    └── cost: 4905.87
  │    └── []
  │         ├── best: (index-join G26 t58390,cols=(7-10))
- │         └── cost: 4754.42
+ │         └── cost: 4754.04
  ├── G18: (scan t58390,cols=(13-16))
  │    ├── [ordering: +13]
  │    │    ├── best: (scan t58390,cols=(13-16))
- │    │    └── cost: 1105.61
+ │    │    └── cost: 1104.82
  │    └── []
  │         ├── best: (scan t58390,cols=(13-16))
- │         └── cost: 1105.61
+ │         └── cost: 1104.82
  ├── G19: (filters G27)
  ├── G20: (index-join G28 t58390,cols=(13-16))
  │    ├── [ordering: +13]
  │    │    ├── best: (index-join G28="[ordering: +13]" t58390,cols=(13-16))
- │    │    └── cost: 4906.24
+ │    │    └── cost: 4905.87
  │    └── []
  │         ├── best: (index-join G28 t58390,cols=(13-16))
- │         └── cost: 4754.42
+ │         └── cost: 4754.04
  ├── G21: (variable a)
  ├── G22: (variable b)
  ├── G23: (variable c)
  ├── G24: (const 1)
  ├── G25: (gt G29 G24)
- ├── G26: (scan t58390@secondary,partial,cols=(7,10))
+ ├── G26: (scan t58390@t58390_c_idx,partial,cols=(7,10))
  │    ├── [ordering: +7]
  │    │    ├── best: (sort G26)
- │    │    └── cost: 859.56
+ │    │    └── cost: 859.18
  │    └── []
- │         ├── best: (scan t58390@secondary,partial,cols=(7,10))
- │         └── cost: 707.74
+ │         ├── best: (scan t58390@t58390_c_idx,partial,cols=(7,10))
+ │         └── cost: 707.35
  ├── G27: (gt G30 G24)
- ├── G28: (scan t58390@secondary,partial,cols=(13,16))
+ ├── G28: (scan t58390@t58390_c_idx,partial,cols=(13,16))
  │    ├── [ordering: +13]
  │    │    ├── best: (sort G28)
- │    │    └── cost: 859.56
+ │    │    └── cost: 859.18
  │    └── []
- │         ├── best: (scan t58390@secondary,partial,cols=(13,16))
- │         └── cost: 707.74
+ │         ├── best: (scan t58390@t58390_c_idx,partial,cols=(13,16))
+ │         └── cost: 707.35
  ├── G29: (variable a)
  └── G30: (variable b)
 
@@ -7738,58 +7919,58 @@ JOIN t61795 AS t2 ON t1.c = t1.b AND t1.b = t2.b
 WHERE t1.a = 10 OR t2.b != abs(t2.b)
 ORDER BY t1.b ASC
 ----
-memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
+memo (optimized, ~33KB, required=[presentation: a:1] [ordering: +2])
  ├── G1: (project G2 G3 a b)
  │    ├── [presentation: a:1] [ordering: +2]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1095.28
+ │    │    └── cost: 1094.72
  │    └── []
  │         ├── best: (project G2 G3 a b)
- │         └── cost: 1095.25
+ │         └── cost: 1094.68
  ├── G2: (select G4 G5) (select G6 G7) (distinct-on G8 G9 cols=(1)) (distinct-on G8 G9 cols=(1),ordering=+1)
  │    ├── [ordering: +(2|3)]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1095.27
+ │    │    └── cost: 1094.70
  │    └── []
  │         ├── best: (select G4 G5)
- │         └── cost: 1095.24
+ │         └── cost: 1094.66
  ├── G3: (projections)
  ├── G4: (scan t61795 [as=t1],cols=(1-3))
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 1334.68
+ │    │    └── cost: 1334.10
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(1-3))
- │         └── cost: 1085.21
+ │         └── cost: 1084.62
  ├── G5: (filters G10 G11)
  ├── G6: (index-join G12 t61795,cols=(1-3))
  │    ├── [ordering: +2]
  │    │    ├── best: (index-join G12="[ordering: +2]" t61795,cols=(1-3))
- │    │    └── cost: 3050.44
+ │    │    └── cost: 3050.07
  │    └── []
  │         ├── best: (index-join G12 t61795,cols=(1-3))
- │         └── cost: 3050.44
+ │         └── cost: 3050.07
  ├── G7: (filters G10)
  ├── G8: (union-all G13 G14)
  │    ├── [ordering: +(2|3)]
  │    │    ├── best: (union-all G13 G14="[ordering: +(17|18)]")
- │    │    └── cost: 1100.39
+ │    │    └── cost: 1099.83
  │    ├── [ordering: +1]
  │    │    ├── best: (union-all G13 G14="[ordering: +16]")
- │    │    └── cost: 1100.36
+ │    │    └── cost: 1099.79
  │    └── []
  │         ├── best: (union-all G13 G14)
- │         └── cost: 1100.36
+ │         └── cost: 1099.79
  ├── G9: (aggregations G15 G16)
  ├── G10: (eq G17 G18)
  ├── G11: (or G19 G20)
  ├── G12: (select G21 G22)
  │    ├── [ordering: +2]
  │    │    ├── best: (select G21="[ordering: +2]" G22)
- │    │    └── cost: 1053.93
+ │    │    └── cost: 1053.55
  │    └── []
  │         ├── best: (select G21 G22)
- │         └── cost: 1053.93
+ │         └── cost: 1053.55
  ├── G13: (select G23 G24) (select G25 G26) (select G27 G26)
  │    └── []
  │         ├── best: (select G25 G26)
@@ -7797,31 +7978,31 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G14: (select G28 G29) (select G30 G31)
  │    ├── [ordering: +(17|18)]
  │    │    ├── best: (sort G14)
- │    │    └── cost: 1095.27
+ │    │    └── cost: 1094.70
  │    ├── [ordering: +16]
  │    │    ├── best: (select G28="[ordering: +16]" G29)
- │    │    └── cost: 1095.24
+ │    │    └── cost: 1094.66
  │    └── []
  │         ├── best: (select G28 G29)
- │         └── cost: 1095.24
+ │         └── cost: 1094.66
  ├── G15: (const-agg G18)
  ├── G16: (const-agg G17)
  ├── G17: (variable t1.c)
  ├── G18: (variable t1.b)
  ├── G19: (eq G32 G33)
  ├── G20: (ne G18 G34)
- ├── G21: (scan t61795@secondary [as=t1],cols=(1,2),constrained)
+ ├── G21: (scan t61795@t61795_b_key [as=t1],cols=(1,2),constrained)
  │    ├── [ordering: +2]
- │    │    ├── best: (scan t61795@secondary [as=t1],cols=(1,2),constrained)
- │    │    └── cost: 1044.01
+ │    │    ├── best: (scan t61795@t61795_b_key [as=t1],cols=(1,2),constrained)
+ │    │    └── cost: 1043.62
  │    └── []
- │         ├── best: (scan t61795@secondary [as=t1],cols=(1,2),constrained)
- │         └── cost: 1044.01
+ │         ├── best: (scan t61795@t61795_b_key [as=t1],cols=(1,2),constrained)
+ │         └── cost: 1043.62
  ├── G22: (filters G11)
  ├── G23: (scan t61795 [as=t1],cols=(11-13))
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(11-13))
- │         └── cost: 1085.21
+ │         └── cost: 1084.62
  ├── G24: (filters G35 G36)
  ├── G25: (scan t61795 [as=t1],cols=(11-13),constrained)
  │    └── []
@@ -7831,28 +8012,28 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G27: (index-join G37 t61795,cols=(11-13))
  │    └── []
  │         ├── best: (index-join G37 t61795,cols=(11-13))
- │         └── cost: 1059.99
+ │         └── cost: 1059.60
  ├── G28: (scan t61795 [as=t1],cols=(16-18))
  │    ├── [ordering: +16]
  │    │    ├── best: (scan t61795 [as=t1],cols=(16-18))
- │    │    └── cost: 1085.21
+ │    │    └── cost: 1084.62
  │    ├── [ordering: +17]
  │    │    ├── best: (sort G28)
- │    │    └── cost: 1334.68
+ │    │    └── cost: 1334.10
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(16-18))
- │         └── cost: 1085.21
+ │         └── cost: 1084.62
  ├── G29: (filters G38 G39)
  ├── G30: (index-join G40 t61795,cols=(16-18))
  │    ├── [ordering: +16]
  │    │    ├── best: (index-join G40="[ordering: +16]" t61795,cols=(16-18))
- │    │    └── cost: 3118.88
+ │    │    └── cost: 3118.52
  │    ├── [ordering: +17]
  │    │    ├── best: (index-join G40="[ordering: +17]" t61795,cols=(16-18))
- │    │    └── cost: 3050.44
+ │    │    └── cost: 3050.07
  │    └── []
  │         ├── best: (index-join G40 t61795,cols=(16-18))
- │         └── cost: 3050.44
+ │         └── cost: 3050.07
  ├── G31: (filters G38)
  ├── G32: (variable t1.a)
  ├── G33: (const 10)
@@ -7862,41 +8043,41 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G37: (select G45 G46)
  │    └── []
  │         ├── best: (select G45 G46)
- │         └── cost: 1053.93
+ │         └── cost: 1053.54
  ├── G38: (eq G47 G48)
  ├── G39: (ne G48 G49)
  ├── G40: (select G50 G51)
  │    ├── [ordering: +16]
  │    │    ├── best: (sort G40)
- │    │    └── cost: 1122.37
+ │    │    └── cost: 1122.00
  │    ├── [ordering: +17]
  │    │    ├── best: (select G50="[ordering: +17]" G51)
- │    │    └── cost: 1053.93
+ │    │    └── cost: 1053.55
  │    └── []
  │         ├── best: (select G50 G51)
- │         └── cost: 1053.93
+ │         └── cost: 1053.55
  ├── G41: (scalar-list G18)
  ├── G42: (variable t1.c)
  ├── G43: (variable t1.b)
  ├── G44: (variable t1.a)
- ├── G45: (scan t61795@secondary [as=t1],cols=(11,12),constrained)
+ ├── G45: (scan t61795@t61795_b_key [as=t1],cols=(11,12),constrained)
  │    └── []
- │         ├── best: (scan t61795@secondary [as=t1],cols=(11,12),constrained)
- │         └── cost: 1044.01
+ │         ├── best: (scan t61795@t61795_b_key [as=t1],cols=(11,12),constrained)
+ │         └── cost: 1043.62
  ├── G46: (filters G36)
  ├── G47: (variable t1.c)
  ├── G48: (variable t1.b)
  ├── G49: (function G52 abs)
- ├── G50: (scan t61795@secondary [as=t1],cols=(16,17),constrained)
+ ├── G50: (scan t61795@t61795_b_key [as=t1],cols=(16,17),constrained)
  │    ├── [ordering: +16]
  │    │    ├── best: (sort G50)
- │    │    └── cost: 1280.80
+ │    │    └── cost: 1280.42
  │    ├── [ordering: +17]
- │    │    ├── best: (scan t61795@secondary [as=t1],cols=(16,17),constrained)
- │    │    └── cost: 1044.01
+ │    │    ├── best: (scan t61795@t61795_b_key [as=t1],cols=(16,17),constrained)
+ │    │    └── cost: 1043.62
  │    └── []
- │         ├── best: (scan t61795@secondary [as=t1],cols=(16,17),constrained)
- │         └── cost: 1044.01
+ │         ├── best: (scan t61795@t61795_b_key [as=t1],cols=(16,17),constrained)
+ │         └── cost: 1043.62
  ├── G51: (filters G39)
  └── G52: (scalar-list G48)
 
@@ -8057,46 +8238,44 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(7)
- ├── project
- │    ├── columns: u:2 v:3
- │    └── distinct-on
- │         ├── columns: k:1!null u:2 v:3
- │         ├── grouping columns: k:1!null
- │         ├── internal-ordering: +1
- │         ├── key: (1)
- │         ├── fd: (1)-->(2,3)
- │         ├── union-all
- │         │    ├── columns: k:1!null u:2 v:3
- │         │    ├── left columns: k:8 u:9 v:10
- │         │    ├── right columns: k:14 u:15 v:16
- │         │    ├── ordering: +1
- │         │    ├── index-join d
- │         │    │    ├── columns: k:8!null u:9!null v:10
- │         │    │    ├── key: (8)
- │         │    │    ├── fd: ()-->(9), (8)-->(10)
- │         │    │    ├── ordering: +8 opt(9) [actual: +8]
- │         │    │    └── scan d@u
- │         │    │         ├── columns: k:8!null u:9!null
- │         │    │         ├── constraint: /9/8: [/1 - /1]
- │         │    │         ├── key: (8)
- │         │    │         ├── fd: ()-->(9)
- │         │    │         └── ordering: +8 opt(9) [actual: +8]
- │         │    └── index-join d
- │         │         ├── columns: k:14!null u:15 v:16!null
- │         │         ├── key: (14)
- │         │         ├── fd: ()-->(16), (14)-->(15)
- │         │         ├── ordering: +14 opt(16) [actual: +14]
- │         │         └── scan d@v
- │         │              ├── columns: k:14!null v:16!null
- │         │              ├── constraint: /16/14: [/1 - /1]
- │         │              ├── key: (14)
- │         │              ├── fd: ()-->(16)
- │         │              └── ordering: +14 opt(16) [actual: +14]
- │         └── aggregations
- │              ├── const-agg [as=u:2, outer=(2)]
- │              │    └── u:2
- │              └── const-agg [as=v:3, outer=(3)]
- │                   └── v:3
+ ├── distinct-on
+ │    ├── columns: k:1!null u:2 v:3
+ │    ├── grouping columns: k:1!null
+ │    ├── internal-ordering: +1
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── union-all
+ │    │    ├── columns: k:1!null u:2 v:3
+ │    │    ├── left columns: k:8 u:9 v:10
+ │    │    ├── right columns: k:14 u:15 v:16
+ │    │    ├── ordering: +1
+ │    │    ├── index-join d
+ │    │    │    ├── columns: k:8!null u:9!null v:10
+ │    │    │    ├── key: (8)
+ │    │    │    ├── fd: ()-->(9), (8)-->(10)
+ │    │    │    ├── ordering: +8 opt(9) [actual: +8]
+ │    │    │    └── scan d@u
+ │    │    │         ├── columns: k:8!null u:9!null
+ │    │    │         ├── constraint: /9/8: [/1 - /1]
+ │    │    │         ├── key: (8)
+ │    │    │         ├── fd: ()-->(9)
+ │    │    │         └── ordering: +8 opt(9) [actual: +8]
+ │    │    └── index-join d
+ │    │         ├── columns: k:14!null u:15 v:16!null
+ │    │         ├── key: (14)
+ │    │         ├── fd: ()-->(16), (14)-->(15)
+ │    │         ├── ordering: +14 opt(16) [actual: +14]
+ │    │         └── scan d@v
+ │    │              ├── columns: k:14!null v:16!null
+ │    │              ├── constraint: /16/14: [/1 - /1]
+ │    │              ├── key: (14)
+ │    │              ├── fd: ()-->(16)
+ │    │              └── ordering: +14 opt(16) [actual: +14]
+ │    └── aggregations
+ │         ├── const-agg [as=u:2, outer=(2)]
+ │         │    └── u:2
+ │         └── const-agg [as=v:3, outer=(3)]
+ │              └── v:3
  └── aggregations
       └── count-rows [as=count_rows:7]
 

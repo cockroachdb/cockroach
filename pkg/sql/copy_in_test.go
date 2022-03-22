@@ -511,10 +511,11 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	tdb := sqlutils.MakeSQLRunner(db)
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 	tdb.Exec(t, `CREATE TABLE t (k INT8 PRIMARY KEY)`)
 	tdb.Exec(t, `CREATE USER foo WITH PASSWORD 'testabc'`)
 	tdb.Exec(t, `GRANT admin TO foo`)
@@ -526,10 +527,14 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	conn, err := pgxConn(t, userURL)
 	require.NoError(t, err)
 
-	tag, err := conn.CopyFromReader(strings.NewReader("1\n2\n"),
-		"copy t(k) from stdin")
+	rowsAffected, err := conn.CopyFrom(
+		ctx,
+		pgx.Identifier{"t"},
+		[]string{"k"},
+		pgx.CopyFromRows([][]interface{}{{1}, {2}}),
+	)
 	require.NoError(t, err)
-	require.Equal(t, int64(2), tag.RowsAffected())
+	require.Equal(t, int64(2), rowsAffected)
 
 	// Prior to the bug fix which prompted this test, the below schema change
 	// would hang until the leases expire. Let's make sure it finishes "soon".
@@ -544,5 +549,5 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	case <-time.After(testutils.DefaultSucceedsSoonDuration):
 		t.Fatal("alter did not complete")
 	}
-	require.NoError(t, conn.Close())
+	require.NoError(t, conn.Close(ctx))
 }

@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
@@ -42,7 +44,7 @@ import (
 func registerCancel(r registry.Registry) {
 	runCancel := func(ctx context.Context, t test.Test, c cluster.Cluster, tpchQueriesToRun []int, useDistsql bool) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
@@ -51,7 +53,7 @@ func registerCancel(r registry.Registry) {
 				t.Fatal(err)
 			}
 
-			conn := c.Conn(ctx, 1)
+			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 
 			queryPrefix := "USE tpch; "
@@ -105,7 +107,7 @@ func registerCancel(r registry.Registry) {
 						t.Fatal(err)
 					}
 					// If errCh is closed, then the cancellation was successful.
-					timeToCancel := timeutil.Now().Sub(cancelStartTime)
+					timeToCancel := timeutil.Since(cancelStartTime)
 					fmt.Printf("canceling q%d took %s\n", queryNum, timeToCancel)
 
 				case <-time.After(5 * time.Second):

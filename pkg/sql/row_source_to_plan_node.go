@@ -36,7 +36,7 @@ type rowSourceToPlanNode struct {
 
 	// Temporary variables
 	row      rowenc.EncDatumRow
-	da       rowenc.DatumAlloc
+	da       tree.DatumAlloc
 	datumRow tree.Datums
 }
 

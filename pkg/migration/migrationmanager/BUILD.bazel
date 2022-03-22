@@ -2,14 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "migrationmanager",
-    srcs = [
-        "manager.go",
-        "testing_knobs.go",
-    ],
+    srcs = ["manager.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrationmanager",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
@@ -21,6 +17,8 @@ go_library(
         "//pkg/security",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/catalog/lease",
         "//pkg/sql/protoreflect",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
@@ -39,7 +37,6 @@ go_test(
         "manager_external_test.go",
     ],
     deps = [
-        ":migrationmanager",
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/jobs",
@@ -47,7 +44,8 @@ go_test(
         "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/liveness",
         "//pkg/migration",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/migration/migrations",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

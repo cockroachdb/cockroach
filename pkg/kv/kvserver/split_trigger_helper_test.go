@@ -14,7 +14,9 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -26,17 +28,19 @@ import (
 
 type testMsgAppDropper struct {
 	initialized bool
-	ticks       int
+	age         time.Duration
 	lhs         bool
 
 	startKey string // set by ShouldDrop
 }
 
-func (td *testMsgAppDropper) Args() (initialized bool, ticks int) {
-	return td.initialized, td.ticks
+func (td *testMsgAppDropper) Args() (initialized bool, age time.Duration) {
+	return td.initialized, td.age
 }
 
-func (td *testMsgAppDropper) ShouldDrop(startKey roachpb.RKey) (fmt.Stringer, bool) {
+func (td *testMsgAppDropper) ShouldDrop(
+	ctx context.Context, startKey roachpb.RKey,
+) (fmt.Stringer, bool) {
 	if len(startKey) == 0 {
 		panic("empty startKey")
 	}
@@ -56,9 +60,9 @@ func TestMaybeDropMsgApp(t *testing.T) {
 		// Drop message to wait for trigger.
 		{initialized: false, lhs: true}: true,
 		// Drop message to wait for trigger.
-		{initialized: false, lhs: true, ticks: maxDelaySplitTriggerTicks}: true,
+		{initialized: false, lhs: true, age: maxDelaySplitTriggerDur}: true,
 		// Escape hatch fires.
-		{initialized: false, lhs: true, ticks: maxDelaySplitTriggerTicks + 1}: false,
+		{initialized: false, lhs: true, age: maxDelaySplitTriggerDur + 1}: false,
 	}
 
 	msgHeartbeat := &raftpb.Message{
@@ -89,13 +93,13 @@ func TestProtoZeroNilSlice(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "isNil", func(t *testing.T, isNil bool) {
-		msg := &RaftMessageRequest{}
+		msg := &kvserverpb.RaftMessageRequest{}
 		if !isNil {
 			msg.RangeStartKey = roachpb.RKey("foo")
 		}
 		b, err := protoutil.Marshal(msg)
 		assert.NoError(t, err)
-		out := &RaftMessageRequest{}
+		out := &kvserverpb.RaftMessageRequest{}
 		assert.NoError(t, protoutil.Unmarshal(b, out))
 		assert.Equal(t, isNil, out.RangeStartKey == nil)
 	})

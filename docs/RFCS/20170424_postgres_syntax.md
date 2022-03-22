@@ -45,7 +45,7 @@ Postgres or Spanner.
 With our recent goal of supporting various ORMs, these previous decisions
 (or lack thereof) become more complicated. We are advertising ourselves
 as an implementer of the Postgres protocol and syntax, and we mostly
-do. There are some syntax or featurs we do not yet support, and we rightly
+do. There are some syntax or features we do not yet support, and we rightly
 return errors for that. However we now have various features ([integer
 division](https://github.com/cockroachdb/cockroach/pull/3308), [bitwise xor
 (~) operator](https://github.com/cockroachdb/cockroach/pull/14908), [shift
@@ -116,7 +116,7 @@ differing operator precedence can easily be rewritten with parenthesis.
 
 # Drawbacks
 
-Some users may encounter surpsising behavior when they discover that
+Some users may encounter surprising behavior when they discover that
 CockroachDB produces different results for identical queries. These users will
 silently get unexpected results until they discover the differences. However
 since they are moving to a completely new database and we will not be

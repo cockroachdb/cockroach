@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ioctx",
+    srcs = ["reader.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/ioctx",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)

@@ -11,6 +11,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -21,9 +22,11 @@ go_test(
     srcs = ["index_test.go"],
     embed = [":catformat"],
     deps = [
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/types",
     ],
 )

@@ -27,10 +27,6 @@ func main() {
 
 	dev := makeDevCmd()
 
-	if err := setupPath(dev); err != nil {
-		log.Fatalf("Failed to setup PATH: %v", err)
-	}
-
 	if err := dev.cli.Execute(); err != nil {
 		log.Printf("ERROR: %v", err)
 		os.Exit(1)

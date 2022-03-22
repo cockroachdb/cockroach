@@ -7,11 +7,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord:with-mocks",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlerrors",
+        "//pkg/util",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -24,7 +25,7 @@ go_test(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/gossip",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/util",
         "//pkg/util/hlc",

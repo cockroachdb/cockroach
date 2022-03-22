@@ -32,17 +32,22 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/logger"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
@@ -60,6 +65,7 @@ type sinkType int32
 const (
 	cloudStorageSink sinkType = iota + 1
 	webhookSink
+	pubsubSink
 )
 
 type cdcTestArgs struct {
@@ -81,19 +87,36 @@ type cdcTestArgs struct {
 	targetTxnPerSecond       float64
 }
 
+func cdcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
+	// kv.rangefeed.enabled is required for changefeeds to run
+	db.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	randomlyRun(t, db, "SET CLUSTER SETTING kv.rangefeed.catchup_scan_iterator_optimization.enabled = false")
+}
+
+const randomSettingPercent = 0.50
+
+var rng, _ = randutil.NewTestRand()
+
+func randomlyRun(t test.Test, db *sqlutils.SQLRunner, query string) {
+	if rng.Float64() < randomSettingPercent {
+		db.Exec(t, query)
+		t.L().Printf("setting non-default cluster setting: %s", query)
+	}
+
+}
+
 func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcTestArgs) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 	kafkaNode := c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
-	if _, err := db.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = true`); err != nil {
-		t.Fatal(err)
-	}
+	tdb := sqlutils.MakeSQLRunner(db)
+	cdcClusterSettings(t, tdb)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -129,6 +152,8 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 		sinkDestHost.RawQuery = params.Encode()
 
 		sinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
+	} else if args.whichSink == pubsubSink {
+		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest"
 	} else {
 		t.Status("installing kafka")
 		kafka.install(ctx)
@@ -288,7 +313,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -311,24 +336,13 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	c.Run(ctx, workloadNode, `./workload init bank {pgurl:1}`)
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`,
-	); err != nil {
-		t.Fatal(err)
-	}
+	tdb := sqlutils.MakeSQLRunner(db)
+	cdcClusterSettings(t, tdb)
+	tdb.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 
 	// NB: the WITH diff option was not supported until v20.1.
 	withDiff := t.IsBuildVersion("v20.1.0")
@@ -343,10 +357,27 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
+	tc, err := kafka.consumer(ctx, "bank")
+	if err != nil {
+		t.Fatal(errors.Wrap(err, "could not create kafka consumer"))
+	}
+	defer tc.Close()
+
+	l, err := t.L().ChildLogger(`changefeed`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+
 	t.Status("running workload")
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
+	defer workloadCancel()
+
 	m := c.NewMonitor(workloadCtx, crdbNodes)
 	var doneAtomic int64
+	messageBuf := make(chan *sarama.ConsumerMessage, 4096)
+	const requestedResolved = 100
+
 	m.Go(func(ctx context.Context) error {
 		err := c.RunE(ctx, workloadNode, `./workload run bank {pgurl:1} --max-rate=10`)
 		if atomic.LoadInt64(&doneAtomic) > 0 {
@@ -354,33 +385,47 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 		return errors.Wrap(err, "workload failed")
 	})
-	m.Go(func(ctx context.Context) (_err error) {
+	m.Go(func(ctx context.Context) error {
 		defer workloadCancel()
+		defer func() { close(messageBuf) }()
+		v := cdctest.MakeCountValidator(cdctest.NoOpValidator)
+		for {
+			m := tc.Next(ctx)
+			if m == nil {
+				return fmt.Errorf("unexpected end of changefeed")
+			}
+			messageBuf <- m
+			updated, resolved, err := cdctest.ParseJSONValueTimestamps(m.Value)
+			if err != nil {
+				return err
+			}
 
-		defer func() {
-			_err = errors.Wrap(_err, "CDC failed")
-		}()
-
-		l, err := t.L().ChildLogger(`changefeed`)
-		if err != nil {
-			return err
+			partitionStr := strconv.Itoa(int(m.Partition))
+			if len(m.Key) > 0 {
+				if err := v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated); err != nil {
+					return err
+				}
+			} else {
+				if err := v.NoteResolved(partitionStr, resolved); err != nil {
+					return err
+				}
+				l.Printf("%d of %d resolved timestamps received from kafka, latest is %s behind realtime, %s beind realtime when sent to kafka",
+					v.NumResolvedWithRows, requestedResolved, timeutil.Since(resolved.GoTime()), m.Timestamp.Sub(resolved.GoTime()))
+				if v.NumResolvedWithRows >= requestedResolved {
+					atomic.StoreInt64(&doneAtomic, 1)
+					break
+				}
+			}
 		}
-		defer l.Close()
-
-		tc, err := kafka.consumer(ctx, "bank")
-		if err != nil {
-			return errors.Wrap(err, "could not create kafka consumer")
-		}
-
-		defer tc.Close()
-
+		return nil
+	})
+	m.Go(func(context.Context) error {
 		if _, err := db.Exec(
 			`CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`,
 		); err != nil {
 			return errors.Wrap(err, "CREATE TABLE failed")
 		}
 
-		const requestedResolved = 100
 		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions, 0)
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
@@ -397,11 +442,10 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 			validators = append(validators, baV)
 		}
 		v := cdctest.MakeCountValidator(validators)
-
 		for {
-			m := tc.Next(ctx)
-			if m == nil {
-				return fmt.Errorf("unexpected end of changefeed")
+			m, ok := <-messageBuf
+			if !ok {
+				break
 			}
 			updated, resolved, err := cdctest.ParseJSONValueTimestamps(m.Value)
 			if err != nil {
@@ -417,12 +461,9 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if err := v.NoteResolved(partitionStr, resolved); err != nil {
 					return err
 				}
-				l.Printf("%d of %d resolved timestamps, latest is %s behind realtime",
+				l.Printf("%d of %d resolved timestamps validated, latest is %s behind realtime",
 					v.NumResolvedWithRows, requestedResolved, timeutil.Since(resolved.GoTime()))
-				if v.NumResolvedWithRows >= requestedResolved {
-					atomic.StoreInt64(&doneAtomic, 1)
-					break
-				}
+
 			}
 		}
 		if failures := v.Failures(); len(failures) > 0 {
@@ -440,7 +481,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
 		c:     c,
@@ -450,12 +491,11 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	kafka.start(ctx)
 	defer kafka.stop(ctx)
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
-	if _, err := db.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = $1`, true); err != nil {
-		t.Fatal(err)
-	}
+	cdcClusterSettings(t, sqlutils.MakeSQLRunner(db))
+
 	if _, err := db.Exec(`CREATE TABLE foo (a INT PRIMARY KEY)`); err != nil {
 		t.Fatal(err)
 	}
@@ -496,32 +536,41 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	output, err := c.RunWithBuffer(ctx, t.L(), kafkaNode,
-		kafka.makeCommand("kafka-avro-console-consumer",
-			"--from-beginning",
-			"--topic=foo",
-			"--max-messages=14",
-			"--bootstrap-server=localhost:9092"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.L().Printf("\n%s\n", output)
-
-	updatedRE := regexp.MustCompile(`"updated":\{"string":"[^"]+"\}`)
-	updatedMap := make(map[string]struct{})
-	var resolved []string
-	for _, line := range strings.Split(string(output), "\n") {
-		if strings.Contains(line, `"updated"`) {
-			line = updatedRE.ReplaceAllString(line, `"updated":{"string":""}`)
-			updatedMap[line] = struct{}{}
-		} else if strings.Contains(line, `"resolved"`) {
-			resolved = append(resolved, line)
-		}
-	}
 	// There are various internal races and retries in changefeeds that can
 	// produce duplicates. This test is really only to verify that the confluent
 	// schema registry works end-to-end, so do the simplest thing and sort +
-	// unique the output.
+	// unique the output, pulling more messages if we get a lot of duplicates
+	// or resolved messages.
+	updatedRE := regexp.MustCompile(`"updated":\{"string":"[^"]+"\}`)
+	updatedMap := make(map[string]struct{})
+	var resolved []string
+	pagesFetched := 0
+	pageSize := 14
+
+	for len(updatedMap) < 10 && pagesFetched < 5 {
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), kafkaNode,
+			kafka.makeCommand("kafka-avro-console-consumer",
+				fmt.Sprintf("--offset=%d", pagesFetched*pageSize),
+				"--partition=0",
+				"--topic=foo",
+				fmt.Sprintf("--max-messages=%d", pageSize),
+				"--bootstrap-server=localhost:9092"))
+		t.L().Printf("\n%s\n", result.Stdout+result.Stderr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pagesFetched++
+
+		for _, line := range strings.Split(result.Stdout, "\n") {
+			if strings.Contains(line, `"updated"`) {
+				line = updatedRE.ReplaceAllString(line, `"updated":{"string":""}`)
+				updatedMap[line] = struct{}{}
+			} else if strings.Contains(line, `"resolved"`) {
+				resolved = append(resolved, line)
+			}
+		}
+	}
+
 	updated := make([]string, 0, len(updatedMap))
 	for u := range updatedMap {
 		updated = append(updated, u)
@@ -571,7 +620,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
-	c.Start(ctx, crdbNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	kafka := kafkaManager{
 		t:     t,
@@ -584,27 +633,15 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	kafka.addSCRAMUsers(ctx)
 	defer kafka.stop(ctx)
 
-	db := c.Conn(ctx, 1)
+	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`CREATE TABLE auth_test_table (a INT PRIMARY KEY)`); err != nil {
-		t.Fatal(err)
-	}
+	tdb := sqlutils.MakeSQLRunner(db)
+	cdcClusterSettings(t, tdb)
+	tdb.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+
+	tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
 
 	caCert := testCerts.CACertBase64()
 	saslURL := kafka.sinkURLSASL(ctx)
@@ -776,6 +813,23 @@ func registerCDC(r registry.Registry) {
 			})
 		},
 	})
+	r.Add(registry.TestSpec{
+		Name:            "cdc/pubsub-sink",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       1,
+				workloadDuration:         "30m",
+				initialScan:              true,
+				whichSink:                pubsubSink,
+				targetInitialScanLatency: 30 * time.Minute,
+				targetSteadyLatency:      time.Minute,
+			})
+		},
+	})
 	// TODO(ryan min): uncomment once connectivity issue is fixed,
 	// currently fails with "initial scan did not complete" because sink
 	// URI is set as localhost, need to expose it to the other nodes via IP
@@ -809,10 +863,11 @@ func registerCDC(r registry.Registry) {
 	})
 	r.Add(registry.TestSpec{
 		Name:            "cdc/bank",
+		Skip:            "#72904",
 		Owner:           `cdc`,
 		Cluster:         r.MakeClusterSpec(4),
 		RequiresLicense: true,
-		Skip:            "timeouts #68167",
+		Timeout:         30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCBank(ctx, t, c)
 		},
@@ -1087,7 +1142,7 @@ fi
 `, confluentDownloadURL, confluentSHA256, confluentInstallBase, confluentCLIVersion, confluentCLIDownloadURLBase)
 
 const (
-	// kafkaJAASConfig is a JAAS configuration file that creats a
+	// kafkaJAASConfig is a JAAS configuration file that creates a
 	// user called "plain" with password "plain-secret" that can
 	// authenticate via SASL/PLAIN.
 	//
@@ -1203,14 +1258,29 @@ func (k kafkaManager) install(ctx context.Context) {
 	k.c.Run(ctx, k.nodes, downloadScriptPath, folder)
 	if !k.c.IsLocal() {
 		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
-		k.c.Run(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
-		k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install openssl default-jre 2>&1 > logs/apt-get-install.log`)
+		if err := k.installJRE(ctx); err != nil {
+			k.t.Fatal(err)
+		}
 	}
+}
+
+func (k kafkaManager) installJRE(ctx context.Context) error {
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Minute,
+		MaxBackoff:     5 * time.Minute,
+	}
+	return retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
+		err := k.c.RunE(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
+		if err != nil {
+			return err
+		}
+		return k.c.RunE(ctx, k.nodes, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre 2>&1 > logs/apt-get-install.log`)
+	})
 }
 
 func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 	k.t.Status("generating TLS certificates")
-	ips, err := k.c.InternalIP(ctx, k.nodes)
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1318,24 +1388,51 @@ func (k kafkaManager) start(ctx context.Context, services ...string) {
 	k.restart(ctx, services...)
 }
 
-func (k kafkaManager) restart(ctx context.Context, services ...string) {
-	var startArgs string
-	if len(services) == 0 {
-		startArgs = "schema-registry"
+var kafkaServices = map[string][]string{
+	"zookeeper":       {"zookeeper"},
+	"kafka":           {"zookeeper", "kafka"},
+	"schema-registry": {"zookeeper", "kafka", "schema-registry"},
+}
+
+func (k kafkaManager) kafkaServicesForTargets(targets []string) []string {
+	var services []string
+	for _, tgt := range targets {
+		if s, ok := kafkaServices[tgt]; ok {
+			services = append(services, s...)
+		} else {
+			k.t.Fatalf("unknown kafka start target %q", tgt)
+		}
+	}
+	return services
+}
+
+func (k kafkaManager) restart(ctx context.Context, targetServices ...string) {
+	var services []string
+	if len(targetServices) == 0 {
+		services = kafkaServices["schema-registry"]
 	} else {
-		startArgs = strings.Join(services, " ")
+		services = k.kafkaServicesForTargets(targetServices)
 	}
 
 	k.c.Run(ctx, k.nodes, "touch", k.serverJAASConfig())
+	for _, svcName := range services {
+		// The confluent tool applies the KAFKA_OPTS to all
+		// services. Also, the kafka.logs.dir is used by each
+		// service, despite the name.
+		opts := fmt.Sprintf("-Djava.security.auth.login.config=%s -Dkafka.logs.dir=%s",
+			k.serverJAASConfig(),
+			fmt.Sprintf("logs/%s", svcName),
+		)
+		startCmd := fmt.Sprintf(
+			"CONFLUENT_CURRENT=%s CONFLUENT_HOME=%s KAFKA_OPTS='%s' %s local services %s start",
+			k.basePath(),
+			k.confluentHome(),
+			opts,
+			k.confluentBin(),
+			svcName)
+		k.c.Run(ctx, k.nodes, startCmd)
+	}
 
-	startCmd := fmt.Sprintf(
-		"CONFLUENT_CURRENT=%s CONFLUENT_HOME=%s KAFKA_OPTS=-Djava.security.auth.login.config=%s %s local services %s start",
-		k.basePath(),
-		k.confluentHome(),
-		k.serverJAASConfig(),
-		k.confluentBin(),
-		startArgs)
-	k.c.Run(ctx, k.nodes, startCmd)
 }
 
 func (k kafkaManager) makeCommand(exe string, args ...string) string {
@@ -1379,7 +1476,7 @@ func (k kafkaManager) chaosLoop(
 }
 
 func (k kafkaManager) sinkURL(ctx context.Context) string {
-	ips, err := k.c.InternalIP(ctx, k.nodes)
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1387,7 +1484,7 @@ func (k kafkaManager) sinkURL(ctx context.Context) string {
 }
 
 func (k kafkaManager) sinkURLTLS(ctx context.Context) string {
-	ips, err := k.c.InternalIP(ctx, k.nodes)
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1395,7 +1492,7 @@ func (k kafkaManager) sinkURLTLS(ctx context.Context) string {
 }
 
 func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
-	ips, err := k.c.InternalIP(ctx, k.nodes)
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1403,7 +1500,7 @@ func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
 }
 
 func (k kafkaManager) consumerURL(ctx context.Context) string {
-	ips, err := k.c.ExternalIP(ctx, k.nodes)
+	ips, err := k.c.ExternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1411,7 +1508,7 @@ func (k kafkaManager) consumerURL(ctx context.Context) string {
 }
 
 func (k kafkaManager) schemaRegistryURL(ctx context.Context) string {
-	ips, err := k.c.InternalIP(ctx, k.nodes)
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -1644,9 +1741,9 @@ func createChangefeed(db *gosql.DB, targets, sinkURL string, args cdcTestArgs) (
 	createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR %s INTO $1`, targets)
 	extraArgs := []interface{}{sinkURL}
 	if args.whichSink == cloudStorageSink || args.whichSink == webhookSink {
-		createStmt += ` WITH resolved='10s', envelope=wrapped`
+		createStmt += ` WITH resolved='10s', envelope=wrapped, min_checkpoint_frequency='10s'`
 	} else {
-		createStmt += ` WITH resolved`
+		createStmt += ` WITH resolved,  min_checkpoint_frequency='10s'`
 	}
 	if !args.initialScan {
 		createStmt += `, cursor='-1s'`

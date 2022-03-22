@@ -100,7 +100,7 @@ func TestMetadata(t *testing.T) {
 	expr := &memo.ProjectExpr{}
 	md.AddWithBinding(1, expr)
 	var mdNew opt.Metadata
-	mdNew.CopyFrom(md, f.CopyScalarWithoutPlaceholders)
+	mdNew.CopyFrom(md, f.CopyWithoutAssigningPlaceholders)
 
 	if mdNew.Schema(schID) != testCat.Schema() {
 		t.Fatalf("unexpected schema")
@@ -248,6 +248,9 @@ func TestMetadataTables(t *testing.T) {
 			cat.Visible,
 			nil, /* defaultExpr */
 			nil, /* computedExpr */
+			nil, /* onUpdateExpr */
+			cat.NotGeneratedAsIdentity,
+			nil, /* generatedAsIdentitySequenceOption */
 		)
 		return c
 	}

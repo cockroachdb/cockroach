@@ -70,9 +70,6 @@ func (d *defaultCmpProjOp) Next() coldata.Batch {
 			}
 		}
 	})
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 
@@ -130,9 +127,6 @@ func (d *defaultCmpRConstProjOp) Next() coldata.Batch {
 			}
 		}
 	})
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 

@@ -1,0 +1,3 @@
+show_transfer_stmt ::=
+	'SHOW' 'TRANSFER' 'STATE' 'WITH' 'SCONST'
+	| 'SHOW' 'TRANSFER' 'STATE'

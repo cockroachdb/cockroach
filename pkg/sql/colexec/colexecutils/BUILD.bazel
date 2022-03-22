@@ -42,6 +42,7 @@ go_test(
         "spilling_queue_test.go",
     ],
     embed = [":colexecutils"],
+    tags = ["no-remote"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

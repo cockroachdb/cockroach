@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -337,7 +337,7 @@ func setupRanges(
 		}
 	}
 
-	tableDesc := catalogkv.TestingGetTableDescriptor(cdb, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(cdb, keys.SystemSQLCodec, "t", "test")
 	// Split every SQL row to its own range.
 	rowRanges := make([]roachpb.RangeDescriptor, len(values))
 	for i, val := range values {

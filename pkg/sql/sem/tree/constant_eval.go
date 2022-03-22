@@ -10,6 +10,8 @@
 
 package tree
 
+import "github.com/cockroachdb/errors"
+
 // ConstantEvalVisitor replaces constant TypedExprs with the result of Eval.
 type ConstantEvalVisitor struct {
 	ctx *EvalContext
@@ -58,7 +60,12 @@ func (v *ConstantEvalVisitor) VisitPost(expr Expr) Expr {
 	if value == DNull {
 		// We don't want to return an expression that has a different type; cast
 		// the NULL if necessary.
-		return ReType(DNull, typedExpr.ResolvedType())
+		retypedNull, ok := ReType(DNull, typedExpr.ResolvedType())
+		if !ok {
+			v.err = errors.AssertionFailedf("failed to retype NULL to %s", typedExpr.ResolvedType())
+			return expr
+		}
+		return retypedNull
 	}
 	return value
 }

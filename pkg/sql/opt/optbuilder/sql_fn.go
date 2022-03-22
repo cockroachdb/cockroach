@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 // sqlFnInfo stores information about a tree.SQLClass function, which is a
@@ -58,7 +58,7 @@ func (b *Builder) buildSQLFn(
 	for i := range exprs {
 		if !memo.CanExtractConstDatum(info.args[i]) {
 			panic(unimplemented.NewWithIssuef(49448, "non-constant argument passed to %s\n",
-				log.Safe(info.def.Name),
+				redact.Safe(info.def.Name),
 			))
 		}
 		exprs[i] = memo.ExtractConstDatum(info.args[i])

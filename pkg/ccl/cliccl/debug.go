@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -59,7 +60,7 @@ Specifying --active-store-key-id-only prints the key ID of the active store key
 and exits.
 `,
 		Args: cobra.ExactArgs(1),
-		RunE: cli.MaybeDecorateGRPCError(runEncryptionStatus),
+		RunE: clierrorplus.MaybeDecorateError(runEncryptionStatus),
 	}
 
 	encryptionActiveKeyCmd := &cobra.Command{
@@ -74,11 +75,11 @@ Plaintext:            # encryption not enabled
 AES128_CTR:be235...   # AES-128 encryption with store key ID
 `,
 		Args: cobra.ExactArgs(1),
-		RunE: cli.MaybeDecorateGRPCError(runEncryptionActiveKey),
+		RunE: clierrorplus.MaybeDecorateError(runEncryptionActiveKey),
 	}
 
 	// Add commands to the root debug command.
-	// We can't add them to the lists of commands (eg: DebugCmdsForRocksDB) as cli init() is called before us.
+	// We can't add them to the lists of commands (eg: DebugCmdsForPebble) as cli init() is called before us.
 	cli.DebugCmd.AddCommand(encryptionStatusCmd)
 	cli.DebugCmd.AddCommand(encryptionActiveKeyCmd)
 
@@ -90,7 +91,7 @@ AES128_CTR:be235...   # AES-128 encryption with store key ID
 		"print active store key ID and exit")
 
 	// Add encryption flag to all OSS debug commands that want it.
-	for _, cmd := range cli.DebugCmdsForRocksDB {
+	for _, cmd := range cli.DebugCommandsRequiringEncryption {
 		// storeEncryptionSpecs is in start.go.
 		cli.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 	}
@@ -101,10 +102,10 @@ AES128_CTR:be235...   # AES-128 encryption with store key ID
 	cli.VarFlag(cli.DebugPebbleCmd.PersistentFlags(),
 		&storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
-	cli.PopulateRocksDBConfigHook = fillEncryptionOptionsForStore
+	cli.PopulateStorageConfigHook = fillEncryptionOptionsForStore
 }
 
-// fillEncryptionOptionsForStore fills the RocksDBConfig fields
+// fillEncryptionOptionsForStore fills the StorageConfig fields
 // based on the --enterprise-encryption flag value.
 func fillEncryptionOptionsForStore(cfg *base.StorageConfig) error {
 	opts, err := baseccl.EncryptionOptionsForStore(cfg.Dir, storeEncryptionSpecs)
@@ -159,7 +160,7 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 
 	dir := args[0]
 
-	db, err := cli.OpenExistingStore(dir, stopper, true /* readOnly */)
+	db, err := cli.OpenExistingStore(dir, stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
 	if err != nil {
 		return err
 	}
@@ -293,7 +294,7 @@ func runEncryptionActiveKey(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// getActiveEncryptionkey opens the file registry directly, bypassing rocksdb.
+// getActiveEncryptionkey opens the file registry directly, bypassing Pebble.
 // This allows looking up the active encryption key ID without knowing it.
 func getActiveEncryptionkey(dir string) (string, string, error) {
 	registryFile := filepath.Join(dir, fileRegistryFilename)
@@ -330,7 +331,7 @@ func getActiveEncryptionkey(dir string) (string, string, error) {
 
 	var setting enginepbccl.EncryptionSettings
 	if err := protoutil.Unmarshal(entry.EncryptionSettings, &setting); err != nil {
-		return "", "", fmt.Errorf("could not unmarshal encryption settings for %s: %v", keyRegistryFilename, err)
+		return "", "", errors.Wrapf(err, "could not unmarshal encryption settings for %s", keyRegistryFilename)
 	}
 
 	return setting.EncryptionType.String(), setting.KeyId, nil

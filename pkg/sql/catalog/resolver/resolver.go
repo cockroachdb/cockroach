@@ -13,6 +13,7 @@ package resolver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -52,7 +54,9 @@ type SchemaResolver interface {
 // ObjectNameExistingResolver is the helper interface to resolve table
 // names when the object is expected to exist already. The boolean passed
 // is used to specify if a MutableTableDescriptor is to be returned in the
-// result.
+// result. ResolvedObjectPrefix should always be populated by implementors
+// to allows us to generate errors at higher level layers, since it allows
+// us to know if the schema and database were found.
 type ObjectNameExistingResolver interface {
 	LookupObject(
 		ctx context.Context, flags tree.ObjectLookupFlags,
@@ -168,7 +172,16 @@ func ResolveMutableType(
 	if err != nil || desc == nil {
 		return catalog.ResolvedObjectPrefix{}, nil, err
 	}
-	return prefix, desc.(*typedesc.Mutable), nil
+	switch t := desc.(type) {
+	case *typedesc.Mutable:
+		return prefix, t, nil
+	case *typedesc.TableImplicitRecordType:
+		return catalog.ResolvedObjectPrefix{}, nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"cannot modify table record type %q", desc.GetName())
+	default:
+		return catalog.ResolvedObjectPrefix{}, nil,
+			errors.AssertionFailedf("unhandled type descriptor type %T during resolve mutable desc", t)
+	}
 }
 
 // ResolveExistingObject resolves an object with the given flags.
@@ -203,22 +216,22 @@ func ResolveExistingObject(
 		}
 		return nil, prefix, nil
 	}
-	resolvedTn := tree.MakeTableNameFromPrefix(prefix.NamePrefix(), tree.Name(un.Object()))
+	getResolvedTn := func() *tree.TableName {
+		tn := tree.MakeTableNameFromPrefix(prefix.NamePrefix(), tree.Name(un.Object()))
+		return &tn
+	}
 
 	switch lookupFlags.DesiredObjectKind {
 	case tree.TypeObject:
 		typ, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
-			return nil, prefix, sqlerrors.NewUndefinedTypeError(&resolvedTn)
-		}
-		if lookupFlags.RequireMutable {
-			return obj.(*typedesc.Mutable), prefix, nil
+			return nil, prefix, sqlerrors.NewUndefinedTypeError(getResolvedTn())
 		}
 		return typ, prefix, nil
 	case tree.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
-			return nil, prefix, sqlerrors.NewUndefinedRelationError(&resolvedTn)
+			return nil, prefix, sqlerrors.NewUndefinedRelationError(getResolvedTn())
 		}
 		goodType := true
 		switch lookupFlags.DesiredTableDescKind {
@@ -232,7 +245,7 @@ func ResolveExistingObject(
 			goodType = table.IsSequence()
 		}
 		if !goodType {
-			return nil, prefix, sqlerrors.NewWrongObjectTypeError(&resolvedTn, lookupFlags.DesiredTableDescKind.String())
+			return nil, prefix, sqlerrors.NewWrongObjectTypeError(getResolvedTn(), lookupFlags.DesiredTableDescKind.String())
 		}
 
 		// If the table does not have a primary key, return an error
@@ -284,40 +297,58 @@ func ResolveTargetObject(
 // TODO (SQLSchema): The remaining uses of this should be plumbed through
 //  the desc.Collection's ResolveSchemaByID.
 func ResolveSchemaNameByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, schemaID descpb.ID,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	db catalog.DatabaseDescriptor,
+	schemaID descpb.ID,
+	version clusterversion.Handle,
 ) (string, error) {
 	// Fast-path for public schema and virtual schemas, to avoid hot lookups.
-	if schemaName, ok := catconstants.StaticSchemaIDMap[uint32(schemaID)]; ok {
+	staticSchemaMap := catconstants.GetStaticSchemaIDMap(ctx, version)
+	if schemaName, ok := staticSchemaMap[uint32(schemaID)]; ok {
 		return schemaName, nil
 	}
-	schemas, err := GetForDatabase(ctx, txn, codec, dbID)
+	schemas, err := GetForDatabase(ctx, txn, codec, db)
 	if err != nil {
 		return "", err
 	}
 	if schema, ok := schemas[schemaID]; ok {
-		return schema, nil
+		return schema.Name, nil
 	}
-	return "", errors.Newf("unable to resolve schema id %d for db %d", schemaID, dbID)
+	return "", errors.Newf("unable to resolve schema id %d for db %d", schemaID, db.GetID())
+}
+
+// SchemaEntryForDB entry for an individual schema,
+// which includes the name and modification timestamp.
+type SchemaEntryForDB struct {
+	Name      string
+	Timestamp hlc.Timestamp
 }
 
 // GetForDatabase looks up and returns all available
-// schema ids to names for a given database.
+// schema ids to SchemaEntryForDB structures for a
+//given database.
 func GetForDatabase(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID,
-) (map[descpb.ID]string, error) {
-	log.Eventf(ctx, "fetching all schema descriptor IDs for %d", dbID)
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, db catalog.DatabaseDescriptor,
+) (map[descpb.ID]SchemaEntryForDB, error) {
+	log.Eventf(ctx, "fetching all schema descriptor IDs for database %q (%d)", db.GetName(), db.GetID())
 
-	nameKey := catalogkeys.MakeSchemaNameKey(codec, dbID, "" /* name */)
+	nameKey := catalogkeys.MakeSchemaNameKey(codec, db.GetID(), "" /* name */)
 	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, err
 	}
 
-	// Always add public schema ID.
-	// TODO(solon): This can be removed in 20.2, when this is always written.
-	// In 20.1, in a migrating state, it may be not included yet.
-	ret := make(map[descpb.ID]string, len(kvs)+1)
-	ret[descpb.ID(keys.PublicSchemaID)] = tree.PublicSchema
+	ret := make(map[descpb.ID]SchemaEntryForDB, len(kvs)+1)
+
+	// This is needed at least for the temp system db during restores.
+	if !db.HasPublicSchemaWithDescriptor() {
+		ret[descpb.ID(keys.PublicSchemaID)] = SchemaEntryForDB{
+			Name:      tree.PublicSchema,
+			Timestamp: txn.ReadTimestamp(),
+		}
+	}
 
 	for _, kv := range kvs {
 		id := descpb.ID(kv.ValueInt())
@@ -328,7 +359,10 @@ func GetForDatabase(
 		if err != nil {
 			return nil, err
 		}
-		ret[id] = k.GetName()
+		ret[id] = SchemaEntryForDB{
+			Name:      k.GetName(),
+			Timestamp: kv.Value.Timestamp,
+		}
 	}
 	return ret, nil
 }
@@ -344,6 +378,11 @@ func GetForDatabase(
 // components because LookupObject retains those components. This is error
 // prone and exists only for backwards compatibility with certain error
 // reporting behaviors.
+//
+// Note also that if the implied current database does not exist and the name
+// is either unqualified or qualified by a virtual schema, an error will be
+// returned to indicate that the database does not exist. This error will be
+// returned regardless of the value set on the Required flag.
 func ResolveExisting(
 	ctx context.Context,
 	u *tree.UnresolvedObjectName,
@@ -370,7 +409,22 @@ func ResolveExisting(
 		// schema name is for a virtual schema.
 		_, isVirtualSchema := catconstants.VirtualSchemaNames[u.Schema()]
 		if isVirtualSchema || curDb != "" {
-			if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, u.Schema(), u.Object()); found || err != nil {
+			if found, prefix, result, err = r.LookupObject(
+				ctx, lookupFlags, curDb, u.Schema(), u.Object(),
+			); found || err != nil || isVirtualSchema {
+				if !found && err == nil && prefix.Database == nil { // && isVirtualSchema
+					// If the database was not found during the lookup for a virtual schema
+					// we should return a database not found error. We will use the prefix
+					// information to confirm this, since its possible that someone might
+					// be selecting a non-existent table or type. While normally we generate
+					// errors above this layer, we have no way of flagging if the looked up object
+					// was virtual schema. The Required flag is never set above when doing
+					// the object look up, so no errors will be generated for missing objects
+					// or databases.
+					err = sqlerrors.NewUndefinedDatabaseError(curDb)
+				}
+				// Special case the qualification of virtual schema accesses for
+				// backwards compatibility.
 				prefix.ExplicitDatabase = false
 				prefix.ExplicitSchema = true
 				return found, prefix, result, err
@@ -388,11 +442,23 @@ func ResolveExisting(
 
 	// This is a naked object name. Use the search path.
 	iter := searchPath.Iter()
+	foundDatabase := false
 	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
-		if found, prefix, result, err = r.LookupObject(ctx, lookupFlags, curDb, next,
-			u.Object()); found || err != nil {
+		if found, prefix, result, err = r.LookupObject(
+			ctx, lookupFlags, curDb, next, u.Object(),
+		); found || err != nil {
 			return found, prefix, result, err
 		}
+		foundDatabase = foundDatabase || prefix.Database != nil
+	}
+
+	// If we have a database, and we didn't find it, then we're never going to
+	// find it because it must not exist. This error return path is a bit of
+	// a rough edge, but it preserves backwards compatibility and makes sure
+	// we return a database does not exist error in cases where the current
+	// database definitely does not exist.
+	if curDb != "" && !foundDatabase {
+		return false, prefix, nil, sqlerrors.NewUndefinedDatabaseError(curDb)
 	}
 	return false, prefix, nil, nil
 }

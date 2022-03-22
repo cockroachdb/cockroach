@@ -103,6 +103,12 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 			// version of the proposal in the pipeline, so don't remove the
 			// proposal from the map. We expect this entry to be rejected by
 			// checkForcedErr.
+			//
+			// Note that lease proposals always use a MaxLeaseIndex of zero (since
+			// they have their own replay protection), so they always meet this
+			// criterion. While such proposals can be reproposed, only the first
+			// instance that gets applied matters and so removing the command is
+			// always what we want to happen.
 			cmd.raftCmd.MaxLeaseIndex == cmd.proposal.command.MaxLeaseIndex
 		if shouldRemove {
 			// Delete the proposal from the proposals map. There may be reproposals
@@ -139,7 +145,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
 		if cmd.IsLocal() {
-			cmd.ctx, cmd.sp = tracing.ForkSpan(cmd.proposal.ctx, opName)
+			cmd.ctx, cmd.sp = tracing.ChildSpan(cmd.proposal.ctx, opName)
 		} else if cmd.raftCmd.TraceData != nil {
 			// The proposal isn't local, and trace data is available. Extract
 			// the remote span and start a server-side span that follows from it.
@@ -152,14 +158,14 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 				cmd.ctx, cmd.sp = d.r.AmbientContext.Tracer.StartSpanCtx(
 					ctx,
 					opName,
-					// NB: we are lying here - we are not actually going to propagate
-					// the recording towards the root. That seems ok.
-					tracing.WithParentAndManualCollection(spanMeta),
+					// NB: Nobody is collecting the recording of this span; we have no
+					// mechanism for it.
+					tracing.WithRemoteParentFromSpanMeta(spanMeta),
 					tracing.WithFollowsFrom(),
 				)
 			}
 		} else {
-			cmd.ctx, cmd.sp = tracing.ForkSpan(ctx, opName)
+			cmd.ctx, cmd.sp = tracing.ChildSpan(ctx, opName)
 		}
 	}
 }

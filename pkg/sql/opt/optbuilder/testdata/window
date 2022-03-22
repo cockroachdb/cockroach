@@ -659,7 +659,7 @@ project
  ├── columns: v:2 row_number:11
  └── window partition=(10)
       ├── columns: v:2 avg:10!null row_number:11
-      ├── group-by
+      ├── group-by (hash)
       │    ├── columns: v:2 avg:10!null
       │    ├── grouping columns: v:2
       │    ├── project

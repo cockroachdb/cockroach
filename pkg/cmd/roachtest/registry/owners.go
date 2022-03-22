@@ -21,9 +21,11 @@ const (
 	OwnerCDC           Owner = `cdc`
 	OwnerKV            Owner = `kv`
 	OwnerMultiRegion   Owner = `multiregion`
+	OwnerObsInf        Owner = `obs-inf-prs`
 	OwnerServer        Owner = `server`
 	OwnerSQLQueries    Owner = `sql-queries`
 	OwnerSQLSchema     Owner = `sql-schema`
 	OwnerStorage       Owner = `storage`
 	OwnerTestEng       Owner = `test-eng`
+	OwnerDevInf        Owner = `dev-inf`
 )

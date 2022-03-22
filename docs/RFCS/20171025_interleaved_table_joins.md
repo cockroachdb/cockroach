@@ -359,7 +359,7 @@ Looking through the implementation of `RowFetcher`, specifically the call chain
 RowFetcher --> RowFetcher.NextKey --> RowFetcher.ReadIndexKey --> DecodeIndexKey (table.go)
 ```
 it doesn't seem like `RowFetcher` is very permissive when it comes to allow
-1-pass through on an interleaved hierarchy. Specfically, [`DecodeIndexKey` in
+1-pass through on an interleaved hierarchy. Specifically, [`DecodeIndexKey` in
 `table.go`](https://github.com/cockroachdb/cockroach/blob/de7337dc5ca5b4e5ee17e812c817e4bba5a449ca/pkg/sql/sqlbase/table.go#L778L780)
  will need to be refactored so that it returns `true` for KV pairs if
 it matches either the target `parent` index or `child2` index. This is
@@ -606,7 +606,7 @@ how we do the reading component of `InterleaveReaderJoiner` (and `RowFetcher`):
 ### [2] Logical planning > physical planning
 
 For planning interleaved table joins, one can either introduce the branching
-point (that is, the point at which an `InterleavedRaederJoiner` is introduced)
+point (that is, the point at which an `InterleavedReaderJoiner` is introduced)
 in the physical plan (processor-level in the distributed execution engine) or
 in the logical plan (which affects both execution engines).
 
@@ -633,7 +633,7 @@ one can identify the plan tree pattern that has a `joinNode` as the root and
 two `scanNode` leaves that correspond to the parent and child tables. For the
 simple case, one can verify that the join column(s) are on the primary key of
 the parent table (and a prefix of the interleaved index of the child table, but
-this is mandated by `INTERLEAVE` anyways), but this can of course be
+this is mandated by `INTERLEAVE` anyway), but this can of course be
 generalized.
 
 #### [3a] Common ancestor joins
@@ -1044,5 +1044,5 @@ implement should work fine with interleave boundaries too.
   approach #1 the safer option since we won't know how RocksDB cache behaves in
   production (i.e. when it runs out of cache space, since the amount RocksDB
   will need to cache is far greater than what we need cached). The point of
-  approach #2 is if RocksDB caches our blocks anyways, then we don't need to
+  approach #2 is if RocksDB caches our blocks anyway, then we don't need to
   store as much in memory.

@@ -1,0 +1,331 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.roachpb;
+option go_package = "roachpb";
+
+import "roachpb/data.proto";
+import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
+
+// GCPolicy dictates the garbage collection policy to apply over a given span.
+message GCPolicy {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // TTLSeconds is the number of seconds overwritten values will be retained
+  // before garbage collection. A value <= 0 means older versions are never
+  // GC-ed.
+  int32 ttl_seconds = 1 [(gogoproto.customname) = "TTLSeconds"];
+
+  // ProtectionPolicies is a list of policies that dictate GC behavior for a
+  // range (in conjunction with the GC TTL). A ProtectionPolicy can be used
+  // to indicate a timestamp above which GC should not run, regardless of the
+  // GC TTL. The data it applies over is guaranteed to not be GC-ed provided it
+  // wasn't GC-ed before the config applied.
+  repeated ProtectionPolicy protection_policies = 2 [(gogoproto.nullable) = false];
+
+  // IgnoreStrictEnforcement is used to selectively opt out of strict GC TTL
+  // enforcement (where requests served at timestamps below the TTL are made to
+  // fail, even if the data exists).
+  bool ignore_strict_enforcement = 3;
+}
+
+// ProtectionPolicy dictates a protection policy against garbage collection that
+// applies over a given span.
+message ProtectionPolicy {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
+
+  // ProtectedTimestamp is a timestamp above which GC should not run, regardless
+  // of the GC TTL.
+  util.hlc.Timestamp protected_timestamp = 1 [(gogoproto.nullable) = false];
+
+  // IgnoreIfExcludedFromBackup is set to true if the ProtectionPolicy can be
+  // ignored when making GC decisions on a span that has been marked to be
+  // excluded from backups i.e. the applied SpanConfig has
+  // `exclude_data_from_backup = true`.
+  //
+  // This field is currently only set to true when a protected timestamp record
+  // has been written by a backup schedule or job. This is to ensure that
+  // ProtectionPolicies written by non-backup users (CDC, streaming) on spans
+  // marked as `exclude_data_from_backup` are still respected when making GC
+  // decisions on the span.
+  bool ignore_if_excluded_from_backup = 2;
+}
+
+// Constraint constrains the stores that a replica can be stored on. It
+// parallels the definition found in zonepb/zone.proto.
+message Constraint {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+
+  enum Type {
+    // REQUIRED ensures all replicas are placed on stores with locality tags
+    // that match the constraint. Replication will fail if there aren't any such
+    // stores.
+    REQUIRED = 0;
+    // PROHIBITED prevents replicas from being placed on stores with locality
+    // tags that match the constrain.
+    PROHIBITED = 1;
+  }
+
+  // Type captures the kind of constraint this is: required or prohibited.
+  Type type = 1;
+
+  // Key captures the locality tag key we're constraining against.
+  string key = 2;
+
+  // Value is the locality tag value we're constraining against.
+  string value = 3;
+}
+
+// ConstraintsConjunction is the set of constraints that need to be satisfied
+// together by replicas. It parallels the definition found in zonepb/zone.proto.
+message ConstraintsConjunction {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
+
+  // NumReplicas is the number of replicas that should abide by the constraints
+  // below. If set to zero, the constraints will apply to all replicas of the
+  // range.
+  //
+  // NB: Only REQUIRED constraints are allowed when the number of replicas is
+  // non-zero.
+  int32 num_replicas = 1;
+
+  // Constraints is the set that needs to be satisfied by the store in order for
+  // us to place replicas on it.
+  repeated Constraint constraints = 2 [(gogoproto.nullable) = false];
+}
+
+// LeasePreference specifies a preference about where range leases should be
+// located. It parallels the definition found in zonepb/zone.proto.
+message LeasePreference {
+  option (gogoproto.equal) = true;
+
+  // Constraints is the set that needs to be satisfied by the store in order for
+  // us to prefer placing leases on it.
+  repeated Constraint constraints = 1 [(gogoproto.nullable) = false];
+}
+
+// SpanConfig holds the configuration that applies to a given keyspan. It is a
+// superset of the fields found in zonepb.zone.proto.
+message SpanConfig {
+  option (gogoproto.equal) = true;
+
+  // RangeMinBytes is the minimum size, in bytes, a range can have. When a range
+  // is less than this size, it'll be merged with an adjacent range.
+  int64 range_min_bytes = 1;
+
+  // RangeMaxBytes is the maximum size, in bytes, a range can have. When a range
+  // is more than this size, it'll split into two ranges.
+  int64 range_max_bytes = 2;
+
+  // GCPolicy dictates the the GC policy to apply over a range.
+  GCPolicy gc_policy = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCPolicy"];
+
+  // GlobalReads specifies whether transactions operating over the range(s)
+  // should be configured to provide non-blocking behavior, meaning that reads
+  // can be served consistently from all replicas and do not block on writes. In
+  // exchange, writes get pushed into the future and must wait on commit to
+  // ensure linearizability. For more, see #52745.
+  bool global_reads = 4;
+
+  // NumReplicas specifies the number of replicas, including both voting and
+  // non-voting kinds.
+  int32 num_replicas = 5;
+
+  // NumVoters specifies the number of voter replicas. If set to zero, we'll
+  // consider NumReplicas to be the voter replica count instead (i.e. no
+  // non-voting replicas).
+  int32 num_voters = 6;
+
+  // Constraints constrain which stores the both voting and non-voting replicas
+  // can be placed on.
+  //
+  // NB: The NumReplicas fields in Constraints must either:
+  // - add up to at most SpanConfig.NumReplicas (pinning the sum of replicas and
+  //   having the rest float freely);
+  // - all be zero (applying each constraint to all replicas).
+  repeated ConstraintsConjunction constraints = 7 [(gogoproto.nullable) = false];
+
+  // VoterConstraints constrains which stores the voting replicas can be placed
+  // on. This must be compatible with the Constraints field above, but not
+  // necessarily a subset. It's compatible as long as there are no prohibitive
+  // constraints above that are required here.
+  repeated ConstraintsConjunction voter_constraints = 8 [(gogoproto.nullable) = false];
+
+  // LeasePreference captures the preference for how range leases are to be
+  // placed. They're allowed to be placed elsewhere if needed, but will follow
+  // the stated preferences when possible.
+  //
+  // More than one lease preference is allowed; they're considered as the most
+  // preferred option to least. The first preference that an existing replica of
+  // a range matches will take priority for the lease.
+  repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false];
+
+  // RangefeedEnabled determines whether rangefeeds are enabled over the
+  // specific range.
+  bool rangefeed_enabled = 10;
+
+  // ExcludeDataFromBackup specifies if the range has been marked to be excluded
+  // from a backup targeting the table represented by this keyspace. This
+  // information is used when ExportRequests issued by backups are being
+  // serviced in KV, to decide whether or not to send back any row data.
+  bool exclude_data_from_backup = 11;
+
+  // Next ID: 12
+  //
+  // When adding a field, also add a check a to `ValidateSystemTargetSpanConfig`
+  // if it is not expected to be set on a SpanConfig corresponding to a
+  // SystemTarget.
+}
+
+// SystemSpanConfigTarget specifies the target of system span configurations.
+// System targets are designed for a few different kinds of interactions. We
+// want the ability to:
+// 1. Allow the host tenant to set a system span configuration on the entire
+// keyspace.
+// 2. Allow the host tenant to set a system span configuration on a particular
+// tenant's keyspace.
+// 3. Allow secondary tenants to set system span configurations on their
+// keyspace.
+//
+// Additionally, we also want each tenant to be able to fetch all system span
+// configurations that it has installed. Ideally, we want to be able to do this
+// without knowing the tenantID of all other tenants that exist. We provide a
+// read-only system span config target type to achieve exactly this.
+message SystemSpanConfigTarget {
+  option (gogoproto.equal) = true;
+
+  // SourceTenantID is the ID of the tenant that specified the system span
+  // configuration.
+  TenantID source_tenant_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceTenantID"];
+
+  // TenantKeyspace is a target type that targets the keyspace of a specific
+  // tenant.
+  message TenantKeyspace {
+    option (gogoproto.equal) = true;
+
+    // TenantID is the ID of the tenant whose keyspace the the associated
+    // system span configuration applies to.
+    //
+    // Secondary tenants are only allowed to target their keyspace. The host
+    // tenant may use this field to target a specific secondary tenant's
+    // keyspace.
+    TenantID tenant_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+  };
+
+   // EntireKeyspace is a target type that targets the entire keyspace (all
+   // ranges, including those belonging to secondary tenants). Only the host
+   // tenant is allowed to target the entire keyspace.
+  message EntireKeyspace{
+    option (gogoproto.equal) = true;
+  };
+
+  // AllTenantKeyspacesTargetsSet is is a read-only system target type that
+  // encompasses all system targets that have been set by the source tenant on
+  // specific tenant's keyspaces.
+  message AllTenantKeyspaceTargetsSet{
+    option (gogoproto.equal) = true;
+  };
+
+  message Type {
+    option (gogoproto.equal) = true;
+
+    oneof type {
+      TenantKeyspace specific_tenant_keyspace = 1;
+      EntireKeyspace entire_keyspace = 2;
+      AllTenantKeyspaceTargetsSet all_tenant_keyspace_targets_set = 3;
+    }
+  }
+
+  // Type of the system target.
+  Type type = 2;
+}
+
+// SpanConfigTarget specifies the target of an associated span configuration.
+message SpanConfigTarget {
+  oneof union {
+    // Span is a keyspan that a span config is said to apply over.
+    Span span = 1;
+    // SystemSpanConfigTarget specifies the target of a system span
+    // configuration.
+    SystemSpanConfigTarget system_span_config_target = 2;
+  }
+}
+
+// SpanConfigEntry ties a span to its corresponding config.
+message SpanConfigEntry {
+  reserved 1;
+
+  // Target specifies the target the config applies over.
+  SpanConfigTarget target = 3 [(gogoproto.nullable) = false];
+
+  // Config is the set of attributes that apply over the corresponding target.
+  SpanConfig config = 2 [(gogoproto.nullable) = false];
+};
+
+// GetSpanConfigsRequest is used to fetch the span configurations and system
+// span configurations.
+message GetSpanConfigsRequest {
+  reserved 1;
+
+  // Targets to request configurations for. The targets listed here are not
+  // allowed to be duplicated/overlap with one another.
+  repeated SpanConfigTarget targets = 2 [(gogoproto.nullable) = false];
+};
+
+// GetSpanConfigsResponse lists out the span configurations and system span
+// configurations that have been requested.
+message GetSpanConfigsResponse {
+  // SpanConfigEntries capture the span configurations over the requested spans.
+  // The results for each Span in the matching GetSpanConfigsRequest are
+  // flattened out into a single slice, and follow the same ordering. It's
+  // possible for there to be no configurations for a given span; there'll
+  // simply be no entries for it.
+  //
+  // Any system span configurations set by the tenant are also returned if
+  // requested.
+  repeated SpanConfigEntry span_config_entries = 1 [(gogoproto.nullable) = false];
+};
+
+// UpdateSpanConfigsRequest is used to update the span configurations and system
+// span configurations over the given targets.
+//
+// This is a "targeted" API: the targets being deleted are expected to have been
+// present exactly as specified. The same is true for targets being upserted with
+// new configs. If targets aren't present, an error is returned.
+//
+// Adding configurations that target a span are expected to not overlap with any
+// existing spans. When divvying up an existing span into multiple others,
+// callers are expected to delete the old and upsert the new ones. This can
+// happen as part of the same request, as we delete targets marked for deletion
+// before upserting what was requested.
+//
+// Targets are not allowed to overlap with other targets in the same list. They
+// are, however, allowed to overlap across lists. This is necessary to support
+// the delete+upsert semantics described above.
+message UpdateSpanConfigsRequest {
+  reserved 1, 2;
+
+  // ToDelete captures the targets we want to delete configs for.
+  repeated SpanConfigTarget to_delete = 3 [(gogoproto.nullable) = false];
+
+  // ToUpsert captures the targets we want to upsert and the configs we want
+  // to upsert with.
+  repeated SpanConfigEntry to_upsert = 4 [(gogoproto.nullable) = false];
+};
+
+message UpdateSpanConfigsResponse { };
+

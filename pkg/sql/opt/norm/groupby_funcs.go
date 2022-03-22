@@ -14,11 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // RemoveGroupingCols returns a new grouping private struct with the given
@@ -62,7 +62,7 @@ func (c *CustomFuncs) makeAggCols(
 			outAgg = c.f.ConstructFirstAgg(varExpr)
 
 		default:
-			panic(errors.AssertionFailedf("unrecognized aggregate operator type: %v", log.Safe(aggOp)))
+			panic(errors.AssertionFailedf("unrecognized aggregate operator type: %v", redact.Safe(aggOp)))
 		}
 
 		outAggs[i] = c.f.ConstructAggregationsItem(outAgg, id)
@@ -255,7 +255,7 @@ func (c *CustomFuncs) areRowsDistinct(
 			// Encode the datum using the key encoding format. The encodings for
 			// multiple column datums are simply appended to one another.
 			var err error
-			encoded, err = rowenc.EncodeTableKey(encoded, datum, encoding.Ascending)
+			encoded, err = keyside.Encode(encoded, datum, encoding.Ascending)
 			if err != nil {
 				// Assume rows are not distinct if an encoding error occurs.
 				return false

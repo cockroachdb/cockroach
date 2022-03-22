@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -33,67 +32,29 @@ const (
 )
 
 // DefaultUserDBs is a set of the databases which are present in a new cluster.
-var DefaultUserDBs = map[string]struct{}{
-	DefaultDatabaseName: {},
-	PgDatabaseName:      {},
-}
-
-// MaxDefaultDescriptorID is the maximum ID of a descriptor that exists in a
-// new cluster.
-var MaxDefaultDescriptorID = keys.MaxReservedDescID + descpb.ID(len(DefaultUserDBs))
-
-// IsDefaultCreatedDescriptor returns whether or not a given descriptor ID is
-// present at the time of starting a cluster.
-func IsDefaultCreatedDescriptor(descID descpb.ID) bool {
-	return descID <= MaxDefaultDescriptorID
+var DefaultUserDBs = []string{
+	DefaultDatabaseName, PgDatabaseName,
 }
 
 // IndexKeyValDirs returns the corresponding encoding.Directions for all the
 // encoded values in index's "fullest" possible index key, including directions
-// for table/index IDs, the interleaved sentinel and the index column values.
-// For example, given
-//    CREATE INDEX foo ON bar (a, b DESC) INTERLEAVED IN PARENT bar (a)
-// a typical index key with all values specified could be
-//    /51/1/42/#/51/2/1337
-// which would return the slice
-//    {ASC, ASC, ASC, 0, ASC, ASC, DESC}
+// for table/index IDs and the index column values.
 func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 	if index == nil {
 		return nil
 	}
 
-	dirs := make([]encoding.Direction, 0, (index.NumInterleaveAncestors()+1)*2+index.NumKeyColumns())
-
-	colIdx := 0
-	for i := 0; i < index.NumInterleaveAncestors(); i++ {
-		ancs := index.GetInterleaveAncestor(i)
-		// Table/Index IDs are always encoded ascending.
-		dirs = append(dirs, encoding.Ascending, encoding.Ascending)
-		for i := 0; i < int(ancs.SharedPrefixLen); i++ {
-			d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
-			if err != nil {
-				panic(err)
-			}
-			dirs = append(dirs, d)
-			colIdx++
-		}
-
-		// The interleaved sentinel uses the 0 value for
-		// encoding.Direction when pretty-printing (see
-		// encoding.go:prettyPrintFirstValue).
-		dirs = append(dirs, 0)
-	}
+	dirs := make([]encoding.Direction, 0, 2+index.NumKeyColumns())
 
 	// The index's table/index ID.
 	dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 
-	for colIdx < index.NumKeyColumns() {
+	for colIdx := 0; colIdx < index.NumKeyColumns(); colIdx++ {
 		d, err := index.GetKeyColumnDirection(colIdx).ToEncodingDirection()
 		if err != nil {
 			panic(err)
 		}
 		dirs = append(dirs, d)
-		colIdx++
 	}
 
 	return dirs
@@ -177,12 +138,6 @@ func MakePublicObjectNameKey(codec keys.SQLCodec, parentID descpb.ID, name strin
 // under the given database.
 func MakeSchemaNameKey(codec keys.SQLCodec, parentID descpb.ID, name string) roachpb.Key {
 	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.RootNamespaceID, name))
-}
-
-// MakePublicSchemaNameKey returns the roachpb.Key corresponding to the public
-// schema scoped under the given database.
-func MakePublicSchemaNameKey(codec keys.SQLCodec, parentID descpb.ID) roachpb.Key {
-	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.RootNamespaceID, tree.PublicSchema))
 }
 
 // MakeDatabaseNameKey returns the roachpb.Key corresponding to the database

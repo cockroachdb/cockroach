@@ -14,9 +14,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -32,11 +35,8 @@ import (
 )
 
 // Grant adds privileges to users.
-// Current status:
-// - Target: single database, table, or view.
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
-// - should we make users case-insensitive?
 // Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
@@ -47,30 +47,26 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		return nil, err
 	}
 
-	grantees := make([]security.SQLUsername, len(n.Grantees))
-	for i, grantee := range n.Grantees {
-		normalizedGrantee, err := security.MakeSQLUsernameFromUserInput(string(grantee), security.UsernameValidation)
-		if err != nil {
-			return nil, err
-		}
-		grantees[i] = normalizedGrantee
+	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return nil, err
 	}
 
 	return &changePrivilegesNode{
-		isGrant:      true,
-		targets:      n.Targets,
-		grantees:     grantees,
-		desiredprivs: n.Privileges,
-		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee security.SQLUsername) {
-			privDesc.Grant(grantee, n.Privileges)
+		isGrant:         true,
+		withGrantOption: n.WithGrantOption,
+		targets:         n.Targets,
+		grantees:        grantees,
+		desiredprivs:    n.Privileges,
+		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
+			privDesc.Grant(grantee, privileges, n.WithGrantOption)
 		},
-		grantOn: grantOn,
+		grantOn:          grantOn,
+		granteesNameList: n.Grantees,
 	}, nil
 }
 
 // Revoke removes privileges from users.
-// Current status:
-// - Target: single database, table, or view.
 // TODO(marc): open questions:
 // - should we have root always allowed and not present in the permissions list?
 // Privileges: GRANT on database/table/view.
@@ -83,34 +79,37 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		return nil, err
 	}
 
-	grantees := make([]security.SQLUsername, len(n.Grantees))
-	for i, grantee := range n.Grantees {
-		normalizedGrantee, err := security.MakeSQLUsernameFromUserInput(string(grantee), security.UsernameValidation)
-		if err != nil {
-			return nil, err
-		}
-		grantees[i] = normalizedGrantee
+	grantees, err := n.Grantees.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return nil, err
 	}
-
 	return &changePrivilegesNode{
-		isGrant:      false,
-		targets:      n.Targets,
-		grantees:     grantees,
-		desiredprivs: n.Privileges,
-		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee security.SQLUsername) {
-			privDesc.Revoke(grantee, n.Privileges, grantOn)
+		isGrant:         false,
+		withGrantOption: n.GrantOptionFor,
+		targets:         n.Targets,
+		grantees:        grantees,
+		desiredprivs:    n.Privileges,
+		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
+			privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor)
 		},
-		grantOn: grantOn,
+		grantOn:          grantOn,
+		granteesNameList: n.Grantees,
 	}, nil
 }
 
 type changePrivilegesNode struct {
 	isGrant         bool
+	withGrantOption bool
 	targets         tree.TargetList
 	grantees        []security.SQLUsername
 	desiredprivs    privilege.List
-	changePrivilege func(*descpb.PrivilegeDescriptor, security.SQLUsername)
+	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, security.SQLUsername)
 	grantOn         privilege.ObjectType
+
+	// granteesNameList is used for creating an AST node for alter default
+	// privileges inside changePrivilegesNode's startExec.
+	// This is required for getting the pre-normalized name to construct the AST.
+	granteesNameList tree.RoleSpecList
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -122,12 +121,30 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 
+	if n.withGrantOption && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"version %v must be finalized to use grant options",
+			clusterversion.ByKey(clusterversion.ValidateGrantOption))
+	}
+
 	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
 		return err
 	}
+	// The public role is not allowed to have grant options.
+	if n.isGrant && n.withGrantOption {
+		for _, grantee := range n.grantees {
+			if grantee.IsPublicRole() {
+				return pgerror.Newf(
+					pgcode.InvalidGrantOperation,
+					"grant options cannot be granted to %q role",
+					security.PublicRoleName(),
+				)
+			}
+		}
+	}
 
-	var descriptors []catalog.Descriptor
 	var err error
+	var descriptors []catalog.Descriptor
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
@@ -152,39 +169,91 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		if n.isGrant {
 			op = "GRANT"
 		}
-		if descriptor.GetID() < keys.MinUserDescID {
+		if catalog.IsSystemDescriptor(descriptor) {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "cannot %s on system object", op)
 		}
 
-		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
-			return err
-		}
-
-		// Only allow granting/revoking privileges that the requesting
-		// user themselves have on the descriptor.
-		for _, priv := range n.desiredprivs {
-			if err := p.CheckPrivilege(ctx, descriptor, priv); err != nil {
+		// The check for GRANT is only needed before the v22.1 upgrade is finalized.
+		// Otherwise, we check grant options later in this function.
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+			if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
 				return err
 			}
 		}
 
-		privileges := descriptor.GetPrivileges()
-		for _, grantee := range n.grantees {
-			n.changePrivilege(privileges, grantee)
-		}
+		if len(n.desiredprivs) > 0 {
+			grantPresent, allPresent := false, false
+			for _, priv := range n.desiredprivs {
+				// Only allow granting/revoking privileges that the requesting
+				// user themselves have on the descriptor.
+				if err := p.CheckPrivilege(ctx, descriptor, priv); err != nil {
+					return err
+				}
+				grantPresent = grantPresent || priv == privilege.GRANT
+				allPresent = allPresent || priv == privilege.ALL
+			}
+			privileges := descriptor.GetPrivileges()
 
-		// Ensure superusers have exactly the allowed privilege set.
-		// Postgres does not actually enforce this, instead of checking that
-		// superusers have all the privileges, Postgres allows superusers to
-		// bypass privilege checks.
-		if err := privileges.ValidateSuperuserPrivileges(descriptor.GetID(), n.grantOn); err != nil {
-			return err
-		}
+			noticeMessage := ""
+			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+				err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, p.User(), n.isGrant)
+				if err != nil {
+					return err
+				}
 
-		// Validate privilege descriptors directly as the db/table level Validate
-		// may fix up the descriptor.
-		if err := privileges.Validate(descriptor.GetID(), n.grantOn); err != nil {
-			return err
+				// We only output the message for ALL privilege if it is being granted
+				// without the WITH GRANT OPTION flag if GRANT privilege is involved, we
+				// must always output the message
+				if allPresent && n.isGrant && !n.withGrantOption {
+					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
+				} else if grantPresent {
+					noticeMessage = "the GRANT privilege is deprecated"
+				}
+			}
+
+			for _, grantee := range n.grantees {
+				n.changePrivilege(privileges, n.desiredprivs, grantee)
+
+				// TODO (sql-exp): remove the rest of this loop in 22.2.
+				granteeHasGrantPriv := privileges.CheckPrivilege(grantee, privilege.GRANT)
+
+				if granteeHasGrantPriv && n.isGrant && !n.withGrantOption && len(noticeMessage) == 0 {
+					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
+				}
+				if !n.withGrantOption && (grantPresent || allPresent || (granteeHasGrantPriv && n.isGrant)) {
+					if n.isGrant {
+						privileges.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
+					} else {
+						privileges.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
+					}
+				}
+			}
+
+			if len(noticeMessage) > 0 {
+				params.p.BufferClientNotice(
+					ctx,
+					errors.WithHint(
+						pgnotice.Newf("%s", noticeMessage),
+						"please use WITH GRANT OPTION",
+					),
+				)
+			}
+
+			// Ensure superusers have exactly the allowed privilege set.
+			// Postgres does not actually enforce this, instead of checking that
+			// superusers have all the privileges, Postgres allows superusers to
+			// bypass privilege checks.
+			err = catprivilege.ValidateSuperuserPrivileges(*privileges, descriptor, n.grantOn)
+			if err != nil {
+				return err
+			}
+
+			// Validate privilege descriptors directly as the db/table level Validate
+			// may fix up the descriptor.
+			err = catprivilege.Validate(*privileges, descriptor, n.grantOn)
+			if err != nil {
+				return err
+			}
 		}
 
 		eventDetails := eventpb.CommonSQLPrivilegeEventDetails{}

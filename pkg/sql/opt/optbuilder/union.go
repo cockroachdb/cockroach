@@ -57,10 +57,15 @@ func (b *Builder) buildSetOp(
 	}
 
 	// For UNION, we have to synthesize new output columns (because they contain
-	// values from both the left and right relations). This is not necessary for
-	// INTERSECT or EXCEPT, since these operations are basically filters on the
-	// left relation.
-	if unionType == tree.UnionOp {
+	// values from both the left and right relations).
+	//
+	// This is not usually necessary for INTERSECT or EXCEPT, since these
+	// operations are basically filters on the left relation. The exception is if
+	// the left input projects the same column twice, since having the same column
+	// ID for multiple output columns would make it too complicated to represent
+	// the merge ordering for streaming operations (the merge ordering must
+	// include all output columns for the streaming operation to work correctly).
+	if unionType == tree.UnionOp || leftScope.colSet().Len() < len(leftScope.cols) {
 		outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
 		for i := range leftScope.cols {
 			c := &leftScope.cols[i]
@@ -76,8 +81,8 @@ func (b *Builder) buildSetOp(
 	rightCols := colsToColList(rightScope.cols)
 	newCols := colsToColList(outScope.cols)
 
-	left := leftScope.expr.(memo.RelExpr)
-	right := rightScope.expr.(memo.RelExpr)
+	left := leftScope.expr
+	right := rightScope.expr
 	private := memo.SetPrivate{LeftCols: leftCols, RightCols: rightCols, OutCols: newCols}
 
 	if all {
@@ -148,15 +153,24 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 	}
 
 	if left.Equivalent(right) {
-		// Do a best-effort attempt to determine which type is "larger".
-		if left.Width() > right.Width() {
-			return left
-		}
+		// In the default case, use the left type.
+		src, tgt := right, left
 		if left.Width() < right.Width() {
-			return right
+			// If the right type is "larger", use it.
+			src, tgt = left, right
 		}
-		// In other cases, use the left type.
-		return left
+		if !tree.ValidCast(src, tgt, tree.CastContextExplicit) {
+			// Error if no cast exists from src to tgt.
+			// TODO(#75103): For legacy reasons, we check for a valid cast in
+			// the most permissive context, CastContextExplicit. To be
+			// consistent with Postgres, we should check for a valid cast in the
+			// most restrictive context, CastContextImplicit.
+			panic(pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"%v types %s and %s cannot be matched", clauseTag, left, right,
+			))
+		}
+		return tgt
 	}
 	leftFam, rightFam := left.Family(), right.Family()
 
@@ -184,7 +198,7 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 		return right
 	}
 
-	// TODO(radu): Postgres has more encompassing rules:
+	// TODO(#75103): Postgres has more encompassing rules:
 	// http://www.postgresql.org/docs/12/static/typeconv-union-case.html
 	panic(pgerror.Newf(
 		pgcode.DatatypeMismatch,
@@ -193,9 +207,11 @@ func determineUnionType(left, right *types.T, clauseTag string) *types.T {
 }
 
 // addCasts adds a projection to a scope, adding casts as necessary so that the
-// resulting columns have the given types.
+// resulting columns have the given types. This function assumes that there is a
+// valid cast from the column types in dst.cols to the corresponding types in
+// outTypes.
 func (b *Builder) addCasts(dst *scope, outTypes []*types.T) *scope {
-	expr := dst.expr.(memo.RelExpr)
+	expr := dst.expr
 	dstCols := dst.cols
 
 	dst = dst.push()

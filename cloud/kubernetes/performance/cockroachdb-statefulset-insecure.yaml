@@ -1,10 +1,11 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/performance/cockroachdb-statefulset-insecure.yaml
 # This configuration file sets up an insecure StatefulSet running CockroachDB with
 # tweaks to make it more performant than our default configuration files. All
 # changes from the default insecure configuration have been marked with a comment
 # starting with "NOTE" or "TODO".
 #
 # Beware that this configuration is quite insecure. By default, it will make
-# CockroachDB accesible on port 26257 on your Kubernetes nodes' network
+# CockroachDB accessible on port 26257 on your Kubernetes nodes' network
 # interfaces, meaning that if your nodes are reachable from the Internet, then
 # this CockroachDB cluster will be too. To disable this behavior, remove the 
 # `hostNetwork` configuration field below.
@@ -140,7 +141,7 @@ spec:
       - name: cockroachdb
         # NOTE: Always use the most recent version of CockroachDB for the best
         # performance and reliability.
-        image: cockroachdb/cockroach:v21.1.6
+        image: cockroachdb/cockroach:v21.2.7
         imagePullPolicy: IfNotPresent
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
         # the resources that can be allocated on each of your Kubernetes nodes by running:

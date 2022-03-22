@@ -321,6 +321,9 @@ const (
 	IndeterminateCommitErrType              ErrorDetailType = 39
 	InvalidLeaseErrType                     ErrorDetailType = 40
 	OptimisticEvalConflictsErrType          ErrorDetailType = 41
+	MinTimestampBoundUnsatisfiableErrType   ErrorDetailType = 42
+	RefreshFailedErrType                    ErrorDetailType = 43
+	MVCCHistoryMutationErrType              ErrorDetailType = 44
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -330,7 +333,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 42
+	NumErrors int = 45
 )
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -544,17 +547,14 @@ func IsRangeNotFoundError(err error) bool {
 	return errors.HasType(err, (*RangeNotFoundError)(nil))
 }
 
-// NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
-//
-// desc and lease represent info about the range that the request was
-// erroneously routed to. lease can be nil. If it's not nil but the leaseholder
-// is not part of desc, it is ignored. This allows callers to read the
-// descriptor and lease non-atomically without worrying about incoherence.
-//
-// Note that more range info is commonly added to the error after the error is
-// created.
-func NewRangeKeyMismatchError(
-	ctx context.Context, start, end Key, desc *RangeDescriptor, lease *Lease,
+// NewRangeKeyMismatchErrorWithCTPolicy initializes a new RangeKeyMismatchError.
+// identical to NewRangeKeyMismatchError, with the given ClosedTimestampPolicy.
+func NewRangeKeyMismatchErrorWithCTPolicy(
+	ctx context.Context,
+	start, end Key,
+	desc *RangeDescriptor,
+	lease *Lease,
+	ctPolicy RangeClosedTimestampPolicy,
 ) *RangeKeyMismatchError {
 	if desc == nil {
 		panic("NewRangeKeyMismatchError with nil descriptor")
@@ -573,13 +573,38 @@ func NewRangeKeyMismatchError(
 		}
 	}
 	e := &RangeKeyMismatchError{
-		RequestStartKey:           start,
-		RequestEndKey:             end,
-		DeprecatedMismatchedRange: *desc,
+		RequestStartKey: start,
+		RequestEndKey:   end,
+	}
+	ri := RangeInfo{
+		Desc:                  *desc,
+		Lease:                 l,
+		ClosedTimestampPolicy: ctPolicy,
 	}
 	// More ranges are sometimes added to rangesInternal later.
-	e.AppendRangeInfo(ctx, *desc, l)
+	e.AppendRangeInfo(ctx, ri)
 	return e
+}
+
+// NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
+//
+// desc and lease represent info about the range that the request was
+// erroneously routed to. lease can be nil. If it's not nil but the leaseholder
+// is not part of desc, it is ignored. This allows callers to read the
+// descriptor and lease non-atomically without worrying about incoherence.
+//
+// Note that more range info is commonly added to the error after the error is
+// created.
+func NewRangeKeyMismatchError(
+	ctx context.Context, start, end Key, desc *RangeDescriptor, lease *Lease,
+) *RangeKeyMismatchError {
+	return NewRangeKeyMismatchErrorWithCTPolicy(ctx,
+		start,
+		end,
+		desc,
+		lease,
+		LAG_BY_CLUSTER_SETTING, /* default closed timestsamp policy*/
+	)
 }
 
 func (e *RangeKeyMismatchError) Error() string {
@@ -587,9 +612,12 @@ func (e *RangeKeyMismatchError) Error() string {
 }
 
 func (e *RangeKeyMismatchError) message(_ *Error) string {
-	desc := &e.Ranges()[0].Desc
+	mr, err := e.MismatchedRange()
+	if err != nil {
+		return err.Error()
+	}
 	return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s; suggested ranges: %s",
-		e.RequestStartKey, e.RequestEndKey, desc.StartKey, desc.EndKey, e.Ranges())
+		e.RequestStartKey, e.RequestEndKey, mr.Desc.StartKey, mr.Desc.EndKey, e.Ranges)
 }
 
 // Type is part of the ErrorDetailInterface.
@@ -597,68 +625,34 @@ func (e *RangeKeyMismatchError) Type() ErrorDetailType {
 	return RangeKeyMismatchErrType
 }
 
-// Ranges returns the range info for the range that the request was erroneously
-// routed to. It deals with legacy errors coming from 20.1 nodes by returning
-// empty lease for the respective descriptors.
-//
-// At least one RangeInfo is returned.
-func (e *RangeKeyMismatchError) Ranges() []RangeInfo {
-	if len(e.rangesInternal) != 0 {
-		return e.rangesInternal
+// MismatchedRange returns the range info for the range that the request was
+// erroneously routed to, or an error if the Ranges slice is empty.
+func (e *RangeKeyMismatchError) MismatchedRange() (RangeInfo, error) {
+	if len(e.Ranges) == 0 {
+		return RangeInfo{}, errors.AssertionFailedf(
+			"RangeKeyMismatchError (key range %s-%s) with empty RangeInfo slice", e.RequestStartKey, e.RequestEndKey,
+		)
 	}
-	// Fallback for 20.1 errors. Remove in 21.1.
-	ranges := []RangeInfo{{Desc: e.DeprecatedMismatchedRange}}
-	if e.DeprecatedSuggestedRange != nil {
-		ranges = append(ranges, RangeInfo{Desc: *e.DeprecatedSuggestedRange})
-	}
-	return ranges
+	return e.Ranges[0], nil
 }
 
-// AppendRangeInfo appends info about one range to the set returned to the
+// AppendRangeInfo appends info about a group of ranges to the set returned to the
 // kvclient.
 //
 // l can be empty. Otherwise, the leaseholder is asserted to be a replica in
 // desc.
-func (e *RangeKeyMismatchError) AppendRangeInfo(
-	ctx context.Context, desc RangeDescriptor, l Lease,
-) {
-	if !l.Empty() {
-		if _, ok := desc.GetReplicaDescriptorByID(l.Replica.ReplicaID); !ok {
-			log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", l, desc)
+func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ris ...RangeInfo) {
+	for _, ri := range ris {
+		if !ri.Lease.Empty() {
+			if _, ok := ri.Desc.GetReplicaDescriptorByID(ri.Lease.Replica.ReplicaID); !ok {
+				log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", ri.Lease, ri.Desc)
+			}
 		}
+		e.Ranges = append(e.Ranges, ri)
 	}
-	e.rangesInternal = append(e.rangesInternal, RangeInfo{
-		Desc:  desc,
-		Lease: l,
-	})
 }
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}
-
-// NewAmbiguousResultError initializes a new AmbiguousResultError with
-// an explanatory message.
-func NewAmbiguousResultError(msg string) *AmbiguousResultError {
-	return &AmbiguousResultError{Message: msg}
-}
-
-// NewAmbiguousResultErrorf initializes a new AmbiguousResultError with
-// an explanatory format and set of arguments.
-func NewAmbiguousResultErrorf(format string, args ...interface{}) *AmbiguousResultError {
-	return NewAmbiguousResultError(fmt.Sprintf(format, args...))
-}
-
-func (e *AmbiguousResultError) Error() string {
-	return e.message(nil)
-}
-
-func (e *AmbiguousResultError) message(_ *Error) string {
-	return fmt.Sprintf("result is ambiguous (%s)", e.Message)
-}
-
-// Type is part of the ErrorDetailInterface.
-func (e *AmbiguousResultError) Type() ErrorDetailType {
-	return AmbiguousResultErrType
-}
 
 // ClientVisibleAmbiguousError implements the ClientVisibleAmbiguousError interface.
 func (e *AmbiguousResultError) ClientVisibleAmbiguousError() {}
@@ -804,21 +798,14 @@ func (*TransactionRetryError) canRestartTransaction() TransactionRestart {
 var _ ErrorDetailInterface = &TransactionRetryError{}
 var _ transactionRestartError = &TransactionRetryError{}
 
-// NewTransactionStatusError initializes a new TransactionStatusError from
-// the given message.
-func NewTransactionStatusError(msg string) *TransactionStatusError {
+// NewTransactionStatusError initializes a new TransactionStatusError with
+// the given message and reason.
+func NewTransactionStatusError(
+	reason TransactionStatusError_Reason, msg string,
+) *TransactionStatusError {
 	return &TransactionStatusError{
 		Msg:    msg,
-		Reason: TransactionStatusError_REASON_UNKNOWN,
-	}
-}
-
-// NewTransactionCommittedStatusError initializes a new TransactionStatusError
-// with a REASON_TXN_COMMITTED.
-func NewTransactionCommittedStatusError() *TransactionStatusError {
-	return &TransactionStatusError{
-		Msg:    "already committed",
-		Reason: TransactionStatusError_REASON_TXN_COMMITTED,
+		Reason: reason,
 	}
 }
 
@@ -871,6 +858,19 @@ func (e *WriteIntentError) message(_ *Error) string {
 			buf.WriteString(end[i].Key.String())
 		}
 	}
+
+	switch e.Reason {
+	case WriteIntentError_REASON_UNSPECIFIED:
+		// Nothing to say.
+	case WriteIntentError_REASON_WAIT_POLICY:
+		buf.WriteString(" [reason=wait_policy]")
+	case WriteIntentError_REASON_LOCK_TIMEOUT:
+		buf.WriteString(" [reason=lock_timeout]")
+	case WriteIntentError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED:
+		buf.WriteString(" [reason=lock_wait_queue_max_length_exceeded]")
+	default:
+		// Could panic, better to silently ignore in case new reasons are added.
+	}
 	return buf.String()
 }
 
@@ -884,11 +884,18 @@ var _ ErrorDetailInterface = &WriteIntentError{}
 // NewWriteTooOldError creates a new write too old error. The function accepts
 // the timestamp of the operation that hit the error, along with the timestamp
 // immediately after the existing write which had a higher timestamp and which
-// caused the error.
-func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp) *WriteTooOldError {
+// caused the error. An optional Key parameter is accepted to denote one key
+// where this error was encountered.
+func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp, key Key) *WriteTooOldError {
+	if len(key) > 0 {
+		oldKey := key
+		key = make([]byte, len(oldKey))
+		copy(key, oldKey)
+	}
 	return &WriteTooOldError{
 		Timestamp:       operationTS,
 		ActualTimestamp: actualTS,
+		Key:             key,
 	}
 }
 
@@ -897,6 +904,10 @@ func (e *WriteTooOldError) Error() string {
 }
 
 func (e *WriteTooOldError) message(_ *Error) string {
+	if len(e.Key) > 0 {
+		return fmt.Sprintf("WriteTooOldError: write for key %s at timestamp %s too old; wrote at %s",
+			e.Key, e.Timestamp, e.ActualTimestamp)
+	}
 	return fmt.Sprintf("WriteTooOldError: write at timestamp %s too old; wrote at %s",
 		e.Timestamp, e.ActualTimestamp)
 }
@@ -908,6 +919,12 @@ func (*WriteTooOldError) canRestartTransaction() TransactionRestart {
 // Type is part of the ErrorDetailInterface.
 func (e *WriteTooOldError) Type() ErrorDetailType {
 	return WriteTooOldErrType
+}
+
+// RetryTimestamp returns the timestamp that should be used to retry an
+// operation after encountering a WriteTooOldError.
+func (e *WriteTooOldError) RetryTimestamp() hlc.Timestamp {
+	return e.ActualTimestamp
 }
 
 var _ ErrorDetailInterface = &WriteTooOldError{}
@@ -968,6 +985,39 @@ func (e *ReadWithinUncertaintyIntervalError) Type() ErrorDetailType {
 
 func (*ReadWithinUncertaintyIntervalError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
+}
+
+// RetryTimestamp returns the timestamp that should be used to retry an
+// operation after encountering a ReadWithinUncertaintyIntervalError.
+func (e *ReadWithinUncertaintyIntervalError) RetryTimestamp() hlc.Timestamp {
+	// If the reader encountered a newer write within the uncertainty interval,
+	// we advance the txn's timestamp just past the uncertain value's timestamp.
+	// This ensures that we read above the uncertain value on a retry.
+	ts := e.ExistingTimestamp.Next()
+	// In addition to advancing past the uncertainty value's timestamp, we also
+	// advance the txn's timestamp up to the local uncertainty limit on the node
+	// which hit the error. This ensures that no future read after the retry on
+	// this node (ignoring lease complications in ComputeLocalUncertaintyLimit
+	// and values with synthetic timestamps) will throw an uncertainty error,
+	// even when reading other keys.
+	//
+	// Note that if the request was not able to establish a local uncertainty
+	// limit due to a missing observed timestamp (for instance, if the request
+	// was evaluated on a follower replica and the txn had never visited the
+	// leaseholder), then LocalUncertaintyLimit will be empty and the Forward
+	// will be a no-op. In this case, we could advance all the way past the
+	// global uncertainty limit, but this time would likely be in the future, so
+	// this would necessitate a commit-wait period after committing.
+	//
+	// In general, we expect the local uncertainty limit, if set, to be above
+	// the uncertainty value's timestamp. So we expect this Forward to advance
+	// ts. However, this is not always the case. The one exception is if the
+	// uncertain value had a synthetic timestamp, so it was compared against the
+	// global uncertainty limit to determine uncertainty (see IsUncertain). In
+	// such cases, we're ok advancing just past the value's timestamp. Either
+	// way, we won't see the same value in our uncertainty interval on a retry.
+	ts.Forward(e.LocalUncertaintyLimit)
+	return ts
 }
 
 var _ ErrorDetailInterface = &ReadWithinUncertaintyIntervalError{}
@@ -1152,6 +1202,21 @@ func (e *BatchTimestampBeforeGCError) Type() ErrorDetailType {
 
 var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
 
+func (e *MVCCHistoryMutationError) Error() string {
+	return e.message(nil)
+}
+
+func (e *MVCCHistoryMutationError) message(_ *Error) string {
+	return fmt.Sprintf("unexpected MVCC history mutation in span %s", e.Span)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *MVCCHistoryMutationError) Type() ErrorDetailType {
+	return MVCCHistoryMutationErrType
+}
+
+var _ ErrorDetailInterface = &MVCCHistoryMutationError{}
+
 // NewIntentMissingError creates a new IntentMissingError.
 func NewIntentMissingError(key Key, wrongIntent *Intent) *IntentMissingError {
 	return &IntentMissingError{
@@ -1280,3 +1345,73 @@ func (e *OptimisticEvalConflictsError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &OptimisticEvalConflictsError{}
+
+// NewMinTimestampBoundUnsatisfiableError initializes a new
+// MinTimestampBoundUnsatisfiableError.
+func NewMinTimestampBoundUnsatisfiableError(
+	minTimestampBound, resolvedTimestamp hlc.Timestamp,
+) *MinTimestampBoundUnsatisfiableError {
+	return &MinTimestampBoundUnsatisfiableError{
+		MinTimestampBound: minTimestampBound,
+		ResolvedTimestamp: resolvedTimestamp,
+	}
+}
+
+func (e *MinTimestampBoundUnsatisfiableError) Error() string {
+	return e.message(nil)
+}
+
+func (e *MinTimestampBoundUnsatisfiableError) message(pErr *Error) string {
+	return fmt.Sprintf("bounded staleness read with minimum timestamp "+
+		"bound of %s could not be satisfied by a local resolved timestamp of %s",
+		e.MinTimestampBound, e.ResolvedTimestamp)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *MinTimestampBoundUnsatisfiableError) Type() ErrorDetailType {
+	return MinTimestampBoundUnsatisfiableErrType
+}
+
+var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
+
+// NewRefreshFailedError initializes a new RefreshFailedError. reason can be 'committed value'
+// or 'intent' which caused the failed refresh, key is the key that we failed
+// refreshing, and ts is the timestamp of the committed value or intent that was written.
+func NewRefreshFailedError(
+	reason RefreshFailedError_Reason, key Key, ts hlc.Timestamp,
+) *RefreshFailedError {
+	return &RefreshFailedError{
+		Reason:    reason,
+		Key:       key,
+		Timestamp: ts,
+	}
+}
+
+func (e *RefreshFailedError) Error() string {
+	return e.message(nil)
+}
+
+// FailureReason returns the failure reason as a string.
+func (e *RefreshFailedError) FailureReason() string {
+	var r string
+	switch e.Reason {
+	case RefreshFailedError_REASON_COMMITTED_VALUE:
+		r = "committed value"
+	case RefreshFailedError_REASON_INTENT:
+		r = "intent"
+	default:
+		r = "UNKNOWN"
+	}
+	return r
+}
+
+func (e *RefreshFailedError) message(_ *Error) string {
+	return fmt.Sprintf("encountered recently written %s %s @%s", e.FailureReason(), e.Key, e.Timestamp)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *RefreshFailedError) Type() ErrorDetailType {
+	return RefreshFailedErrType
+}
+
+var _ ErrorDetailInterface = &RefreshFailedError{}

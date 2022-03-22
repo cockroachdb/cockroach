@@ -103,7 +103,7 @@ vectorized: true
 │ filter: (b @> '[[1, 2]]') OR (b @> '[[3, 4]]')
 │
 └── • index join
-    │ table: json_tab@primary
+    │ table: json_tab@json_tab_pkey
     │
     └── • sort
         │ order: +a
@@ -147,7 +147,7 @@ vectorized: true
 │ filter: (b @> '[3]') OR (b @> '[[1, 2]]')
 │
 └── • index join
-    │ table: json_tab@primary
+    │ table: json_tab@json_tab_pkey
     │
     └── • sort
         │ order: +a
@@ -214,7 +214,7 @@ vectorized: true
 └── • union all
     │
     ├── • index join
-    │   │ table: json_tab@primary
+    │   │ table: json_tab@json_tab_pkey
     │   │
     │   └── • sort
     │       │ order: +a
@@ -226,7 +226,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: json_tab@primary
+          table: json_tab@json_tab_pkey
           spans: [/44 - /44]
 
 # We cannot use the index for this query.
@@ -244,7 +244,7 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: json_tab@primary
+      table: json_tab@json_tab_pkey
       spans: FULL SCAN
 
 # Array operations.
@@ -298,7 +298,7 @@ vectorized: true
 └── • union all
     │
     ├── • index join
-    │   │ table: array_tab@primary
+    │   │ table: array_tab@array_tab_pkey
     │   │
     │   └── • sort
     │       │ order: +a
@@ -310,7 +310,7 @@ vectorized: true
     │
     └── • scan
           missing stats
-          table: array_tab@primary
+          table: array_tab@array_tab_pkey
           spans: [/1 - /1]
 
 # We cannot use the index for this query.
@@ -328,5 +328,5 @@ vectorized: true
 │
 └── • scan
       missing stats
-      table: array_tab@primary
+      table: array_tab@array_tab_pkey
       spans: FULL SCAN

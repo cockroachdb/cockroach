@@ -19,14 +19,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -109,6 +110,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 	range_min_bytes = 134217728,
 	range_max_bytes = 536870912,
 	gc.ttlseconds = 90000,
+	global_reads = true,
 	num_replicas = 3,
 	num_voters = 3,
 	constraints = '{+region=ajstorm-1: 1}',
@@ -423,7 +425,7 @@ USE t;
 							// Ensure that the mutations corresponding to the primary key change are cleaned up and
 							// that the job did not succeed even though it was canceled.
 							testutils.SucceedsSoon(t, func() error {
-								tableDesc := catalogkv.TestingGetTableDescriptor(
+								tableDesc := desctestutils.TestingGetPublicTableDescriptor(
 									kvDB, keys.SystemSQLCodec, "t", "test",
 								)
 								if len(tableDesc.AllMutations()) != 0 {
@@ -480,7 +482,7 @@ USE t;
 								return nil
 							})
 
-							tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+							tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 							if _, err := sqltestutils.AddImmediateGCZoneConfig(db, tableDesc.GetID()); err != nil {
 								t.Fatal(err)
 							}
@@ -567,6 +569,10 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 		{locality: "REGIONAL BY ROW AS region_col"},
 	} {
 		t.Run(tc.locality, func(t *testing.T) {
+			// Don't allow gc jobs to complete so that we
+			// can validate that they were created.
+			blockGC := make(chan struct{})
+
 			knobs := base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable the merge queue because it makes this test flakey
@@ -582,6 +588,7 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 				},
 				// Decrease the adopt loop interval so that retries happen quickly.
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				GCJob:            &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
 			}
 
 			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -589,27 +596,21 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 			)
 			defer cleanup()
 
-			_, err := sqlDB.Exec(
-				`CREATE DATABASE "mr-zone-configs" WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
-USE "mr-zone-configs";
+			sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+			sqlRunner.Exec(t, `CREATE DATABASE "mr-zone-configs" WITH PRIMARY REGION "us-east1" REGIONS "us-east2","us-east3";`)
+			sqlRunner.Exec(t, `USE "mr-zone-configs";`)
+			sqlRunner.Exec(t, `
 CREATE TABLE regional_by_row (
   pk INT PRIMARY KEY,
 	region_col crdb_internal_region NOT NULL,
   i INT,
   INDEX(i)
 ) LOCALITY REGIONAL BY ROW`)
-			require.NoError(t, err)
 
 			// Alter the table to REGIONAL BY TABLE, and then back to REGIONAL BY ROW, to
 			// create some indexes that need cleaning up.
-			_, err = sqlDB.Exec(
-				fmt.Sprintf(
-					`ALTER TABLE regional_by_row SET LOCALITY %s;
-						ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW`,
-					tc.locality,
-				),
-			)
-			require.NoError(t, err)
+			sqlRunner.Exec(t, fmt.Sprintf(`ALTER TABLE regional_by_row SET LOCALITY %s;`, tc.locality))
+			sqlRunner.Exec(t, `ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW`)
 
 			// Validate that the indexes requiring cleanup exist.
 			type row struct {
@@ -619,7 +620,7 @@ CREATE TABLE regional_by_row (
 
 			for {
 				// First confirm that the schema change job has completed
-				res := sqlDB.QueryRow(`WITH jobs AS (
+				res := sqlRunner.QueryRow(t, `WITH jobs AS (
       SELECT status, crdb_internal.pb_to_json(
 			'cockroach.sql.jobs.jobspb.Payload',
 			payload,
@@ -631,11 +632,8 @@ CREATE TABLE regional_by_row (
     FROM jobs
     WHERE (job->>'schemaChange') IS NOT NULL AND status = 'running'`)
 
-				require.NoError(t, res.Err())
-
 				numJobs := 0
-				err = res.Scan(&numJobs)
-				require.NoError(t, err)
+				res.Scan(&numJobs)
 				if numJobs == 0 {
 					break
 				}
@@ -654,14 +652,12 @@ CREATE TABLE regional_by_row (
     FROM jobs
     WHERE (job->>'schemaChangeGC') IS NOT NULL AND status = '%s'`
 
-				res, err := sqlDB.Query(fmt.Sprintf(query, status))
-				require.NoError(t, err)
+				res := sqlRunner.Query(t, fmt.Sprintf(query, status))
 
 				var rows []row
 				for res.Next() {
 					r := row{}
-					err = res.Scan(&r.status, &r.details)
-					require.NoError(t, err)
+					require.NoError(t, res.Scan(&r.status, &r.details))
 					rows = append(rows, r)
 				}
 				if err := res.Err(); err != nil {
@@ -679,21 +675,31 @@ CREATE TABLE regional_by_row (
 				return nil
 			}
 
+			expectedGCJobsForDrops := 4
+			expectedGCJobsForTempIndexes := 4
 			// Now check that we have the right number of index GC jobs pending.
-			err = queryIndexGCJobsAndValidateCount(`running`, 4)
+			err := queryIndexGCJobsAndValidateCount(`running`, expectedGCJobsForDrops+expectedGCJobsForTempIndexes)
 			require.NoError(t, err)
 			err = queryIndexGCJobsAndValidateCount(`succeeded`, 0)
 			require.NoError(t, err)
 
-			// Change gc.ttlseconds to speed up the cleanup.
-			_, err = sqlDB.Exec(`ALTER TABLE regional_by_row CONFIGURE ZONE USING gc.ttlseconds = 1`)
+			queryAndEnsureThatIndexGCJobsSucceeded := func(count int) func() error {
+				return func() error { return queryIndexGCJobsAndValidateCount(`succeeded`, count) }
+			}
+
+			// Unblock GC jobs.
+			close(blockGC)
+			// The GC jobs for the temporary indexes should be cleaned up immediately.
+			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCJobsForTempIndexes))
+			// The GC jobs for the drops should still be waiting out the GC TTL.
+			err = queryIndexGCJobsAndValidateCount(`running`, expectedGCJobsForDrops)
 			require.NoError(t, err)
 
+			// Change gc.ttlseconds to speed up the cleanup.
+			_ = sqlRunner.Exec(t, `ALTER TABLE regional_by_row CONFIGURE ZONE USING gc.ttlseconds = 1`)
+
 			// Validate that indexes are cleaned up.
-			queryAndEnsureThatFourIndexGCJobsSucceeded := func() error {
-				return queryIndexGCJobsAndValidateCount(`succeeded`, 4)
-			}
-			testutils.SucceedsSoon(t, queryAndEnsureThatFourIndexGCJobsSucceeded)
+			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCJobsForDrops+expectedGCJobsForTempIndexes))
 			err = queryIndexGCJobsAndValidateCount(`running`, 0)
 			require.NoError(t, err)
 		})
@@ -911,13 +917,13 @@ func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 
 	fetchIndexes := func(tableName string) []catalog.Index {
 		kvDB := c.Servers[0].DB()
-		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 		return desc.NonDropIndexes()
 	}
 
 	t.Run("primary index", func(t *testing.T) {
 		tdb.Exec(t, `CREATE TABLE test.t1 (
-			a INT PRIMARY KEY, 
+			a INT PRIMARY KEY,
 			b test.public.crdb_internal_region NOT NULL
 		) LOCALITY GLOBAL`)
 		indexes := fetchIndexes("t1")
@@ -943,7 +949,7 @@ func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 
 	t.Run("secondary index", func(t *testing.T) {
 		tdb.Exec(t, `CREATE TABLE test.t2 (
-			a INT PRIMARY KEY, 
+			a INT PRIMARY KEY,
 			b test.public.crdb_internal_region NOT NULL,
 			c INT NOT NULL,
 			d INT NOT NULL,

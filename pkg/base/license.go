@@ -12,9 +12,11 @@ package base
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -30,15 +32,31 @@ var CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, org, feature
 	return errEnterpriseNotEnabled // nb: this is squarely in the hot path on OSS builds
 }
 
-// TimeToEnterpriseLicenseExpiry returns a duration object that measures the time until
-// the currently set enterprise license expires starting from the 3rd argument
-// passed in.
-//
-// This function is overridden by an init hook in CCL builds
-var TimeToEnterpriseLicenseExpiry = func(
-	ctx context.Context, _ *cluster.Settings, _ time.Time,
-) (time.Duration, error) {
-	return 0, nil
+var licenseTTLMetadata = metric.Metadata{
+	// This metric name isn't namespaced for backwards
+	// compatibility. The prior version of this metric was manually
+	// inserted into the prometheus output
+	Name:        "seconds_until_enterprise_license_expiry",
+	Help:        "Seconds until enterprise license expiry (0 if no license present or running without enterprise features)",
+	Measurement: "Seconds",
+	Unit:        metric.Unit_SECONDS,
+}
+
+// LicenseTTL is a metric gauge that measures the number of seconds
+// until the current enterprise license (if any) expires.
+var LicenseTTL = metric.NewGauge(licenseTTLMetadata)
+
+// UpdateMetricOnLicenseChange is a function that's called on startup
+// in order to connect the enterprise license setting update to the
+// prometheus metric provided as an argument.
+var UpdateMetricOnLicenseChange = func(
+	ctx context.Context,
+	st *cluster.Settings,
+	metric *metric.Gauge,
+	ts timeutil.TimeSource,
+	stopper *stop.Stopper,
+) error {
+	return nil
 }
 
 // LicenseType returns what type of license the cluster is running with, or

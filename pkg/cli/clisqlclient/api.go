@@ -11,6 +11,7 @@
 package clisqlclient
 
 import (
+	"context"
 	"database/sql/driver"
 	"reflect"
 	"time"
@@ -26,24 +27,24 @@ type Conn interface {
 	EnsureConn() error
 
 	// Exec executes a statement.
-	Exec(query string, args []driver.Value) error
+	Exec(ctx context.Context, query string, args ...interface{}) error
 
 	// Query returns one or more SQL statements and returns the
 	// corresponding result set(s).
-	Query(query string, args []driver.Value) (Rows, error)
+	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
 
 	// QueryRow execute a SQL query returning exactly one row
 	// and retrieves the returned values. An error is returned
 	// if the query returns zero or more than one row.
-	QueryRow(query string, args []driver.Value) ([]driver.Value, error)
+	QueryRow(ctx context.Context, query string, args ...interface{}) ([]driver.Value, error)
 
 	// ExecTxn runs fn inside a transaction and retries it as needed.
-	ExecTxn(fn func(TxBoundConn) error) error
+	ExecTxn(ctx context.Context, fn func(context.Context, TxBoundConn) error) error
 
 	// GetLastQueryStatistics returns the detailed latency stats for the
 	// last executed query, if supported by the server and enabled by
 	// configuration.
-	GetLastQueryStatistics() (result QueryStats, err error)
+	GetLastQueryStatistics(ctx context.Context) (result QueryStats, err error)
 
 	// SetURL changes the URL field in the connection object, so that the
 	// next connection (re-)establishment will use the new URL.
@@ -69,7 +70,7 @@ type Conn interface {
 
 	// GetServerMetadata() returns details about the CockroachDB node
 	// this connection is connected to.
-	GetServerMetadata() (
+	GetServerMetadata(ctx context.Context) (
 		nodeID int32,
 		version, clusterID string,
 		err error,
@@ -82,7 +83,7 @@ type Conn interface {
 	// The what argument is a descriptive label for the value being
 	// retrieved, for inclusion inside warning or error message.
 	// The sql argument is the SQL query to use to retrieve the value.
-	GetServerValue(what, sql string) (driver.Value, string, bool)
+	GetServerValue(ctx context.Context, what, sql string) (driver.Value, string, bool)
 
 	// GetDriverConn exposes the underlying SQL driver connection object
 	// for use by the cli package.
@@ -159,11 +160,11 @@ type QueryStats struct {
 // visible to the closure passed to (Conn).ExecTxn.
 type TxBoundConn interface {
 	// Exec executes a statement inside the transaction.
-	Exec(query string, args []driver.Value) error
+	Exec(ctx context.Context, query string, args ...interface{}) error
 
 	// Query returns one or more SQL statements and returns the
 	// corresponding result set(s).
-	Query(query string, args []driver.Value) (Rows, error)
+	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
 }
 
 // DriverConn is the type of the connection object returned by
@@ -173,9 +174,4 @@ type DriverConn interface {
 	driver.Conn
 	driver.ExecerContext
 	driver.QueryerContext
-
-	//lint:ignore SA1019 TODO(mjibson): clean this up to use go1.8 APIs
-	driver.Execer
-	//lint:ignore SA1019 TODO(mjibson): clean this up to use go1.8 APIs
-	driver.Queryer
 }

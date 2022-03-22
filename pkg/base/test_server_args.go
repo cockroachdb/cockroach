@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // TestServerArgs contains the parameters one can set when creating a test
@@ -130,8 +131,22 @@ type TestServerArgs struct {
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
 
+	// Tracer, if set, will be used by the Server for creating Spans.
+	Tracer *tracing.Tracer
+	// TracingDefault kicks in if Tracer is not set. It is passed to the Tracer
+	// that will be created for the server.
+	TracingDefault tracing.TracingMode
 	// If set, a TraceDir is initialized at the provided path.
 	TraceDir string
+
+	// DisableSpanConfigs disables the use of the span configs infrastructure
+	// (in favor of the gossiped system config span). It's equivalent to setting
+	// COCKROACH_DISABLE_SPAN_CONFIGS, and is only intended for tests written
+	// with the system config span in mind.
+	//
+	// TODO(irfansharif): Remove all uses of this when we rip out the system
+	// config span.
+	DisableSpanConfigs bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -233,9 +248,6 @@ type TestTenantArgs struct {
 	// to be created by StartTenant.
 	Existing bool
 
-	// IdleExitAfter, if set will cause the tenant process to exit if idle.
-	IdleExitAfter time.Duration
-
 	// Settings allows the caller to control the settings object used for the
 	// tenant cluster.
 	Settings *cluster.Settings
@@ -278,4 +290,38 @@ type TestTenantArgs struct {
 
 	// Skip check for tenant existence when running the test.
 	SkipTenantCheck bool
+
+	// Locality is used to initialize the same-named field on the server.Config
+	// struct.
+	Locality roachpb.Locality
+
+	// SSLCertsDir is a path to a custom certs dir. If empty, will use the default
+	// embedded certs.
+	SSLCertsDir string
+
+	// StartingSQLPort, if it is non-zero, is added to the tenant ID in order to
+	// determine the tenant's SQL port.
+	StartingSQLPort int
+
+	// StartingHTTPPort, if it is non-zero, is added to the tenant ID in order to
+	// determine the tenant's HTTP port.
+	StartingHTTPPort int
+
+	// TracingDefault controls whether the tracing will be on or off by default.
+	TracingDefault tracing.TracingMode
+
+	// RPCHeartbeatInterval controls how often the tenant sends Ping requests.
+	RPCHeartbeatInterval time.Duration
+
+	// GoroutineDumpDirName is used to initialize the same named field on the
+	// SQLServer.BaseConfig field. It is used as the directory name for
+	// goroutine dumps using goroutinedumper. If set, this directory should
+	// be cleaned up once the test completes.
+	GoroutineDumpDirName string
+
+	// HeapProfileDirName is used to initialize the same named field on the
+	// SQLServer.BaseConfig field. It is the directory name for heap profiles using
+	// heapprofiler. If empty, no heap profiles will be collected during the test.
+	// If set, this directory should be cleaned up after the test completes.
+	HeapProfileDirName string
 }

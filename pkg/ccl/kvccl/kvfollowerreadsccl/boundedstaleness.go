@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func checkEnterpriseEnabledForBoundedStaleness(ctx *tree.EvalContext) error {
+func checkBoundedStalenessEnabled(ctx *tree.EvalContext) error {
 	st := ctx.Settings
 	return utilccl.CheckEnterpriseEnabled(
 		st,
@@ -32,7 +32,7 @@ func checkEnterpriseEnabledForBoundedStaleness(ctx *tree.EvalContext) error {
 }
 
 func evalMaxStaleness(ctx *tree.EvalContext, d duration.Duration) (time.Time, error) {
-	if err := checkEnterpriseEnabledForBoundedStaleness(ctx); err != nil {
+	if err := checkBoundedStalenessEnabled(ctx); err != nil {
 		return time.Time{}, err
 	}
 	if d.Compare(duration.FromInt64(0)) < 0 {
@@ -46,7 +46,7 @@ func evalMaxStaleness(ctx *tree.EvalContext, d duration.Duration) (time.Time, er
 }
 
 func evalMinTimestamp(ctx *tree.EvalContext, t time.Time) (time.Time, error) {
-	if err := checkEnterpriseEnabledForBoundedStaleness(ctx); err != nil {
+	if err := checkBoundedStalenessEnabled(ctx); err != nil {
 		return time.Time{}, err
 	}
 	t = t.Round(time.Microsecond)

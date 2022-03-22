@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
@@ -25,7 +25,7 @@ go_test(
     embed = [":abortspan"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",

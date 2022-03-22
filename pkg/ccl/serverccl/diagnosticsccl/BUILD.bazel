@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "diagnosticsccl_test",
+    srcs = [
+        "main_test.go",
+        "reporter_test.go",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/kvccl/kvtenantccl",
+        "//pkg/clusterversion",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/diagnostics",
+        "//pkg/server/diagnostics/diagnosticspb",
+        "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/catalog/lease",
+        "//pkg/testutils",
+        "//pkg/testutils/diagutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/cloudinfo",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/system",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

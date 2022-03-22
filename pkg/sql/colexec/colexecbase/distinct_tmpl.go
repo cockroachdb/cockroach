@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for distinct.eg.go. It's formatted in a
 // special way, so it's both valid Go and a valid text/template input. This
@@ -68,7 +70,7 @@ const _TYPE_WIDTH = 0
 
 func newSingleDistinct(
 	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T, nullsAreDistinct bool,
-) (colexecop.Operator, error) {
+) colexecop.Operator {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
@@ -80,12 +82,14 @@ func newSingleDistinct(
 				distinctColIdx:   distinctColIdx,
 				outputCol:        outputCol,
 				nullsAreDistinct: nullsAreDistinct,
-			}, nil
+			}
 			// {{end}}
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("unsupported distinct type %s", t)
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", t))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // {{end}}
@@ -110,19 +114,21 @@ type partitioner interface {
 }
 
 // newPartitioner returns a new partitioner on type t.
-func newPartitioner(t *types.T, nullsAreDistinct bool) (partitioner, error) {
+func newPartitioner(t *types.T, nullsAreDistinct bool) partitioner {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			return partitioner_TYPE{nullsAreDistinct: nullsAreDistinct}, nil
+			return partitioner_TYPE{nullsAreDistinct: nullsAreDistinct}
 			// {{end}}
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("unsupported partition type %s", t)
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", t))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 // {{end}}

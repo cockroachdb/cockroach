@@ -243,7 +243,7 @@ func init() {
 						// Wrap the output in a <div> so that the Markdown parser
 						// doesn't attempt to parse the inside of the contained
 						// <svg> as Markdown.
-						body = fmt.Sprintf(`<div>%s</div>`, body)
+						body = fmt.Sprintf(`<div style="overflow-x:auto;">%s</div>`, body)
 						// Remove blank lines and strip spaces.
 						body = stripRE.ReplaceAllString(body, "\n") + "\n"
 					}
@@ -259,6 +259,7 @@ func init() {
 	cmdSVG.Flags().StringVar(&railroadJar, "railroad", "", "Location of Railroad.jar; empty to use website")
 	cmdSVG.Flags().DurationVar(&railroadAPITimeout, "timeout", time.Second*120, "Timeout in seconds for railroad HTTP Api, "+
 		"only relevant when the web api is used; default 120s.")
+	cmdSVG.Flags().StringVar(&addr, "addr", "./pkg/sql/parser/sql.y", "Location of sql.y file. Can also specify an http address.")
 
 	diagramCmd := &cobra.Command{
 		Use:   "grammar",
@@ -382,6 +383,11 @@ var specs = []stmtSpec{
 		stmt: "alter_database_drop_region_stmt",
 	},
 	{
+		name:    "alter_default_privileges_stmt",
+		inline:  []string{"opt_for_roles", "role_or_group_or_user", "name_list", "opt_in_schemas", "schema_name_list", "abbreviated_grant_stmt", "opt_with_grant_option", "alter_default_privileges_target_object", "abbreviated_revoke_stmt", "opt_drop_behavior"},
+		nosplit: true,
+	},
+	{
 		name:   "alter_primary_key",
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_hash_sharded"},
@@ -397,13 +403,12 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "alter_role_stmt",
-		inline: []string{"role_or_group_or_user", "opt_role_options"},
+		inline: []string{"role_or_group_or_user", "opt_role_options", "opt_in_database", "set_or_reset_clause", "opt_with", "role_options", "set_rest", "generic_set", "var_list", "to_or_eq"},
 		replace: map[string]string{
-			"string_or_placeholder":             "name",
-			"opt_role_options":                  "OPTIONS",
-			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
-			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
-		unlink: []string{"name", "password"},
+			"'ROLE_ALL'":            "'ROLE'",
+			"'USER_ALL'":            "'USER'",
+			"string_or_placeholder": "'role_name'",
+		},
 	},
 	{
 		name:    "alter_schema",
@@ -535,7 +540,7 @@ var specs = []stmtSpec{
 	{
 		name:   "col_qualification",
 		stmt:   "col_qualification",
-		inline: []string{"col_qualification_elem", "opt_hash_sharded", "generated_as"},
+		inline: []string{"col_qualification_elem", "opt_hash_sharded", "generated_always_as", "generated_by_default_as"},
 		replace: map[string]string{
 			"'=' a_expr": "'=' n_buckets",
 		},
@@ -595,7 +600,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_changefeed_stmt",
-		inline: []string{"changefeed_targets", "single_table_pattern_list", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
+		inline: []string{"changefeed_targets", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
 		replace: map[string]string{
 			"table_option":                 "table_name",
 			"'INTO' string_or_placeholder": "'INTO' sink",
@@ -621,27 +626,6 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:   "create_index_interleaved_stmt",
-		stmt:   "create_index_stmt",
-		match:  []*regexp.Regexp{regexp.MustCompile("'INTERLEAVE'")},
-		inline: []string{"opt_unique", "opt_storing", "opt_interleave", "opt_concurrently"},
-		replace: map[string]string{
-			"'ON' a_expr":                          "'ON' column_name",
-			"'=' a_expr":                           "'=' n_buckets",
-			" opt_index_name":                      "",
-			" opt_partition_by":                    "",
-			" opt_index_access_method":             "",
-			"'ON' table_name '(' index_params ')'": "'...'",
-			"storing '(' name_list ')'":            "'STORING' '(' stored_columns ')'",
-			"table_name '(' name_list":             "parent_table '(' interleave_prefix",
-		},
-		exclude: []*regexp.Regexp{
-			regexp.MustCompile("'CREATE' 'INVERTED'"),
-			regexp.MustCompile("'EXISTS'"),
-		},
-		unlink: []string{"stored_columns", "parent_table", "interleave_prefix", "n_buckets"},
-	},
-	{
 		name:   "create_inverted_index_stmt",
 		stmt:   "create_index_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("'CREATE' .* 'INVERTED' 'INDEX'")},
@@ -653,7 +637,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_schedule_for_backup_stmt",
-		inline: []string{"opt_description", "string_or_placeholder_opt_list", "string_or_placeholder_list", "opt_with_backup_options", "cron_expr", "opt_full_backup_clause", "opt_with_schedule_options", "opt_backup_targets"},
+		inline: []string{"string_or_placeholder_opt_list", "string_or_placeholder_list", "opt_with_backup_options", "cron_expr", "opt_full_backup_clause", "opt_with_schedule_options", "opt_backup_targets"},
 		replace: map[string]string{
 			"string_or_placeholder 'FOR'":       "label 'FOR'",
 			"'RECURRING' sconst_or_placeholder": "'RECURRING' cronexpr",
@@ -831,7 +815,7 @@ var specs = []stmtSpec{
 	{
 		name:    "alter_table_partition_by",
 		stmt:    "alter_onetable_stmt",
-		inline:  []string{"alter_table_cmds", "alter_table_cmd", "partition_by"},
+		inline:  []string{"alter_table_cmds", "alter_table_cmd", "partition_by_table"},
 		replace: map[string]string{"relation_expr": "table_name"},
 		regreplace: map[string]string{
 			`'NOTHING' .*`:        `'NOTHING'`,
@@ -844,14 +828,6 @@ var specs = []stmtSpec{
 		stmt:    "alter_oneindex_stmt",
 		inline:  []string{"alter_index_cmds", "alter_index_cmd", "partition_by", "table_index_name"},
 		replace: map[string]string{"standalone_index_name": "index_name"},
-	},
-	{
-		name:    "create_table_partition_by",
-		stmt:    "create_table_stmt",
-		inline:  []string{"opt_partition_by", "partition_by"},
-		replace: map[string]string{"opt_table_elem_list": "table_definition", "opt_interleave": ""},
-		match:   []*regexp.Regexp{regexp.MustCompile("PARTITION")},
-		unlink:  []string{"table_definition"},
 	},
 	{
 		name:   "explain_stmt",
@@ -889,11 +865,6 @@ var specs = []stmtSpec{
 	{
 		name:   "grant_stmt",
 		inline: []string{"privileges", "opt_privileges_clause"},
-		exclude: []*regexp.Regexp{
-			regexp.MustCompile("'TYPE' target_types"),
-			regexp.MustCompile("'SCHEMA' schema_name_list"),
-		},
-		unlink: []string{"targets"},
 	},
 	{
 		name: "foreign_key_column_level",
@@ -980,20 +951,10 @@ var specs = []stmtSpec{
 	},
 	{name: "iso_level"},
 	{
-		name:    "interleave",
-		stmt:    "create_table_stmt",
-		inline:  []string{"opt_interleave", "opt_table_with", "opt_with_storage_parameter_list", "storage_parameter_list", "opt_create_table_on_commit"},
-		replace: map[string]string{"opt_table_elem_list": "table_definition"},
-		unlink:  []string{"table_definition"},
-	},
-	{
 		name: "not_null_column_level",
 		stmt: "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'NOT NULL' ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
 		unlink: []string{"table_name", "column_name", "column_type", "table_constraints"},
-	},
-	{
-		name: "opt_interleave",
 	},
 	{
 		name:   "opt_with_storage_parameter_list",
@@ -1033,12 +994,9 @@ var specs = []stmtSpec{
 		inline: []string{"savepoint_name"},
 	},
 	{
-		name:    "rename_column",
-		stmt:    "alter_rename_table_stmt",
-		inline:  []string{"opt_column"},
-		match:   []*regexp.Regexp{regexp.MustCompile("'ALTER' 'TABLE' .* 'RENAME' ('COLUMN'|name)")},
-		replace: map[string]string{"relation_expr": "table_name", "name 'TO'": "current_name 'TO'"},
-		unlink:  []string{"table_name", "current_name"},
+		name:  "rename_column",
+		stmt:  "alter_table_cmd",
+		match: []*regexp.Regexp{regexp.MustCompile("'RENAME' opt_column column_name 'TO' column_name")},
 	},
 	{
 		name:    "rename_constraint",
@@ -1102,11 +1060,6 @@ var specs = []stmtSpec{
 	{
 		name:   "revoke_stmt",
 		inline: []string{"privileges", "opt_privileges_clause"},
-		exclude: []*regexp.Regexp{
-			regexp.MustCompile("'TYPE' target_types"),
-			regexp.MustCompile("'SCHEMA' schema_name_list"),
-		},
-		unlink: []string{"targets"},
 	},
 	{
 		name:    "rollback_transaction",
@@ -1191,21 +1144,17 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:   "set_var",
-		stmt:   "preparable_set_stmt",
-		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list", "to_or_eq"},
+		name: "set_session_stmt",
+		stmt: "set_session_stmt",
 		exclude: []*regexp.Regexp{
-			regexp.MustCompile(`'SET' . 'TRANSACTION'`),
-			regexp.MustCompile(`'SET' 'TRANSACTION'`),
-			regexp.MustCompile(`'SET' 'SESSION' var_name`),
-			regexp.MustCompile(`'SET' 'SESSION' 'TRANSACTION'`),
-			regexp.MustCompile(`'SET' 'SESSION' 'CHARACTERISTICS'`),
-			regexp.MustCompile("'SET' 'CLUSTER'"),
+			regexp.MustCompile("'CHARACTERISTICS' 'AS' 'TRANSACTION' transaction_mode_list"),
 		},
-		replace: map[string]string{
-			"'=' 'DEFAULT'":  "'=' 'DEFAULT' | 'SET' 'TIME' 'ZONE' ( var_value | 'DEFAULT' | 'LOCAL' )",
-			"'SET' var_name": "'SET' ( 'SESSION' | ) var_name",
-		},
+		inline: []string{"set_rest_more", "set_rest", "generic_set", "var_list", "to_or_eq"},
+	},
+	{
+		name:   "set_local_stmt",
+		stmt:   "set_local_stmt",
+		inline: []string{"set_rest", "generic_set", "var_list", "to_or_eq"},
 	},
 	{
 		name:   "set_cluster_setting",
@@ -1250,13 +1199,6 @@ var specs = []stmtSpec{
 		inline: []string{"with_comment"},
 	},
 	{
-		name:    "show_constraints",
-		stmt:    "show_stmt",
-		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CONSTRAINTS'")},
-		replace: map[string]string{"var_name": "table_name"},
-		unlink:  []string{"table_name"},
-	},
-	{
 		name:    "show_create_stmt",
 		replace: map[string]string{"table_name": "object_name"},
 		unlink:  []string{"object_name"},
@@ -1266,8 +1208,16 @@ var specs = []stmtSpec{
 		inline: []string{"with_comment"},
 	},
 	{
+		name:   "show_default_privileges_stmt",
+		inline: []string{"opt_for_roles", "role_or_group_or_user", "name_list"},
+	},
+	{
 		name: "show_enums",
 		stmt: "show_enums_stmt",
+	},
+	{
+		name: "show_full_scans",
+		stmt: "show_full_scans_stmt",
 	},
 	{
 		name:   "show_backup",
@@ -1303,21 +1253,13 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "database_name", "schema_name", "name"},
 	},
 	{
-		name:   "show_indexes",
+		name:   "show_indexes_stmt",
 		inline: []string{"with_comment"},
 		stmt:   "show_indexes_stmt",
 	},
 	{
-		name:    "show_index",
-		stmt:    "show_stmt",
-		inline:  []string{"with_comment"},
-		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'INDEX'")},
-		replace: map[string]string{"var_name": "table_name"},
-		unlink:  []string{"table_name"},
-	},
-	{
 		name:  "show_keys",
-		stmt:  "show_stmt",
+		stmt:  "show_indexes_stmt",
 		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'KEYS'")},
 	},
 	{
@@ -1360,6 +1302,9 @@ var specs = []stmtSpec{
 		inline: []string{"schedule_state", "opt_schedule_executor_type"},
 	},
 	{
+		name: "show_create_schedules_stmt",
+	},
+	{
 		name: "show_schemas",
 		stmt: "show_schemas_stmt",
 	},
@@ -1390,9 +1335,8 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'EXPERIMENTAL_REPLICA'")},
 	},
 	{
-		name:  "show_transaction",
-		stmt:  "show_stmt",
-		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TRANSACTION'")},
+		name:   "show_transactions_stmt",
+		inline: []string{"opt_cluster"},
 	},
 	{
 		name:  "show_savepoint_status",
@@ -1554,9 +1498,6 @@ func getAllStmtSpecs(sqlGrammarFile string, bnfAPITimeout time.Duration) ([]stmt
 	stmtRegex := regexp.MustCompile(`%type\s*<tree.Statement>\s*(.*)$`)
 
 	scanner := bufio.NewScanner(file)
-	if err != nil {
-		return nil, err
-	}
 	for scanner.Scan() {
 		text := scanner.Text()
 		if matches := stmtRegex.FindAllStringSubmatch(text, -1); len(matches) > 0 {

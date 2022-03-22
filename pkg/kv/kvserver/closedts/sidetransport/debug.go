@@ -148,6 +148,8 @@ func (s *Sender) HTML() string {
 	header("Last message")
 	lastMsg, ok := s.buf.GetBySeq(context.Background(), lastMsgSeq)
 	if !ok {
+		fmt.Fprint(sb, "Buffer has been closed.\n")
+	} else if lastMsg == nil {
 		fmt.Fprint(sb, "Buffer no longer has the message. This is unexpected.\n")
 	} else {
 		sb.WriteString(escape(lastMsg.String()))

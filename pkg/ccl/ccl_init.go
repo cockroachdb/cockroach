@@ -12,14 +12,12 @@ package ccl
 // import of this package enables building a binary with CCL features.
 
 import (
-	// ccl init hooks. Don't include cliccl here, it pulls in pkg/cli, which
-	// does weird things at init time.
+	// ccl init hooks.
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/cliccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
@@ -28,7 +26,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"

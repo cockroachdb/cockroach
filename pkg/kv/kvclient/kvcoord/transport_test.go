@@ -113,9 +113,9 @@ func TestSpanImport(t *testing.T) {
 	expectedErr := "my expected error"
 	server.pErr = roachpb.NewErrorf(expectedErr /* nolint:fmtsafe */)
 
-	recCtx, getRec, cancel := tracing.ContextWithRecordingSpan(
+	recCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(
 		ctx, tracing.NewTracer(), "test")
-	defer cancel()
+	defer getRecAndFinish()
 
 	server.tr = tracing.SpanFromContext(recCtx).Tracer()
 
@@ -127,7 +127,7 @@ func TestSpanImport(t *testing.T) {
 		t.Fatalf("expected err: %s, got: %q", expectedErr, br.Error)
 	}
 	expectedMsg := "mockInternalClient processing batch"
-	if tracing.FindMsgInRecording(getRec(), expectedMsg) == -1 {
+	if tracing.FindMsgInRecording(getRecAndFinish(), expectedMsg) == -1 {
 		t.Fatalf("didn't find expected message in trace: %s", expectedMsg)
 	}
 }
@@ -151,15 +151,14 @@ func (*mockInternalClient) ResetQuorum(
 func (m *mockInternalClient) Batch(
 	ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
-	sp := m.tr.StartSpan("mock", tracing.WithForceRealSpan())
+	sp := m.tr.StartSpan("mock", tracing.WithRecording(tracing.RecordingVerbose))
 	defer sp.Finish()
-	sp.SetVerbose(true)
 	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	log.Eventf(ctx, "mockInternalClient processing batch")
 	br := &roachpb.BatchResponse{}
 	br.Error = m.pErr
-	if rec := sp.GetRecording(); rec != nil {
+	if rec := sp.GetConfiguredRecording(); rec != nil {
 		br.CollectedSpans = append(br.CollectedSpans, rec...)
 	}
 	return br, nil
@@ -196,4 +195,22 @@ func (m *mockInternalClient) TokenBucket(
 	ctx context.Context, in *roachpb.TokenBucketRequest, _ ...grpc.CallOption,
 ) (*roachpb.TokenBucketResponse, error) {
 	return nil, fmt.Errorf("unsupported TokenBucket call")
+}
+
+func (m *mockInternalClient) GetSpanConfigs(
+	_ context.Context, _ *roachpb.GetSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.GetSpanConfigsResponse, error) {
+	return nil, fmt.Errorf("unsupported GetSpanConfigs call")
+}
+
+func (m *mockInternalClient) UpdateSpanConfigs(
+	_ context.Context, _ *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
+) (*roachpb.UpdateSpanConfigsResponse, error) {
+	return nil, fmt.Errorf("unsupported UpdateSpanConfigs call")
+}
+
+func (m *mockInternalClient) TenantSettings(
+	context.Context, *roachpb.TenantSettingsRequest, ...grpc.CallOption,
+) (roachpb.Internal_TenantSettingsClient, error) {
+	return nil, fmt.Errorf("unsupported TenantSettings call")
 }

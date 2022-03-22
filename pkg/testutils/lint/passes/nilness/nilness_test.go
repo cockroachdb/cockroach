@@ -35,5 +35,5 @@ func init() {
 func Test(t *testing.T) {
 	testdata := testutils.TestDataPath(t)
 	analysistest.TestData = func() string { return testdata }
-	analysistest.Run(t, testdata, nilness.Analyzer, "a")
+	analysistest.Run(t, testdata, nilness.TestAnalyzer, "a")
 }

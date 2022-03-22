@@ -1,0 +1,257 @@
+
+# -------------------------------------------------------------
+# Barrier requests do not acquire latches
+# -------------------------------------------------------------
+
+new-request name=barrier1 txn=none ts=10,1
+  barrier key=a endkey=f
+----
+
+sequence req=barrier1
+----
+[1] sequence barrier1: sequencing request
+[1] sequence barrier1: waiting on latches without acquiring
+[1] sequence barrier1: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 0
+
+finish req=barrier1
+----
+[-] finish barrier1: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# Barrier requests wait for reads, even with a higher timestamp
+# -------------------------------------------------------------
+
+new-request name=barrier2 txn=none ts=10,1
+  barrier key=a endkey=f
+----
+
+new-request name=read1 txn=none ts=15,1
+  get key=c
+----
+
+sequence req=read1
+----
+[1] sequence read1: sequencing request
+[1] sequence read1: acquiring latches
+[1] sequence read1: scanning lock table for conflicting locks
+[1] sequence read1: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 1
+
+sequence req=barrier2
+----
+[2] sequence barrier2: sequencing request
+[2] sequence barrier2: waiting on latches without acquiring
+[2] sequence barrier2: waiting to acquire write latch {a-f}@0,0, held by read latch c@15.000000000,1
+[2] sequence barrier2: blocked on select in spanlatch.(*Manager).waitForSignal
+
+finish req=read1
+----
+[-] finish read1: finishing request
+[2] sequence barrier2: sequencing complete, returned guard
+
+finish req=barrier2
+----
+[-] finish barrier2: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# Barrier requests wait for earlier reads
+# -------------------------------------------------------------
+
+new-request name=read1 txn=none ts=10,1
+  get key=c
+----
+
+new-request name=barrier1 txn=none ts=12,1
+  barrier key=a endkey=f
+----
+
+sequence req=read1
+----
+[1] sequence read1: sequencing request
+[1] sequence read1: acquiring latches
+[1] sequence read1: scanning lock table for conflicting locks
+[1] sequence read1: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 1
+
+sequence req=barrier1
+----
+[2] sequence barrier1: sequencing request
+[2] sequence barrier1: waiting on latches without acquiring
+[2] sequence barrier1: waiting to acquire write latch {a-f}@0,0, held by read latch c@10.000000000,1
+[2] sequence barrier1: blocked on select in spanlatch.(*Manager).waitForSignal
+
+finish req=read1
+----
+[-] finish read1: finishing request
+[2] sequence barrier1: sequencing complete, returned guard
+
+finish req=barrier1
+----
+[-] finish barrier1: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# Barrier requests wait for conflicting writes
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-request name=barrier1 txn=none ts=15,1
+  barrier key=a endkey=f
+----
+
+new-request name=write1 txn=txn1 ts=10,1
+  put key=c value=v
+----
+
+sequence req=write1
+----
+[1] sequence write1: sequencing request
+[1] sequence write1: acquiring latches
+[1] sequence write1: scanning lock table for conflicting locks
+[1] sequence write1: sequencing complete, returned guard
+
+
+debug-latch-manager
+----
+write count: 1
+ read count: 0
+
+sequence req=barrier1
+----
+[2] sequence barrier1: sequencing request
+[2] sequence barrier1: waiting on latches without acquiring
+[2] sequence barrier1: waiting to acquire write latch {a-f}@0,0, held by write latch c@10.000000000,1
+[2] sequence barrier1: blocked on select in spanlatch.(*Manager).waitForSignal
+
+debug-latch-manager
+----
+write count: 1
+ read count: 0
+
+finish req=write1
+----
+[-] finish write1: finishing request
+[2] sequence barrier1: sequencing complete, returned guard
+
+finish req=barrier1
+----
+[-] finish barrier1: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# Barrier requests do not block past/future writes or reads that
+# got sequenced after the barrier.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=9,1 epoch=0
+----
+
+new-txn name=txn2 ts=15,1 epoch=0
+----
+
+new-request name=read1 txn=none ts=8,1
+  get key=a
+----
+
+new-request name=write1 txn=txn1 ts=9,1
+  put key=b value=v
+----
+
+new-request name=barrier1 txn=none ts=10,1
+  barrier key=a endkey=f
+----
+
+new-request name=read2 txn=none ts=12,1
+  get key=d
+----
+
+new-request name=write2 txn=txn2 ts=15,1
+  put key=c value=v
+----
+
+sequence req=barrier1
+----
+[1] sequence barrier1: sequencing request
+[1] sequence barrier1: waiting on latches without acquiring
+[1] sequence barrier1: sequencing complete, returned guard
+
+sequence req=read1
+----
+[2] sequence read1: sequencing request
+[2] sequence read1: acquiring latches
+[2] sequence read1: scanning lock table for conflicting locks
+[2] sequence read1: sequencing complete, returned guard
+
+sequence req=write1
+----
+[3] sequence write1: sequencing request
+[3] sequence write1: acquiring latches
+[3] sequence write1: scanning lock table for conflicting locks
+[3] sequence write1: sequencing complete, returned guard
+
+sequence req=read2
+----
+[4] sequence read2: sequencing request
+[4] sequence read2: acquiring latches
+[4] sequence read2: scanning lock table for conflicting locks
+[4] sequence read2: sequencing complete, returned guard
+
+sequence req=write2
+----
+[5] sequence write2: sequencing request
+[5] sequence write2: acquiring latches
+[5] sequence write2: scanning lock table for conflicting locks
+[5] sequence write2: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 2
+ read count: 2
+
+finish req=barrier1
+----
+[-] finish barrier1: finishing request
+
+finish req=write1
+----
+[-] finish write1: finishing request
+
+finish req=read1
+----
+[-] finish read1: finishing request
+
+finish req=write2
+----
+[-] finish write2: finishing request
+
+finish req=read2
+----
+[-] finish read2: finishing request
+
+reset namespace
+----

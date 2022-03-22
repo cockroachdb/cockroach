@@ -27,6 +27,7 @@ var backpressureLogLimiter = log.Every(500 * time.Millisecond)
 // range's size must grow to before backpressure will be applied on writes. Set
 // to 0 to disable backpressure altogether.
 var backpressureRangeSizeMultiplier = settings.RegisterFloatSetting(
+	settings.TenantWritable,
 	"kv.range.backpressure_range_size_multiplier",
 	"multiple of range_max_bytes that a range is allowed to grow to without "+
 		"splitting before writes to that range are blocked, or 0 to disable",
@@ -65,6 +66,7 @@ var backpressureRangeSizeMultiplier = settings.RegisterFloatSetting(
 //     applying backpressure.
 //
 var backpressureByteTolerance = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
 	"kv.range.backpressure_byte_tolerance",
 	"defines the number of bytes above the product of "+
 		"backpressure_range_size_multiplier and the range_max_size at which "+
@@ -104,6 +106,21 @@ func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 		}
 	}
 	return false
+}
+
+// signallerForBatch returns the signaller to use for this batch. This is the
+// Replica's breaker's signaller except if any request in the batch uses
+// poison.Policy_Wait, in which case it's a neverTripSignaller. In particular,
+// `(signaller).C() == nil` signals that the request bypasses the circuit
+// breakers.
+func (r *Replica) signallerForBatch(ba *roachpb.BatchRequest) signaller {
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
+		if roachpb.BypassesReplicaCircuitBreaker(req) {
+			return neverTripSignaller{}
+		}
+	}
+	return r.breaker.Signal()
 }
 
 // shouldBackpressureWrites returns whether writes to the range should be

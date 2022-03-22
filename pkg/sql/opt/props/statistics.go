@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -81,6 +82,15 @@ func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
 	return false
 }
 
+// RowCountIfAvailable returns the RowCount if the stats were available and a
+// negative number otherwise.
+func (s *Statistics) RowCountIfAvailable() float64 {
+	if s.Available {
+		return s.RowCount
+	}
+	return -1
+}
+
 // CopyFrom copies a Statistics object which can then be modified independently.
 func (s *Statistics) CopyFrom(other *Statistics) {
 	s.Available = other.Available
@@ -99,30 +109,6 @@ func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
 	s.Selectivity.Multiply(selectivity)
 }
 
-// UnapplySelectivity divides the statistics by the given selectivity.
-// RowCount and Selectivity are updated. Note that DistinctCounts, NullCounts,
-// and Histograms are not updated.
-func (s *Statistics) UnapplySelectivity(selectivity Selectivity) {
-	// Make sure that we don't increase the row count to something larger than it
-	// was at the beginning. Selectivity will never exceed 1, so use that fact to
-	// update the RowCount.
-	adjustedSelectivity := s.Selectivity
-	s.Selectivity.Divide(selectivity)
-	adjustedSelectivity.Divide(s.Selectivity)
-	s.RowCount /= adjustedSelectivity.AsFloat()
-}
-
-// LimitSelectivity limits the Selectivity to the given max selectivity.
-// RowCount and Selectivity are updated. Note that DistinctCounts, NullCounts,
-// and Histograms are not updated.
-func (s *Statistics) LimitSelectivity(maxSelectivity Selectivity) {
-	if s.Selectivity.selectivity > maxSelectivity.selectivity {
-		adjustedSelectivity := maxSelectivity
-		adjustedSelectivity.Divide(s.Selectivity)
-		s.ApplySelectivity(adjustedSelectivity)
-	}
-}
-
 // UnionWith unions this Statistics object with another Statistics object. It
 // updates the RowCount and Selectivity, and represents the result of unioning
 // two relational expressions with the given statistics. Note that
@@ -133,31 +119,45 @@ func (s *Statistics) UnionWith(other *Statistics) {
 	s.Selectivity.Add(other.Selectivity)
 }
 
+// String returns a string representation of the statistics.
 func (s *Statistics) String() string {
+	return s.stringImpl(true)
+}
+
+// StringWithoutHistograms is like String, but all histograms are omitted from
+// the returned string.
+func (s *Statistics) StringWithoutHistograms() string {
+	return s.stringImpl(false)
+}
+
+func (s *Statistics) stringImpl(includeHistograms bool) string {
 	var buf bytes.Buffer
 
-	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
+	fmt.Fprintf(&buf, "[rows=%.7g", s.RowCount)
 	colStats := make(ColumnStatistics, s.ColStats.Count())
 	for i := 0; i < s.ColStats.Count(); i++ {
 		colStats[i] = s.ColStats.Get(i)
 	}
 	sort.Sort(colStats)
 	for _, col := range colStats {
-		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount)
-		fmt.Fprintf(&buf, ", null%s=%.9g", col.Cols.String(), col.NullCount)
+		fmt.Fprintf(&buf, ", distinct%s=%.6g", col.Cols.String(), col.DistinctCount)
+		fmt.Fprintf(&buf, ", null%s=%.6g", col.Cols.String(), col.NullCount)
+		fmt.Fprintf(&buf, ", avgsize%s=%.6g", col.Cols.String(), col.AvgSize)
 	}
 	buf.WriteString("]")
-	for _, col := range colStats {
-		if col.Histogram != nil {
-			label := fmt.Sprintf("histogram%s=", col.Cols.String())
-			indent := strings.Repeat(" ", tablewriter.DisplayWidth(label))
-			fmt.Fprintf(&buf, "\n%s", label)
-			histLines := strings.Split(strings.TrimRight(col.Histogram.String(), "\n"), "\n")
-			for i, line := range histLines {
-				if i != 0 {
-					fmt.Fprintf(&buf, "\n%s", indent)
+	if includeHistograms {
+		for _, col := range colStats {
+			if col.Histogram != nil {
+				label := fmt.Sprintf("histogram%s=", col.Cols.String())
+				indent := strings.Repeat(" ", tablewriter.DisplayWidth(label))
+				fmt.Fprintf(&buf, "\n%s", label)
+				histLines := strings.Split(strings.TrimRight(col.Histogram.String(), "\n"), "\n")
+				for i, line := range histLines {
+					if i != 0 {
+						fmt.Fprintf(&buf, "\n%s", indent)
+					}
+					fmt.Fprintf(&buf, "%s", strings.TrimRight(line, " "))
 				}
-				fmt.Fprintf(&buf, "%s", strings.TrimRight(line, " "))
 			}
 		}
 	}
@@ -185,6 +185,10 @@ type ColumnStatistic struct {
 	// columns for this expression. For multi-column stats, this null
 	// count tracks only the rows in which all columns in the set are null.
 	NullCount float64
+
+	// AvgSize is the estimated average size of this set of columns in bytes. For
+	// multi-column stats, it is the combined width of all columns.
+	AvgSize float64
 
 	// Histogram is only used when the size of Cols is one. It contains
 	// the approximate distribution of values for that column, represented
@@ -229,6 +233,18 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity Selectivity, inputRows fl
 		c.DistinctCount = epsilon
 	}
 
+}
+
+// CopyFromOther copies all fields of the other ColumnStatistic except Cols,
+// including the Histogram, into the receiver.
+func (c *ColumnStatistic) CopyFromOther(other *ColumnStatistic, evalCtx *tree.EvalContext) {
+	c.DistinctCount = other.DistinctCount
+	c.NullCount = other.NullCount
+	c.AvgSize = other.AvgSize
+	if other.Histogram != nil && c.Cols.Len() == 1 {
+		c.Histogram = &Histogram{}
+		c.Histogram.Init(evalCtx, c.Cols.SingleColumn(), other.Histogram.buckets)
+	}
 }
 
 // ColumnStatistics is a slice of pointers to ColumnStatistic values.

@@ -52,7 +52,7 @@ send "commit;\r"
 eexpect "ROLLBACK"
 eexpect root@
 
-interrupt
+send_eof
 eexpect eof
 end_test
 

@@ -8,11 +8,19 @@ source build/shlib.sh
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GCEWORKER_PROJECT-cockroach-workers}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
 NAME=${GCEWORKER_NAME-gceworker-$(id -un)}
+FQNAME="${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}"
 
 cmd=${1-}
 if [[ "${cmd}" ]]; then
   shift
 fi
+
+function start_and_wait() {
+    gcloud compute instances start "${1}"
+    echo "waiting for node to finish starting..."
+    # Wait for vm and sshd to start up.
+    retry gcloud compute ssh "${1}" --command=true || true
+}
 
 case "${cmd}" in
     gcloud)
@@ -28,17 +36,19 @@ case "${cmd}" in
 
     gcloud compute instances \
            create "${NAME}" \
-           --machine-type "custom-24-32768" \
+           --machine-type "n2-custom-24-32768" \
            --network "default" \
            --maintenance-policy "MIGRATE" \
            --image-project "ubuntu-os-cloud" \
-           --image-family "ubuntu-1804-lts" \
+           --image-family "ubuntu-2004-lts" \
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
            --scopes "cloud-platform"
     gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
 
+    # wait a bit to let gcloud create the instance before retrying
+    sleep 30
     # Retry while vm and sshd start up.
     retry gcloud compute ssh "${NAME}" --command=true
 
@@ -55,12 +65,13 @@ case "${cmd}" in
 
     ;;
     start)
-    gcloud compute instances start "${NAME}"
-    echo "waiting for node to finish starting..."
-    # Wait for vm and sshd to start up.
-    retry gcloud compute ssh "${NAME}" --command=true || true
+    start_and_wait "${NAME}"
+    if ! gcloud compute config-ssh > /dev/null; then
+	echo "WARNING: Unable to invoke config-ssh, you may not be able to 'ssh ${FQNAME}'"
+    fi
+
     # SSH into the node, since that's probably why we started it.
-    gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
+    $0 ssh
     ;;
     stop)
     read -r -p "This will stop the VM. Are you sure? [yes] " response
@@ -71,6 +82,16 @@ case "${cmd}" in
       exit 1
     fi
     gcloud compute instances stop "${NAME}"
+    ;;
+    reset)
+    read -r -p "This will hard reset (\"powercycle\") the VM. Are you sure? [yes] " response
+    # Convert to lowercase.
+    response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
+    if [[ $response != "yes" ]]; then
+      echo Aborting
+      exit 1
+    fi
+    gcloud compute instances reset "${NAME}"
     ;;
     delete|destroy)
     read -r -p "This will delete the VM! Are you sure? [yes] " response
@@ -86,16 +107,17 @@ case "${cmd}" in
     exit ${status}
     ;;
     ssh)
+    echo "****************************************"
+    echo "Hint: you should also be able to directly invoke:"
+    echo "ssh ${FQNAME}"
+    echo "  or"
+    echo "mosh ${FQNAME}"
+    echo "instead of '$0 ssh'."
+    echo "****************************************"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     mosh)
-    # An alternative solution would be to run gcloud compute config-ssh after
-    # starting or creating the vm, which adds stanzas to ~/.ssh/config that
-    # make `ssh $HOST` (and by extension, hopefully, mosh).
-    read -r -a arr <<< "$(gcloud compute ssh "${NAME}" --dry-run)"
-    host="${arr[-1]}"
-    unset 'arr[${#arr[@]}-1]'
-    mosh --ssh=$(printf '%q' "${arr}") $host
+    mosh "${FQNAME}"
     ;;
     scp)
     # Example: $0 scp gceworker-youruser:go/src/github.com/cockroachdb/cockroach/cockroach-data/logs gcelogs --recurse
@@ -132,7 +154,10 @@ case "${cmd}" in
     gcloud compute config-ssh --ssh-config-file "$tmpfile" > /dev/null
     unison "$host" "ssh://${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}/$worker" \
       -sshargs "-F ${tmpfile}" -auto -prefer "$host" -repeat watch \
+      -ignore 'Path .localcluster.certs*' \
       -ignore 'Path .git' \
+      -ignore 'Path _bazel*' \
+      -ignore 'Path bazel-out*' \
       -ignore 'Path bin*' \
       -ignore 'Path build/builder_home' \
       -ignore 'Path pkg/sql/parser/gen' \
@@ -142,6 +167,11 @@ case "${cmd}" in
       -ignore 'Name *.d' \
       -ignore 'Name *.o' \
       -ignore 'Name zcgo_flags*.go'
+    ;;
+    vscode)
+    start_and_wait "${NAME}"
+    HOST=$(gcloud compute ssh --dry-run ${NAME} | awk '{print $NF}')
+    code --wait --remote ssh-remote+$HOST "$@"
     ;;
     *)
     echo "$0: unknown command: ${cmd}, use one of create, start, stop, delete, ssh, or sync"

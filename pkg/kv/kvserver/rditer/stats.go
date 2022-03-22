@@ -27,11 +27,11 @@ func ComputeStatsForRange(
 	for _, keyRange := range MakeReplicatedKeyRangesExceptLockTable(d) {
 		func() {
 			iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind,
-				storage.IterOptions{UpperBound: keyRange.End.Key})
+				storage.IterOptions{UpperBound: keyRange.End})
 			defer iter.Close()
 
 			var msDelta enginepb.MVCCStats
-			if msDelta, err = iter.ComputeStats(keyRange.Start.Key, keyRange.End.Key, nowNanos); err != nil {
+			if msDelta, err = iter.ComputeStats(keyRange.Start, keyRange.End, nowNanos); err != nil {
 				return
 			}
 			ms.Add(msDelta)

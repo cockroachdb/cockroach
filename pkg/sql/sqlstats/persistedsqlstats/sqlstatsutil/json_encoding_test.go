@@ -11,11 +11,10 @@
 package sqlstatsutil
 
 import (
-	"math/rand"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
-	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -30,95 +29,8 @@ func jsonTestHelper(t *testing.T, expectedStr string, actual json.JSON) {
 
 	cmp, err := actual.Compare(expected)
 	require.NoError(t, err)
-	require.True(t, cmp == 0, "expected %s\nbut found %s", expected.String(), actual.String())
+	require.Zerof(t, cmp, "expected %s\nbut found %s", expected.String(), actual.String())
 }
-
-type randomData struct {
-	Bool   bool
-	String string
-	Int64  int64
-	Float  float64
-}
-
-var alphabet = []rune("abcdefghijklmkopqrstuvwxyz")
-
-func genRandomData() randomData {
-	r := randomData{}
-	r.Bool = rand.Float64() > 0.5
-
-	// Randomly generating 20-character string.
-	b := strings.Builder{}
-	for i := 0; i < 20; i++ {
-		b.WriteRune(alphabet[rand.Intn(26)])
-	}
-	r.String = b.String()
-
-	r.Int64 = rand.Int63()
-	r.Float = rand.Float64()
-
-	return r
-}
-
-func fillTemplate(t *testing.T, tmplStr string, data randomData) string {
-	tmpl, err := template.New("").Parse(tmplStr)
-	require.NoError(t, err)
-
-	b := strings.Builder{}
-	err = tmpl.Execute(&b, data)
-	require.NoError(t, err)
-
-	return b.String()
-}
-
-var fieldBlacklist = map[string]struct{}{
-	"App":                     {},
-	"SensitiveInfo":           {},
-	"LegacyLastErr":           {},
-	"LegacyLastErrRedacted":   {},
-	"LastExecTimestamp":       {},
-	"StatementFingerprintIDs": {},
-}
-
-func fillObject(t *testing.T, val reflect.Value, data *randomData) {
-	// Do not set the fields that are not being encoded as json.
-	if val.Kind() != reflect.Ptr {
-		t.Fatal("not a pointer type")
-	}
-
-	val = reflect.Indirect(val)
-
-	switch val.Kind() {
-	case reflect.Uint64:
-		val.SetUint(uint64(0))
-	case reflect.Int64:
-		val.SetInt(data.Int64)
-	case reflect.String:
-		val.SetString(data.String)
-	case reflect.Float64:
-		val.SetFloat(data.Float)
-	case reflect.Bool:
-		val.SetBool(data.Bool)
-	case reflect.Slice:
-		numElem := val.Len()
-		for i := 0; i < numElem; i++ {
-			fillObject(t, val.Index(i).Addr(), data)
-		}
-	case reflect.Struct:
-		numFields := val.NumField()
-		for i := 0; i < numFields; i++ {
-			fieldName := val.Type().Field(i).Name
-			fieldAddr := val.Field(i).Addr()
-			if _, ok := fieldBlacklist[fieldName]; ok {
-				continue
-			}
-
-			fillObject(t, fieldAddr, data)
-		}
-	default:
-		t.Fatalf("unsupported type: %s", val.Kind().String())
-	}
-}
-
 func TestSQLStatsJsonEncoding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -129,12 +41,12 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 
 		expectedMetadataStrTemplate := `
 {
-  "stmtTyp": "{{.String}}",
-  "query":   "{{.String}}",
-  "db":      "{{.String}}",
+  "stmtTyp":      "{{.String}}",
+  "query":        "{{.String}}",
+  "querySummary": "{{.String}}",
+  "db":           "{{.String}}",
   "distsql": {{.Bool}},
   "failed":  {{.Bool}},
-  "opt":     {{.Bool}},
   "implicitTxn": {{.Bool}},
   "vec":         {{.Bool}},
   "fullScan":    {{.Bool}}
@@ -147,7 +59,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "cnt": {{.Int64}},
          "firstAttemptCnt": {{.Int64}},
          "maxRetries":      {{.Int64}},
-         "lastExecAt":      "0001-01-01T00:00:00Z",
+         "lastExecAt":      "{{stringifyTime .Time}}",
          "numRows": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
@@ -179,7 +91,13 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "rowsRead": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
-         }
+         },
+         "rowsWritten": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "nodes": [{{joinInts .IntArray}}],
+         "planGists": [{{joinStrings .StringArray}}]
        },
        "execution_statistics": {
          "cnt": {{.Int64}},
@@ -230,6 +148,123 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 		require.Equal(t, input, actualJSONUnmarshalled)
 	})
 
+	// When a new statistic is added to a statement payload, older versions won't have the
+	// new parameter, so this test is to confirm that all other parameters will be set and
+	// the new one will be empty, without breaking the decoding process.
+	t.Run("statement_statistics with new parameter", func(t *testing.T) {
+		data := genRandomData()
+		expectedStatistics := roachpb.CollectedStatementStatistics{}
+
+		expectedMetadataStrTemplate := `
+			{
+				"stmtTyp":      "{{.String}}",
+				"query":        "{{.String}}",
+				"querySummary": "{{.String}}",
+				"db":           "{{.String}}",
+				"distsql": {{.Bool}},
+				"failed":  {{.Bool}},
+				"implicitTxn": {{.Bool}},
+				"vec":         {{.Bool}},
+				"fullScan":    {{.Bool}}
+			}
+			`
+		expectedStatisticsStrTemplate := `
+     {
+       "statistics": {
+         "cnt": {{.Int64}},
+         "firstAttemptCnt": {{.Int64}},
+         "maxRetries":      {{.Int64}},
+         "lastExecAt":      "{{stringifyTime .Time}}",
+         "numRows": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "parseLat": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "planLat": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "runLat": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "svcLat": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "ovhLat": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "bytesRead": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "rowsRead": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "rowsWritten": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "nodes": [{{joinInts .IntArray}}]
+         "planGists": [{{joinStrings .StringArray}}]
+       },
+       "execution_statistics": {
+         "cnt": {{.Int64}},
+         "networkBytes": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "maxMemUsage": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "contentionTime": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "networkMsgs": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "maxDiskUsage": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         }
+       }
+     }
+		 `
+
+		fillTemplate(t, expectedMetadataStrTemplate, data)
+		fillTemplate(t, expectedStatisticsStrTemplate, data)
+		fillObject(t, reflect.ValueOf(&expectedStatistics), &data)
+
+		actualMetadataJSON, err := BuildStmtMetadataJSON(&expectedStatistics)
+		require.NoError(t, err)
+		actualStatisticsJSON, err := BuildStmtStatisticsJSON(&expectedStatistics.Stats)
+		require.NoError(t, err)
+
+		var actualJSONUnmarshalled roachpb.CollectedStatementStatistics
+
+		err = DecodeStmtStatsMetadataJSON(actualMetadataJSON, &actualJSONUnmarshalled)
+		require.NoError(t, err)
+
+		// Remove one of the statistics on the object so its value doesn't get populated on
+		// the final actualJSONUnmarshalled.Stats.
+		actualStatisticsJSON, _, _ = actualStatisticsJSON.RemovePath([]string{"statistics", "numRows"})
+		// Initialize the field again to remove the existing value.
+		expectedStatistics.Stats.NumRows = roachpb.NumericStat{}
+
+		err = DecodeStmtStatsStatisticsJSON(actualStatisticsJSON, &actualJSONUnmarshalled.Stats)
+		require.NoError(t, err)
+		require.Equal(t, expectedStatistics, actualJSONUnmarshalled)
+	})
+
 	t.Run("transaction_statistics", func(t *testing.T) {
 		data := genRandomData()
 
@@ -277,6 +312,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
     "rowsRead": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
+    },
+    "rowsWritten": {
+      "mean": {{.Float}},
+      "sqDiff": {{.Float}}
     }
   },
   "execution_statistics": {
@@ -322,6 +361,41 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 		require.NoError(t, err)
 
 		err = DecodeTxnStatsStatisticsJSON(actualStatisticsJSON, &actualJSONUnmarshalled.Stats)
+		require.NoError(t, err)
+		require.Equal(t, input, actualJSONUnmarshalled)
+	})
+
+	t.Run("statement aggregated metadata", func(t *testing.T) {
+		data := genRandomData()
+
+		input := roachpb.AggregatedStatementMetadata{}
+
+		expectedAggregatedMetadataStrTemplate := `
+{
+  "stmtType": "{{.String}}",
+  "query": "{{.String}}",
+  "formattedQuery": "{{.String}}",
+  "querySummary": "{{.String}}",
+  "implicitTxn": {{.Bool}},
+  "distSQLCount": {{.Int64}},
+  "failedCount": {{.Int64}},
+  "vecCount": {{.Int64}},
+  "fullScanCount": {{.Int64}},
+  "totalCount": {{.Int64}},
+  "db": [{{joinStrings .StringArray}}],
+  "appNames": [{{joinStrings .StringArray}}]
+}
+		 `
+		expectedAggregatedMetadataStr := fillTemplate(t, expectedAggregatedMetadataStrTemplate, data)
+		fillObject(t, reflect.ValueOf(&input), &data)
+
+		actualMetadataJSON, err := BuildStmtDetailsMetadataJSON(&input)
+		require.NoError(t, err)
+		jsonTestHelper(t, expectedAggregatedMetadataStr, actualMetadataJSON)
+
+		// Ensure that we get the same protobuf after we decode the JSON.
+		var actualJSONUnmarshalled roachpb.AggregatedStatementMetadata
+		err = DecodeAggregatedMetadataJSON(actualMetadataJSON, &actualJSONUnmarshalled)
 		require.NoError(t, err)
 		require.Equal(t, input, actualJSONUnmarshalled)
 	})
@@ -400,6 +474,35 @@ func BenchmarkSQLStatsJson(b *testing.B) {
 					b.Fatal(err)
 				}
 				err = DecodeTxnStatsStatisticsJSON(inputTxnStatsJSON, &result.Stats)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	})
+
+	b.Run("statement_metadata", func(b *testing.B) {
+		inputStmtStats := roachpb.CollectedStatementStatistics{}
+		inputStmtMetadata := roachpb.AggregatedStatementMetadata{}
+		b.Run("encoding", func(b *testing.B) {
+			b.SetBytes(int64(inputStmtStats.Size()))
+
+			for i := 0; i < b.N; i++ {
+				_, err := BuildStmtDetailsMetadataJSON(&inputStmtMetadata)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+
+		inputStmtStatsAggregatedMetaJSON, _ := BuildStmtMetadataJSON(&inputStmtStats)
+		result := roachpb.AggregatedStatementMetadata{}
+
+		b.Run("decoding", func(b *testing.B) {
+			b.SetBytes(int64(inputStmtStatsAggregatedMetaJSON.Size()))
+
+			for i := 0; i < b.N; i++ {
+				err := DecodeAggregatedMetadataJSON(inputStmtStatsAggregatedMetaJSON, &result)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -529,5 +632,69 @@ func TestExplainTreePlanNodeToJSON(t *testing.T) {
 	for _, testData := range testDataArr {
 		explainTreeJSON := ExplainTreePlanNodeToJSON(&testData.explainTree)
 		require.Equal(t, testData.expected, explainTreeJSON.String())
+
+		explainTreeProto, err := JSONToExplainTreePlanNode(explainTreeJSON)
+		require.NoError(t, err)
+		compareExplainTree(t, &testData.explainTree, explainTreeProto)
+	}
+}
+
+type nodeAttrList []*roachpb.ExplainTreePlanNode_Attr
+
+var _ sort.Interface = nodeAttrList{}
+
+func (n nodeAttrList) Len() int {
+	return len(n)
+}
+
+func (n nodeAttrList) Less(i, j int) bool {
+	return strings.Compare(n[i].Key, n[j].Key) == -1
+}
+
+func (n nodeAttrList) Swap(i, j int) {
+	tmp := n[i]
+	n[i] = n[j]
+	n[j] = tmp
+}
+
+type nodeList []*roachpb.ExplainTreePlanNode
+
+var _ sort.Interface = nodeList{}
+
+func (n nodeList) Len() int {
+	return len(n)
+}
+
+func (n nodeList) Less(i, j int) bool {
+	return strings.Compare(n[i].Name, n[j].Name) == -1
+}
+
+func (n nodeList) Swap(i, j int) {
+	tmp := n[i]
+	n[i] = n[j]
+	n[j] = tmp
+}
+
+func compareExplainTree(t *testing.T, expected, actual *roachpb.ExplainTreePlanNode) {
+	require.Equal(t, strings.ToLower(expected.Name), strings.ToLower(actual.Name))
+	require.Equal(t, len(expected.Attrs), len(actual.Attrs))
+
+	// Sorts the Attrs so we have consistent result.
+	sort.Sort(nodeAttrList(expected.Attrs))
+	sort.Sort(nodeAttrList(actual.Attrs))
+
+	for i := range expected.Attrs {
+		require.Equal(t, strings.ToLower(expected.Attrs[i].Key), strings.ToLower(actual.Attrs[i].Key))
+		require.Equal(t, expected.Attrs[i].Value, actual.Attrs[i].Value)
+	}
+
+	require.Equal(t, len(expected.Children), len(actual.Children), "expected %+v, but found %+v", expected.Children, actual.Children)
+
+	// Sorts the Children so we can recursively compare them.
+	sort.Sort(nodeList(expected.Children))
+	sort.Sort(nodeList(actual.Children))
+
+	for i := range expected.Children {
+		compareExplainTree(t, expected.Children[i], actual.Children[i])
 	}
 }

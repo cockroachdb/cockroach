@@ -74,17 +74,15 @@ func TestKeyRewriter(t *testing.T) {
 		},
 	}
 
-	const notSpan = false
-
-	kr, err := makeKeyRewriterFromRekeys(keys.SystemSQLCodec, rekeys)
+	kr, err := makeKeyRewriterFromRekeys(keys.SystemSQLCodec, rekeys, nil /* tenantRekeys */)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("normal", func(t *testing.T) {
 		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec,
-			systemschema.NamespaceTable, desc.GetPrimaryIndexID())
-		newKey, ok, err := kr.RewriteKey(key, notSpan)
+			systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
+		newKey, ok, err := kr.RewriteKey(key)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,8 +100,8 @@ func TestKeyRewriter(t *testing.T) {
 
 	t.Run("prefix end", func(t *testing.T) {
 		key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec,
-			systemschema.NamespaceTable, desc.GetPrimaryIndexID())).PrefixEnd()
-		newKey, ok, err := kr.RewriteKey(key, notSpan)
+			systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())).PrefixEnd()
+		newKey, ok, err := kr.RewriteKey(key)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -126,13 +124,13 @@ func TestKeyRewriter(t *testing.T) {
 		newKr, err := makeKeyRewriterFromRekeys(keys.SystemSQLCodec, []execinfrapb.TableRekey{
 			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
 			{OldID: uint32(desc.ID), NewDesc: mustMarshalDesc(t, desc2.TableDesc())},
-		})
+		}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, systemschema.NamespaceTable, desc.GetPrimaryIndexID())
-		newKey, ok, err := newKr.RewriteKey(key, notSpan)
+		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
+		newKey, ok, err := newKr.RewriteKey(key)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -155,11 +153,11 @@ func TestKeyRewriter(t *testing.T) {
 			destCodec := keys.MakeSQLCodec(destTenant)
 			newKr, err := makeKeyRewriterFromRekeys(destCodec, []execinfrapb.TableRekey{
 				{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
-			})
+			}, nil)
 			require.NoError(t, err)
 
-			key := rowenc.MakeIndexKeyPrefix(srcCodec, systemschema.NamespaceTable, desc.GetPrimaryIndexID())
-			newKey, ok, err := newKr.RewriteKey(key, notSpan)
+			key := rowenc.MakeIndexKeyPrefix(srcCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
+			newKey, ok, err := newKr.RewriteKey(key)
 			require.NoError(t, err)
 			if !ok {
 				t.Fatalf("expected rewrite")

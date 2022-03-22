@@ -1,0 +1,23 @@
+# cycle.opt contains Optgen language definitions for testing cycle detection.
+
+# NormCycleTestRel is a relational operator for testing that normalization rule
+# cycles are detected by the Factory and a stack overflow is prevented. Two
+# rules for this expression, NormCycleTestRelTrueToFalse and
+# NormCycleTestRelFalseToTrue, create a normalization rule cycle. See the cycle
+# test file for tests that use this expression.
+[Relational]
+define NormCycleTestRel {
+    Scalar ScalarExpr
+}
+
+# MemoCycleTestRel is a relational expression for testing that memo cycles are
+# detected by the optimizer and a stack overflow is prevented. A cycle in the
+# memo occurs when there is a path from a group member's children back to the
+# group member's group. MemoCycleTestRel is similar in structure to the Select
+# expression, but matches a rule, MemoCycleTestRelRule, that creates a memo
+# cycle.
+[Relational]
+define MemoCycleTestRel {
+    Input RelExpr
+    Filters FiltersExpr
+}

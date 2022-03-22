@@ -16,7 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,15 +30,11 @@ import (
 // FlowCtx encompasses the configuration parameters needed for various flow
 // components.
 type FlowCtx struct {
-	log.AmbientContext
+	AmbientContext log.AmbientContext
 
 	Cfg *ServerConfig
 
-	// ID is a unique identifier for a remote flow. It is mainly used as a key
-	// into the flowRegistry. Since local flows do not need to exist in the flow
-	// registry (no inbound stream connections need to be performed), they are not
-	// assigned ids. This is done for performance reasons, as local flows are
-	// more likely to be dominated by setup time.
+	// ID is a unique identifier for a flow.
 	ID execinfrapb.FlowID
 
 	// EvalCtx is used by all the processors in the flow to evaluate expressions.
@@ -53,6 +52,20 @@ type FlowCtx struct {
 	// higher-level txn (like backfills).
 	Txn *kv.Txn
 
+	// Descriptors is used to look up leased table descriptors and to construct
+	// transaction bound TypeResolvers to resolve type references during flow
+	// setup. It is not safe for concurrent use and is intended to be used only
+	// during flow setup and initialization. The Descriptors object is initialized
+	// when the FlowContext is created on the gateway node using the planner's
+	// descs.Collection and is created on remote nodes with a new descs.Collection
+	// In the latter case, after the flow is complete, all descriptors leased from
+	// this object must be released.
+	Descriptors *descs.Collection
+
+	// IsDescriptorsCleanupRequired is set if Descriptors needs to release the
+	// leases it acquired after the flow is complete.
+	IsDescriptorsCleanupRequired bool
+
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.
 	NodeID *base.SQLIDContainer
@@ -69,18 +82,13 @@ type FlowCtx struct {
 	// Gateway is true if this flow is being run on the gateway node.
 	Gateway bool
 
-	// TypeResolverFactory is used to construct transaction bound TypeResolvers
-	// to resolve type references during flow setup. It is not safe for concurrent
-	// use and is intended to be used only during flow setup and initialization.
-	// The TypeResolverFactory is initialized when the FlowContext is created
-	// on the gateway node using the planner's descs.Collection and is created
-	// on remote nodes with a new descs.Collection. After the flow is complete,
-	// all descriptors leased from the factory must be released.
-	TypeResolverFactory *descs.DistSQLTypeResolverFactory
-
 	// DiskMonitor is this flow's disk monitor. All disk usage for this flow must
 	// be registered through this monitor.
 	DiskMonitor *mon.BytesMonitor
+
+	// PreserveFlowSpecs is true when the flow setup code needs to be careful
+	// when modifying the specifications of processors.
+	PreserveFlowSpecs bool
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
@@ -108,6 +116,40 @@ func (ctx *FlowCtx) Stopper() *stop.Stopper {
 // Codec returns the SQL codec for this flowCtx.
 func (ctx *FlowCtx) Codec() keys.SQLCodec {
 	return ctx.EvalCtx.Codec
+}
+
+// TableDescriptor returns a catalog.TableDescriptor object for the given
+// descriptor proto, using the descriptors collection if it is available.
+func (ctx *FlowCtx) TableDescriptor(desc *descpb.TableDescriptor) catalog.TableDescriptor {
+	if desc == nil {
+		return nil
+	}
+	if ctx != nil && ctx.Descriptors != nil && ctx.Txn != nil {
+		leased, _ := ctx.Descriptors.GetLeasedImmutableTableByID(ctx.EvalCtx.Ctx(), ctx.Txn, desc.ID)
+		if leased != nil && leased.GetVersion() == desc.Version {
+			return leased
+		}
+	}
+	return tabledesc.NewUnsafeImmutable(desc)
+}
+
+// NewTypeResolver creates a new TypeResolver that is bound under the input
+// transaction. It returns a nil resolver if the FlowCtx doesn't hold a
+// descs.Collection object.
+func (ctx *FlowCtx) NewTypeResolver(txn *kv.Txn) descs.DistSQLTypeResolver {
+	if ctx == nil || ctx.Descriptors == nil {
+		return descs.DistSQLTypeResolver{}
+	}
+	return descs.NewDistSQLTypeResolver(ctx.Descriptors, txn)
+}
+
+// NewSemaContext creates a new SemaContext with a TypeResolver bound to the
+// input transaction.
+func (ctx *FlowCtx) NewSemaContext(txn *kv.Txn) *tree.SemaContext {
+	resolver := ctx.NewTypeResolver(txn)
+	semaCtx := tree.MakeSemaContext()
+	semaCtx.TypeResolver = &resolver
+	return &semaCtx
 }
 
 // ProcessorComponentID returns a ComponentID for the given processor in this

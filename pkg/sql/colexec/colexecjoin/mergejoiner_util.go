@@ -148,6 +148,12 @@ func (b *circularGroupsBuffer) isLastGroupInCol() bool {
 	return b.startIdx == b.nextColStartIdx
 }
 
+// hasGroupForNextCol returns true if at least one group has already been added
+// for the next column.
+func (b *circularGroupsBuffer) hasGroupForNextCol() bool {
+	return b.nextColStartIdx != b.endIdx
+}
+
 // ensureCapacityForNewGroup makes sure that groups slices have enough space to
 // add another group to the buffer, reallocating the slices if necessary.
 func (b *circularGroupsBuffer) ensureCapacityForNewGroup() {

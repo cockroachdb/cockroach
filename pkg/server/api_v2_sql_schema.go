@@ -13,7 +13,6 @@ package server
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,10 +21,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-func isNotFoundError(err error) bool {
-	return err != nil && strings.HasSuffix(err.Error(), "not found")
-}
 
 // Response for listUsers.
 //

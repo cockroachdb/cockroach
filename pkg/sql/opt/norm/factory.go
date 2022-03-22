@@ -17,10 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ReplaceFunc is the callback function passed to the Factory.Replace method.
@@ -102,7 +102,7 @@ type Factory struct {
 // normalization rules are applied when this limit is reached, and the
 // onMaxConstructorStackDepthExceeded method is called. This can result in an
 // expression that is not fully optimized.
-const maxConstructorStackDepth = 10000
+const maxConstructorStackDepth = 10_000
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
@@ -236,11 +236,16 @@ func (f *Factory) CopyAndReplace(
 		panic(errors.AssertionFailedf("destination memo must be empty"))
 	}
 
+	// Copy the next scalar rank to the target memo so that new scalar
+	// expressions built with the new memo will not share scalar ranks with
+	// existing expressions.
+	f.mem.CopyNextRankFrom(from.Memo())
+
 	// Copy all metadata to the target memo so that referenced tables and
 	// columns can keep the same ids they had in the "from" memo. Scalar
 	// expressions in the metadata cannot have placeholders, so we simply copy
 	// the expressions without replacement.
-	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyScalarWithoutPlaceholders)
+	f.mem.Metadata().CopyFrom(from.Memo().Metadata(), f.CopyWithoutAssigningPlaceholders)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
@@ -248,10 +253,10 @@ func (f *Factory) CopyAndReplace(
 	f.Memo().SetRoot(to, fromProps)
 }
 
-// CopyScalarWithoutPlaceholders returns a copy of the given scalar expression.
+// CopyWithoutAssigningPlaceholders returns a copy of the given scalar expression.
 // It does not attempt to replace placeholders with values.
-func (f *Factory) CopyScalarWithoutPlaceholders(e opt.Expr) opt.Expr {
-	return f.CopyAndReplaceDefault(e, f.CopyScalarWithoutPlaceholders)
+func (f *Factory) CopyWithoutAssigningPlaceholders(e opt.Expr) opt.Expr {
+	return f.CopyAndReplaceDefault(e, f.CopyWithoutAssigningPlaceholders)
 }
 
 // AssignPlaceholders is used just before execution of a prepared Memo. It makes
@@ -297,7 +302,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 // function returns. It is used to verify that the stack depth is correctly
 // decremented for each constructor function.
 func (f *Factory) CheckConstructorStackDepth() {
-	if util.CrdbTestBuild && f.constructorStackDepth != 0 {
+	if buildutil.CrdbTestBuild && f.constructorStackDepth != 0 {
 		panic(errors.AssertionFailedf(
 			"expected constructor stack depth %v to be 0",
 			f.constructorStackDepth,
@@ -313,7 +318,7 @@ func (f *Factory) onMaxConstructorStackDepthExceeded() {
 		"optimizer factory constructor call stack exceeded max depth of %v",
 		maxConstructorStackDepth,
 	)
-	if util.CrdbTestBuild {
+	if buildutil.CrdbTestBuild {
 		panic(err)
 	}
 	errorutil.SendReport(f.evalCtx.Ctx(), &f.evalCtx.Settings.SV, err)
@@ -395,7 +400,7 @@ func (f *Factory) ConstructJoin(
 	case opt.AntiJoinApplyOp:
 		return f.ConstructAntiJoinApply(left, right, on, private)
 	}
-	panic(errors.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
+	panic(errors.AssertionFailedf("unexpected join operator: %v", redact.Safe(joinOp)))
 }
 
 // ConstructConstVal constructs one of the constant value operators from the

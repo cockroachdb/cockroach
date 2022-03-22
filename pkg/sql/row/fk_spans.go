@@ -20,16 +20,15 @@ import (
 // FKCheckSpan returns a span that can be scanned to ascertain existence of a
 // specific row in a given index.
 func FKCheckSpan(
-	s *span.Builder, values []tree.Datum, colMap catalog.TableColMap, numCols int,
+	builder *span.Builder,
+	splitter span.Splitter,
+	values []tree.Datum,
+	colMap catalog.TableColMap,
+	numCols int,
 ) (roachpb.Span, error) {
-	span, containsNull, err := s.SpanFromDatumRow(values, numCols, colMap)
+	span, containsNull, err := builder.SpanFromDatumRow(values, numCols, colMap)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
-	// If it is safe to split this lookup into multiple families, generate a point lookup for
-	// family 0. Because we are just checking for existence, we only need family 0.
-	if s.CanSplitSpanIntoFamilySpans(1 /* numNeededFamilies */, numCols, containsNull) {
-		return s.SpanToPointSpan(span, 0), nil
-	}
-	return span, nil
+	return splitter.ExistenceCheckSpan(span, numCols, containsNull), nil
 }

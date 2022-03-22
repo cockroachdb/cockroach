@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 // {{/*
+//go:build execgen_template
 // +build execgen_template
+
 //
 // This file is the execgen template for any_not_null_agg.eg.go. It's formatted
 // in a special way, so it's both valid Go and a valid text/template input.
@@ -22,7 +24,7 @@ package colexecagg
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -86,24 +88,23 @@ func newAnyNotNull_AGGKINDAggAlloc(
 type anyNotNull_TYPE_AGGKINDAgg struct {
 	// {{if eq "_AGGKIND" "Ordered"}}
 	orderedAggregateFuncBase
+	col _GOTYPESLICE
 	// {{else}}
 	unorderedAggregateFuncBase
 	// {{end}}
-	col                         _GOTYPESLICE
 	curAgg                      _GOTYPE
 	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &anyNotNull_TYPE_AGGKINDAgg{}
 
+// {{if eq "_AGGKIND" "Ordered"}}
 func (a *anyNotNull_TYPE_AGGKINDAgg) SetOutput(vec coldata.Vec) {
-	// {{if eq "_AGGKIND" "Ordered"}}
 	a.orderedAggregateFuncBase.SetOutput(vec)
-	// {{else}}
-	a.unorderedAggregateFuncBase.SetOutput(vec)
-	// {{end}}
 	a.col = vec.TemplateType()
 }
+
+// {{end}}
 
 func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
@@ -173,11 +174,14 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	_ = outputIdx
 	outputIdx = a.curIdx
 	a.curIdx++
+	col := a.col
+	// {{else}}
+	col := a.vec.TemplateType()
 	// {{end}}
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col.Set(outputIdx, a.curAgg)
+		col.Set(outputIdx, a.curAgg)
 	}
 	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
 	// Release the reference to curAgg eagerly.

@@ -21,9 +21,44 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
+
+// DequalifyAndTypeCheckExpr type checks the given expression and returns the
+// type-checked expression disregarding volatility. The typed expression, which contains dummyColumns,
+// does not support evaluation.
+func DequalifyAndTypeCheckExpr(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	expr tree.Expr,
+	semaCtx *tree.SemaContext,
+	tn *tree.TableName,
+) (tree.TypedExpr, error) {
+	nonDropColumns := desc.NonDropColumns()
+	sourceInfo := colinfo.NewSourceInfoForSingleTable(
+		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
+	)
+	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Replace the column variables with dummyColumns so that they can be
+	// type-checked.
+	replacedExpr, _, err := replaceColumnVars(desc, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	typedExpr, err := tree.TypeCheck(ctx, replacedExpr, semaCtx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+
+	return typedExpr, nil
+}
 
 // DequalifyAndValidateExpr validates that an expression has the given type and
 // contains no functions with a volatility greater than maxVolatility. The
@@ -160,6 +195,7 @@ func FormatExprForDisplay(
 	desc catalog.TableDescriptor,
 	exprStr string,
 	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
 	fmtFlags tree.FmtFlags,
 ) (string, error) {
 	return formatExprForDisplayImpl(
@@ -167,6 +203,7 @@ func FormatExprForDisplay(
 		desc,
 		exprStr,
 		semaCtx,
+		sessionData,
 		fmtFlags,
 		false, /* wrapNonFuncExprs */
 	)
@@ -181,6 +218,7 @@ func FormatExprForExpressionIndexDisplay(
 	desc catalog.TableDescriptor,
 	exprStr string,
 	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
 	fmtFlags tree.FmtFlags,
 ) (string, error) {
 	return formatExprForDisplayImpl(
@@ -188,6 +226,7 @@ func FormatExprForExpressionIndexDisplay(
 		desc,
 		exprStr,
 		semaCtx,
+		sessionData,
 		fmtFlags,
 		true, /* wrapNonFuncExprs */
 	)
@@ -198,6 +237,7 @@ func formatExprForDisplayImpl(
 	desc catalog.TableDescriptor,
 	exprStr string,
 	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
 	fmtFlags tree.FmtFlags,
 	wrapNonFuncExprs bool,
 ) (string, error) {
@@ -210,7 +250,7 @@ func formatExprForDisplayImpl(
 	if err != nil {
 		return "", err
 	}
-	f := tree.NewFmtCtx(fmtFlags)
+	f := tree.NewFmtCtx(fmtFlags, tree.FmtDataConversionConfig(sessionData.DataConversionConfig))
 	_, isFunc := expr.(*tree.FuncExpr)
 	if wrapNonFuncExprs && !isFunc {
 		f.WriteByte('(')
@@ -303,7 +343,7 @@ func newNameResolver(
 // unresolved names replaced with IndexedVars.
 func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
 	var v NameResolutionVisitor
-	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData.SearchPath)
+	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData().SearchPath)
 }
 
 // addColumn adds a new column to the nameResolver so that it can be resolved in

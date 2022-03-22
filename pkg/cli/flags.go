@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -53,12 +54,11 @@ var serverSQLAdvertiseAddr, serverSQLAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
 var localityAdvertiseHosts localityList
 var startBackground bool
+var storeSpecs base.StoreSpecList
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
 func initPreFlagsDefaults() {
-	initPreFlagsCertDefaults()
-
 	serverListenPort = base.DefaultPort
 	serverSocketDir = ""
 	serverAdvertiseAddr = ""
@@ -75,6 +75,8 @@ func initPreFlagsDefaults() {
 	localityAdvertiseHosts = localityList{}
 
 	startBackground = false
+
+	storeSpecs = base.StoreSpecList{}
 }
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
@@ -296,7 +298,20 @@ func init() {
 			// Finalize the configuration of network settings.
 			return extraServerFlagInit(cmd)
 		})
+		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
+			return extraStoreFlagInit(cmd)
+		})
 	}
+
+	// Add store flag handling for the pebble debug command as it needs store
+	// flags configured.
+	AddPersistentPreRunE(DebugPebbleCmd, func(cmd *cobra.Command, _ []string) error {
+		return extraStoreFlagInit(cmd)
+	})
+
+	AddPersistentPreRunE(mtStartSQLCmd, func(cmd *cobra.Command, _ []string) error {
+		return mtStartSQLFlagsInit(cmd)
+	})
 
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
@@ -317,7 +332,11 @@ func init() {
 			// Same as httptest, but for the datadriven package.
 			flag.Hidden = true
 		}
-		if flag.Name == logflags.ShowLogsName {
+		if strings.EqualFold(flag.Name, "log_err_stacks") {
+			// Vitess registers flags directly.
+			flag.Hidden = true
+		}
+		if flag.Name == logflags.ShowLogsName || flag.Name == logflags.TestLogConfigName {
 			// test-only flag
 			flag.Hidden = true
 		}
@@ -468,7 +487,7 @@ func init() {
 		stringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
 		varFlag(f, &serverCfg.Locality, cliflags.Locality)
 
-		varFlag(f, &serverCfg.Stores, cliflags.Store)
+		varFlag(f, &storeSpecs, cliflags.Store)
 		varFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
 		varFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
 		stringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice)
@@ -488,6 +507,7 @@ func init() {
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
+		boolFlag(f, &serverCfg.ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound, cliflags.ExternalIOEnableNonAdminImplicitAndArbitraryOutbound)
 
 		// Certificate principal map.
 		stringSliceFlag(f, &startCtx.serverCertPrincipalMap, cliflags.CertPrincipalMap)
@@ -510,6 +530,7 @@ func init() {
 		// Engine flags.
 		varFlag(f, cacheSizeValue, cliflags.Cache)
 		varFlag(f, sqlSizeValue, cliflags.SQLMem)
+		varFlag(f, tsdbSizeValue, cliflags.TSDBMem)
 		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
 		// the stores flag has been parsed and the storage device that a percentage
 		// refers to becomes known.
@@ -545,57 +566,38 @@ func init() {
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// All certs commands need the certificate directory.
-		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
-		// All certs commands get the certificate principal map.
-		stringSliceFlag(f, &cliCtx.certPrincipalMap, cliflags.CertPrincipalMap)
-	}
+		stringFlag(f, &certCtx.certsDir, cliflags.CertsDir)
 
-	for _, cmd := range []*cobra.Command{
-		createCACertCmd,
-		createClientCACertCmd,
-		mtCreateTenantClientCACertCmd,
-	} {
-		f := cmd.Flags()
-		// CA certificates have a longer expiration time.
-		durationFlag(f, &caCertificateLifetime, cliflags.CertificateLifetime)
-		// The CA key can be re-used if it exists.
-		boolFlag(f, &allowCAKeyReuse, cliflags.AllowCAKeyReuse)
-	}
+		// All certs command want to map CNs to SQL principals.
+		stringSliceFlag(f, &certCtx.certPrincipalMap, cliflags.CertPrincipalMap)
 
-	for _, cmd := range []*cobra.Command{
-		createNodeCertCmd,
-		createClientCertCmd,
-		mtCreateTenantClientCertCmd,
-	} {
-		f := cmd.Flags()
-		durationFlag(f, &certificateLifetime, cliflags.CertificateLifetime)
-	}
+		if cmd == listCertsCmd {
+			// The 'list' subcommand does not write to files and thus does
+			// not need the arguments below.
+			continue
+		}
 
-	// The remaining flags are shared between all cert-generating functions.
-	for _, cmd := range []*cobra.Command{
-		createCACertCmd,
-		createClientCACertCmd,
-		createNodeCertCmd,
-		createClientCertCmd,
-		mtCreateTenantClientCACertCmd,
-		mtCreateTenantClientCertCmd,
-	} {
-		f := cmd.Flags()
-		stringFlag(f, &baseCfg.SSLCAKey, cliflags.CAKey)
-		intFlag(f, &keySize, cliflags.KeySize)
-		boolFlag(f, &overwriteFiles, cliflags.OverwriteFiles)
-	}
-	// PKCS8 key format is only available for the client cert command.
-	boolFlag(createClientCertCmd.Flags(), &generatePKCS8Key, cliflags.GeneratePKCS8Key)
+		stringFlag(f, &certCtx.caKey, cliflags.CAKey)
+		intFlag(f, &certCtx.keySize, cliflags.KeySize)
+		boolFlag(f, &certCtx.overwriteFiles, cliflags.OverwriteFiles)
 
-	// The certs dir is given to all clientCmds below, but the following are not clientCmds.
-	for _, cmd := range []*cobra.Command{
-		mtCreateTenantClientCACertCmd,
-		mtCreateTenantClientCertCmd,
-	} {
-		f := cmd.Flags()
-		// Certificate flags.
-		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
+		if strings.HasSuffix(cmd.Name(), "-ca") {
+			// CA-only commands.
+
+			// CA certificates have a longer expiration time.
+			durationFlag(f, &certCtx.caCertificateLifetime, cliflags.CertificateLifetime)
+			// The CA key can be re-used if it exists.
+			boolFlag(f, &certCtx.allowCAKeyReuse, cliflags.AllowCAKeyReuse)
+		} else {
+			// Non-CA commands.
+
+			durationFlag(f, &certCtx.certificateLifetime, cliflags.CertificateLifetime)
+		}
+
+		// PKCS8 key format is only available for the client cert command.
+		if cmd == createClientCertCmd {
+			boolFlag(f, &certCtx.generatePKCS8Key, cliflags.GeneratePKCS8Key)
+		}
 	}
 
 	clientCmds := []*cobra.Command{
@@ -604,6 +606,7 @@ func init() {
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
 		debugListFilesCmd,
+		debugSendKVBatchCmd,
 		doctorExamineClusterCmd,
 		doctorExamineFallbackClusterCmd,
 		doctorRecreateClusterCmd,
@@ -706,6 +709,7 @@ func init() {
 	for _, cmd := range []*cobra.Command{quitCmd, drainNodeCmd} {
 		f := cmd.Flags()
 		durationFlag(f, &quitCtx.drainWait, cliflags.DrainWait)
+		boolFlag(f, &quitCtx.nodeDrainSelf, cliflags.NodeDrainSelf)
 	}
 
 	// SQL and demo commands.
@@ -716,6 +720,7 @@ func init() {
 		stringFlag(f, &sqlCtx.InputFile, cliflags.File)
 		durationFlag(f, &sqlCtx.ShellCtx.RepeatDelay, cliflags.Watch)
 		varFlag(f, &sqlCtx.SafeUpdates, cliflags.SafeUpdates)
+		boolFlag(f, &sqlCtx.ReadOnly, cliflags.ReadOnly)
 		// The "safe-updates" flag is tri-valued (true, false, not-specified).
 		// If the flag is specified on the command line, but is not given a value,
 		// then use the value "true".
@@ -832,6 +837,7 @@ func init() {
 
 		intFlag(f, &demoCtx.NumNodes, cliflags.DemoNodes)
 		boolFlag(f, &demoCtx.RunWorkload, cliflags.RunDemoWorkload)
+		intFlag(f, &demoCtx.WorkloadMaxQPS, cliflags.DemoWorkloadMaxQPS)
 		varFlag(f, &demoCtx.Localities, cliflags.DemoNodeLocality)
 		boolFlag(f, &demoCtx.GeoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
 		varFlag(f, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
@@ -843,6 +849,7 @@ func init() {
 				"For details, see: "+build.MakeIssueURL(53404))
 
 		boolFlag(f, &demoCtx.DisableLicenseAcquisition, cliflags.DemoNoLicense)
+		boolFlag(f, &demoCtx.Multitenant, cliflags.DemoMultitenant)
 		boolFlag(f, &demoCtx.SimulateLatency, cliflags.Global)
 		// The --empty flag is only valid for the top level demo command,
 		// so we use the regular flag set.
@@ -857,6 +864,7 @@ func init() {
 
 		intFlag(f, &demoCtx.SQLPort, cliflags.DemoSQLPort)
 		intFlag(f, &demoCtx.HTTPPort, cliflags.DemoHTTPPort)
+		stringFlag(f, &demoCtx.ListeningURLFile, cliflags.ListeningURLFile)
 	}
 
 	// statement-diag command.
@@ -914,7 +922,7 @@ func init() {
 	}
 	{
 		f := debugCheckLogConfigCmd.Flags()
-		varFlag(f, &serverCfg.Stores, cliflags.Store)
+		varFlag(f, &storeSpecs, cliflags.Store)
 	}
 	{
 		f := debugRangeDataCmd.Flags()
@@ -933,7 +941,7 @@ func init() {
 	{
 		// TODO(ayang): clean up so dir isn't passed to both pebble and --store
 		f := DebugPebbleCmd.PersistentFlags()
-		varFlag(f, &serverCfg.Stores, cliflags.Store)
+		varFlag(f, &storeSpecs, cliflags.Store)
 	}
 	{
 		for _, c := range []*cobra.Command{
@@ -952,7 +960,7 @@ func init() {
 		}
 	}
 
-	// Multi-tenancy commands.
+	// Multi-tenancy start-sql command flags.
 	{
 		f := mtStartSQLCmd.Flags()
 		varFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
@@ -966,17 +974,33 @@ func init() {
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
 		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
+		varFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 
+		varFlag(f, &serverCfg.Locality, cliflags.Locality)
+		varFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
+		varFlag(f, &storeSpecs, cliflags.Store)
+		stringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
 		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
 
 		stringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
 
-		durationFlag(f, &serverCfg.IdleExitAfter, cliflags.IdleExitAfter)
-
+		// Enable/disable various external storage endpoints.
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
 
+		// Engine flags.
+		varFlag(f, sqlSizeValue, cliflags.SQLMem)
+		varFlag(f, tsdbSizeValue, cliflags.TSDBMem)
+		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
+		// the stores flag has been parsed and the storage device that a percentage
+		// refers to becomes known.
+		varFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
+		stringFlag(f, &startCtx.tempDir, cliflags.TempDir)
+
+		if backgroundFlagDefined {
+			boolFlag(f, &startBackground, cliflags.Background)
+		}
 	}
 
 	// Multi-tenancy proxy command flags.
@@ -991,15 +1015,18 @@ func init() {
 		stringFlag(f, &proxyContext.DirectoryAddr, cliflags.DirectoryAddr)
 		boolFlag(f, &proxyContext.SkipVerify, cliflags.SkipVerify)
 		boolFlag(f, &proxyContext.Insecure, cliflags.InsecureBackend)
-		durationFlag(f, &proxyContext.RatelimitBaseDelay, cliflags.RatelimitBaseDelay)
 		durationFlag(f, &proxyContext.ValidateAccessInterval, cliflags.ValidateAccessInterval)
 		durationFlag(f, &proxyContext.PollConfigInterval, cliflags.PollConfigInterval)
 		durationFlag(f, &proxyContext.DrainTimeout, cliflags.DrainTimeout)
+		durationFlag(f, &proxyContext.ThrottleBaseDelay, cliflags.ThrottleBaseDelay)
 	}
 	// Multi-tenancy test directory command flags.
 	{
 		f := mtTestDirectorySvr.Flags()
 		intFlag(f, &testDirectorySvrContext.port, cliflags.TestDirectoryListenPort)
+		stringFlag(f, &testDirectorySvrContext.certsDir, cliflags.TestDirectoryTenantCertsDir)
+		stringFlag(f, &testDirectorySvrContext.tenantBaseDir, cliflags.TestDirectoryTenantBaseDir)
+		stringFlag(f, &testDirectorySvrContext.kvAddrs, cliflags.KVAddrs)
 	}
 
 	// userfile upload command.
@@ -1202,8 +1229,29 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	return nil
 }
 
+// Fill the store paths.
+// We have different defaults for server and tenant pod, and we don't want incorrect
+// default to show up in flag help. To achieve that we create empty spec in private
+// flag copy of spec and then copy this value if it was populated.
+// If it isn't populated, default from server config is used for server commands or
+// alternative default is generated by PreRun multi-tenant hook.
+func extraStoreFlagInit(cmd *cobra.Command) error {
+	fs := flagSetForCmd(cmd)
+	if fs.Changed(cliflags.Store.Name) {
+		serverCfg.Stores = storeSpecs
+	}
+	return nil
+}
+
 func extraClientFlagInit() error {
-	if err := security.SetCertPrincipalMap(cliCtx.certPrincipalMap); err != nil {
+	// A command can be either a 'cert' command or an actual client command.
+	// TODO(knz): Clean this up to not use a global variable for the
+	// principal map.
+	principalMap := certCtx.certPrincipalMap
+	if principalMap == nil {
+		principalMap = cliCtx.certPrincipalMap
+	}
+	if err := security.SetCertPrincipalMap(principalMap); err != nil {
 		return err
 	}
 	serverCfg.Addr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
@@ -1220,6 +1268,18 @@ func extraClientFlagInit() error {
 	// sent.
 	if sqlConnCtx.DebugMode {
 		sqlConnCtx.Echo = true
+	}
+	return nil
+}
+
+func mtStartSQLFlagsInit(cmd *cobra.Command) error {
+	// Override default store for mt to use a per tenant store directory.
+	fs := flagSetForCmd(cmd)
+	if !fs.Changed(cliflags.Store.Name) {
+		// We assume that we only need to change top level store as temp dir configs are
+		// initialized when start is executed and temp dirs inherit path from first store.
+		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
+		serverCfg.Stores.Specs[0].Path = server.DefaultSQLNodeStorePathPrefix + tenantID
 	}
 	return nil
 }

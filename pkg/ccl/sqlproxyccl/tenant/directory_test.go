@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -67,6 +68,7 @@ func TestDirectoryErrors(t *testing.T) {
 func TestWatchPods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
+	skip.UnderDeadlockWithIssue(t, 71365)
 
 	// Make pod watcher channel.
 	podWatcher := make(chan *tenant.Pod, 1)
@@ -99,9 +101,10 @@ func TestWatchPods(t *testing.T) {
 
 	// Ensure that all addresses have been cleared from the directory, since
 	// it should only return RUNNING addresses.
-	addrs, err := dir.LookupTenantAddrs(ctx, tenantID)
-	require.NoError(t, err)
-	require.Empty(t, addrs)
+	require.Eventually(t, func() bool {
+		addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
+		return len(addrs) == 0
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// Now shut the tenant directory down.
 	processes := tds.Get(tenantID)
@@ -118,10 +121,12 @@ func TestWatchPods(t *testing.T) {
 	require.Equal(t, addr, pod.Addr)
 	require.Equal(t, tenant.DELETING, pod.State)
 
-	require.Eventually(t, func() bool {
-		addrs, _ := dir.LookupTenantAddrs(ctx, tenantID)
-		return len(addrs) == 0
-	}, 10*time.Second, 100*time.Millisecond)
+	// We know that the directory should have been emptied earlier since we
+	// don't add DRAINING pods to the directory, so putting the pod into the
+	// DELETING state should not make a difference.
+	addrs, err := dir.LookupTenantAddrs(ctx, tenantID)
+	require.NoError(t, err)
+	require.Empty(t, addrs)
 
 	// Resume tenant again by a direct call to the directory server
 	_, err = tds.EnsurePod(ctx, &tenant.EnsurePodRequest{tenantID.ToUint64()})
@@ -220,6 +225,7 @@ func TestCancelLookups(t *testing.T) {
 func TestResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
+	skip.UnderDeadlockWithIssue(t, 71365)
 
 	tenantID := roachpb.MakeTenantID(40)
 	const lookupCount = 5
@@ -319,6 +325,7 @@ func TestDeleteTenant(t *testing.T) {
 func TestRefreshThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
+	skip.UnderDeadlockWithIssue(t, 71365)
 
 	// Create the directory, but with extreme rate limiting so that directory
 	// will never refresh.
@@ -482,7 +489,6 @@ func destroyTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) err
 func startTenant(
 	ctx context.Context, srv serverutils.TestServerInterface, id uint64,
 ) (*tenantdirsvr.Process, error) {
-	log.TestingClearServerIdentifiers()
 	tenantStopper := tenantdirsvr.NewSubStopper(srv.Stopper())
 	t, err := srv.StartTenant(
 		ctx,
@@ -542,6 +548,7 @@ func newTestDirectory(
 
 	// Setup directory
 	directorySrvAddr := listenPort.Addr()
+	//lint:ignore SA1019 grpc.WithInsecure is deprecated
 	conn, err := grpc.Dial(directorySrvAddr.String(), grpc.WithInsecure())
 	require.NoError(t, err)
 	// nolint:grpcconnclose

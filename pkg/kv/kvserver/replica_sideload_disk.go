@@ -213,9 +213,16 @@ func (ss *diskSideloadStorage) Clear(_ context.Context) error {
 func (ss *diskSideloadStorage) TruncateTo(
 	ctx context.Context, firstIndex uint64,
 ) (bytesFreed, bytesRetained int64, _ error) {
+	return ss.possiblyTruncateTo(ctx, 0, firstIndex, true /* doTruncate */)
+}
+
+// Helper for truncation or byte calculation for [from, to).
+func (ss *diskSideloadStorage) possiblyTruncateTo(
+	ctx context.Context, from uint64, to uint64, doTruncate bool,
+) (bytesFreed, bytesRetained int64, _ error) {
 	deletedAll := true
 	if err := ss.forEach(ctx, func(index uint64, filename string) error {
-		if index >= firstIndex {
+		if index >= to {
 			size, err := ss.fileSize(filename)
 			if err != nil {
 				return err
@@ -224,7 +231,17 @@ func (ss *diskSideloadStorage) TruncateTo(
 			deletedAll = false
 			return nil
 		}
-		fileSize, err := ss.purgeFile(ctx, filename)
+		if index < from {
+			return nil
+		}
+		// index is in [from, to)
+		var fileSize int64
+		var err error
+		if doTruncate {
+			fileSize, err = ss.purgeFile(ctx, filename)
+		} else {
+			fileSize, err = ss.fileSize(filename)
+		}
 		if err != nil {
 			return err
 		}
@@ -234,16 +251,23 @@ func (ss *diskSideloadStorage) TruncateTo(
 		return 0, 0, err
 	}
 
-	if deletedAll {
+	if deletedAll && doTruncate {
 		// The directory may not exist, or it may exist and have been empty.
 		// Not worth trying to figure out which one, just try to delete.
-		err := ss.eng.RemoveDir(ss.dir)
+		err := ss.eng.Remove(ss.dir)
 		if err != nil && !oserror.IsNotExist(err) {
 			log.Infof(ctx, "unable to remove sideloaded dir %s: %v", ss.dir, err)
 			err = nil // handled
 		}
 	}
 	return bytesFreed, bytesRetained, nil
+}
+
+// BytesIfTruncatedFromTo implements SideloadStorage.
+func (ss *diskSideloadStorage) BytesIfTruncatedFromTo(
+	ctx context.Context, from uint64, to uint64,
+) (freed, retained int64, _ error) {
+	return ss.possiblyTruncateTo(ctx, from, to, false /* doTruncate */)
 }
 
 func (ss *diskSideloadStorage) forEach(

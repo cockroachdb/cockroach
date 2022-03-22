@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -58,7 +57,7 @@ func verifyRows(
 			return err
 		}
 		if cmp, err := compareRows(
-			types.OneIntCol, row, expectedRows[0], evalCtx, &rowenc.DatumAlloc{}, ordering,
+			types.OneIntCol, row, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
 		); err != nil {
 			return err
 		} else if cmp != 0 {
@@ -78,7 +77,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
@@ -361,11 +360,10 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	diskMonitor := newTestDiskMonitor(ctx, st)
 
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
-	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
 	numRows := 10
@@ -382,7 +380,7 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 			Direction: encoding.Descending,
 		},
 	}
-	rng, _ := randutil.NewPseudoRand()
+	rng, _ := randutil.NewTestRand()
 	// Use random types and random rows.
 	types := randgen.RandSortingTypes(rng, numCols)
 	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
@@ -433,7 +431,7 @@ func verifyOrdering(
 	types []*types.T,
 	ordering colinfo.ColumnOrdering,
 ) error {
-	var datumAlloc rowenc.DatumAlloc
+	var datumAlloc tree.DatumAlloc
 	var rowAlloc rowenc.EncDatumRowAlloc
 	var prevRow rowenc.EncDatumRow
 	i := src.NewIterator(ctx)

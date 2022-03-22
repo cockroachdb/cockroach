@@ -416,7 +416,7 @@ func (q *SpillingQueue) Dequeue(ctx context.Context) (coldata.Batch, error) {
 }
 
 func (q *SpillingQueue) numFDsOpenAtAnyGivenTime() int {
-	if q.diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
+	if q.diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeIntertwinedCalls {
 		// The access pattern must be write-everything then read-everything so
 		// either a read FD or a write FD are open at any one point.
 		return 1

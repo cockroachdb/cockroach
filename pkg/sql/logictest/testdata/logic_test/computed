@@ -17,8 +17,7 @@ with_no_column_refs  CREATE TABLE public.with_no_column_refs (
                      b INT8 NULL,
                      c INT8 NULL AS (3:::INT8) STORED,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-                     FAMILY "primary" (a, b, c, rowid)
+                     CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -37,8 +36,7 @@ extra_parens  CREATE TABLE public.extra_parens (
               b INT8 NULL,
               c INT8 NULL AS (3:::INT8) STORED,
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-              FAMILY "primary" (a, b, c, rowid)
+              CONSTRAINT extra_parens_pkey PRIMARY KEY (rowid ASC)
 )
 
 
@@ -93,19 +91,18 @@ x  CREATE TABLE public.x (
    c INT8 NULL AS (a) STORED,
    d INT8 NULL AS (a + b) STORED,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, b, c, d, rowid)
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
 )
 
 query TTBTTTB colnames
 SHOW COLUMNS FROM x
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
-a            INT8       true         3:::INT8        ·                      {primary}  false
-b            INT8       true         7:::INT8        ·                      {primary}  false
-c            INT8       true         NULL            a                      {primary}  false
-d            INT8       true         NULL            a + b                  {primary}  false
-rowid        INT8       false        unique_rowid()  ·                      {primary}  true
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+a            INT8       true         3:::INT8        ·                      {x_pkey}  false
+b            INT8       true         7:::INT8        ·                      {x_pkey}  false
+c            INT8       true         NULL            a                      {x_pkey}  false
+d            INT8       true         NULL            a + b                  {x_pkey}  false
+rowid        INT8       false        unique_rowid()  ·                      {x_pkey}  true
 
 statement error cannot write directly to computed column "c"
 INSERT INTO x (c) VALUES (1)
@@ -721,8 +718,7 @@ x  CREATE TABLE public.x (
    a INT8 NULL,
    b INT8 NULL AS (a) STORED,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, b, rowid)
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -746,8 +742,7 @@ x  CREATE TABLE public.x (
    c INT8 NULL,
    b INT8 NULL AS (c) STORED,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (c, b, rowid)
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -788,8 +783,7 @@ x  CREATE TABLE public.x (
    b INT8 NULL AS (a * 2:::INT8) STORED,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    c INT8 NOT NULL AS (a + 4:::INT8) STORED,
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, b, rowid, c)
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -883,8 +877,16 @@ CREATE TABLE x (
   b INT AS (a+1) STORED
 )
 
-query error value type decimal doesn't match type int of column "a"
+statement ok
 INSERT INTO x VALUES(1.4)
+
+query II
+SELECT * FROM x
+----
+1  2
+
+query error value type date doesn't match type int of column "a"
+INSERT INTO x VALUES('1970-01-01'::date)
 
 # Regression test for #34901: verify that builtins can be used in computed
 # column expressions without a "memory budget exceeded" error while backfilling
@@ -914,8 +916,7 @@ t42418  CREATE TABLE public.t42418 (
         x INT8 NULL AS (1:::INT8) STORED,
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
         y INT8 NULL AS (1:::INT8) STORED,
-        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-        FAMILY "primary" (x, rowid, y)
+        CONSTRAINT t42418_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Tests for computed column rewrites.
@@ -928,14 +929,15 @@ SET experimental_computed_column_rewrites = "(ts :: STRING) -> ((ts AT TIME ZONE
 statement ok
 CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, c STRING AS (ts::STRING) STORED, FAMILY (k,ts,c))
 
+# The cast also gets rewritten to use to_char during PostDeserializationChanges.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
 CREATE TABLE public.trewrite (
    k INT8 NOT NULL,
    ts TIMESTAMPTZ NULL,
-   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
-   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+   CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
    FAMILY fam_0_k_ts_c (k, ts, c)
 )
 
@@ -948,14 +950,15 @@ CREATE TABLE trewrite(k INT PRIMARY KEY, ts TIMESTAMPTZ, FAMILY (k,ts))
 statement ok
 ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
 
+# The cast also gets rewritten to use to_char during PostDeserializationChanges.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
 CREATE TABLE public.trewrite (
    k INT8 NOT NULL,
    ts TIMESTAMPTZ NULL,
-   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
-   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+   CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
    FAMILY fam_0_k_ts (k, ts, c)
 )
 
@@ -965,15 +968,15 @@ SET experimental_computed_column_rewrites = ""
 statement ok
 CREATE TABLE trewrite_copy (LIKE trewrite INCLUDING ALL)
 
+# The cast also gets rewritten to use to_char during PostDeserializationChanges.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite_copy]
 ----
 CREATE TABLE public.trewrite_copy (
    k INT8 NOT NULL,
    ts TIMESTAMPTZ NULL,
-   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
-   CONSTRAINT "primary" PRIMARY KEY (k ASC),
-   FAMILY "primary" (k, ts, c)
+   c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+   CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC)
 )
 
 statement ok
@@ -1002,6 +1005,7 @@ CREATE TABLE trewrite2(
   FAMILY (k,ts,b,str,c1,c2,c3)
 )
 
+# The cast also gets rewritten to use to_char during PostDeserializationChanges.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite2]
 ----
@@ -1010,10 +1014,10 @@ CREATE TABLE public.trewrite2 (
    ts TIMESTAMPTZ NULL,
    b BYTES NULL,
    str STRING NULL,
-   c1 STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   c1 STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
    c2 TIMESTAMP NULL AS (parse_timestamp(str)) STORED,
    c3 INT8 NULL AS (mod(fnv32(b), 4:::INT8)) STORED,
-   CONSTRAINT "primary" PRIMARY KEY (k ASC),
+   CONSTRAINT trewrite2_pkey PRIMARY KEY (k ASC),
    FAMILY fam_0_k_ts_b_str_c1_c2_c3 (k, ts, b, str, c1, c2, c3)
 )
 
@@ -1025,3 +1029,50 @@ SET experimental_computed_column_rewrites = "bad"
 
 statement error invalid column rewrites expression
 SET CLUSTER SETTING sql.defaults.experimental_computed_column_rewrites = "bad"
+
+# Regression test for #69327. Computed columns should be evaluated after
+# assignment casts have been performed.
+statement ok
+CREATE TABLE t69327 (
+  c "char",
+  v STRING AS (c) STORED
+);
+INSERT INTO t69327 VALUES ('foo'::STRING)
+
+# Both columns should have a value of "f".
+query TT
+SELECT * FROM t69327
+----
+f  f
+
+# Regression test for #72881. Computed columns can't have a DEFAULT expr.
+statement error pgcode 42P16 computed column "v" cannot also have a DEFAULT expression
+ALTER TABLE t69327 ALTER COLUMN v SET DEFAULT 'foo'
+
+# Regression test for #69665.Computed columns should be evaluated after
+# assignment casts have been performed.
+statement ok
+CREATE TABLE t69665 (
+  c CHAR,
+  v STRING AS (c) STORED
+);
+INSERT INTO t69665 VALUES (' '::STRING)
+
+# Both columns should be empty values.
+query II
+SELECT length(c), length(v) FROM t69665
+----
+0  0
+
+# Regression test for #75907. During a backfill, expressions of the form
+# j->'a' = '1' should not be normalized to j @> '{"a": 1}'.
+statement ok
+CREATE TABLE t75907 (j JSONB);
+INSERT INTO t75907 VALUES ('{"a": 1}');
+ALTER TABLE t75907 ADD COLUMN c BOOL AS (j->'b' = '1') STORED
+
+query TBB colnames
+SELECT j, c, j->'b' = '1' AS expected_c FROM t75907
+----
+j         c     expected_c
+{"a": 1}  NULL  NULL

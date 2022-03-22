@@ -13,6 +13,7 @@
 package clisqlcfg
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -68,6 +69,10 @@ type Context struct {
 	// If the boolean is left unspecified, the default depends
 	// on whether the session is interactive.
 	SafeUpdates OptBool
+
+	// ReadOnly indicates where to set default_transaction_read_only in the
+	// CLI shell prior to running it.
+	ReadOnly bool
 
 	// The following fields are populated during Open().
 	opened bool
@@ -133,7 +138,7 @@ func (c *Context) getInputFile(defaultIn *os.File) (cmdIn *os.File, closeFn func
 // checkInteractive sets the isInteractive parameter depending on the
 // execution environment and the presence of -e flags.
 func (c *Context) checkInteractive() {
-	// We don't consider sessions interactives unless we have a
+	// We don't consider sessions interactive unless we have a
 	// serious hunch they are. For now, only `cockroach sql` *without*
 	// `-e` has the ability to input from a (presumably) human user,
 	// and we'll also assume that there is no human if the standard
@@ -191,19 +196,40 @@ func (c *Context) Run(conn clisqlclient.Conn) error {
 		return err
 	}
 
+	c.maybeSetSafeUpdates(conn)
+	if err := c.maybeSetReadOnly(conn); err != nil {
+		return err
+	}
+
+	shell := clisqlshell.NewShell(c.CliCtx, c.ConnCtx, c.ExecCtx, &c.ShellCtx, conn)
+	return shell.RunInteractive(c.cmdIn, c.CmdOut, c.CmdErr)
+}
+
+// maybeSetSafeUpdates sets the session variable for safe updates to true
+// if the flag is specified or this is an interactive session. It prints
+// but does not do anything drastic if an error occurs.
+func (c *Context) maybeSetSafeUpdates(conn clisqlclient.Conn) {
 	hasSafeUpdates, safeUpdates := c.SafeUpdates.Get()
 	if !hasSafeUpdates {
 		safeUpdates = c.CliCtx.IsInteractive
 	}
 	if safeUpdates {
-		if err := conn.Exec("SET sql_safe_updates = TRUE", nil); err != nil {
+		if err := conn.Exec(context.Background(),
+			"SET sql_safe_updates = TRUE"); err != nil {
 			// We only enable the setting in interactive sessions. Ignoring
 			// the error with a warning is acceptable, because the user is
 			// there to decide what they want to do if it doesn't work.
 			fmt.Fprintf(c.CmdErr, "warning: cannot enable safe updates: %v\n", err)
 		}
 	}
+}
 
-	shell := clisqlshell.NewShell(c.CliCtx, c.ConnCtx, c.ExecCtx, &c.ShellCtx, conn)
-	return shell.RunInteractive(c.cmdIn, c.CmdOut, c.CmdErr)
+// maybeSetReadOnly sets the session variable default_transaction_read_only to
+// true if the user has requested it.
+func (c *Context) maybeSetReadOnly(conn clisqlclient.Conn) error {
+	if !c.ReadOnly {
+		return nil
+	}
+	return conn.Exec(context.Background(),
+		"SET default_transaction_read_only = TRUE")
 }

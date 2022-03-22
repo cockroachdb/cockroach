@@ -76,12 +76,6 @@ func assertEqLocal(t *testing.T, rw ReadWriter, debug string, ms, expMS *enginep
 	assertEqImpl(t, rw, debug, false /* globalKeys */, ms, expMS)
 }
 
-func accountForTxnDidNotUpdateMeta(t *testing.T, eng Engine) bool {
-	accountFor, err := eng.SafeToWriteSeparatedIntents(context.Background())
-	require.NoError(t, err)
-	return accountFor
-}
-
 // TestMVCCStatsDeleteCommitMovesTimestamp exercises the case in which a value
 // is written, later deleted via an intent and the deletion committed at an even
 // higher timestamp. This exercises subtleties related to the implicit push of
@@ -196,14 +190,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 			}).Size())
-			var separatedIntentCount int64
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for TxnDidNotUpdateMeta
-				mValSize += 2
-				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
-					separatedIntentCount = 1
-				}
-			}
+			mValSize += 2
 			vKeySize := MVCCVersionTimestampSize   // 12
 			vValSize := int64(len(value.RawBytes)) // 10
 
@@ -216,7 +203,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 				ValBytes:             mValSize + vValSize, // (44[+2])+10 = 54[+2]
 				ValCount:             1,
 				IntentCount:          1,
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize + vValSize, // 12+10 = 22
 				GCBytesAge:           0,
 			}
@@ -285,14 +272,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 				Deleted:   false,
 				Txn:       &txn.TxnMeta,
 			}).Size())
-			var separatedIntentCount int64
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for TxnDidNotUpdateMeta
-				mValSize += 2
-				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
-					separatedIntentCount = 1
-				}
-			}
+			mValSize += 2
 			vKeySize := MVCCVersionTimestampSize   // 12
 			vValSize := int64(len(value.RawBytes)) // 10
 
@@ -306,7 +286,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 				ValCount:             1,
 				IntentAge:            0,
 				IntentCount:          1,
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize + vValSize, // 12+10 = 22
 			}
 			assertEq(t, engine, "after put", aggMS, &expMS)
@@ -320,10 +300,8 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for removal of TxnDidNotUpdateMeta
-				mValSize -= 2
-			}
+			// Account for removal of TxnDidNotUpdateMeta
+			mValSize -= 2
 
 			expAggMS := enginepb.MVCCStats{
 				LastUpdateNanos: 4e9,
@@ -338,7 +316,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 				ValBytes:             vValSize + mValSize, // 44+10 = 54
 				IntentAge:            0,                   // this was once erroneously positive
 				IntentCount:          1,                   // still there
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize + vValSize, // still there
 			}
 
@@ -387,14 +365,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, mVal1Size, 46)
-			var separatedIntentCount int64
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for TxnDidNotUpdateMeta
-				mVal1Size += 2
-				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
-					separatedIntentCount = 1
-				}
-			}
+			mVal1Size += 2
 
 			// TODO(sumeer): this is the first put at ts1, so why are we using this m1ValSize
 			// instead of mVal1Size being sufficient?
@@ -404,10 +375,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, m1ValSize, 46)
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for TxnDidNotUpdateMeta
-				m1ValSize += 2
-			}
+			m1ValSize += 2
 
 			vKeySize := MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
@@ -425,7 +393,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 				ValCount:             1,
 				IntentAge:            0,
 				IntentCount:          1,
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize + vValSize, // 12+10 = 22
 			}
 			assertEq(t, engine, "after put", aggMS, &expMS)
@@ -466,7 +434,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 				ValBytes:             m2ValSize, // 10+46 = 56
 				IntentAge:            0,
 				IntentCount:          1, // still there
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize, // still there, but now without vValSize
 				GCBytesAge:           0,        // this was once erroneously negative
 			}
@@ -517,14 +485,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, mVal1Size, 46)
-			var separatedIntentCount int64
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for TxnDidNotUpdateMeta
-				mVal1Size += 2
-				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
-					separatedIntentCount = 1
-				}
-			}
+			mVal1Size += 2
 
 			vKeySize := MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
@@ -542,7 +503,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 				ValCount:             1,
 				IntentAge:            0,
 				IntentCount:          1,
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize, // 12
 				GCBytesAge:           0,
 			}
@@ -584,7 +545,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 				ValBytes:             vValSize + m2ValSize, // 10+46 = 56
 				IntentAge:            0,
 				IntentCount:          1, // still there
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize + vValSize, // still there, now bigger
 				GCBytesAge:           0,                   // this was once erroneously negative
 			}
@@ -653,14 +614,8 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, mValSize, 46)
-			var separatedIntentCount int64
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for TxnDidNotUpdateMeta
-				mValSize += 2
-				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
-					separatedIntentCount = 1
-				}
-			}
+			// Account for TxnDidNotUpdateMeta
+			mValSize += 2
 
 			expMS = enginepb.MVCCStats{
 				LastUpdateNanos:      2e9,
@@ -669,7 +624,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 				ValBytes:             mValSize, // 46[+2]
 				ValCount:             2,
 				IntentCount:          1,
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize, // TBD
 				// The original non-transactional write (at 1s) has now aged one second.
 				GCBytesAge: 1 * vKeySize,
@@ -809,14 +764,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, mValSize, 46)
-			var separatedIntentCount int64
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for TxnDidNotUpdateMeta
-				mValSize += 2
-				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
-					separatedIntentCount = 1
-				}
-			}
+			mValSize += 2
 
 			expMS = enginepb.MVCCStats{
 				LastUpdateNanos:      2e9,
@@ -825,7 +773,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				ValBytes:             mValSize + vValSize, // 46[+2]+10 = 56[+2]
 				ValCount:             2,
 				IntentCount:          1,
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize, // 12
 				// The original non-transactional write becomes non-live at 2s, so no age
 				// is accrued yet.
@@ -912,7 +860,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 					LiveCount:            1,
 					LiveBytes:            mKeySize + m2ValSizeWithHistory + vKeySize + vVal2Size,
 					IntentCount:          1,
-					SeparatedIntentCount: separatedIntentCount,
+					SeparatedIntentCount: 1,
 					IntentBytes:          vKeySize + vVal2Size,
 					// The original write was previously non-live at 2s because that's where the
 					// intent originally lived. But the intent has moved to 3s, and so has the
@@ -1036,14 +984,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 				Timestamp: ts201.ToLegacyTimestamp(),
 				Txn:       &txn.TxnMeta,
 			}).Size())
-			var separatedIntentCount int64
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for TxnDidNotUpdateMeta
-				m1ValSize += 2
-				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
-					separatedIntentCount = 1
-				}
-			}
+			m1ValSize += 2
 			vKeySize := MVCCVersionTimestampSize   // 12
 			vValSize := int64(len(value.RawBytes)) // 10
 
@@ -1056,7 +997,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 				ValBytes:             m1ValSize + vValSize, // (44[+2])+10 = 54[+2]
 				ValCount:             1,
 				IntentCount:          1,
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize + vValSize, // 12+10 = 22
 			}
 			assertEq(t, engine, "after first put", aggMS, &expMS)
@@ -1096,7 +1037,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 				ValBytes:             m2ValSize + vValSize, // 46+10 = 56
 				ValCount:             1,
 				IntentCount:          1,
-				SeparatedIntentCount: separatedIntentCount,
+				SeparatedIntentCount: 1,
 				IntentBytes:          vKeySize + vValSize, // 12+10 = 22
 			}
 
@@ -1233,10 +1174,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, mValSize, 46)
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for TxnDidNotUpdateMeta
-				mValSize += 2
-			}
+			mValSize += 2
 
 			vKeySize := MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
@@ -1326,10 +1264,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 				Txn:       &txn.TxnMeta,
 			}).Size())
 			require.EqualValues(t, mValSize, 46)
-			if accountForTxnDidNotUpdateMeta(t, engine) {
-				// Account for TxnDidNotUpdateMeta
-				mValSize += 2
-			}
+			mValSize += 2
 
 			vKeySize := MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
@@ -1597,7 +1532,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	}
 	actions["EnsureTxn"] = func(s *state) string {
 		if s.Txn == nil {
-			txn := roachpb.MakeTransaction("test", nil, 0, s.TS, 0)
+			txn := roachpb.MakeTransaction("test", nil, 0, s.TS, 0, 1)
 			s.Txn = &txn
 		}
 		return ""
@@ -1614,7 +1549,8 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			} else {
 				max := s.rng.Int63n(5)
 				desc += fmt.Sprintf(", max=%d", max)
-				if _, _, err := MVCCResolveWriteIntentRange(ctx, s.eng, s.MS, s.intentRange(status), max); err != nil {
+				if _, _, err := MVCCResolveWriteIntentRange(
+					ctx, s.eng, s.MS, s.intentRange(status), max); err != nil {
 					return desc + ": " + err.Error()
 				}
 			}

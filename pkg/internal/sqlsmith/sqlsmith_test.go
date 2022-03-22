@@ -27,11 +27,10 @@ import (
 )
 
 var (
-	flagExec     = flag.Bool("ex", false, "execute (instead of just parse) generated statements")
-	flagNum      = flag.Int("num", 100, "number of statements to generate")
-	flagSetup    = flag.String("setup", "", "setup for TestGenerateParse, empty for random")
-	flagSetting  = flag.String("setting", "", "setting for TestGenerateParse, empty for random")
-	flagCheckVec = flag.Bool("check-vec", false, "fail if a generated statement cannot be vectorized")
+	flagExec    = flag.Bool("ex", false, "execute (instead of just parse) generated statements")
+	flagNum     = flag.Int("num", 100, "number of statements to generate")
+	flagSetup   = flag.String("setup", "", "setup for TestGenerateParse, empty for random")
+	flagSetting = flag.String("setting", "", "setting for TestGenerateParse, empty for random")
 )
 
 // TestSetups verifies that all setups generate executable SQL.
@@ -44,12 +43,14 @@ func TestSetups(t *testing.T) {
 			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
 
-			rnd, _ := randutil.NewPseudoRand()
+			rnd, _ := randutil.NewTestRand()
 
 			sql := setup(rnd)
-			if _, err := sqlDB.Exec(sql); err != nil {
-				t.Log(sql)
-				t.Fatal(err)
+			for _, stmt := range sql {
+				if _, err := sqlDB.Exec(stmt); err != nil {
+					t.Log(stmt)
+					t.Fatal(err)
+				}
 			}
 		})
 	}
@@ -84,12 +85,14 @@ func TestRandTableInserts(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	rnd, _ := randutil.NewPseudoRand()
+	rnd, _ := randutil.NewTestRand()
 
 	setup := randTablesN(rnd, 10)
-	if _, err := sqlDB.Exec(setup); err != nil {
-		t.Log(setup)
-		t.Fatal(err)
+	for _, stmt := range setup {
+		if _, err := sqlDB.Exec(stmt); err != nil {
+			t.Log(stmt)
+			t.Fatal(err)
+		}
 	}
 
 	insertOnly := simpleOption("insert only", func(s *Smither) {
@@ -145,7 +148,7 @@ func TestGenerateParse(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	rnd, seed := randutil.NewPseudoRand()
+	rnd, seed := randutil.NewTestRand()
 	t.Log("seed:", seed)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -170,8 +173,10 @@ func TestGenerateParse(t *testing.T) {
 	settings := setting(rnd)
 	t.Log("setting:", settingName, settings.Options)
 	setupSQL := setup(rnd)
-	t.Log(setupSQL)
-	db.Exec(t, setupSQL)
+	t.Log(strings.Join(setupSQL, "\n"))
+	for _, stmt := range setupSQL {
+		db.Exec(t, stmt)
+	}
 
 	smither, err := NewSmither(sqlDB, rnd, settings.Options...)
 	if err != nil {
@@ -191,34 +196,6 @@ func TestGenerateParse(t *testing.T) {
 		}
 		stmt = prettyCfg.Pretty(parsed.AST)
 		fmt.Print("STMT: ", i, "\n", stmt, ";\n\n")
-		if *flagCheckVec {
-			if _, err := sqlDB.Exec(fmt.Sprintf("EXPLAIN (vec) %s", stmt)); err != nil {
-				es := err.Error()
-				ok := false
-				// It is hard to make queries that can always
-				// be vectorized. Hard code a list of error
-				// messages we are ok with.
-				for _, s := range []string{
-					// If the optimizer removes stuff due
-					// to something like a `WHERE false`,
-					// vec will fail with an error message
-					// like this. This is hard to fix
-					// because things like `WHERE true AND
-					// false` similarly remove rows but are
-					// harder to detect.
-					"num_rows:0",
-					"unsorted distinct",
-				} {
-					if strings.Contains(es, s) {
-						ok = true
-						break
-					}
-				}
-				if !ok {
-					t.Fatal(err)
-				}
-			}
-		}
 		if *flagExec {
 			db.Exec(t, `SET statement_timeout = '9s'`)
 			if _, err := sqlDB.Exec(stmt); err != nil {

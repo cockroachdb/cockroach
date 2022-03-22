@@ -1,0 +1,2 @@
+alter_changefeed_stmt ::=
+	'ALTER' 'CHANGEFEED' a_expr alter_changefeed_cmds

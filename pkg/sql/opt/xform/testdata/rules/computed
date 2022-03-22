@@ -82,7 +82,7 @@ scan t_mult@c_mult_index
 opt
 SELECT * FROM hashed WHERE k = 'andy'
 ----
-scan hashed@secondary
+scan hashed@hashed_hash_k_idx
  ├── columns: k:1!null hash:2
  ├── constraint: /2/1/3: [/1/'andy' - /1/'andy']
  └── fd: ()-->(1,2)

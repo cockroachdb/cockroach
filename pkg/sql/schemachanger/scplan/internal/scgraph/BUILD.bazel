@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
+
+go_library(
+    name = "scgraph",
+    srcs = [
+        "dep_edge_tree.go",
+        "edge.go",
+        "graph.go",
+        "iteration.go",
+        ":gen-depedgekind-stringer",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/screl",
+        "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_btree//:btree",
+    ],
+)
+
+go_test(
+    name = "scgraph_test",
+    size = "small",
+    srcs = [
+        "dep_edge_tree_test.go",
+        "graph_test.go",
+    ],
+    embed = [":scgraph"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/screl",
+        "//pkg/util/iterutil",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+stringer(
+    name = "gen-depedgekind-stringer",
+    src = "edge.go",
+    typ = "DepEdgeKind",
+)

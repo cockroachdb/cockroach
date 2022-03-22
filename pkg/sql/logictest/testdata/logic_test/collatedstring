@@ -218,8 +218,7 @@ SHOW CREATE TABLE t
 t  CREATE TABLE public.t (
    a STRING COLLATE en NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, rowid)
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -231,8 +230,10 @@ INSERT INTO t VALUES
   ('x' COLLATE en),
   ('ü' COLLATE en)
 
-statement error value type collatedstring{de} doesn't match type collatedstring{en} of column "a"
-INSERT INTO t VALUES ('X' COLLATE de)
+statement ok
+INSERT INTO t VALUES
+  ('X' COLLATE de),
+  ('y' COLLATE de)
 
 query T
 SELECT a FROM t ORDER BY t.a
@@ -243,6 +244,8 @@ b
 B
 ü
 x
+X
+y
 
 query T
 SELECT a FROM t ORDER BY t.a COLLATE da
@@ -252,6 +255,8 @@ A
 b
 B
 x
+X
+y
 ü
 
 query T
@@ -362,8 +367,7 @@ quoted_coll  CREATE TABLE public.quoted_coll (
              d STRING COLLATE en_u_ks_level1 NULL DEFAULT 'd':::STRING COLLATE en_u_ks_level1,
              e STRING COLLATE en_US NULL AS (a COLLATE en_US) STORED,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-             CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-             FAMILY "primary" (a, b, c, d, e, rowid)
+             CONSTRAINT quoted_coll_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Regression for #46570.
@@ -465,8 +469,7 @@ SHOW CREATE TABLE collation_name_case
 collation_name_case  CREATE TABLE public.collation_name_case (
                      s STRING COLLATE en_US_u_ks_level2 NULL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-                     FAMILY "primary" (s, rowid)
+                     CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement error invalid locale en-US-u-ks-le"vel2: language: tag is not well-formed

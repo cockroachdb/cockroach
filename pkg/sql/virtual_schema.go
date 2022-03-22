@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -177,7 +179,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		id,
 		nil,       /* regionConfig */
 		startTime, /* creationTime */
-		descpb.NewPublicSelectPrivilegeDescriptor(),
+		catpb.NewVirtualTablePrivilegeDescriptor(),
 		nil,                        /* affected */
 		nil,                        /* semaCtx */
 		nil,                        /* evalCtx */
@@ -247,20 +249,20 @@ func (v virtualSchemaView) initVirtualTableDesc(
 	}
 	mutDesc, err := makeViewTableDesc(
 		ctx,
-		st,
 		create.Name.Table(),
 		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
-		0, /* parentID */
+		0,
 		sc.GetID(),
 		id,
 		columns,
-		startTime, /* creationTime */
-		descpb.NewPublicSelectPrivilegeDescriptor(),
-		nil, /* semaCtx */
-		nil, /* evalCtx */
+		startTime,
+		catpb.NewVirtualTablePrivilegeDescriptor(),
+		nil, // semaCtx
+		nil, // evalCtx
+		st,
 		tree.PersistencePermanent,
-		false, /* isMultiRegion */
-		nil,   /* sc */
+		false, // isMultiRegion
+		nil,   // sc
 	)
 	return mutDesc.TableDescriptor, err
 }
@@ -418,8 +420,8 @@ func (e *virtualDefEntry) Desc() catalog.Descriptor {
 func canQueryVirtualTable(evalCtx *tree.EvalContext, e *virtualDefEntry) bool {
 	return !e.unimplemented ||
 		evalCtx == nil ||
-		evalCtx.SessionData == nil ||
-		evalCtx.SessionData.StubCatalogTablesEnabled
+		evalCtx.SessionData() == nil ||
+		evalCtx.SessionData().StubCatalogTablesEnabled
 }
 
 type mutableVirtualDefEntry struct {
@@ -502,7 +504,7 @@ func (e *virtualDefEntry) getPlanInfo(
 		if dbName != "" {
 			dbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
 				dbName, tree.DatabaseLookupFlags{
-					Required: true, AvoidCached: p.avoidCachedDescriptors,
+					Required: true, AvoidLeased: p.avoidLeasedDescriptors,
 				})
 			if err != nil {
 				return nil, err
@@ -529,7 +531,7 @@ func (e *virtualDefEntry) getPlanInfo(
 
 			constrainedScan := idxConstraint != nil && !idxConstraint.IsUnconstrained()
 			if !constrainedScan {
-				generator, cleanup, setupError := setupGenerator(ctx, func(pusher rowPusher) error {
+				generator, cleanup, setupError := setupGenerator(ctx, func(ctx context.Context, pusher rowPusher) error {
 					return def.populate(ctx, p, dbDesc, func(row ...tree.Datum) error {
 						if err := e.validateRow(row, columns); err != nil {
 							return err
@@ -555,7 +557,7 @@ func (e *virtualDefEntry) getPlanInfo(
 			indexKeyDatums := make([]tree.Datum, index.NumKeyColumns())
 
 			generator, cleanup, setupError := setupGenerator(ctx, e.makeConstrainedRowsGenerator(
-				ctx, p, dbDesc, index, indexKeyDatums, columnIdxMap, idxConstraint, columns), stopper)
+				p, dbDesc, index, indexKeyDatums, columnIdxMap, idxConstraint, columns), stopper)
 			if setupError != nil {
 				return nil, setupError
 			}
@@ -573,7 +575,6 @@ func (e *virtualDefEntry) getPlanInfo(
 // to push all rows from this virtual table that satisfy the input index
 // constraint to a row pusher that's supplied to the generator function.
 func (e *virtualDefEntry) makeConstrainedRowsGenerator(
-	ctx context.Context,
 	p *planner,
 	dbDesc catalog.DatabaseDescriptor,
 	index catalog.Index,
@@ -581,9 +582,9 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 	columnIdxMap catalog.TableColMap,
 	idxConstraint *constraint.Constraint,
 	columns colinfo.ResultColumns,
-) func(pusher rowPusher) error {
+) func(ctx context.Context, pusher rowPusher) error {
 	def := e.virtualDef.(virtualSchemaTable)
-	return func(pusher rowPusher) error {
+	return func(ctx context.Context, pusher rowPusher) error {
 		var span constraint.Span
 		addRowIfPassesFilter := func(idxConstraint *constraint.Constraint) func(datums ...tree.Datum) error {
 			return func(datums ...tree.Datum) error {
@@ -696,7 +697,8 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			td := tabledesc.NewBuilder(&tableDesc).BuildImmutableTable()
-			if err := catalog.ValidateSelf(td); err != nil {
+			version := st.Version.ActiveVersionOrEmpty(ctx)
+			if err := descbuilder.ValidateSelf(td, version); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
 			}

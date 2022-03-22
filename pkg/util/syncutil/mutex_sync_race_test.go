@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build !deadlock
-// +build race
+//go:build !deadlock && race
+// +build !deadlock,race
 
 package syncutil
 

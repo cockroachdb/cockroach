@@ -85,7 +85,7 @@ func TestInternalExecutor(t *testing.T) {
 	}
 
 	// Reset the sequence to a clear value. Next nextval() will return 2.
-	if _, err := db.Exec("SELECT setval('test.seq', 1)"); err != nil {
+	if _, err := db.Exec("SELECT setval('test.seq', 1, true)"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -161,7 +161,7 @@ func TestInternalFullTableScan(t *testing.T) {
 				Database:  "db",
 				UserProto: security.RootUserName().EncodeProto(),
 			},
-			LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
 				DisallowFullTableScans: true,
 			},
 			SequenceState: &sessiondata.SequenceState{},
@@ -258,6 +258,7 @@ func TestQueryHasRoleOptionWithNoTxn(t *testing.T) {
 
 	stmts := `
 CREATE USER testuser VIEWACTIVITY;
+CREATE USER testuserredacted VIEWACTIVITYREDACTED;
 CREATE USER testadmin;
 GRANT admin TO testadmin`
 	if _, err := db.Exec(stmts); err != nil {
@@ -274,6 +275,9 @@ GRANT admin TO testadmin`
 		{"testuser", roleoption.VIEWACTIVITY.String(), true, ""},
 		{"testuser", roleoption.CREATEROLE.String(), false, ""},
 		{"testuser", "nonexistent", false, "unrecognized role option"},
+		{"testuserredacted", roleoption.VIEWACTIVITYREDACTED.String(), true, ""},
+		{"testuserredacted", roleoption.CREATEROLE.String(), false, ""},
+		{"testuserredacted", "nonexistent", false, "unrecognized role option"},
 		{"testadmin", roleoption.VIEWACTIVITY.String(), true, ""},
 		{"testadmin", roleoption.CREATEROLE.String(), true, ""},
 		{"testadmin", "nonexistent", false, "unrecognized role option"},
@@ -527,8 +531,9 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
-	s, _, db := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	si, _, db := serverutils.StartServer(t, params)
+	defer si.Stopper().Stop(ctx)
+	s := si.(*server.TestServer)
 
 	// Setup a pushed txn.
 	txn := db.NewTxn(ctx, "test")
@@ -544,13 +549,13 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 	txn.CommitTimestamp()
 	require.True(t, txn.IsSerializablePushAndRefreshNotPossible())
 
-	tr := s.Tracer().(*tracing.Tracer)
-	execCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
-	defer cancel()
+	tr := s.Tracer()
+	execCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
+	defer getRecAndFinish()
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	_, err = ie.Exec(execCtx, "test", txn, "select 42")
 	require.NoError(t, err)
-	require.NoError(t, testutils.MatchInOrder(collect().String(),
+	require.NoError(t, testutils.MatchInOrder(getRecAndFinish().String(),
 		"push detected for non-refreshable txn but auto-retry not possible"))
 	require.NotEqual(t, txn.ReadTimestamp(), txn.ProvisionalCommitTimestamp(), "expect txn wts to be pushed")
 
@@ -568,13 +573,54 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 	rootTxn := kvDB.NewTxn(ctx, "root-txn")
 
 	ltis := rootTxn.GetLeafTxnInputState(ctx)
-	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), &ltis)
+	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), ltis)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	_, err := ie.ExecEx(
 		ctx, "leaf-query", leafTxn, sessiondata.InternalExecutorOverride{User: security.RootUserName()}, "SELECT 1",
 	)
 	require.NoError(t, err)
+}
+
+func TestInternalExecutorWithDefinedQoSOverrideDoesNotPanic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	qosLevel := sessiondatapb.TTLLow
+	_, err := ie.ExecEx(
+		ctx, "defined_quality_of_service_level_does_not_panic", nil,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName(), QualityOfService: &qosLevel},
+		"SELECT 1",
+	)
+	require.NoError(t, err)
+}
+
+func TestInternalExecutorWithUndefinedQoSOverridePanics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	qosLevel := sessiondatapb.QoSLevel(122)
+	// Only defined QoSLevels are currently allowed.
+	require.Panics(t, func() {
+		_, err := ie.ExecEx(
+			ctx,
+			"undefined_quality_of_service_level_panics",
+			nil, /* txn */
+			sessiondata.InternalExecutorOverride{User: security.RootUserName(), QualityOfService: &qosLevel},
+			"SELECT 1",
+		)
+		require.Error(t, err)
+	})
 }
 
 // TODO(andrei): Test that descriptor leases are released by the

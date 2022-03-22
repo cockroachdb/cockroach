@@ -8,10 +8,10 @@ go_library(
     deps = [
         "//pkg/geo/geoproj",
         "//pkg/geo/geoprojbase",
+        "//pkg/geo/geoprojbase/embeddedproj",
         "//pkg/util/ctxgroup",
         "//pkg/util/httputil",
         "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
     ],
 )
 
