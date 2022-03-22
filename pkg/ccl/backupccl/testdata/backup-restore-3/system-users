@@ -1,0 +1,137 @@
+new-server name=s1 nodes=1
+----
+
+exec-sql
+CREATE USER app;
+CREATE USER test;
+----
+
+exec-sql
+CREATE ROLE app_role;
+CREATE ROLE test_role;
+----
+
+# 'test_role' is a member of 'app_role'.
+exec-sql
+GRANT app_role TO test_role;
+GRANT admin, app_role TO app;
+GRANT test_role TO test;
+----
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.foo (ind INT);
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/foo/1';
+----
+
+exec-sql
+BACKUP DATABASE db INTO 'nodelocal://1/foo/2';
+----
+
+exec-sql
+BACKUP TABLE system.users INTO 'nodelocal://1/foo/3';
+----
+
+new-server name=s2 nodes=1 share-io-dir=s1
+----
+
+# User 'test' exists in both clusters but 'app' only exists in the backup.
+exec-sql
+CREATE USER test;
+CREATE DATABASE db;
+----
+
+# Create multiple databases to make max descriptor ID be larger than max
+# descriptor ID in the backup to test if we correctly generate new descriptor
+# IDs.
+exec-sql
+CREATE DATABASE db1;
+CREATE DATABASE db2;
+CREATE DATABASE db3;
+----
+
+subtest system-users
+
+exec-sql
+RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://1/foo/1'
+----
+
+# Role 'app_role' and user 'app' will be added, and 'app' is granted with
+# 'app_role'. User test will remain untouched with no role granted.
+query-sql
+SELECT * FROM system.users;
+----
+admin  true
+app <nil> false
+app_role <nil> true
+root  false
+test <nil> false
+test_role <nil> true
+
+query-sql
+SELECT * FROM system.role_members;
+----
+admin app false
+admin root true
+app_role app false
+app_role test_role false
+
+query-sql
+SHOW USERS;
+----
+admin  {}
+app  {admin,app_role}
+app_role  {}
+root  {admin}
+test  {}
+test_role  {app_role}
+
+subtest end
+
+subtest restore-from-backup-with-no-system-users
+
+exec-sql
+RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://1/foo/2';
+----
+pq: failed to resolve targets in the BACKUP location specified by the RESTORE stmt, use SHOW BACKUP to find correct targets: cannot restore system users as no system.users table in the backup
+
+subtest end
+
+subtest restore-from-backup-with-no-system-role-members
+
+new-server name=s3 nodes=1 share-io-dir=s1
+----
+
+exec-sql
+RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://1/foo/3';
+----
+
+query-sql
+SELECT * FROM system.users;
+----
+admin  true
+app <nil> false
+app_role <nil> true
+root  false
+test <nil> false
+test_role <nil> true
+
+query-sql
+SELECT * FROM system.role_members;
+----
+admin root true
+
+query-sql
+SHOW USERS;
+----
+admin  {}
+app  {}
+app_role  {}
+root  {admin}
+test  {}
+test_role  {}
+
+subtest end
