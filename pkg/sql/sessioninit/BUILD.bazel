@@ -13,6 +13,7 @@ go_library(
         "//pkg/security",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/sem/tree",
@@ -35,7 +36,6 @@ go_test(
     deps = [
         ":sessioninit",
         "//pkg/base",
-        "//pkg/kv",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
