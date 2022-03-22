@@ -97,9 +97,7 @@ func (s channelServer) HandleSnapshot(
 }
 
 func (s channelServer) SendDelegatedSnapshot(
-	_ context.Context,
-	header *kvserverpb.DelegatedSnapshotRequest,
-	stream kvserver.DelegateSnapshotResponseStream,
+	_ context.Context, header *kvserverpb.DelegateSnapshotRequest,
 ) error {
 	panic("unimplemented")
 }

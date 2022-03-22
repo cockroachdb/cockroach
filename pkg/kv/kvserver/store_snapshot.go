@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -65,13 +66,13 @@ type outgoingSnapshotStream interface {
 // to receive a snapshot over the network.
 type incomingDelegatedStream interface {
 	Send(*kvserverpb.SnapshotResponse) error
-	Recv() (*kvserverpb.DelegatedSnapshotRequest, error)
+	Recv() (*kvserverpb.DelegateSnapshotRequest, error)
 }
 
 // outgoingSnapshotStream is the minimal interface on a GRPC stream required
 // to send a snapshot over the network.
 type outgoingDelegatedStream interface {
-	Send(*kvserverpb.DelegatedSnapshotRequest) error
+	Send(*kvserverpb.DelegateSnapshotRequest) error
 	Recv() (*kvserverpb.SnapshotResponse, error)
 }
 
@@ -417,18 +418,42 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 	}
 }
 
-// reserveSnapshot throttles incoming snapshots. The returned closure is used
-// to cleanup the reservation and release its resources.
+// reserveSnapshot throttles incoming snapshots.
 func (s *Store) reserveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
 ) (_cleanup func(), _err error) {
-	tBegin := timeutil.Now()
+	return s.throttleSnapshot(
+		ctx, s.snapshotApplySem, header.RangeSize,
+		header.RaftMessageRequest.RangeID, header.RaftMessageRequest.ToReplica.ReplicaID,
+	)
+}
 
+// reserveSendSnapshot throttles outgoing snapshots.
+func (s *Store) reserveSendSnapshot(
+	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest,
+) (_cleanup func(), _err error) {
+	return s.throttleSnapshot(
+		ctx, s.snapshotSendSem, req.Header.RangeSize,
+		req.Header.RangeID, req.DelegatedSender.ReplicaID,
+	)
+}
+
+// throttleSnapshot is a helper function to throttle snapshot sending and
+// receiving. The returned closure is used to cleanup the reservation and
+// release its resources.
+func (s *Store) throttleSnapshot(
+	ctx context.Context,
+	snapshotSem chan struct{},
+	rangeSize int64,
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+) (_cleanup func(), _err error) {
+	tBegin := timeutil.Now()
 	// Empty snapshots are exempt from rate limits because they're so cheap to
 	// apply. This vastly speeds up rebalancing any empty ranges created by a
 	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 	// getting stuck behind large snapshots managed by the replicate queue.
-	if header.RangeSize != 0 {
+	if rangeSize != 0 {
 		queueCtx := ctx
 		if deadline, ok := queueCtx.Deadline(); ok {
 			// Enforce a more strict timeout for acquiring the snapshot reservation to
@@ -442,14 +467,16 @@ func (s *Store) reserveSnapshot(
 			defer cancel()
 		}
 		select {
-		case s.snapshotApplySem <- struct{}{}:
+		case snapshotSem <- struct{}{}:
 		case <-queueCtx.Done():
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
 			}
-			return nil, errors.Wrapf(queueCtx.Err(),
+			return nil, errors.Wrapf(
+				queueCtx.Err(),
 				"giving up during snapshot reservation due to %q",
-				snapshotReservationQueueTimeoutFraction.Key())
+				snapshotReservationQueueTimeoutFraction.Key(),
+			)
 		case <-s.stopper.ShouldQuiesce():
 			return nil, errors.Errorf("stopped")
 		}
@@ -459,24 +486,24 @@ func (s *Store) reserveSnapshot(
 	// Raft snapshot rate limiting of 32mb/s, we expect to spend less than 16s per snapshot.
 	// which is what we want to log.
 	const snapshotReservationWaitWarnThreshold = 32 * time.Second
-	if elapsed := timeutil.Since(tBegin); elapsed > snapshotReservationWaitWarnThreshold {
-		replDesc, _ := header.State.Desc.GetReplicaDescriptor(s.StoreID())
+	elapsed := timeutil.Since(tBegin)
+	if elapsed > snapshotReservationWaitWarnThreshold && !buildutil.CrdbTestBuild {
 		log.Infof(
 			ctx,
 			"waited for %.1fs to acquire snapshot reservation to r%d/%d",
 			elapsed.Seconds(),
-			header.State.Desc.RangeID,
-			replDesc.ReplicaID,
+			rangeID,
+			replicaID,
 		)
 	}
 
 	s.metrics.ReservedReplicaCount.Inc(1)
-	s.metrics.Reserved.Inc(header.RangeSize)
+	s.metrics.Reserved.Inc(rangeSize)
 	return func() {
 		s.metrics.ReservedReplicaCount.Dec(1)
-		s.metrics.Reserved.Dec(header.RangeSize)
-		if header.RangeSize != 0 {
-			<-s.snapshotApplySem
+		s.metrics.Reserved.Dec(rangeSize)
+		if rangeSize != 0 {
+			<-snapshotSem
 		}
 	}, nil
 }
@@ -1115,13 +1142,11 @@ func sendSnapshot(
 	// (only a limited number of snapshots are allowed concurrently) or flat-out
 	// reject the snapshot. After the initial message exchange, we'll go and send
 	// the actual snapshot (if not rejected).
-
 	resp, err := stream.Recv()
 	if err != nil {
 		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
 		return err
 	}
-
 	switch resp.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, resp.Message, to.StoreID)
@@ -1214,8 +1239,7 @@ func sendSnapshot(
 	case kvserverpb.SnapshotResponse_APPLIED:
 		return nil
 	default:
-		return errors.Errorf(
-			"%s: server sent an invalid status during finalization: %s",
+		return errors.Errorf("%s: server sent an invalid status during finalization: %s",
 			to, resp.Status,
 		)
 	}
@@ -1223,20 +1247,19 @@ func sendSnapshot(
 
 // sendDelegatedSnapshot sends an outgoing delegated snapshot request via a
 // pre-opened GRPC stream. It sends the delegated snapshot request to the new
-// sender and waits for confirmation if the snapshot has been applied.
+// sender and waits for confirmation that the snapshot has been applied.
 func sendDelegatedSnapshot(
 	ctx context.Context,
 	stream outgoingDelegatedStream,
 	storePool SnapshotStorePool,
-	req *kvserverpb.DelegatedSnapshotRequest,
+	req *kvserverpb.DelegateSnapshotRequest,
 ) error {
 
-	to := req.SnapRequest.Header.RaftMessageRequest.ToReplica
 	delegatedSender := req.DelegatedSender
 	if err := stream.Send(req); err != nil {
 		return err
 	}
-	// Wait for response to see if the receiver accepted or rejected
+	// Wait for a response from the new sender.
 	resp, err := stream.Recv()
 	if err != nil {
 		storePool.throttle(throttleFailed, err.Error(), delegatedSender.StoreID)
@@ -1246,11 +1269,15 @@ func sendDelegatedSnapshot(
 	case kvserverpb.SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, resp.Message, delegatedSender.StoreID)
 		return errors.Errorf(
-			"%s: remote couldn't accept %s with error: %s",
-			delegatedSender, req, resp.Message,
+			"%s: remote couldn't accept %s with error: %s", delegatedSender,
+			req, resp.Message,
 		)
 	case kvserverpb.SnapshotResponse_ACCEPTED:
-		// This is the response we're expecting. New sender accepted the request.
+		// The new sender accepted the request, it will continue with sending.
+		log.VEventf(
+			ctx, 2, "new sender %s accepted snapshot request %s", delegatedSender,
+			req,
+		)
 	default:
 		err := errors.Errorf(
 			"%s: server sent an invalid status while negotiating %s: %s",
@@ -1260,7 +1287,7 @@ func sendDelegatedSnapshot(
 		return err
 	}
 
-	// Wait for response to see if the receiver successfully applied the snapshot
+	// Wait for response to see if the receiver successfully applied the snapshot.
 	resp, err = stream.Recv()
 	if err != nil {
 		return errors.Wrapf(err, "%s: remote failed to send snapshot", delegatedSender)
@@ -1268,25 +1295,28 @@ func sendDelegatedSnapshot(
 	// Wait for EOF to ensure server side processing is complete.
 	if unexpectedResp, err := stream.Recv(); err != io.EOF {
 		if err != nil {
-			return errors.Wrapf(err, "%s: expected EOF, got resp=%v with error", to, unexpectedResp)
+			return errors.Wrapf(
+				err, "%s: expected EOF, got resp=%v with error",
+				delegatedSender.StoreID, unexpectedResp,
+			)
 		}
-		return errors.Newf("%s: expected EOF, got resp=%v", to, unexpectedResp)
+		return errors.Newf(
+			"%s: expected EOF, got resp=%v", delegatedSender.StoreID,
+			unexpectedResp,
+		)
 	}
 	switch resp.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
-		storePool.throttle(throttleFailed, resp.Message, delegatedSender.StoreID)
-		return errors.Errorf("%s: remote couldn't apply the snapshot with error: %s",
-			to, resp.Message)
+		// send the error message back to the leaseholder.
+		return errors.Newf("%s", resp.Message)
 	case kvserverpb.SnapshotResponse_APPLIED:
 		// This is the response we're expecting. Snapshot successfully applied.
 		return nil
 	default:
-		err := errors.Errorf(
-			"%s: server sent an invalid status while negotiating %s: %s",
-			delegatedSender, req, resp.Status,
+		return errors.Errorf(
+			"%s: server sent an invalid status during finalization: %s",
+			delegatedSender, resp.Status,
 		)
-		storePool.throttle(throttleFailed, err.Error(), delegatedSender.StoreID)
-		return err
 	}
 
 }

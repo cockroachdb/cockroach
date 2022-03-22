@@ -181,15 +181,13 @@ func (h *testClusterStoreRaftMessageHandler) HandleSnapshot(
 }
 
 func (h *testClusterStoreRaftMessageHandler) SendDelegatedSnapshot(
-	ctx context.Context,
-	req *kvserverpb.DelegatedSnapshotRequest,
-	respStream kvserver.DelegateSnapshotResponseStream,
+	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest,
 ) error {
 	store, err := h.getStore()
 	if err != nil {
 		return err
 	}
-	return store.SendDelegatedSnapshot(ctx, req, respStream)
+	return store.SendDelegatedSnapshot(ctx, req)
 }
 
 // testClusterPartitionedRange is a convenient abstraction to create a range on a node

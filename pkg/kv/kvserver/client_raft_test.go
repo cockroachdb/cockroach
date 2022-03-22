@@ -3453,9 +3453,7 @@ func (errorChannelTestHandler) HandleSnapshot(
 }
 
 func (errorChannelTestHandler) SendDelegatedSnapshot(
-	_ context.Context,
-	req *kvserverpb.DelegatedSnapshotRequest,
-	respStream kvserver.DelegateSnapshotResponseStream,
+	_ context.Context, req *kvserverpb.DelegateSnapshotRequest,
 ) error {
 	panic("unimplemented")
 }
@@ -3468,12 +3466,10 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(
-		t, 4,
+	tc := testcluster.StartTestCluster(t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
-		},
-	)
+		})
 	defer tc.Stopper().Stop(ctx)
 
 	// Move the first range from the first node to the other three.
