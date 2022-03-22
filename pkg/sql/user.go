@@ -241,13 +241,15 @@ func retrieveSessionInitInfoWithCache(
 }
 
 func retrieveAuthInfo(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, username security.SQLUsername,
+	ctx context.Context, ie sqlutil.InternalExecutor, username security.SQLUsername,
 ) (aInfo sessioninit.AuthInfo, retErr error) {
 	// Use fully qualified table name to avoid looking up "".system.users.
+	// We use a nil txn as login is not tied to any transaction state, and
+	// we should always look up the latest data.
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
 		`WHERE username=$1`
 	values, err := ie.QueryRowEx(
-		ctx, "get-hashed-pwd", txn,
+		ctx, "get-hashed-pwd", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getHashedPassword, username)
 	if err != nil {
@@ -276,7 +278,7 @@ func retrieveAuthInfo(
 		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN')`
 
 	roleOptsIt, err := ie.QueryIteratorEx(
-		ctx, "get-login-dependencies", txn,
+		ctx, "get-login-dependencies", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getLoginDependencies,
 		username,
@@ -326,7 +328,6 @@ func retrieveAuthInfo(
 
 func retrieveDefaultSettings(
 	ctx context.Context,
-	txn *kv.Txn,
 	ie sqlutil.InternalExecutor,
 	username security.SQLUsername,
 	databaseID descpb.ID,
@@ -359,8 +360,10 @@ WHERE
   OR (database_id = $2 AND role_name = '')
   OR (database_id = 0 AND role_name = '');
 `
+	// We use a nil txn as role settings are not tied to any transaction state,
+	// and we should always look up the latest data.
 	defaultSettingsIt, err := ie.QueryIteratorEx(
-		ctx, "get-default-settings", txn,
+		ctx, "get-default-settings", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getDefaultSettings,
 		username,
