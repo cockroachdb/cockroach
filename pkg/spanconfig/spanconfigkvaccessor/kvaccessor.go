@@ -395,7 +395,7 @@ func (k *KVAccessor) constructValidationStmtAndArgs(
 	validationQueryArgs := make([]interface{}, 2)
 	validationQueryArgs[0] = targetsToUpsert[0].Encode().Key
 	// NB: This is the largest key due to sort above + validation at the caller
-	// than ensures non-overlapping upser spans.
+	// than ensures non-overlapping upsert spans.
 	validationQueryArgs[1] = targetsToUpsert[len(targetsToUpsert)-1].Encode().EndKey
 
 	validationStmt := fmt.Sprintf(`
