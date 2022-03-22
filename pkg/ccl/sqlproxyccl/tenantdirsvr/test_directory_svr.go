@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Licensed as a CockroachDB Enterprise file under the Cockroach Community
 // License (the "License"); you may not use this file except in compliance with
@@ -104,7 +104,7 @@ func New(stopper *stop.Stopper, args ...string) (*TestDirectoryServer, error) {
 	dir.TenantStarterFunc = dir.startTenantLocked
 	dir.proc.processByAddrByTenantID = map[uint64]map[net.Addr]*Process{}
 	dir.listen.eventListeners = list.New()
-	stopper.AddCloser(stop.CloserFn(func() { dir.grpcServer.GracefulStop() }))
+	stopper.AddCloser(stop.CloserFn(dir.grpcServer.GracefulStop))
 	tenant.RegisterDirectoryServer(dir.grpcServer, dir)
 	return dir, nil
 }
