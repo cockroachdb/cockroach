@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // TestScrubIndexMissingIndexEntry tests that
@@ -61,26 +63,8 @@ INSERT INTO t."tEst" VALUES (10, 20);
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)}
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tEst")
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-
-	// Construct the secondary index key that is currently in the
-	// database.
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(secondaryIndexKey) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
-
-	// Delete the entry.
-	if err := kvDB.Del(context.Background(), secondaryIndexKey[0].Key); err != nil {
-		t.Fatalf("unexpected error: %s", err)
+	if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+		t.Fatalf("unexpected error: %s", err.Error())
 	}
 
 	// Run SCRUB and find the index errors we created.
@@ -108,6 +92,168 @@ INSERT INTO t."tEst" VALUES (10, 20);
 	)
 }
 
+// TestScrubIndexPartialIndex tests that SCRUB catches various anomalies in the data contained in a
+// partial secondary index.
+func TestScrubIndexPartialIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	r := sqlutils.MakeSQLRunner(db)
+
+	t.Run("missing index entry", func(t *testing.T) {
+		r.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.test (v) WHERE v > 10;
+INSERT INTO t.test VALUES (1, 5);
+INSERT INTO t.test VALUES (2, 15);
+`)
+		defer r.Exec(t, "DROP DATABASE t")
+		values := []tree.Datum{tree.NewDInt(2), tree.NewDInt(15)}
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+		if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+			t.Fatalf("unexpected error: %s", err.Error())
+		}
+		// Run SCRUB and find the index errors we created.
+		exp := expectedScrubResult{
+			ErrorType:    scrub.MissingIndexEntryError,
+			Database:     "t",
+			Table:        "test",
+			PrimaryKey:   "(2)",
+			Repaired:     false,
+			DetailsRegex: `"v": "15"`,
+		}
+		runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+	})
+	t.Run("dangling index entry that matches predicate", func(t *testing.T) {
+		r.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.test (v) WHERE v > 10;
+INSERT INTO t.test VALUES (1, 5);
+INSERT INTO t.test VALUES (2, 15);
+`)
+		defer r.Exec(t, "DROP DATABASE t")
+		values := []tree.Datum{tree.NewDInt(3), tree.NewDInt(25)}
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+		if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+			t.Fatalf("unexpected error: %s", err.Error())
+		}
+		// Run SCRUB and find the index errors we created.
+		exp := expectedScrubResult{
+			ErrorType:    scrub.DanglingIndexReferenceError,
+			Database:     "t",
+			Table:        "test",
+			PrimaryKey:   "(3)",
+			Repaired:     false,
+			DetailsRegex: `"v": "25"`,
+		}
+		runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+	})
+	t.Run("dangling index entry that does not match predicate", func(t *testing.T) {
+		r.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.test (v) WHERE v > 10;
+INSERT INTO t.test VALUES (1, 5);
+INSERT INTO t.test VALUES (2, 15);
+`)
+		defer r.Exec(t, "DROP DATABASE t")
+		values := []tree.Datum{tree.NewDInt(3), tree.NewDInt(7)}
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+		if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+			t.Fatalf("unexpected error: %s", err.Error())
+		}
+		// Run SCRUB and find the index errors we created.
+		exp := expectedScrubResult{
+			ErrorType:    scrub.DanglingIndexReferenceError,
+			Database:     "t",
+			Table:        "test",
+			PrimaryKey:   "(3)",
+			Repaired:     false,
+			DetailsRegex: `"v": "7"`,
+		}
+		runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+	})
+	t.Run("index entry that does not match predicate", func(t *testing.T) {
+		r.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.test (v) WHERE v > 10;
+INSERT INTO t.test VALUES (1, 5);
+INSERT INTO t.test VALUES (2, 15);
+`)
+		defer r.Exec(t, "DROP DATABASE t")
+		values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(5)}
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+		if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+			t.Fatalf("unexpected error: %s", err.Error())
+		}
+		// Run SCRUB and find the index errors we created.
+		exp := expectedScrubResult{
+			ErrorType:    scrub.DanglingIndexReferenceError,
+			Database:     "t",
+			Table:        "test",
+			PrimaryKey:   "(1)",
+			Repaired:     false,
+			DetailsRegex: `"v": "5"`,
+		}
+		runScrub(t, db, `EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`, exp)
+	})
+
+}
+
+func indexEntryForDatums(
+	row []tree.Datum, tableDesc catalog.TableDescriptor, index catalog.Index,
+) (rowenc.IndexEntry, error) {
+	var colIDtoRowIndex catalog.TableColMap
+	for i, c := range tableDesc.PublicColumns() {
+		colIDtoRowIndex.Set(c.GetID(), i)
+	}
+	indexEntries, err := rowenc.EncodeSecondaryIndex(
+		keys.SystemSQLCodec, tableDesc, index, colIDtoRowIndex, row, true /* includeEmpty */)
+	if err != nil {
+		return rowenc.IndexEntry{}, err
+	}
+
+	if len(indexEntries) != 1 {
+		return rowenc.IndexEntry{}, errors.Newf("expected 1 index entry, got %d. got %#v", len(indexEntries), indexEntries)
+	}
+	return indexEntries[0], nil
+}
+
+// removeIndexEntryForDatums removes the index entries for the row
+// that represents the given datums. It assumes the datums are in the
+// order of the public columns of the table. It further assumes that
+// the row only produces a single index entry.
+func removeIndexEntryForDatums(
+	row []tree.Datum, kvDB *kv.DB, tableDesc catalog.TableDescriptor, index catalog.Index,
+) error {
+	entry, err := indexEntryForDatums(row, tableDesc, index)
+	if err != nil {
+		return err
+	}
+	return kvDB.Del(context.Background(), entry.Key)
+}
+
+// addIndexEntryForDatums adds an index entry for the given datums. It assumes the datums are in the
+// order of the public columns of the table. It further assumes that the row only produces a single
+// index entry.
+func addIndexEntryForDatums(
+	row []tree.Datum, kvDB *kv.DB, tableDesc catalog.TableDescriptor, index catalog.Index,
+) error {
+	entry, err := indexEntryForDatums(row, tableDesc, index)
+	if err != nil {
+		return err
+	}
+	return kvDB.Put(context.Background(), entry.Key, &entry.Value)
+}
+
 // TestScrubIndexDanglingIndexReference tests that
 // `SCRUB TABLE ... INDEX`` will find dangling index references, which
 // are index entries that have no corresponding primary k/v. To test
@@ -130,25 +276,11 @@ CREATE INDEX secondary ON t.test (v);
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-
 	// Construct datums and secondary k/v for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(secondaryIndexKey) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
 
 	// Put the new secondary k/v into the database.
-	if err := kvDB.Put(context.Background(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
+	if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -224,38 +356,19 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
-
 	// Generate the existing secondary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(1337)}
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
 
-	if len(secondaryIndexKey) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
-
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
 	// Delete the existing secondary k/v.
-	if err := kvDB.Del(context.Background(), secondaryIndexKey[0].Key); err != nil {
+	if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
 	// Generate a secondary index k/v that has a different value.
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(314)}
-	secondaryIndexKey, err = rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
+
 	// Put the incorrect secondary k/v.
-	if err := kvDB.Put(context.Background(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
+	if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -447,44 +560,17 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 
-	var colIDtoRowIndex catalog.TableColMap
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
-	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-
-	// Construct the secondary index key entry as it exists in the
-	// database.
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(secondaryIndexKey) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
-
 	// Delete the existing secondary key entry, as we will later replace
 	// it.
-	if err := kvDB.Del(context.Background(), secondaryIndexKey[0].Key); err != nil {
+	if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
 	// Replace the foreign key value.
 	values[1] = tree.NewDInt(0)
 
-	// Construct the new secondary index key that will be inserted.
-	secondaryIndexKey, err = rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if len(secondaryIndexKey) != 1 {
-		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
-	}
-
 	// Add the new, replacement secondary index entry.
-	if err := kvDB.Put(context.Background(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
+	if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
