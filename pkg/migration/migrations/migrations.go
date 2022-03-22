@@ -125,6 +125,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		tenantSettingsTableMigration,
 	),
+	migration.NewTenantMigration(
+		"Rewrites cast that are negatively affected by DateStyle/IntervalStyle",
+		toCV(clusterversion.DateStyleIntervalStyleCastRewrite),
+		NoPrecondition,
+		fixCastForStyleMigration,
+	),
 }
 
 func init() {
