@@ -241,8 +241,11 @@ func retrieveSessionInitInfoWithCache(
 }
 
 func retrieveAuthInfo(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, username security.SQLUsername,
+	ctx context.Context, ie sqlutil.InternalExecutor, username security.SQLUsername,
 ) (aInfo sessioninit.AuthInfo, retErr error) {
+	// We use nil as logging in is not tied to any transaction state, and
+	// we should always look up the latest data.
+	var txn *kv.Txn = nil
 	// Use fully qualified table name to avoid looking up "".system.users.
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
 		`WHERE username=$1`
@@ -326,11 +329,13 @@ func retrieveAuthInfo(
 
 func retrieveDefaultSettings(
 	ctx context.Context,
-	txn *kv.Txn,
 	ie sqlutil.InternalExecutor,
 	username security.SQLUsername,
 	databaseID descpb.ID,
 ) (settingsEntries []sessioninit.SettingsCacheEntry, retErr error) {
+	// We use nil as role settings are not tied to any transaction state, and
+	// we should always look up the latest data.
+	var txn *kv.Txn = nil
 	// Add an empty slice for all the keys so that something gets cached and
 	// prevents a lookup for the same key from happening later.
 	keys := sessioninit.GenerateSettingsCacheKeys(databaseID, username)
