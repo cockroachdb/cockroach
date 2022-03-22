@@ -30,10 +30,6 @@ export function jobToVisual(job: Job): JobStatusVisual {
       return JobStatusVisual.BadgeWithDuration;
     case JOB_STATUS_FAILED:
       return JobStatusVisual.BadgeWithErrorMessage;
-    case JOB_STATUS_CANCELED:
-      return JobStatusVisual.BadgeOnly;
-    case JOB_STATUS_PAUSED:
-      return JobStatusVisual.BadgeOnly;
     case JOB_STATUS_RUNNING:
       return JobStatusVisual.ProgressBarWithDuration;
     case JOB_STATUS_RETRY_RUNNING:
@@ -42,6 +38,11 @@ export function jobToVisual(job: Job): JobStatusVisual {
       return JobStatusVisual.BadgeWithMessage;
     case JOB_STATUS_RETRY_REVERTING:
       return JobStatusVisual.BadgeWithRetrying;
+    case JOB_STATUS_CANCELED:
+    case JOB_STATUS_CANCEL_REQUESTED:
+    case JOB_STATUS_PAUSED:
+    case JOB_STATUS_PAUSE_REQUESTED:
+    case JOB_STATUS_REVERTING:
     default:
       return JobStatusVisual.BadgeOnly;
   }
@@ -50,11 +51,14 @@ export function jobToVisual(job: Job): JobStatusVisual {
 export const JOB_STATUS_SUCCEEDED = "succeeded";
 export const JOB_STATUS_FAILED = "failed";
 export const JOB_STATUS_CANCELED = "canceled";
+export const JOB_STATUS_CANCEL_REQUESTED = "cancel-requested";
 export const JOB_STATUS_PAUSED = "paused";
+export const JOB_STATUS_PAUSE_REQUESTED = "paused-requested";
 export const JOB_STATUS_RUNNING = "running";
 export const JOB_STATUS_RETRY_RUNNING = "retry-running";
 export const JOB_STATUS_PENDING = "pending";
 export const JOB_STATUS_REVERTING = "reverting";
+export const JOB_STATUS_REVERT_FAILED = "revert-failed";
 export const JOB_STATUS_RETRY_REVERTING = "retry-reverting";
 
 export function isRetrying(status: string): boolean {
@@ -88,20 +92,20 @@ export const jobStatusToBadgeStatus = (status: string): BadgeStatus => {
       return "success";
     case JOB_STATUS_FAILED:
       return "danger";
-    case JOB_STATUS_CANCELED:
-      return "default";
-    case JOB_STATUS_PAUSED:
-      return "default";
-    case JOB_STATUS_REVERTING:
-      return "default";
-    case JOB_STATUS_RETRY_REVERTING:
-      return "default";
+    case JOB_STATUS_REVERT_FAILED:
+      return "danger";
     case JOB_STATUS_RUNNING:
       return "info";
     case JOB_STATUS_PENDING:
       return "warning";
+    case JOB_STATUS_CANCELED:
+    case JOB_STATUS_CANCEL_REQUESTED:
+    case JOB_STATUS_PAUSED:
+    case JOB_STATUS_PAUSE_REQUESTED:
+    case JOB_STATUS_REVERTING:
+    case JOB_STATUS_RETRY_REVERTING:
     default:
-      return "info";
+      return "default";
   }
 };
 export const jobStatusToBadgeText = (status: string): string => {

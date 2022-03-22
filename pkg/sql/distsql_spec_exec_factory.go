@@ -349,8 +349,8 @@ func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
 	projection := make([]uint32, len(cols))
-	for i := range cols {
-		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
+	for i, col := range cols {
+		projection[i] = uint32(physPlan.PlanToStreamColMap[col])
 	}
 	newColMap := identityMap(physPlan.PlanToStreamColMap, len(cols))
 	physPlan.AddProjection(
@@ -370,8 +370,8 @@ func (e *distSQLSpecExecFactory) ConstructSerializingProject(
 	physPlan, plan := getPhysPlan(n)
 	physPlan.EnsureSingleStreamOnGateway()
 	projection := make([]uint32, len(cols))
-	for i := range cols {
-		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
+	for i, col := range cols {
+		projection[i] = uint32(physPlan.PlanToStreamColMap[col])
 	}
 	physPlan.AddProjection(projection, execinfrapb.Ordering{})
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.GetResultTypes(), physPlan.ResultColumns)

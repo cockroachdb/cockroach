@@ -123,6 +123,7 @@ var retiredSettings = map[string]struct{}{
 	"schemachanger.backfiller.max_sst_size":                            {},
 	"kv.bulk_ingest.buffer_increment":                                  {},
 	"schemachanger.backfiller.buffer_increment":                        {},
+	"kv.rangefeed.separated_intent_scan.enabled":                       {},
 }
 
 // register adds a setting to the registry.
