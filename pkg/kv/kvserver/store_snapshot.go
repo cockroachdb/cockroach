@@ -710,6 +710,7 @@ func (s *Store) receiveSnapshot(
 	if err != nil {
 		return err
 	}
+	s.metrics.RangeSnapshotRcvdBytes.Inc(header.RangeSize)
 	inSnap.placeholder = placeholder
 
 	// Use a background context for applying the snapshot, as handleRaftReady is

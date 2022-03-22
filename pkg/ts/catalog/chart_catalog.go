@@ -604,6 +604,12 @@ var charts = []sectionDescription{
 					"range.snapshots.applied-non-voter",
 				},
 			},
+			{
+				Title: "Snapshot Bytes",
+				Metrics: []string{
+					"range.snapshots.rcvd-bytes",
+				},
+			},
 		},
 	},
 	{
