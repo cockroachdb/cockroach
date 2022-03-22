@@ -63,7 +63,7 @@ func TestKvBuf(t *testing.T) {
 	b := kvBuf{}
 	for i := range src {
 		size := sz(len(src[i].key) + len(src[i].value))
-		fits := len(b.entries) < cap(b.entries) && len(b.slab)+int(size) < cap(b.slab)
+		fits := len(b.entries) <= cap(b.entries) && len(b.slab)+int(size) <= cap(b.slab)
 
 		require.Equal(t, fits, b.fits(ctx, size, 0, &none))
 		if !fits {
