@@ -484,8 +484,6 @@ type testClusterConfig struct {
 	overrideDistSQLMode string
 	// if non-empty, overrides the default vectorize mode.
 	overrideVectorize string
-	// if non-empty, overrides the default automatic statistics mode.
-	overrideAutoStats string
 	// if non-empty, overrides the default experimental DistSQL planning mode.
 	overrideExperimentalDistSQLPlanning string
 	// if set, queries using distSQL processors or vectorized operators that can
@@ -680,20 +678,17 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "local",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
 	},
 	{
 		name:                "local-vec-off",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
 		overrideVectorize:   "off",
 	},
 	{
 		name:                "local-v1.1@v1.0-noupgrade",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
 		bootstrapVersion:    roachpb.Version{Major: 1},
 		binaryVersion:       roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade:      true,
@@ -702,7 +697,6 @@ var logicTestConfigs = []testClusterConfig{
 		name:                                "local-spec-planning",
 		numNodes:                            1,
 		overrideDistSQLMode:                 "off",
-		overrideAutoStats:                   "false",
 		overrideExperimentalDistSQLPlanning: "on",
 	},
 	{
@@ -710,14 +704,12 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            3,
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
 	},
 	{
 		name:                "fakedist-vec-off",
 		numNodes:            3,
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
 		overrideVectorize:   "off",
 	},
 	{
@@ -725,7 +717,6 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:                   3,
 		useFakeSpanResolver:        true,
 		overrideDistSQLMode:        "on",
-		overrideAutoStats:          "false",
 		distSQLMetadataTestEnabled: true,
 		skipShort:                  true,
 	},
@@ -734,7 +725,6 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            3,
 		useFakeSpanResolver: true,
 		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
 	},
@@ -743,20 +733,17 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:                            3,
 		useFakeSpanResolver:                 true,
 		overrideDistSQLMode:                 "on",
-		overrideAutoStats:                   "false",
 		overrideExperimentalDistSQLPlanning: "on",
 	},
 	{
 		name:                "5node",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
 	},
 	{
 		name:                       "5node-metadata",
 		numNodes:                   5,
 		overrideDistSQLMode:        "on",
-		overrideAutoStats:          "false",
 		distSQLMetadataTestEnabled: true,
 		skipShort:                  true,
 	},
@@ -764,7 +751,6 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "5node-disk",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
 		sqlExecUseDisk:      true,
 		skipShort:           true,
 	},
@@ -772,7 +758,6 @@ var logicTestConfigs = []testClusterConfig{
 		name:                                "5node-spec-planning",
 		numNodes:                            5,
 		overrideDistSQLMode:                 "on",
-		overrideAutoStats:                   "false",
 		overrideExperimentalDistSQLPlanning: "on",
 	},
 	{
@@ -781,13 +766,10 @@ var logicTestConfigs = []testClusterConfig{
 		// logictest command.
 		// To run a logic test with this config as a directive, run:
 		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic//<test_name>
-		name:     threeNodeTenantConfigName,
-		numNodes: 3,
-		// overrideAutoStats will disable automatic stats on the cluster this tenant
-		// is connected to.
-		overrideAutoStats: "false",
-		useTenant:         true,
-		isCCLConfig:       true,
+		name:        threeNodeTenantConfigName,
+		numNodes:    3,
+		useTenant:   true,
+		isCCLConfig: true,
 	},
 	// Regions and zones below are named deliberately, and contain "-"'s to be reflective
 	// of the naming convention in public clouds.  "-"'s are handled differently in SQL
@@ -795,9 +777,8 @@ var logicTestConfigs = []testClusterConfig{
 	// the multi-region code handles them correctly.
 
 	{
-		name:              "multiregion-invalid-locality",
-		numNodes:          3,
-		overrideAutoStats: "false",
+		name:     "multiregion-invalid-locality",
+		numNodes: 3,
 		localities: map[int]roachpb.Locality{
 			1: {
 				Tiers: []roachpb.Tier{
@@ -817,9 +798,8 @@ var logicTestConfigs = []testClusterConfig{
 		},
 	},
 	{
-		name:              "multiregion-3node-3superlongregions",
-		numNodes:          3,
-		overrideAutoStats: "false",
+		name:     "multiregion-3node-3superlongregions",
+		numNodes: 3,
 		localities: map[int]roachpb.Locality{
 			1: {
 				Tiers: []roachpb.Tier{
@@ -839,36 +819,31 @@ var logicTestConfigs = []testClusterConfig{
 		},
 	},
 	{
-		name:              "multiregion-9node-3region-3azs",
-		numNodes:          9,
-		overrideAutoStats: "false",
-		localities:        multiregion9node3region3azsLocalities,
+		name:       "multiregion-9node-3region-3azs",
+		numNodes:   9,
+		localities: multiregion9node3region3azsLocalities,
 	},
 	{
-		name:              "multiregion-9node-3region-3azs-tenant",
-		numNodes:          9,
-		overrideAutoStats: "false",
-		localities:        multiregion9node3region3azsLocalities,
-		useTenant:         true,
+		name:       "multiregion-9node-3region-3azs-tenant",
+		numNodes:   9,
+		localities: multiregion9node3region3azsLocalities,
+		useTenant:  true,
 	},
 	{
 		name:              "multiregion-9node-3region-3azs-vec-off",
 		numNodes:          9,
-		overrideAutoStats: "false",
 		localities:        multiregion9node3region3azsLocalities,
 		overrideVectorize: "off",
 	},
 	{
-		name:              "multiregion-15node-5region-3azs",
-		numNodes:          15,
-		overrideAutoStats: "false",
-		localities:        multiregion15node5region3azsLocalities,
+		name:       "multiregion-15node-5region-3azs",
+		numNodes:   15,
+		localities: multiregion15node5region3azsLocalities,
 	},
 	{
 		name:                "local-mixed-21.2-22.1",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		overrideAutoStats:   "false",
 		bootstrapVersion:    roachpb.Version{Major: 21, Minor: 2},
 		binaryVersion:       roachpb.Version{Major: 22, Minor: 1},
 		disableUpgrade:      true,
@@ -1752,32 +1727,28 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 			}
 		}
 
-		if cfg.overrideAutoStats != "" {
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
-			); err != nil {
-				t.Fatal(err)
-			}
-		} else {
-			// Background stats collection is enabled by default, but we've seen tests
-			// flake with it on. When the issue manifests, it seems to be around a
-			// schema change transaction getting pushed, which causes it to increment a
-			// table ID twice instead of once, causing non-determinism.
-			//
-			// In the short term, we disable auto stats by default to avoid the flakes.
-			//
-			// In the long run, these tests should be running with default settings as
-			// much as possible, so we likely want to address this. Two options are
-			// either making schema changes more resilient to being pushed or possibly
-			// making auto stats avoid pushing schema change transactions. There might
-			// be other better alternatives than these.
-			//
-			// See #37751 for details.
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-			); err != nil {
-				t.Fatal(err)
-			}
+		// We disable the automatic stats collection in order to have
+		// deterministic tests.
+		//
+		// We've also seen tests flake with it on. When the issue manifests, it
+		// seems to be around a schema change transaction getting pushed, which
+		// causes it to increment a table ID twice instead of once, causing
+		// non-determinism.
+		//
+		// In the short term, we disable auto stats by default to avoid the
+		// flakes.
+		//
+		// In the long run, these tests should be running with default settings
+		// as much as possible, so we likely want to address this. Two options
+		// are either making schema changes more resilient to being pushed or
+		// possibly making auto stats avoid pushing schema change transactions.
+		// There might be other better alternatives than these.
+		//
+		// See #37751 for details.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+		); err != nil {
+			t.Fatal(err)
 		}
 
 		if cfg.overrideExperimentalDistSQLPlanning != "" {
