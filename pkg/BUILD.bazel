@@ -134,6 +134,7 @@ ALL_TESTS = [
     "//pkg/kv/kvprober:kvprober_test",
     "//pkg/kv/kvserver/abortspan:abortspan_test",
     "//pkg/kv/kvserver/apply:apply_test",
+    "//pkg/kv/kvserver/asim:asim_test",
     "//pkg/kv/kvserver/batcheval/result:result_test",
     "//pkg/kv/kvserver/batcheval:batcheval_test",
     "//pkg/kv/kvserver/closedts/sidetransport:sidetransport_test",
