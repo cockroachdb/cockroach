@@ -300,6 +300,7 @@ func newJoinReader(
 		shouldLimitBatches = false
 	}
 	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
+		readerType == indexJoinReaderType &&
 		row.CanUseStreamer(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Settings)
 
 	jr := &joinReader{

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -250,7 +251,9 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 		return errors.New("clock jumps are already being monitored")
 	}
 
+	ctx, sp := tracing.ForkSpan(ctx, "clock monitor")
 	go func() {
+		defer sp.Finish()
 		// Create a ticker object which can be used in selects.
 		// This ticker is turned on / off based on forwardClockJumpCheckEnabledCh
 		ticker := tickerFn(time.Hour)

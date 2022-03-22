@@ -55,7 +55,7 @@ type rowLevelTTLTestJobTestHelper struct {
 }
 
 func newRowLevelTTLTestJobTestHelper(
-	t *testing.T, testingKnobs sql.TTLTestingKnobs,
+	t *testing.T, testingKnobs *sql.TTLTestingKnobs,
 ) (*rowLevelTTLTestJobTestHelper, func()) {
 	th := &rowLevelTTLTestJobTestHelper{
 		env: jobstest.NewJobSchedulerTestEnv(
@@ -84,7 +84,7 @@ func newRowLevelTTLTestJobTestHelper(
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: knobs,
-			TTL:              &testingKnobs,
+			TTL:              testingKnobs,
 		},
 	}
 
@@ -141,6 +141,23 @@ func (h *rowLevelTTLTestJobTestHelper) waitForSuccessfulScheduledJob(t *testing.
 	h.waitForScheduledJob(t, jobs.StatusSucceeded, "")
 }
 
+func TestRowLevelTTLNoTestingKnobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, nil /* SQLTestingKnobs */)
+	defer cleanupFunc()
+
+	th.sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY) WITH (ttl_expire_after = '1 minute')`)
+	th.sqlDB.Exec(t, `INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month')`)
+
+	// Force the schedule to execute.
+	th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
+	require.NoError(t, th.executeSchedules())
+
+	th.waitForScheduledJob(t, jobs.StatusFailed, `found a recent schema change on the table`)
+}
+
 // TestRowLevelTTLInterruptDuringExecution tests that row-level TTL errors
 // as appropriate if there is some sort of "interrupting" request.
 func TestRowLevelTTLInterruptDuringExecution(t *testing.T) {
@@ -194,7 +211,7 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 			if tc.onDeleteLoopStart != nil {
 				onDeleteLoopStart = tc.onDeleteLoopStart(t, &sqlDB)
 			}
-			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, sql.TTLTestingKnobs{
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, &sql.TTLTestingKnobs{
 				AOSTDuration:                      &tc.aostDuration,
 				MockDescriptorVersionDuringDelete: tc.mockDescriptorVersionDuringDelete,
 				OnDeleteLoopStart:                 onDeleteLoopStart,
@@ -248,7 +265,7 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			var zeroDuration time.Duration
-			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, sql.TTLTestingKnobs{
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, &sql.TTLTestingKnobs{
 				AOSTDuration: &zeroDuration,
 			})
 			defer cleanupFunc()
@@ -414,7 +431,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			t.Logf("test case: %#v", tc)
 
 			var zeroDuration time.Duration
-			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, sql.TTLTestingKnobs{
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, &sql.TTLTestingKnobs{
 				AOSTDuration: &zeroDuration,
 				OnStatisticsError: func(err error) {
 					require.NoError(t, err, "error gathering statistics")
