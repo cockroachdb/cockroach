@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "asim_lib",
+    srcs = ["asim.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver",
+        "//pkg/roachpb",
+        "@com_github_google_btree//:btree",
+    ],
+)
+
+go_test(
+    name = "asim_test",
+    srcs = ["asim_test.go"],
+    deps = [
+        ":asim_lib",
+        "@com_github_stretchr_testify//require",
+    ],
+)
