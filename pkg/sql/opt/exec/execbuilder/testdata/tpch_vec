@@ -1,8 +1,6 @@
 # LogicTest: local
 
 # Note that statistics are populated for TPCH Scale Factor 1.
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
 statement ok
 CREATE TABLE public.region

@@ -3,10 +3,6 @@
 # Tests that verify we retrieve the stats correctly. Note that we can't create
 # statistics if distsql mode is OFF.
 
-# Disable automatic stats to prevent flakes if auto stats run.
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
 statement ok
 CREATE TABLE t (j JSON, g GEOMETRY);
 CREATE INVERTED INDEX ON t (j);
