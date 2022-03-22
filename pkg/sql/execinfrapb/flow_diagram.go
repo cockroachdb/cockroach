@@ -307,11 +307,10 @@ func (mj *MergeJoinerSpec) summary() (string, []string) {
 // summary implements the diagramCellType interface.
 func (zj *ZigzagJoinerSpec) summary() (string, []string) {
 	name := "ZigzagJoiner"
-	tables := zj.Tables
-	details := make([]string, 0, len(tables)+1)
-	for i, table := range tables {
+	details := make([]string, 0, len(zj.Sides)+1)
+	for i := range zj.Sides {
 		details = append(details, fmt.Sprintf(
-			"Side %d: %s", i, indexDetail(&table, zj.IndexOrdinals[i]),
+			"Side %d: %s", i, indexDetail(&zj.Sides[i].Table, zj.Sides[i].IndexOrdinal),
 		))
 	}
 	if !zj.OnExpr.Empty() {
