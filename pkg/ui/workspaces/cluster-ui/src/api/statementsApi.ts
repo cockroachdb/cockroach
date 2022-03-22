@@ -38,6 +38,9 @@ export const getCombinedStatements = (
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
     `${STATEMENTS_PATH}?${queryStr}`,
+    null,
+    null,
+    "30M",
   );
 };
 
@@ -54,5 +57,8 @@ export const getStatementDetails = (
   return fetchData(
     cockroach.server.serverpb.StatementDetailsResponse,
     `${STATEMENT_DETAILS_PATH}/${req.fingerprint_id}?${queryStr}`,
+    null,
+    null,
+    "30M",
   );
 };
