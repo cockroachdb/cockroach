@@ -64,6 +64,15 @@ type Config struct {
 	// be produced.
 	InitialHighWater hlc.Timestamp
 
+	// If the end time is set, the changefeed will run until the frontier
+	// progresses past the end time. Once the frontier has progressed past the end
+	// time, the changefeed job will end with a successful status.
+	EndTime hlc.Timestamp
+
+	// If true, the feed will perform an initial scan, and immediately end the job
+	// with a successful status.
+	InitialScanOnly bool
+
 	// Knobs are kvfeed testing knobs.
 	Knobs TestingKnobs
 }
@@ -96,8 +105,8 @@ func Run(ctx context.Context, cfg Config) error {
 	f := newKVFeed(
 		cfg.Writer, cfg.Spans, cfg.BackfillCheckpoint,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
-		cfg.NeedsInitialScan, cfg.WithDiff,
-		cfg.InitialHighWater,
+		cfg.NeedsInitialScan, cfg.InitialScanOnly, cfg.WithDiff,
+		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
 		sc, pff, bf, cfg.Knobs)
@@ -115,16 +124,21 @@ func Run(ctx context.Context, cfg Config) error {
 	// changefeedAggregator to exit even if all values haven't been read out of the
 	// provided buffer.
 	var scErr schemaChangeDetectedError
-	if !errors.As(err, &scErr) {
+	isChangefeedCompleted := errors.Is(err, errChangefeedCompleted)
+	if !(isChangefeedCompleted || errors.As(err, &scErr)) {
 		// Regardless of whether we exited KV feed with or without an error, that error
 		// is not a schema change; so, close the writer and return.
 		return errors.CombineErrors(err, f.writer.CloseWithReason(ctx, err))
 	}
 
-	log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
+	if isChangefeedCompleted {
+		log.Info(ctx, "stopping kv feed: changefeed completed")
+	} else {
+		log.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
+	}
 
 	// Drain the writer before we close it so that all events emitted prior to schema change
-	// boundary are consumed by the change aggregator.
+	// or changefeed completion boundary are consumed by the change aggregator.
 	// Regardless of whether drain succeeds, we must also close the buffer to release
 	// any resources, and to let the consumer (changeAggregator) know that no more writes
 	// are expected so that it can transition to a draining state.
@@ -155,7 +169,9 @@ type kvFeed struct {
 	checkpoint          []roachpb.Span
 	withDiff            bool
 	withInitialBackfill bool
+	initialScanOnly     bool
 	initialHighWater    hlc.Timestamp
+	endTime             hlc.Timestamp
 	writer              kvevent.Writer
 	codec               keys.SQLCodec
 
@@ -178,8 +194,9 @@ func newKVFeed(
 	checkpoint []roachpb.Span,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
-	withInitialBackfill, withDiff bool,
+	withInitialBackfill, initialScanOnly, withDiff bool,
 	initialHighWater hlc.Timestamp,
+	endTime hlc.Timestamp,
 	codec keys.SQLCodec,
 	tf schemafeed.SchemaFeed,
 	sc kvScanner,
@@ -192,8 +209,10 @@ func newKVFeed(
 		spans:               spans,
 		checkpoint:          checkpoint,
 		withInitialBackfill: withInitialBackfill,
+		initialScanOnly:     initialScanOnly,
 		withDiff:            withDiff,
 		initialHighWater:    initialHighWater,
+		endTime:             endTime,
 		schemaChangeEvents:  schemaChangeEvents,
 		schemaChangePolicy:  schemaChangePolicy,
 		codec:               codec,
@@ -205,7 +224,18 @@ func newKVFeed(
 	}
 }
 
+var errChangefeedCompleted = errors.New("changefeed completed")
+
 func (f *kvFeed) run(ctx context.Context) (err error) {
+	emitResolved := func(ts hlc.Timestamp, boundary jobspb.ResolvedSpan_BoundaryType) error {
+		for _, sp := range f.spans {
+			if err := f.writer.Add(ctx, kvevent.MakeResolvedEvent(sp, ts, boundary)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	// highWater represents the point in time at or before which we know
 	// we've seen all events or is the initial starting time of the feed.
 	highWater := f.initialHighWater
@@ -215,8 +245,21 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 			return err
 		}
 
+		if f.initialScanOnly {
+			if err := emitResolved(f.initialHighWater, jobspb.ResolvedSpan_EXIT); err != nil {
+				return err
+			}
+			return errChangefeedCompleted
+		}
+
 		highWater, err = f.runUntilTableEvent(ctx, highWater)
 		if err != nil {
+			if tErr := (*errEndTimeReached)(nil); errors.As(err, &tErr) {
+				if err := emitResolved(highWater, jobspb.ResolvedSpan_EXIT); err != nil {
+					return err
+				}
+				return errChangefeedCompleted
+			}
 			return err
 		}
 
@@ -232,13 +275,8 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		// we should do so.
 		if f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyNoBackfill ||
 			boundaryType == jobspb.ResolvedSpan_RESTART {
-			for _, sp := range f.spans {
-				if err := f.writer.Add(
-					ctx,
-					kvevent.MakeResolvedEvent(sp, highWater, boundaryType),
-				); err != nil {
-					return err
-				}
+			if err := emitResolved(highWater, boundaryType); err != nil {
+				return err
 			}
 		}
 
@@ -373,7 +411,7 @@ func (f *kvFeed) runUntilTableEvent(
 		Knobs:     f.knobs,
 	}
 	g.GoCtx(func(ctx context.Context) error {
-		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, physicalCfg, f.tableFeed)
+		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, physicalCfg, f.tableFeed, f.endTime)
 	})
 	g.GoCtx(func(ctx context.Context) error {
 		return f.physicalFeed.Run(ctx, memBuf, physicalCfg)
@@ -392,6 +430,8 @@ func (f *kvFeed) runUntilTableEvent(
 		// We'll need to do this to ensure that a resolved timestamp propagates
 		// when we're trying to exit.
 		return tErr.Timestamp().Prev(), nil
+	} else if tErr := (*errEndTimeReached)(nil); errors.As(err, &tErr) {
+		return tErr.endTime.Prev(), err
 	} else if kvcoord.IsSendError(err) {
 		// During node shutdown it is possible for all outgoing transports used by
 		// the kvfeed to expire, producing a SendError that the node is still able
@@ -410,6 +450,14 @@ type errBoundaryReached struct {
 
 func (e *errBoundaryReached) Error() string {
 	return "scan boundary reached: " + e.String()
+}
+
+type errEndTimeReached struct {
+	endTime hlc.Timestamp
+}
+
+func (e *errEndTimeReached) Error() string {
+	return "end time reached: " + e.endTime.String()
 }
 
 type errUnknownEvent struct {
@@ -431,6 +479,7 @@ func copyFromSourceToDestUntilTableEvent(
 	source kvevent.Reader,
 	cfg physicalConfig,
 	tables schemafeed.SchemaFeed,
+	endTime hlc.Timestamp,
 ) error {
 	// Maintain a local spanfrontier to tell when all the component rangefeeds
 	// being watched have reached the Scan boundary.
@@ -519,10 +568,20 @@ func copyFromSourceToDestUntilTableEvent(
 				// Break out of the ctxgroup by returning the sentinel error.
 				return scanBoundary
 			}
-			if skipEntry {
-				return nil
+
+			if !skipEntry {
+				err = addEntry(e)
+				if err != nil {
+					return err
+				}
 			}
-			return addEntry(e)
+
+			if !endTime.IsEmpty() && endTime.LessEq(frontier.Frontier()) {
+				// All component rangefeeds have now reached the end time boundary.
+				// Break out of the ctxgroup by returning a sentinel error.
+				return &errEndTimeReached{endTime: endTime}
+			}
+			return nil
 		}
 	)
 

@@ -36,6 +36,7 @@ const (
 	OptAvroSchemaPrefix         = `avro_schema_prefix`
 	OptConfluentSchemaRegistry  = `confluent_schema_registry`
 	OptCursor                   = `cursor`
+	OptEndTime                  = `end_time`
 	OptEnvelope                 = `envelope`
 	OptFormat                   = `format`
 	OptFullTableName            = `full_table_name`
@@ -93,6 +94,8 @@ const (
 	OptNoInitialScan = `no_initial_scan`
 	// Sentinel value to indicate that all resolved timestamp events should be emitted.
 	OptEmitAllResolvedTimestamps = ``
+
+	OptInitialScanOnly = `initial_scan_only`
 
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
@@ -166,6 +169,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptAvroSchemaPrefix:         sql.KVStringOptRequireValue,
 	OptConfluentSchemaRegistry:  sql.KVStringOptRequireValue,
 	OptCursor:                   sql.KVStringOptRequireValue,
+	OptEndTime:                  sql.KVStringOptRequireValue,
 	OptEnvelope:                 sql.KVStringOptRequireValue,
 	OptFormat:                   sql.KVStringOptRequireValue,
 	OptFullTableName:            sql.KVStringOptRequireNoValue,
@@ -182,6 +186,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptSplitColumnFamilies:      sql.KVStringOptRequireNoValue,
 	OptInitialScan:              sql.KVStringOptRequireNoValue,
 	OptNoInitialScan:            sql.KVStringOptRequireNoValue,
+	OptInitialScanOnly:          sql.KVStringOptRequireNoValue,
 	OptProtectDataFromGCOnPause: sql.KVStringOptRequireNoValue,
 	OptKafkaSinkConfig:          sql.KVStringOptRequireValue,
 	OptWebhookSinkConfig:        sql.KVStringOptRequireValue,
@@ -201,14 +206,14 @@ func makeStringSet(opts ...string) map[string]struct{} {
 }
 
 // CommonOptions is options common to all sinks
-var CommonOptions = makeStringSet(OptCursor, OptEnvelope,
+var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptFormat, OptFullTableName,
 	OptKeyInValue, OptTopicInValue,
 	OptResolvedTimestamps, OptUpdatedTimestamps,
 	OptMVCCTimestamps, OptDiff, OptSplitColumnFamilies,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
-	OptInitialScan, OptNoInitialScan,
+	OptInitialScan, OptNoInitialScan, OptInitialScanOnly,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics)
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -242,7 +247,7 @@ var NoLongerExperimental = map[string]string{
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
 // users to alter
-var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan, OptNoInitialScan)
+var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan, OptNoInitialScan, OptInitialScanOnly)
 
 // AlterChangefeedOptionExpectValues is used to parse alter changefeed options
 // using PlanHookState.TypeAsStringOpts().

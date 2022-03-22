@@ -3749,6 +3749,26 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan`, `kafka://nope`,
 	)
 
+	// WITH only_initial_scan and no_initial_scan disallowed
+	sqlDB.ExpectErr(
+		t, `cannot specify both only_initial_scan and no_initial_scan`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH only_initial_scan, no_initial_scan`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both only_initial_scan and no_initial_scan`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, only_initial_scan`, `kafka://nope`,
+	)
+
+	// WITH only_initial_scan and end_time disallowed
+	sqlDB.ExpectErr(
+		t, `cannot specify both only_initial_scan and end_time`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH only_initial_scan, end_time = '1'`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both only_initial_scan and end_time`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', only_initial_scan`, `kafka://nope`,
+	)
+
 	// Sanity check schema registry tls parameters.
 	sqlDB.ExpectErr(
 		t, `param ca_cert must be base 64 encoded`,
@@ -5610,6 +5630,68 @@ func TestChangefeedCaseInsensitiveOpts(t *testing.T) {
 		})
 	}
 	t.Run(`sinkless`, sinklessTest(testFn))
+}
+
+func TestChangefeedEndTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
+
+		var tsAfterInitialInsert string
+		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsAfterInitialInsert)
+
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH end_time = $1", tsAfterInitialInsert)
+
+		defer closeFeed(t, feed)
+		jobFeed := feed.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
+			return s == jobs.StatusSucceeded
+		}))
+
+		assertPayloads(t, feed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+		})
+	}
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
+}
+
+func TestChangefeedOnlyInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
+
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan_only")
+		defer closeFeed(t, feed)
+		jobFeed := feed.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
+			return s == jobs.StatusSucceeded
+		}))
+
+		assertPayloads(t, feed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+		})
+	}
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func startMonitorWithBudget(budget int64) *mon.BytesMonitor {

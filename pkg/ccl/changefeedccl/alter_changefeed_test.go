@@ -346,6 +346,10 @@ func TestAlterChangefeedErrors(t *testing.T) {
 			`pq: cannot alter option "initial_scan"`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET initial_scan`, feed.JobID()),
 		)
+		sqlDB.ExpectErr(t,
+			`pq: cannot alter option "initial_scan_only"`,
+			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET initial_scan_only`, feed.JobID()),
+		)
 
 		sqlDB.ExpectErr(t,
 			`cannot unset option "sink"`,
@@ -981,4 +985,47 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 	}
 
 	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
+}
+
+func TestChangefeedAlterEndTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
+
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo")
+		defer closeFeed(t, feed)
+		jobFeed := feed.(cdctest.EnterpriseTestFeed)
+
+		assertPayloads(t, feed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+		})
+
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (4)")
+
+		assertPayloads(t, feed, []string{
+			`foo: [4]->{"after": {"a": 4}}`,
+		})
+
+		require.NoError(t, jobFeed.Pause())
+		waitForJobStatus(sqlDB, t, jobFeed.JobID(), `paused`)
+
+		var tsAfterPause string
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsAfterPause)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET end_time = '%s'`, jobFeed.JobID(), tsAfterPause))
+
+		require.NoError(t, jobFeed.Resume())
+
+		require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
+			return s == jobs.StatusSucceeded
+		}))
+	}
+	t.Run(`kafka`, kafkaTest(testFn))
 }

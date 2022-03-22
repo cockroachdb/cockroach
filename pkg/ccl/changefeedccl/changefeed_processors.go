@@ -226,6 +226,10 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 	spans, err := ca.setupSpansAndFrontier(frontierHighWater)
 
+	endTime := ca.spec.Feed.EndTime
+
+	_, initialScanOnly := ca.spec.Feed.Opts[changefeedbase.OptInitialScanOnly]
+
 	if err != nil {
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -281,7 +285,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	ca.eventProducer, err = ca.startKVFeed(ctx, spans, initialHighWater, needsInitialScan, ca.sliMetrics)
+	ca.eventProducer, err = ca.startKVFeed(ctx, spans, initialHighWater, needsInitialScan, endTime, initialScanOnly, ca.sliMetrics)
 	if err != nil {
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
@@ -303,6 +307,8 @@ func (ca *changeAggregator) startKVFeed(
 	spans []roachpb.Span,
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
+	endTime hlc.Timestamp,
+	initialScanOnly bool,
 	sm *sliMetrics,
 ) (kvevent.Reader, error) {
 	cfg := ca.flowCtx.Cfg
@@ -312,7 +318,7 @@ func (ca *changeAggregator) startKVFeed(
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
 	// we return the kvevent.Reader part to the caller.
-	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan, sm)
+	kvfeedCfg := ca.makeKVFeedCfg(ctx, spans, buf, initialHighWater, needsInitialScan, endTime, initialScanOnly, sm)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -343,6 +349,8 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	buf kvevent.Writer,
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
+	endTime hlc.Timestamp,
+	initialScanOnly bool,
 	sm *sliMetrics,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
@@ -353,7 +361,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	cfg := ca.flowCtx.Cfg
 
 	var sf schemafeed.SchemaFeed
-	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore {
+	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore || initialScanOnly {
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
 		sf = schemafeed.New(ctx, cfg, schemaChangeEvents, AllTargets(ca.spec.Feed),
@@ -375,8 +383,10 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		OnBackfillRangeCallback: ca.sliMetrics.getBackfillRangeCallback(),
 		MM:                      ca.kvFeedMemMon,
 		InitialHighWater:        initialHighWater,
+		EndTime:                 endTime,
 		WithDiff:                withDiff,
 		NeedsInitialScan:        needsInitialScan,
+		InitialScanOnly:         initialScanOnly,
 		SchemaChangeEvents:      schemaChangeEvents,
 		SchemaChangePolicy:      schemaChangePolicy,
 		SchemaFeed:              sf,
@@ -1287,14 +1297,19 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		if cf.frontier.schemaChangeBoundaryReached() &&
 			(cf.frontier.boundaryType == jobspb.ResolvedSpan_EXIT ||
 				cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART) {
-			err := pgerror.Newf(pgcode.SchemaChangeOccurred,
-				"schema change occurred at %v", cf.frontier.boundaryTime.Next().AsOfSystemTime())
+			var err error
+			endTime := cf.spec.Feed.EndTime
+			if endTime.IsEmpty() || endTime.Less(cf.frontier.boundaryTime.Next()) {
+				err = pgerror.Newf(pgcode.SchemaChangeOccurred,
+					"schema change occurred at %v", cf.frontier.boundaryTime.Next().AsOfSystemTime())
 
-			// Detect whether this boundary should be used to kill or restart the
-			// changefeed.
-			if cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART {
-				err = changefeedbase.MarkRetryableError(err)
+				// Detect whether this boundary should be used to kill or restart the
+				// changefeed.
+				if cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART {
+					err = changefeedbase.MarkRetryableError(err)
+				}
 			}
+
 			// TODO(ajwerner): make this more useful by at least informing the client
 			// of which tables changed.
 			cf.MoveToDraining(err)
