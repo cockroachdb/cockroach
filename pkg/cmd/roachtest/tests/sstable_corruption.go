@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -53,15 +54,19 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 	opts.RoachprodOpts.Wait = true
 	c.Stop(ctx, t.L(), opts, crdbNodes)
 
-	const findTablesCmd = "" +
+	const nTables = 6
+	var dumpManifestCmd = "" +
 		// Take the latest manifest file ...
 		"ls -tr {store-dir}/MANIFEST-* | tail -n1 | " +
 		// ... dump its contents ...
 		"xargs ./cockroach debug pebble manifest dump | " +
-		// ... shuffle the files to distribute corruption over the LSM.
+		// ... filter for SSTables that contain table data.
+		"grep -v added | grep -v deleted | grep '/Table/'"
+	var findTablesCmd = dumpManifestCmd + "| " +
+		// Shuffle the files to distribute corruption over the LSM ...
 		"shuf | " +
-		// ... filter for up to six SSTables that contain table data.
-		"grep -v added | grep -v deleted | grep '/Table/' | tail -n6"
+		// ... take a fixed number of tables.
+		fmt.Sprintf("tail -n %d", nTables)
 
 	for _, node := range corruptNodes {
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), findTablesCmd)
@@ -69,15 +74,45 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatalf("could not find tables to corrupt: %s\nstdout: %s\nstderr: %s", err, result.Stdout, result.Stderr)
 		}
 		tableSSTs := strings.Split(strings.TrimSpace(result.Stdout), "\n")
-		if len(tableSSTs) == 0 {
-			t.Fatal("expected at least one sst containing table keys only, got none")
+		if len(tableSSTs) != nTables {
+			// We couldn't find enough tables to corrupt. As there should be an
+			// abundance of tables, this warrants further investigation. To aid in
+			// such an investigation, print the contents of the data directory.
+			cmd := "ls -l {store-dir}"
+			result, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), cmd)
+			if err == nil {
+				t.Status("store dir contents:\n", result.Stdout)
+			}
+			// Fetch the MANIFEST files from this node.
+			result, err = c.RunWithDetailsSingleNode(
+				ctx, t.L(), c.Node(node),
+				"tar czf {store-dir}/manifests.tar.gz {store-dir}/MANIFEST-*",
+			)
+			if err != nil {
+				t.Fatalf("could not create manifest file archive: %s", err)
+			}
+			result, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "echo", "-n", "{store-dir}")
+			if err != nil {
+				t.Fatalf("could not infer store directory: %s", err)
+			}
+			storeDirectory := result.Stdout
+			srcPath := filepath.Join(storeDirectory, "manifests.tar.gz")
+			dstPath := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("manifests.%d.tar.gz", node))
+			err = c.Get(ctx, t.L(), srcPath, dstPath, c.Node(node))
+			if err != nil {
+				t.Fatalf("could not fetch manifest archive: %s", err)
+			}
+			t.Fatalf(
+				"expected %d SSTables containing table keys, got %d: %s",
+				nTables, len(tableSSTs), tableSSTs,
+			)
 		}
 		// Corrupt the SSTs.
 		for _, sstLine := range tableSSTs {
 			sstLine = strings.TrimSpace(sstLine)
 			firstFileIdx := strings.Index(sstLine, ":")
 			if firstFileIdx < 0 {
-				t.Fatalf("unexpected format for sst line: %s", sstLine)
+				t.Fatalf("unexpected format for sst line: %q", sstLine)
 			}
 			_, err = strconv.Atoi(sstLine[:firstFileIdx])
 			if err != nil {
