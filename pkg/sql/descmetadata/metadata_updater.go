@@ -97,9 +97,9 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 	if err != nil {
 		return err
 	}
-	// If system table updates should be minimized, avoid bumping up the version
-	// number of the table below.
-	if mu.cacheEnabled || rowsDeleted == 0 {
+	// If the cache is off or if no rows changed, there's no need to bump the
+	// table version.
+	if !mu.cacheEnabled || rowsDeleted == 0 {
 		return nil
 	}
 	// Bump the table version for the role settings table when we modify it.
