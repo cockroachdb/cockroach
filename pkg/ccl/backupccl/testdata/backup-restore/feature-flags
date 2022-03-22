@@ -1,3 +1,5 @@
+subtest backup-feature-flags
+
 new-server name=s1
 ----
 
@@ -13,7 +15,7 @@ SET CLUSTER SETTING feature.backup.enabled = FALSE;
 ----
 
 exec-sql
-BACKUP TO 'nodelocal://0/test-root/';
+BACKUP INTO 'nodelocal://0/test-root/';
 ----
 pq: feature BACKUP was disabled by the database administrator
 
@@ -23,7 +25,7 @@ SET CLUSTER SETTING feature.backup.enabled = TRUE;
 ----
 
 exec-sql
-BACKUP TO 'nodelocal://0/test-root/';
+BACKUP INTO 'nodelocal://0/test-root/';
 ----
 
 exec-sql
@@ -36,7 +38,7 @@ SET CLUSTER SETTING feature.restore.enabled = FALSE;
 ----
 
 exec-sql
-RESTORE TABLE d.t FROM 'nodelocal://0/test-root/';
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test-root/';
 ----
 pq: feature RESTORE was disabled by the database administrator
 
@@ -46,5 +48,38 @@ SET CLUSTER SETTING feature.restore.enabled = TRUE;
 ----
 
 exec-sql
-RESTORE TABLE d.t FROM 'nodelocal://0/test-root/';
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://0/test-root/';
 ----
+
+subtest end
+
+# TODO(adityamaru): Delete in 22.2 once the syntax is removed. We don't want
+# to start a testserver just for this test.
+subtest backup-restore-deprecation-notice
+
+exec-sql
+BACKUP TO 'nodelocal://1/deprecated';
+----
+NOTICE: The `BACKUP TO` syntax will be removed in a future release, please switch over to using `BACKUP INTO` to create a backup collection: https://www.cockroachlabs.com/docs/stable/backup.html#considerations. Backups created using the `BACKUP TO` syntax may not be restoreable in the next major version release.
+
+exec-sql
+BACKUP TO 'nodelocal://1/deprecated/incfrom' INCREMENTAL FROM 'nodelocal://1/deprecated';
+----
+NOTICE: The `BACKUP TO` syntax will be removed in a future release, please switch over to using `BACKUP INTO` to create a backup collection: https://www.cockroachlabs.com/docs/stable/backup.html#considerations. Backups created using the `BACKUP TO` syntax may not be restoreable in the next major version release.
+
+exec-sql
+DROP TABLE d.t;
+----
+
+exec-sql
+RESTORE TABLE d.t FROM 'nodelocal://1/deprecated';
+----
+NOTICE: The `RESTORE FROM <backup>` syntax will be removed in a future release, please switch over to using `RESTORE FROM <backup> IN <collection>` to restore a particular backup from a collection: https://www.cockroachlabs.com/docs/stable/restore.html#view-the-backup-subdirectories
+
+
+exec-sql
+RESTORE SYSTEM USERS FROM 'nodelocal://1/deprecated';
+----
+NOTICE: The `RESTORE FROM <backup>` syntax will be removed in a future release, please switch over to using `RESTORE FROM <backup> IN <collection>` to restore a particular backup from a collection: https://www.cockroachlabs.com/docs/stable/restore.html#view-the-backup-subdirectories
+
+subtest end
