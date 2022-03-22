@@ -70,8 +70,7 @@ message NodeStatus {
   ];
 
   message NetworkActivity {
-    int64 incoming = 1; // in bytes
-    int64 outgoing = 2; // in bytes
+    reserved 1, 2;
     int64 latency = 3;  // in nanoseconds
   }
   // activity is a map of nodeIDs to network statistics from this node

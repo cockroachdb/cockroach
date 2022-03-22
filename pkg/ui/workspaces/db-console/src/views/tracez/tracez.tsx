@@ -53,7 +53,7 @@ const SnapshotSelector = ({
   snapshots,
   currentSnapshot,
 }: {
-  setSnapshot: (id: string) => void;
+  setSnapshot: (id: Long) => void;
   snapshots: ISnapshotInfo[];
   currentSnapshot: Snapshot;
 }) => {
@@ -67,7 +67,9 @@ const SnapshotSelector = ({
         };
       })}
       selected={`${currentSnapshot.id}`}
-      onChange={dropdownOption => setSnapshot(dropdownOption.value)}
+      onChange={dropdownOption =>
+        setSnapshot(Long.fromString(dropdownOption.value))
+      }
     />
   );
 };
@@ -288,15 +290,9 @@ export const Tracez = () => {
   const [showTrace, setShowTrace] = useState<boolean>(false);
   const [showLiveTrace, setShowLiveTrace] = useState<boolean>(false);
 
-  const takeSnapshot = () => {
-    takeTracingSnapshot().then(() => {
-      refreshTracingSnapshots();
-    });
-  };
-
-  const setSnapshotID = (id: string) => {
+  const setSnapshotID = (id: Long) => {
     const req = new GetTracingSnapshotRequest({
-      snapshot_id: Long.fromString(id),
+      snapshot_id: id,
     });
     getTracingSnapshot(req).then(req => {
       setSnapshot({
@@ -309,6 +305,15 @@ export const Tracez = () => {
           };
         }),
       });
+    });
+  };
+
+  // takeSnapshot takes a snapshot and displays it.
+  const takeSnapshot = () => {
+    takeTracingSnapshot().then(resp => {
+      refreshTracingSnapshots();
+      // Load the new snapshot.
+      setSnapshotID(resp.snapshot.snapshot_id);
     });
   };
 
@@ -447,7 +452,7 @@ const TraceView = ({
 
 interface SnapshotViewProps {
   takeSnapshot: () => void;
-  setSnapshotID: (s: string) => void;
+  setSnapshotID: (s: Long) => void;
   snapshots: ISnapshotInfo[];
   snapshot: Snapshot;
   setSearch: (s: string) => void;

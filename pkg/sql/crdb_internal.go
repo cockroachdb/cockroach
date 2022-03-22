@@ -4229,8 +4229,6 @@ CREATE TABLE crdb_internal.kv_node_status (
 			activity := json.NewObjectBuilder(len(n.Activity))
 			for nodeID, values := range n.Activity {
 				b := json.NewObjectBuilder(3)
-				b.Add("incoming", json.FromInt64(values.Incoming))
-				b.Add("outgoing", json.FromInt64(values.Outgoing))
 				b.Add("latency", json.FromInt64(values.Latency))
 				activity.Add(nodeID.String(), b.Build())
 			}

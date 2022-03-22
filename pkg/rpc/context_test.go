@@ -83,7 +83,6 @@ func newTestServer(t testing.TB, ctx *Context, extraOpts ...grpc.ServerOption) *
 	}
 	opts := []grpc.ServerOption{
 		grpc.Creds(credentials.NewTLS(tlsConfig)),
-		grpc.StatsHandler(&ctx.stats),
 	}
 	opts = append(opts, extraOpts...)
 	return grpc.NewServer(opts...)
@@ -1140,7 +1139,6 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	}
 	s := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(tlsConfig)),
-		grpc.StatsHandler(&serverCtx.stats),
 		grpc.KeepaliveParams(sKeepalive),
 	)
 

@@ -41,6 +41,14 @@ type TestingKnobs struct {
 	// job from persisting checkpoints.
 	JobDisablePersistingCheckpoints bool
 
+	// JobDisableInternalRetry disables the span config reconciliation job's
+	// internal retry loop.
+	JobDisableInternalRetry bool
+
+	// JobPersistCheckpointInterceptor, if set, is invoked before the
+	// reconciliation job persists checkpoints.
+	JobOnCheckpointInterceptor func() error
+
 	// KVSubscriberRangeFeedKnobs control lifecycle events for the rangefeed
 	// underlying the KVSubscriber.
 	KVSubscriberRangeFeedKnobs base.ModuleTestingKnobs

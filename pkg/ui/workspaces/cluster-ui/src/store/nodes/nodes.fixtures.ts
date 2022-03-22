@@ -960,8 +960,6 @@ export const getNodeStatus = () => {
     ],
     activity: {
       "1": {
-        incoming: Long.fromString("46834"),
-        outgoing: Long.fromString("56573"),
         latency: Long.fromString("2846186"),
       },
     },

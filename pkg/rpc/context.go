@@ -179,8 +179,6 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 		grpc.MaxConcurrentStreams(math.MaxInt32),
 		grpc.KeepaliveParams(serverKeepalive),
 		grpc.KeepaliveEnforcementPolicy(serverEnforcement),
-		// A stats handler to measure server network stats.
-		grpc.StatsHandler(&rpcCtx.stats),
 	}
 	if !rpcCtx.Config.Insecure {
 		tlsConfig, err := rpcCtx.GetServerTLSConfig()
@@ -357,8 +355,6 @@ type Context struct {
 
 	conns syncmap.Map
 
-	stats StatsHandler
-
 	metrics Metrics
 
 	// For unittesting.
@@ -524,13 +520,6 @@ func (rpcCtx *Context) ClusterName() string {
 		return "<MISSING RPC CONTEXT>"
 	}
 	return rpcCtx.Config.ClusterName
-}
-
-// GetStatsMap returns a map of network statistics maintained by the
-// internal stats handler. The map is from the remote network address
-// (in string form) to an rpc.Stats object.
-func (rpcCtx *Context) GetStatsMap() *syncmap.Map {
-	return &rpcCtx.stats.stats
 }
 
 // Metrics returns the Context's Metrics struct.
@@ -1181,9 +1170,6 @@ func (rpcCtx *Context) grpcDialRaw(
 	if err != nil {
 		return nil, nil, err
 	}
-
-	// Add a stats handler to measure client network stats.
-	dialOpts = append(dialOpts, grpc.WithStatsHandler(rpcCtx.stats.newClient(target)))
 
 	// Lower the MaxBackoff (which defaults to ~minutes) to something in the
 	// ~second range.
