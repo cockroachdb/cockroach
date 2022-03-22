@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -43,14 +44,23 @@ var checkReconciliationJobInterval = settings.RegisterDurationSetting(
 
 // jobEnabledSetting gates the activation of the span config reconciliation job.
 // For the host tenant it has no effect if COCKROACH_DISABLE_SPAN_CONFIGS is
-// set.
-//
-// TODO(irfansharif): This should be a tenant read-only setting once the work
-// for #73349 is completed.
+// set. Tenants can toggle this setting to enable/disable their reconciliation
+// job.
 var jobEnabledSetting = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"spanconfig.reconciliation_job.enabled",
-	"enable the use of the kv accessor", true)
+	"enable the span config reconciliation job", true)
+
+// tenantJobEnabledSetting is a tenant-readonly setting that lets the host
+// control whether secondary tenants are able to run the span config
+// reconciliation job. It has no effect on the host tenant itself. Both
+// spanconfig.tenant_reconciliation_job.enabled (host-settable) and
+// spanconfig.reconciliation_job.enabled (tenant-settable) needs to true in
+// order for the job to run.
+var tenantJobEnabledSetting = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"spanconfig.tenant_reconciliation_job.enabled",
+	"enable the reconciliation job for secondary tenants", false)
 
 // Manager is the coordinator of the span config subsystem. It ensures that
 // there's only one span config reconciliation job[1] for every tenant. It also
@@ -62,6 +72,7 @@ type Manager struct {
 	db       *kv.DB
 	jr       *jobs.Registry
 	ie       sqlutil.InternalExecutor
+	codec    keys.SQLCodec
 	stopper  *stop.Stopper
 	settings *cluster.Settings
 	knobs    *spanconfig.TestingKnobs
@@ -74,6 +85,7 @@ func New(
 	db *kv.DB,
 	jr *jobs.Registry,
 	ie sqlutil.InternalExecutor,
+	codec keys.SQLCodec,
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
 	reconciler spanconfig.Reconciler,
@@ -86,6 +98,7 @@ func New(
 		db:         db,
 		jr:         jr,
 		ie:         ie,
+		codec:      codec,
 		stopper:    stopper,
 		settings:   settings,
 		Reconciler: reconciler,
@@ -113,6 +126,9 @@ func (m *Manager) run(ctx context.Context) {
 
 	// We have a few conditions that should trigger a job check:
 	// - when the setting to enable/disable the reconciliation job is toggled;
+	//   - spanconfig.reconciliation_job.enabled for both host and secondary
+	//     tenants;
+	//   - spanconfig.tenant_reconciliation_job.enabled for secondary tenants;
 	// - when the setting controlling the reconciliation job check interval is
 	//   changed;
 	// - when the cluster version is changed; if we don't it's possible to have
@@ -123,6 +139,11 @@ func (m *Manager) run(ctx context.Context) {
 	jobEnabledSetting.SetOnChange(&m.settings.SV, func(ctx context.Context) {
 		triggerJobCheck()
 	})
+	if !m.codec.ForSystemTenant() {
+		tenantJobEnabledSetting.SetOnChange(&m.settings.SV, func(ctx context.Context) {
+			triggerJobCheck()
+		})
+	}
 	checkReconciliationJobInterval.SetOnChange(&m.settings.SV, func(ctx context.Context) {
 		triggerJobCheck()
 	})
@@ -136,6 +157,9 @@ func (m *Manager) run(ctx context.Context) {
 		}
 
 		if !jobEnabledSetting.Get(&m.settings.SV) {
+			return
+		}
+		if !m.codec.ForSystemTenant() && !tenantJobEnabledSetting.Get(&m.settings.SV) {
 			return
 		}
 

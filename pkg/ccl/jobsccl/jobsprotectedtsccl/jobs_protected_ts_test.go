@@ -152,12 +152,12 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	hostRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 	hostRunner.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 	// Also set what tenants see for these settings.
-	// TODO(radu): use ALTER TENANT statement when that is available.
-	hostRunner.Exec(t, `INSERT INTO system.tenant_settings (tenant_id, name, value, value_type)
-		SELECT 0, name, value, "valueType" FROM system.settings
-		WHERE name IN ('kv.closed_timestamp.target_duration', 'kv.protectedts.reconciliation.interval')`)
+	hostRunner.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+	hostRunner.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 
 	t.Run("secondary-tenant", func(t *testing.T) {
+		hostRunner.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING spanconfig.tenant_reconciliation_job.enabled = true;")
+
 		ten10, conn10 := serverutils.StartTenant(t, s0, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
 		defer conn10.Close()
 		ptp := ten10.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
@@ -267,12 +267,12 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 	hostRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 	hostRunner.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 	// Also set what tenants see for these settings.
-	// TODO(radu): use ALTER TENANT statement when that is available.
-	hostRunner.Exec(t, `INSERT INTO system.tenant_settings (tenant_id, name, value, value_type)
-		SELECT 0, name, value, "valueType" FROM system.settings
-		WHERE name IN ('kv.closed_timestamp.target_duration', 'kv.protectedts.reconciliation.interval')`)
+	hostRunner.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+	hostRunner.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 
 	t.Run("secondary-tenant", func(t *testing.T) {
+		hostRunner.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING spanconfig.tenant_reconciliation_job.enabled = true;")
+
 		ten10, conn10 := serverutils.StartTenant(t, s0, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
 		defer conn10.Close()
 		ptp := ten10.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider

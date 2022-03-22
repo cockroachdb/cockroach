@@ -1099,6 +1099,10 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper *tenantTes
 }
 
 func testTenantRangesRPC(_ context.Context, t *testing.T, helper *tenantTestHelper) {
+	_, err := helper.hostCluster.ServerConn(0).Exec(
+		"ALTER TENANT ALL SET CLUSTER SETTING spanconfig.tenant_reconciliation_job.enabled = true")
+	require.NoError(t, err)
+
 	tenantA := helper.testCluster().tenant(0).tenant.TenantStatusServer().(serverpb.TenantStatusServer)
 	tenantB := helper.controlCluster().tenant(0).tenant.TenantStatusServer().(serverpb.TenantStatusServer)
 

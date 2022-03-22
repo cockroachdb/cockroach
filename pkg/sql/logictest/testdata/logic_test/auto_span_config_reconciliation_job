@@ -1,3 +1,5 @@
+# tenant-cluster-setting-override-opt: enable-reconciliation-job-for-secondary-tenants
+
 statement ok
 SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = true;
 

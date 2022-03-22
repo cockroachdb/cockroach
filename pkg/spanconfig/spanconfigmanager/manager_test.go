@@ -12,7 +12,6 @@ package spanconfigmanager_test
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -69,6 +68,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		ts.DB(),
 		ts.JobRegistry().(*jobs.Registry),
 		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.ExecutorConfig().(sql.ExecutorConfig).Codec,
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
@@ -155,6 +155,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 		ts.DB(),
 		ts.JobRegistry().(*jobs.Registry),
 		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.ExecutorConfig().(sql.ExecutorConfig).Codec,
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
@@ -181,62 +182,6 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
 	require.NoError(t, err)
 	require.True(t, started)
-}
-
-func TestManagerCheckJobConditions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SpanConfig: &spanconfig.TestingKnobs{
-					ManagerDisableJobCreation: true, // disable the automatic job creation
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	ts := tc.Server(0)
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = false;`)
-
-	var interceptCount int32
-	checkInterceptCountGreaterThan := func(min int32) int32 {
-		var currentCount int32
-		testutils.SucceedsSoon(t, func() error {
-			if currentCount = atomic.LoadInt32(&interceptCount); !(currentCount > min) {
-				return errors.Errorf("expected intercept count(=%d) > min(=%d)",
-					currentCount, min)
-			}
-			return nil
-		})
-		return currentCount
-	}
-	manager := spanconfigmanager.New(
-		ts.DB(),
-		ts.JobRegistry().(*jobs.Registry),
-		ts.InternalExecutor().(*sql.InternalExecutor),
-		ts.Stopper(),
-		ts.ClusterSettings(),
-		ts.SpanConfigReconciler().(spanconfig.Reconciler),
-		&spanconfig.TestingKnobs{
-			ManagerDisableJobCreation: true,
-			ManagerCheckJobInterceptor: func() {
-				atomic.AddInt32(&interceptCount, 1)
-			},
-		},
-	)
-	var currentCount int32
-	require.NoError(t, manager.Start(ctx))
-	currentCount = checkInterceptCountGreaterThan(currentCount) // wait for an initial check
-
-	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = true;`)
-	currentCount = checkInterceptCountGreaterThan(currentCount) // the job enablement setting triggers a check
-
-	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.check_interval = '25m'`)
-	_ = checkInterceptCountGreaterThan(currentCount) // the job check interval setting triggers a check
 }
 
 // TestReconciliationJobIsIdle ensures that the reconciliation job, when
@@ -322,6 +267,7 @@ func TestReconciliationJobErrorFailsJob(t *testing.T) {
 		ts.DB(),
 		ts.JobRegistry().(*jobs.Registry),
 		ts.InternalExecutor().(*sql.InternalExecutor),
+		ts.ExecutorConfig().(sql.ExecutorConfig).Codec,
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),

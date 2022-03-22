@@ -1,4 +1,5 @@
 # LogicTest: 3node-tenant
+# tenant-cluster-setting-override-opt: enable-reconciliation-job-for-secondary-tenants
 
 query II
 SELECT count(distinct(node_id)), count(*)  FROM crdb_internal.node_runtime_info
@@ -11,8 +12,6 @@ SELECT node_id, name FROM crdb_internal.leases ORDER BY name
 0  eventlog
 0  jobs
 0  locations
-0  protected_ts_meta
-0  protected_ts_records
 0  role_members
 0  role_options
 0  scheduled_jobs

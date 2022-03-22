@@ -42,6 +42,16 @@ var batchSizeSetting = settings.RegisterIntSetting(
 	10000,
 )
 
+// tenantEnabledSetting determines whether secondary tenants are able to use the
+// KVAccessor. It acts as a global kill switch on the KV side for tenant zone
+// configs.
+var tenantEnabledSetting = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"spanconfig.tenant_kvaccessor.enabled",
+	`enable use of the kvaccessor for secondary tenants`,
+	true,
+)
+
 // KVAccessor provides read/write access to all the span configurations for a
 // CRDB cluster. It's a concrete implementation of the KVAccessor interface.
 type KVAccessor struct {
@@ -135,6 +145,10 @@ func (k *KVAccessor) GetAllSystemSpanConfigsThatApply(
 func (k *KVAccessor) GetSpanConfigRecords(
 	ctx context.Context, targets []spanconfig.Target,
 ) ([]spanconfig.Record, error) {
+	if err := k.validate(ctx); err != nil {
+		return nil, err
+	}
+
 	if k.optionalTxn != nil {
 		return k.getSpanConfigRecordsWithTxn(ctx, targets, k.optionalTxn)
 	}
@@ -155,6 +169,10 @@ func (k *KVAccessor) GetSpanConfigRecords(
 func (k *KVAccessor) UpdateSpanConfigRecords(
 	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
 ) error {
+	if err := k.validate(ctx); err != nil {
+		return err
+	}
+
 	if k.optionalTxn != nil {
 		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, k.optionalTxn)
 	}
@@ -162,6 +180,15 @@ func (k *KVAccessor) UpdateSpanConfigRecords(
 	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, txn)
 	})
+}
+
+func (k *KVAccessor) validate(ctx context.Context) error {
+	if tenantID, ok := roachpb.TenantFromContext(ctx); ok && tenantID != roachpb.SystemTenantID {
+		if !tenantEnabledSetting.Get(&k.settings.SV) {
+			return errors.New("kvaccessor disabled for secondary tenants")
+		}
+	}
+	return nil
 }
 
 func newKVAccessor(

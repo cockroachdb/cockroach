@@ -160,6 +160,9 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 				retrier.Reset()
 			}
 
+			// TODO(irfansharif): We could peek at spanconfig.tenant_reconciliation_job.enabled,
+			// which if false, could be used as an indicator that the host tenant
+			// wants to disable all in-flight reconciliation jobs.
 			return r.job.SetProgress(ctx, nil, jobspb.AutoSpanConfigReconciliationProgress{
 				Checkpoint: rc.Checkpoint(),
 			})

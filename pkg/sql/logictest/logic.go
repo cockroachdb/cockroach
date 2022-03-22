@@ -1737,7 +1737,7 @@ func (t *logicTest) newCluster(
 			opt.apply(clusterSettingOverrideArgs)
 		}
 
-		if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+		if clusterSettingOverrideArgs.anySet() {
 			conn := t.cluster.ServerConn(0)
 
 			// We reduce the closed timestamp duration on the host tenant so that the
@@ -1753,14 +1753,22 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 
-			// Allow secondary tenants to set zone configurations if the configuration
-			// indicates as such. As this is a tenant read-only cluster setting, only
-			// the operator is allowed to set it.
-			if _, err := conn.Exec(
-				"ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
-				serverutils.TestTenantID().ToUint64(),
-			); err != nil {
-				t.Fatal(err)
+			if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+				if _, err := conn.Exec(
+					"ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
+					serverutils.TestTenantID().ToUint64(),
+				); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if clusterSettingOverrideArgs.overrideTenantReconciliationJobEnabled {
+				if _, err := conn.Exec(
+					"ALTER TENANT $1 SET CLUSTER SETTING spanconfig.tenant_reconciliation_job.enabled = true",
+					serverutils.TestTenantID().ToUint64(),
+				); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 	}
@@ -1855,8 +1863,9 @@ func (t *logicTest) newCluster(
 		})
 	}
 
-	if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
-		// Wait until all tenant servers are aware of the setting override.
+	if clusterSettingOverrideArgs.anySet() {
+
+		// Wait until all tenant servers are aware of the setting overrides.
 		testutils.SucceedsSoon(t.rootT, func() error {
 			for i := 0; i < len(t.tenantAddrs); i++ {
 				pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(security.RootUser))
@@ -1870,17 +1879,28 @@ func (t *logicTest) newCluster(
 				}
 				defer db.Close()
 
-				var val string
-				err = db.QueryRow(
-					"SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled",
-				).Scan(&val)
-				if err != nil {
-					t.Fatal(errors.Wrapf(err, "%d", i))
+				if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+					var val string
+					if err := db.QueryRow(
+						"SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled",
+					).Scan(&val); err != nil {
+						t.Fatal(errors.Wrapf(err, "%d", i))
+					}
+					if val == "false" {
+						return errors.Errorf("tenant server %d is still waiting zone config cluster setting update", i)
+					}
 				}
-				if val == "false" {
-					return errors.Errorf("tenant server %d is still waiting zone config cluster setting update",
-						i,
-					)
+
+				if clusterSettingOverrideArgs.overrideTenantReconciliationJobEnabled {
+					var val string
+					if err := db.QueryRow(
+						"SHOW CLUSTER SETTING spanconfig.tenant_reconciliation_job.enabled",
+					).Scan(&val); err != nil {
+						t.Fatal(errors.Wrapf(err, "%d", i))
+					}
+					if val == "false" {
+						return errors.Errorf("tenant %d still waiting reconciliation job setting update", i)
+					}
 				}
 			}
 			return nil
@@ -2102,10 +2122,17 @@ func readTestFileConfigs(
 }
 
 type tenantClusterSettingOverrideArgs struct {
-	// if set, the sql.zone_configs.allow_for_secondary_tenant.enabled defaults
+	// If set, the sql.zone_configs.allow_for_secondary_tenant.enabled defaults
 	// is set to true by the host. This is allows logic tests that run on
 	// secondary tenants to use zone configurations.
 	overrideMultiTenantZoneConfigsAllowed bool
+	// If set, spanconfig.tenant_reconciliation_job.enabled is set to true by the
+	// host.
+	overrideTenantReconciliationJobEnabled bool
+}
+
+func (t *tenantClusterSettingOverrideArgs) anySet() bool {
+	return t.overrideMultiTenantZoneConfigsAllowed || t.overrideTenantReconciliationJobEnabled
 }
 
 // tenantClusterSettingOverrideOpt is implemented by options for configuring
@@ -2125,6 +2152,18 @@ func (t tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed) apply(
 	args *tenantClusterSettingOverrideArgs,
 ) {
 	args.overrideMultiTenantZoneConfigsAllowed = true
+}
+
+// tenantClusterSettingOverrideTenantReconciliationJobEnabled corresponds to
+// the enable-reconciliation-job-for-secondary-tenants directive.
+type tenantClusterSettingOverrideTenantReconciliationJobEnabled struct{}
+
+var _ tenantClusterSettingOverrideOpt = tenantClusterSettingOverrideTenantReconciliationJobEnabled{}
+
+func (t tenantClusterSettingOverrideTenantReconciliationJobEnabled) apply(
+	args *tenantClusterSettingOverrideArgs,
+) {
+	args.overrideTenantReconciliationJobEnabled = true
 }
 
 // clusterOpt is implemented by options for configuring the test cluster under
@@ -2243,6 +2282,8 @@ func readTenantClusterSettingOverrideArgs(
 		switch opt {
 		case "allow-zone-configs-for-secondary-tenants":
 			res = append(res, tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{})
+		case "enable-reconciliation-job-for-secondary-tenants":
+			res = append(res, tenantClusterSettingOverrideTenantReconciliationJobEnabled{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}
