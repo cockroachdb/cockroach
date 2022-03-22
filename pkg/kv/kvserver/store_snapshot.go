@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -68,7 +69,9 @@ type outgoingSnapshotStream interface {
 type snapshotStrategy interface {
 	// Receive streams SnapshotRequests in from the provided stream and
 	// constructs an IncomingSnapshot.
-	Receive(context.Context, incomingSnapshotStream, kvserverpb.SnapshotRequest_Header) (IncomingSnapshot, error)
+	Receive(
+		context.Context, incomingSnapshotStream, kvserverpb.SnapshotRequest_Header, *metric.Counter,
+	) (IncomingSnapshot, error)
 
 	// Send streams SnapshotRequests created from the OutgoingSnapshot in to the
 	// provided stream. On nil error, the number of bytes sent is returned.
@@ -239,7 +242,10 @@ func (msstw *multiSSTWriter) Close() {
 // 3. Two lock-table key ranges (optional)
 // 4. User key range
 func (kvSS *kvBatchSnapshotStrategy) Receive(
-	ctx context.Context, stream incomingSnapshotStream, header kvserverpb.SnapshotRequest_Header,
+	ctx context.Context,
+	stream incomingSnapshotStream,
+	header kvserverpb.SnapshotRequest_Header,
+	bytesRcvd *metric.Counter,
 ) (IncomingSnapshot, error) {
 	assertStrategy(ctx, header, kvserverpb.SnapshotRequest_KV_BATCH)
 
@@ -263,6 +269,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		}
 
 		if req.KVBatch != nil {
+			bytesRcvd.Inc(int64(len(req.KVBatch)))
 			batchReader, err := storage.NewRocksDBBatchReader(req.KVBatch)
 			if err != nil {
 				return noSnap, errors.Wrap(err, "failed to decode batch")
@@ -706,7 +713,7 @@ func (s *Store) receiveSnapshot(
 		log.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
 	}
 
-	inSnap, err := ss.Receive(ctx, stream, *header)
+	inSnap, err := ss.Receive(ctx, stream, *header, s.metrics.RangeSnapshotRcvdBytes)
 	if err != nil {
 		return err
 	}
