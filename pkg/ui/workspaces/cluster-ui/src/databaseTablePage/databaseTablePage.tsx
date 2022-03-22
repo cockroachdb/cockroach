@@ -383,27 +383,29 @@ export class DatabaseTablePage extends React.Component<
                         )}
                       />
                     )}
-                    <SummaryCardItemBoolSetting
-                      label="Auto Stats Collection"
-                      value={this.props.automaticStatsCollectionEnabled}
-                      toolTipText={
-                        <span>
-                          {" "}
-                          Automatic statistics can help improve query
-                          performance. Learn how to{" "}
-                          <Anchor
-                            href={tableStatsClusterSetting}
-                            target="_blank"
-                            className={booleanSettingCx(
-                              "crl-hover-text__link-text",
-                            )}
-                          >
-                            manage statistics collection
-                          </Anchor>
-                          .
-                        </span>
-                      }
-                    />
+                    {this.props.automaticStatsCollectionEnabled && (
+                      <SummaryCardItemBoolSetting
+                        label="Auto Stats Collection"
+                        value={this.props.automaticStatsCollectionEnabled}
+                        toolTipText={
+                          <span>
+                            {" "}
+                            Automatic statistics can help improve query
+                            performance. Learn how to{" "}
+                            <Anchor
+                              href={tableStatsClusterSetting}
+                              target="_blank"
+                              className={booleanSettingCx(
+                                "crl-hover-text__link-text",
+                              )}
+                            >
+                              manage statistics collection
+                            </Anchor>
+                            .
+                          </span>
+                        }
+                      />
+                    )}
                   </SummaryCard>
                 </Col>
 

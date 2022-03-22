@@ -295,25 +295,27 @@ export class DatabasesPage extends React.Component<
       <div>
         <div className={baseHeadingClasses.wrapper}>
           <h3 className={baseHeadingClasses.tableName}>Databases</h3>
-          <BooleanSetting
-            text={"Auto stats collection"}
-            enabled={this.props.automaticStatsCollectionEnabled}
-            tooltipText={
-              <span>
-                {" "}
-                Automatic statistics can help improve query performance. Learn
-                how to{" "}
-                <Anchor
-                  href={tableStatsClusterSetting}
-                  target="_blank"
-                  className={booleanSettingCx("crl-hover-text__link-text")}
-                >
-                  manage statistics collection
-                </Anchor>
-                .
-              </span>
-            }
-          />
+          {this.props.automaticStatsCollectionEnabled && (
+            <BooleanSetting
+              text={"Auto stats collection"}
+              enabled={this.props.automaticStatsCollectionEnabled}
+              tooltipText={
+                <span>
+                  {" "}
+                  Automatic statistics can help improve query performance. Learn
+                  how to{" "}
+                  <Anchor
+                    href={tableStatsClusterSetting}
+                    target="_blank"
+                    className={booleanSettingCx("crl-hover-text__link-text")}
+                  >
+                    manage statistics collection
+                  </Anchor>
+                  .
+                </span>
+              }
+            />
+          )}
         </div>
         <section className={sortableTableCx("cl-table-container")}>
           <div className={statisticsClasses.statistic}>
