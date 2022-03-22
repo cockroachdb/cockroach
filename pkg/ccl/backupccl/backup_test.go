@@ -4567,6 +4567,11 @@ func TestEncryptedBackup(t *testing.T) {
 
 			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, encryptionOption), backupLoc1)
 
+			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH %s,encryption_info_dir='%s'`,
+				encryptionOption,
+				backupLoc1),
+				backupLoc1inc)
+
 			var expectedShowError string
 			if tc.useKMS {
 				expectedShowError = `one of the provided URIs was not used when encrypting the base BACKUP`
@@ -4580,6 +4585,9 @@ func TestEncryptedBackup(t *testing.T) {
 				`SHOW BACKUP $1`, backupLoc1)
 			sqlDB.ExpectErr(t, `could not find or read encryption information`,
 				fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, encryptionOption), plainBackupLoc1)
+
+			sqlDB.ExpectErr(t, `If you are running SHOW BACKUP exclusively on an incremental backup`,
+				fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, encryptionOption), backupLoc1inc)
 
 			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE neverappears FROM ($1, $2), ($3, $4) WITH %s`,
 				encryptionOption), backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc)

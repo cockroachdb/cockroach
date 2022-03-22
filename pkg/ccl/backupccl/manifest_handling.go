@@ -83,6 +83,8 @@ const (
 	latestFileName          = "LATEST"
 )
 
+var errEncryptionInfoRead = errors.New(`ENCRYPTION-INFO not found`)
+
 // isGZipped detects whether the given bytes represent GZipped data. This check
 // is used rather than a standard implementation such as http.DetectContentType
 // since some zipped data may be mis-identified by that method. We've seen
@@ -950,14 +952,16 @@ func sanitizeLocalityKV(kv string) string {
 func readEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
 ) (*jobspb.EncryptionInfo, error) {
+	const encryptionReadErrorMsg = `could not find or read encryption information`
+
 	r, err := src.ReadFile(ctx, backupEncryptionInfoFile)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not find or read encryption information")
+		return nil, errors.Mark(errors.Wrap(err, encryptionReadErrorMsg), errEncryptionInfoRead)
 	}
 	defer r.Close()
 	encInfoBytes, err := ioutil.ReadAll(r)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not find or read encryption information")
+		return nil, errors.Wrap(err, encryptionReadErrorMsg)
 	}
 	var encInfo jobspb.EncryptionInfo
 	if err := protoutil.Unmarshal(encInfoBytes, &encInfo); err != nil {
