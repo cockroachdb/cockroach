@@ -238,7 +238,7 @@ type zigzagJoiner struct {
 	// Stores relevant information for each side of the join including table
 	// descriptors, index IDs, rowFetchers, and more. See zigzagJoinInfo for
 	// more information.
-	infos []*zigzagJoinerInfo
+	infos []zigzagJoinerInfo
 
 	// baseRow stores the row that the algorithm is compared against and is
 	// updated with every change of side.
@@ -276,15 +276,15 @@ func newZigzagJoiner(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*zigzagJoiner, error) {
-	tables := make([]catalog.TableDescriptor, len(spec.Tables))
-	for i := range spec.Tables {
-		tables[i] = flowCtx.TableDescriptor(&spec.Tables[i])
-	}
-	if len(tables) != 2 {
-		return nil, errors.AssertionFailedf("zigzag joins only of two tables (or indexes) are supported, %d requested", len(tables))
+	if len(spec.Sides) != 2 {
+		return nil, errors.AssertionFailedf("zigzag joins only of two tables (or indexes) are supported, %d requested", len(spec.Sides))
 	}
 	if spec.Type != descpb.InnerJoin {
 		return nil, errors.AssertionFailedf("only inner zigzag joins are supported, %s requested", spec.Type)
+	}
+	tables := make([]catalog.TableDescriptor, len(spec.Sides))
+	for i := range spec.Sides {
+		tables[i] = flowCtx.TableDescriptor(&spec.Sides[i].Table)
 	}
 	z := &zigzagJoiner{}
 
@@ -317,10 +317,7 @@ func newZigzagJoiner(
 	}
 
 	z.numTables = len(tables)
-	z.infos = make([]*zigzagJoinerInfo, z.numTables)
-	for i := range z.infos {
-		z.infos[i] = &zigzagJoinerInfo{}
-	}
+	z.infos = make([]zigzagJoinerInfo, z.numTables)
 
 	collectingStats := false
 	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
@@ -330,18 +327,18 @@ func newZigzagJoiner(
 
 	colOffset := 0
 	for i := 0; i < z.numTables; i++ {
-		if fixedValues != nil && i < len(fixedValues) {
+		if fixedValues != nil {
 			// Useful for testing. In cases where we plan a zigzagJoin in
 			// the planner, we specify fixed values as ValuesCoreSpecs in
 			// the spec itself.
 			z.infos[i].fixedValues = fixedValues[i]
-		} else if i < len(spec.FixedValues) {
-			z.infos[i].fixedValues, err = valuesSpecToEncDatum(spec.FixedValues[i])
+		} else {
+			z.infos[i].fixedValues, err = valuesSpecToEncDatum(&spec.Sides[i].FixedValues)
 			if err != nil {
 				return nil, err
 			}
 		}
-		if err := z.setupInfo(flowCtx, spec, i, colOffset, tables, collectingStats); err != nil {
+		if err := z.setupInfo(flowCtx, tables[i], &spec.Sides[i], &z.infos[i], colOffset, collectingStats); err != nil {
 			return nil, err
 		}
 		colOffset += len(z.infos[i].table.PublicColumns())
@@ -416,19 +413,16 @@ type zigzagJoinerInfo struct {
 // of the join.
 func (z *zigzagJoiner) setupInfo(
 	flowCtx *execinfra.FlowCtx,
-	spec *execinfrapb.ZigzagJoinerSpec,
-	side int,
+	table catalog.TableDescriptor,
+	spec *execinfrapb.ZigzagJoinerSpec_Side,
+	info *zigzagJoinerInfo,
 	colOffset int,
-	tables []catalog.TableDescriptor,
 	collectingStats bool,
 ) error {
-	z.side = side
-	info := z.infos[side]
-
 	info.alloc = &tree.DatumAlloc{}
-	info.table = tables[side]
-	info.eqColumns = spec.EqColumns[side].Columns
-	indexOrdinal := spec.IndexOrdinals[side]
+	info.table = table
+	info.eqColumns = spec.EqColumns.Columns
+	indexOrdinal := spec.IndexOrdinal
 	info.index = info.table.ActiveIndexes()[indexOrdinal]
 
 	info.indexDirs = info.table.IndexFullColumnDirections(info.index)
@@ -502,7 +496,7 @@ func (z *zigzagJoiner) setupInfo(
 		info.fetcher = fetcher
 	}
 
-	span, err := z.produceSpanFromBaseRow()
+	span, err := z.produceSpanFromBaseRow(info)
 
 	if err != nil {
 		return err
@@ -539,7 +533,7 @@ func (z *zigzagJoiner) fetchRow(ctx context.Context) (rowenc.EncDatumRow, error)
 func (z *zigzagJoiner) fetchRowFromSide(
 	ctx context.Context, side int,
 ) (fetchedRow rowenc.EncDatumRow, err error) {
-	info := z.infos[side]
+	info := &z.infos[side]
 	// Keep fetching until a row is found that does not have null in an equality
 	// column.
 	hasNull := func(row rowenc.EncDatumRow) bool {
@@ -577,8 +571,7 @@ func (z *zigzagJoiner) extractEqDatums(row rowenc.EncDatumRow, side int) rowenc.
 
 // Generates a Key, corresponding to the current `z.baseRow` in
 // the index on the current side.
-func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
-	info := z.infos[z.side]
+func (z *zigzagJoiner) produceSpanFromBaseRow(info *zigzagJoinerInfo) (roachpb.Span, error) {
 	neededDatums := info.fixedValues
 	if z.baseRow != nil {
 		eqDatums := z.extractEqDatums(z.baseRow, z.prevSide())
@@ -713,11 +706,11 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 			return nil, nil
 		}
 
-		curInfo := z.infos[z.side]
+		curInfo := &z.infos[z.side]
 
 		// Generate a key from the last row seen from the last side. We're about to
 		// use it to jump to the next possible match on the current side.
-		span, err := z.produceSpanFromBaseRow()
+		span, err := z.produceSpanFromBaseRow(curInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -867,7 +860,7 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 	if !z.fetchedInititalRow {
 		z.fetchedInititalRow = true
 
-		curInfo := z.infos[z.side]
+		curInfo := &z.infos[z.side]
 		err := curInfo.fetcher.StartScan(
 			z.Ctx,
 			z.FlowCtx.Txn,
