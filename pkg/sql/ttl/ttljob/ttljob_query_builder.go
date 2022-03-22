@@ -219,7 +219,7 @@ func makeDeleteQueryBuilder(
 	tableID descpb.ID, cutoff time.Time, pkColumns []string, deleteBatchSize int,
 ) deleteQueryBuilder {
 	cachedArgs := make([]interface{}, 0, 1+len(pkColumns)*deleteBatchSize)
-	cachedArgs = append(cachedArgs, cutoff)
+	//cachedArgs = append(cachedArgs, cutoff)
 
 	return deleteQueryBuilder{
 		tableID:         tableID,
@@ -242,13 +242,13 @@ func (b *deleteQueryBuilder) buildQuery(numRows int) string {
 			if j > 0 {
 				placeholderStr += ", "
 			}
-			placeholderStr += fmt.Sprintf("$%d", 2+i*len(b.pkColumns)+j)
+			placeholderStr += fmt.Sprintf("$%d", 1+i*len(b.pkColumns)+j)
 		}
 		placeholderStr += ")"
 	}
 
 	return fmt.Sprintf(
-		`DELETE FROM [%d AS tbl_name] WHERE crdb_internal_expiration <= $1 AND (%s) IN (%s)`,
+		`DELETE FROM [%d AS tbl_name] WHERE (%s) IN (%s)`,
 		b.tableID,
 		columnNamesSQL,
 		placeholderStr,
@@ -265,7 +265,7 @@ func (b *deleteQueryBuilder) buildQueryAndArgs(rows []tree.Datums) (string, []in
 	} else {
 		q = b.buildQuery(len(rows))
 	}
-	deleteArgs := b.cachedArgs[:1]
+	deleteArgs := b.cachedArgs[:0]
 	for _, row := range rows {
 		for _, col := range row {
 			deleteArgs = append(deleteArgs, col)
