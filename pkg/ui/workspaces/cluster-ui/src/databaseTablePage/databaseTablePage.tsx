@@ -239,25 +239,15 @@ export class DatabaseTablePage extends React.Component<
   }
 
   private getLastUsedString(indexStat: IndexStat) {
-    const lastReset = this.props.indexStats.lastReset;
-    switch (indexStat.lastUsedType) {
-      case "read":
-        return formatDate(
-          indexStat.lastUsed,
-          "[Last read:] MMM DD, YYYY [at] h:mm A",
-        );
-      case "reset":
-      default:
-        // TODO(lindseyjin): replace default case with create time after it's added to table_indexes
-        if (lastReset.isSame(this.minDate)) {
-          return "Never";
-        } else {
-          return formatDate(
-            lastReset,
-            "[Last reset:] MMM DD, YYYY [at] h:mm A",
-          );
-        }
+    // This case only occurs when we have no reads, resets, or creation time on
+    // the index.
+    if (indexStat.lastUsed.isSame(this.minDate)) {
+      return "Never";
     }
+    return formatDate(
+      indexStat.lastUsed,
+      `[Last ${indexStat.lastUsedType}:] MMM DD, YYYY [at] h:mm A`,
+    );
   }
 
   private indexStatsColumns: ColumnDescriptor<IndexStat>[] = [

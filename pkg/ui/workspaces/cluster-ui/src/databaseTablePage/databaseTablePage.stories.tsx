@@ -126,6 +126,12 @@ const withData: DatabaseTablePageProps = {
         lastUsedType: "reset",
         indexName: "secondary",
       },
+      {
+        totalReads: 0,
+        lastUsed: moment("2022-03-12T14:31:00Z"),
+        lastUsedType: "created",
+        indexName: "secondary",
+      },
     ],
     lastReset: moment("2021-09-04T13:55:00Z"),
   },

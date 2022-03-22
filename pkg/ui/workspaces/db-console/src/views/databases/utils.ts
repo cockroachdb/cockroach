@@ -67,6 +67,6 @@ export function getNodesByRegionString(
 // makeTimestamp converts a string to a google.protobuf.Timestamp object.
 export function makeTimestamp(date: string): Timestamp {
   return new protos.google.protobuf.Timestamp({
-    seconds: new Long(Date.parse(date) * 1e-3),
+    seconds: new Long(new Date(date).getUTCSeconds()),
   });
 }

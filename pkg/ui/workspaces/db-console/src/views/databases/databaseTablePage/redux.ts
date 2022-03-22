@@ -74,12 +74,20 @@ export const mapStateToProps = createSelector(
           indexStat.statistics?.stats?.last_read,
         );
         let lastUsed, lastUsedType;
-        if (lastRead.isAfter(lastReset)) {
-          lastUsed = lastRead;
-          lastUsedType = "read";
+        if (indexStat.created_at !== null) {
+          lastUsed = util.TimestampToMoment(indexStat.created_at);
+          lastUsedType = "created";
         } else {
           lastUsed = lastReset;
           lastUsedType = "reset";
+        }
+        if (lastReset.isAfter(lastUsed)) {
+          lastUsed = lastReset;
+          lastUsedType = "reset";
+        }
+        if (lastRead.isAfter(lastUsed)) {
+          lastUsed = lastRead;
+          lastUsedType = "read";
         }
         return {
           indexName: indexStat.index_name,
