@@ -36,7 +36,9 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 	testCtx := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	testCtx.Start(ctx, t, stopper)
+	tsc := TestStoreConfig(nil)
+	tsc.SpanConfigsDisabled = true
+	testCtx.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	mq := newMergeQueue(testCtx.store, testCtx.store.DB())
 	kvserverbase.MergeQueueEnabled.Override(ctx, &testCtx.store.ClusterSettings().SV, true)
