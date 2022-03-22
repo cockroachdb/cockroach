@@ -534,7 +534,7 @@ var versionsSingleton = keyedVersions{
 	},
 	{
 		Key:     DateStyleIntervalStyleCastRewrite,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 94},
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
 	},
 
 	// *************************************************
