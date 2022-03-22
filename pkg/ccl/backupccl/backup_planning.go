@@ -1661,12 +1661,31 @@ func getBackupDetailAndManifest(
 		}
 	}
 
+	localityKVs := make([]string, len(urisByLocalityKV))
+	i := 0
+	for k := range urisByLocalityKV {
+		localityKVs[i] = k
+		i++
+	}
+
 	for i := range prevBackups {
+		prevBackup := prevBackups[i]
 		// IDs are how we identify tables, and those are only meaningful in the
 		// context of their own cluster, so we need to ensure we only allow
 		// incremental previous backups that we created.
-		if fromCluster := prevBackups[i].ClusterID; !fromCluster.Equal(execCfg.ClusterID()) {
+		if fromCluster := prevBackup.ClusterID; !fromCluster.Equal(execCfg.ClusterID()) {
 			return jobspb.BackupDetails{}, BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
+		}
+
+		prevLocalityKVs := prevBackup.LocalityKVs
+
+		if !stringSlicesEqual(localityKVs, prevLocalityKVs) {
+			return jobspb.BackupDetails{}, BackupManifest{}, errors.Newf(
+				"Requested backup has localities %s, but a previous backup layer in this collection has localities %s. "+
+					"Mismatched backup layers are not supported. Please take a new full backup with the new localities, or an "+
+					"incremental backup with matching localities.",
+				localityKVs, prevLocalityKVs,
+			)
 		}
 	}
 
@@ -1698,6 +1717,22 @@ func getBackupDetailAndManifest(
 	}
 
 	return updatedDetails, backupManifest, nil
+}
+
+func stringSlicesEqual(first []string, second []string) bool {
+	if len(first) != len(second) {
+		return false
+	}
+	sortedFirst := first
+	sortedSecond := second
+	sort.Strings(sortedFirst)
+	sort.Strings(sortedSecond)
+	for i := range sortedFirst {
+		if sortedFirst[i] != sortedSecond[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func getTenantInfo(

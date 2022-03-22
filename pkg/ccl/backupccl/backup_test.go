@@ -3464,6 +3464,48 @@ func TestConcurrentBackupRestores(t *testing.T) {
 	}
 }
 
+func TestBackupWithMismatchedLocalityLayersFails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	ctx := context.Background()
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	const msg = "Mismatched backup layers are not supported."
+
+	_, err := sqlDB.DB.ExecContext(
+		ctx,
+		`BACKUP INTO (
+'nodelocal://0/default?COCKROACH_LOCALITY=default',
+'nodelocal://0/us-west?COCKROACH_LOCALITY=region%3Dus-west')`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.DB.ExecContext(
+		ctx,
+		`BACKUP INTO LATEST IN(
+'nodelocal://0/default?COCKROACH_LOCALITY=default',
+'nodelocal://0/us-west?COCKROACH_LOCALITY=region%3Dus-west',
+'nodelocal://0/us-east?COCKROACH_LOCALITY=region%3Dus-east')`)
+
+	require.Contains(t, fmt.Sprint(err), msg)
+
+	_, err = sqlDB.DB.ExecContext(
+		ctx,
+		`BACKUP INTO LATEST IN(
+'nodelocal://0/default?COCKROACH_LOCALITY=default',
+'nodelocal://0/us-east?COCKROACH_LOCALITY=region%3Dus-east')`)
+
+	require.Contains(t, fmt.Sprint(err), msg)
+
+	_, err = sqlDB.DB.ExecContext(
+		ctx,
+		`BACKUP INTO LATEST IN 'nodelocal://0/default?COCKROACH_LOCALITY=default'`)
+
+	require.Contains(t, fmt.Sprint(err), msg)
+}
+
 func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
