@@ -450,19 +450,17 @@ message OrdinalitySpec {
 // rowFetchers.
 //
 // The "internal columns" of a ZigzagJoiner (see ProcessorSpec) are the
-// concatenation of all of the columns of the tables specified. The columns
-// are populated if they are contained in the index specified for that table.
+// concatenation of all the fetch columns of all the sides.
 message ZigzagJoinerSpec {
   message Side {
-    optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
-    optional uint32 index_ordinal = 2 [(gogoproto.nullable) = false];
+    optional sqlbase.IndexFetchSpec fetch_spec = 1 [(gogoproto.nullable) = false];
 
-    // EqColumns contains the equality columns for this side. All sides have the
-    // same number of equality columns.
-    optional Columns eq_columns = 3 [(gogoproto.nullable) = false];
+    // EqColumns contains the equality columns for this side (as fetched column
+    // ordinals). All sides have the same number of equality columns.
+    optional Columns eq_columns = 2 [(gogoproto.nullable) = false];
 
-    // Fixed values at the start of indices.
-    optional ValuesCoreSpec fixed_values = 5 [(gogoproto.nullable) = false];
+    // Fixed values, corresponding to a prefix of the index key columns.
+    optional ValuesCoreSpec fixed_values = 3 [(gogoproto.nullable) = false];
   }
 
   repeated Side sides = 7 [(gogoproto.nullable) = false];

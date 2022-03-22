@@ -7,6 +7,14 @@ CREATE TABLE a (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX
 INSERT INTO a SELECT a,a,a%3,'foo' FROM generate_series(1,10) AS g(a) ;
 SET enable_zigzag_join = true
 
+#query T
+#EXPLAIN (OPT, VERBOSE) SELECT n,a,b FROM a WHERE a = 4 AND b = 1
+#----
+
+#query T
+#EXPLAIN (DISTSQL) SELECT n,a,b FROM a WHERE a = 4 AND b = 1
+#----
+
 query III rowsort
 SELECT n,a,b FROM a WHERE a = 4 AND b = 1
 ----
