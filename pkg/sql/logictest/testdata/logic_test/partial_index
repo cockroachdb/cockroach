@@ -1036,7 +1036,6 @@ DELETE from u
 subtest join
 
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 CREATE TABLE join_small (m INT, n INT);
 CREATE TABLE join_large (i INT, s STRING, INDEX (i) WHERE s IN ('foo', 'bar', 'baz'));
 ALTER TABLE join_small INJECT STATISTICS '[
