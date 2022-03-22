@@ -13,10 +13,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -29,37 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
-
-// fetchPreviousBackups takes a list of URIs of previous backups and returns
-// their manifest as well as the encryption options of the first backup in the
-// chain.
-func fetchPreviousBackups(
-	ctx context.Context,
-	mem *mon.BoundAccount,
-	user security.SQLUsername,
-	makeCloudStorage cloud.ExternalStorageFromURIFactory,
-	prevBackupURIs []string,
-	encryptionParams jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
-) ([]BackupManifest, *jobspb.BackupEncryptionOptions, int64, error) {
-	if len(prevBackupURIs) == 0 {
-		return nil, nil, 0, nil
-	}
-
-	baseBackup := prevBackupURIs[0]
-	encryptionOptions, err := getEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
-		encryptionParams, kmsEnv)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	prevBackups, size, err := getBackupManifests(ctx, mem, user, makeCloudStorage, prevBackupURIs,
-		encryptionOptions)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-
-	return prevBackups, encryptionOptions, size, nil
-}
 
 // resolveDest resolves the true destination of a backup. The backup command
 // provided by the user may point to a backup collection, or a backup location
@@ -251,55 +220,6 @@ func getBackupManifests(
 	return manifests, memMu.total, nil
 }
 
-// getEncryptionFromBase retrieves the encryption options of a base backup. It
-// is expected that incremental backups use the same encryption options as the
-// base backups.
-func getEncryptionFromBase(
-	ctx context.Context,
-	user security.SQLUsername,
-	makeCloudStorage cloud.ExternalStorageFromURIFactory,
-	baseBackupURI string,
-	encryptionParams jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
-) (*jobspb.BackupEncryptionOptions, error) {
-	var encryptionOptions *jobspb.BackupEncryptionOptions
-	if encryptionParams.Mode != jobspb.EncryptionMode_None {
-		exportStore, err := makeCloudStorage(ctx, baseBackupURI, user)
-		if err != nil {
-			return nil, err
-		}
-		defer exportStore.Close()
-		opts, err := readEncryptionOptions(ctx, exportStore)
-		if err != nil {
-			return nil, err
-		}
-
-		switch encryptionParams.Mode {
-		case jobspb.EncryptionMode_Passphrase:
-			encryptionOptions = &jobspb.BackupEncryptionOptions{
-				Mode: jobspb.EncryptionMode_Passphrase,
-				Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), opts[0].Salt),
-			}
-		case jobspb.EncryptionMode_KMS:
-			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
-			for _, encFile := range opts {
-				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(encryptionParams.RawKmsUris,
-					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
-				if err == nil {
-					break
-				}
-			}
-			if err != nil {
-				return nil, err
-			}
-			encryptionOptions = &jobspb.BackupEncryptionOptions{
-				Mode:    jobspb.EncryptionMode_KMS,
-				KMSInfo: defaultKMSInfo}
-		}
-	}
-	return encryptionOptions, nil
-}
-
 func readLatestFile(
 	ctx context.Context,
 	collectionURI string,
@@ -363,4 +283,75 @@ func writeNewLatestFile(
 	}
 
 	return cloud.WriteFile(ctx, exportStore, latestHistoryDirectory+"/"+latestFileName, strings.NewReader(suffix))
+}
+
+func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
+	parsedURI, err := url.Parse(uri)
+	if err != nil {
+		return "", "", err
+	}
+	q := parsedURI.Query()
+	localityKV := q.Get(localityURLParam)
+	// Remove the backup locality parameter.
+	q.Del(localityURLParam)
+	parsedURI.RawQuery = q.Encode()
+
+	parsedURI.Path = JoinURLPath(parsedURI.Path, appendPath)
+
+	baseURI := parsedURI.String()
+	return localityKV, baseURI, nil
+}
+
+// getURIsByLocalityKV takes a slice of URIs for a single (possibly partitioned)
+// backup, and returns the default backup destination URI and a map of all other
+// URIs by locality KV, appending appendPath to the path component of both the
+// default URI and all the locality URIs. The URIs in the result do not include
+// the COCKROACH_LOCALITY parameter.
+func getURIsByLocalityKV(
+	to []string, appendPath string,
+) (defaultURI string, urisByLocalityKV map[string]string, err error) {
+	urisByLocalityKV = make(map[string]string)
+	if len(to) == 1 {
+		localityKV, baseURI, err := getLocalityAndBaseURI(to[0], appendPath)
+		if err != nil {
+			return "", nil, err
+		}
+		if localityKV != "" && localityKV != defaultLocalityValue {
+			return "", nil, errors.Errorf("%s %s is invalid for a single BACKUP location",
+				localityURLParam, localityKV)
+		}
+		return baseURI, urisByLocalityKV, nil
+	}
+
+	for _, uri := range to {
+		localityKV, baseURI, err := getLocalityAndBaseURI(uri, appendPath)
+		if err != nil {
+			return "", nil, err
+		}
+		if localityKV == "" {
+			return "", nil, errors.Errorf(
+				"multiple URLs are provided for partitioned BACKUP, but %s is not specified",
+				localityURLParam,
+			)
+		}
+		if localityKV == defaultLocalityValue {
+			if defaultURI != "" {
+				return "", nil, errors.Errorf("multiple default URLs provided for partition backup")
+			}
+			defaultURI = baseURI
+		} else {
+			kv := roachpb.Tier{}
+			if err := kv.FromString(localityKV); err != nil {
+				return "", nil, errors.Wrap(err, "failed to parse backup locality")
+			}
+			if _, ok := urisByLocalityKV[localityKV]; ok {
+				return "", nil, errors.Errorf("duplicate URIs for locality %s", localityKV)
+			}
+			urisByLocalityKV[localityKV] = baseURI
+		}
+	}
+	if defaultURI == "" {
+		return "", nil, errors.Errorf("no default URL provided for partitioned backup")
+	}
+	return defaultURI, urisByLocalityKV, nil
 }
