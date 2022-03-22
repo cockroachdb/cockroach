@@ -12,7 +12,6 @@ import React from "react";
 import { Col, Row, Tabs } from "antd";
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
-import _ from "lodash";
 import { Tooltip } from "antd";
 import { Heading } from "@cockroachlabs/ui-components";
 
@@ -421,7 +420,7 @@ export class DatabaseTablePage extends React.Component<
                     />
                     <SummaryCardItem
                       label="Indexes"
-                      value={_.join(this.props.details.indexNames, ", ")}
+                      value={this.props.details.indexNames.join(", ")}
                       className={cx("database-table-page__indexes--value")}
                     />
                   </SummaryCard>

@@ -76,7 +76,7 @@ const withData: DatabasesPageProps = {
     ascending: false,
     columnTitle: "name",
   },
-  databases: _.map(Array(42), _item => {
+  databases: Array(42).map(() => {
     return {
       loading: false,
       loaded: true,
