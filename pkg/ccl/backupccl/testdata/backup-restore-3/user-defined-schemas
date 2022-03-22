@@ -1,0 +1,640 @@
+new-server name=s1 nodes=3 splits=1000
+----
+
+# This test takes a full backup and an incremental backup with revision history
+# at certain timestamps, then restores to each of the timestamps to ensure that
+# the types restored are correct.
+subtest revision-history
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE SCHEMA sc;
+CREATE SCHEMA sc2;
+CREATE TABLE d.sc.t1(x int);
+CREATE TABLE d.sc2.t1 (c bool);
+----
+
+save-cluster-ts tag=t1
+----
+
+exec-sql
+ALTER SCHEMA sc RENAME TO sc3;
+----
+
+exec-sql
+ALTER SCHEMA sc2 RENAME TO sc;
+----
+
+save-cluster-ts tag=t2
+----
+
+exec-sql
+DROP TABLE sc.t1;
+DROP TABLE sc3.t1;
+----
+
+exec-sql
+DROP SCHEMA sc;
+----
+
+exec-sql
+DROP SCHEMA sc3;
+----
+
+save-cluster-ts tag=t3
+----
+
+exec-sql
+CREATE SCHEMA sc;
+CREATE TABLE sc.t1 (a STRING);
+----
+
+save-cluster-ts tag=t4
+----
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/rev-history-backup' WITH revision_history;
+----
+
+exec-sql
+DROP TABLE sc.t1;
+----
+
+exec-sql
+DROP SCHEMA sc;
+----
+
+save-cluster-ts tag=t5
+----
+
+exec-sql
+CREATE SCHEMA sc;
+CREATE TABLE sc.t1 (a FLOAT);
+----
+
+save-cluster-ts tag=t6
+----
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://1/rev-history-backup' WITH revision_history;
+----
+
+subtest revision-history/ts1
+
+exec-sql
+DROP DATABASE d;
+----
+
+restore aost=t1
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/rev-history-backup' AS OF SYSTEM TIME t1
+----
+
+exec-sql
+INSERT INTO d.sc.t1 VALUES (1);
+INSERT INTO d.sc2.t1 VALUES (true);
+USE d;
+CREATE SCHEMA unused;
+----
+
+subtest end
+
+subtest revision-history/ts2
+
+exec-sql
+DROP DATABASE d;
+----
+
+restore aost=t2
+RESTORE DATABASE d FROM LATEST IN  'nodelocal://1/rev-history-backup' AS OF SYSTEM TIME t2
+----
+
+exec-sql
+INSERT INTO d.sc3.t1 VALUES (1);
+INSERT INTO d.sc.t1 VALUES (true);
+----
+
+subtest end
+
+subtest revision-history/ts3
+
+exec-sql
+DROP DATABASE d;
+----
+
+restore aost=t3
+RESTORE DATABASE d FROM LATEST IN  'nodelocal://1/rev-history-backup' AS OF SYSTEM TIME t3
+----
+
+exec-sql
+USE d;
+CREATE SCHEMA sc;
+CREATE SCHEMA sc3;
+----
+
+subtest end
+
+subtest revision-history/ts4
+
+exec-sql
+DROP DATABASE d;
+----
+
+restore aost=t4
+RESTORE DATABASE d FROM LATEST IN  'nodelocal://1/rev-history-backup' AS OF SYSTEM TIME t4
+----
+
+exec-sql
+INSERT INTO d.sc.t1 VALUES ('hello');
+----
+
+subtest end
+
+subtest revision-history/ts5
+
+exec-sql
+DROP DATABASE d;
+----
+
+restore aost=t5
+RESTORE DATABASE d FROM LATEST IN  'nodelocal://1/rev-history-backup' AS OF SYSTEM TIME t5
+----
+
+exec-sql
+USE d;
+CREATE SCHEMA sc;
+----
+
+subtest end
+
+subtest revision-history/ts6
+
+exec-sql
+DROP DATABASE d;
+----
+
+restore aost=t6
+RESTORE DATABASE d FROM LATEST IN  'nodelocal://1/rev-history-backup' AS OF SYSTEM TIME t6
+----
+
+exec-sql
+INSERT INTO d.sc.t1 VALUES (123.123);
+----
+
+subtest end
+
+subtest end
+
+subtest full-cluster
+
+exec-sql
+CREATE DATABASE d2;
+USE d2;
+CREATE SCHEMA unused;
+CREATE SCHEMA sc;
+CREATE TABLE sc.tb1 (x INT);
+INSERT INTO sc.tb1 VALUES (1);
+CREATE TYPE sc.typ1 AS ENUM ('hello');
+CREATE TABLE sc.tb2 (x sc.typ1);
+INSERT INTO sc.tb2 VALUES ('hello');
+----
+
+# Now backup the full cluster.
+exec-sql
+BACKUP INTO 'nodelocal://1/test/';
+----
+
+# Start a new server that shares the data directory
+new-server name=s2 share-io-dir=s1
+----
+
+# Restore into the new cluster.
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/test/';
+----
+
+# Check that we can resolve all names through the user defined schema.
+query-sql
+SELECT * FROM d2.sc.tb1;
+----
+1
+
+query-sql
+SELECT * FROM d2.sc.tb2;
+----
+hello
+
+query-sql
+SELECT 'hello'::d2.sc.typ1;
+----
+hello
+
+# We shouldn't be able to create a new schema with the same name.
+
+query-sql
+USE d2;
+CREATE SCHEMA sc;
+----
+pq: schema "sc" already exists
+
+query-sql
+USE d2;
+CREATE SCHEMA unused;
+----
+pq: schema "unused" already exists
+
+subtest end
+
+subtest database
+
+# Backup the database.
+exec-sql
+BACKUP DATABASE d2 INTO 'nodelocal://1/test'
+----
+
+# Drop the database and restore into it.
+exec-sql
+DROP DATABASE d2;
+----
+
+exec-sql
+RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://1/test';
+----
+
+# Check that we can resolve all names through the user defined schema.
+query-sql
+SELECT * FROM d2.sc.tb1;
+----
+1
+
+query-sql
+SELECT * FROM d2.sc.tb2;
+----
+hello
+
+query-sql
+SELECT 'hello'::d2.sc.typ1;
+----
+hello
+
+# We shouldn't be able to create a new schema with the same name.
+
+query-sql
+USE d2;
+CREATE SCHEMA sc;
+----
+pq: schema "sc" already exists
+
+query-sql
+USE d2;
+CREATE SCHEMA unused;
+----
+pq: schema "unused" already exists
+
+subtest end
+
+# Tests backing up and restoring all tables in requested user defined schemas.
+subtest all-tables-in-requested-schemas
+
+exec-sql
+USE data;
+CREATE TABLE table_in_data (x INT);
+----
+
+exec-sql
+CREATE SCHEMA data;
+CREATE TABLE data.tb1 (x INT);
+----
+
+exec-sql
+CREATE DATABASE foo;
+USE foo;
+----
+
+exec-sql
+CREATE SCHEMA schema_in_foo;
+CREATE TABLE schema_in_foo.tb1 (x INT);
+CREATE SCHEMA schema_in_foo2;
+CREATE TABLE schema_in_foo2.tb1 (x INT);
+----
+
+exec-sql
+CREATE SCHEMA foo;
+CREATE TABLE foo.tb1 (x INT);
+----
+
+exec-sql
+CREATE TABLE tb2 (y INT);
+----
+
+subtest all-tables-in-requested-schemas/fully-qualified-target
+
+exec-sql
+BACKUP TABLE foo.schema_in_foo.* INTO 'nodelocal://1/fully-qualified-target';
+----
+
+exec-sql
+CREATE DATABASE restore;
+----
+
+exec-sql
+RESTORE TABLE foo.schema_in_foo.* FROM LATEST IN 'nodelocal://1/fully-qualified-target' WITH into_db='restore'
+----
+
+query-sql
+SELECT schema_name, table_name FROM [SHOW TABLES FROM restore] ORDER BY schema_name, table_name;
+----
+schema_in_foo tb1
+
+# Cleanup
+exec-sql
+DROP DATABASE restore CASCADE;
+----
+
+subtest end
+
+
+subtest all-tables-in-requested-schemas/schema-qualified-target
+
+exec-sql
+BACKUP TABLE schema_in_foo.* INTO 'nodelocal://1/schema-qualified-target';
+----
+
+exec-sql
+CREATE DATABASE restore;
+----
+
+exec-sql
+RESTORE TABLE schema_in_foo.* FROM LATEST IN 'nodelocal://1/schema-qualified-target' WITH into_db='restore'
+----
+
+query-sql
+SELECT schema_name, table_name FROM [SHOW TABLES FROM restore] ORDER BY schema_name, table_name;
+----
+schema_in_foo tb1
+
+# Cleanup
+exec-sql
+DROP DATABASE restore CASCADE;
+----
+
+subtest end
+
+subtest all-tables-in-requested-schemas/schema-qualified-target-with-identical-name-as-curdb
+
+exec-sql
+BACKUP TABLE foo.* INTO 'nodelocal://1/schema-qualified-target-with-identical-name-as-curdb';
+----
+
+exec-sql
+CREATE DATABASE restore;
+----
+
+exec-sql
+RESTORE TABLE foo.* FROM LATEST IN 'nodelocal://1/schema-qualified-target-with-identical-name-as-curdb' WITH into_db='restore'
+----
+
+query-sql
+SELECT schema_name, table_name FROM [SHOW TABLES FROM restore] ORDER BY schema_name, table_name;
+----
+foo tb1
+
+# Cleanup
+exec-sql
+DROP DATABASE restore CASCADE;
+----
+
+subtest end
+
+subtest all-tables-in-requested-schemas/curdb-public-schema-target
+
+exec-sql
+BACKUP TABLE * INTO 'nodelocal://1/curdb-public-schema-target';
+----
+
+exec-sql
+CREATE DATABASE restore;
+----
+
+exec-sql
+RESTORE TABLE * FROM LATEST IN 'nodelocal://1/curdb-public-schema-target' WITH into_db='restore'
+----
+
+query-sql
+SELECT schema_name, table_name FROM [SHOW TABLES FROM restore] ORDER BY schema_name, table_name;
+----
+public tb2
+
+# Cleanup
+exec-sql
+DROP DATABASE restore CASCADE;
+----
+
+subtest end
+
+subtest all-tables-in-requested-schemas/cross-db-qualified-target
+
+exec-sql
+BACKUP TABLE data.* INTO 'nodelocal://1/cross-db-qualified-target';
+----
+
+exec-sql
+CREATE DATABASE restore;
+----
+
+exec-sql
+RESTORE TABLE data.* FROM LATEST IN 'nodelocal://1/cross-db-qualified-target' WITH into_db='restore'
+----
+
+query-sql
+SELECT schema_name, table_name FROM [SHOW TABLES FROM restore] ORDER BY schema_name, table_name;
+----
+data tb1
+public bank
+public table_in_data
+
+# Cleanup
+exec-sql
+DROP DATABASE restore CASCADE;
+----
+
+subtest end
+
+subtest end
+
+subtest no-remap
+
+exec-sql
+CREATE DATABASE d3;
+USE d3;
+CREATE SCHEMA sc;
+CREATE TYPE sc.typ1 AS ENUM ('hello');
+CREATE TABLE sc.tb1 (x sc.typ1);
+INSERT INTO sc.tb1 VALUES ('hello');
+CREATE TABLE sc.tb2 (x INT);
+INSERT INTO sc.tb2 VALUES (1);
+----
+
+# We have to qualify the table correctly to back it up. d3.tb1 resolves
+# to d3.public.tb1.
+exec-sql
+BACKUP TABLE d3.tb1 INTO 'nodelocal://1/test'
+----
+pq: failed to resolve targets specified in the BACKUP stmt: table "d3.tb1" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time
+
+# Backup tb1.
+exec-sql
+BACKUP TABLE d3.sc.tb1 INTO 'nodelocal://1/test';
+----
+
+# Create a new database to restore into. This restore should restore the schema
+# sc into the new database.
+exec-sql
+CREATE DATABASE d4;
+----
+
+# We have to qualify the table correctly to restore it. d.tb1 resolves
+# to d.public.tb1.
+exec-sql
+RESTORE TABLE d3.tb1 FROM LATEST IN 'nodelocal://1/test' WITH into_db = 'd4';
+----
+pq: failed to resolve targets in the BACKUP location specified by the RESTORE stmt, use SHOW BACKUP to find correct targets: table "d3.tb1" does not exist
+
+exec-sql
+RESTORE TABLE d3.sc.tb1 FROM LATEST IN 'nodelocal://1/test' WITH into_db = 'd4';
+----
+
+# Check that we can resolve all names through the user defined schemas.
+query-sql
+SELECT * FROM d4.sc.tb1;
+----
+hello
+
+query-sql
+SELECT 'hello'::d4.sc.typ1;
+----
+hello
+
+# We shouldn't be able to create a new schema with the same name.
+exec-sql
+USE d4;
+CREATE SCHEMA sc;
+----
+pq: schema "sc" already exists
+
+subtest end
+
+subtest remap
+
+exec-sql
+CREATE DATABASE d5;
+USE d5;
+CREATE SCHEMA sc;
+CREATE TYPE sc.typ1 AS ENUM ('hello');
+CREATE TABLE sc.tb1 (x sc.typ1);
+INSERT INTO sc.tb1 VALUES ('hello');
+----
+
+# Take a backup.
+exec-sql
+BACKUP TABLE d5.sc.tb1 INTO 'nodelocal://1/test';
+----
+
+# Now drop a table.
+exec-sql
+DROP TABLE d5.sc.tb1;
+----
+
+# Restoring the table should restore into d5.
+exec-sql
+RESTORE TABLE d5.sc.tb1 FROM LATEST IN 'nodelocal://1/test';
+----
+
+query-sql
+SELECT * FROM d5.sc.tb1;
+----
+hello
+
+subtest end
+
+# Test restoring tables with user defined schemas when restore schemas are not
+# being remapped. Like no-remap but with more databases and schemas.
+subtest multi-schemas
+
+exec-sql
+CREATE DATABASE d6;
+USE d6;
+CREATE SCHEMA sc1;
+CREATE TABLE sc1.tb (x INT);
+INSERT INTO sc1.tb VALUES (1);
+CREATE SCHEMA sc2;
+CREATE TABLE sc2.tb (x INT);
+INSERT INTO sc2.tb VALUES (2);
+----
+
+exec-sql
+CREATE DATABASE d7;
+USE d7;
+CREATE SCHEMA sc3;
+CREATE TABLE sc3.tb (x INT);
+INSERT INTO sc3.tb VALUES (3);
+CREATE SCHEMA sc4;
+CREATE TABLE sc4.tb (x INT);
+INSERT INTO sc4.tb VALUES (4);
+----
+
+# Backup all databases.
+exec-sql
+BACKUP DATABASE d6, d7 INTO 'nodelocal://1/test';
+----
+
+# Create a new database to restore into. This restore should restore the schemas
+# into the new database.
+exec-sql
+CREATE DATABASE newdb;
+----
+
+# Create a schema and table in the database to restore into, unrelated to the
+# restore.
+exec-sql
+USE newdb;
+CREATE SCHEMA existingschema;
+----
+
+exec-sql
+CREATE TABLE existingschema.tb (x INT);
+INSERT INTO existingschema.tb VALUES (0);
+----
+
+exec-sql
+RESTORE TABLE d6.sc1.*, d6.sc2.*, d7.sc3.*, d7.sc4.* FROM LATEST IN 'nodelocal://1/test' WITH into_db = 'newdb'
+----
+
+# Check that we can resolve all names through the user defined schemas.
+query-sql
+SELECT * FROM newdb.sc1.tb;
+----
+1
+
+query-sql
+SELECT * FROM newdb.sc2.tb;
+----
+2
+
+query-sql
+SELECT * FROM newdb.sc3.tb;
+----
+3
+
+query-sql
+SELECT * FROM newdb.sc4.tb;
+----
+4
+
+# Check that name resolution still workds for the preexisting schema.
+query-sql
+SELECT * FROM newdb.existingschema.tb;
+----
+0
+
+subtest end
