@@ -143,7 +143,7 @@ class TestDriver {
   }
 }
 
-describe("Database Table Page", function() {
+describe.only("Database Table Page", function() {
   let driver: TestDriver;
 
   beforeEach(function() {
@@ -275,8 +275,27 @@ describe("Database Table Page", function() {
           index_name: "jobs_status_created_idx",
           index_type: "secondary",
         },
+        {
+          statistics: {
+            key: {
+              table_id: 1,
+              index_id: 2,
+            },
+            stats: {
+              total_read_count: new Long(0),
+              last_read: makeTimestamp("0001-01-01T00:00:00Z"),
+              total_rows_read: new Long(0),
+              total_write_count: new Long(0),
+              last_write: makeTimestamp("0001-01-01T00:00:00Z"),
+              total_rows_written: new Long(0),
+            },
+          },
+          index_name: "index_no_reads_no_resets",
+          index_type: "secondary",
+          created_at: makeTimestamp("0001-01-01T00:00:00Z"),
+        },
       ],
-      last_reset: makeTimestamp("2021-11-12T20:18:22.167627Z"),
+      last_reset: makeTimestamp("0001-01-01T00:00:00Z"),
     });
 
     await driver.refreshIndexStats();
@@ -293,10 +312,16 @@ describe("Database Table Page", function() {
           ),
           lastUsedType: "read",
         },
+        {
+          indexName: "index_no_reads_no_resets",
+          totalReads: 0,
+          lastUsed: util.TimestampToMoment(
+            makeTimestamp("0001-01-01T00:00:00Z"),
+          ),
+          lastUsedType: "created",
+        },
       ],
-      lastReset: util.TimestampToMoment(
-        makeTimestamp("2021-11-12T20:18:22.167627Z"),
-      ),
+      lastReset: util.TimestampToMoment(makeTimestamp("0001-01-01T00:00:00Z")),
     });
   });
 });
