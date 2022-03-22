@@ -17,6 +17,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/errors"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 	pgx "github.com/jackc/pgx/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -806,7 +808,7 @@ func TestConnectionMigration(t *testing.T) {
 		}
 		return nil
 	}
-	_, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
 
 	// The tenant ID does not matter here since we stubbed RoutingRule.
 	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-28", addr)
@@ -826,6 +828,21 @@ func TestConnectionMigration(t *testing.T) {
 				AND b.component = 'DB' AND b.field = 'Port'
 		`).Scan(&host, &port))
 		return fmt.Sprintf("%s:%s", host, port)
+	}
+
+	// validateMiscMetrics ensures that our invariant of
+	// attempts = success + error_recoverable + error_fatal is valid, and all
+	// other transfer related metrics were incremented as well.
+	validateMiscMetrics := func(t *testing.T) {
+		t.Helper()
+		totalAttempts := proxy.metrics.ConnMigrationSuccessCount.Count() +
+			proxy.metrics.ConnMigrationErrorRecoverableCount.Count() +
+			proxy.metrics.ConnMigrationErrorFatalCount.Count()
+		require.Equal(t, totalAttempts, proxy.metrics.ConnMigrationAttemptedCount.Count())
+		require.Equal(t, totalAttempts,
+			proxy.metrics.ConnMigrationAttemptedLatency.TotalCount())
+		require.Equal(t, totalAttempts,
+			proxy.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
 	}
 
 	// Test that connection transfers are successful. Note that if one sub-test
@@ -878,10 +895,8 @@ func TestConnectionMigration(t *testing.T) {
 			require.NoError(t, err)
 
 			// Show that we get alternating SQL pods when we transfer.
-			f.RequestTransfer()
-			require.Eventually(t, func() bool {
-				return f.metrics.ConnMigrationSuccessCount.Count() == 1
-			}, 30*time.Second, 100*time.Millisecond)
+			require.NoError(t, f.TransferConnection())
+			require.Equal(t, int64(1), f.metrics.ConnMigrationSuccessCount.Count())
 			require.Equal(t, tenant2.SQLAddr(), queryAddr(t, tCtx, db))
 
 			var name string
@@ -891,26 +906,29 @@ func TestConnectionMigration(t *testing.T) {
 			_, err = db.Exec("SET application_name = 'bar'")
 			require.NoError(t, err)
 
-			f.RequestTransfer()
-			require.Eventually(t, func() bool {
-				return f.metrics.ConnMigrationSuccessCount.Count() == 2
-			}, 30*time.Second, 100*time.Millisecond)
+			require.NoError(t, f.TransferConnection())
+			require.Equal(t, int64(2), f.metrics.ConnMigrationSuccessCount.Count())
 			require.Equal(t, tenant1.SQLAddr(), queryAddr(t, tCtx, db))
 
 			require.NoError(t, db.QueryRow("SHOW application_name").Scan(&name))
 			require.Equal(t, "bar", name)
 
 			// Now attempt a transfer concurrently with requests.
-			closerCh := make(chan struct{})
+			initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
+			subCtx, cancel := context.WithCancel(tCtx)
+			defer cancel()
+
+			var wg sync.WaitGroup
+			wg.Add(1)
 			go func() {
-				for i := 0; i < 10 && tCtx.Err() == nil; i++ {
-					f.RequestTransfer()
-					time.Sleep(500 * time.Millisecond)
+				defer wg.Done()
+				for subCtx.Err() == nil {
+					_ = f.TransferConnection()
+					time.Sleep(100 * time.Millisecond)
 				}
-				closerCh <- struct{}{}
 			}()
 
-			// This test runs for 5 seconds.
+			// This loop will run approximately 5 seconds.
 			var tenant1Addr, tenant2Addr int
 			for i := 0; i < 100; i++ {
 				addr := queryAddr(t, tCtx, db)
@@ -923,35 +941,23 @@ func TestConnectionMigration(t *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			}
 
-			// In 5s, we should have at least 10 successful transfers. Just do
-			// an approximation here.
-			require.Eventually(t, func() bool {
-				return f.metrics.ConnMigrationSuccessCount.Count() >= 5
-			}, 30*time.Second, 100*time.Millisecond)
-			require.True(t, tenant1Addr > 2)
-			require.True(t, tenant2Addr > 2)
+			// Ensure that the goroutine terminates so other subtests are not
+			// affected.
+			cancel()
+			wg.Wait()
+
+			// Ensure that some transfers were performed, and the forwarder isn't
+			// closed.
+			require.True(t, tenant1Addr >= 2)
+			require.True(t, tenant2Addr >= 2)
+			require.Nil(t, f.ctx.Err())
+
+			// Check metrics.
+			require.True(t, f.metrics.ConnMigrationSuccessCount.Count() > initSuccessCount+4)
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorRecoverableCount.Count())
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
 
-			// Ensure that the goroutine terminates so other subtests are not
-			// affected.
-			<-closerCh
-
-			// There's a chance that we still have an in-progress transfer, so
-			// attempt to wait.
-			require.Eventually(t, func() bool {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				return !f.mu.isTransferring
-			}, 10*time.Second, 25*time.Millisecond)
-
-			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
-				f.metrics.ConnMigrationSuccessCount.Count(),
-			)
-			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
-				f.metrics.ConnMigrationAttemptedLatency.TotalCount())
-			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
-				f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
+			validateMiscMetrics(t)
 		})
 
 		// Transfers should fail if there is an open transaction. These failed
@@ -961,8 +967,15 @@ func TestConnectionMigration(t *testing.T) {
 			initAddr := queryAddr(t, tCtx, db)
 
 			err = crdb.ExecuteTx(tCtx, db, nil /* txopts */, func(tx *gosql.Tx) error {
-				for i := 0; i < 10; i++ {
-					f.RequestTransfer()
+				// Run multiple times to ensure that connection isn't closed.
+				for i := 0; i < 5; i++ {
+					err := f.TransferConnection()
+					if err == nil {
+						return errors.New("no error")
+					}
+					if !assert.Regexp(t, "cannot serialize", err.Error()) {
+						return errors.Wrap(err, "non-serialization error")
+					}
 					addr := queryAddr(t, tCtx, tx)
 					if initAddr != addr {
 						return errors.Newf(
@@ -971,44 +984,27 @@ func TestConnectionMigration(t *testing.T) {
 							addr,
 						)
 					}
-					time.Sleep(50 * time.Millisecond)
 				}
 				return nil
 			})
 			require.NoError(t, err)
 
-			// Make sure there are no pending transfers.
-			func() {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				require.False(t, f.mu.isTransferring)
-			}()
-
-			// Just check that we have half of what we requested since we cannot
-			// guarantee that the transfer will run within 50ms.
-			require.True(t, f.metrics.ConnMigrationErrorRecoverableCount.Count() >= 5)
-			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+			// None of the migrations should succeed, and the forwarder should
+			// still be active.
+			require.Nil(t, f.ctx.Err())
 			require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
-			prevErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
+			require.Equal(t, int64(5), f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
 
 			// Once the transaction is closed, transfers should work.
-			f.RequestTransfer()
-			require.Eventually(t, func() bool {
-				return f.metrics.ConnMigrationSuccessCount.Count() == initSuccessCount+1
-			}, 30*time.Second, 100*time.Millisecond)
+			require.NoError(t, f.TransferConnection())
 			require.NotEqual(t, initAddr, queryAddr(t, tCtx, db))
-			require.Equal(t, prevErrorRecoverableCount, f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.Nil(t, f.ctx.Err())
+			require.Equal(t, initSuccessCount+1, f.metrics.ConnMigrationSuccessCount.Count())
+			require.Equal(t, int64(5), f.metrics.ConnMigrationErrorRecoverableCount.Count())
 			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
-			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
-				f.metrics.ConnMigrationAttemptedLatency.TotalCount())
-			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
-				f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
 
-			// We have already asserted metrics above, so transfer must have
-			// been completed.
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			require.False(t, f.mu.isTransferring)
+			validateMiscMetrics(t)
 		})
 
 		// Transfer timeout caused by dial issues should not close the session.
@@ -1023,23 +1019,18 @@ func TestConnectionMigration(t *testing.T) {
 			lookupAddrDelayDuration = 10 * time.Second
 			defer testutils.TestingHook(&defaultTransferTimeout, 3*time.Second)()
 
-			f.RequestTransfer()
-			require.Eventually(t, func() bool {
-				return f.metrics.ConnMigrationErrorRecoverableCount.Count() == initErrorRecoverableCount+1
-			}, 30*time.Second, 100*time.Millisecond)
+			err := f.TransferConnection()
+			require.Error(t, err)
+			require.Regexp(t, "injected delays", err.Error())
 			require.Equal(t, initAddr, queryAddr(t, tCtx, db))
-			require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
-			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
-			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
-				f.metrics.ConnMigrationAttemptedLatency.TotalCount())
-			require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
-				f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
+			require.Nil(t, f.ctx.Err())
 
-			// We have already asserted metrics above, so transfer must have
-			// been completed.
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			require.False(t, f.mu.isTransferring)
+			require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
+			require.Equal(t, initErrorRecoverableCount+1,
+				f.metrics.ConnMigrationErrorRecoverableCount.Count())
+			require.Equal(t, int64(0), f.metrics.ConnMigrationErrorFatalCount.Count())
+
+			validateMiscMetrics(t)
 		})
 	})
 
@@ -1083,6 +1074,9 @@ func TestConnectionMigration(t *testing.T) {
 			t.Fatal("no connection")
 		}
 
+		initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
+		initErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
+
 		// Set up forwarder hooks.
 		prevTenant1 := true
 		f.connector.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
@@ -1103,7 +1097,7 @@ func TestConnectionMigration(t *testing.T) {
 		errCh := make(chan error, 1)
 		go func() {
 			goCh <- struct{}{}
-			_, err = conn.ExecContext(tCtx, "SELECT pg_sleep(10)")
+			_, err := conn.ExecContext(tCtx, "SELECT pg_sleep(10)")
 			errCh <- err
 		}()
 
@@ -1115,34 +1109,39 @@ func TestConnectionMigration(t *testing.T) {
 		// to make sure pg_sleep is running, but that seems unnecessary for just
 		// one test.
 		<-goCh
-		time.Sleep(250 * time.Millisecond)
-		f.RequestTransfer()
+		time.Sleep(2 * time.Second)
+		// This should be an error because the transfer timed out.
+		require.Error(t, f.TransferConnection())
 
 		// Connection should be closed because this is a non-recoverable error,
 		// i.e. timeout after sending the request, but before fully receiving
 		// its response.
-		require.Eventually(t, func() bool {
-			err := conn.PingContext(tCtx)
-			return err != nil && strings.Contains(err.Error(), "bad connection")
-		}, 30*time.Second, 100*time.Millisecond)
+		err = conn.PingContext(tCtx)
+		require.Error(t, err)
+		require.Regexp(t, "(closed|bad connection)", err.Error())
 
 		select {
 		case <-time.After(10 * time.Second):
 			t.Fatalf("require that pg_sleep query terminates")
 		case err = <-errCh:
-			require.NotNil(t, err)
-			require.Regexp(t, "bad connection", err.Error())
+			require.Error(t, err)
+			require.Regexp(t, "(closed|bad connection)", err.Error())
 		}
-		require.Eventually(t, func() bool {
-			return f.metrics.ConnMigrationErrorFatalCount.Count() == 1
-		}, 30*time.Second, 100*time.Millisecond)
-		require.NotNil(t, f.ctx.Err())
-		require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count(),
-			f.metrics.ConnMigrationAttemptedLatency.TotalCount())
 
+		require.EqualError(t, f.ctx.Err(), context.Canceled.Error())
+		require.Equal(t, initSuccessCount, f.metrics.ConnMigrationSuccessCount.Count())
+		require.Equal(t, initErrorRecoverableCount, f.metrics.ConnMigrationErrorRecoverableCount.Count())
+		require.Equal(t, int64(1), f.metrics.ConnMigrationErrorFatalCount.Count())
+
+		totalAttempts := f.metrics.ConnMigrationSuccessCount.Count() +
+			f.metrics.ConnMigrationErrorRecoverableCount.Count() +
+			f.metrics.ConnMigrationErrorFatalCount.Count()
+		require.Equal(t, totalAttempts, f.metrics.ConnMigrationAttemptedCount.Count())
+		require.Equal(t, totalAttempts,
+			f.metrics.ConnMigrationAttemptedLatency.TotalCount())
 		// Here, we get a transfer timeout in response, so the message size
 		// should not be recorded.
-		require.Equal(t, f.metrics.ConnMigrationAttemptedCount.Count()-1,
+		require.Equal(t, totalAttempts-1,
 			f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
 	})
 }
