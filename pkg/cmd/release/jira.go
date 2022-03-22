@@ -18,7 +18,10 @@ import (
 )
 
 const jiraBaseURL = "https://cockroachlabs.atlassian.net/"
-const dryRunProject = "RE"
+
+// TODO(rai): use some "junk" project for the dry-run issues
+const dryRunProject = "REL"
+const sreDryRunProject = "RE"
 
 // for DeployToClusterIssue
 const customFieldHasSLAKey = "customfield_10073"
@@ -31,32 +34,6 @@ const trackingIssueTemplate = `
 * SRE issue: [{{ .SREIssue }}]
 * Deployment status: _fillmein_
 * Publish Cockroach Release: _fillmein_
-
-h2. [Release process checklist|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process]
-
-* Assign the SRE issue [{{ .SREIssue }}] (use "/genie whoisoncall" in Slack). They will be notified by Jira.
-* [5-8. Verify node crash reports|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/328859690/Release+Qualification#Verify-node-crash-reports-appear-in-sentry.io]
-
-h2. Do not proceed below until the release date.
-
-Release date: _fillmein_
-
-* [9. Publish Cockroach Release|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-9.PublishTheRelease]
-* Ack security@ and release-engineering-team@ on the generated AWS S3 bucket write alert to confirm these writes were part of a planned release
-* [10. Check binaries|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-10.CheckBinaries]
-* [12. Announce the release is cut to releases@|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-13.Announcethereleaseiscuttoreleases@]
-* [13. Update version numbers|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-14.Updateversionnumbers]
-* For production or stable releases in the latest [major release|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-Knowifthereleaseisonthelatestmajorreleaseseries] series only (in August 2020, this is the v20.1 series):
-* Update [Brew Recipe|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-Brewrecipe]
-* Update [Orchestrator configurations:CRDB|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-Orchestratorconfigurations:CRDB]
-* Update [Orchestrator configurations:Helm Charts|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-Orchestratorconfigurations:HelmCharts]
-
-For all production or stable releases:
-* Create a ticket in the [Dev Inf tracker|https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/429097164/Submitting+Issues+Requests+to+the+Developer+Infrastructure+team] to update the Red Hat Container Image Repository
-* *After docs are updated* [Announce version to registration cluster|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-AnnounceVersionToRegCluster]
-* [Update version map in bin/roachtest (all stable releases) and regenerate test fixtures (only major release)|https://cockroachlabs.atlassian.net/wiki/spaces/ENG/pages/73105625/Release+process#Releaseprocess-Updateversionmapinroachtestandregeneratetestfixtures]
-* Update docs (handled by Docs team)
-* External communications for release (handled by Marketing team)
 `
 const sreIssueTemplate = `
 Could you deploy the Docker image with the following tag to the release qualification CC cluster?
@@ -188,17 +165,13 @@ func createTrackingIssue(
 		return jiraIssue{}, fmt.Errorf("cannot parse tracking issue template: %w", err)
 	}
 	summary := fmt.Sprintf("Release: %s", release.nextReleaseVersion)
-	projectKey := "RE"
+	projectKey := "REL"
 	if dryRun {
 		projectKey = dryRunProject
 	}
 	issue := newIssue(&jiraIssue{
-		// TODO: remove the following when ready
-		// Before sending the post request, let's override
-		// the `REL` project with our test `RE` project.
-		ProjectKey: projectKey,
-		// TODO: switch to TypeName: "CRDB Release", which requires some fields to be set
-		TypeName:    "Task",
+		ProjectKey:  projectKey,
+		TypeName:    "CRDB Release",
 		Summary:     summary,
 		Description: description,
 	})
@@ -230,7 +203,7 @@ func createSREIssue(client *jiraClient, release releaseInfo, dryRun bool) (jiraI
 	customFields := make(jira.CustomFields)
 	customFields[customFieldHasSLAKey] = "Yes"
 	if dryRun {
-		projectKey = dryRunProject
+		projectKey = sreDryRunProject
 		customFields = nil
 	}
 	issue := newIssue(&jiraIssue{
