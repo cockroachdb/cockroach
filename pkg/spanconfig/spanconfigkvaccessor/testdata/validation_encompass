@@ -1,0 +1,60 @@
+# Test a few instances where the kvaccessor validation should prevent us from
+# violating table invariants (installed spans are non-overlapping).
+# Specifically when updates overlap with and/or encompass spans already
+# present.
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state
+# set        [-A)  [-B|-C)  [--D--)
+kvaccessor-update
+upsert [b,c):A
+upsert [d,e):B
+upsert [e,f):C
+upsert [g,i):D
+----
+ok
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-A)  [-B|-C)  [--D--)
+# set     [--------X--------)
+kvaccessor-update
+upsert [a,g):X
+----
+err: expected to find single row containing upserted spans
+
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-A)  [-B|-C)  [--D--)
+# set     [--------X--|----Y---)
+kvaccessor-update
+upsert [a,e):X
+upsert [e,h):Y
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-A)  [-B|-C)  [--D--)
+# set     [--------X-----------)
+kvaccessor-update
+upsert [a,h):X
+----
+err: expected to find single row containing upserted spans
+
+# keys    a  b  c  d  e  f  g  h  i  j
+# state      [-A)  [-B|-C)  [--D--)
+# set     [--------X-----|--Y--)
+kvaccessor-update
+upsert [a,f):X
+upsert [f,h):Y
+----
+err: expected to find single row containing upserted spans
+
+# All of the attempts above should've errored out -- expect to find the actual
+# state unchanged.
+kvaccessor-get
+span [a,j)
+----
+[b,c):A
+[d,e):B
+[e,f):C
+[g,i):D
