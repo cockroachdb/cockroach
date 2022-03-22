@@ -318,6 +318,10 @@ const (
 	// dedicated subdirectory, to make it easier to apply a different ttl.
 	IncrementalBackupSubdir
 
+	// DateStyleIntervalStyleCastRewrite rewrites cast that cause inconsistencies
+	// when DateStyle/IntervalStyle is enabled.
+	DateStyleIntervalStyleCastRewrite
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -528,6 +532,11 @@ var versionsSingleton = keyedVersions{
 		Key:     IncrementalBackupSubdir,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 92},
 	},
+	{
+		Key:     DateStyleIntervalStyleCastRewrite,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
