@@ -29,18 +29,49 @@ import (
 // Flush flushes in-memory sql stats into system table. Any errors encountered
 // during the flush will be logged as warning.
 func (s *PersistedSQLStats) Flush(ctx context.Context) {
+	now := s.getTimeNow()
+
+	allowDiscardWhenDisabled := PeriodicallyDiscardWhenFlushDisabled.Get(&s.cfg.Settings.SV)
+	minimumFlushInterval := MinimumFlushInterval.Get(&s.cfg.Settings.SV)
+
+	enabled := SQLStatsFlushEnabled.Get(&s.cfg.Settings.SV)
+	flushingTooSoon := now.Before(s.lastFlushStarted.Add(minimumFlushInterval))
+
+	// Handle wiping in-memory stats here, we only wipe in-memory stats under 2
+	// circumstances:
+	// 1. flush is enabled, and we are not early aborting the flush due to flushing
+	//    too frequently.
+	// 2. flush is disabled, but we allow discard in-memory stats when disabled.
+	shouldWipeInMemoryStats := enabled && !flushingTooSoon
+	shouldWipeInMemoryStats = shouldWipeInMemoryStats || (!enabled && allowDiscardWhenDisabled)
+
+	if shouldWipeInMemoryStats {
+		defer func() {
+			if err := s.SQLStats.Reset(ctx); err != nil {
+				log.Warningf(ctx, "fail to reset in-memory SQL Stats: %s", err)
+			}
+		}()
+	}
+
+	// Handle early abortion of the flush.
+	if !enabled {
+		return
+	}
+
+	if flushingTooSoon {
+		log.Infof(ctx, "flush aborted due to high flush frequency. "+
+			"The minimum interval between flushes is %s", minimumFlushInterval.String())
+		return
+	}
+
+	s.lastFlushStarted = now
 	log.Infof(ctx, "flushing %d stmt/txn fingerprints (%d bytes) after %s",
 		s.SQLStats.GetTotalFingerprintCount(), s.SQLStats.GetTotalFingerprintBytes(), timeutil.Since(s.lastFlushStarted))
 
 	aggregatedTs := s.ComputeAggregatedTs()
-	s.lastFlushStarted = s.getTimeNow()
 
 	s.flushStmtStats(ctx, aggregatedTs)
 	s.flushTxnStats(ctx, aggregatedTs)
-
-	if err := s.SQLStats.Reset(ctx); err != nil {
-		log.Warningf(ctx, "fail to reset in-memory SQL Stats: %s", err)
-	}
 }
 
 func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs time.Time) {
