@@ -283,6 +283,11 @@ func (*DummyEvalPlanner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context
 	return errors.WithStack(errEvalPlanner)
 }
 
+// RepairTTLScheduledJobForTable is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 // ExecutorConfig is part of the EvalPlanner interface.
 func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil

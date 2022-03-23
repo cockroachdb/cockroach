@@ -17,16 +17,26 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +49,6 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 		desc          string
 		setup         func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID int64)
 		expectedErrRe func(tableID descpb.ID, scheduleID int64) string
-		cleanup       func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, tableID descpb.ID, scheduleID int64)
 	}{
 		{
 			desc: "not pointing at a valid scheduled job",
@@ -50,13 +59,43 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 				}))
 			},
 			expectedErrRe: func(tableID descpb.ID, scheduleID int64) string {
-				return fmt.Sprintf(`table id %d does not have a maps to a non-existent scheduled job id %d`, tableID, scheduleID)
+				return fmt.Sprintf(`table id %d maps to a non-existent schedule id 0`, tableID)
 			},
-			cleanup: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, tableID descpb.ID, scheduleID int64) {
-				_, err := sqlDB.Exec(`DROP SCHEDULE $1`, scheduleID)
-				require.NoError(t, err)
-				_, err = sqlDB.Exec(`SELECT crdb_internal.repair_ttl_table_scheduled_job($1)`, tableID)
-				require.NoError(t, err)
+		},
+		{
+			desc: "scheduled job points at an different table",
+			setup: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID int64) {
+				ie := s.InternalExecutor().(sqlutil.InternalExecutor)
+				require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					sj, err := jobs.LoadScheduledJob(
+						ctx,
+						jobstest.NewJobSchedulerTestEnv(
+							jobstest.UseSystemTables,
+							timeutil.Now(),
+							tree.ScheduledBackupExecutor,
+						),
+						scheduleID,
+						ie,
+						txn,
+					)
+					if err != nil {
+						return err
+					}
+					var args catpb.ScheduledRowLevelTTLArgs
+					if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, &args); err != nil {
+						return err
+					}
+					args.TableID = 0
+					any, err := pbtypes.MarshalAny(&args)
+					if err != nil {
+						return err
+					}
+					sj.SetExecutionDetails(sj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
+					return sj.Update(ctx, ie, txn)
+				}))
+			},
+			expectedErrRe: func(tableID descpb.ID, scheduleID int64) string {
+				return fmt.Sprintf(`schedule id %d points to table id 0 instead of table id %d`, scheduleID, tableID)
 			},
 		},
 	}
@@ -78,13 +117,19 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 			_, err = sqlDB.Exec(`SELECT crdb_internal.validate_ttl_scheduled_jobs()`)
 			require.Error(t, err)
 			require.Regexp(t, tc.expectedErrRe(tableDesc.GetID(), scheduleID), err)
+			var pgxErr *pq.Error
+			require.True(t, errors.As(err, &pgxErr))
 			require.Regexp(
 				t,
-				fmt.Sprintf(`use crdb_internal.repair_ttl_table_scheduled_job(%d) to repair the missing job`, tableDesc.GetID()),
-				err,
+				fmt.Sprintf(`use crdb_internal.repair_ttl_table_scheduled_job\(%d\) to repair the missing job`, tableDesc.GetID()),
+				pgxErr.Hint,
 			)
 
-			tc.cleanup(t, sqlDB, kvDB, tableDesc.GetID(), scheduleID)
+			// Repair and check jobs are valid.
+			_, err = sqlDB.Exec(`DROP SCHEDULE $1`, scheduleID)
+			require.NoError(t, err)
+			_, err = sqlDB.Exec(`SELECT crdb_internal.repair_ttl_table_scheduled_job($1)`, tableDesc.GetID())
+			require.NoError(t, err)
 			_, err = sqlDB.Exec(`SELECT crdb_internal.validate_ttl_scheduled_jobs()`)
 			require.NoError(t, err)
 		})
