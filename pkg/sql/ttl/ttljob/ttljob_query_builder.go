@@ -44,6 +44,10 @@ type selectQueryBuilder struct {
 	// cachedArgs keeps a cache of args to use in the run query.
 	// The cache is of form [cutoff, <endFilterClause...>, <startFilterClause..>].
 	cachedArgs []interface{}
+	// pkColumnNamesSQL caches the column names of the PK.
+	pkColumnNamesSQL string
+	// endPKColumnNamesSQL caches the column names of the ending PK.
+	endPKColumnNamesSQL string
 }
 
 func makeSelectQueryBuilder(
@@ -56,13 +60,13 @@ func makeSelectQueryBuilder(
 ) selectQueryBuilder {
 	// We will have a maximum of 1 + len(pkColumns)*2 columns, where one
 	// is reserved for AOST, and len(pkColumns) for both start and end key.
-	argsCache := make([]interface{}, 0, 1+len(pkColumns)*2)
-	argsCache = append(argsCache, cutoff)
+	cachedArgs := make([]interface{}, 0, 1+len(pkColumns)*2)
+	cachedArgs = append(cachedArgs, cutoff)
 	for _, d := range endPK {
-		argsCache = append(argsCache, d)
+		cachedArgs = append(cachedArgs, d)
 	}
 	for _, d := range startPK {
-		argsCache = append(argsCache, d)
+		cachedArgs = append(cachedArgs, d)
 	}
 
 	return selectQueryBuilder{
@@ -73,21 +77,21 @@ func makeSelectQueryBuilder(
 		aost:            aost,
 		selectBatchSize: selectBatchSize,
 
-		cachedArgs: argsCache,
-		isFirst:    true,
+		cachedArgs:          cachedArgs,
+		isFirst:             true,
+		pkColumnNamesSQL:    makeColumnNamesSQL(pkColumns),
+		endPKColumnNamesSQL: makeColumnNamesSQL(pkColumns[:len(endPK)]),
 	}
 }
 
 func (b *selectQueryBuilder) buildQuery() string {
-	columnNamesSQL := makeColumnNamesSQL(b.pkColumns)
-
 	// Generate the end key clause for SELECT, which always stays the same.
 	// Start from $2 as $1 is for the now clause.
 	// The end key of a range is exclusive, so use <.
 	var endFilterClause string
 	if len(b.endPK) > 0 {
-		endFilterClause = fmt.Sprintf(" AND (%s) < (", columnNamesSQL)
-		for i := range b.pkColumns {
+		endFilterClause = fmt.Sprintf(" AND (%s) < (", b.endPKColumnNamesSQL)
+		for i := range b.endPK {
 			if i > 0 {
 				endFilterClause += ", "
 			}
@@ -99,7 +103,7 @@ func (b *selectQueryBuilder) buildQuery() string {
 	var filterClause string
 	if !b.isFirst {
 		// After the first query, we always want (col1, ...) > (cursor_col_1, ...)
-		filterClause = fmt.Sprintf(" AND (%s) > (", columnNamesSQL)
+		filterClause = fmt.Sprintf(" AND (%s) > (", b.pkColumnNamesSQL)
 		for i := range b.pkColumns {
 			if i > 0 {
 				filterClause += ", "
@@ -111,8 +115,8 @@ func (b *selectQueryBuilder) buildQuery() string {
 		filterClause += ")"
 	} else if len(b.startPK) > 0 {
 		// For the the first query, we want (col1, ...) >= (cursor_col_1, ...)
-		filterClause = fmt.Sprintf(" AND (%s) >= (", columnNamesSQL)
-		for i := range b.pkColumns {
+		filterClause = fmt.Sprintf(" AND (%s) >= (", makeColumnNamesSQL(b.pkColumns[:len(b.startPK)]))
+		for i := range b.startPK {
 			if i > 0 {
 				filterClause += ", "
 			}
@@ -129,7 +133,7 @@ AS OF SYSTEM TIME %[3]s
 WHERE crdb_internal_expiration <= $1%[4]s%[5]s
 ORDER BY %[1]s
 LIMIT %[6]d`,
-		columnNamesSQL,
+		b.pkColumnNamesSQL,
 		b.tableID,
 		b.aost.String(),
 		filterClause,
@@ -214,15 +218,15 @@ type deleteQueryBuilder struct {
 func makeDeleteQueryBuilder(
 	tableID descpb.ID, cutoff time.Time, pkColumns []string, deleteBatchSize int,
 ) deleteQueryBuilder {
-	argsCache := make([]interface{}, 0, 1+len(pkColumns)*deleteBatchSize)
-	argsCache = append(argsCache, cutoff)
+	cachedArgs := make([]interface{}, 0, 1+len(pkColumns)*deleteBatchSize)
+	cachedArgs = append(cachedArgs, cutoff)
 
 	return deleteQueryBuilder{
 		tableID:         tableID,
 		pkColumns:       pkColumns,
 		deleteBatchSize: deleteBatchSize,
 
-		cachedArgs: argsCache,
+		cachedArgs: cachedArgs,
 	}
 }
 

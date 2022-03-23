@@ -498,7 +498,10 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				for i := 0; i < tc.numSplits; i++ {
 					var values []interface{}
 					var placeholders []string
-					for idx := 0; idx < tbDesc.GetPrimaryIndex().NumKeyColumns(); idx++ {
+
+					// Note we can split a PRIMARY KEY partially.
+					numKeyCols := 1 + rng.Intn(tbDesc.GetPrimaryIndex().NumKeyColumns())
+					for idx := 0; idx < numKeyCols; idx++ {
 						col, err := tbDesc.FindColumnWithID(tbDesc.GetPrimaryIndex().GetKeyColumnID(idx))
 						require.NoError(t, err)
 						placeholders = append(placeholders, fmt.Sprintf("$%d", idx+1))
