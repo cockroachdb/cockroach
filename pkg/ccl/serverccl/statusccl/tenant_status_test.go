@@ -439,6 +439,7 @@ VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 					Exec(t, "SELECT * FROM test")
 
 				// Record scan on secondary index.
+				// Note that this an index join and will also read from the primary index.
 				cluster.tenantConn(randomServer).
 					Exec(t, "SELECT * FROM test@test_a_idx")
 				testTableIDStr := cluster.tenantConn(randomServer).
@@ -463,7 +464,7 @@ WHERE
   table_id = ` + testTableIDStr
 				// Assert index usage data was inserted.
 				expected := [][]string{
-					{testTableIDStr, "1", "1", "true"},
+					{testTableIDStr, "1", "2", "true"}, // Primary index
 					{testTableIDStr, "2", "1", "true"},
 				}
 				cluster.tenantConn(randomServer).CheckQueryResults(t, query, expected)
@@ -771,6 +772,7 @@ VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
 	testingCluster.tenantConn(0).Exec(t, "SELECT * FROM idx_test.test")
 
 	// Record scan on secondary index.
+	// Note that this an index join and will also read from the primary index.
 	testingCluster.tenantConn(1).Exec(t, "SELECT * FROM idx_test.test@test_a_idx")
 	testTableIDStr := testingCluster.tenantConn(2).QueryStr(t, "SELECT 'idx_test.test'::regclass::oid")[0][0]
 	testTableID, err := strconv.Atoi(testTableIDStr)
@@ -789,7 +791,7 @@ WHERE
 `
 	actual := testingCluster.tenantConn(2).QueryStr(t, query, testTableID)
 	expected := [][]string{
-		{testTableIDStr, "1", "1", "true"},
+		{testTableIDStr, "1", "2", "true"},
 		{testTableIDStr, "2", "1", "true"},
 	}
 
