@@ -72,11 +72,26 @@ func randPartialIndexPredicateFromCols(
 // This function must be kept in sync with the implementation of
 // randBoolColumnExpr.
 func isAllowedPartialIndexColType(columnTableDef *tree.ColumnTableDef) bool {
-	switch fam := columnTableDef.Type.(*types.T).Family(); fam {
+	typ := columnTableDef.Type.(*types.T)
+	switch typ.Family() {
 	case types.BoolFamily, types.IntFamily, types.FloatFamily, types.DecimalFamily,
 		types.StringFamily, types.DateFamily, types.TimeFamily, types.TimeTZFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.BytesFamily:
-		return true
+		switch typ.Oid() {
+		case oid.T_bpchar, oid.T_char:
+			// Bugs were introduced in 21.2 that cause incorrect values to be
+			// generated for synthesized partial index PUT and DEL columns that
+			// reference columns of type CHAR or "char". This can corrupt
+			// indexes and cause incorrect query results. These bugs have been
+			// fixed in more recent releases with the implementation of
+			// assignment casts, but this is far too large of a change to
+			// backport. To prevent rediscovering the same bug repeatedly, we
+			// avoid building partial index predicates that reference CHAR and
+			// "char" types.
+			return false
+		default:
+			return true
+		}
 	default:
 		return false
 	}
