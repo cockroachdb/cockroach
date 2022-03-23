@@ -112,14 +112,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -168,14 +170,12 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -224,14 +224,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -279,14 +281,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							case 32:
@@ -331,14 +335,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							case -1:
@@ -384,14 +390,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -440,14 +448,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -496,14 +506,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -552,14 +564,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -608,14 +622,12 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -664,14 +676,13 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Set(outStartIdx+i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -751,14 +762,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -807,14 +820,12 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -863,14 +874,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -918,14 +931,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							case 32:
@@ -970,14 +985,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							case -1:
@@ -1023,14 +1040,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -1079,14 +1098,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -1135,14 +1156,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -1191,14 +1214,16 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
+											outCol := outCol[outStartIdx:]
+											_ = outCol[toAppend-1]
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												//gcassert:bce
+												outCol.Set(i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -1247,14 +1272,12 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
-											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
@@ -1303,14 +1326,13 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										}
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-											outStartIdx += toAppend
 										} else {
 											val := srcCol.Get(srcStartIdx)
 											for i := 0; i < toAppend; i++ {
-												outCol.Set(outStartIdx, val)
-												outStartIdx++
+												outCol.Set(outStartIdx+i, val)
 											}
 										}
+										outStartIdx += toAppend
 									}
 								}
 							}
