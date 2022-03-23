@@ -3307,6 +3307,9 @@ type EvalPlanner interface {
 	// ValidateTTLScheduledJobsInCurrentDB checks scheduled jobs for each table
 	// in the database maps to a scheduled job.
 	ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error
+	// RepairTTLScheduledJob repairs the scheduled job for the given table if
+	// it is invalid.
+	RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error
 
 	// QueryRowEx executes the supplied SQL statement and returns a single row, or
 	// nil if no row is found, or an error if more that one row is returned.
