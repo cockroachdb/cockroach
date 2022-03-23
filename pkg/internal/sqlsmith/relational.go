@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/lib/pq/oid"
 )
 
 func (s *Smither) makeStmt() (stmt tree.Statement, ok bool) {
@@ -211,10 +210,14 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 	var available [][2]tree.TypedExpr
 	for _, leftCol := range leftRefs {
 		for _, rightCol := range rightRefs {
-			// You can't compare voids.
-			if leftCol.typ.Oid() == oid.T_void || rightCol.typ.Oid() == oid.T_void {
+			// Don't compare non-scalar types. This avoids trying to
+			// compare types like arrays of tuples, tuple[], which
+			// cannot be compared. However, it also avoids comparing
+			// some types that can be compared, like arrays.
+			if !s.isScalarType(leftCol.typ) || !s.isScalarType(rightCol.typ) {
 				continue
 			}
+
 			if leftCol.typ.Equivalent(rightCol.typ) {
 				available = append(available, [2]tree.TypedExpr{
 					typedParen(leftCol.item, leftCol.typ),
@@ -276,7 +279,7 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 	// Now look for one that satisfies our constraints (some shared prefix
 	// of type + direction), might end up being the same one. We rely on
 	// Go's non-deterministic map iteration ordering for randomness.
-	rightTableName, cols := func() (*tree.TableIndexName, [][2]colRef) {
+	rightTableName, cols, ok := func() (*tree.TableIndexName, [][2]colRef, bool) {
 		s.lock.RLock()
 		defer s.lock.RUnlock()
 		for tbl, idxs := range s.indexes {
@@ -305,8 +308,11 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 					}
 					leftType := tree.MustBeStaticallyKnownType(leftCol.Type)
 					rightType := tree.MustBeStaticallyKnownType(rightCol.Type)
-					// You can't compare voids.
-					if leftType.Oid() == oid.T_void || rightType.Oid() == oid.T_void {
+					// Don't compare non-scalar types. This avoids trying to
+					// compare types like arrays of tuples, tuple[], which
+					// cannot be compared. However, it also avoids comparing
+					// some types that can be compared, like arrays.
+					if !s.isScalarType(leftType) || !s.isScalarType(rightType) {
 						break
 					}
 					cols = append(cols, [2]colRef{
@@ -324,13 +330,15 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 					}
 				}
 				if len(cols) > 0 {
-					return rightTableName, cols
+					return rightTableName, cols, true
 				}
 			}
 		}
-		// Since we can always match leftIdx we should never get here.
-		panic("unreachable")
+		return nil, nil, false
 	}()
+	if !ok {
+		return nil, nil, false
+	}
 
 	// joinRefs are limited to columns in the indexes (even if they don't
 	// appear in the join condition) because non-stored columns will cause
