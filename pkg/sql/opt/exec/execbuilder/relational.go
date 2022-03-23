@@ -1960,10 +1960,27 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 		leftEqCols[i] = exec.TableColumnOrdinal(join.LeftTable.ColumnOrdinal(join.LeftEqCols[i]))
 		rightEqCols[i] = exec.TableColumnOrdinal(join.RightTable.ColumnOrdinal(join.RightEqCols[i]))
 	}
+
+	// Determine the columns that are needed from each side.
 	leftCols := md.TableMeta(join.LeftTable).IndexColumns(join.LeftIndex).Intersection(join.Cols)
 	rightCols := md.TableMeta(join.RightTable).IndexColumns(join.RightIndex).Intersection(join.Cols)
 	// Remove duplicate columns, if any.
 	rightCols.DifferenceWith(leftCols)
+	// Make sure each side's columns always include the equality columns.
+	for i := range join.LeftEqCols {
+		leftCols.Add(join.LeftEqCols[i])
+		rightCols.Add(join.RightEqCols[i])
+	}
+	// Make sure each side's columns always include the fixed index prefix
+	// columns.
+	leftNumFixed := len(join.FixedVals[0].(*memo.TupleExpr).Elems)
+	for i := 0; i < leftNumFixed; i++ {
+		leftCols.Add(join.LeftTable.IndexColumnID(leftIndex, i))
+	}
+	rightNumFixed := len(join.FixedVals[1].(*memo.TupleExpr).Elems)
+	for i := 0; i < rightNumFixed; i++ {
+		rightCols.Add(join.RightTable.IndexColumnID(rightIndex, i))
+	}
 
 	leftOrdinals, leftColMap := b.getColumns(leftCols, join.LeftTable)
 	rightOrdinals, rightColMap := b.getColumns(rightCols, join.RightTable)
@@ -2020,7 +2037,8 @@ func (b *Builder) buildZigzagJoin(join *memo.ZigzagJoinExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	return res, nil
+	// Apply a post-projection to retain only the columns we need.
+	return b.applySimpleProject(res, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
 func (b *Builder) buildMax1Row(max1Row *memo.Max1RowExpr) (execPlan, error) {

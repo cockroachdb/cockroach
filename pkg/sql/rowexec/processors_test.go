@@ -72,16 +72,14 @@ func TestPostProcess(t *testing.T) {
 	}
 
 	testCases := []struct {
-		post          execinfrapb.PostProcessSpec
-		outputTypes   []*types.T
-		expNeededCols []int
-		expected      string
+		post        execinfrapb.PostProcessSpec
+		outputTypes []*types.T
+		expected    string
 	}{
 		{
-			post:          execinfrapb.PostProcessSpec{},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 
 		// Projection.
@@ -90,9 +88,8 @@ func TestPostProcess(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
-			outputTypes:   types.TwoIntCols,
-			expNeededCols: []int{0, 2},
-			expected:      "[[0 2] [0 3] [0 4] [0 3] [0 4] [0 4] [1 3] [1 4] [1 4] [2 4]]",
+			outputTypes: types.TwoIntCols,
+			expected:    "[[0 2] [0 3] [0 4] [0 3] [0 4] [0 4] [1 3] [1 4] [1 4] [2 4]]",
 		},
 
 		// Rendering.
@@ -100,9 +97,8 @@ func TestPostProcess(t *testing.T) {
 			post: execinfrapb.PostProcessSpec{
 				RenderExprs: []execinfrapb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1},
-			expected:      "[[0 1 1] [0 1 1] [0 1 1] [0 2 2] [0 2 2] [0 3 3] [1 2 3] [1 2 3] [1 3 4] [2 3 5]]",
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 1] [0 1 1] [0 1 1] [0 2 2] [0 2 2] [0 3 3] [1 2 3] [1 2 3] [1 3 4] [2 3 5]]",
 		},
 
 		// More complex rendering expressions.
@@ -117,8 +113,7 @@ func TestPostProcess(t *testing.T) {
 					{Expr: "@1 = @2 - 1 AND @1 = @3 - 2"},
 				},
 			},
-			outputTypes:   []*types.T{types.Int, types.Int, types.Bool, types.Bool, types.Bool, types.Bool},
-			expNeededCols: []int{0, 1, 2},
+			outputTypes: []*types.T{types.Int, types.Int, types.Bool, types.Bool, types.Bool, types.Bool},
 			expected: "[" + strings.Join([]string{
 				/* 0 1 2 */ "[-1 2 false true true true]",
 				/* 0 1 3 */ "[-1 3 false true true false]",
@@ -135,62 +130,53 @@ func TestPostProcess(t *testing.T) {
 
 		// Offset.
 		{
-			post:          execinfrapb.PostProcessSpec{Offset: 3},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Offset: 3},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 
 		// Limit.
 		{
-			post:          execinfrapb.PostProcessSpec{Limit: 3},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 2] [0 1 3] [0 1 4]]",
+			post:        execinfrapb.PostProcessSpec{Limit: 3},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 2] [0 1 3] [0 1 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Limit: 9},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Limit: 9},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Limit: 10},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Limit: 10},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Limit: 11},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Limit: 11},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 
 		// Offset + limit.
 		{
-			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 2},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 2 3] [0 2 4]]",
+			post:        execinfrapb.PostProcessSpec{Offset: 3, Limit: 2},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 2 3] [0 2 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 6},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Offset: 3, Limit: 6},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 7},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Offset: 3, Limit: 7},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
-			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 8},
-			outputTypes:   types.ThreeIntCols,
-			expNeededCols: []int{0, 1, 2},
-			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
+			post:        execinfrapb.PostProcessSpec{Offset: 3, Limit: 8},
+			outputTypes: types.ThreeIntCols,
+			expected:    "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 	}
 
@@ -207,20 +193,6 @@ func TestPostProcess(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Verify NeededColumns().
-			count := 0
-			neededCols := out.NeededColumns()
-			neededCols.ForEach(func(_ int) {
-				count++
-			})
-			if count != len(tc.expNeededCols) {
-				t.Fatalf("invalid neededCols length %d, expected %d", count, len(tc.expNeededCols))
-			}
-			for _, col := range tc.expNeededCols {
-				if !neededCols.Contains(col) {
-					t.Errorf("column %d not found in neededCols", col)
-				}
-			}
 			// Run the rows through the helper.
 			for i := range input {
 				status, err := out.EmitRow(context.Background(), input[i], outBuf)

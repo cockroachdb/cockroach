@@ -52,7 +52,7 @@ type zigzagJoinSide struct {
 	scan *scanNode
 
 	// eqCols is an int slice containing the equated columns for this side
-	// of the zigzag join.
+	// of the zigzag join (as ordinals into scan.cols).
 	eqCols []int
 
 	// fixedVals contains fixed values for a prefix of this side's index columns.

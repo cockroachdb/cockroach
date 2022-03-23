@@ -1443,7 +1443,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			return
 		}
 
-		// We treat the fixed values for JSON and Array as DBytes.
+		// We treat the fixed values for JSON and Array as DEncodedKey.
 		leftVal := tree.DEncodedKey(vals[0])
 		rightVal := tree.DEncodedKey(vals[1])
 
