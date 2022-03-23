@@ -49,6 +49,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/iterutil",
+        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
