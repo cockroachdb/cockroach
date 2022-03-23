@@ -54,11 +54,11 @@ func TestDirectoryErrors(t *testing.T) {
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1002 not in directory cache")
 
 	// Fail to find tenant that does not exist.
-	_, err = dir.EnsureTenantAddr(ctx, roachpb.MakeTenantID(1000), "")
+	_, err = dir.LookupTenantAddr(ctx, roachpb.MakeTenantID(1000), "")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1000 not found")
 
 	// Fail to find tenant when cluster name doesn't match.
-	_, err = dir.EnsureTenantAddr(ctx, roachpb.MakeTenantID(tenantID), "unknown")
+	_, err = dir.LookupTenantAddr(ctx, roachpb.MakeTenantID(tenantID), "unknown")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = cluster name unknown doesn't match expected tenant-cluster")
 
 	// No-op when reporting failure for tenant that doesn't exit.
@@ -81,8 +81,8 @@ func TestWatchPods(t *testing.T) {
 	tenantID := roachpb.MakeTenantID(20)
 	require.NoError(t, createTenant(tc, tenantID))
 
-	// Call EnsureTenantAddr to start a new tenant and create an entry.
-	addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
+	// Call LookupTenantAddr to start a new tenant and create an entry.
+	addr, err := dir.LookupTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
 
@@ -148,8 +148,8 @@ func TestWatchPods(t *testing.T) {
 	require.Equal(t, addr, pod.Addr)
 	require.Equal(t, tenant.RUNNING, pod.State)
 
-	// Verify that EnsureTenantAddr returns the pod's IP address.
-	addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
+	// Verify that LookupTenantAddr returns the pod's IP address.
+	addr, err = dir.LookupTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
 
@@ -176,8 +176,8 @@ func TestWatchPods(t *testing.T) {
 	require.Equal(t, addr, pod.Addr)
 	require.Equal(t, tenant.DELETING, pod.State)
 
-	// Verify that a new call to EnsureTenantAddr will resume again the tenant.
-	addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
+	// Verify that a new call to LookupTenantAddr will resume again the tenant.
+	addr, err = dir.LookupTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
 
@@ -206,7 +206,7 @@ func TestCancelLookups(t *testing.T) {
 	for i := 0; i < lookupCount; i++ {
 		wait.Add(1)
 		go func(i int) {
-			_, backgroundErrors[i] = dir.EnsureTenantAddr(ctx, tenantID, "")
+			_, backgroundErrors[i] = dir.LookupTenantAddr(ctx, tenantID, "")
 			wait.Done()
 		}(i)
 	}
@@ -245,7 +245,7 @@ func TestResume(t *testing.T) {
 		wait.Add(1)
 		go func(i int) {
 			var err error
-			addrs[i], err = dir.EnsureTenantAddr(ctx, tenantID, "")
+			addrs[i], err = dir.LookupTenantAddr(ctx, tenantID, "")
 			require.NoError(t, err)
 			wait.Done()
 		}(i)
@@ -283,13 +283,13 @@ func TestDeleteTenant(t *testing.T) {
 	require.NoError(t, createTenant(tc, tenantID))
 
 	// Perform lookup to create entry in cache.
-	addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
+	addr, err := dir.LookupTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
 
 	// Report failure even though tenant is healthy - refresh should do nothing.
 	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
-	addr, err = dir.EnsureTenantAddr(ctx, tenantID, "")
+	addr, err = dir.LookupTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
 
@@ -312,9 +312,9 @@ func TestDeleteTenant(t *testing.T) {
 	// Now delete the tenant.
 	require.NoError(t, destroyTenant(tc, tenantID))
 
-	// Now EnsureTenantAddr should return an error and the directory should no
+	// Now LookupTenantAddr should return an error and the directory should no
 	// longer cache the tenant.
-	_, err = dir.EnsureTenantAddr(ctx, tenantID, "")
+	_, err = dir.LookupTenantAddr(ctx, tenantID, "")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 50 not found")
 	addrs, err = dir.TryLookupTenantAddrs(ctx, tenantID)
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 50 not in directory cache")
@@ -338,7 +338,7 @@ func TestRefreshThrottling(t *testing.T) {
 	require.NoError(t, createTenant(tc, tenantID))
 
 	// Perform lookup to create entry in cache.
-	addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
+	addr, err := dir.LookupTenantAddr(ctx, tenantID, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
 
@@ -396,10 +396,10 @@ func TestLoadBalancing(t *testing.T) {
 	}
 
 	// Both tenants will have the same initial (and fake) load reporting.
-	// Observe that EnsureTenantAddr evenly distributes load across them.
+	// Observe that LookupTenantAddr evenly distributes load across them.
 	responses := map[string]int{}
 	for i := 0; i < 100; i++ {
-		addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
+		addr, err := dir.LookupTenantAddr(ctx, tenantID, "")
 		require.NoError(t, err)
 		responses[addr] += 1
 	}
@@ -426,7 +426,7 @@ func TestLoadBalancing(t *testing.T) {
 
 	responses = map[string]int{}
 	for i := 0; i < 100; i++ {
-		addr, err := dir.EnsureTenantAddr(ctx, tenantID, "")
+		addr, err := dir.LookupTenantAddr(ctx, tenantID, "")
 		require.NoError(t, err)
 		responses[addr] += 1
 	}
