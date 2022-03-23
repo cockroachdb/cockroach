@@ -29,6 +29,32 @@ var SQLStatsFlushInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 ).WithPublic()
 
+// MinimumInterval is the cluster setting that controls the minimum
+// between each flush operation. If flush operations get triggered faster
+// than what is allowed by this setting, (e.g. when too many fingerprints are
+// generated in a short span of time, which in turn cause memory pressure), the
+// flush operation will be aborted.
+var MinimumInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.stats.flush.minimum_interval",
+	"the minimum interval that SQL stats can be flushes to disk. If a "+
+		"flush operation starts within less than the minimum interval, the flush "+
+		"operation will be aborted",
+	0,
+	settings.NonNegativeDuration,
+)
+
+// DiscardInMemoryStatsWhenFlushDisabled is the cluster setting that allows the
+// older in-memory SQL stats to be discarded when flushing to persisted tables
+// is disabled.
+var DiscardInMemoryStatsWhenFlushDisabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.stats.flush.force_cleanup.enabled",
+	"if set, older SQL stats are discarded periodically when flushing to "+
+		"persisted tables is disabled",
+	false,
+)
+
 // SQLStatsFlushEnabled is the cluster setting that controls if the sqlstats
 // subsystem persists the statistics into system table.
 var SQLStatsFlushEnabled = settings.RegisterBoolSetting(
