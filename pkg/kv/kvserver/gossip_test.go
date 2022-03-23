@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -183,7 +184,17 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	newServerArgs.JoinAddr = tc.Servers[1].ServingRPCAddr()
 	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
-	tc.AddAndStartServer(t, newServerArgs)
+	// We are re-using a hard-coded port. Other processes on the system may by now
+	// be listening on this port, so there will be flakes. For now, skip the test
+	// when this flake occurs.
+	//
+	// The real solution would be to create listeners for both RPC and SQL at the
+	// beginning of the test, and to make sure they aren't closed on server
+	// shutdown. Then we can pass the listeners to the second invocation. Alas,
+	// this requires some refactoring that remains out of scope for now.
+	if err := tc.AddAndStartServerE(newServerArgs); err != nil && !testutils.IsError(err, `address already in use`) {
+		t.Fatal(err)
+	}
 
 	tc.WaitForNStores(t, tc.NumServers(), tc.Server(1).GossipI().(*gossip.Gossip))
 

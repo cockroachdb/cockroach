@@ -137,7 +137,7 @@ func registerSysbench(r registry.Registry) {
 	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
 		const n = 3
 		const cpus = 32
-		const conc = 4 * cpus
+		const conc = 8 * cpus
 		opts := sysbenchOptions{
 			workload:     w,
 			duration:     10 * time.Minute,

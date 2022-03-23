@@ -557,6 +557,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		scKVAccessor := spanconfigkvaccessor.New(
 			db, internalExecutor, cfg.Settings,
 			systemschema.SpanConfigurationsTableName.FQString(),
+			spanConfigKnobs,
 		)
 		spanConfig.kvAccessor, spanConfig.kvAccessorForTenantRecords = scKVAccessor, scKVAccessor
 	} else {

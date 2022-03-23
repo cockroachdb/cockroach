@@ -3300,29 +3300,19 @@ alter_unsupported_stmt:
 //        <format> <datafile>
 //        [ WITH <option> [= <value>] [, ...] ]
 //
-// -- Import using specific schema, use only table data from external file:
-// IMPORT TABLE <tablename>
-//        { ( <elements> ) | CREATE USING <schemafile> }
-//        <format>
-//        DATA ( <datafile> [, ...] )
-//        [ WITH <option> [= <value>] [, ...] ]
-//
 // Formats:
-//    CSV
-//    DELIMITED
 //    MYSQLDUMP
-//    PGCOPY
 //    PGDUMP
 //
 // Options:
 //    distributed = '...'
 //    sstsize = '...'
 //    temp = '...'
-//    delimiter = '...'      [CSV, PGCOPY-specific]
-//    nullif = '...'         [CSV, PGCOPY-specific]
-//    comment = '...'        [CSV-specific]
 //
-// %SeeAlso: CREATE TABLE
+// Use CREATE TABLE followed by IMPORT INTO to create and import into a table
+// from external files that only have table data.
+//
+// %SeeAlso: CREATE TABLE, WEBDOCS/import-into.html
 import_stmt:
  IMPORT import_format '(' string_or_placeholder ')' opt_with_options
   {
