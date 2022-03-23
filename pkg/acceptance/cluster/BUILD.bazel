@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/util/contextutil",
         "//pkg/util/log",
