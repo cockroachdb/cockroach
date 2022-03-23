@@ -85,6 +85,7 @@ const (
 	SpanConfigurationsTableName            SystemTableName = "span_configurations"
 	TenantSettingsTableName                SystemTableName = "tenant_settings"
 	SpanCountTableName                     SystemTableName = "span_count"
+	UserIDSequenceTableName                SystemTableName = "user_id_seq"
 )
 
 // Oid for virtual database and table.

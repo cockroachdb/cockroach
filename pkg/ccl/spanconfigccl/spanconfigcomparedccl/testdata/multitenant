@@ -62,10 +62,10 @@ diff offset=48 limit=10
 +/Tenant/11/Table/5                         database system (tenant)
 +/Tenant/11/Table/6                         database system (tenant)
 +/Tenant/11/Table/7                         database system (tenant)
++/Tenant/11/Table/9                         database system (tenant)
 +/Tenant/11/Table/11                        database system (tenant)
 +/Tenant/11/Table/12                        database system (tenant)
 +/Tenant/11/Table/13                        database system (tenant)
-+/Tenant/11/Table/14                        database system (tenant)
  ...
 
 # Sanity check that new tenant tables show up correctly.
@@ -88,6 +88,7 @@ diff offset=48
 +/Tenant/11/Table/5                         database system (tenant)
 +/Tenant/11/Table/6                         database system (tenant)
 +/Tenant/11/Table/7                         database system (tenant)
++/Tenant/11/Table/9                         database system (tenant)
 +/Tenant/11/Table/11                        database system (tenant)
 +/Tenant/11/Table/12                        database system (tenant)
 +/Tenant/11/Table/13                        database system (tenant)

@@ -257,6 +257,7 @@ func (ms MetadataSchema) allocateID() (nextID descpb.ID) {
 func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// Add system database.
 	target.AddDescriptor(systemschema.SystemDB)
+	target.AddDescriptor(systemschema.UserIDSequence)
 
 	// Add system config tables.
 	target.AddDescriptor(systemschema.NamespaceTable)

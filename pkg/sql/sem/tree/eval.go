@@ -3263,7 +3263,7 @@ type EvalPlanner interface {
 	// implementation in authorization.go
 	MemberOfWithAdminOption(
 		ctx context.Context,
-		member security.SQLUsername,
+		member security.SQLUserInfo,
 	) (map[security.SQLUsername]bool, error)
 
 	// ExternalReadFile reads the content from an external file URI.
