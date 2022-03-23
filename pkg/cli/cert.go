@@ -12,6 +12,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"os"
 	"strings"
 	"time"
@@ -169,6 +170,20 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 		return errors.Wrap(err, "failed to generate client certificate and key")
 	}
 
+	var tenantIDs []roachpb.TenantID
+	if certCtx.tenantScope != "" {
+		tenants := strings.Split(certCtx.tenantScope, ",")
+		for _, tenant := range tenants {
+			tenant = strings.TrimSpace(tenant)
+			tenantID, err := roachpb.TenantIDFromString(tenant)
+			if err != nil {
+				return errors.Wrap(err, "failed to generate client certificate and key")
+			}
+			tenantIDs = append(tenantIDs, tenantID)
+		}
+	} else {
+		tenantIDs = append(tenantIDs, roachpb.SystemTenantID)
+	}
 	return errors.Wrap(
 		security.CreateClientPair(
 			certCtx.certsDir,
@@ -177,6 +192,7 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 			certCtx.certificateLifetime,
 			certCtx.overwriteFiles,
 			username,
+			tenantIDs,
 			certCtx.generatePKCS8Key),
 		"failed to generate client certificate and key")
 }

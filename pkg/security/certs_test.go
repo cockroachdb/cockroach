@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -170,6 +171,93 @@ func TestGenerateTenantCerts(t *testing.T) {
 	}, infos)
 }
 
+// TestGenerateClientCerts tests client certificates are generated as expected:
+// - Global client certificates have the username and SAN set correctly with the system tenant ID.
+// - Tenant scoped client certificates have the username set correctly and also
+//   have the tenant ID embedded as a SAN.
+func TestGenerateClientCerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	security.ResetAssetLoader()
+	defer ResetTest()
+
+	certsDir := t.TempDir()
+
+	caKeyFile := certsDir + "/ca.key"
+	// Generate CA key and crt.
+	require.NoError(t, security.CreateCAPair(certsDir, caKeyFile, testKeySize,
+		time.Hour*72, false /* allowReuse */, false /* overwrite */))
+	globalUser := security.MakeSQLUsernameFromPreNormalizedString("global-user")
+	tenantUser := security.MakeSQLUsernameFromPreNormalizedString("tenant-user")
+	tenantIDs := []roachpb.TenantID{roachpb.MakeTenantID(123), roachpb.MakeTenantID(456)}
+	// Create tenant-scoped client cert.
+	require.NoError(t, security.CreateClientPair(
+		certsDir,
+		caKeyFile,
+		testKeySize,
+		48*time.Hour,
+		false, /*overwrite */
+		tenantUser,
+		tenantIDs,
+		false /* wantPKCS8Key */))
+
+	// Create a global client cert by setting the tenant ID to the system tenant.
+	require.NoError(t, security.CreateClientPair(
+		certsDir,
+		caKeyFile,
+		testKeySize,
+		48*time.Hour,
+		false, /*overwrite */
+		globalUser,
+		[]roachpb.TenantID{roachpb.SystemTenantID},
+		false /* wantPKCS8Key */))
+
+	// Load and verify the certificates.
+	cl := security.NewCertificateLoader(certsDir)
+	require.NoError(t, cl.Load())
+	infos := cl.Certificates()
+	for _, info := range infos {
+		require.NoError(t, info.Error)
+	}
+
+	// We expect three certificates: the CA certificate, the tenant scoped client certificate
+	// and the regular client certificate.
+	require.Equal(t, len(infos), 3)
+	//expectedClientCrtName := fmt.Sprintf("client.%s.crt", username)
+	for _, info := range infos {
+		if info.Filename == "ca.crt" {
+			continue
+		}
+		require.Equal(t, info.FileUsage, security.ClientPem)
+		var expectedSANs []*url.URL
+		var expectedClientCrtName string
+		var err error
+		if info.Name == globalUser.Normalized() {
+			expectedSANs, err = security.MakeTenantURISANs([]roachpb.TenantID{roachpb.SystemTenantID})
+			require.NoError(t, err)
+			expectedClientCrtName = fmt.Sprintf("client.%s.crt", globalUser.Normalized())
+		} else if info.Name == tenantUser.Normalized() {
+			expectedSANs, err = security.MakeTenantURISANs(tenantIDs)
+			require.NoError(t, err)
+			expectedClientCrtName = fmt.Sprintf("client.%s.crt", tenantUser.Normalized())
+		} else {
+			t.Fatalf("Unexpected cert %s", info.Filename)
+		}
+		require.Equal(t, 1, len(info.ParsedCertificates))
+		require.Equal(t, expectedClientCrtName, info.Filename)
+		require.Equal(t, len(expectedSANs), len(info.ParsedCertificates[0].URIs))
+		// Set up expectedSANs in a map to make comparison with parsed certificate URIs easier
+		expectedSANKeys := make(map[string]struct{})
+		for _, expectedSAN := range expectedSANs {
+			expectedSANKeys[expectedSAN.String()] = struct{}{}
+		}
+		for _, uri := range info.ParsedCertificates[0].URIs {
+			_, ok := expectedSANKeys[uri.String()]
+			require.True(t, ok)
+		}
+	}
+}
+
 func TestGenerateNodeCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
@@ -227,7 +315,7 @@ func generateBaseCerts(certsDir string) error {
 
 		if err := security.CreateClientPair(
 			certsDir, caKey,
-			testKeySize, time.Hour*48, true, security.RootUserName(), false,
+			testKeySize, time.Hour*48, true, security.RootUserName(), []roachpb.TenantID{roachpb.SystemTenantID}, false,
 		); err != nil {
 			return err
 		}
@@ -281,14 +369,14 @@ func generateSplitCACerts(certsDir string) error {
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, security.NodeUserName(), false,
+		testKeySize, time.Hour*48, true, security.NodeUserName(), []roachpb.TenantID{roachpb.SystemTenantID}, false,
 	); err != nil {
 		return errors.Wrap(err, "could not generate Client pair")
 	}
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, security.RootUserName(), false,
+		testKeySize, time.Hour*48, true, security.RootUserName(), []roachpb.TenantID{roachpb.SystemTenantID}, false,
 	); err != nil {
 		return errors.Wrap(err, "could not generate Client pair")
 	}
