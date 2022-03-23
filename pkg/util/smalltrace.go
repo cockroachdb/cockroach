@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/redact"
 )
 
 var prefix = func() string {
@@ -27,7 +29,7 @@ var prefix = func() string {
 
 // GetSmallTrace returns a comma-separated string containing the top
 // 5 callers from a given skip level.
-func GetSmallTrace(skip int) string {
+func GetSmallTrace(skip int) redact.RedactableString {
 	var pcs [5]uintptr
 	nCallers := runtime.Callers(skip, pcs[:])
 	callers := make([]string, 0, nCallers)
@@ -46,5 +48,5 @@ func GetSmallTrace(skip int) string {
 		}
 	}
 
-	return strings.Join(callers, ",")
+	return redact.Sprint(strings.Join(callers, ","))
 }
