@@ -1572,6 +1572,10 @@ message ExportResponse {
 message AdminScatterRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool randomize_leases = 2;
+
+  // max_size, if > 0, specifies a range's size above with it should reject
+  // this scatter request, allowing a "scatter-if-not-full" conditional request.
+  int64 max_size = 3;
 }
 
 // ScatterResponse is the response to a Scatter() operation.
@@ -1763,6 +1767,20 @@ message AddSSTableRequest {
 // AddSSTableResponse is the response to a AddSSTable() operation.
 message AddSSTableResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // RangeSpan is the span of the range which just added this sstable. It is 
+  // included in the reply along with AvailableBytes so that callers can tell if
+  // a file they are about to send would be sent to the same range as a file
+  // sent previously (i.e. if it intersects with this span as sent then), and if
+  // so, if its size would fit within the size remaining in this range.
+  Span range_span = 2 [(gogoproto.nullable) = false];
+
+  // AvailableBytes indicates how many bytes remain before the range into which
+  // this request added will be considered "full". This is for use by callers to
+  // check if they should keep sending additional SSTs to this range or if they
+  // should split first. Such callers can use RangeSpan to see if the file they
+  // would be sending would also add to this range.
+  int64 available_bytes = 3;
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no
