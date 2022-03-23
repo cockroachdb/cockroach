@@ -283,6 +283,16 @@ func TargetsFromProtos(protoTargets []roachpb.SpanConfigTarget) ([]Target, error
 	return targets, nil
 }
 
+// TargetsFromRecords extracts the list of underlying targets from the given
+// list of Records.
+func TargetsFromRecords(records []Record) []Target {
+	targets := make([]Target, len(records))
+	for i, rec := range records {
+		targets[i] = rec.GetTarget()
+	}
+	return targets
+}
+
 // TestingEntireSpanConfigurationStateTargets returns a list of targets which
 // can be used to read the entire span configuration state. This includes all
 // span configurations installed by all tenants and all system span
