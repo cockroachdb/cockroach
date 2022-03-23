@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
@@ -172,6 +173,7 @@ func (e *scheduledSQLStatsCompactionExecutor) OnDrop(
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 ) error {
 	return persistedsqlstats.ErrScheduleUndroppable
 }

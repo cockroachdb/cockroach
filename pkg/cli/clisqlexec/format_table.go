@@ -12,6 +12,7 @@ package clisqlexec
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -584,6 +585,45 @@ func (p *recordReporter) doneRows(w io.Writer, seenRows int) error {
 func (p *recordReporter) beforeFirstRow(_ io.Writer, _ RowStrIter) error { return nil }
 func (p *recordReporter) doneNoRows(_ io.Writer) error                   { return nil }
 
+type ndjsonReporter struct {
+	cols []string
+}
+
+func (n *ndjsonReporter) describe(w io.Writer, cols []string) error {
+	n.cols = cols
+	return nil
+}
+
+func (n *ndjsonReporter) beforeFirstRow(w io.Writer, allRows RowStrIter) error {
+	return nil
+}
+
+func (n *ndjsonReporter) iter(w, ew io.Writer, rowIdx int, row []string) error {
+	retMap := make(map[string]string, len(row))
+	for i := range row {
+		retMap[n.cols[i]] = row[i]
+	}
+	out, err := json.Marshal(retMap)
+	if err != nil {
+		return err
+	}
+	if _, err := ew.Write(out); err != nil {
+		return err
+	}
+	if _, err := ew.Write([]byte("\n")); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *ndjsonReporter) doneRows(w io.Writer, seenRows int) error {
+	return nil
+}
+
+func (n *ndjsonReporter) doneNoRows(w io.Writer) error {
+	return nil
+}
+
 type sqlReporter struct {
 	noColumns bool
 }
@@ -643,6 +683,9 @@ func (sqlExecCtx *Context) makeReporter(w io.Writer) (rowReporter, func(), error
 	case TableDisplayCSV:
 		reporter, cleanup := makeCSVReporter(w, sqlExecCtx.TableDisplayFormat)
 		return reporter, cleanup, nil
+
+	case TableDisplayNDJSON:
+		return &ndjsonReporter{}, nil, nil
 
 	case TableDisplayRaw:
 		return &rawReporter{}, nil, nil

@@ -28,6 +28,10 @@ exec-sql
 RESTORE FROM LATEST IN 'nodelocal://0/full_cluster_backup/'
 ----
 
+exec-sql
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
+----
+
 query-sql
 SELECT create_statement FROM [SHOW CREATE TABLE d.public.t]
 ----
@@ -55,6 +59,10 @@ WHERE label LIKE 'row-level-ttl-%'
 
 exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database_backup/'
+----
+
+exec-sql
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
 ----
 
 query-sql
@@ -88,6 +96,10 @@ CREATE DATABASE d
 
 exec-sql
 RESTORE TABLE d.public.t FROM LATEST IN 'nodelocal://0/database_backup/'
+----
+
+exec-sql
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
 ----
 
 query-sql

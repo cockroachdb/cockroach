@@ -45,7 +45,7 @@ export const getTrxAppFilterOptions = (
       .map(t => (t.stats_data.app ? t.stats_data.app : "(unset)")),
   );
 
-  return Array.from(uniqueAppNames);
+  return Array.from(uniqueAppNames).sort();
 };
 
 export const collectStatementsText = (statements: Statement[]): string =>
