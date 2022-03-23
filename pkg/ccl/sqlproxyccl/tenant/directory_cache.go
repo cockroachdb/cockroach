@@ -33,20 +33,16 @@ type DirectoryCache interface {
 	//
 	// If no matching pods are found (e.g. cluster name mismatch, or tenant was
 	// deleted), this will return a GRPC NotFound error.
-	EnsureTenantAddr(
-		ctx context.Context,
-		tenantID roachpb.TenantID,
-		clusterName string,
-	) (string, error)
+	EnsureTenantAddr(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
 
-	// LookupTenantAddrs returns the IP addresses for all available SQL
+	// TryLookupTenantAddrs returns the IP addresses for all available SQL
 	// processes for the given tenant. It returns a GRPC NotFound error if the
 	// tenant does not exist.
 	//
 	// Unlike EnsureTenantAddr which blocks until there is an associated
-	// process, LookupTenantAddrs will just return an empty set if no processes
+	// process, TryLookupTenantAddrs will just return an empty set if no processes
 	// are available for the tenant.
-	LookupTenantAddrs(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
+	TryLookupTenantAddrs(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
 
 	// ReportFailure is used to indicate to the directory cache that a
 	// connection attempt to connect to a particular SQL tenant pod have failed.
@@ -162,7 +158,7 @@ func NewDirectoryCache(
 // processes. If the tenant was just created or is suspended, such that there
 // are no available processes, then EnsureTenantAddr will trigger resumption of a
 // new instance and block until the process is ready. If there are multiple
-// processes for the tenant, then LookupTenantAddrs will choose one of them (note
+// processes for the tenant, then TryLookupTenantAddrs will choose one of them (note
 // that currently there is always at most one SQL process per tenant).
 //
 // If clusterName is non-empty, then a GRPC NotFound error is returned if no
@@ -201,15 +197,15 @@ func (d *directoryCache) EnsureTenantAddr(
 	return addr, err
 }
 
-// LookupTenantAddrs returns the IP addresses for all available SQL processes for
+// TryLookupTenantAddrs returns the IP addresses for all available SQL processes for
 // the given tenant. It returns a GRPC NotFound error if the tenant does not
 // exist (e.g. it has not yet been created) or if it has not yet been fetched
-// into the directory's cache (LookupTenantAddrs will never attempt to fetch it).
-// If no processes are available for the tenant, LookupTenantAddrs will return the
+// into the directory's cache (TryLookupTenantAddrs will never attempt to fetch it).
+// If no processes are available for the tenant, TryLookupTenantAddrs will return the
 // empty set (unlike EnsureTenantAddr).
 //
-// LookupTenantAddrs implements the DirectoryCache interface.
-func (d *directoryCache) LookupTenantAddrs(
+// TryLookupTenantAddrs implements the DirectoryCache interface.
+func (d *directoryCache) TryLookupTenantAddrs(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) ([]string, error) {
 	// Ensure that a directory entry has been created for this tenant.
