@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/require"
 )
@@ -62,6 +63,13 @@ func createTenantNode(
 		node:     node,
 		sqlPort:  sqlPort,
 	}
+	n := c.Node(1)
+	version, err := fetchCockroachVersion(ctx, t.L(), c, n[0])
+	require.NoError(t, err)
+	// Tenant scoped certificates were introduced in version 22.1.
+	if strings.HasPrefix(version, "v22.1") {
+		tn.recreateClientCertsWithTenantScope(ctx, c)
+	}
 	tn.createTenantCert(ctx, t, c)
 	return tn
 }
@@ -81,6 +89,15 @@ func (tn *tenantNode) createTenantCert(ctx context.Context, t test.Test, c clust
 		"./cockroach cert create-tenant-client --certs-dir=certs --ca-key=certs/ca.key %d %s",
 		tn.tenantID, strings.Join(names, " "))
 	c.Run(ctx, c.Node(tn.node), cmd)
+}
+
+func (tn *tenantNode) recreateClientCertsWithTenantScope(ctx context.Context, c cluster.Cluster) {
+	for _, user := range []username.SQLUsername{username.RootUserName(), username.TestUserName()} {
+		cmd := fmt.Sprintf(
+			"./cockroach cert create-client %s --certs-dir=certs --ca-key=certs/ca.key --tenant-scope 1,%d --overwrite",
+			user.Normalized(), tn.tenantID)
+		c.Run(ctx, c.Node(tn.node), cmd)
+	}
 }
 
 func (tn *tenantNode) stop(ctx context.Context, t test.Test, c cluster.Cluster) {
