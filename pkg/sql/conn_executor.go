@@ -844,6 +844,8 @@ func (s *Server) newConnExecutor(
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
+	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
+
 	ex.initPlanner(ctx, &ex.planner)
 
 	return ex
@@ -1268,6 +1270,10 @@ type connExecutor struct {
 		// has admin privilege. hasAdminRoleCache is set for the first statement
 		// in a transaction.
 		hasAdminRoleCache HasAdminRoleCache
+
+		// createdSequences keeps track of sequences created in the current transaction.
+		// The map key is the sequence descpb.ID.
+		createdSequences map[descpb.ID]struct{}
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -1486,6 +1492,8 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 		p.decRef(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 	}
+
+	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
 	switch ev {
 	case txnCommit, txnRollback:
@@ -2506,6 +2514,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
+	p.createdSequences = ex.getCreatedSequencesAccessor()
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
@@ -2844,6 +2853,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 
 func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 	return connExPrepStmtsAccessor{
+		ex: ex,
+	}
+}
+
+func (ex *connExecutor) getCreatedSequencesAccessor() createdSequences {
+	return connExCreatedSequencesAccessor{
 		ex: ex,
 	}
 }
