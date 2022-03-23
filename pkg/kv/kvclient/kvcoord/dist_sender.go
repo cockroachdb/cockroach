@@ -872,7 +872,7 @@ func (ds *DistSender) Send(
 		reply.BatchResponse_Header = lastHeader
 
 		if ds.kvInterceptor != nil {
-			respInfo := tenantcostmodel.MakeResponseInfo(reply)
+			respInfo := tenantcostmodel.MakeResponseInfo(reply, !reqInfo.IsWrite())
 			ds.kvInterceptor.OnResponse(ctx, reqInfo, respInfo)
 		}
 	}

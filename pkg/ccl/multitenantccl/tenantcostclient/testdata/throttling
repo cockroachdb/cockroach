@@ -43,7 +43,7 @@ token-bucket-response
 timers
 ----
 00:00:11.000
-00:00:11.359
+00:00:11.391
 
 advance
 1s
@@ -75,7 +75,7 @@ token-bucket-response
 timers
 ----
 00:00:22.000
-00:00:50.013
+00:00:50.051
 
 advance
 20s
@@ -88,7 +88,7 @@ await label=w1
 timers
 ----
 00:00:42.000
-00:00:50.013
+00:00:50.051
 
 not-completed label=w2
 ----

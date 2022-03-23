@@ -117,13 +117,10 @@ func (rl *limiter) Wait(ctx context.Context, reqInfo tenantcostmodel.RequestInfo
 		return err
 	}
 
-	if isWrite, writeBytes := reqInfo.IsWrite(); isWrite {
-		rl.metrics.writeRequestsAdmitted.Inc(1)
-		rl.metrics.writeBytesAdmitted.Inc(writeBytes)
-	} else {
-		// We don't know how much we will read; the bytes will be accounted for
-		// after the fact in RecordRead.
-		rl.metrics.readRequestsAdmitted.Inc(1)
+	if reqInfo.IsWrite() {
+		rl.metrics.writeBatchesAdmitted.Inc(1)
+		rl.metrics.writeRequestsAdmitted.Inc(reqInfo.WriteCount())
+		rl.metrics.writeBytesAdmitted.Inc(reqInfo.WriteBytes())
 	}
 
 	return nil
@@ -131,10 +128,14 @@ func (rl *limiter) Wait(ctx context.Context, reqInfo tenantcostmodel.RequestInfo
 
 // RecordRead is part of the Limiter interface.
 func (rl *limiter) RecordRead(ctx context.Context, respInfo tenantcostmodel.ResponseInfo) {
+	rl.metrics.readBatchesAdmitted.Inc(1)
+	rl.metrics.readRequestsAdmitted.Inc(respInfo.ReadCount())
 	rl.metrics.readBytesAdmitted.Inc(respInfo.ReadBytes())
 	rl.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
 		tb := res.(*tokenBucket)
-		amount := float64(respInfo.ReadBytes()) * tb.config.ReadUnitsPerByte
+		amount := tb.config.ReadBatchUnits
+		amount += float64(respInfo.ReadCount()) * tb.config.ReadRequestUnits
+		amount += float64(respInfo.ReadBytes()) * tb.config.ReadUnitsPerByte
 		tb.Adjust(quotapool.Tokens(-amount))
 		// Do not notify the head of the queue. In the best case we did not disturb
 		// the time at which it can be fulfilled and in the worst case, we made it
@@ -199,10 +200,15 @@ func (req *waitRequest) Acquire(
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	tb := res.(*tokenBucket)
 	var needed float64
-	if isWrite, writeBytes := req.info.IsWrite(); isWrite {
-		needed = tb.config.WriteRequestUnits + float64(writeBytes)*tb.config.WriteUnitsPerByte
+	if req.info.IsWrite() {
+		needed = tb.config.WriteBatchUnits
+		needed += float64(req.info.WriteCount()) * tb.config.WriteRequestUnits
+		needed += float64(req.info.WriteBytes()) * tb.config.WriteUnitsPerByte
 	} else {
-		needed = tb.config.ReadRequestUnits
+		// Only acquire tokens for read requests once the response has been
+		// received. However, TryToFulfill still needs to be called with a zero
+		// value, in case the quota pool is in debt and the read should block.
+		needed = 0
 	}
 	return tb.TryToFulfill(quotapool.Tokens(needed))
 }

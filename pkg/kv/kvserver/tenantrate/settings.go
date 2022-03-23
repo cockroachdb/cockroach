@@ -28,11 +28,15 @@ type Config struct {
 	// up to this limit.
 	Burst float64
 
+	// ReadBatchUnits is the baseline cost of a read batch, in KV Compute Units.
+	ReadBatchUnits float64
 	// ReadRequestUnits is the baseline cost of a read, in KV Compute Units.
 	ReadRequestUnits float64
 	// ReadRequestUnits is the size-dependent cost of a read, in KV Compute Units
 	// per byte.
 	ReadUnitsPerByte float64
+	// WriteBatchUnits is the baseline cost of a write batch, in KV Compute Units.
+	WriteBatchUnits float64
 	// WriteRequestUnits is the baseline cost of a write, in KV Compute Units.
 	WriteRequestUnits float64
 	// WriteRequestUnits is the size-dependent cost of a write, in KV Compute
@@ -85,6 +89,14 @@ var (
 		settings.PositiveFloat,
 	)
 
+	readBatchCost = settings.RegisterFloatSetting(
+		settings.TenantWritable,
+		"kv.tenant_rate_limiter.read_batch_cost",
+		"base cost of a read batch in KV Compute Units",
+		0.1,
+		settings.PositiveFloat,
+	)
+
 	readRequestCost = settings.RegisterFloatSetting(
 		settings.TenantWritable,
 		"kv.tenant_rate_limiter.read_request_cost",
@@ -98,6 +110,14 @@ var (
 		"kv.tenant_rate_limiter.read_cost_per_megabyte",
 		"cost of a read in KV Compute Units per MB",
 		10.0,
+		settings.PositiveFloat,
+	)
+
+	writeBatchCost = settings.RegisterFloatSetting(
+		settings.TenantWritable,
+		"kv.tenant_rate_limiter.write_batch_cost",
+		"base cost of a write batch in KV Compute Units",
+		0.1,
 		settings.PositiveFloat,
 	)
 
@@ -121,8 +141,10 @@ var (
 	configSettings = [...]settings.NonMaskedSetting{
 		kvcuRateLimit,
 		kvcuBurstLimitSeconds,
+		readBatchCost,
 		readRequestCost,
 		readCostPerMB,
+		writeBatchCost,
 		writeRequestCost,
 		writeCostPerMB,
 	}
@@ -145,8 +167,10 @@ func ConfigFromSettings(sv *settings.Values) Config {
 	return Config{
 		Rate:              rate,
 		Burst:             rate * kvcuBurstLimitSeconds.Get(sv),
+		ReadBatchUnits:    readBatchCost.Get(sv),
 		ReadRequestUnits:  readRequestCost.Get(sv),
 		ReadUnitsPerByte:  readCostPerMB.Get(sv) / (1024 * 1024),
+		WriteBatchUnits:   writeBatchCost.Get(sv),
 		WriteRequestUnits: writeRequestCost.Get(sv),
 		WriteUnitsPerByte: writeCostPerMB.Get(sv) / (1024 * 1024),
 	}
@@ -159,8 +183,10 @@ func DefaultConfig() Config {
 	return Config{
 		Rate:              rate,
 		Burst:             rate * kvcuBurstLimitSeconds.Default(),
+		ReadBatchUnits:    readBatchCost.Default(),
 		ReadRequestUnits:  readRequestCost.Default(),
 		ReadUnitsPerByte:  readCostPerMB.Default() / (1024 * 1024),
+		WriteBatchUnits:   writeBatchCost.Default(),
 		WriteRequestUnits: writeRequestCost.Default(),
 		WriteUnitsPerByte: writeCostPerMB.Default() / (1024 * 1024),
 	}

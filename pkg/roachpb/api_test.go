@@ -268,13 +268,15 @@ func TestContentionEvent_SafeFormat(t *testing.T) {
 func TestTenantConsumptionAddSub(t *testing.T) {
 	a := TenantConsumption{
 		RU:                1,
-		ReadRequests:      2,
-		ReadBytes:         3,
-		WriteRequests:     4,
-		WriteBytes:        5,
-		SQLPodsCPUSeconds: 6,
-		PGWireEgressBytes: 7,
-		KVRU:              8,
+		ReadBatches:       2,
+		ReadRequests:      3,
+		ReadBytes:         4,
+		WriteBatches:      5,
+		WriteRequests:     6,
+		WriteBytes:        7,
+		SQLPodsCPUSeconds: 8,
+		PGWireEgressBytes: 9,
+		KVRU:              10,
 	}
 	var b TenantConsumption
 	for i := 0; i < 10; i++ {
@@ -282,13 +284,15 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 	}
 	if exp := (TenantConsumption{
 		RU:                10,
-		ReadRequests:      20,
-		ReadBytes:         30,
-		WriteRequests:     40,
-		WriteBytes:        50,
-		SQLPodsCPUSeconds: 60,
-		PGWireEgressBytes: 70,
-		KVRU:              80,
+		ReadBatches:       20,
+		ReadRequests:      30,
+		ReadBytes:         40,
+		WriteBatches:      50,
+		WriteRequests:     60,
+		WriteBytes:        70,
+		SQLPodsCPUSeconds: 80,
+		PGWireEgressBytes: 90,
+		KVRU:              100,
 	}); b != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, b)
 	}
@@ -297,13 +301,15 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 	c.Sub(&a)
 	if exp := (TenantConsumption{
 		RU:                9,
-		ReadRequests:      18,
-		ReadBytes:         27,
-		WriteRequests:     36,
-		WriteBytes:        45,
-		SQLPodsCPUSeconds: 54,
-		PGWireEgressBytes: 63,
-		KVRU:              72,
+		ReadBatches:       18,
+		ReadRequests:      27,
+		ReadBytes:         36,
+		WriteBatches:      45,
+		WriteRequests:     54,
+		WriteBytes:        63,
+		SQLPodsCPUSeconds: 72,
+		PGWireEgressBytes: 81,
+		KVRU:              90,
 	}); c != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, c)
 	}
