@@ -612,8 +612,17 @@ func (ef *execFactory) ConstructIndexJoin(
 		return nil, err
 	}
 
-	tableScan.index = tabDesc.GetPrimaryIndex()
+	idx := tabDesc.GetPrimaryIndex()
+	tableScan.index = idx
 	tableScan.disableBatchLimit()
+
+	if !ef.isExplain {
+		idxUsageKey := roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tabDesc.GetID()),
+			IndexID: roachpb.IndexID(idx.GetID()),
+		}
+		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(idxUsageKey)
+	}
 
 	n := &indexJoinNode{
 		input:         input.(planNode),
