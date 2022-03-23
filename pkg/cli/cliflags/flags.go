@@ -761,6 +761,14 @@ Note: that --external-io-disable-http or --external-io-disable-implicit-credenti
 		Description: `Certificate and key files are overwritten if they exist.`,
 	}
 
+	TenantScope = FlagInfo{
+		Name: "tenant-scope",
+		Description: `Assign a tenant scope to the certificate.
+This will allow for the certificate to only be used specifically for a particular
+tenant. This flag is optional, when omitted, the certificate is scoped to the
+system tenant.`,
+	}
+
 	GeneratePKCS8Key = FlagInfo{
 		Name:        "also-generate-pkcs8-key",
 		Description: `Also write the key in pkcs8 format to <certs-dir>/client.<username>.key.pk8.`,
