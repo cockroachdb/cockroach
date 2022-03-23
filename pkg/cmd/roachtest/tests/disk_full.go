@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -21,7 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 func registerDiskFull(r registry.Registry) {
@@ -65,10 +69,40 @@ func registerDiskFull(r registry.Registry) {
 
 				// Node 1 should forcibly exit due to a full disk.
 				for isLive := true; isLive; {
-					db := c.Conn(ctx, t.L(), 2)
-					err := db.QueryRow(`SELECT is_live FROM crdb_internal.gossip_nodes WHERE node_id = 1;`).Scan(&isLive)
-					if err != nil {
+					opts := retry.Options{
+						InitialBackoff: 1 * time.Second,
+						MaxBackoff:     5 * time.Second,
+						MaxRetries:     12,
+					}
+					var success bool
+					var err error
+					for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+						// Run each query with a timeout to prevent queries from hanging
+						// indefinitely.
+						err = contextutil.RunWithTimeout(ctx, "is_live", time.Second, func(ctx context.Context) error {
+							// Select a random node each time (excluding node 1). Note that
+							// node numbers are 1-indexed, which implies using a min node of
+							// 2.
+							node := rand.Intn(nodes-1) + 2
+							db := c.Conn(ctx, t.L(), node)
+							return db.QueryRowContext(
+								ctx, `SELECT is_live FROM crdb_internal.gossip_nodes WHERE node_id = 1;`,
+							).Scan(&isLive)
+						})
+						if err == nil {
+							success = true
+							break
+						}
+						var e *contextutil.TimeoutError
+						if errors.As(err, &e) {
+							t.L().Printf("liveness query timed out; retrying")
+							continue
+						}
 						t.Fatal(err)
+					}
+					if !success {
+						// Retries were exhausted. Fail the test.
+						t.Fatalf("timed out fetching node liveness; last err: %s", err)
 					}
 					if isLive {
 						t.L().Printf("waiting for n%d to die due to full disk\n", n)
