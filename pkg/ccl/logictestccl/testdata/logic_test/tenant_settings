@@ -7,9 +7,8 @@ true
 
 user host-cluster-root
 
-# TODO(radu): use the new ALTER TENANT statement when it is implemented.
 statement ok
-INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (10, 'sql.notices.enabled', 'false', 'b')
+ALTER TENANT 10 SET CLUSTER SETTING sql.notices.enabled = false
 
 user root
 
@@ -22,7 +21,7 @@ false
 user host-cluster-root
 
 statement ok
-DELETE FROM system.tenant_settings WHERE tenant_id = 10
+ALTER TENANT 10 RESET CLUSTER SETTING sql.notices.enabled
 
 user root
 
@@ -35,7 +34,7 @@ user host-cluster-root
 
 # Set an all-tenant override.
 statement ok
-INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (0, 'sql.notices.enabled', 'false', 'b')
+ALTER TENANT ALL SET CLUSTER SETTING sql.notices.enabled = false
 
 user root
 
@@ -48,7 +47,7 @@ user host-cluster-root
 
 # Now set a tenant-specific override which takes precedence.
 statement ok
-INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (10, 'sql.notices.enabled', 'true', 'b')
+ALTER TENANT 10 SET CLUSTER SETTING sql.notices.enabled = true
 
 user root
 
@@ -68,7 +67,7 @@ user host-cluster-root
 
 # Remove the all-tenant override; should make no difference.
 statement ok
-DELETE FROM system.tenant_settings WHERE tenant_id = 0
+ALTER TENANT ALL RESET CLUSTER SETTING sql.notices.enabled
 
 user root
 
@@ -99,8 +98,7 @@ SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
 user host-cluster-root
 
 statement ok
-INSERT INTO system.tenant_settings (tenant_id, name, value, value_type)
-  VALUES (10, 'kv.protectedts.reconciliation.interval', '45s', 'd')
+ALTER TENANT 10 SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '45s'
 
 user root
 
@@ -115,9 +113,13 @@ user host-cluster-root
 statement ok
 SELECT crdb_internal.create_tenant(1234)
 
-# TODO(radu): replace with ALTER TENANT when it's available.
 statement ok
-INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (1234, 'sql.notices.enabled', 'true', 'b')
+ALTER TENANT 1234 SET CLUSTER SETTING sql.notices.enabled = true
+
+query I
+SELECT count(*) FROM system.tenant_settings WHERE tenant_id = 1234
+----
+1
 
 statement ok
 SELECT crdb_internal.destroy_tenant(1234, true)
