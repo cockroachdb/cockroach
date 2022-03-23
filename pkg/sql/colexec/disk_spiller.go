@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // oneInputDiskSpiller is an Operator that manages the fallback from a one
@@ -74,7 +75,7 @@ import (
 func NewOneInputDiskSpiller(
 	input colexecop.Operator,
 	inMemoryOp colexecop.BufferingInMemoryOperator,
-	inMemoryMemMonitorName string,
+	inMemoryMemMonitorName redact.RedactableString,
 	diskBackedOpConstructor func(input colexecop.Operator) colexecop.Operator,
 	spillingCallbackFn func(),
 ) colexecop.Operator {
@@ -82,7 +83,7 @@ func NewOneInputDiskSpiller(
 	return &diskSpillerBase{
 		inputs:                 []colexecop.Operator{input},
 		inMemoryOp:             inMemoryOp,
-		inMemoryMemMonitorName: inMemoryMemMonitorName,
+		inMemoryMemMonitorName: string(inMemoryMemMonitorName),
 		diskBackedOp:           diskBackedOpConstructor(diskBackedOpInput),
 		spillingCallbackFn:     spillingCallbackFn,
 	}
@@ -141,7 +142,7 @@ func NewOneInputDiskSpiller(
 func NewTwoInputDiskSpiller(
 	inputOne, inputTwo colexecop.Operator,
 	inMemoryOp colexecop.BufferingInMemoryOperator,
-	inMemoryMemMonitorName string,
+	inMemoryMemMonitorName redact.RedactableString,
 	diskBackedOpConstructor func(inputOne, inputTwo colexecop.Operator) colexecop.Operator,
 	spillingCallbackFn func(),
 ) colexecop.Operator {
@@ -150,7 +151,7 @@ func NewTwoInputDiskSpiller(
 	return &diskSpillerBase{
 		inputs:                 []colexecop.Operator{inputOne, inputTwo},
 		inMemoryOp:             inMemoryOp,
-		inMemoryMemMonitorName: inMemoryMemMonitorName,
+		inMemoryMemMonitorName: string(inMemoryMemMonitorName),
 		diskBackedOp:           diskBackedOpConstructor(diskBackedOpInputOne, diskBackedOpInputTwo),
 		spillingCallbackFn:     spillingCallbackFn,
 	}
