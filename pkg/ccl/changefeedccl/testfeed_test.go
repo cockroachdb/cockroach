@@ -372,6 +372,17 @@ func (f *jobFeed) Close() error {
 	// Already failed/or failing.
 	default:
 		// TODO(yevgeniy): Cancel job w/out producing spurious error messages in the logs.
+		status, err := f.status()
+		if err != nil {
+			return err
+		}
+		if status == string(jobs.StatusSucceeded) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.mu.terminalErr = errors.New("changefeed completed")
+			close(f.shutdown)
+			return nil
+		}
 		if _, err := f.db.Exec(`CANCEL JOB $1`, f.jobID); err != nil {
 			log.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
 		}
