@@ -264,7 +264,7 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 	}
 
 	// Lookup tenant in the directory cache.
-	addr, err := c.DirectoryCache.EnsureTenantAddr(ctx, c.TenantID, c.ClusterName)
+	addr, err := c.DirectoryCache.LookupTenantAddr(ctx, c.TenantID, c.ClusterName)
 	switch {
 	case err == nil:
 		return addr, nil

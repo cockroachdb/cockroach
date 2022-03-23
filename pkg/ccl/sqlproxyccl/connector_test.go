@@ -480,14 +480,14 @@ func TestConnector_lookupAddr(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful", func(t *testing.T) {
-		var ensureTenantAddrFnCount int
+		var lookupTenantAddrFnCount int
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
-			ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
-				ensureTenantAddrFnCount++
+			lookupTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
+				lookupTenantAddrFnCount++
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
@@ -498,18 +498,18 @@ func TestConnector_lookupAddr(t *testing.T) {
 		addr, err := c.lookupAddr(ctx)
 		require.NoError(t, err)
 		require.Equal(t, "127.0.0.10:80", addr)
-		require.Equal(t, 1, ensureTenantAddrFnCount)
+		require.Equal(t, 1, lookupTenantAddrFnCount)
 	})
 
 	t.Run("FailedPrecondition error", func(t *testing.T) {
-		var ensureTenantAddrFnCount int
+		var lookupTenantAddrFnCount int
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
-			ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
-				ensureTenantAddrFnCount++
+			lookupTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
+				lookupTenantAddrFnCount++
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
@@ -520,18 +520,18 @@ func TestConnector_lookupAddr(t *testing.T) {
 		addr, err := c.lookupAddr(ctx)
 		require.EqualError(t, err, "codeUnavailable: foo")
 		require.Equal(t, "", addr)
-		require.Equal(t, 1, ensureTenantAddrFnCount)
+		require.Equal(t, 1, lookupTenantAddrFnCount)
 	})
 
 	t.Run("NotFound error", func(t *testing.T) {
-		var ensureTenantAddrFnCount int
+		var lookupTenantAddrFnCount int
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
-			ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
-				ensureTenantAddrFnCount++
+			lookupTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
+				lookupTenantAddrFnCount++
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
@@ -542,18 +542,18 @@ func TestConnector_lookupAddr(t *testing.T) {
 		addr, err := c.lookupAddr(ctx)
 		require.EqualError(t, err, "codeParamsRoutingFailed: cluster my-foo-10 not found")
 		require.Equal(t, "", addr)
-		require.Equal(t, 1, ensureTenantAddrFnCount)
+		require.Equal(t, 1, lookupTenantAddrFnCount)
 	})
 
 	t.Run("retriable error", func(t *testing.T) {
-		var ensureTenantAddrFnCount int
+		var lookupTenantAddrFnCount int
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
-			ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
-				ensureTenantAddrFnCount++
+			lookupTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
+				lookupTenantAddrFnCount++
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
@@ -565,7 +565,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		require.EqualError(t, err, "foo")
 		require.True(t, isRetriableConnectorError(err))
 		require.Equal(t, "", addr)
-		require.Equal(t, 1, ensureTenantAddrFnCount)
+		require.Equal(t, 1, lookupTenantAddrFnCount)
 	})
 }
 
@@ -675,16 +675,16 @@ var _ tenant.DirectoryCache = &testTenantDirectoryCache{}
 // testTenantDirectoryCache is a test implementation of the tenant directory
 // cache.
 type testTenantDirectoryCache struct {
-	ensureTenantAddrFn     func(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
+	lookupTenantAddrFn     func(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
 	trylookupTenantAddrsFn func(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
 	reportFailureFn        func(ctx context.Context, tenantID roachpb.TenantID, addr string) error
 }
 
-// EnsureTenantAddr implements the tenant.DirectoryCache interface.
-func (r *testTenantDirectoryCache) EnsureTenantAddr(
+// LookupTenantAddr implements the tenant.DirectoryCache interface.
+func (r *testTenantDirectoryCache) LookupTenantAddr(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
 ) (string, error) {
-	return r.ensureTenantAddrFn(ctx, tenantID, clusterName)
+	return r.lookupTenantAddrFn(ctx, tenantID, clusterName)
 }
 
 // TryLookupTenantAddrs implements the tenant.DirectoryCache interface.

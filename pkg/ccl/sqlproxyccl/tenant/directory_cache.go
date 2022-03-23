@@ -27,19 +27,19 @@ import (
 //
 // See directoryCache for more information.
 type DirectoryCache interface {
-	// EnsureTenantAddr returns an IP address of one of the given tenant's SQL
+	// LookupTenantAddr returns an IP address of one of the given tenant's SQL
 	// processes based on the tenantID and clusterName fields. This should block
 	// until the process associated with the IP is ready.
 	//
 	// If no matching pods are found (e.g. cluster name mismatch, or tenant was
 	// deleted), this will return a GRPC NotFound error.
-	EnsureTenantAddr(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
+	LookupTenantAddr(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
 
 	// TryLookupTenantAddrs returns the IP addresses for all available SQL
 	// processes for the given tenant. It returns a GRPC NotFound error if the
 	// tenant does not exist.
 	//
-	// Unlike EnsureTenantAddr which blocks until there is an associated
+	// Unlike LookupTenantAddr which blocks until there is an associated
 	// process, TryLookupTenantAddrs will just return an empty set if no processes
 	// are available for the tenant.
 	TryLookupTenantAddrs(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
@@ -154,9 +154,9 @@ func NewDirectoryCache(
 	return dir, nil
 }
 
-// EnsureTenantAddr returns the IP address of one of the given tenant's SQL
+// LookupTenantAddr returns the IP address of one of the given tenant's SQL
 // processes. If the tenant was just created or is suspended, such that there
-// are no available processes, then EnsureTenantAddr will trigger resumption of a
+// are no available processes, then LookupTenantAddr will trigger resumption of a
 // new instance and block until the process is ready. If there are multiple
 // processes for the tenant, then TryLookupTenantAddrs will choose one of them (note
 // that currently there is always at most one SQL process per tenant).
@@ -165,11 +165,11 @@ func NewDirectoryCache(
 // pods match the cluster name. This can be used to ensure that the
 // incoming SQL connection "knows" some additional information about the tenant,
 // such as the name of the cluster, before being allowed to connect. Similarly,
-// if the tenant does not exist (e.g. because it was deleted), EnsureTenantAddr
+// if the tenant does not exist (e.g. because it was deleted), LookupTenantAddr
 // returns a GRPC NotFound error.
 //
-// EnsureTenantAddr implements the DirectoryCache interface.
-func (d *directoryCache) EnsureTenantAddr(
+// LookupTenantAddr implements the DirectoryCache interface.
+func (d *directoryCache) LookupTenantAddr(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
 ) (string, error) {
 	// Ensure that a directory entry has been created for this tenant.
@@ -188,13 +188,20 @@ func (d *directoryCache) EnsureTenantAddr(
 	}
 
 	ctx, _ = d.stopper.WithCancelOnQuiesce(ctx)
-	addr, err := entry.ChoosePodAddr(ctx, d.client, d.options.deterministic)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			d.deleteEntry(entry)
+	pods := entry.GetPods()
+	if len(pods) == 0 {
+		// There are no known pod IP addresses, so fetch pod information
+		// from the directory server. Resume the tenant if it is suspended; that
+		// will always result in at least one pod IP address (or an error).
+		var err error
+		if pods, err = entry.EnsureTenantPod(ctx, d.client, d.options.deterministic); err != nil {
+			if status.Code(err) == codes.NotFound {
+				d.deleteEntry(entry)
+			}
+			return "", err
 		}
 	}
-	return addr, err
+	return selectTenantPod(entry.randFloat32(), pods).Addr, nil
 }
 
 // TryLookupTenantAddrs returns the IP addresses for all available SQL processes for
@@ -202,7 +209,7 @@ func (d *directoryCache) EnsureTenantAddr(
 // exist (e.g. it has not yet been created) or if it has not yet been fetched
 // into the directory's cache (TryLookupTenantAddrs will never attempt to fetch it).
 // If no processes are available for the tenant, TryLookupTenantAddrs will return the
-// empty set (unlike EnsureTenantAddr).
+// empty set (unlike LookupTenantAddr).
 //
 // TryLookupTenantAddrs implements the DirectoryCache interface.
 func (d *directoryCache) TryLookupTenantAddrs(
@@ -219,7 +226,7 @@ func (d *directoryCache) TryLookupTenantAddrs(
 			codes.NotFound, "tenant %d not in directory cache", tenantID.ToUint64())
 	}
 
-	tenantPods := entry.getPods()
+	tenantPods := entry.GetPods()
 	addrs := make([]string, len(tenantPods))
 	for i, pod := range tenantPods {
 		addrs[i] = pod.Addr
@@ -333,7 +340,7 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 	// helps us achieve this. Without the wait group, it will be possible to:
 	//
 	// 1. call watchPods
-	// 2. call EnsureTenantAddr
+	// 2. call LookupTenantAddr
 	// 3. wait forever to receive notification about the tenant that just started.
 	//
 	// The reason why the notification may not ever arrive is because the

@@ -111,32 +111,6 @@ func (e *tenantEntry) RefreshPods(ctx context.Context, client DirectoryClient) e
 	return err
 }
 
-// ChoosePodAddr returns the IP address of one of this tenant's available pods.
-// If a tenant has multiple pods, then ChoosePodAddr returns the IP address of
-// one of those pods based on the pods' reported load. If the tenant is
-// suspended and no pods are available, then ChoosePodAddr will trigger
-// resumption of the tenant and return the IP address of the new pod. Note that
-// resuming a tenant requires directory server calls, so ChoosePodAddr can
-// block for some time, until the resumption process is complete. However, if
-// errorIfNoPods is true, then ChoosePodAddr returns an error if there are no
-// pods available rather than blocking.
-func (e *tenantEntry) ChoosePodAddr(
-	ctx context.Context, client DirectoryClient, errorIfNoPods bool,
-) (string, error) {
-	pods := e.getPods()
-	if len(pods) == 0 {
-		// There are no known pod IP addresses, so fetch pod information
-		// from the directory server. Resume the tenant if it is suspended; that
-		// will always result in at least one pod IP address (or an error).
-		var err error
-		if pods, err = e.ensureTenantPod(ctx, client, errorIfNoPods); err != nil {
-			return "", err
-		}
-	}
-
-	return selectTenantPod(e.randFloat32(), pods).Addr, nil
-}
-
 // randFloat32 generates a random float32 within the bounds [0, 1) and is
 // thread safe.
 func (e *tenantEntry) randFloat32() float32 {
@@ -155,7 +129,7 @@ func (e *tenantEntry) AddPod(pod *Pod) bool {
 		if existing.Addr == pod.Addr {
 			// e.pods.pods is copy on write. Whenever modifications are made,
 			// we must make a copy to avoid accidentally mutating the slice
-			// retrieved by getPods.
+			// retrieved by GetPods.
 			pods := e.pods.pods
 			e.pods.pods = make([]*Pod, len(pods))
 			copy(e.pods.pods, pods)
@@ -178,7 +152,7 @@ func (e *tenantEntry) UpdatePod(pod *Pod) bool {
 		if existing.Addr == pod.Addr {
 			// e.pods.pods is copy on write. Whenever modifications are made,
 			// we must make a copy to avoid accidentally mutating the slice
-			// retrieved by getPods.
+			// retrieved by GetPods.
 			pods := e.pods.pods
 			e.pods.pods = make([]*Pod, len(pods))
 			copy(e.pods.pods, pods)
@@ -206,18 +180,18 @@ func (e *tenantEntry) RemovePodByAddr(addr string) bool {
 	return false
 }
 
-// getPod gets the current list of pods within scope of lock and returns them.
-func (e *tenantEntry) getPods() []*Pod {
+// GetPods gets the current list of pods within scope of lock and returns them.
+func (e *tenantEntry) GetPods() []*Pod {
 	e.pods.Lock()
 	defer e.pods.Unlock()
 	return e.pods.pods
 }
 
-// ensureTenantPod ensures that at least one SQL process exists for this tenant,
+// EnsureTenantPod ensures that at least one SQL process exists for this tenant,
 // and is ready for connection attempts to its IP address. If errorIfNoPods is
-// true, then ensureTenantPod returns an error if there are no pods available
+// true, then EnsureTenantPod returns an error if there are no pods available
 // rather than blocking.
-func (e *tenantEntry) ensureTenantPod(
+func (e *tenantEntry) EnsureTenantPod(
 	ctx context.Context, client DirectoryClient, errorIfNoPods bool,
 ) (pods []*Pod, err error) {
 	const retryDelay = 100 * time.Millisecond
@@ -228,7 +202,7 @@ func (e *tenantEntry) ensureTenantPod(
 	// If an IP address is already available, nothing more to do. Check this
 	// immediately after obtaining the lock so that only the first thread does
 	// the work to get information about the tenant.
-	pods = e.getPods()
+	pods = e.GetPods()
 	if len(pods) != 0 {
 		return pods, nil
 	}
