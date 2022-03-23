@@ -16,7 +16,7 @@ get_tenants
 # Launch a request that puts the limiter in debt by 2.
 
 launch
-- { id: g1, tenant: 2, iswrite: true, writebytes: 50 }
+- { id: g1, tenant: 2, writecount: 1, writebytes: 50 }
 ----
 [g1@2]
 
@@ -29,7 +29,7 @@ await
 # with the current debt.
 
 launch
-- { id: g1, tenant: 2, iswrite: true, writebytes: 30 }
+- { id: g1, tenant: 2, writecount: 1, writebytes: 30 }
 ----
 [g1@2]
 
