@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -92,7 +93,7 @@ func TestManagerWithPrincipalMap(t *testing.T) {
 		certsDir, caKey, testKeySize, time.Hour*96, true, true,
 	))
 	require.NoError(t, security.CreateClientPair(
-		certsDir, caKey, testKeySize, time.Hour*48, true, username.TestUserName(), false,
+		certsDir, caKey, testKeySize, time.Hour*48, true, username.TestUserName(), []roachpb.TenantID{roachpb.SystemTenantID}, false,
 	))
 	require.NoError(t, security.CreateNodePair(
 		certsDir, caKey, testKeySize, time.Hour*48, true, []string{"127.0.0.1", "foo"},
