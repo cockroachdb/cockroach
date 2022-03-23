@@ -737,8 +737,13 @@ func (rq *replicateQueue) addOrReplaceVoters(
 				break
 			}
 		}
-		if !repl.store.cfg.Settings.Version.IsActive(ctx,
-			clusterversion.EnableLeaseHolderRemoval) {
+		// Determines whether we can remove the leaseholder without first
+		// transferring the lease away. The call to allocator below makes sure
+		// that we proceed with the change only if we replace the removed replica
+		// with a VOTER_INCOMING.
+		lhRemovalAllowed := repl.store.cfg.Settings.Version.IsActive(ctx,
+			clusterversion.EnableLeaseHolderRemoval)
+		if !lhRemovalAllowed {
 			// See about transferring the lease away if we're about to remove the
 			// leaseholder.
 			done, err := rq.maybeTransferLeaseAway(
@@ -753,6 +758,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		}
 	}
 
+	lhBeingRemoved := removeIdx >= 0 && existingVoters[removeIdx].StoreID == repl.store.StoreID()
 	// The allocator should not try to re-add this replica since there is a reason
 	// we're removing it (i.e. dead or decommissioning). If we left the replica in
 	// the slice, the allocator would not be guaranteed to pick a replica that
@@ -854,8 +860,10 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	); err != nil {
 		return false, err
 	}
-	// Always requeue to see if more work needs to be done.
-	return true, nil
+	// Unless just removed myself (the leaseholder), always requeue to see
+	// if more work needs to be done. If leaseholder is removed, someone
+	// else will take over.
+	return !lhBeingRemoved, nil
 }
 
 // addOrReplaceNonVoters adds a non-voting replica to `repl`s range.
@@ -1324,10 +1332,15 @@ func (rq *replicateQueue) considerRebalance(
 			rebalanceTargetType = nonVoterTarget
 		}
 
+		// Determines whether we can remove the leaseholder without first
+		// transferring the lease away
+		lhRemovalAllowed := addTarget != (roachpb.ReplicationTarget{}) &&
+			repl.store.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableLeaseHolderRemoval)
+		lhBeingRemoved := removeTarget.StoreID == repl.store.StoreID()
+
 		if !ok {
 			log.VEventf(ctx, 1, "no suitable rebalance target for non-voters")
-		} else if !repl.store.cfg.Settings.Version.IsActive(ctx,
-			clusterversion.EnableLeaseHolderRemoval) {
+		} else if !lhRemovalAllowed {
 			if done, err := rq.maybeTransferLeaseAway(
 				ctx, repl, removeTarget.StoreID, dryRun, canTransferLeaseFrom,
 			); err != nil {
@@ -1373,7 +1386,10 @@ func (rq *replicateQueue) considerRebalance(
 			); err != nil {
 				return false, err
 			}
-			return true, nil
+			// Unless just removed myself (the leaseholder), always requeue to see
+			// if more work needs to be done. If leaseholder is removed, someone
+			// else will take over.
+			return !lhBeingRemoved, nil
 		}
 	}
 

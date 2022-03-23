@@ -122,7 +122,7 @@ func applyMethodsAndVerify(
 			destIdx := rng.Intn(n)
 			srcIdx := rng.Intn(sourceN)
 			debugString += fmt.Sprintf("(%d, %d)", destIdx, srcIdx)
-			b1.copy(b1Source, destIdx, srcIdx)
+			b1.Copy(b1Source, destIdx, srcIdx)
 			b2[destIdx] = append([]byte(nil), b2Source[srcIdx]...)
 		case copySlice, appendSlice:
 			// Generate a length-inclusive destIdx.
