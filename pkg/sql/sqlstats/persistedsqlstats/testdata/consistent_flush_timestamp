@@ -1,4 +1,8 @@
 exec-sql
+SET CLUSTER SETTING sql.stats.flush.minimum_interval = '0s'
+----
+
+exec-sql
 SET application_name = 'consistent-test'
 ----
 

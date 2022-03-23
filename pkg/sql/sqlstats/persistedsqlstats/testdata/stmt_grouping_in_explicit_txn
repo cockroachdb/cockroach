@@ -1,4 +1,8 @@
 exec-sql
+SET CLUSTER SETTING sql.stats.flush.minimum_interval = '0s'
+----
+
+exec-sql
 SET application_name = 'test'
 ----
 
@@ -170,6 +174,9 @@ WHERE
     WHERE
       jsonb_array_length(metadata -> 'stmtFingerprintIDs') >= 3
   )
+ORDER BY
+  (statistics -> 'statistics' ->> 'cnt')::INT
+ASC
 ----
-df3c70bf7729b433,705fcdf3f12803ec,SELECT _,2
 15c74af7a18bd6da,baa4f7bb278a6105,SELECT _, _,1
+df3c70bf7729b433,705fcdf3f12803ec,SELECT _,2
