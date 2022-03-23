@@ -171,6 +171,7 @@ go_library(
         "//pkg/roachprod",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/sql/pgwire/pgcode",
