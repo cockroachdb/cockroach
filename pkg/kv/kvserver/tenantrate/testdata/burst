@@ -20,7 +20,7 @@ get_tenants
 # limit. This will not block but will put the limiter into debt.
 
 launch
-- { id: g1, tenant: 2, iswrite: true, writebytes: 20 }
+- { id: g1, tenant: 2, writecount: 1, writebytes: 20 }
 ----
 [g1@2]
 
@@ -33,7 +33,7 @@ await
 # This will be 2s because we're in debt 1 and the rate is 1/s.
 
 launch
-- { id: g2, tenant: 2, iswrite: true, writebytes: 0 }
+- { id: g2, tenant: 2, writecount: 1, writebytes: 0 }
 ----
 [g2@2]
 
@@ -67,7 +67,7 @@ await
 # is above the burst of 2, we'll need to wait for the bucket to be full.
 
 launch
-- { id: g3,  tenant: 2, iswrite: true, writebytes: 30 }
+- { id: g3,  tenant: 2, writecount: 1, writebytes: 30 }
 ----
 [g3@2]
 

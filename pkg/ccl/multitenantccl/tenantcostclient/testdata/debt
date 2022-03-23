@@ -17,7 +17,7 @@ token-bucket-response
 
 timers
 ----
-00:00:01.600
+00:00:01.606
 00:00:09.000
 
 advance
@@ -43,7 +43,7 @@ write bytes=1024 label=w2
 
 timers
 ----
-00:00:02.011
+00:00:02.019
 00:00:09.000
 
 advance

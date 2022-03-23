@@ -348,12 +348,12 @@ func (c *tenantSideCostController) updateRunState(ctx context.Context) {
 	if deltaCPU < 0 {
 		deltaCPU = 0
 	}
-	ru := deltaCPU * float64(c.costCfg.PodCPUSecond)
+	ru := float64(c.costCfg.PodCPUCost(deltaCPU))
 
 	var deltaPGWireEgressBytes uint64
 	if newExternalUsage.PGWireEgressBytes > c.run.externalUsage.PGWireEgressBytes {
 		deltaPGWireEgressBytes = newExternalUsage.PGWireEgressBytes - c.run.externalUsage.PGWireEgressBytes
-		ru += float64(deltaPGWireEgressBytes) * float64(c.costCfg.PGWireEgressByte)
+		ru += float64(c.costCfg.PGWireEgressCost(int64(deltaPGWireEgressBytes)))
 	}
 
 	// KV RUs are not included here, these metrics correspond only to the SQL pod.
@@ -657,24 +657,25 @@ func (c *tenantSideCostController) OnResponse(
 	if multitenant.HasTenantCostControlExemption(ctx) {
 		return
 	}
-	if resp.ReadBytes() > 0 {
+	if resp.IsRead() {
 		c.limiter.RemoveTokens(c.timeSource.Now(), c.costCfg.ResponseCost(resp))
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if isWrite, writeBytes := req.IsWrite(); isWrite {
-		c.mu.consumption.WriteRequests++
-		c.mu.consumption.WriteBytes += uint64(writeBytes)
-		writeRU := float64(c.costCfg.KVWriteCost(writeBytes))
+	if req.IsWrite() {
+		c.mu.consumption.WriteBatches++
+		c.mu.consumption.WriteRequests += uint64(req.WriteCount())
+		c.mu.consumption.WriteBytes += uint64(req.WriteBytes())
+		writeRU := float64(c.costCfg.RequestCost(req))
 		c.mu.consumption.KVRU += writeRU
 		c.mu.consumption.RU += writeRU
-	} else {
-		c.mu.consumption.ReadRequests++
-		readBytes := resp.ReadBytes()
-		c.mu.consumption.ReadBytes += uint64(readBytes)
-		readRU := float64(c.costCfg.KVReadCost(readBytes))
+	} else if resp.IsRead() {
+		c.mu.consumption.ReadBatches++
+		c.mu.consumption.ReadRequests += uint64(resp.ReadCount())
+		c.mu.consumption.ReadBytes += uint64(resp.ReadBytes())
+		readRU := float64(c.costCfg.ResponseCost(resp))
 		c.mu.consumption.KVRU += readRU
 		c.mu.consumption.RU += readRU
 	}
@@ -692,7 +693,8 @@ func (c *tenantSideCostController) shouldAccountForExternalIORUs() bool {
 	return c.modeMu.externalIORUAccountingMode != externalIORUAccountingOff
 }
 
-// ExternalIOWriteWait is part of the multitenant.TenantSideExternalIORecorder interface.
+// ExternalIOWriteWait is part of the multitenant.TenantSideExternalIORecorder
+// interface.
 func (c *tenantSideCostController) ExternalIOWriteWait(ctx context.Context, bytes int64) error {
 	if !c.shouldWaitForExternalIORUs() {
 		return nil
@@ -704,7 +706,8 @@ func (c *tenantSideCostController) ExternalIOWriteWait(ctx context.Context, byte
 	return c.limiter.Wait(ctx, ru)
 }
 
-// ExternalIOWriteScucess is part of the multitenant.TenantSideExternalIORecorder interface.
+// ExternalIOWriteSuccess is part of the multitenant.TenantSideExternalIORecorder
+// interface.
 func (c *tenantSideCostController) ExternalIOWriteSuccess(ctx context.Context, bytes int64) {
 	if multitenant.HasTenantCostControlExemption(ctx) {
 		return
@@ -718,7 +721,8 @@ func (c *tenantSideCostController) ExternalIOWriteSuccess(ctx context.Context, b
 	c.mu.Unlock()
 }
 
-// ExternalIOWriteFailure is part of the multitenant.TenantSideExternalIORecorder interface.
+// ExternalIOWriteFailure is part of the multitenant.TenantSideExternalIORecorder
+// interface.
 //
 // The given byte count should be the number of bytes that were never
 // actually written.
@@ -741,8 +745,8 @@ func (c *tenantSideCostController) ExternalIOWriteFailure(
 	c.mu.Unlock()
 }
 
-// ExternalIOReadWait is part of the multitenant.TenantSideExternalIORecorder interface. We wait
-// after adding the RUs since these reads already happened.
+// ExternalIOReadWait is part of the multitenant.TenantSideExternalIORecorder
+// interface. We wait after adding the RUs since these reads already happened.
 func (c *tenantSideCostController) ExternalIOReadWait(ctx context.Context, bytes int64) error {
 	if multitenant.HasTenantCostControlExemption(ctx) {
 		return nil
