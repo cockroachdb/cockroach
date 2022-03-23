@@ -146,10 +146,7 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 				return
 			}
 
-			enabled := SQLStatsFlushEnabled.Get(&s.cfg.Settings.SV)
-			if enabled {
-				s.Flush(ctx)
-			}
+			s.Flush(ctx)
 		}
 	})
 }
