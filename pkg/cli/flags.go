@@ -214,6 +214,42 @@ func (a clusterNameSetter) String() string { return *a.clusterName }
 // Type implements the pflag.Value interface.
 func (a clusterNameSetter) Type() string { return "<identifier>" }
 
+// tenantIDSetter wraps a list of roachpb.TenantIDs and enables setting them via a command-line flag.
+type tenantIDSetter struct {
+	tenantIDs *[]roachpb.TenantID
+}
+
+// String implements the pflag.Value interface.
+func (t tenantIDSetter) String() string {
+	var tenantString strings.Builder
+	separator := ""
+	for _, tID := range *t.tenantIDs {
+		tenantString.WriteString(separator)
+		tenantString.WriteString(strconv.FormatUint(tID.ToUint64(), 10))
+		separator = ","
+	}
+	return tenantString.String()
+}
+
+// Type implements the pflag.Value interface.
+func (t tenantIDSetter) Type() string { return "<[]TenantID>" }
+
+// Set implements the pflag.Value interface.
+func (t tenantIDSetter) Set(v string) error {
+	// Reset tenantIDs slice as it is initialized to contain the system tenant ID
+	// by default.
+	*t.tenantIDs = []roachpb.TenantID{}
+	tenantScopes := strings.Split(v, "," /* separator */)
+	for _, tenantScope := range tenantScopes {
+		tenantID, err := roachpb.TenantIDFromString(tenantScope)
+		if err != nil {
+			return err
+		}
+		*t.tenantIDs = append(*t.tenantIDs, tenantID)
+	}
+	return nil
+}
+
 // Set implements the pflag.Value interface.
 func (a clusterNameSetter) Set(v string) error {
 	if v == "" {
@@ -588,6 +624,7 @@ func init() {
 		stringFlag(f, &certCtx.caKey, cliflags.CAKey)
 		intFlag(f, &certCtx.keySize, cliflags.KeySize)
 		boolFlag(f, &certCtx.overwriteFiles, cliflags.OverwriteFiles)
+		varFlag(f, &tenantIDSetter{tenantIDs: &certCtx.tenantScope}, cliflags.TenantScope)
 
 		if strings.HasSuffix(cmd.Name(), "-ca") {
 			// CA-only commands.

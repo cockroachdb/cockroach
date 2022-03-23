@@ -33,15 +33,12 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 		require.NoError(t, err)
 	}
 
-	kvAddrs, err := c.ExternalAddr(ctx, t.L(), c.All())
-	require.NoError(t, err)
-
 	const (
 		tenantHTTPPort = 8081
 		tenantSQLPort  = 30258
 	)
 	const tenantNode = 1
-	tenant := createTenantNode(kvAddrs, tenantID, tenantNode, tenantHTTPPort, tenantSQLPort)
+	tenant := createTenantNode(ctx, t, c, c.All(), tenantID, tenantNode, tenantHTTPPort, tenantSQLPort)
 	tenant.start(ctx, t, c, "./cockroach")
 
 	t.Status("checking that a client can connect to the tenant server")

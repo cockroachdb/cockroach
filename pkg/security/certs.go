@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -377,12 +378,15 @@ func CreateUIPair(
 // exist in the CA cert, the first one is used.
 // If a client CA exists, this is used instead.
 // If wantPKCS8Key is true, the private key in PKCS#8 encoding is written as well.
+// tenantIDs indicates the tenant(s) the client certificate is being scoped to.
+// By default, tenantID is set to the system tenant ID.
 func CreateClientPair(
 	certsDir, caKeyPath string,
 	keySize int,
 	lifetime time.Duration,
 	overwrite bool,
 	user SQLUsername,
+	tenantIDs []roachpb.TenantID,
 	wantPKCS8Key bool,
 ) error {
 	if len(caKeyPath) == 0 {
@@ -423,18 +427,19 @@ func CreateClientPair(
 		return errors.Wrap(err, "could not generate new client key")
 	}
 
-	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user)
+	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user, tenantIDs)
 	if err != nil {
 		return errors.Wrap(err, "error creating client certificate and key")
 	}
 
 	certPath := cm.ClientCertPath(user)
+	keyPath := cm.ClientKeyPath(user)
+
 	if err := writeCertificateToFile(certPath, clientCert, overwrite); err != nil {
 		return errors.Wrapf(err, "error writing client certificate to %s", certPath)
 	}
 	log.Infof(context.Background(), "generated client certificate: %s", certPath)
 
-	keyPath := cm.ClientKeyPath(user)
 	if err := writeKeyToFile(keyPath, clientKey, overwrite); err != nil {
 		return errors.Wrapf(err, "error writing client key to %s", keyPath)
 	}
