@@ -257,14 +257,16 @@ func (ts *testState) asyncRequest(
 func (ts *testState) request(
 	t *testing.T, d *datadriven.TestData, isWrite bool, args cmdArgs,
 ) string {
-	var writeBytes, readBytes int64
+	var writeCount, readCount, writeBytes, readBytes int64
 	if isWrite {
+		writeCount = 1
 		writeBytes = args.bytes
 	} else {
+		readCount = 1
 		readBytes = args.bytes
 	}
-	reqInfo := tenantcostmodel.TestingRequestInfo(isWrite, writeBytes)
-	respInfo := tenantcostmodel.TestingResponseInfo(readBytes)
+	reqInfo := tenantcostmodel.TestingRequestInfo(writeCount, writeBytes)
+	respInfo := tenantcostmodel.TestingResponseInfo(readCount, readBytes)
 	if args.label == "" {
 		ts.syncRequest(t, d, reqInfo, respInfo)
 	} else {
@@ -456,15 +458,17 @@ func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) s
 	return fmt.Sprintf(""+
 		"RU:  %.2f\n"+
 		"KVRU:  %.2f\n"+
-		"Reads:  %d requests (%d bytes)\n"+
-		"Writes:  %d requests (%d bytes)\n"+
+		"Reads:  %d requests in %d batches (%d bytes)\n"+
+		"Writes:  %d requests in %d batches (%d bytes)\n"+
 		"SQL Pods CPU seconds:  %.2f\n"+
 		"PGWire egress:  %d bytes\n",
 		c.RU,
 		c.KVRU,
 		c.ReadRequests,
+		c.ReadBatches,
 		c.ReadBytes,
 		c.WriteRequests,
+		c.WriteBatches,
 		c.WriteBytes,
 		c.SQLPodsCPUSeconds,
 		c.PGWireEgressBytes,
@@ -596,19 +600,21 @@ func TestConsumption(t *testing.T) {
 		},
 	})
 	r := sqlutils.MakeSQLRunner(tenantDB)
-	r.Exec(t, "CREATE TABLE t (v STRING)")
+	// Create a secondary index to ensure that writes to both indexes are
+	// recorded in metrics.
+	r.Exec(t, "CREATE TABLE t (v STRING, w STRING, INDEX (w, v))")
 	// Do some writes and reads and check the reported consumption. Repeat the
 	// test a few times, since background requests can trick the test into
 	// passing.
 	for repeat := 0; repeat < 5; repeat++ {
 		beforeWrite := testProvider.waitForConsumption(t)
-		r.Exec(t, "INSERT INTO t SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
+		r.Exec(t, "INSERT INTO t (v) SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
 		const expectedBytes = 10 * 10 * 1024
 
 		afterWrite := testProvider.waitForConsumption(t)
 		delta := afterWrite
 		delta.Sub(&beforeWrite)
-		if delta.WriteRequests < 1 || delta.WriteBytes < expectedBytes {
+		if delta.WriteBatches < 1 || delta.WriteRequests < 2 || delta.WriteBytes < expectedBytes*2 {
 			t.Errorf("usage after write: %s", delta.String())
 		}
 
@@ -617,7 +623,7 @@ func TestConsumption(t *testing.T) {
 		afterRead := testProvider.waitForConsumption(t)
 		delta = afterRead
 		delta.Sub(&afterWrite)
-		if delta.ReadRequests < 1 || delta.ReadBytes < expectedBytes {
+		if delta.ReadBatches < 1 || delta.ReadRequests < 1 || delta.ReadBytes < expectedBytes {
 			t.Errorf("usage after read: %s", delta.String())
 		}
 		r.Exec(t, "DELETE FROM t WHERE true")

@@ -4,8 +4,8 @@ usage
 ----
 RU:  0.00
 KVRU:  0.00
-Reads:  0 requests (0 bytes)
-Writes:  0 requests (0 bytes)
+Reads:  0 requests in 0 batches (0 bytes)
+Writes:  0 requests in 0 batches (0 bytes)
 SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 
@@ -14,10 +14,10 @@ read bytes=1024000
 
 usage
 ----
-RU:  105.83
-KVRU:  105.83
-Reads:  1 requests (1024000 bytes)
-Writes:  0 requests (0 bytes)
+RU:  5.77
+KVRU:  5.77
+Reads:  0 requests in 0 batches (0 bytes)
+Writes:  0 requests in 1 batches (0 bytes)
 SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 
@@ -26,10 +26,10 @@ write bytes=1024
 
 usage
 ----
-RU:  113.58
-KVRU:  113.58
-Reads:  1 requests (1024000 bytes)
-Writes:  1 requests (1024 bytes)
+RU:  19.30
+KVRU:  19.30
+Reads:  0 requests in 0 batches (0 bytes)
+Writes:  1 requests in 2 batches (1024 bytes)
 SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 
@@ -39,10 +39,10 @@ cpu
 
 usage
 ----
-RU:  1113.58
-KVRU:  113.58
-Reads:  1 requests (1024000 bytes)
-Writes:  1 requests (1024 bytes)
+RU:  1019.30
+KVRU:  19.30
+Reads:  0 requests in 0 batches (0 bytes)
+Writes:  1 requests in 2 batches (1024 bytes)
 SQL Pods CPU seconds:  1.00
 PGWire egress:  0 bytes
 
@@ -57,10 +57,10 @@ write bytes=4096
 
 usage
 ----
-RU:  1148.39
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
+RU:  1064.00
+KVRU:  64.00
+Reads:  0 requests in 0 batches (0 bytes)
+Writes:  3 requests in 5 batches (9216 bytes)
 SQL Pods CPU seconds:  1.00
 PGWire egress:  0 bytes
 
@@ -70,10 +70,10 @@ cpu
 
 usage
 ----
-RU:  3601148.39
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
+RU:  3601064.00
+KVRU:  64.00
+Reads:  0 requests in 0 batches (0 bytes)
+Writes:  3 requests in 5 batches (9216 bytes)
 SQL Pods CPU seconds:  3601.00
 PGWire egress:  0 bytes
 
@@ -83,9 +83,9 @@ pgwire-egress
 
 usage
 ----
-RU:  3601158.74
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
+RU:  3601074.34
+KVRU:  64.00
+Reads:  0 requests in 0 batches (0 bytes)
+Writes:  3 requests in 5 batches (9216 bytes)
 SQL Pods CPU seconds:  3601.00
 PGWire egress:  12345 bytes

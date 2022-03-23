@@ -50,9 +50,9 @@ func TestCloser(t *testing.T) {
 	ctx := context.Background()
 	limiter := factory.GetTenant(ctx, tenant, closer)
 	// First Wait call will not block.
-	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(true, 1)))
+	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1)))
 	errCh := make(chan error, 1)
-	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(true, 1<<30)) }()
+	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1<<30)) }()
 	testutils.SucceedsSoon(t, func() error {
 		if timers := timeSource.Timers(); len(timers) != 1 {
 			return errors.Errorf("expected 1 timer, found %d", len(timers))
@@ -87,7 +87,7 @@ type launchState struct {
 	tenantID   roachpb.TenantID
 	ctx        context.Context
 	cancel     context.CancelFunc
-	isWrite    bool
+	writeCount int64
 	writeBytes int64
 	reserveCh  chan error
 }
@@ -208,7 +208,7 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 	var cmds []struct {
 		ID         string
 		Tenant     uint64
-		IsWrite    bool
+		WriteCount int64
 		WriteBytes int64
 	}
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &cmds); err != nil {
@@ -220,7 +220,7 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 		s.tenantID = roachpb.MakeTenantID(cmd.Tenant)
 		s.ctx, s.cancel = context.WithCancel(context.Background())
 		s.reserveCh = make(chan error, 1)
-		s.isWrite = cmd.IsWrite
+		s.writeCount = cmd.WriteCount
 		s.writeBytes = cmd.WriteBytes
 		ts.running[s.id] = &s
 		lims := ts.tenants[s.tenantID]
@@ -230,7 +230,7 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 		go func() {
 			// We'll not worry about ever releasing tenant Limiters.
 			s.reserveCh <- lims[0].Wait(
-				s.ctx, tenantcostmodel.TestingRequestInfo(s.isWrite, s.writeBytes),
+				s.ctx, tenantcostmodel.TestingRequestInfo(s.writeCount, s.writeBytes),
 			)
 		}()
 	}
@@ -303,19 +303,20 @@ func (ts *testState) cancel(t *testing.T, d *datadriven.TestData) string {
 }
 
 // recordRead accounts for bytes read from a request. It takes as input a
-// yaml list with fields tenant and readbytes. It returns the set of tasks
-// currently running like launch, await, and cancel.
+// yaml list with fields tenant, readcount, and readbytes. It returns the set of
+// tasks currently running like launch, await, and cancel.
 //
 // For example:
 //
 //  record_read
-//  - { tenant: 2, readbytes: 32 }
+//  - { tenant: 2, readcount: 1, readbytes: 32 }
 //  ----
 //  [a@2]
 //
 func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 	var reads []struct {
 		Tenant    uint64
+		ReadCount int64
 		ReadBytes int64
 	}
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &reads); err != nil {
@@ -327,7 +328,7 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 		if len(lims) == 0 {
 			d.Fatalf(t, "no outstanding limiters for %v", tid)
 		}
-		lims[0].RecordRead(context.Background(), tenantcostmodel.TestingResponseInfo(r.ReadBytes))
+		lims[0].RecordRead(context.Background(), tenantcostmodel.TestingResponseInfo(r.ReadCount, r.ReadBytes))
 	}
 	return ts.FormatRunning()
 }
@@ -519,8 +520,10 @@ func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 	config := tenantrate.DefaultConfig()
 
 	calculateIOPS := func(rate float64) float64 {
-		readCost := config.ReadRequestUnits + float64(workload.ReadSize)*config.ReadUnitsPerByte
-		writeCost := config.WriteRequestUnits + float64(workload.WriteSize)*config.WriteUnitsPerByte
+		readCost := config.ReadBatchUnits + config.ReadRequestUnits +
+			float64(workload.ReadSize)*config.ReadUnitsPerByte
+		writeCost := config.WriteBatchUnits + config.WriteRequestUnits +
+			float64(workload.WriteSize)*config.WriteUnitsPerByte
 		readFraction := float64(workload.ReadPercentage) / 100.0
 		avgCost := readFraction*readCost + (1-readFraction)*writeCost
 		return rate / avgCost
@@ -621,8 +624,10 @@ func parseSettings(t *testing.T, d *datadriven.TestData, config *tenantrate.Conf
 	}
 	override(&config.Rate, vals.Rate)
 	override(&config.Burst, vals.Burst)
+	override(&config.ReadBatchUnits, vals.Read.Base)
 	override(&config.ReadRequestUnits, vals.Read.Base)
 	override(&config.ReadUnitsPerByte, vals.Read.PerByte)
+	override(&config.WriteBatchUnits, vals.Write.Base)
 	override(&config.WriteRequestUnits, vals.Write.Base)
 	override(&config.WriteUnitsPerByte, vals.Write.PerByte)
 }

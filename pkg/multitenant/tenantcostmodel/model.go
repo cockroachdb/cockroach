@@ -29,20 +29,33 @@ type RU float64
 //
 // The cost model takes into account the following activities:
 //
-//  - KV "read" and "write" operations. KV operations that read or write data
-//    have a base cost and a per-byte cost. Specifically, the cost of a read is:
-//      RUs = ReadRequest + <size of read in bytes> * ReadByte
-//    The cost of a write is:
-//      RUs = WriteRequest + <size of write in bytes> * WriteByte
+//  - KV "read" and "write" batches. KV batches that read or write data have a
+//      base cost, a per-request cost, and a per-byte cost. Specifically, the
+//      cost of a read batch is:
+//      RUs = KVReadBatch +
+//     	      <count of reads in batch> * KVReadRequest +
+//    	      <size of reads in bytes> * KVReadByte
+//    The cost of a write batch is:
+//      RUs = KVWriteBatch +
+//            <count of writes in batch> * KVWriteRequest +
+//            <size of writes in bytes> * KVWriteByte
 //
 //  - CPU usage on the tenant's SQL pods.
 //
+//  - Count of bytes returned from SQL to the client (network egress).
+//
 type Config struct {
+	// KVReadBatch is the baseline cost of a batch of KV reads.
+	KVReadBatch RU
+
 	// KVReadRequest is the baseline cost of a KV read.
 	KVReadRequest RU
 
 	// KVReadByte is the per-byte cost of a KV read.
 	KVReadByte RU
+
+	// KVWriteBatch is the baseline cost of a batch of KV writes.
+	KVWriteBatch RU
 
 	// KVWriteRequest is the baseline cost of a KV write.
 	KVWriteRequest RU
@@ -59,94 +72,148 @@ type Config struct {
 }
 
 // KVReadCost calculates the cost of a KV read operation.
-func (c *Config) KVReadCost(bytes int64) RU {
-	return c.KVReadRequest + RU(bytes)*c.KVReadByte
+func (c *Config) KVReadCost(count, bytes int64) RU {
+	return c.KVReadBatch + RU(count)*c.KVReadRequest + RU(bytes)*c.KVReadByte
 }
 
 // KVWriteCost calculates the cost of a KV write operation.
-func (c *Config) KVWriteCost(bytes int64) RU {
-	return c.KVWriteRequest + RU(bytes)*c.KVWriteByte
+func (c *Config) KVWriteCost(count, bytes int64) RU {
+	return c.KVWriteBatch + RU(count)*c.KVWriteRequest + RU(bytes)*c.KVWriteByte
 }
 
-// RequestCost returns the portion of the cost that can be calculated upfront:
-// the per-request cost (for both reads and writes) and the per-byte write cost.
+// RequestCost returns the portion of the cost that is calculated upfront: the
+// per-request and per-byte write cost.
 func (c *Config) RequestCost(bri RequestInfo) RU {
-	if isWrite, writeBytes := bri.IsWrite(); isWrite {
-		return c.KVWriteCost(writeBytes)
+	if !bri.IsWrite() {
+		return 0
 	}
-	return c.KVReadRequest
+	return c.KVWriteCost(bri.writeCount, bri.writeBytes)
 }
 
-// ResponseCost returns the portion of the cost that can only be calculated
-// after-the-fact: the per-byte read cost.
+// ResponseCost returns the portion of the cost that is calculated
+// after-the-fact: the per-request and per-byte read cost.
 func (c *Config) ResponseCost(bri ResponseInfo) RU {
-	return RU(bri.ReadBytes()) * c.KVReadByte
+	if !bri.IsRead() {
+		return 0
+	}
+	return c.KVReadCost(bri.readCount, bri.readBytes)
 }
 
-// RequestInfo captures the request information that is used (together with
-// the cost model) to determine the portion of the cost that can be calculated
-// upfront. Specifically: whether it is a read or a write and the write size (if
-// it's a write).
+// RequestInfo captures the BatchRequeset information that is used (together
+// with the cost model) to determine the portion of the cost that can be
+// calculated upfront. Specifically: how many writes were batched together and
+// their total size (if the request is a write batch).
 type RequestInfo struct {
-	// writeBytes is the write size if the request is a write, or -1 if it is a read.
+	// writeCount is the number of writes that were batched together. This is -1
+	// if it is a read-only batch.
+	writeCount int64
+	// writeBytes is the total size of all batched writes in the request, in
+	// bytes, or 0 if it is a read-only batch.
 	writeBytes int64
 }
 
 // MakeRequestInfo extracts the relevant information from a BatchRequest.
 func MakeRequestInfo(ba *roachpb.BatchRequest) RequestInfo {
+	// The cost of read-only batches is captured by MakeResponseInfo.
 	if !ba.IsWrite() {
-		return RequestInfo{writeBytes: -1}
+		return RequestInfo{writeCount: -1}
 	}
 
-	var writeBytes int64
+	var writeCount, writeBytes int64
 	for i := range ba.Requests {
-		if swr, isSizedWrite := ba.Requests[i].GetInner().(roachpb.SizedWriteRequest); isSizedWrite {
-			writeBytes += swr.WriteBytes()
+		req := ba.Requests[i].GetInner()
+
+		// Only count non-admin requests in the batch that write user data. Other
+		// requests are considered part of the "base" cost of a batch.
+		switch req.(type) {
+		case *roachpb.PutRequest, *roachpb.ConditionalPutRequest, *roachpb.IncrementRequest,
+			*roachpb.DeleteRequest, *roachpb.DeleteRangeRequest, *roachpb.ClearRangeRequest,
+			*roachpb.RevertRangeRequest, *roachpb.InitPutRequest, *roachpb.AddSSTableRequest:
+			writeCount++
+			if swr, isSizedWrite := req.(roachpb.SizedWriteRequest); isSizedWrite {
+				writeBytes += swr.WriteBytes()
+			}
 		}
 	}
-	return RequestInfo{writeBytes: writeBytes}
+	return RequestInfo{writeCount: writeCount, writeBytes: writeBytes}
 }
 
-// IsWrite returns whether the request is a write, and if so the write size in
-// bytes.
-func (bri RequestInfo) IsWrite() (isWrite bool, writeBytes int64) {
-	if bri.writeBytes == -1 {
-		return false, 0
-	}
-	return true, bri.writeBytes
+// IsWrite is true if this was a write batch rather than a read-only batch.
+func (bri RequestInfo) IsWrite() bool {
+	return bri.writeCount != -1
+}
+
+// WriteCount is the number of writes that were batched together. This is -1 if
+// it is a read-only batch.
+func (bri RequestInfo) WriteCount() int64 {
+	return bri.writeCount
+}
+
+// WriteBytes is the total size of all batched writes in the request, in bytes,
+// or 0 if it is a read-only batch.
+func (bri RequestInfo) WriteBytes() int64 {
+	return bri.writeBytes
 }
 
 // TestingRequestInfo creates a RequestInfo for testing purposes.
-func TestingRequestInfo(isWrite bool, writeBytes int64) RequestInfo {
-	if !isWrite {
-		return RequestInfo{writeBytes: -1}
-	}
-	return RequestInfo{writeBytes: writeBytes}
+func TestingRequestInfo(writeCount, writeBytes int64) RequestInfo {
+	return RequestInfo{writeCount: writeCount, writeBytes: writeBytes}
 }
 
 // ResponseInfo captures the BatchResponse information that is used (together
 // with the cost model) to determine the portion of the cost that can only be
-// calculated after-the-fact. Specifically: the read size (if the request is a
-// read).
+// calculated after-the-fact. Specifically: how many reads were batched together
+// and their total size (if the request is a read-only batch).
 type ResponseInfo struct {
+	// readCount is the number of reads that were batched together. This is -1
+	// if it is a write batch.
+	readCount int64
+	// readBytes is the total size of all batched reads in the response, in
+	// bytes, or 0 if it is a write batch.
 	readBytes int64
 }
 
 // MakeResponseInfo extracts the relevant information from a BatchResponse.
-func MakeResponseInfo(br *roachpb.BatchResponse) ResponseInfo {
-	var readBytes int64
-	for _, ru := range br.Responses {
-		readBytes += ru.GetInner().Header().NumBytes
+func MakeResponseInfo(br *roachpb.BatchResponse, isReadOnly bool) ResponseInfo {
+	// The cost of non read-only batches is captured by MakeRequestInfo.
+	if !isReadOnly {
+		return ResponseInfo{readCount: -1}
 	}
-	return ResponseInfo{readBytes: readBytes}
+
+	var readCount, readBytes int64
+	for i := range br.Responses {
+		resp := br.Responses[i].GetInner()
+
+		// Only count requests in the batch that read user data. Other requests
+		// are considered part of the "base" cost of a batch.
+		switch resp.(type) {
+		case *roachpb.GetResponse, *roachpb.ScanResponse, *roachpb.ReverseScanResponse,
+			*roachpb.ExportResponse:
+			readCount++
+			readBytes += resp.Header().NumBytes
+		}
+	}
+	return ResponseInfo{readCount: readCount, readBytes: readBytes}
 }
 
-// ReadBytes returns the bytes read, or 0 if the request was a write.
+// IsRead is true if this was a read-only batch rather than a write batch.
+func (bri ResponseInfo) IsRead() bool {
+	return bri.readCount != -1
+}
+
+// ReadCount is the number of reads that were batched together. This is -1 if it
+// is a write batch.
+func (bri ResponseInfo) ReadCount() int64 {
+	return bri.readCount
+}
+
+// ReadBytes is the total size of all batched reads in the response, in bytes,
+// or 0 if it is a write batch.
 func (bri ResponseInfo) ReadBytes() int64 {
 	return bri.readBytes
 }
 
 // TestingResponseInfo creates a ResponseInfo for testing purposes.
-func TestingResponseInfo(readBytes int64) ResponseInfo {
-	return ResponseInfo{readBytes: readBytes}
+func TestingResponseInfo(readCount, readBytes int64) ResponseInfo {
+	return ResponseInfo{readCount: readCount, readBytes: readBytes}
 }
