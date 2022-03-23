@@ -158,6 +158,7 @@ func doCreateSequence(
 	// Initialize the sequence value.
 	seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(id))
 	b := &kv.Batch{}
+	p.createdSequences.addCreatedSequence(uint32(id))
 	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
 	if err := p.txn.Run(ctx, b); err != nil {
 		return nil, err

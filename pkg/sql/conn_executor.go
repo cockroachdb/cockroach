@@ -932,6 +932,8 @@ func (s *Server) newConnExecutor(
 
 	ex.extraTxnState.atomicAutoRetryCounter = new(int32)
 
+	ex.extraTxnState.createdSequences = make(map[uint32]struct{})
+
 	ex.initPlanner(ctx, &ex.planner)
 
 	return ex
@@ -1377,6 +1379,10 @@ type connExecutor struct {
 		// has admin privilege. hasAdminRoleCache is set for the first statement
 		// in a transaction.
 		hasAdminRoleCache HasAdminRoleCache
+
+		// createdSequences keeps track of sequences created in the current transaction.
+		// The map key is the sequence descpb.ID.
+		createdSequences map[uint32]struct{}
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -1645,6 +1651,11 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 
 	// Close all cursors.
 	ex.extraTxnState.sqlCursors.closeAll()
+
+	createdSequences := ex.extraTxnState.createdSequences
+	for id, _ := range createdSequences {
+		delete(createdSequences, id)
+	}
 
 	switch ev.eventType {
 	case txnCommit, txnRollback:
@@ -2735,6 +2746,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
+	p.createdSequences = ex.getCreatedSequencesAccessor()
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
@@ -3102,6 +3114,12 @@ func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 
 func (ex *connExecutor) getCursorAccessor() sqlCursors {
 	return connExCursorAccessor{
+		ex: ex,
+	}
+}
+
+func (ex *connExecutor) getCreatedSequencesAccessor() createdSequences {
+	return connExCreatedSequencesAccessor{
 		ex: ex,
 	}
 }
