@@ -104,8 +104,11 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	if len(targetRoles) == 0 {
 		targetRoles = append(targetRoles, params.p.User())
 	}
-
-	if err := params.p.validateRoles(params.ctx, targetRoles, false /* isPublicValid */); err != nil {
+	targetRoleInfos, err := ToSQLUserInfos(params.ctx, params.p.execCfg.InternalExecutor, params.p.txn, targetRoles)
+	if err != nil {
+		return err
+	}
+	if err := params.p.validateRoles(params.ctx, targetRoleInfos, false /* isPublicValid */); err != nil {
 		return err
 	}
 
@@ -124,8 +127,12 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	granteeSQLUserInfos, err := ToSQLUserInfos(params.ctx, params.p.execCfg.InternalExecutor, params.p.txn, granteeSQLUsernames)
+	if err != nil {
+		return err
+	}
 
-	if err := params.p.validateRoles(params.ctx, granteeSQLUsernames, true /* isPublicValid */); err != nil {
+	if err := params.p.validateRoles(params.ctx, granteeSQLUserInfos, true /* isPublicValid */); err != nil {
 		return err
 	}
 
@@ -138,7 +145,11 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		// by yourself or by roles that you are a member of.
 		for _, targetRole := range targetRoles {
 			if targetRole != params.p.User() {
-				memberOf, err := params.p.MemberOfWithAdminOption(params.ctx, params.p.User())
+				paramUserID, err := GetUserID(params.ctx, params.p.execCfg.InternalExecutor, params.p.txn, params.p.User())
+				if err != nil {
+					return err
+				}
+				memberOf, err := params.p.MemberOfWithAdminOption(params.ctx, security.SQLUserInfo{Username: params.p.User(), UserID: paramUserID})
 				if err != nil {
 					return err
 				}
