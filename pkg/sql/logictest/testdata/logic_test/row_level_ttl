@@ -302,7 +302,7 @@ WHERE label = 'row-level-ttl-$table_id'
 query T
 SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
 ----
-ALTER TABLE [123 as T] WITH (expire_after = ...)
+ALTER TABLE test.public.tbl WITH (ttl = 'on', ...)
 
 statement ok
 DROP TABLE tbl
@@ -591,3 +591,25 @@ SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
 WHERE label = 'row-level-ttl-$table_id'
 ----
 ACTIVE  @hourly  root
+
+statement ok
+DROP TABLE tbl
+
+# Special table name.
+statement ok
+CREATE TABLE "Table-Name" (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 hours')
+
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'Table-Name'
+
+let $schedule_id
+SELECT id FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+
+query T
+SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
+----
+ALTER TABLE test.public."Table-Name" WITH (ttl = 'on', ...)
+
+statement ok
+DROP TABLE "Table-Name"
