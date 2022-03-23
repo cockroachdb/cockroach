@@ -91,7 +91,7 @@ func TestManagerWithPrincipalMap(t *testing.T) {
 		certsDir, caKey, testKeySize, time.Hour*96, true, true,
 	))
 	require.NoError(t, security.CreateClientPair(
-		certsDir, caKey, testKeySize, time.Hour*48, true, security.TestUserName(), false,
+		certsDir, caKey, testKeySize, time.Hour*48, true, security.TestUserName(), "", false,
 	))
 	require.NoError(t, security.CreateNodePair(
 		certsDir, caKey, testKeySize, time.Hour*48, true, []string{"127.0.0.1", "foo"},
