@@ -75,6 +75,19 @@ func (og *operationGenerator) tableHasRows(
 	return og.scanBool(ctx, tx, fmt.Sprintf(`SELECT EXISTS (SELECT * FROM %s)`, tableName.String()))
 }
 
+func (og *operationGenerator) scanInt(
+	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
+) (i int, err error) {
+	err = tx.QueryRow(ctx, query, args...).Scan(&i)
+	if err == nil {
+		og.LogQueryResults(
+			fmt.Sprintf("%q %q", query, args),
+			fmt.Sprintf("%d", i),
+		)
+	}
+	return i, errors.Wrapf(err, "scanBool: %q %q", query, args)
+}
+
 func (og *operationGenerator) scanBool(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) (b bool, err error) {
@@ -878,6 +891,10 @@ func (og *operationGenerator) constraintIsPrimary(
 func (og *operationGenerator) columnHasSingleUniqueConstraint(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
+	// Rowid will always be unique, though the index is hidden.
+	if columnName == "rowid" {
+		return true, nil
+	}
 	return og.scanBool(ctx, tx, `
 	SELECT EXISTS(
 	        SELECT column_name
@@ -930,7 +947,7 @@ SELECT COALESCE(
 `, tableName.String(), columnName)
 }
 
-func (og *operationGenerator) columnIsComputed(
+func (og *operationGenerator) columnIsVirtualComputed(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
 	// Note that we COALESCE because the column may not exist.
@@ -941,7 +958,7 @@ SELECT COALESCE(
               FROM pg_catalog.pg_attribute
              WHERE attrelid = $1:::REGCLASS AND attname = $2
         )
-        != '',
+        = 'v',
         false
        );
 `, tableName.String(), columnName)
@@ -968,17 +985,42 @@ func (og *operationGenerator) rowsSatisfyFkConstraint(
 	childColumn *column,
 ) (bool, error) {
 	// Self referential foreign key constraints are acceptable.
-	if parentTable.Schema() == childTable.Schema() && parentTable.Object() == childTable.Object() && parentColumn.name == childColumn.name {
+	selfReferential, err := og.scanBool(ctx, tx,
+		`SELECT $1:::REGCLASS=$2:::REGCLASS`,
+		parentTable.String(), childTable.String())
+	if err != nil {
+		return false, err
+	}
+	if selfReferential && parentColumn.name == childColumn.name {
 		return true, nil
 	}
-	return og.scanBool(ctx, tx, fmt.Sprintf(`
-	SELECT NOT EXISTS(
-	  SELECT *
+
+	// Validate the parent table has rows.
+	childRows, err := og.scanInt(ctx, tx,
+		fmt.Sprintf(`
+SELECT count(*) FROM %s
+		`, childTable.String()),
+	)
+	if err != nil {
+		return false, err
+	}
+
+	// If child table is empty then no violation can exist.
+	if childRows == 0 {
+		return true, nil
+	}
+
+	numJoinRows, err := og.scanInt(ctx, tx, fmt.Sprintf(`
+	  SELECT count(*)
 	    FROM %s as t1
 		  LEFT JOIN %s as t2
 				     ON t1.%s = t2.%s
-	   WHERE t2.%s IS NULL
-  )`, childTable.String(), parentTable.String(), childColumn.name, parentColumn.name, parentColumn.name))
+			WHERE t2.%s IS NOT NULL
+`, childTable.String(), parentTable.String(), childColumn.name, parentColumn.name, parentColumn.name))
+	if err != nil {
+		return false, err
+	}
+	return numJoinRows == childRows, err
 }
 
 // violatesFkConstraints checks if the rows to be inserted will result in a foreign key violation.
@@ -988,11 +1030,16 @@ func (og *operationGenerator) violatesFkConstraints(
 	fkConstraints, err := og.scanStringArrayRows(ctx, tx, fmt.Sprintf(`
 		SELECT array[parent.table_schema, parent.table_name, parent.column_name, child.column_name]
 		  FROM (
-		        SELECT conkey, confkey, conrelid, confrelid
+		        SELECT conname, conkey, confkey, conrelid, confrelid
 		          FROM pg_constraint
 		         WHERE contype = 'f'
 		           AND conrelid = '%s'::REGCLASS::INT8
 		       ) AS con
+			JOIN ( SELECT CONSTRAINT_NAME from information_schema.table_constraints 
+				      WHERE table_schema ='%s' AND
+								    table_name='%s' AND
+										(crdb_internal.is_constraint_active('%s', constraint_name) = true)
+           ) AS tc ON conname = tc.CONSTRAINT_NAME
 		  JOIN (
 		        SELECT column_name, ordinal_position, column_default
 		          FROM information_schema.columns
@@ -1013,7 +1060,7 @@ func (og *operationGenerator) violatesFkConstraints(
 		                       AND con.confrelid = parent.oid
 		                      )
 		 WHERE child.column_name != 'rowid';
-`, tableName.String(), tableName.Schema(), tableName.Object()))
+`, tableName.String(), tableName.Schema(), tableName.Object(), tableName.String(), tableName.Schema(), tableName.Object()))
 	if err != nil {
 		return false, err
 	}
@@ -1042,7 +1089,6 @@ func (og *operationGenerator) violatesFkConstraints(
 			if err != nil {
 				return false, err
 			}
-
 			if violation {
 				return true, nil
 			}
@@ -1069,10 +1115,8 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	}
 
 	return og.scanBool(ctx, tx, fmt.Sprintf(`
-	SELECT NOT EXISTS (
-	    SELECT * from %s.%s
+	    SELECT count(*) = 0 from %s.%s
 	    WHERE %s = %s
-	)
 	`, parentTableSchema, parentTableName, parentColumn, childValue))
 }
 
