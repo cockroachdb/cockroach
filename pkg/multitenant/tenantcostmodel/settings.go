@@ -26,6 +26,14 @@ import (
 // only the defaults are used. Ideally, the tenant would always get the values
 // from the host cluster.
 var (
+	readBatchCost = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.kv_read_batch_cost",
+		"base cost of a read batch in Request Units",
+		0.6993,
+		settings.PositiveFloat,
+	)
+
 	readRequestCost = settings.RegisterFloatSetting(
 		settings.TenantReadOnly,
 		"tenant_cost_model.kv_read_request_cost",
@@ -39,6 +47,14 @@ var (
 		"tenant_cost_model.kv_read_cost_per_megabyte",
 		"cost of a read in Request Units per MB",
 		107.6563,
+		settings.PositiveFloat,
+	)
+
+	writeBatchCost = settings.RegisterFloatSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.kv_write_batch_cost",
+		"base cost of a write batch in Request Units",
+		5.7733,
 		settings.PositiveFloat,
 	)
 
@@ -76,8 +92,10 @@ var (
 
 	// List of config settings, used by SetOnChange.
 	configSettings = [...]settings.NonMaskedSetting{
+		readBatchCost,
 		readRequestCost,
 		readCostPerMB,
+		writeBatchCost,
 		writeRequestCost,
 		writeCostPerMB,
 		podCPUSecondCost,
@@ -90,8 +108,10 @@ const perMBToPerByte = float64(1) / (1024 * 1024)
 // ConfigFromSettings constructs a Config using the cluster setting values.
 func ConfigFromSettings(sv *settings.Values) Config {
 	return Config{
+		KVReadBatch:      RU(readBatchCost.Get(sv)),
 		KVReadRequest:    RU(readRequestCost.Get(sv)),
 		KVReadByte:       RU(readCostPerMB.Get(sv) * perMBToPerByte),
+		KVWriteBatch:     RU(writeBatchCost.Get(sv)),
 		KVWriteRequest:   RU(writeRequestCost.Get(sv)),
 		KVWriteByte:      RU(writeCostPerMB.Get(sv) * perMBToPerByte),
 		PodCPUSecond:     RU(podCPUSecondCost.Get(sv)),
@@ -103,8 +123,10 @@ func ConfigFromSettings(sv *settings.Values) Config {
 // setting values.
 func DefaultConfig() Config {
 	return Config{
+		KVReadBatch:      RU(readBatchCost.Default()),
 		KVReadRequest:    RU(readRequestCost.Default()),
 		KVReadByte:       RU(readCostPerMB.Default() * perMBToPerByte),
+		KVWriteBatch:     RU(writeBatchCost.Default()),
 		KVWriteRequest:   RU(writeRequestCost.Default()),
 		KVWriteByte:      RU(writeCostPerMB.Default() * perMBToPerByte),
 		PodCPUSecond:     RU(podCPUSecondCost.Default()),
