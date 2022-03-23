@@ -14,6 +14,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -256,6 +258,10 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 			if err != nil {
 				q.Fatal(err)
 			}
+			// Persist the response to artifacts to aid debugging. See #75438.
+			_ = os.WriteFile(filepath.Join(q.t.ArtifactsDir(), "status_ranges.json"),
+				[]byte(result.Stdout), 0644,
+			)
 			// We need just a subset of the response. Make an ad-hoc
 			// struct with just the bits of interest.
 			type jsonOutput struct {
