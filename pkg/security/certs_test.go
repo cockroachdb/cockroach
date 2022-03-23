@@ -171,6 +171,58 @@ func TestGenerateTenantCerts(t *testing.T) {
 	}, infos)
 }
 
+// TestGenerateClientCerts tests tenant scoped client certificates have the username
+// set correctly and also have the tenant ID embedded as a SAN.
+func TestGenerateClientCerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	security.ResetAssetLoader()
+	defer ResetTest()
+
+	certsDir := t.TempDir()
+
+	caKeyFile := certsDir + "/ca.key"
+	// Generate CA key and crt.
+	require.NoError(t, security.CreateCAPair(certsDir, caKeyFile, testKeySize,
+		time.Hour*72, false /* allowReuse */, false /* overwrite */))
+	user := username.MakeSQLUsernameFromPreNormalizedString("user")
+	tenantID := roachpb.MakeTenantID(123)
+	// Create tenant-scoped client cert.
+	require.NoError(t, security.CreateClientPair(
+		certsDir,
+		caKeyFile,
+		testKeySize,
+		48*time.Hour,
+		false, /*overwrite */
+		user,
+		tenantID,
+		false /* wantPKCS8Key */))
+
+	// Load and verify the certificates.
+	cl := security.NewCertificateLoader(certsDir)
+	require.NoError(t, cl.Load())
+	infos := cl.Certificates()
+	for _, info := range infos {
+		require.NoError(t, info.Error)
+	}
+
+	// We expect two certificates: the CA certificate and the tenant scoped client certificate.
+	require.Equal(t, 2, len(infos))
+	expectedClientCrtName := fmt.Sprintf("client.%s.crt", user)
+	expectedSAN, err := security.MakeTenantURISAN(user, tenantID)
+	require.NoError(t, err)
+	for _, info := range infos {
+		if info.Filename == "ca.crt" {
+			continue
+		}
+		require.Equal(t, security.ClientPem, info.FileUsage)
+		require.Equal(t, expectedClientCrtName, info.Filename)
+		require.Equal(t, 1, len(info.ParsedCertificates))
+		require.Equal(t, 1, len(info.ParsedCertificates[0].URIs))
+		require.Equal(t, expectedSAN, info.ParsedCertificates[0].URIs[0])
+	}
+}
+
 func TestGenerateNodeCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
@@ -227,8 +279,14 @@ func generateBaseCerts(certsDir string) error {
 		}
 
 		if err := security.CreateClientPair(
-			certsDir, caKey,
-			testKeySize, time.Hour*48, true, username.RootUserName(), false,
+			certsDir,
+			caKey,
+			testKeySize,
+			time.Hour*48,
+			true,
+			username.RootUserName(),
+			roachpb.SystemTenantID,
+			false,
 		); err != nil {
 			return err
 		}
@@ -282,14 +340,14 @@ func generateSplitCACerts(certsDir string) error {
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, username.NodeUserName(), false,
+		testKeySize, time.Hour*48, true, username.NodeUserName(), roachpb.SystemTenantID, false,
 	); err != nil {
 		return errors.Wrap(err, "could not generate Client pair")
 	}
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, username.RootUserName(), false,
+		testKeySize, time.Hour*48, true, username.RootUserName(), roachpb.SystemTenantID, false,
 	); err != nil {
 		return errors.Wrap(err, "could not generate Client pair")
 	}
