@@ -277,6 +277,20 @@ func createChangefeedJobRecord(
 		statementTime = initialHighWater
 	}
 
+	endTime := hlc.Timestamp{}
+	if endTimeOpt, ok := opts[changefeedbase.OptEndTime]; ok {
+		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(endTimeOpt)}
+		asOf, err := tree.EvalAsOfTimestamp(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().EvalContext)
+		if err != nil {
+			return nil, err
+		}
+		endTime = asOf.Timestamp
+	}
+
+	if _, ok := opts[changefeedbase.OptInitialScanOnly]; ok {
+		endTime = statementTime
+	}
+
 	targetList := uniqueTableNames(changefeedStmt.Targets)
 
 	// This grabs table descriptors once to get their ids.
@@ -305,6 +319,7 @@ func createChangefeedJobRecord(
 		Opts:                 opts,
 		SinkURI:              sinkURI,
 		StatementTime:        statementTime,
+		EndTime:              endTime,
 		TargetSpecifications: targets,
 	}
 
@@ -802,6 +817,30 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		default:
 			return jobspb.ChangefeedDetails{}, errors.Errorf(
 				`unknown %s: %s`, opt, v)
+		}
+	}
+	{
+		_, noInitialScan := details.Opts[changefeedbase.OptNoInitialScan]
+		_, onlyInitialScan := details.Opts[changefeedbase.OptInitialScanOnly]
+		_, endTime := details.Opts[changefeedbase.OptEndTime]
+		if onlyInitialScan && noInitialScan {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`cannot specify both %s and %s`, changefeedbase.OptInitialScanOnly,
+				changefeedbase.OptNoInitialScan)
+		}
+		if endTime && onlyInitialScan {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`cannot specify both %s and %s`, changefeedbase.OptInitialScanOnly,
+				changefeedbase.OptEndTime)
+		}
+	}
+	{
+		if !details.EndTime.IsEmpty() && details.EndTime.Less(details.StatementTime) {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`specified end time %s cannot be less than statement time %s`,
+				details.EndTime.AsOfSystemTime(),
+				details.StatementTime.AsOfSystemTime(),
+			)
 		}
 	}
 	return details, nil
