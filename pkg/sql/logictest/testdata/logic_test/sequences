@@ -2072,3 +2072,44 @@ CREATE SEQUENCE seqas_error
   INCREMENT BY 1
   MAXVALUE 123456
   CACHE 1
+
+# creating a sequence and calling nextval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE nextval_txn_seq
+
+query I
+SELECT nextval('nextval_txn_seq')
+----
+1
+
+statement ok
+END
+
+query I
+SELECT nextval('nextval_txn_seq')
+----
+2
+
+# creating a sequence and calling setval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_seq
+
+query I
+SELECT setval('setval_txn_seq', 2)
+----
+2
+
+statement ok
+END
+
+query I
+SELECT setval('setval_txn_seq', 3)
+----
+3
+
