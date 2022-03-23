@@ -675,9 +675,9 @@ var _ tenant.DirectoryCache = &testTenantDirectoryCache{}
 // testTenantDirectoryCache is a test implementation of the tenant directory
 // cache.
 type testTenantDirectoryCache struct {
-	lookupTenantAddrFn     func(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
-	trylookupTenantAddrsFn func(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
-	reportFailureFn        func(ctx context.Context, tenantID roachpb.TenantID, addr string) error
+	lookupTenantAddrFn    func(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
+	trylookupTenantPodsFn func(ctx context.Context, tenantID roachpb.TenantID) ([]*tenant.Pod, error)
+	reportFailureFn       func(ctx context.Context, tenantID roachpb.TenantID, addr string) error
 }
 
 // LookupTenantAddr implements the tenant.DirectoryCache interface.
@@ -687,11 +687,11 @@ func (r *testTenantDirectoryCache) LookupTenantAddr(
 	return r.lookupTenantAddrFn(ctx, tenantID, clusterName)
 }
 
-// TryLookupTenantAddrs implements the tenant.DirectoryCache interface.
-func (r *testTenantDirectoryCache) TryLookupTenantAddrs(
+// TryLookupTenantPods implements the tenant.DirectoryCache interface.
+func (r *testTenantDirectoryCache) TryLookupTenantPods(
 	ctx context.Context, tenantID roachpb.TenantID,
-) ([]string, error) {
-	return r.trylookupTenantAddrsFn(ctx, tenantID)
+) ([]*tenant.Pod, error) {
+	return r.trylookupTenantPodsFn(ctx, tenantID)
 }
 
 // ReportFailure implements the tenant.DirectoryCache interface.

@@ -35,14 +35,14 @@ type DirectoryCache interface {
 	// deleted), this will return a GRPC NotFound error.
 	LookupTenantAddr(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
 
-	// TryLookupTenantAddrs returns the IP addresses for all available SQL
+	// TryLookupTenantPods returns the IP addresses for all available SQL
 	// processes for the given tenant. It returns a GRPC NotFound error if the
 	// tenant does not exist.
 	//
 	// Unlike LookupTenantAddr which blocks until there is an associated
-	// process, TryLookupTenantAddrs will just return an empty set if no processes
+	// process, TryLookupTenantPods will just return an empty set if no processes
 	// are available for the tenant.
-	TryLookupTenantAddrs(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
+	TryLookupTenantPods(ctx context.Context, tenantID roachpb.TenantID) ([]*Pod, error)
 
 	// ReportFailure is used to indicate to the directory cache that a
 	// connection attempt to connect to a particular SQL tenant pod have failed.
@@ -158,7 +158,7 @@ func NewDirectoryCache(
 // processes. If the tenant was just created or is suspended, such that there
 // are no available processes, then LookupTenantAddr will trigger resumption of a
 // new instance and block until the process is ready. If there are multiple
-// processes for the tenant, then TryLookupTenantAddrs will choose one of them (note
+// processes for the tenant, then TryLookupTenantPods will choose one of them (note
 // that currently there is always at most one SQL process per tenant).
 //
 // If clusterName is non-empty, then a GRPC NotFound error is returned if no
@@ -204,17 +204,17 @@ func (d *directoryCache) LookupTenantAddr(
 	return selectTenantPod(entry.randFloat32(), pods).Addr, nil
 }
 
-// TryLookupTenantAddrs returns the IP addresses for all available SQL processes for
+// TryLookupTenantPods returns the IP addresses for all available SQL processes for
 // the given tenant. It returns a GRPC NotFound error if the tenant does not
 // exist (e.g. it has not yet been created) or if it has not yet been fetched
-// into the directory's cache (TryLookupTenantAddrs will never attempt to fetch it).
-// If no processes are available for the tenant, TryLookupTenantAddrs will return the
+// into the directory's cache (TryLookupTenantPods will never attempt to fetch it).
+// If no processes are available for the tenant, TryLookupTenantPods will return the
 // empty set (unlike LookupTenantAddr).
 //
-// TryLookupTenantAddrs implements the DirectoryCache interface.
-func (d *directoryCache) TryLookupTenantAddrs(
+// TryLookupTenantPods implements the DirectoryCache interface.
+func (d *directoryCache) TryLookupTenantPods(
 	ctx context.Context, tenantID roachpb.TenantID,
-) ([]string, error) {
+) ([]*Pod, error) {
 	// Ensure that a directory entry has been created for this tenant.
 	entry, err := d.getEntry(ctx, tenantID, false /* allowCreate */)
 	if err != nil {
@@ -227,11 +227,14 @@ func (d *directoryCache) TryLookupTenantAddrs(
 	}
 
 	tenantPods := entry.GetPods()
-	addrs := make([]string, len(tenantPods))
+	pods := make([]*Pod, len(tenantPods))
 	for i, pod := range tenantPods {
-		addrs[i] = pod.Addr
+		// Make a copy of the tenant pod to avoid modifications by callers.
+		var retPod Pod
+		retPod = *pod
+		pods[i] = &retPod
 	}
-	return addrs, nil
+	return pods, nil
 }
 
 // ReportFailure should be called when attempts to connect to a particular SQL

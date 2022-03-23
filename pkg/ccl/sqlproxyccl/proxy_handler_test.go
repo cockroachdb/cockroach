@@ -682,10 +682,10 @@ func TestDirectoryConnect(t *testing.T) {
 			ctx context.Context, tenantID roachpb.TenantID, addr string, directoryCache tenant.DirectoryCache,
 		) error {
 			require.Equal(t, roachpb.MakeTenantID(28), tenantID)
-			addrs, err := directoryCache.TryLookupTenantAddrs(ctx, tenantID)
+			pods, err := directoryCache.TryLookupTenantPods(ctx, tenantID)
 			require.NoError(t, err)
-			require.Len(t, addrs, 1)
-			require.Equal(t, addrs[0], addr)
+			require.Len(t, pods, 1)
+			require.Equal(t, pods[0].Addr, addr)
 
 			countReports++
 			err = directoryCache.ReportFailure(ctx, tenantID, addr)
