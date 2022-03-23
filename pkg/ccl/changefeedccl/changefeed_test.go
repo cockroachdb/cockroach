@@ -2114,8 +2114,12 @@ func TestChangefeedOutputTopics(t *testing.T) {
 				feedCh: feedCh,
 			}
 		}
+
+		jobFeed := newJobFeed(dbWithHandler, wrapSink)
+		jobFeed.jobID = jobspb.InvalidJobID
+
 		c := &kafkaFeed{
-			jobFeed:        newJobFeed(dbWithHandler, wrapSink),
+			jobFeed:        jobFeed,
 			seenTrackerMap: make(map[string]struct{}),
 			source:         feedCh,
 			tg:             tg,
@@ -3747,6 +3751,35 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `cannot specify both initial_scan and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan`, `kafka://nope`,
+	)
+
+	// WITH only_initial_scan and no_initial_scan disallowed
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan_only and no_initial_scan`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan_only, no_initial_scan`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan_only and no_initial_scan`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan_only`, `kafka://nope`,
+	)
+
+	// WITH only_initial_scan and end_time disallowed
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan_only and end_time`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan_only, end_time = '1'`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan_only and end_time`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', initial_scan_only`, `kafka://nope`,
+	)
+
+	var tsCurrent string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsCurrent)
+
+	sqlDB.ExpectErr(
+		t,
+		fmt.Sprintf(`specified end time 1.0000000000 cannot be less than statement time %s`, tsCurrent),
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH cursor = $2, end_time = '1.0000000000'`, `kafka://nope`, tsCurrent,
 	)
 
 	// Sanity check schema registry tls parameters.
@@ -5610,6 +5643,154 @@ func TestChangefeedCaseInsensitiveOpts(t *testing.T) {
 		})
 	}
 	t.Run(`sinkless`, sinklessTest(testFn))
+}
+
+func TestChangefeedEndTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
+
+		var tsAfterInitialInsert string
+		sqlDB.QueryRow(t, "SELECT (cluster_logical_timestamp() + 10000000000)").Scan(&tsAfterInitialInsert)
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH end_time = $1", tsAfterInitialInsert)
+
+		time.Sleep(10 * time.Second)
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (4), (5), (6)")
+
+		seenMoreMessages := false
+		g := ctxgroup.WithContext(context.Background())
+		g.Go(func() error {
+			assertPayloads(t, feed, []string{
+				`foo: [1]->{"after": {"a": 1}}`,
+				`foo: [2]->{"after": {"a": 2}}`,
+				`foo: [3]->{"after": {"a": 3}}`,
+			})
+			for {
+				_, err := feed.Next()
+				if err != nil {
+					return err
+				}
+				seenMoreMessages = true
+			}
+		})
+		defer func() {
+			closeFeed(t, feed)
+			_ = g.Wait()
+			require.False(t, seenMoreMessages)
+		}()
+
+		testFeed := feed.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, testFeed.WaitForStatus(func(s jobs.Status) bool {
+			return s == jobs.StatusSucceeded
+		}))
+	}
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestChangefeedEndTimeWithCursor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
+
+		var tsCursor string
+		sqlDB.QueryRow(t, "SELECT (cluster_logical_timestamp())").Scan(&tsCursor)
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (4), (5), (6)")
+
+		var tsEndTime string
+		sqlDB.QueryRow(t, "SELECT (cluster_logical_timestamp() + 10000000000)").Scan(&tsEndTime)
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH cursor = $1, end_time = $2, no_initial_scan", tsCursor, tsEndTime)
+
+		time.Sleep(10 * time.Second)
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (7), (8), (9)")
+
+		seenMoreMessages := false
+		g := ctxgroup.WithContext(context.Background())
+		g.Go(func() error {
+			assertPayloads(t, feed, []string{
+				`foo: [4]->{"after": {"a": 4}}`,
+				`foo: [5]->{"after": {"a": 5}}`,
+				`foo: [6]->{"after": {"a": 6}}`,
+			})
+			for {
+				_, err := feed.Next()
+				if err != nil {
+					return err
+				}
+				seenMoreMessages = true
+			}
+		})
+		defer func() {
+			closeFeed(t, feed)
+			_ = g.Wait()
+			require.False(t, seenMoreMessages)
+		}()
+
+		testFeed := feed.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, testFeed.WaitForStatus(func(s jobs.Status) bool {
+			return s == jobs.StatusSucceeded
+		}))
+	}
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestChangefeedOnlyInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
+
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan_only")
+
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (4), (5), (6)")
+
+		seenMoreMessages := false
+		g := ctxgroup.WithContext(context.Background())
+		g.Go(func() error {
+			assertPayloads(t, feed, []string{
+				`foo: [1]->{"after": {"a": 1}}`,
+				`foo: [2]->{"after": {"a": 2}}`,
+				`foo: [3]->{"after": {"a": 3}}`,
+			})
+			for {
+				_, err := feed.Next()
+				if err != nil {
+					return err
+				}
+				seenMoreMessages = true
+			}
+		})
+		defer func() {
+			closeFeed(t, feed)
+			_ = g.Wait()
+			require.False(t, seenMoreMessages)
+		}()
+
+		jobFeed := feed.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
+			return s == jobs.StatusSucceeded
+		}))
+	}
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
