@@ -2562,33 +2562,28 @@ func (dsp *DistSQLPlanner) planZigzagJoin(
 ) (plan *PhysicalPlan, err error) {
 
 	plan = planCtx.NewPhysicalPlan()
-	tables := make([]descpb.TableDescriptor, len(pi.sides))
-	indexOrdinals := make([]uint32, len(pi.sides))
-	cols := make([]execinfrapb.Columns, len(pi.sides))
-	fixedValues := make([]*execinfrapb.ValuesCoreSpec, len(pi.sides))
 
+	sides := make([]execinfrapb.ZigzagJoinerSpec_Side, len(pi.sides))
 	for i, side := range pi.sides {
-		tables[i] = *side.desc.TableDesc()
-		indexOrdinals[i], err = getIndexIdx(side.index, side.desc)
+		s := &sides[i]
+		s.Table = *side.desc.TableDesc()
+		s.IndexOrdinal, err = getIndexIdx(side.index, side.desc)
 		if err != nil {
 			return nil, err
 		}
 
-		cols[i].Columns = make([]uint32, len(side.eqCols))
+		s.EqColumns.Columns = make([]uint32, len(side.eqCols))
 		for j, col := range side.eqCols {
-			cols[i].Columns[j] = uint32(col)
+			s.EqColumns.Columns[j] = uint32(col)
 		}
-		fixedValues[i] = side.fixedValues
+		s.FixedValues = *side.fixedValues
 	}
 
 	// The zigzag join node only represents inner joins, so hardcode Type to
 	// InnerJoin.
 	zigzagJoinerSpec := execinfrapb.ZigzagJoinerSpec{
-		Tables:        tables,
-		EqColumns:     cols,
-		IndexOrdinals: indexOrdinals,
-		FixedValues:   fixedValues,
-		Type:          descpb.InnerJoin,
+		Sides: sides,
+		Type:  descpb.InnerJoin,
 	}
 
 	// The internal schema of the zigzag joiner is:
