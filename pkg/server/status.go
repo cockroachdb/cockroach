@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -1378,9 +1379,11 @@ func regionsResponseFromNodesResponse(nr *serverpb.NodesResponse) *serverpb.Regi
 func (s *statusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponse, error) {
-	// The node status contains details about the command line, network
-	// addresses, env vars etc which are admin-only.
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	err := s.privilegeChecker.requireViewActivityPermission(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1394,9 +1397,14 @@ func (s *statusServer) NodesUI(
 	// The node status contains details about the command line, network
 	// addresses, env vars etc which are admin-only.
 
-	_, isAdmin, err := s.privilegeChecker.getUserAndRole(ctx)
+	hasViewActivity := false
+	err := s.privilegeChecker.requireViewActivityPermission(ctx)
 	if err != nil {
-		return nil, err
+		if !grpcutil.IsAuthError(err) {
+			return nil, err
+		}
+	} else {
+		hasViewActivity = true
 	}
 
 	internalResp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
@@ -1408,13 +1416,13 @@ func (s *statusServer) NodesUI(
 		LivenessByNodeID: internalResp.LivenessByNodeID,
 	}
 	for i, nodeStatus := range internalResp.Nodes {
-		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, isAdmin)
+		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, hasViewActivity)
 	}
 
 	return resp, err
 }
 
-func nodeStatusToResp(n *statuspb.NodeStatus, isAdmin bool) serverpb.NodeResponse {
+func nodeStatusToResp(n *statuspb.NodeStatus, hasViewActivity bool) serverpb.NodeResponse {
 	tiers := make([]serverpb.Tier, len(n.Desc.Locality.Tiers))
 	for j, t := range n.Desc.Locality.Tiers {
 		tiers[j] = serverpb.Tier{
@@ -1480,7 +1488,7 @@ func nodeStatusToResp(n *statuspb.NodeStatus, isAdmin bool) serverpb.NodeRespons
 		NumCpus:           n.NumCpus,
 	}
 
-	if isAdmin {
+	if hasViewActivity {
 		resp.Args = n.Args
 		resp.Env = n.Env
 		resp.Desc.Attrs = n.Desc.Attrs
