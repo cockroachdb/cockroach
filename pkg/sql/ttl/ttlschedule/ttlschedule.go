@@ -150,9 +150,13 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return "", err
 	}
-
-	// TODO(#76915): consider using table name instead - we would need to pass in descCol from the planner.
-	return fmt.Sprintf("ALTER TABLE [%d as T] WITH (expire_after = ...)", args.TableID), nil
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	tn, err := descs.GetTableNameByID(ctx, txn, descsCol, args.TableID)
+	if err != nil {
+		return "", err
+	}
+	f.FormatNode(tn)
+	return fmt.Sprintf(`ALTER TABLE %s WITH (ttl = 'on', ...)`, f.CloseAndGetString()), nil
 }
 
 func createRowLevelTTLJob(
