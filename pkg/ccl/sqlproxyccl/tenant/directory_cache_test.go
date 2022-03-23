@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Licensed as a CockroachDB Enterprise file under the Cockroach Community
 // License (the "License"); you may not use this file except in compliance with
@@ -43,7 +43,7 @@ func TestDirectoryErrors(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, dir, _ := newTestDirectory(t)
+	tc, dir, _ := newTestDirectoryCache(t)
 	defer tc.Stopper().Stop(ctx)
 
 	_, err := dir.LookupTenantAddrs(ctx, roachpb.MakeTenantID(1000))
@@ -75,7 +75,7 @@ func TestWatchPods(t *testing.T) {
 
 	// Create the directory.
 	ctx := context.Background()
-	tc, dir, tds := newTestDirectory(t, tenant.PodWatcher(podWatcher))
+	tc, dir, tds := newTestDirectoryCache(t, tenant.PodWatcher(podWatcher))
 	defer tc.Stopper().Stop(ctx)
 
 	tenantID := roachpb.MakeTenantID(20)
@@ -197,7 +197,7 @@ func TestCancelLookups(t *testing.T) {
 
 	// Create the directory.
 	ctx, cancel := context.WithCancel(context.Background())
-	tc, dir, _ := newTestDirectory(t)
+	tc, dir, _ := newTestDirectoryCache(t)
 	defer tc.Stopper().Stop(ctx)
 	require.NoError(t, createTenant(tc, tenantID))
 
@@ -232,7 +232,7 @@ func TestResume(t *testing.T) {
 
 	// Create the directory.
 	ctx := context.Background()
-	tc, dir, tds := newTestDirectory(t)
+	tc, dir, tds := newTestDirectoryCache(t)
 	defer tc.Stopper().Stop(ctx)
 	require.NoError(t, createTenant(tc, tenantID))
 
@@ -275,7 +275,7 @@ func TestDeleteTenant(t *testing.T) {
 	// Create the directory.
 	ctx := context.Background()
 	// Disable throttling for this test
-	tc, dir, tds := newTestDirectory(t, tenant.RefreshDelay(-1))
+	tc, dir, tds := newTestDirectoryCache(t, tenant.RefreshDelay(-1))
 	defer tc.Stopper().Stop(ctx)
 
 	tenantID := roachpb.MakeTenantID(50)
@@ -330,7 +330,7 @@ func TestRefreshThrottling(t *testing.T) {
 	// Create the directory, but with extreme rate limiting so that directory
 	// will never refresh.
 	ctx := context.Background()
-	tc, dir, _ := newTestDirectory(t, tenant.RefreshDelay(60*time.Minute))
+	tc, dir, _ := newTestDirectoryCache(t, tenant.RefreshDelay(60*time.Minute))
 	defer tc.Stopper().Stop(ctx)
 
 	// Create test tenant.
@@ -366,7 +366,7 @@ func TestLoadBalancing(t *testing.T) {
 
 	// Create the directory.
 	ctx := context.Background()
-	tc, dir, tds := newTestDirectory(t, tenant.PodWatcher(podWatcher))
+	tc, dir, tds := newTestDirectoryCache(t, tenant.PodWatcher(podWatcher))
 	defer tc.Stopper().Stop(ctx)
 
 	tenantID := roachpb.MakeTenantID(30)
@@ -512,13 +512,13 @@ func startTenant(
 	return &tenantdirsvr.Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
 }
 
-// Setup directory that uses a client connected to a test directory server
+// Setup directory cache that uses a client connected to a test directory server
 // that manages tenants connected to a backing KV server.
-func newTestDirectory(
+func newTestDirectoryCache(
 	t *testing.T, opts ...tenant.DirOption,
 ) (
 	tc serverutils.TestClusterInterface,
-	directory *tenant.Directory,
+	directoryCache tenant.DirectoryCache,
 	tds *tenantdirsvr.TestDirectoryServer,
 ) {
 	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
@@ -554,8 +554,7 @@ func newTestDirectory(
 	// nolint:grpcconnclose
 	clusterStopper.AddCloser(stop.CloserFn(func() { require.NoError(t, conn.Close() /* nolint:grpcconnclose */) }))
 	client := tenant.NewDirectoryClient(conn)
-	directory, err = tenant.NewDirectory(context.Background(), clusterStopper, client, opts...)
+	directoryCache, err = tenant.NewDirectoryCache(context.Background(), clusterStopper, client, opts...)
 	require.NoError(t, err)
-
 	return
 }

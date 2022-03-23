@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,39 +35,6 @@ const sessionRevivalTokenStartupParam = "crdb:session_revival_token_base64"
 // remoteAddrStartupParam contains the remote address of the original client.
 const remoteAddrStartupParam = "crdb:remote_addr"
 
-// TenantResolver is an interface for the tenant directory. Currently only
-// tenant.Directory implements it.
-//
-// TODO(jaylim-crl): Rename this to Directory, and the current tenant.Directory
-// to tenant.directory. This needs to be moved into the tenant package as well.
-// This is added here to aid testing.
-type TenantResolver interface {
-	// EnsureTenantAddr returns an IP address of one of the given tenant's SQL
-	// processes based on the tenantID and clusterName fields. This should block
-	// until the process associated with the IP is ready.
-	//
-	// If no matching pods are found (e.g. cluster name mismatch, or tenant was
-	// deleted), this will return a GRPC NotFound error.
-	EnsureTenantAddr(
-		ctx context.Context,
-		tenantID roachpb.TenantID,
-		clusterName string,
-	) (string, error)
-
-	// LookupTenantAddrs returns the IP addresses for all available SQL
-	// processes for the given tenant. It returns a GRPC NotFound error if the
-	// tenant does not exist.
-	//
-	// Unlike EnsureTenantAddr which blocks until there is an associated
-	// process, LookupTenantAddrs will just return an empty set if no processes
-	// are available for the tenant.
-	LookupTenantAddrs(ctx context.Context, tenantID roachpb.TenantID) ([]string, error)
-
-	// ReportFailure is used to indicate to the resolver that a connection
-	// attempt to connect to a particular SQL tenant pod have failed.
-	ReportFailure(ctx context.Context, tenantID roachpb.TenantID, addr string) error
-}
-
 // connector is a per-session tenant-associated component that can be used to
 // obtain a connection to the tenant cluster. This will also handle the
 // authentication phase. All connections returned by the connector should
@@ -79,24 +47,24 @@ type connector struct {
 	ClusterName string
 	TenantID    roachpb.TenantID
 
-	// Directory corresponds to the tenant directory, which will be used to
-	// resolve tenants to their corresponding IP addresses. If this isn't set,
-	// we will fallback to use RoutingRule.
+	// DirectoryCache corresponds to the tenant directory cache, which will be
+	// used to resolve tenants to their corresponding IP addresses. If this
+	// isn't set, we will fallback to use RoutingRule.
 	//
-	// TODO(jaylim-crl): Replace this with a Directory interface, and remove
-	// the RoutingRule field. RoutingRule should not be in here.
+	// TODO(jaylim-crl): Remove the RoutingRule field. RoutingRule should not
+	// be in here.
 	//
 	// NOTE: This field is optional.
-	Directory TenantResolver
+	DirectoryCache tenant.DirectoryCache
 
 	// RoutingRule refers to the static rule that will be used when resolving
-	// tenants. This will be used directly whenever the Directory field isn't
-	// specified, or as a fallback if one was specified.
+	// tenants. This will be used directly whenever the DirectoryCache field
+	// isn't specified, or as a fallback if one was specified.
 	//
 	// The literal "{{clusterName}}" will be replaced with ClusterName within
 	// the RoutingRule string.
 	//
-	// NOTE: This field is optional, if Directory isn't set.
+	// NOTE: This field is optional, if DirectoryCache isn't set.
 	RoutingRule string
 
 	// StartupMsg represents the startup message associated with the client.
@@ -263,11 +231,12 @@ func (c *connector) dialTenantCluster(ctx context.Context) (net.Conn, error) {
 					dialSQLServerErrs = 0
 				}
 
-				// Report the failure to the directory so that it can refresh
-				// any stale information that may have caused the problem.
-				if c.Directory != nil {
-					if err = reportFailureToDirectory(
-						ctx, c.TenantID, serverAddr, c.Directory,
+				// Report the failure to the directory cache so that it can
+				// refresh any stale information that may have caused the
+				// problem.
+				if c.DirectoryCache != nil {
+					if err = reportFailureToDirectoryCache(
+						ctx, c.TenantID, serverAddr, c.DirectoryCache,
 					); err != nil {
 						reportFailureErrs++
 						if reportFailureErr.ShouldLog() {
@@ -315,9 +284,9 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 		return c.testingKnobs.lookupAddr(ctx)
 	}
 
-	// First try to lookup tenant in the directory (if available).
-	if c.Directory != nil {
-		addr, err := c.Directory.EnsureTenantAddr(ctx, c.TenantID, c.ClusterName)
+	// First try to lookup tenant in the directory cache (if available).
+	if c.DirectoryCache != nil {
+		addr, err := c.DirectoryCache.EnsureTenantAddr(ctx, c.TenantID, c.ClusterName)
 		switch {
 		case err == nil:
 			return addr, nil
@@ -337,7 +306,7 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 	// map to a GRPC NotFound error.
 	//
 	// TODO(jaylim-crl): This code is temporary. Remove this once we have fully
-	// replaced this with a Directory interface. This fallback does not need
+	// replaced this with a Directory GRPC server. This fallback does not need
 	// to exist.
 	addr := strings.ReplaceAll(
 		c.RoutingRule, "{{clusterName}}",
@@ -407,10 +376,13 @@ func isRetriableConnectorError(err error) bool {
 	return errors.Is(err, errRetryConnectorSentinel)
 }
 
-// reportFailureToDirectory is a hookable function that calls the given tenant
-// directory's ReportFailure method.
-var reportFailureToDirectory = func(
-	ctx context.Context, tenantID roachpb.TenantID, addr string, directory TenantResolver,
+// reportFailureToDirectoryCache is a hookable function that calls the given
+// tenant directory cache's ReportFailure method.
+var reportFailureToDirectoryCache = func(
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	addr string,
+	directoryCache tenant.DirectoryCache,
 ) error {
-	return directory.ReportFailure(ctx, tenantID, addr)
+	return directoryCache.ReportFailure(ctx, tenantID, addr)
 }
