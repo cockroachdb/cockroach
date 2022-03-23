@@ -290,6 +290,19 @@ func (*AlterDatabaseDropSuperRegion) StatementTag() string { return "ALTER DATAB
 func (*AlterDatabaseDropSuperRegion) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterDatabaseAlterSuperRegion) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterDatabaseAlterSuperRegion) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseAlterSuperRegion) StatementTag() string {
+	return "ALTER DATABASE ALTER SUPER REGION"
+}
+
+func (*AlterDatabaseAlterSuperRegion) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterDefaultPrivileges) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1794,6 +1807,7 @@ func (n *AlterDatabasePlacement) String() string         { return AsString(n) }
 func (n *AlterDatabasePrimaryRegion) String() string     { return AsString(n) }
 func (n *AlterDatabaseAddSuperRegion) String() string    { return AsString(n) }
 func (n *AlterDatabaseDropSuperRegion) String() string   { return AsString(n) }
+func (n *AlterDatabaseAlterSuperRegion) String() string  { return AsString(n) }
 func (n *AlterDefaultPrivileges) String() string         { return AsString(n) }
 func (n *AlterSchema) String() string                    { return AsString(n) }
 func (n *AlterTable) String() string                     { return AsString(n) }

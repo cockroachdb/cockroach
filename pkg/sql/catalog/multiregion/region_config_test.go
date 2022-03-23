@@ -162,7 +162,7 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 		},
 		{
 			testName: "a super region should have at least three regions if the survival mode is region failure",
-			err:      "super region sr1 only has 2 regions: at least 3 regions are required for surviving a region failure",
+			err:      "super region sr1 only has 2 region(s): at least 3 regions are required for surviving a region failure",
 			regionConfig: multiregion.MakeRegionConfig(catpb.RegionNames{"region_a", "region_b", "region_c"}, "region_b", descpb.SurvivalGoal_REGION_FAILURE, validRegionEnumID, descpb.DataPlacement_DEFAULT, []descpb.SuperRegion{
 				{
 					SuperRegionName: "sr1",
