@@ -85,6 +85,7 @@ func TestKVFeed(t *testing.T) {
 		schemaChangeEvents changefeedbase.SchemaChangeEventClass
 		schemaChangePolicy changefeedbase.SchemaChangePolicy
 		initialHighWater   hlc.Timestamp
+		endTime            hlc.Timestamp
 		spans              []roachpb.Span
 		checkpoint         []roachpb.Span
 		events             []roachpb.RangeFeedEvent
@@ -121,7 +122,7 @@ func TestKVFeed(t *testing.T) {
 		f := newKVFeed(buf, tc.spans, tc.checkpoint,
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff,
-			tc.initialHighWater,
+			tc.initialHighWater, tc.endTime,
 			keys.SystemSQLCodec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory, TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
