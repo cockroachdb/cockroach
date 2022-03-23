@@ -453,30 +453,30 @@ message OrdinalitySpec {
 // concatenation of all of the columns of the tables specified. The columns
 // are populated if they are contained in the index specified for that table.
 message ZigzagJoinerSpec {
-  // TODO(pbardea): Replace these with inputs that conform to a RowSource-like
-  // interface.
-  repeated sqlbase.TableDescriptor tables = 1 [(gogoproto.nullable) = false];
+  message Side {
+    optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+    optional uint32 index_ordinal = 2 [(gogoproto.nullable) = false];
 
-  // An array of arrays. The array at eq_columns[side_idx] contains the
-  // equality columns for that side. All arrays in eq_columns should have
-  // equal length.
-  repeated Columns eq_columns = 2 [(gogoproto.nullable) = false];
+    // EqColumns contains the equality columns for this side. All sides have the
+    // same number of equality columns.
+    optional Columns eq_columns = 3 [(gogoproto.nullable) = false];
 
-  // Each value indicates an index: if 0, primary index; otherwise the n-th
-  // secondary index, i.e. tables[side_idx].indexes[index_ordinals[side_idx]].
-  repeated uint32 index_ordinals = 3 [packed = true];
+    // Fixed values at the start of indices.
+    optional ValuesCoreSpec fixed_values = 5 [(gogoproto.nullable) = false];
+  }
+
+  repeated Side sides = 7 [(gogoproto.nullable) = false];
 
   // "ON" expression (in addition to the equality constraints captured by the
-  // orderings). Assuming that the left stream has N columns and the right
-  // stream has M columns, in this expression ordinal references @1 to @N refer
-  // to columns of the left stream and variables @(N+1) to @(N+M) refer to
-  // columns in the right stream.
+  // equality columns). Assuming that the left side has N columns and the
+  // right side has M columns, in this expression ordinal references @1 to @N
+  // refer to columns of the left side and variables @(N+1) to @(N+M) refer to
+  // columns in the right side.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
-  // Fixed values at the start of indices.
-  repeated ValuesCoreSpec fixed_values = 5;
-
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+
+  reserved 1, 2, 3, 5;
 }
 
 // MergeJoinerSpec is the specification for a merge join processor. The processor
