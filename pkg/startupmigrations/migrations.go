@@ -687,8 +687,8 @@ func migrationKey(codec keys.SQLCodec, migration migrationDescriptor) roachpb.Ke
 func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {
 	// Add the CREATELOGIN option to roles that already have CREATEROLE.
 	const upsertCreateRoleStmt = `
-     UPSERT INTO system.role_options (username, option, value)
-        SELECT username, 'CREATELOGIN', NULL
+     UPSERT INTO system.role_options (username, option, value, user_id)
+        SELECT username, 'CREATELOGIN', NULL, user_id
           FROM system.role_options
          WHERE option = 'CREATEROLE'
      `
@@ -780,7 +780,7 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 func addRootUser(ctx context.Context, r runner) error {
 	// Upsert the root user into the table. We intentionally override any existing entry.
 	const upsertRootStmt = `
-	        UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)
+	        UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ($1, '', false,  1)
 	        `
 	return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, security.RootUser)
 }
@@ -788,7 +788,7 @@ func addRootUser(ctx context.Context, r runner) error {
 func addAdminRole(ctx context.Context, r runner) error {
 	// Upsert the admin role into the table. We intentionally override any existing entry.
 	const upsertAdminStmt = `
-          UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
+          UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ($1, '', true,  2)
           `
 	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, security.AdminRole)
 }
@@ -796,10 +796,19 @@ func addAdminRole(ctx context.Context, r runner) error {
 func addRootToAdminRole(ctx context.Context, r runner) error {
 	// Upsert the role membership into the table. We intentionally override any existing entry.
 	const upsertAdminStmt = `
-          UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+          UPSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, true, $3, $4)
           `
+	rootid, err := sql.GetUserID(ctx, r.sqlExecutor, nil, security.RootUserName())
+	if err != nil {
+		return err
+	}
+	adminid, err := sql.GetUserID(ctx, r.sqlExecutor, nil, security.AdminRoleName())
+	if err != nil {
+		return err
+	}
+
 	return r.execAsRootWithRetry(
-		ctx, "addRootToAdminRole", upsertAdminStmt, security.AdminRole, security.RootUser)
+		ctx, "addRootToAdminRole", upsertAdminStmt, security.AdminRole, security.RootUser, adminid, rootid)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {

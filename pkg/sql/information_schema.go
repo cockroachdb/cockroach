@@ -236,7 +236,11 @@ https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 func populateRoleHierarchy(
 	ctx context.Context, p *planner, addRow func(...tree.Datum) error, onlyIsAdmin bool,
 ) error {
-	allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
+	userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, p.User())
+	if err != nil {
+		return err
+	}
+	allRoles, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{Username: p.User(), UserID: userID})
 	if err != nil {
 		return err
 	}
@@ -584,7 +588,11 @@ https://www.postgresql.org/docs/9.5/infoschema-enabled-roles.html`,
 	schema: vtable.InformationSchemaEnabledRoles,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User()
-		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+		userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, currentUser)
+		if err != nil {
+			return err
+		}
+		memberMap, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{Username: currentUser, UserID: userID})
 		if err != nil {
 			return err
 		}

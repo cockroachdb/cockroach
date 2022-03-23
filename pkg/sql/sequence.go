@@ -784,68 +784,70 @@ func maybeAddSequenceDependencies(
 	var seqDescs []*tabledesc.Mutable
 	seqNameToID := make(map[string]int64)
 	for _, seqIdentifier := range seqIdentifiers {
-		seqDesc, err := GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
-		if err != nil {
-			return nil, err
-		}
-		// Check if this reference is cross DB.
-		if seqDesc.GetParentID() != tableDesc.GetParentID() &&
-			!allowCrossDatabaseSeqReferences.Get(&st.SV) {
-			return nil, errors.WithHintf(
-				pgerror.Newf(pgcode.FeatureNotSupported,
-					"sequence references cannot come from other databases; (see the '%s' cluster setting)",
-					allowCrossDatabaseSeqReferencesSetting),
-				crossDBReferenceDeprecationHint(),
-			)
+		if sc != nil {
+			seqDesc, err := GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
+			if err != nil {
+				return nil, err
+			}
+			// Check if this reference is cross DB.
+			if seqDesc.GetParentID() != tableDesc.GetParentID() &&
+				!allowCrossDatabaseSeqReferences.Get(&st.SV) {
+				return nil, errors.WithHintf(
+					pgerror.Newf(pgcode.FeatureNotSupported,
+						"sequence references cannot come from other databases; (see the '%s' cluster setting)",
+						allowCrossDatabaseSeqReferencesSetting),
+					crossDBReferenceDeprecationHint(),
+				)
 
-		}
-		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
+			}
+			seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
 
-		// If we had already modified this Sequence as part of this transaction,
-		// we only want to modify a single instance of it instead of overwriting it.
-		// So replace seqDesc with the descriptor that was previously modified.
-		if prev, ok := backrefs[seqDesc.ID]; ok {
-			seqDesc = prev
-		}
-		// Add reference from sequence descriptor to column.
-		{
-			var found bool
-			for _, seqID := range col.UsesSequenceIds {
-				if seqID == seqDesc.ID {
-					found = true
-					break
+			// If we had already modified this Sequence as part of this transaction,
+			// we only want to modify a single instance of it instead of overwriting it.
+			// So replace seqDesc with the descriptor that was previously modified.
+			if prev, ok := backrefs[seqDesc.ID]; ok {
+				seqDesc = prev
+			}
+			// Add reference from sequence descriptor to column.
+			{
+				var found bool
+				for _, seqID := range col.UsesSequenceIds {
+					if seqID == seqDesc.ID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
 				}
 			}
-			if !found {
-				col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
-			}
-		}
-		refIdx := -1
-		for i, reference := range seqDesc.DependedOnBy {
-			if reference.ID == tableDesc.GetID() {
-				refIdx = i
-			}
-		}
-		if refIdx == -1 {
-			seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
-				ID:        tableDesc.GetID(),
-				ColumnIDs: []descpb.ColumnID{col.ID},
-				ByID:      true,
-			})
-		} else {
-			ref := &seqDesc.DependedOnBy[refIdx]
-			var found bool
-			for _, colID := range ref.ColumnIDs {
-				if colID == col.ID {
-					found = true
-					break
+			refIdx := -1
+			for i, reference := range seqDesc.DependedOnBy {
+				if reference.ID == tableDesc.GetID() {
+					refIdx = i
 				}
 			}
-			if !found {
-				ref.ColumnIDs = append(ref.ColumnIDs, col.ID)
+			if refIdx == -1 {
+				seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, descpb.TableDescriptor_Reference{
+					ID:        tableDesc.GetID(),
+					ColumnIDs: []descpb.ColumnID{col.ID},
+					ByID:      true,
+				})
+			} else {
+				ref := &seqDesc.DependedOnBy[refIdx]
+				var found bool
+				for _, colID := range ref.ColumnIDs {
+					if colID == col.ID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					ref.ColumnIDs = append(ref.ColumnIDs, col.ID)
+				}
 			}
+			seqDescs = append(seqDescs, seqDesc)
 		}
-		seqDescs = append(seqDescs, seqDesc)
 	}
 
 	// If sequences are present in the expr (and the cluster is the right version),

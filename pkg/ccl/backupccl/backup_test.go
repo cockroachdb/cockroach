@@ -9854,6 +9854,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 78963)
 
 	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
@@ -9881,7 +9882,7 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 
 		// Role 'app_role' and user 'app' will be added, and 'app' is granted with 'app_role'
 		// User test will remain untouched with no role granted
-		sqlDBRestore.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
+		sqlDBRestore.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\" FROM system.users", [][]string{
 			{"admin", "", "true"},
 			{"app", "NULL", "false"},
 			{"app_role", "NULL", "true"},
@@ -9915,7 +9916,7 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 	t.Run("restore-from-backup-with-no-system-role-members", func(t *testing.T) {
 		sqlDBRestore1.Exec(t, "RESTORE SYSTEM USERS FROM $1", localFoo+"/3")
 
-		sqlDBRestore1.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
+		sqlDBRestore1.CheckQueryResults(t, "SELECT username, \"hashedPassword\", \"isRole\" FROM system.users", [][]string{
 			{"admin", "", "true"},
 			{"app", "NULL", "false"},
 			{"app_role", "NULL", "true"},
@@ -9923,7 +9924,7 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"test", "NULL", "false"},
 			{"test_role", "NULL", "true"},
 		})
-		sqlDBRestore1.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
+		sqlDBRestore1.CheckQueryResults(t, "SELECT \"role\", \"member\", \"isAdmin\" FROM system.role_members", [][]string{
 			{"admin", "root", "true"},
 		})
 		sqlDBRestore1.CheckQueryResults(t, "SHOW USERS", [][]string{

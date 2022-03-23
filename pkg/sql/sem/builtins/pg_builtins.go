@@ -2376,7 +2376,23 @@ func isMemberOfRole(
 		return tree.HasPrivilege, nil
 	}
 
-	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, user)
+	var userID oid.Oid
+	query := `SELECT user_id FROM system.users WHERE username=$1`
+
+	values, err := ctx.Planner.QueryRowEx(ctx.Context, "isAdminOfRole", ctx.Txn, sessiondata.InternalExecutorOverride{
+		User: security.RootUserName()}, query, user)
+
+	if err != nil {
+		return tree.HasNoPrivilege, errors.Wrapf(err, "error looking up user %s", user)
+	}
+
+	if values != nil {
+		if v := values[0]; v != tree.DNull {
+			userID = oid.Oid(v.(*tree.DOid).DInt)
+		}
+	}
+
+	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, security.SQLUserInfo{Username: user, UserID: userID})
 	if err != nil {
 		return tree.HasNoPrivilege, err
 	}
@@ -2443,7 +2459,23 @@ func isAdminOfRole(
 		return tree.HasNoPrivilege, nil
 	}
 
-	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, user)
+	var userID oid.Oid
+	query := `SELECT user_id FROM system.users WHERE username=$1`
+
+	values, err := ctx.Planner.QueryRowEx(ctx.Context, "isAdminOfRole", ctx.Txn, sessiondata.InternalExecutorOverride{
+		User: security.RootUserName()}, query, user)
+
+	if err != nil {
+		return tree.HasNoPrivilege, errors.Wrapf(err, "error looking up user %s", user)
+	}
+
+	if values != nil {
+		if v := values[0]; v != tree.DNull {
+			userID = oid.Oid(v.(*tree.DOid).DInt)
+		}
+	}
+
+	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, security.SQLUserInfo{Username: user, UserID: userID})
 	if err != nil {
 		return tree.HasNoPrivilege, err
 	}

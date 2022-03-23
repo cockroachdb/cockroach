@@ -392,6 +392,7 @@ const (
 	SettingsTableID            = 6
 	DescIDSequenceID           = 7
 	TenantsTableID             = 8
+	UserIDSequenceID           = 9
 
 	// IDs for the important columns and indexes in the zones table live here to
 	// avoid introducing a dependency on sql/sqlbase throughout the codebase.

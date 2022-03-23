@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -142,10 +143,18 @@ func (ts *httpTestServer) createAuthUser(userName security.SQLUsername, isAdmin 
 	if isAdmin {
 		// We can't use the GRANT statement here because we don't want
 		// to rely on CCL code.
+		adminID, err := sql.GetUserID(context.TODO(), ts.t.sqlServer.internalExecutor, nil, security.AdminRoleName())
+		if err != nil {
+			return err
+		}
+		userID, err := sql.GetUserID(context.TODO(), ts.t.sqlServer.internalExecutor, nil, userName)
+		if err != nil {
+			return err
+		}
 		if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 			"grant-admin", nil,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			"INSERT INTO system.role_members (role, member, \"isAdmin\") VALUES ('admin', $1, true)", userName.Normalized(),
+			`INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ('admin', $1, true, $2, $3)`, userName.Normalized(), adminID, userID,
 		); err != nil {
 			return err
 		}
