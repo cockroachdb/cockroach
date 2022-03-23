@@ -600,24 +600,25 @@ func (c *tenantSideCostController) OnResponse(
 	if multitenant.HasTenantCostControlExemption(ctx) {
 		return
 	}
-	if resp.ReadBytes() > 0 {
+	if resp.IsRead() {
 		c.limiter.RemoveTokens(c.timeSource.Now(), c.costCfg.ResponseCost(resp))
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if isWrite, writeBytes := req.IsWrite(); isWrite {
-		c.mu.consumption.WriteRequests++
-		c.mu.consumption.WriteBytes += uint64(writeBytes)
-		writeRU := float64(c.costCfg.KVWriteCost(writeBytes))
+	if req.IsWrite() {
+		c.mu.consumption.WriteBatches++
+		c.mu.consumption.WriteRequests += uint64(req.WriteCount())
+		c.mu.consumption.WriteBytes += uint64(req.WriteBytes())
+		writeRU := float64(c.costCfg.RequestCost(req))
 		c.mu.consumption.KVRU += writeRU
 		c.mu.consumption.RU += writeRU
-	} else {
-		c.mu.consumption.ReadRequests++
-		readBytes := resp.ReadBytes()
-		c.mu.consumption.ReadBytes += uint64(readBytes)
-		readRU := float64(c.costCfg.KVReadCost(readBytes))
+	} else if resp.IsRead() {
+		c.mu.consumption.ReadBatches++
+		c.mu.consumption.ReadRequests += uint64(resp.ReadCount())
+		c.mu.consumption.ReadBytes += uint64(resp.ReadBytes())
+		readRU := float64(c.costCfg.ResponseCost(resp))
 		c.mu.consumption.KVRU += readRU
 		c.mu.consumption.RU += readRU
 	}
