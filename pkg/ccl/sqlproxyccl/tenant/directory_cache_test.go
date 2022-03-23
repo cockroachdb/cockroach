@@ -46,11 +46,11 @@ func TestDirectoryErrors(t *testing.T) {
 	tc, dir, _ := newTestDirectoryCache(t)
 	defer tc.Stopper().Stop(ctx)
 
-	_, err := dir.TryLookupTenantAddrs(ctx, roachpb.MakeTenantID(1000))
+	_, err := dir.TryLookupTenantPods(ctx, roachpb.MakeTenantID(1000))
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1000 not in directory cache")
-	_, err = dir.TryLookupTenantAddrs(ctx, roachpb.MakeTenantID(1001))
+	_, err = dir.TryLookupTenantPods(ctx, roachpb.MakeTenantID(1001))
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1001 not in directory cache")
-	_, err = dir.TryLookupTenantAddrs(ctx, roachpb.MakeTenantID(1002))
+	_, err = dir.TryLookupTenantPods(ctx, roachpb.MakeTenantID(1002))
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1002 not in directory cache")
 
 	// Fail to find tenant that does not exist.
@@ -102,8 +102,8 @@ func TestWatchPods(t *testing.T) {
 	// Ensure that all addresses have been cleared from the directory, since
 	// it should only return RUNNING addresses.
 	require.Eventually(t, func() bool {
-		addrs, _ := dir.TryLookupTenantAddrs(ctx, tenantID)
-		return len(addrs) == 0
+		pods, _ := dir.TryLookupTenantPods(ctx, tenantID)
+		return len(pods) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Now shut the tenant directory down.
@@ -124,9 +124,9 @@ func TestWatchPods(t *testing.T) {
 	// We know that the directory should have been emptied earlier since we
 	// don't add DRAINING pods to the directory, so putting the pod into the
 	// DELETING state should not make a difference.
-	addrs, err := dir.TryLookupTenantAddrs(ctx, tenantID)
+	pods, err := dir.TryLookupTenantPods(ctx, tenantID)
 	require.NoError(t, err)
-	require.Empty(t, addrs)
+	require.Empty(t, pods)
 
 	// Resume tenant again by a direct call to the directory server
 	_, err = tds.EnsurePod(ctx, &tenant.EnsurePodRequest{tenantID.ToUint64()})
@@ -134,9 +134,9 @@ func TestWatchPods(t *testing.T) {
 
 	// Wait for background watcher to populate the initial pod.
 	require.Eventually(t, func() bool {
-		addrs, _ := dir.TryLookupTenantAddrs(ctx, tenantID)
-		if len(addrs) != 0 {
-			addr = addrs[0]
+		pods, _ := dir.TryLookupTenantPods(ctx, tenantID)
+		if len(pods) != 0 {
+			addr = pods[0].Addr
 			return true
 		}
 		return false
@@ -166,8 +166,8 @@ func TestWatchPods(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		addrs, _ := dir.TryLookupTenantAddrs(ctx, tenantID)
-		return len(addrs) == 0
+		pods, _ := dir.TryLookupTenantPods(ctx, tenantID)
+		return len(pods) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Ensure that correct event was sent to watcher channel.
@@ -302,9 +302,9 @@ func TestDeleteTenant(t *testing.T) {
 	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
 
 	// Ensure that tenant has no valid IP addresses.
-	addrs, err := dir.TryLookupTenantAddrs(ctx, tenantID)
+	pods, err := dir.TryLookupTenantPods(ctx, tenantID)
 	require.NoError(t, err)
-	require.Empty(t, addrs)
+	require.Empty(t, pods)
 
 	// Report failure again to ensure that works when there is no ip address.
 	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
@@ -316,9 +316,9 @@ func TestDeleteTenant(t *testing.T) {
 	// longer cache the tenant.
 	_, err = dir.LookupTenantAddr(ctx, tenantID, "")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 50 not found")
-	addrs, err = dir.TryLookupTenantAddrs(ctx, tenantID)
+	pods, err = dir.TryLookupTenantPods(ctx, tenantID)
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 50 not in directory cache")
-	require.Nil(t, addrs)
+	require.Nil(t, pods)
 }
 
 // TestRefreshThrottling checks that throttling works.
@@ -344,17 +344,25 @@ func TestRefreshThrottling(t *testing.T) {
 
 	// Report a false failure and verify that IP is still present in the cache.
 	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
-	addrs, err := dir.TryLookupTenantAddrs(ctx, tenantID)
+	pods, err := dir.TryLookupTenantPods(ctx, tenantID)
 	require.NoError(t, err)
-	require.Equal(t, []string{addr}, addrs)
+	require.Equal(t, []*tenant.Pod{{
+		TenantID: tenantID.ToUint64(),
+		Addr:     addr,
+		State:    tenant.RUNNING,
+	}}, pods)
 
 	// Now destroy the tenant and call ReportFailure again. This should be a no-op
 	// due to refresh throttling.
 	require.NoError(t, destroyTenant(tc, tenantID))
 	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
-	addrs, err = dir.TryLookupTenantAddrs(ctx, tenantID)
+	pods, err = dir.TryLookupTenantPods(ctx, tenantID)
 	require.NoError(t, err)
-	require.Equal(t, []string{addr}, addrs)
+	require.Equal(t, []*tenant.Pod{{
+		TenantID: tenantID.ToUint64(),
+		Addr:     addr,
+		State:    tenant.RUNNING,
+	}}, pods)
 }
 
 func TestLoadBalancing(t *testing.T) {
@@ -386,8 +394,8 @@ func TestLoadBalancing(t *testing.T) {
 
 	// Wait for the background watcher to populate both pods.
 	require.Eventually(t, func() bool {
-		addrs, _ := dir.TryLookupTenantAddrs(ctx, tenantID)
-		return len(addrs) == 2
+		pods, _ := dir.TryLookupTenantPods(ctx, tenantID)
+		return len(pods) == 2
 	}, 10*time.Second, 100*time.Millisecond)
 
 	var processAddrs []net.Addr
@@ -443,8 +451,8 @@ func TestLoadBalancing(t *testing.T) {
 
 	// Wait for the tenantdir to reflect that no tenants are running any more.
 	require.Eventually(t, func() bool {
-		addrs, _ := dir.TryLookupTenantAddrs(ctx, tenantID)
-		return len(addrs) == 0
+		pods, _ := dir.TryLookupTenantPods(ctx, tenantID)
+		return len(pods) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Set the load on a deleted tenant.
@@ -452,8 +460,8 @@ func TestLoadBalancing(t *testing.T) {
 	<-podWatcher
 
 	// And ensure that the deleted entry does not get resurrected.
-	addrs, _ := dir.TryLookupTenantAddrs(ctx, tenantID)
-	require.Len(t, addrs, 0)
+	pods, _ := dir.TryLookupTenantPods(ctx, tenantID)
+	require.Len(t, pods, 0)
 }
 
 func createTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) error {
