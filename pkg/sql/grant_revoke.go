@@ -126,8 +126,12 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			"version %v must be finalized to use grant options",
 			clusterversion.ByKey(clusterversion.ValidateGrantOption))
 	}
+	granteeInfo, err := ToSQLUserInfos(ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, n.grantees)
+	if err != nil {
+		return err
+	}
 
-	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
+	if err := p.validateRoles(ctx, granteeInfo, true /* isPublicValid */); err != nil {
 		return err
 	}
 	// The public role is not allowed to have grant options.
@@ -143,7 +147,6 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 	}
 
-	var err error
 	var descriptors []catalog.Descriptor
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
@@ -387,18 +390,18 @@ func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privi
 // validateRoles checks that all the roles are valid users.
 // isPublicValid determines whether or not Public is a valid role.
 func (p *planner) validateRoles(
-	ctx context.Context, roles []security.SQLUsername, isPublicValid bool,
+	ctx context.Context, roles []security.SQLUserInfo, isPublicValid bool,
 ) error {
 	users, err := p.GetAllRoles(ctx)
 	if err != nil {
 		return err
 	}
 	if isPublicValid {
-		users[security.PublicRoleName()] = true // isRole
+		users[PublicRoleInfo(ctx, p)] = true // isRole
 	}
 	for i, grantee := range roles {
 		if _, ok := users[grantee]; !ok {
-			sqlName := tree.Name(roles[i].Normalized())
+			sqlName := tree.Name(roles[i].Username.Normalized())
 			return errors.Errorf("user or role %s does not exist", &sqlName)
 		}
 	}

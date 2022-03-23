@@ -3354,6 +3354,7 @@ func (c *adminPrivilegeChecker) hasRoleOption(
 		// Shortcut.
 		return true, nil
 	}
+
 	row, err := c.ie.QueryRowEx(
 		ctx, "check-role-option", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: user},

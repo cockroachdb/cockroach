@@ -2074,13 +2074,15 @@ func NewTableDesc(
 		if _, ok := n.Defs[i].(*tree.ColumnTableDef); ok {
 			if cdd[i] != nil {
 				if err := cdd[i].ForEachTypedExpr(func(expr tree.TypedExpr) error {
-					changedSeqDescs, err := maybeAddSequenceDependencies(
-						ctx, st, vt, &desc, &desc.Columns[colIdx], expr, affected)
-					if err != nil {
-						return err
-					}
-					for _, changedSeqDesc := range changedSeqDescs {
-						affected[changedSeqDesc.ID] = changedSeqDesc
+					if vt != nil {
+						changedSeqDescs, err := maybeAddSequenceDependencies(
+							ctx, st, vt, &desc, &desc.Columns[colIdx], expr, affected)
+						if err != nil {
+							return err
+						}
+						for _, changedSeqDesc := range changedSeqDescs {
+							affected[changedSeqDesc.ID] = changedSeqDesc
+						}
 					}
 					return nil
 				}); err != nil {

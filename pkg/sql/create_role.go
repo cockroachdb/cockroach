@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -143,12 +142,13 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			"a role/user named %s already exists", n.roleName.Normalized())
 	}
 
+	//newUUID, _ := uuid.GenerateUUID()
 	// TODO(richardjcai): move hashedPassword column to system.role_options.
 	rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
 		params.p.txn,
-		fmt.Sprintf("insert into %s values ($1, $2, $3)", sessioninit.UsersTableName),
+		fmt.Sprintf(`insert into %s (username, "hashedPassword", "isRole") values ($1, $2, $3)`, sessioninit.UsersTableName),
 		n.roleName,
 		hashedPassword,
 		n.isRole,
@@ -161,7 +161,10 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			rowsAffected,
 		)
 	}
-
+	roleID, err := GetUserID(params.ctx, params.ExecCfg().InternalExecutor, params.p.txn, n.roleName)
+	if err != nil {
+		return err
+	}
 	// Get a map of statements to execute for role options and their values.
 	stmts, err := n.roleOptions.GetSQLStmts(sqltelemetry.CreateRole)
 	if err != nil {
@@ -169,7 +172,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	for stmt, value := range stmts {
-		qargs := []interface{}{n.roleName}
+		qargs := []interface{}{n.roleName, roleID}
 
 		if value != nil {
 			isNull, val, err := value()

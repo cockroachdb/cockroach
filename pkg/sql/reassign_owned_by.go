@@ -80,7 +80,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	// the current user is a member of both the new roles and all the
 	// old roles.
 	if !hasAdminRole {
-		memberOf, err := p.MemberOfWithAdminOption(ctx, p.User())
+		memberOf, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{Username: p.User(), UserID: 0})
 		if err != nil {
 			return nil, err
 		}
