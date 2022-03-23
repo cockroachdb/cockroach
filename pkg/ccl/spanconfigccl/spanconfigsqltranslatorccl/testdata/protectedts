@@ -121,9 +121,10 @@ translate system-span-configurations
 {source=1,target=111}                      protection_policies=[{ts: 3}]
 {source=1,target=112}                      protection_policies=[{ts: 3}]
 
-translate database=db
-----
-/Table/106{-/2}                            num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
-/Table/106/{2-3}                           ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
-/Table/10{6/3-7}                           num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
-/Table/10{7-8}                             num_replicas=7
+# TODO(arul): Unskip this.
+# translate database=db
+# ----
+# /Table/106{-/2}                            num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
+# /Table/106/{2-3}                           ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
+# /Table/10{6/3-7}                           num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
+# /Table/10{7-8}                             num_replicas=7
