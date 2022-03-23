@@ -321,6 +321,9 @@ const (
 	// DateStyleIntervalStyleCastRewrite rewrites cast that cause inconsistencies
 	// when DateStyle/IntervalStyle is enabled.
 	DateStyleIntervalStyleCastRewrite
+	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
+	// 22.1.
+	EnableNewStoreRebalancer
 
 	// *************************************************
 	// Step (1): Add new versions here.
