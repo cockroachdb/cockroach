@@ -761,6 +761,7 @@ message ChangefeedDetails {
   // time of the changefeed, which is no longer the case. We should rename this
   // field to ScanTime instead.
   util.hlc.Timestamp statement_time = 7 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end_time = 9 [(gogoproto.nullable) = false];
   repeated ChangefeedTargetSpecification target_specifications = 8 [(gogoproto.nullable) = false];
 
   reserved 1, 2, 5;

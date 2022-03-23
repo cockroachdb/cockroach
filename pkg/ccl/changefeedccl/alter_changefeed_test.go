@@ -346,6 +346,14 @@ func TestAlterChangefeedErrors(t *testing.T) {
 			`pq: cannot alter option "initial_scan"`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET initial_scan`, feed.JobID()),
 		)
+		sqlDB.ExpectErr(t,
+			`pq: cannot alter option "initial_scan_only"`,
+			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET initial_scan_only`, feed.JobID()),
+		)
+		sqlDB.ExpectErr(t,
+			`pq: cannot alter option "end_time"`,
+			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET end_time`, feed.JobID()),
+		)
 
 		sqlDB.ExpectErr(t,
 			`cannot unset option "sink"`,
