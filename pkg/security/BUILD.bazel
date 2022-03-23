@@ -22,6 +22,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/roachpb",
         "//pkg/security/password",
         "//pkg/security/username",
         "//pkg/server/telemetry",
