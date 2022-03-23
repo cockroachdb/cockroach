@@ -31,6 +31,7 @@ import (
 var (
 	HasColumn         = hasColumn
 	HasIndex          = hasIndex
+	HasColumnFamily   = hasColumnFamily
 	CreateSystemTable = createSystemTable
 )
 

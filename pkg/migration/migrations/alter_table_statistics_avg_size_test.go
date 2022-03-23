@@ -58,6 +58,8 @@ func TestAlterSystemTableStatisticsTable(t *testing.T) {
 	var (
 		validationSchemas = []migrations.Schema{
 			{Name: "avgSize", ValidationFn: migrations.HasColumn},
+			{Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram",
+				ValidationFn: migrations.HasColumnFamily},
 		}
 	)
 
