@@ -26,7 +26,7 @@ token-bucket-response
 timers
 ----
 00:00:09.000
-00:04:46.544
+00:04:46.601
 
 configure
 error: true
@@ -45,7 +45,7 @@ low-ru
 
 timers
 ----
-00:04:46.544
+00:04:46.601
 
 advance
 2s
@@ -60,7 +60,7 @@ tick
 
 timers
 ----
-00:00:39.454
+00:00:39.460
 
 not-completed label=w2
 ----
