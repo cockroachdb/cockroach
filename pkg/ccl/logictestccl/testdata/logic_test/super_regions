@@ -682,3 +682,54 @@ TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
                     constraints = '{+region=ca-central-1: 1, +region=us-west-1: 1}',
                     voter_constraints = '[+region=us-west-1]',
                     lease_preferences = '[[+region=us-west-1]]'
+
+# ALTER SUPER REGION test cases.
+
+# ALTER SUPER REGION that doesn't exist.
+statement error pq: super region "fake" of database "db3" does not exist
+ALTER DATABASE db3 ALTER SUPER REGION "fake" VALUES "ca-central-1", "us-west-1", "us-east-1";
+
+# super region has region that is in another region.
+statement error pq: region us-east-1 is already defined in super region test2
+ALTER DATABASE db3 ALTER SUPER REGION "test1" VALUES "ca-central-1", "us-west-1", "us-east-1";
+
+# alter super region with region that does not exist.
+statement error pq: region fake-region not part of database
+ALTER DATABASE db3 ALTER SUPER REGION "test1" VALUES "fake-region"
+
+# alter super region such that it cannot match the database's survival goal.
+statement error pq: super region r1 only has 1 regions: at least 3 regions are required for surviving a region failure
+ALTER DATABASE mr3 ALTER SUPER REGION "r1" VALUES "us-west-1";
+
+statement ok
+ALTER DATABASE db3 DROP SUPER REGION "test2";
+ALTER DATABASE db3 ALTER SUPER REGION "test1" VALUES "ca-central-1", "us-west-1", "us-east-1";
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db3.t
+----
+TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 90000,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ca-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                    voter_constraints = '[+region=us-west-1]',
+                    lease_preferences = '[[+region=us-west-1]]'
+
+statement ok
+ALTER DATABASE db3 ALTER SUPER REGION "test1" VALUES "us-west-1";
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db3.t
+----
+TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 90000,
+                    num_replicas = 3,
+                    num_voters = 3,
+                    constraints = '{+region=us-west-1: 1}',
+                    voter_constraints = '[+region=us-west-1]',
+                    lease_preferences = '[[+region=us-west-1]]'

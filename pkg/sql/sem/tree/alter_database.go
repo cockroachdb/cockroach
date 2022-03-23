@@ -153,3 +153,28 @@ func (node *AlterDatabaseDropSuperRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString(" DROP SUPER REGION ")
 	ctx.FormatNode(&node.SuperRegionName)
 }
+
+// AlterDatabaseAlterSuperRegion represents a
+// ALTER DATABASE ADD SUPER REGION ... statement.
+type AlterDatabaseAlterSuperRegion struct {
+	DatabaseName    Name
+	SuperRegionName Name
+	Regions         []Name
+}
+
+var _ Statement = &AlterDatabaseAlterSuperRegion{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseAlterSuperRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" ALTER SUPER REGION ")
+	ctx.FormatNode(&node.SuperRegionName)
+	ctx.WriteString(" VALUES ")
+	for i, region := range node.Regions {
+		if i != 0 {
+			ctx.WriteString(",")
+		}
+		ctx.FormatNode(&region)
+	}
+}
