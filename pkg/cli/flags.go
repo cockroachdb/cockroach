@@ -580,6 +580,7 @@ func init() {
 		stringFlag(f, &certCtx.caKey, cliflags.CAKey)
 		intFlag(f, &certCtx.keySize, cliflags.KeySize)
 		boolFlag(f, &certCtx.overwriteFiles, cliflags.OverwriteFiles)
+		stringFlag(f, &certCtx.tenantScope, cliflags.TenantScope)
 
 		if strings.HasSuffix(cmd.Name(), "-ca") {
 			// CA-only commands.

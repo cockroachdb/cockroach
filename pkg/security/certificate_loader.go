@@ -226,6 +226,14 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 		fileUsage = ClientPem
 		// Strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
+		if strings.Contains(name, "@") {
+			// This is a tenant scoped client certificate, drop tenant ID from the name.
+			nameParts := strings.Split(name, "@")
+			if len(nameParts) != 2 {
+				return nil, errors.Errorf("tenant scoped client certificate filename should match <user>@tenant-<tenant-id>")
+			}
+			name = nameParts[0]
+		}
 		if len(name) == 0 {
 			return nil, errors.Errorf("client certificate filename should match client.<user>%s", certExtension)
 		}
