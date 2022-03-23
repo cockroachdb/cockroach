@@ -199,7 +199,7 @@ type BytesMonitor struct {
 	}
 
 	// name identifies this monitor in logging messages.
-	name string
+	name redact.RedactableString
 
 	// resource specifies what kind of resource the monitor is tracking
 	// allocations for. Specific behavior is delegated to this resource (e.g.
@@ -296,7 +296,7 @@ func NewMonitorWithLimit(
 		limit = math.MaxInt64
 	}
 	m := &BytesMonitor{
-		name:                 name,
+		name:                 redact.Sprint(name),
 		resource:             res,
 		limit:                limit,
 		noteworthyUsageBytes: noteworthy,
@@ -352,7 +352,7 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 	mm.mu.curBudget = pool.MakeBoundAccount()
 	mm.reserved = reserved
 	if log.V(2) {
-		poolname := "(none)"
+		poolname := redact.RedactableString("(none)")
 		if pool != nil {
 			poolname = pool.name
 		}
@@ -374,12 +374,13 @@ func NewUnlimitedMonitor(
 	noteworthy int64,
 	settings *cluster.Settings,
 ) *BytesMonitor {
+	safeName := redact.Sprint(name)
 	if log.V(2) {
-		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", name)
+		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", safeName)
 
 	}
 	m := &BytesMonitor{
-		name:                 name,
+		name:                 safeName,
 		resource:             res,
 		limit:                math.MaxInt64,
 		noteworthyUsageBytes: noteworthy,
@@ -406,7 +407,7 @@ func (mm *BytesMonitor) Stop(ctx context.Context) {
 
 // Name returns the name of the monitor.
 func (mm *BytesMonitor) Name() string {
-	return mm.name
+	return string(mm.name)
 }
 
 const bytesMaxUsageLoggingThreshold = 100 * 1024
@@ -424,7 +425,7 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 		logcrash.ReportOrPanic(
 			ctx, &mm.settings.SV,
 			"%s: unexpected %d leftover bytes",
-			redact.Safe(mm.name), redact.Safe(mm.mu.curAllocated))
+			mm.name, mm.mu.curAllocated)
 		mm.releaseBytes(ctx, mm.mu.curAllocated)
 	}
 
