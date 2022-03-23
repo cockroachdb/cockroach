@@ -170,6 +170,9 @@ func Encode(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 			return encoding.EncodeBytesAscending(b, t.PhysicalRep), nil
 		}
 		return encoding.EncodeBytesDescending(b, t.PhysicalRep), nil
+	case *tree.DEncodedKey:
+		// DEncodedKey carries an already encoded key.
+		return append(b, []byte(*t)...), nil
 	case *tree.DJSON:
 		return nil, unimplemented.NewWithIssue(35706, "unable to encode JSON as a table key")
 	}

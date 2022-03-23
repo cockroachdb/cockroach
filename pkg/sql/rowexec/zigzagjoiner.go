@@ -401,8 +401,6 @@ type zigzagJoinerInfo struct {
 
 	// The current key being fetched by this side.
 	key roachpb.Key
-	// The prefix of the key which includes the table and index IDs.
-	prefix []byte
 	// endKey marks where this side should stop fetching, taking into account the
 	// fixedValues.
 	endKey roachpb.Key
@@ -445,8 +443,8 @@ func (z *zigzagJoiner) setupInfo(
 		columnID := col.GetID()
 		if info.index.GetType() == descpb.IndexDescriptor_INVERTED &&
 			columnID == info.index.InvertedColumnID() {
-			// Inverted key columns have type Bytes.
-			info.indexTypes[i] = types.Bytes
+			// Inverted key columns have type EncodedKey.
+			info.indexTypes[i] = types.EncodedKey
 		} else {
 			info.indexTypes[i] = columnTypes[colIdxMap.GetDefault(columnID)]
 		}
@@ -504,7 +502,6 @@ func (z *zigzagJoiner) setupInfo(
 		info.fetcher = fetcher
 	}
 
-	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table.GetID(), info.index.GetID())
 	span, err := z.produceSpanFromBaseRow()
 
 	if err != nil {
@@ -578,70 +575,6 @@ func (z *zigzagJoiner) extractEqDatums(row rowenc.EncDatumRow, side int) rowenc.
 	return eqDatums
 }
 
-// Generates a Key for an inverted index from the passed datums and side
-// info. Used by produceKeyFromBaseRow.
-func (z *zigzagJoiner) produceInvertedIndexKey(
-	info *zigzagJoinerInfo, datums rowenc.EncDatumRow,
-) (roachpb.Span, error) {
-	// For inverted indexes, the JSON field (first column in the index) is
-	// encoded a little differently. We need to explicitly call
-	// EncodeInvertedIndexKeys to generate the prefix. The rest of the
-	// index key containing the remaining neededDatums can be generated
-	// and appended using EncodeColumns.
-	var colMap catalog.TableColMap
-	decodedDatums := make([]tree.Datum, len(datums))
-
-	// Ensure all EncDatums have been decoded.
-	for i, encDatum := range datums {
-		err := encDatum.EnsureDecoded(info.indexTypes[i], info.alloc)
-		if err != nil {
-			return roachpb.Span{}, err
-		}
-
-		decodedDatums[i] = encDatum.Datum
-		if i < info.index.NumKeyColumns() {
-			colMap.Set(info.index.GetKeyColumnID(i), i)
-		} else {
-			// This column's value will be encoded in the second part (i.e.
-			// EncodeColumns).
-			colMap.Set(info.index.GetKeySuffixColumnID(i-info.index.NumKeyColumns()), i)
-		}
-	}
-
-	// First encode datums for any non-inverted prefix columns.
-	keyPrefix, err := rowenc.EncodeInvertedIndexPrefixKeys(
-		info.index,
-		colMap,
-		decodedDatums,
-		info.prefix,
-	)
-	if err != nil {
-		return roachpb.Span{}, err
-	}
-
-	// Add the inverted key, which is already encoded as a DBytes.
-	invOrd, ok := colMap.Get(info.index.InvertedColumnID())
-	if !ok {
-		return roachpb.Span{}, errors.AssertionFailedf("inverted column not found in colMap")
-	}
-	invertedKey, ok := decodedDatums[invOrd].(*tree.DBytes)
-	if !ok {
-		return roachpb.Span{}, errors.AssertionFailedf("inverted key must be type DBytes")
-	}
-	keyPrefix = append(keyPrefix, []byte(*invertedKey)...)
-
-	// Append remaining (non-JSON) datums to the key.
-	keyBytes, _, err := rowenc.EncodeColumns(
-		info.index.IndexDesc().KeySuffixColumnIDs[:len(datums)-1],
-		info.indexDirs[1:],
-		colMap,
-		decodedDatums,
-		keyPrefix,
-	)
-	key := roachpb.Key(keyBytes)
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, err
-}
-
 // Generates a Key, corresponding to the current `z.baseRow` in
 // the index on the current side.
 func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
@@ -650,12 +583,6 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 	if z.baseRow != nil {
 		eqDatums := z.extractEqDatums(z.baseRow, z.prevSide())
 		neededDatums = append(neededDatums, eqDatums...)
-	}
-
-	// Construct correct row by concatenating right fixed datums with
-	// primary key extracted from `row`.
-	if info.index.GetType() == descpb.IndexDescriptor_INVERTED {
-		return z.produceInvertedIndexKey(info, neededDatums)
 	}
 
 	s, _, err := info.spanBuilder.SpanFromEncDatums(neededDatums)
