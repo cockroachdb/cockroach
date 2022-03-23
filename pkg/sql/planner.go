@@ -182,7 +182,9 @@ type planner struct {
 
 	preparedStatements preparedStatementsAccessor
 
-	// avoidCachedDescriptors, when true, instructs all code that
+	createdSequences createdSequences
+
+	// avoidLeasedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
 	// within the transaction. This is necessary to read descriptors
 	// from the store for:
@@ -412,6 +414,7 @@ func newInternalPlanner(
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
+	p.createdSequences = emptyCreatedSequences{}
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create

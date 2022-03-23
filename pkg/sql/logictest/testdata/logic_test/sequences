@@ -1849,3 +1849,103 @@ query I
 SELECT nextval('seq71135')
 ----
 201
+
+# create a sequence and nextval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE nextval_txn_seq
+
+query I
+SELECT nextval('nextval_txn_seq')
+----
+1
+
+statement ok
+END
+
+query I
+SELECT nextval('nextval_txn_seq')
+----
+2
+
+# create a sequence and setval in the same transaction then nextval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_nextval_seq
+
+query I
+SELECT setval('setval_txn_nextval_seq', 2)
+----
+2
+
+statement ok
+END
+
+query I
+SELECT nextval('setval_txn_nextval_seq')
+----
+3
+
+# create a sequence and setval then nextval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_nextval_txn_seq
+
+query I
+SELECT setval('setval_nextval_txn_seq', 2)
+----
+2
+
+query I
+SELECT nextval('setval_nextval_txn_seq')
+----
+3
+
+statement ok
+END
+
+# create a sequence and setval in the same transaction then currval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_currval_seq
+
+query I
+SELECT setval('setval_txn_currval_seq', 1)
+----
+1
+
+statement ok
+END
+
+query I
+SELECT currval('setval_txn_currval_seq')
+----
+1
+
+# create a sequence and setval then currval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_currval_txn_seq
+
+query I
+SELECT setval('setval_currval_txn_seq', 1)
+----
+1
+
+query I
+SELECT currval('setval_currval_txn_seq')
+----
+1
+
+statement ok
+END
