@@ -49,6 +49,11 @@ const (
 	NOCREATEDB
 	CREATELOGIN
 	NOCREATELOGIN
+	// VIEWACTIVITY is responsible for controlling access to DB Console
+	// endpoints that allow a user to view data in the UI without having
+	// the Admin role. In addition, the VIEWACTIVITY role permits viewing
+	// *unredacted* data in the `/nodes` and `/nodes_ui` endpoints which
+	// display IP addresses and hostnames.
 	VIEWACTIVITY
 	NOVIEWACTIVITY
 	CANCELQUERY
