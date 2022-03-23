@@ -203,10 +203,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join on an empty table with itself on its primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*empty, *empty},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *empty,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *empty,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -216,10 +225,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join an empty table on the left with a populated table on its primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*empty, *highRangeDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *empty,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *highRangeDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -229,10 +247,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a populated table on the left with an empty table on its primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*highRangeDesc, *empty},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *highRangeDesc,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *empty,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -242,10 +269,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a table with a single row with itself on its primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*single, *single},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *single,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *single,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -255,10 +291,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a table with a few rows with itself on its primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*smallDesc, *smallDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *smallDesc,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *smallDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -268,10 +313,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a populated table that has a match in the last row with itself",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*medDesc, *medDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *medDesc,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *medDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -281,10 +335,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "(a) is free, and outputs cartesian product",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*medDesc, *medDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *medDesc,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}},
+					},
+					{
+						Table:        *medDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 4, 5, 7},
@@ -295,10 +358,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "set the fixed columns to be a part of the primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*medDesc, *medDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *medDesc,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{1}},
+					},
+					{
+						Table:        *medDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7), encInt(1)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -308,10 +380,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join should work when there is a block of matches",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*highRangeDesc, *highRangeDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *highRangeDesc,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}},
+					},
+					{
+						Table:        *highRangeDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 4, 5, 7},
@@ -322,10 +403,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join two different tables where first one is larger",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*medDesc, *smallDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *medDesc,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *smallDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 4, 5, 7},
@@ -335,10 +425,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join two different tables where second is larger",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*smallDesc, *medDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *smallDesc,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *medDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 4, 5, 7},
@@ -348,10 +447,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join on an index containing primary key columns explicitly",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*overlappingDesc, *overlappingDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (a, c) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *overlappingDesc,
+						IndexOrdinal: 1, // (c)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{1}},
+					},
+					{
+						Table:        *overlappingDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3) /*a*/, encInt(3) /*c*/}, {encInt(7) /*d*/, encInt(3) /*a*/}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -361,11 +469,21 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join two tables with different schemas",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*smallDesc, *t2Desc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0 /* (a, b) */, 0 /* (a, b) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *smallDesc,
+						IndexOrdinal: 0, // (a, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *t2Desc,
+						IndexOrdinal: 0, // (a, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
+			fixedValues:   []rowenc.EncDatumRow{{}, {}},
 			outCols:       []uint32{0, 1},
 			expectedTypes: intCols(2),
 			expected:      "[[0 1] [0 2] [1 0] [1 1] [2 0]]",
@@ -373,11 +491,21 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join two tables with different schemas flipped",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*t2Desc, *smallDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0 /* (a, b) */, 0 /* (a, b) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *t2Desc,
+						IndexOrdinal: 0, // (a, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *smallDesc,
+						IndexOrdinal: 0, // (a, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
+			fixedValues:   []rowenc.EncDatumRow{{}, {}},
 			outCols:       []uint32{0, 1},
 			expectedTypes: intCols(2),
 			expected:      "[[0 1] [0 2] [1 0] [1 1] [2 0]]",
@@ -385,11 +513,21 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join on a populated table with no fixed columns",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*smallDesc, *smallDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0 /* (a, b) */, 0 /* (a, b) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *smallDesc,
+						IndexOrdinal: 0, // (a, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *smallDesc,
+						IndexOrdinal: 0, // (a, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
+			fixedValues:   []rowenc.EncDatumRow{{}, {}},
 			outCols:       []uint32{0, 1},
 			expectedTypes: intCols(2),
 			expected:      "[[0 1] [0 2] [0 3] [0 4] [1 0] [1 1] [1 2] [1 3] [1 4] [2 0]]",
@@ -397,10 +535,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join tables with different schemas with no locked columns",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*smallDesc, *t2Desc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0 /* (a, b) */, 0 /* (a, b) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *smallDesc,
+						IndexOrdinal: 0, // (a, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{1}},
+					},
+					{
+						Table:        *t2Desc,
+						IndexOrdinal: 0, // (a, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(1)}, {encInt(1)}},
 			outCols:       []uint32{0, 1},
@@ -410,10 +557,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index with itself",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*compDesc, *compDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c, a, b) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *compDesc,
+						IndexOrdinal: 1, // (c, a, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *compDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -423,10 +579,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index with the primary key reversed with itself",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*revCompDesc, *revCompDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}}, // join on a
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c, b, a) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *revCompDesc,
+						IndexOrdinal: 1,                                         // (c, b, a)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}}, // join on a
+					},
+					{
+						Table:        *revCompDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -436,11 +601,20 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index with the primary key reversed with itself with onExpr on value on one side",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*revCompDesc, *revCompDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c, b, a) */, 2 /* (d) */},
-				OnExpr:        execinfrapb.Expression{Expr: "@1 > 1"},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *revCompDesc,
+						IndexOrdinal: 1, // (c, b, a)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}},
+					},
+					{
+						Table:        *revCompDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}},
+					},
+				},
+				Type:   descpb.InnerJoin,
+				OnExpr: execinfrapb.Expression{Expr: "@1 > 1"},
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -450,11 +624,20 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index with the primary key reversed with itself and with onExpr comparing both sides",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*revCompDesc, *revCompDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (c, b, a) */, 2 /* (d) */},
-				OnExpr:        execinfrapb.Expression{Expr: "@8 < 2 * @1"},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *revCompDesc,
+						IndexOrdinal: 1, // (c, b, a)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}},
+					},
+					{
+						Table:        *revCompDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}},
+					},
+				},
+				Type:   descpb.InnerJoin,
+				OnExpr: execinfrapb.Expression{Expr: "@8 < 2 * @1"},
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(3), encInt(1)}, {encInt(7)}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -464,10 +647,19 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index that doesn't contain the full primary key with itself",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*compUnqDesc, *compUnqDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{2 /* (c, b) */, 3 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *compUnqDesc,
+						IndexOrdinal: 2, // (c, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{1}},
+					},
+					{
+						Table:        *compUnqDesc,
+						IndexOrdinal: 3, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			fixedValues:   []rowenc.EncDatumRow{{encInt(21) /* c */}, {encInt(6), encInt(4) /* d, a */}},
 			outCols:       []uint32{0, 1, 2, 7},
@@ -477,11 +669,21 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "test when equality columns may be null",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*nullableDesc, *nullableDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{2}}, {Columns: []uint32{3}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{1 /* (e) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *nullableDesc,
+						IndexOrdinal: 1, // (e)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{2}},
+					},
+					{
+						Table:        *nullableDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{3}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
+			fixedValues:   []rowenc.EncDatumRow{{}, {}},
 			outCols:       []uint32{0, 1, 2, 4, 5, 7},
 			expectedTypes: intCols(6),
 			expected: "[[1 2 4 1 2 4] [1 2 4 0 3 4] [0 3 4 1 2 4] [0 3 4 0 3 4] [1 3 5 1 3 5] " +
@@ -492,11 +694,21 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "test joining with primary key",
 			spec: execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*medDesc, *medDesc},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{3}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0 /* primary (a, b) */, 2 /* (d) */},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *medDesc,
+						IndexOrdinal: 0, // primary (a, b)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0}},
+					},
+					{
+						Table:        *medDesc,
+						IndexOrdinal: 2, // (d)
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{3}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
+			fixedValues:   []rowenc.EncDatumRow{{}, {}},
 			outCols:       []uint32{0, 1, 2, 3, 4, 5, 7},
 			expectedTypes: intCols(7),
 			expected: "[[4 2 4 7 3 4 4] [4 1 3 6 3 4 4] [4 0 5 5 3 4 4] [4 2 4 7 3 0 4] [4 1 3 6 3 0 4] " +
@@ -595,10 +807,19 @@ func TestZigzagJoinerDrain(t *testing.T) {
 			&flowCtx,
 			0, /* processorID */
 			&execinfrapb.ZigzagJoinerSpec{
-				Tables:        []descpb.TableDescriptor{*td, *td},
-				EqColumns:     []execinfrapb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
-				Type:          descpb.InnerJoin,
-				IndexOrdinals: []uint32{0, 1},
+				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
+					{
+						Table:        *td,
+						IndexOrdinal: 0,
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+					{
+						Table:        *td,
+						IndexOrdinal: 1,
+						EqColumns:    execinfrapb.Columns{Columns: []uint32{0, 1}},
+					},
+				},
+				Type: descpb.InnerJoin,
 			},
 			[]rowenc.EncDatumRow{{encThree}, {encSeven}},
 			&execinfrapb.PostProcessSpec{Projection: true, OutputColumns: []uint32{0, 1}},
