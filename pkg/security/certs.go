@@ -383,6 +383,7 @@ func CreateClientPair(
 	lifetime time.Duration,
 	overwrite bool,
 	user SQLUsername,
+	tenantID string,
 	wantPKCS8Key bool,
 ) error {
 	if len(caKeyPath) == 0 {
@@ -423,18 +424,26 @@ func CreateClientPair(
 		return errors.Wrap(err, "could not generate new client key")
 	}
 
-	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user)
+	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user, tenantID)
 	if err != nil {
 		return errors.Wrap(err, "error creating client certificate and key")
 	}
 
-	certPath := cm.ClientCertPath(user)
+	var certPath string
+	var keyPath string
+
+	if tenantID != "" {
+		certPath = cm.ClientForTenantCertPath(user, tenantID)
+		keyPath = cm.ClientForTenantKeyPath(user, tenantID)
+	} else {
+		certPath = cm.ClientCertPath(user)
+		keyPath = cm.ClientKeyPath(user)
+	}
 	if err := writeCertificateToFile(certPath, clientCert, overwrite); err != nil {
 		return errors.Wrapf(err, "error writing client certificate to %s", certPath)
 	}
 	log.Infof(context.Background(), "generated client certificate: %s", certPath)
 
-	keyPath := cm.ClientKeyPath(user)
 	if err := writeKeyToFile(keyPath, clientKey, overwrite); err != nil {
 		return errors.Wrapf(err, "error writing client key to %s", keyPath)
 	}

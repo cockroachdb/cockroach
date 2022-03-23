@@ -431,6 +431,16 @@ func ClientCertFilename(user SQLUsername) string {
 	return "client." + user.Normalized() + certExtension
 }
 
+// ClientForTenantCertPath returns the expected file path for the user's tenant scoped certificate.
+func (cl CertsLocator) ClientForTenantCertPath(user SQLUsername, tenantID string) string {
+	return filepath.Join(cl.certsDir, ClientForTenantCertFilename(user, tenantID))
+}
+
+// ClientForTenantCertFilename returns the expected file name for the user's tenant scoped certificate.
+func ClientForTenantCertFilename(user SQLUsername, tenantID string) string {
+	return "client." + user.Normalized() + ".tenant-" + tenantID + certExtension
+}
+
 // ClientKeyPath returns the expected file path for the user's key.
 func (cl CertsLocator) ClientKeyPath(user SQLUsername) string {
 	return filepath.Join(cl.certsDir, ClientKeyFilename(user))
@@ -439,6 +449,16 @@ func (cl CertsLocator) ClientKeyPath(user SQLUsername) string {
 // ClientKeyFilename returns the expected file name for the user's key.
 func ClientKeyFilename(user SQLUsername) string {
 	return "client." + user.Normalized() + keyExtension
+}
+
+// ClientForTenantKeyPath returns the expected file path for the user's tenant scoped key
+func (cl CertsLocator) ClientForTenantKeyPath(user SQLUsername, tenantID string) string {
+	return filepath.Join(cl.certsDir, ClientForTenantKeyFilename(user, tenantID))
+}
+
+// ClientForTenantKeyFilename returns the expected file name for the user's key.
+func ClientForTenantKeyFilename(user SQLUsername, tenantID string) string {
+	return "client." + user.Normalized() + ".tenant-" + tenantID + keyExtension
 }
 
 // SQLServiceCertPath returns the expected file path for the

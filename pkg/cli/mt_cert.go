@@ -140,3 +140,49 @@ If --overwrite is true, any existing files are overwritten.
 				"failed to generate tenant signing cert and key")
 		}),
 }
+
+// A mtCreateClientForTenantCert command generates a tenant scoped client certificate and stores it
+// in the cert directory under client.<username>.tenant-<tenant_id>.crt and key under client.<username>.tenant-<tenant_id>.key.
+var mtCreateClientForTenantCert = &cobra.Command{
+	Use:   "create-client-for-tenant --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key> <username> <tenant_id>",
+	Short: "create tenant scoped client certificate and key",
+	Long: `
+Generate a tenant scoped client certificate "<certs-dir>/client.<username>.tenant-<tenant_id>.crt" and key
+"<certs-dir>/client.<username>.tenant-<tenant_id>.key".
+
+If --overwrite is true, any existing files are overwritten.
+
+Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
+If "ca.crt" contains more than one certificate, the first is used.
+Creation fails if the CA expiration time is before the desired certificate expiration.
+`,
+	Args: cobra.ExactArgs(2),
+	RunE: clierrorplus.MaybeDecorateError(runCreateClientForTenantCrt),
+}
+
+// runCreateClientForTenantCrt generates key pair and CA certificate and writes them
+// to their corresponding files.
+// TODO(marc): there is currently no way to specify which CA cert to use if more
+// than one if present.
+func runCreateClientForTenantCrt(cmd *cobra.Command, args []string) error {
+	username, err := security.MakeSQLUsernameFromUserInput(args[0], security.UsernameCreation)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate client certificate and key")
+	}
+	tenantID := args[1]
+	// Confirm tenantID is valid.
+	if _, err := strconv.ParseUint(tenantID, 10, 64); err != nil {
+		return errors.Wrapf(err, "%s is invalid uint64", tenantID)
+	}
+	return errors.Wrap(
+		security.CreateClientPair(
+			certCtx.certsDir,
+			certCtx.caKey,
+			certCtx.keySize,
+			certCtx.certificateLifetime,
+			certCtx.overwriteFiles,
+			username,
+			tenantID,
+			certCtx.generatePKCS8Key),
+		"failed to generate tenant scoped client certificate and key")
+}
