@@ -266,6 +266,10 @@ var certCtx struct {
 	// This configuration flag is only used for 'cert' commands
 	// that generate certificates.
 	certPrincipalMap []string
+	// tenantScope indicates a comma separated list of tenant IDs  that a certificate is being
+	// scoped to. By creating a tenant-scoped certicate, the usage of that certificate
+	// is restricted to a specific set of tenants.
+	tenantScope string
 }
 
 func setCertContextDefaults() {
@@ -278,6 +282,7 @@ func setCertContextDefaults() {
 	certCtx.overwriteFiles = false
 	certCtx.generatePKCS8Key = false
 	certCtx.certPrincipalMap = nil
+	certCtx.tenantScope = ""
 }
 
 var sqlExecCtx = clisqlexec.Context{

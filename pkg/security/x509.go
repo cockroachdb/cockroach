@@ -18,8 +18,10 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/url"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -31,9 +33,10 @@ import (
 const (
 	// Make certs valid a day before to handle clock issues, specifically
 	// boot2docker: https://github.com/boot2docker/boot2docker/issues/69
-	validFrom     = -time.Hour * 24
-	maxPathLength = 1
-	caCommonName  = "Cockroach CA"
+	validFrom                = -time.Hour * 24
+	maxPathLength            = 1
+	caCommonName             = "Cockroach CA"
+	tenantURISANFormatString = "crdb://tenant/%d/user/%s"
 
 	// TenantsOU is the OrganizationalUnit that determines a client certificate should be treated as a tenant client
 	// certificate (as opposed to a KV node client certificate).
@@ -247,6 +250,7 @@ func GenerateClientCert(
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
 	user SQLUsername,
+	tenantIDs []roachpb.TenantID,
 ) ([]byte, error) {
 
 	// TODO(marc): should we add extra checks?
@@ -268,6 +272,11 @@ func GenerateClientCert(
 	// Set client-specific fields.
 	// Client authentication only.
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	urls, err := MakeTenantURISANs(user, tenantIDs)
+	if err != nil {
+		return nil, err
+	}
+	template.URIs = append(template.URIs, urls...)
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
 	if err != nil {
@@ -307,4 +316,18 @@ func GenerateTenantSigningCert(
 	}
 
 	return certBytes, nil
+}
+
+// MakeTenantURISANs constructs the tenant SAN URIs for the client certificate.
+func MakeTenantURISANs(
+	username SQLUsername, tenantIDs []roachpb.TenantID,
+) (urls []*url.URL, _ error) {
+	for _, tenantID := range tenantIDs {
+		url, err := url.Parse(fmt.Sprintf(tenantURISANFormatString, tenantID.ToUint64(), username.Normalized()))
+		if err != nil {
+			return urls, err
+		}
+		urls = append(urls, url)
+	}
+	return urls, nil
 }
