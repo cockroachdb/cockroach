@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -52,7 +51,7 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 		return nil, err
 	}
 	// check permissions on each role.
-	allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
+	allRoles, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{p.User(), 0})
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +60,15 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 	if err != nil {
 		return nil, err
 	}
+	inputRoleInfos, err := ToSQLUsernamesWithCache(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, inputRoles)
+	if err != nil {
+		return nil, err
+	}
 	inputMembers, err := n.Members.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return nil, err
+	}
+	inputMemberInfos, err := ToSQLUsernamesWithCache(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, inputMembers)
 	if err != nil {
 		return nil, err
 	}
@@ -91,15 +98,15 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 		return nil, err
 	}
 
-	for _, r := range inputRoles {
+	for _, r := range inputRoleInfos {
 		if _, ok := roles[r]; !ok {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r.Username)
 		}
 	}
 
-	for _, m := range inputMembers {
+	for _, m := range inputMemberInfos {
 		if _, ok := roles[m]; !ok {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", m)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", m.Username)
 		}
 	}
 

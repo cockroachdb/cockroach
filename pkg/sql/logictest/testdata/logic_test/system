@@ -213,9 +213,10 @@ descriptor  BYTES  true   NULL  ·  {primary}  false
 query TTBTTTB
 SHOW COLUMNS FROM system.users
 ----
-username        STRING  false  NULL   ·  {primary}  false
-hashedPassword  BYTES   true   NULL   ·  {primary}  false
-isRole          BOOL    false  false  ·  {primary}  false
+username        STRING  false  NULL               ·  {primary,users_user_id_idx}  false
+hashedPassword  BYTES   true   NULL               ·  {primary}                    false
+isRole          BOOL    false  false              ·  {primary}                    false
+user_id         UUID    false  gen_random_uuid()  ·  {primary,users_user_id_idx}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.zones
@@ -285,9 +286,11 @@ valueType    STRING     true   NULL               ·  {primary}  false
 query TTBTTTB
 SHOW COLUMNS FROM system.role_members
 ----
-role     STRING  false  NULL  ·  {primary,role_members_member_idx,role_members_role_idx}  false
-member   STRING  false  NULL  ·  {primary,role_members_member_idx,role_members_role_idx}  false
-isAdmin  BOOL    false  NULL  ·  {primary}                                                false
+role       STRING  false  NULL  ·  {primary,role_members_member_member_id_idx,role_members_role_role_id_idx}  false
+member     STRING  false  NULL  ·  {primary,role_members_member_member_id_idx,role_members_role_role_id_idx}  false
+isAdmin    BOOL    false  NULL  ·  {primary}                                                                  false
+role_id    UUID    false  NULL  ·  {primary,role_members_member_member_id_idx,role_members_role_role_id_idx}  false
+member_id  UUID    false  NULL  ·  {primary,role_members_member_member_id_idx,role_members_role_role_id_idx}  false
 
 
 # Verify default privileges on system tables.
@@ -1140,7 +1143,7 @@ UPSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalueother
 user root
 
 query TTB
-SELECT * from system.role_members
+SELECT role, member, "isAdmin" from system.role_members
 ----
 admin  root  true
 

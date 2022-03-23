@@ -28,8 +28,8 @@ import (
 // GrantRoleNode creates entries in the system.role_members table.
 // This is called from GRANT <ROLE>
 type GrantRoleNode struct {
-	roles       []security.SQLUsername
-	members     []security.SQLUsername
+	roles       []security.SQLUserInfo
+	members     []security.SQLUserInfo
 	adminOption bool
 
 	run grantRoleRun
@@ -55,7 +55,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 		return nil, err
 	}
 	// Check permissions on each role.
-	allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
+	allRoles, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{p.User(), 0})
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,15 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	if err != nil {
 		return nil, err
 	}
+	inputRoleInfos, err := ToSQLUsernamesWithCache(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, inputRoles)
+	if err != nil {
+		return nil, err
+	}
 	inputMembers, err := n.Members.ToSQLUsernames(p.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return nil, err
+	}
+	inputMemberInfos, err := ToSQLUsernamesWithCache(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, inputMembers)
 	if err != nil {
 		return nil, err
 	}
@@ -97,24 +105,24 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	// NOTE: membership manipulation involving the "public" pseudo-role fails with
 	// "role public does not exist". This matches postgres behavior.
 
-	for _, r := range inputRoles {
+	for _, r := range inputRoleInfos {
 		if _, ok := roles[r]; !ok {
-			maybeOption := strings.ToUpper(r.Normalized())
+			maybeOption := strings.ToUpper(r.Username.Normalized())
 			for name := range roleoption.ByName {
 				if maybeOption == name {
 					return nil, errors.WithHintf(
 						pgerror.Newf(pgcode.UndefinedObject,
-							"role/user %s does not exist", r),
+							"role/user %s does not exist", r.Username),
 						"%s is a role option, try using ALTER ROLE to change a role's options.", maybeOption)
 				}
 			}
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r.Username)
 		}
 	}
 
-	for _, m := range inputMembers {
+	for _, m := range inputMemberInfos {
 		if _, ok := roles[m]; !ok {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", m)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", m.Username)
 		}
 	}
 
@@ -124,7 +132,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	// After adding a given edge (grant.Member ∈ grant.Role), we add the edge to the list as well.
 	allRoleMemberships := make(map[security.SQLUsername]map[security.SQLUsername]bool)
 	for _, r := range inputRoles {
-		allRoles, err := p.MemberOfWithAdminOption(ctx, r)
+		allRoles, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{r, 0})
 		if err != nil {
 			return nil, err
 		}
@@ -155,17 +163,18 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	}
 
 	return &GrantRoleNode{
-		roles:       inputRoles,
-		members:     inputMembers,
+		roles:       inputRoleInfos,
+		members:     inputMemberInfos,
 		adminOption: n.AdminOption,
 	}, nil
 }
 
 func (n *GrantRoleNode) startExec(params runParams) error {
+	//fmt.Printf("start")
 	opName := "grant-role"
 	// Add memberships. Existing memberships are allowed.
 	// If admin option is false, we do not remove it from existing memberships.
-	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
+	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, $3, $4, $5) ON CONFLICT ("role", "member", "role_id", "member_id")`
 	if n.adminOption {
 		// admin option: true, set "isAdmin" even if the membership exists.
 		memberStmt += ` DO UPDATE SET "isAdmin" = true`
@@ -173,17 +182,31 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 		// admin option: false, do not clear it from existing memberships.
 		memberStmt += ` DO NOTHING`
 	}
+	//ruids, err := ToSQLIDs(params.ctx, n.roles, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.extendedEvalCtx.Txn)
+	////fmt.Printf("ruid %s", ruids)
+	//if err != nil {
+	//	return err
+	//}
+	//muids, err := ToSQLIDs(params.ctx, n.members, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.extendedEvalCtx.Txn)
+	//if err != nil {
+	//	return err
+	//}
+	////fmt.Printf("muid %s", ruids)
 
 	var rowsAffected int
 	for _, r := range n.roles {
+		//ruid := ruids[r]
+
 		for _, m := range n.members {
+			//muid := muids[m]
+
 			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				memberStmt,
-				r.Normalized(), m.Normalized(), n.adminOption,
+				r.Username.Normalized(), m.Username.Normalized(), n.adminOption, r.UserID, m.UserID,
 			)
 			if err != nil {
 				return err
@@ -201,6 +224,7 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 	}
 
 	n.run.rowsAffected += rowsAffected
+	//fmt.Printf("the actual update end")
 
 	return nil
 }

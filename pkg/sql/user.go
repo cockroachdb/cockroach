@@ -137,7 +137,7 @@ func GetUserSessionInitInfo(
 					ie,
 					descsCol,
 					txn,
-					username,
+					security.SQLUserInfo{username, 0},
 				)
 				if err != nil {
 					return err
@@ -409,8 +409,8 @@ var userLoginTimeout = settings.RegisterDurationSetting(
 ).WithPublic()
 
 // GetAllRoles returns a "set" (map) of Roles -> true.
-func (p *planner) GetAllRoles(ctx context.Context) (map[security.SQLUsername]bool, error) {
-	query := `SELECT username FROM system.users`
+func (p *planner) GetAllRoles(ctx context.Context) (map[security.SQLUserInfo]bool, error) {
+	query := `SELECT username, user_id FROM system.users`
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx, "read-users", p.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -419,12 +419,14 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[security.SQLUsername]boo
 		return nil, err
 	}
 
-	users := make(map[security.SQLUsername]bool)
+	users := make(map[security.SQLUserInfo]bool)
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		username := tree.MustBeDString(it.Cur()[0])
+		userInfo := security.MakeSQLUserInfoFromPreNormalizedString(string(tree.MustBeDString(it.Cur()[0])), it.Cur()[1].(*tree.DOid).String())
+
+		//username := tree.MustBeDString(it.Cur()[0])
 		// The usernames in system.users are already normalized.
-		users[security.MakeSQLUsernameFromPreNormalizedString(string(username))] = true
+		users[userInfo] = true
 	}
 	if err != nil {
 		return nil, err
@@ -601,7 +603,7 @@ func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQ
 		)
 	}
 
-	memberships, err := p.MemberOfWithAdminOption(ctx, sessionUser)
+	memberships, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{sessionUser, 0})
 	if err != nil {
 		return err
 	}

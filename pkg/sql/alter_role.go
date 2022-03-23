@@ -173,6 +173,10 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		}
 		return pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", n.roleName)
 	}
+	roleID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, n.roleName)
+	if err != nil {
+		return err
+	}
 
 	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
 	if err != nil {
@@ -195,9 +199,10 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			params.ctx,
 			opName,
 			params.p.txn,
-			`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
+			`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1 AND user_id=$3`,
 			n.roleName,
 			hashedPassword,
+			roleID,
 		)
 		if err != nil {
 			return err
@@ -217,7 +222,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	for stmt, value := range stmts {
-		qargs := []interface{}{n.roleName}
+		qargs := []interface{}{n.roleName, roleID}
 
 		if value != nil {
 			isNull, val, err := value()
@@ -415,12 +420,17 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		return nil
 	}
 
+	roleID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.extendedEvalCtx.Txn, roleName)
+	if err != nil {
+		return err
+	}
+
 	var deleteQuery = fmt.Sprintf(
-		`DELETE FROM %s WHERE database_id = $1 AND role_name = $2`,
+		`DELETE FROM %s WHERE database_id = $1 AND role_name = $2 AND role_id = $3`,
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
 	var upsertQuery = fmt.Sprintf(
-		`UPSERT INTO %s (database_id, role_name, settings) VALUES ($1, $2, $3)`,
+		`UPSERT INTO %s (database_id, role_name, settings, role_id) VALUES ($1, $2, $3, $4)`,
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
 
@@ -438,6 +448,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				deleteQuery,
 				n.dbDescID,
 				roleName,
+				roleID,
 			)
 		} else {
 			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
@@ -449,6 +460,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				n.dbDescID,
 				roleName,
 				newSettings,
+				roleID,
 			)
 		}
 		if internalExecErr != nil {

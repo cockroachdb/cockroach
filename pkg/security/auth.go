@@ -25,12 +25,12 @@ var certPrincipalMap struct {
 	m map[string]string
 }
 
-// UserAuthHook authenticates a user based on their username and whether their
+// UserAuthHook authenticates a user based on their Username and whether their
 // connection originates from a client or another node in the cluster. It
 // returns an optional func that is run at connection close.
 //
 // The systemIdentity is the external identity, from GSSAPI or an X.509
-// certificate, while databaseUsername reflects any username mappings
+// certificate, while databaseUsername reflects any Username mappings
 // that may have been applied to the given connection.
 type UserAuthHook func(
 	ctx context.Context,
