@@ -399,6 +399,16 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`COMMENT ON EXTENSION a`, 74777, `comment on extension`, ``},
 		{`COMMENT ON FUNCTION f() is 'f'`, 17511, ``, ``},
+
+		{`COPY t FROM STDIN OIDS`, 41608, `oids`, ``},
+		{`COPY t FROM STDIN FREEZE`, 41608, `freeze`, ``},
+		{`COPY t FROM STDIN HEADER`, 41608, `header`, ``},
+		{`COPY t FROM STDIN ENCODING 'utf-8'`, 41608, `encoding`, ``},
+		{`COPY t FROM STDIN QUOTE 'x'`, 41608, `quote`, ``},
+		{`COPY t FROM STDIN ESCAPE 'x'`, 41608, `escape`, ``},
+		{`COPY t FROM STDIN FORCE QUOTE *`, 41608, `quote`, ``},
+		{`COPY t FROM STDIN FORCE NULL *`, 41608, `force null`, ``},
+		{`COPY t FROM STDIN FORCE NOT NULL *`, 41608, `force not null`, ``},
 		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
 
 		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
