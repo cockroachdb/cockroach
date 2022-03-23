@@ -180,33 +180,6 @@ func (h *ProcOutputHelper) Init(
 	return nil
 }
 
-// NeededColumns calculates the set of internal processor columns that are
-// actually used by the post-processing stage.
-func (h *ProcOutputHelper) NeededColumns() (colIdxs util.FastIntSet) {
-	if h.outputCols == nil && len(h.renderExprs) == 0 {
-		// No projection or rendering; all columns are needed.
-		colIdxs.AddRange(0, h.numInternalCols-1)
-		return colIdxs
-	}
-
-	// Add all explicit output columns.
-	for _, c := range h.outputCols {
-		colIdxs.Add(int(c))
-	}
-
-	for i := 0; i < h.numInternalCols; i++ {
-		// See if render expressions require this column.
-		for j := range h.renderExprs {
-			if h.renderExprs[j].Vars.IndexedVarUsed(i) {
-				colIdxs.Add(i)
-				break
-			}
-		}
-	}
-
-	return colIdxs
-}
-
 // EmitRow sends a row through the post-processing stage. The same row can be
 // reused.
 //

@@ -840,34 +840,38 @@ func (ef *execFactory) ConstructInvertedJoin(
 // Helper function to create a scanNode from just a table / index descriptor
 // and requested cols.
 func (ef *execFactory) constructScanForZigzag(
-	index catalog.Index, tableDesc catalog.TableDescriptor, cols exec.TableColumnOrdinalSet,
-) (*scanNode, error) {
+	table cat.Table,
+	index cat.Index,
+	cols exec.TableColumnOrdinalSet,
+	eqCols []exec.TableColumnOrdinal,
+) (_ *scanNode, eqColOrdinals []int, _ error) {
+	colCfg := makeScanColumnsConfig(table, cols)
 
-	colCfg := scanColumnsConfig{
-		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
+	var err error
+	eqColOrdinals, err = tableToScanOrdinals(cols, eqCols)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tableDesc.PublicColumns()[c].GetID())
-	}
-
+	tableDesc := table.(*optTable).desc
+	idxDesc := index.(*optIndex).idx
 	scan := ef.planner.Scan()
 	ctx := ef.planner.extendedEvalCtx.Ctx()
 	if err := scan.initTable(ctx, ef.planner, tableDesc, colCfg); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if !ef.isExplain {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tableDesc.GetID()),
-			IndexID: roachpb.IndexID(index.GetID()),
+			IndexID: roachpb.IndexID(idxDesc.GetID()),
 		}
 		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(idxUsageKey)
 	}
 
-	scan.index = index
+	scan.index = idxDesc
 
-	return scan, nil
+	return scan, eqColOrdinals, nil
 }
 
 // ConstructZigzagJoin is part of the exec.Factory interface.
@@ -885,49 +889,37 @@ func (ef *execFactory) ConstructZigzagJoin(
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	leftIdx := leftIndex.(*optIndex).idx
-	leftTabDesc := leftTable.(*optTable).desc
-	rightIdx := rightIndex.(*optIndex).idx
-	rightTabDesc := rightTable.(*optTable).desc
-
-	leftScan, err := ef.constructScanForZigzag(leftIdx, leftTabDesc, leftCols)
-	if err != nil {
-		return nil, err
-	}
-	rightScan, err := ef.constructScanForZigzag(rightIdx, rightTabDesc, rightCols)
-	if err != nil {
-		return nil, err
+	if len(leftEqCols) != len(rightEqCols) {
+		return nil, errors.AssertionFailedf("creating zigzag join with unequal number of equated cols")
 	}
 
 	n := &zigzagJoinNode{
+		sides:       make([]zigzagJoinSide, 2),
 		reqOrdering: ReqOrdering(reqOrdering),
 	}
+	var err error
+	n.sides[0].scan, n.sides[0].eqCols, err = ef.constructScanForZigzag(leftTable, leftIndex, leftCols, leftEqCols)
+	if err != nil {
+		return nil, err
+	}
+	n.sides[1].scan, n.sides[1].eqCols, err = ef.constructScanForZigzag(rightTable, rightIndex, rightCols, rightEqCols)
+	if err != nil {
+		return nil, err
+	}
+
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onCond = onCond
 	}
-	n.sides = make([]zigzagJoinSide, 2)
-	n.sides[0].scan = leftScan
-	n.sides[1].scan = rightScan
-	n.sides[0].eqCols = make([]int, len(leftEqCols))
-	n.sides[1].eqCols = make([]int, len(rightEqCols))
 
-	if len(leftEqCols) != len(rightEqCols) {
-		panic("creating zigzag join with unequal number of equated cols")
-	}
-
-	for i, c := range leftEqCols {
-		n.sides[0].eqCols[i] = int(c)
-		n.sides[1].eqCols[i] = int(rightEqCols[i])
-	}
 	// The resultant columns are identical to those from individual index scans; so
 	// reuse the resultColumns generated in the scanNodes.
 	n.columns = make(
 		colinfo.ResultColumns,
 		0,
-		len(leftScan.resultColumns)+len(rightScan.resultColumns),
+		len(n.sides[0].scan.resultColumns)+len(n.sides[1].scan.resultColumns),
 	)
-	n.columns = append(n.columns, leftScan.resultColumns...)
-	n.columns = append(n.columns, rightScan.resultColumns...)
+	n.columns = append(n.columns, n.sides[0].scan.resultColumns...)
+	n.columns = append(n.columns, n.sides[1].scan.resultColumns...)
 
 	// Fixed values are the values fixed for a prefix of each side's index columns.
 	// See the comment in pkg/sql/rowexec/zigzagjoiner.go for how they are used.
