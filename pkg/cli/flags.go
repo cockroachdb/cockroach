@@ -215,6 +215,29 @@ func (a clusterNameSetter) String() string { return *a.clusterName }
 // Type implements the pflag.Value interface.
 func (a clusterNameSetter) Type() string { return "<identifier>" }
 
+// tenantIDSetter wraps a roachpb.TenantID and enables setting it via a command-line flag.
+type tenantIDSetter struct {
+	tenantID *roachpb.TenantID
+}
+
+// String implements the pflag.Value interface.
+func (t tenantIDSetter) String() string {
+	return t.tenantID.String()
+}
+
+// Type implements the pflag.Value interface.
+func (t tenantIDSetter) Type() string { return "<TenantID>" }
+
+// Set implements the pflag.Value interface.
+func (t tenantIDSetter) Set(v string) error {
+	tenantID, err := roachpb.TenantIDFromString(v)
+	if err != nil {
+		return err
+	}
+	*t.tenantID = tenantID
+	return nil
+}
+
 // Set implements the pflag.Value interface.
 func (a clusterNameSetter) Set(v string) error {
 	if v == "" {
@@ -589,6 +612,7 @@ func init() {
 		stringFlag(f, &certCtx.caKey, cliflags.CAKey)
 		intFlag(f, &certCtx.keySize, cliflags.KeySize)
 		boolFlag(f, &certCtx.overwriteFiles, cliflags.OverwriteFiles)
+		varFlag(f, &tenantIDSetter{tenantID: &certCtx.tenantScope}, cliflags.TenantScope)
 
 		if strings.HasSuffix(cmd.Name(), "-ca") {
 			// CA-only commands.

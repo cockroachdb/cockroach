@@ -1074,6 +1074,7 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 		demoCtx.DefaultCertLifetime,
 		false, /* overwrite */
 		username.RootUserName(),
+		roachpb.SystemTenantID,
 		false, /* generatePKCS8Key */
 	); err != nil {
 		return err
