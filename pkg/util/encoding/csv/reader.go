@@ -129,6 +129,10 @@ type Reader struct {
 	// It is set to comma (',') by NewReader.
 	Comma rune
 
+	// Escape, if unset, is the character used to escape certain characters
+	// (e.g. `"` (Quote), `,`) and itself.
+	Escape rune
+
 	// Comment, if not 0, is the comment character. Lines beginning with the
 	// Comment character without preceding whitespace are ignored.
 	// With leading whitespace the Comment character becomes part of the
@@ -181,8 +185,9 @@ type Reader struct {
 // NewReader returns a new Reader that reads from r.
 func NewReader(r io.Reader) *Reader {
 	return &Reader{
-		Comma: ',',
-		r:     bufio.NewReader(r),
+		Comma:  ',',
+		Escape: '"',
+		r:      bufio.NewReader(r),
 	}
 }
 
@@ -264,6 +269,36 @@ func nextRune(b []byte) rune {
 	return r
 }
 
+func (r *Reader) stripEscapeForReadRecord(in []byte) (ret []byte, trailingEscape bool) {
+	// Special speedup: calls to this always assume `"` escape characters should
+	// have no "s in the incoming byte array, so we can just return the byte
+	// array back.
+	if r.Escape == '"' {
+		return in, false
+	}
+	ret = make([]byte, 0, len(in))
+	curr := 0
+	for curr < len(in) {
+		ru, l := utf8.DecodeRune(in[curr:])
+		next := curr + l
+		if ru == r.Escape {
+			if next >= len(in) {
+				return ret, true
+			}
+			// Look at the next character.
+			// We only escape the escape character itself and the `"` character.
+			nextRu, nextRuLength := utf8.DecodeRune(in[next:])
+			if nextRu == r.Escape || nextRu == '"' {
+				curr = next
+				next = curr + nextRuLength
+			}
+		}
+		ret = append(ret, in[curr:next]...)
+		curr = next
+	}
+	return ret, false
+}
+
 func (r *Reader) readRecord(dst []string) ([]string, error) {
 	if r.Comma == r.Comment || !validDelim(r.Comma) || (r.Comment != 0 && !validDelim(r.Comment)) {
 		return nil, errInvalidDelim
@@ -331,11 +366,27 @@ parseField:
 			for {
 				i := bytes.IndexByte(line, '"')
 				if i >= 0 {
-					// Hit next quote.
-					r.recordBuffer = append(r.recordBuffer, line[:i]...)
+					// Note hasTrailingEscape is only true for escape characters that
+					// are not " - if it is ", IndexByte would guarantee there are no
+					// " characters beforehand.
+					contents, hasTrailingEscape := r.stripEscapeForReadRecord(line[:i])
+					r.recordBuffer = append(r.recordBuffer, contents...)
 					line = line[i+quoteLen:]
+					// If we are at a `"` character, and we have a character before
+					// that is an escape character, we are hitting a single " char.
+					if r.Escape != '"' && hasTrailingEscape {
+						r.recordBuffer = append(r.recordBuffer, '"')
+						continue
+					}
+					// Hit next quote.
 					switch rn := nextRune(line); {
 					case rn == '"':
+						// Do not expect "" if the escape character is different.
+						if r.Escape != '"' {
+							col := utf8.RuneCount(fullLine[:len(fullLine)-len(line)-quoteLen])
+							err = &ParseError{StartLine: recLine, Line: r.numLine, Column: col, Err: ErrQuote}
+							break parseField
+						}
 						// `""` sequence (append quote).
 						r.recordBuffer = append(r.recordBuffer, '"')
 						line = line[quoteLen:]
