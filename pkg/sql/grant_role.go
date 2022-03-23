@@ -55,11 +55,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 		return nil, err
 	}
 	// Check permissions on each role.
-	userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, p.User())
-	if err != nil {
-		return nil, err
-	}
-	allRoles, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{Username: p.User(), UserID: userID})
+	allRoles, err := p.MemberOfWithAdminOption(ctx, p.UserInfo())
 	if err != nil {
 		return nil, err
 	}

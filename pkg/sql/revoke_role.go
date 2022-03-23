@@ -56,7 +56,7 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 	if err != nil {
 		return nil, err
 	}
-	allRoles, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{Username: p.User(), UserID: userID})
+	allRoles, err := p.MemberOfWithAdminOption(ctx, p.UserInfo())
 	if err != nil {
 		return nil, err
 	}

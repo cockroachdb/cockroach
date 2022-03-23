@@ -134,6 +134,10 @@ func (p *planner) createDatabase(
 			return nil, true, err
 		}
 	}
+	ownerInfo, err := GetSQLUserInfo(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, owner)
+	if err != nil {
+		return nil, true, err
+	}
 
 	desc := dbdesc.NewInitial(
 		id,
@@ -143,7 +147,7 @@ func (p *planner) createDatabase(
 		dbdesc.WithPublicSchemaID(publicSchemaID),
 	)
 
-	if err := p.checkCanAlterToNewOwner(ctx, desc, owner); err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, desc, ownerInfo); err != nil {
 		return nil, true, err
 	}
 

@@ -489,7 +489,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 }
 
 func userIsSuper(
-	ctx context.Context, p *planner, username security.SQLUsername,
+	ctx context.Context, p *planner, username security.SQLUserInfo,
 ) (tree.DBool, error) {
 	isSuper, err := p.UserHasAdminRole(ctx, username)
 	return tree.DBool(isSuper), err
@@ -502,8 +502,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 	schema: vtable.PGCatalogAuthID,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, _ tree.Datum) error {
-			isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
+		return forEachRole(ctx, p, func(username security.SQLUserInfo, isRole bool, options roleOptions, _ tree.Datum) error {
+			isRoot := tree.DBool(username.Username.IsRootUser() || username.Username.IsAdminRole())
 			// Currently, all users and roles inherit the privileges of roles they are
 			// members of. See https://github.com/cockroachdb/cockroach/issues/69583.
 			roleInherits := tree.DBool(true)
@@ -531,18 +531,18 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 			}
 
 			return addRow(
-				h.UserOid(username),                  // oid
-				tree.NewDName(username.Normalized()), // rolname
-				tree.MakeDBool(isRoot || isSuper),    // rolsuper
-				tree.MakeDBool(roleInherits),         // rolinherit
-				tree.MakeDBool(isRoot || createRole), // rolcreaterole
-				tree.MakeDBool(isRoot || createDB),   // rolcreatedb
-				tree.MakeDBool(roleCanLogin),         // rolcanlogin.
-				tree.DBoolFalse,                      // rolreplication
-				tree.DBoolFalse,                      // rolbypassrls
-				negOneVal,                            // rolconnlimit
-				passwdStarString,                     // rolpassword
-				rolValidUntil,                        // rolvaliduntil
+				h.UserOid(username.Username),                  // oid
+				tree.NewDName(username.Username.Normalized()), // rolname
+				tree.MakeDBool(isRoot || isSuper),             // rolsuper
+				tree.MakeDBool(roleInherits),                  // rolinherit
+				tree.MakeDBool(isRoot || createRole),          // rolcreaterole
+				tree.MakeDBool(isRoot || createDB),            // rolcreatedb
+				tree.MakeDBool(roleCanLogin),                  // rolcanlogin.
+				tree.DBoolFalse,                               // rolreplication
+				tree.DBoolFalse,                               // rolbypassrls
+				negOneVal,                                     // rolconnlimit
+				passwdStarString,                              // rolpassword
+				rolValidUntil,                                 // rolvaliduntil
 			)
 		})
 	},
@@ -2412,8 +2412,8 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 		// include sensitive information such as password hashes.
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
-				isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
+			func(username security.SQLUserInfo, isRole bool, options roleOptions, settings tree.Datum) error {
+				isRoot := tree.DBool(username.Username.IsRootUser() || username.Username.IsAdminRole())
 				// Currently, all users and roles inherit the privileges of roles they are
 				// members of. See https://github.com/cockroachdb/cockroach/issues/69583.
 				roleInherits := tree.DBool(true)
@@ -2440,20 +2440,20 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 				}
 
 				return addRow(
-					h.UserOid(username),                  // oid
-					tree.NewDName(username.Normalized()), // rolname
-					tree.MakeDBool(isRoot || isSuper),    // rolsuper
-					tree.MakeDBool(roleInherits),         // rolinherit
-					tree.MakeDBool(isRoot || createRole), // rolcreaterole
-					tree.MakeDBool(isRoot || createDB),   // rolcreatedb
-					tree.DBoolFalse,                      // rolcatupdate
-					tree.MakeDBool(roleCanLogin),         // rolcanlogin.
-					tree.DBoolFalse,                      // rolreplication
-					negOneVal,                            // rolconnlimit
-					passwdStarString,                     // rolpassword
-					rolValidUntil,                        // rolvaliduntil
-					tree.DBoolFalse,                      // rolbypassrls
-					settings,                             // rolconfig
+					h.UserOid(username.Username),                  // oid
+					tree.NewDName(username.Username.Normalized()), // rolname
+					tree.MakeDBool(isRoot || isSuper),             // rolsuper
+					tree.MakeDBool(roleInherits),                  // rolinherit
+					tree.MakeDBool(isRoot || createRole),          // rolcreaterole
+					tree.MakeDBool(isRoot || createDB),            // rolcreatedb
+					tree.DBoolFalse,                               // rolcatupdate
+					tree.MakeDBool(roleCanLogin),                  // rolcanlogin.
+					tree.DBoolFalse,                               // rolreplication
+					negOneVal,                                     // rolconnlimit
+					passwdStarString,                              // rolpassword
+					rolValidUntil,                                 // rolvaliduntil
+					tree.DBoolFalse,                               // rolbypassrls
+					settings,                                      // rolconfig
 				)
 			})
 	},
@@ -3081,11 +3081,11 @@ https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+			func(username security.SQLUserInfo, isRole bool, options roleOptions, settings tree.Datum) error {
 				if isRole {
 					return nil
 				}
-				isRoot := tree.DBool(username.IsRootUser())
+				isRoot := tree.DBool(username.Username.IsRootUser())
 				createDB, err := options.createDB()
 				if err != nil {
 					return err
@@ -3100,15 +3100,15 @@ https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 				}
 
 				return addRow(
-					tree.NewDName(username.Normalized()), // usename
-					h.UserOid(username),                  // usesysid
-					tree.MakeDBool(isRoot || createDB),   // usecreatedb
-					tree.MakeDBool(isRoot || isSuper),    // usesuper
-					tree.DBoolFalse,                      // userepl
-					tree.DBoolFalse,                      // usebypassrls
-					passwdStarString,                     // passwd
-					validUntil,                           // valuntil
-					settings,                             // useconfig
+					tree.NewDName(username.Username.Normalized()), // usename
+					h.UserOid(username.Username),                  // usesysid
+					tree.MakeDBool(isRoot || createDB),            // usecreatedb
+					tree.MakeDBool(isRoot || isSuper),             // usesuper
+					tree.DBoolFalse,                               // userepl
+					tree.DBoolFalse,                               // usebypassrls
+					passwdStarString,                              // passwd
+					validUntil,                                    // valuntil
+					settings,                                      // useconfig
 				)
 			})
 	},
@@ -3198,7 +3198,7 @@ https://www.postgresql.org/docs/13/view-pg-shadow.html`,
 	schema: vtable.PgCatalogShadow,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+		return forEachRole(ctx, p, func(username security.SQLUserInfo, isRole bool, options roleOptions, settings tree.Datum) error {
 			noLogin, err := options.noLogin()
 			if err != nil {
 				return err
@@ -3207,7 +3207,7 @@ https://www.postgresql.org/docs/13/view-pg-shadow.html`,
 				return nil
 			}
 
-			isRoot := tree.DBool(username.IsRootUser() || username.IsAdminRole())
+			isRoot := tree.DBool(username.Username.IsRootUser() || username.Username.IsAdminRole())
 			createDB, err := options.createDB()
 			if err != nil {
 				return err
@@ -3222,15 +3222,15 @@ https://www.postgresql.org/docs/13/view-pg-shadow.html`,
 			}
 
 			return addRow(
-				tree.NewDName(username.Normalized()), // usename
-				h.UserOid(username),                  // usesysid
-				tree.MakeDBool(isRoot || createDB),   // usecreatedb
-				tree.MakeDBool(isRoot || isSuper),    // usesuper
-				tree.DBoolFalse,                      // userepl
-				tree.DBoolFalse,                      // usebypassrls
-				passwdStarString,                     // passwd
-				rolValidUntil,                        // valuntil
-				settings,                             // useconfig
+				tree.NewDName(username.Username.Normalized()), // usename
+				h.UserOid(username.Username),                  // usesysid
+				tree.MakeDBool(isRoot || createDB),            // usecreatedb
+				tree.MakeDBool(isRoot || isSuper),             // usesuper
+				tree.DBoolFalse,                               // userepl
+				tree.DBoolFalse,                               // usebypassrls
+				passwdStarString,                              // passwd
+				rolValidUntil,                                 // valuntil
+				settings,                                      // useconfig
 			)
 		})
 	},

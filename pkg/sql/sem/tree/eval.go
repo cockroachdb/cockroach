@@ -3249,7 +3249,7 @@ type EvalPlanner interface {
 	// (false, nil) means that the user has NO admin role
 	// (false, err) means that there was an error running the query on
 	// the `system.users` table
-	UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error)
+	UserHasAdminRole(ctx context.Context, user security.SQLUserInfo) (bool, error)
 
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner

@@ -23,7 +23,7 @@ import (
 )
 
 type alterTableOwnerNode struct {
-	owner  security.SQLUsername
+	owner  security.SQLUserInfo
 	desc   *tabledesc.Mutable
 	n      *tree.AlterTableOwner
 	prefix catalog.ResolvedObjectPrefix
@@ -67,8 +67,13 @@ func (p *planner) AlterTableOwner(ctx context.Context, n *tree.AlterTableOwner) 
 	if err != nil {
 		return nil, err
 	}
+	ownerInfo, err := GetSQLUserInfo(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, owner)
+	if err != nil {
+		return nil, err
+	}
+
 	return &alterTableOwnerNode{
-		owner:  owner,
+		owner:  ownerInfo,
 		desc:   tableDesc,
 		n:      n,
 		prefix: prefix,
@@ -104,7 +109,7 @@ func (n *alterTableOwnerNode) startExec(params runParams) error {
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == oldOwner {
+	if newOwner.Username == oldOwner {
 		return nil
 	}
 
@@ -123,7 +128,7 @@ func (p *planner) setNewTableOwner(
 	ctx context.Context,
 	desc *tabledesc.Mutable,
 	tbNameWithSchema tree.TableName,
-	newOwner security.SQLUsername,
+	newOwner security.SQLUserInfo,
 ) error {
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)
@@ -132,7 +137,7 @@ func (p *planner) setNewTableOwner(
 		desc.ID,
 		&eventpb.AlterTableOwner{
 			TableName: tbNameWithSchema.FQString(),
-			Owner:     newOwner.Normalized(),
+			Owner:     newOwner.Username.Normalized(),
 		})
 }
 

@@ -374,7 +374,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 }
 
 // RoleExists is part of the cat.Catalog interface.
-func (oc *optCatalog) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+func (oc *optCatalog) RoleExists(ctx context.Context, role security.SQLUserInfo) (bool, error) {
 	return RoleExists(ctx, oc.planner.ExecCfg(), oc.planner.Txn(), role)
 }
 

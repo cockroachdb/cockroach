@@ -87,7 +87,7 @@ func (p *planner) ShowCreateSchedule(
 	ctx context.Context, n *tree.ShowCreateSchedules,
 ) (planNode, error) {
 	// Only admin users can execute SHOW CREATE SCHEDULE
-	if userIsAdmin, err := p.UserHasAdminRole(ctx, p.User()); err != nil {
+	if userIsAdmin, err := p.UserHasAdminRole(ctx, p.UserInfo()); err != nil {
 		return nil, err
 	} else if !userIsAdmin {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,

@@ -228,7 +228,7 @@ func (tc *Catalog) FullyQualifiedName(
 }
 
 // RoleExists is part of the cat.Catalog interface.
-func (tc *Catalog) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+func (tc *Catalog) RoleExists(ctx context.Context, role security.SQLUserInfo) (bool, error) {
 	return true, nil
 }
 

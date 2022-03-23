@@ -51,12 +51,16 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
+	granteeInfos, err := ToSQLUserInfosWithCache(ctx, p.extendedEvalCtx.ExecCfg, p.extendedEvalCtx.Descs, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, grantees)
+	if err != nil {
+		return nil, err
+	}
 
 	return &changePrivilegesNode{
 		isGrant:         true,
 		withGrantOption: n.WithGrantOption,
 		targets:         n.Targets,
-		grantees:        grantees,
+		grantees:        granteeInfos,
 		desiredprivs:    n.Privileges,
 		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
 			privDesc.Grant(grantee, privileges, n.WithGrantOption)
@@ -83,11 +87,15 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 	if err != nil {
 		return nil, err
 	}
+	granteeInfos, err := ToSQLUserInfosWithCache(ctx, p.extendedEvalCtx.ExecCfg, p.extendedEvalCtx.Descs, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, grantees)
+	if err != nil {
+		return nil, err
+	}
 	return &changePrivilegesNode{
 		isGrant:         false,
 		withGrantOption: n.GrantOptionFor,
 		targets:         n.Targets,
-		grantees:        grantees,
+		grantees:        granteeInfos,
 		desiredprivs:    n.Privileges,
 		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
 			privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor)
@@ -101,7 +109,7 @@ type changePrivilegesNode struct {
 	isGrant         bool
 	withGrantOption bool
 	targets         tree.TargetList
-	grantees        []security.SQLUsername
+	grantees        []security.SQLUserInfo
 	desiredprivs    privilege.List
 	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, security.SQLUsername)
 	grantOn         privilege.ObjectType
@@ -126,18 +134,14 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			"version %v must be finalized to use grant options",
 			clusterversion.ByKey(clusterversion.ValidateGrantOption))
 	}
-	granteeInfo, err := ToSQLUserInfos(ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, n.grantees)
-	if err != nil {
-		return err
-	}
 
-	if err := p.validateRoles(ctx, granteeInfo, true /* isPublicValid */); err != nil {
+	if err := p.validateRoles(ctx, n.grantees, true /* isPublicValid */); err != nil {
 		return err
 	}
 	// The public role is not allowed to have grant options.
 	if n.isGrant && n.withGrantOption {
 		for _, grantee := range n.grantees {
-			if grantee.IsPublicRole() {
+			if grantee.Username.IsPublicRole() {
 				return pgerror.Newf(
 					pgcode.InvalidGrantOperation,
 					"grant options cannot be granted to %q role",
@@ -147,6 +151,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 	}
 
+	var err error
 	var descriptors []catalog.Descriptor
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
@@ -199,7 +204,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 			noticeMessage := ""
 			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-				err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, p.User(), n.isGrant)
+				err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, p.UserInfo(), n.isGrant)
 				if err != nil {
 					return err
 				}
@@ -215,19 +220,19 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			}
 
 			for _, grantee := range n.grantees {
-				n.changePrivilege(privileges, n.desiredprivs, grantee)
+				n.changePrivilege(privileges, n.desiredprivs, grantee.Username)
 
 				// TODO (sql-exp): remove the rest of this loop in 22.2.
-				granteeHasGrantPriv := privileges.CheckPrivilege(grantee, privilege.GRANT)
+				granteeHasGrantPriv := privileges.CheckPrivilege(grantee.Username, privilege.GRANT)
 
 				if granteeHasGrantPriv && n.isGrant && !n.withGrantOption && len(noticeMessage) == 0 {
 					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
 				}
 				if !n.withGrantOption && (grantPresent || allPresent || (granteeHasGrantPriv && n.isGrant)) {
 					if n.isGrant {
-						privileges.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
+						privileges.GrantPrivilegeToGrantOptions(grantee.Username, true /*isGrant*/)
 					} else {
-						privileges.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
+						privileges.GrantPrivilegeToGrantOptions(grantee.Username, false /*isGrant*/)
 					}
 				}
 			}
@@ -277,7 +282,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			}
 			for _, grantee := range n.grantees {
 				privs := eventDetails // copy the granted/revoked privilege list.
-				privs.Grantee = grantee.Normalized()
+				privs.Grantee = grantee.Username.Normalized()
 				events = append(events, eventLogEntry{
 					targetID: int32(d.ID),
 					event: &eventpb.ChangeDatabasePrivilege{
@@ -303,7 +308,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			}
 			for _, grantee := range n.grantees {
 				privs := eventDetails // copy the granted/revoked privilege list.
-				privs.Grantee = grantee.Normalized()
+				privs.Grantee = grantee.Username.Normalized()
 				events = append(events, eventLogEntry{
 					targetID: int32(d.ID),
 					event: &eventpb.ChangeTablePrivilege{
@@ -318,7 +323,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			}
 			for _, grantee := range n.grantees {
 				privs := eventDetails // copy the granted/revoked privilege list.
-				privs.Grantee = grantee.Normalized()
+				privs.Grantee = grantee.Username.Normalized()
 				events = append(events, eventLogEntry{
 					targetID: int32(d.ID),
 					event: &eventpb.ChangeTypePrivilege{
@@ -336,7 +341,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			}
 			for _, grantee := range n.grantees {
 				privs := eventDetails // copy the granted/revoked privilege list.
-				privs.Grantee = grantee.Normalized()
+				privs.Grantee = grantee.Username.Normalized()
 				events = append(events, eventLogEntry{
 					targetID: int32(d.ID),
 					event: &eventpb.ChangeSchemaPrivilege{
@@ -397,10 +402,11 @@ func (p *planner) validateRoles(
 		return err
 	}
 	if isPublicValid {
-		users[PublicRoleInfo(ctx, p)] = true // isRole
+		users[security.PublicRoleInfo()] = true // isRole
 	}
 	for i, grantee := range roles {
 		if _, ok := users[grantee]; !ok {
+			//debug.PrintStack()
 			sqlName := tree.Name(roles[i].Username.Normalized())
 			return errors.Errorf("user or role %s does not exist", &sqlName)
 		}

@@ -30,8 +30,8 @@ import (
 
 // ReassignOwnedByNode represents a REASSIGN OWNED BY <role(s)> TO <role> statement.
 type reassignOwnedByNode struct {
-	n                  *tree.ReassignOwnedBy
-	normalizedOldRoles []security.SQLUsername
+	n            *tree.ReassignOwnedBy
+	oldRoleInfos []security.SQLUserInfo
 }
 
 func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) (planNode, error) {
@@ -47,10 +47,14 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	if err != nil {
 		return nil, err
 	}
+	oldRolesInfos, err := ToSQLUserInfosWithCache(ctx, p.extendedEvalCtx.ExecCfg, p.extendedEvalCtx.Descs, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, normalizedOldRoles)
+	if err != nil {
+		return nil, err
+	}
 	// Check all roles in old roles exist. Checks in authorization.go will confirm that current user
 	// is a member of old roles and new roles and has CREATE privilege.
 	// Postgres first checks if the role exists before checking privileges.
-	for _, oldRole := range normalizedOldRoles {
+	for _, oldRole := range oldRolesInfos {
 		roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), oldRole)
 		if err != nil {
 			return nil, err
@@ -63,7 +67,11 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	if err != nil {
 		return nil, err
 	}
-	roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), newRole)
+	newRolesInfo, err := GetSQLUserInfo(ctx, p.extendedEvalCtx.ExecCfg, p.extendedEvalCtx.Descs, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, newRole)
+	if err != nil {
+		return nil, err
+	}
+	roleExists, err := RoleExists(ctx, p.ExecCfg(), p.Txn(), newRolesInfo)
 	if !roleExists {
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newRole)
 	}
@@ -96,9 +104,9 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 					"user must be a member of the new role")
 			}
 		}
-		for _, oldRole := range normalizedOldRoles {
-			if p.User() != oldRole {
-				if _, ok := memberOf[oldRole]; !ok {
+		for _, oldRole := range oldRolesInfos {
+			if p.User() != oldRole.Username {
+				if _, ok := memberOf[oldRole.Username]; !ok {
 					return nil, errors.WithHint(
 						pgerror.Newf(pgcode.InsufficientPrivilege,
 							"permission denied to reassign objects"),
@@ -107,7 +115,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 			}
 		}
 	}
-	return &reassignOwnedByNode{n: n, normalizedOldRoles: normalizedOldRoles}, nil
+	return &reassignOwnedByNode{n: n, oldRoleInfos: oldRolesInfos}, nil
 }
 
 func (n *reassignOwnedByNode) startExec(params runParams) error {
@@ -129,7 +137,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), currentDbDesc.ImmutableCopy().(catalog.DatabaseDescriptor))
 
 	// Iterate through each object, check for ownership by an old role.
-	for _, oldRole := range n.normalizedOldRoles {
+	for _, oldRole := range n.oldRoleInfos {
 		// There should only be one database (current).
 		for _, dbID := range lCtx.dbIDs {
 			if IsOwner(lCtx.dbDescs[dbID], oldRole) {
@@ -181,7 +189,11 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	if err != nil {
 		return err
 	}
-	if err := params.p.setNewDatabaseOwner(params.ctx, mutableDbDesc, owner); err != nil {
+	newOwnerInfo, err := GetSQLUserInfo(params.ctx, params.p.extendedEvalCtx.ExecCfg, params.p.extendedEvalCtx.Descs, params.p.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, owner)
+	if err != nil {
+		return err
+	}
+	if err := params.p.setNewDatabaseOwner(params.ctx, mutableDbDesc, newOwnerInfo); err != nil {
 		return err
 	}
 	if err := params.p.writeNonDropDatabaseChange(
@@ -205,8 +217,12 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 	if err != nil {
 		return err
 	}
+	newOwnerInfo, err := GetSQLUserInfo(params.ctx, params.p.extendedEvalCtx.ExecCfg, params.p.extendedEvalCtx.Descs, params.p.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, owner)
+	if err != nil {
+		return err
+	}
 	if err := params.p.setNewSchemaOwner(
-		params.ctx, dbDesc, mutableSchemaDesc.(*schemadesc.Mutable), owner); err != nil {
+		params.ctx, dbDesc, mutableSchemaDesc.(*schemadesc.Mutable), newOwnerInfo); err != nil {
 		return err
 	}
 	if err := params.p.writeSchemaDescChange(params.ctx,
@@ -235,8 +251,13 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 	if err != nil {
 		return err
 	}
+	ownerInfo, err := GetSQLUserInfo(params.ctx, params.p.extendedEvalCtx.ExecCfg, params.p.extendedEvalCtx.Descs, params.p.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, owner)
+	if err != nil {
+		return err
+	}
+
 	if err := params.p.setNewTableOwner(
-		params.ctx, mutableTbDesc.(*tabledesc.Mutable), *tableName, owner); err != nil {
+		params.ctx, mutableTbDesc.(*tabledesc.Mutable), *tableName, ownerInfo); err != nil {
 		return err
 	}
 	if err := params.p.writeSchemaChange(
@@ -273,9 +294,13 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 	if err != nil {
 		return err
 	}
+	ownerInfo, err := GetSQLUserInfo(params.ctx, params.p.extendedEvalCtx.ExecCfg, params.p.extendedEvalCtx.Descs, params.p.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, owner)
+	if err != nil {
+		return err
+	}
 	if err := params.p.setNewTypeOwner(
 		params.ctx, mutableTypDesc.(*typedesc.Mutable), arrayDesc, *typeName,
-		*arrayTypeName, owner); err != nil {
+		*arrayTypeName, ownerInfo); err != nil {
 		return err
 	}
 	if err := params.p.writeTypeSchemaChange(

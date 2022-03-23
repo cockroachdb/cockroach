@@ -826,7 +826,11 @@ CREATE TABLE crdb_internal.jobs (
 				var sqlUsername security.SQLUsername
 				if payload != nil {
 					sqlUsername = payload.UsernameProto.Decode()
-					ownedByAdmin, err = p.UserHasAdminRole(ctx, sqlUsername)
+					userInfo, err := GetSQLUserInfo(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, sqlUsername)
+					if err != nil {
+						return nil, err
+					}
+					ownedByAdmin, err = p.UserHasAdminRole(ctx, userInfo)
 					if err != nil {
 						errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
 					}
@@ -5067,9 +5071,9 @@ CREATE TABLE crdb_internal.default_privileges (
 					}
 					return nil
 				}
-				if err := forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+				if err := forEachRole(ctx, p, func(username security.SQLUserInfo, isRole bool, options roleOptions, settings tree.Datum) error {
 					role := catpb.DefaultPrivilegesRole{
-						Role: username,
+						Role: username.Username,
 					}
 					return addRowForRole(role)
 				}); err != nil {

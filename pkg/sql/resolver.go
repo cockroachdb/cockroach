@@ -316,6 +316,10 @@ func (p *planner) HasAnyPrivilege(
 	if desc == nil {
 		return tree.ObjectNotFound, nil
 	}
+	userInfo, err := GetSQLUserInfo(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, user)
+	if err != nil {
+		return tree.ObjectNotFound, err
+	}
 
 	for _, priv := range privs {
 		// RULE was only added for compatibility with Postgres, and Postgres
@@ -326,7 +330,7 @@ func (p *planner) HasAnyPrivilege(
 			continue
 		}
 
-		if err := p.CheckPrivilegeForUser(ctx, desc, priv.Kind, user); err != nil {
+		if err := p.CheckPrivilegeForUser(ctx, desc, priv.Kind, userInfo); err != nil {
 			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
 				continue
 			}
@@ -335,14 +339,14 @@ func (p *planner) HasAnyPrivilege(
 
 		if priv.GrantOption {
 			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-				if err := p.CheckPrivilegeForUser(ctx, desc, privilege.GRANT, user); err != nil {
+				if err := p.CheckPrivilegeForUser(ctx, desc, privilege.GRANT, userInfo); err != nil {
 					if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
 						continue
 					}
 					return tree.HasNoPrivilege, err
 				}
 			} else {
-				if err := p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, user, true /* isGrant */); err != nil {
+				if err := p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, userInfo, true /* isGrant */); err != nil {
 					if pgerror.GetPGCode(err) == pgcode.WarningPrivilegeNotGranted {
 						continue
 					}

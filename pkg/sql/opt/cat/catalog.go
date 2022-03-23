@@ -160,5 +160,5 @@ type Catalog interface {
 	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
 
 	// RoleExists returns true if the role exists.
-	RoleExists(ctx context.Context, role security.SQLUsername) (bool, error)
+	RoleExists(ctx context.Context, role security.SQLUserInfo) (bool, error)
 }

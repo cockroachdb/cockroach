@@ -728,7 +728,7 @@ func checkPlannerStateForRepairFunctions(ctx context.Context, p *planner, method
 	if p.extendedEvalCtx.TxnReadOnly {
 		return readOnlyError(method)
 	}
-	hasAdmin, err := p.UserHasAdminRole(ctx, p.User())
+	hasAdmin, err := p.UserHasAdminRole(ctx, p.UserInfo())
 	if err != nil {
 		return err
 	}

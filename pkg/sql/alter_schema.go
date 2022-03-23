@@ -125,8 +125,13 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
+		newOwnerID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, newOwner)
+		if err != nil {
+			return err
+		}
+		newOwnerInfo := security.SQLUserInfo{Username: newOwner, UserID: newOwnerID}
 		return params.p.alterSchemaOwner(
-			params.ctx, n.desc, newOwner, tree.AsStringWithFQNames(n.n, params.Ann()),
+			params.ctx, n.desc, newOwnerInfo, tree.AsStringWithFQNames(n.n, params.Ann()),
 		)
 	default:
 		return errors.AssertionFailedf("unknown schema cmd %T", t)
@@ -136,7 +141,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 func (p *planner) alterSchemaOwner(
 	ctx context.Context,
 	scDesc *schemadesc.Mutable,
-	newOwner security.SQLUsername,
+	newOwner security.SQLUserInfo,
 	jobDescription string,
 ) error {
 	oldOwner := scDesc.GetPrivileges().Owner()
@@ -159,7 +164,7 @@ func (p *planner) alterSchemaOwner(
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == oldOwner {
+	if newOwner.Username == oldOwner {
 		return nil
 	}
 
@@ -172,7 +177,7 @@ func (p *planner) setNewSchemaOwner(
 	ctx context.Context,
 	dbDesc *dbdesc.Mutable,
 	scDesc *schemadesc.Mutable,
-	newOwner security.SQLUsername,
+	newOwner security.SQLUserInfo,
 ) error {
 	// Update the owner of the schema.
 	privs := scDesc.GetPrivileges()
@@ -189,7 +194,7 @@ func (p *planner) setNewSchemaOwner(
 		scDesc.GetID(),
 		&eventpb.AlterSchemaOwner{
 			SchemaName: qualifiedSchemaName.String(),
-			Owner:      newOwner.Normalized(),
+			Owner:      newOwner.Username.Normalized(),
 		})
 }
 
