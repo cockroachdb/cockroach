@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/url"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -247,6 +248,7 @@ func GenerateClientCert(
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
 	user SQLUsername,
+	tenantID string,
 ) ([]byte, error) {
 
 	// TODO(marc): should we add extra checks?
@@ -268,7 +270,14 @@ func GenerateClientCert(
 	// Set client-specific fields.
 	// Client authentication only.
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
-
+	if tenantID != "" {
+		var url *url.URL
+		url, err := makeTenantURISAN(tenantID)
+		if err != nil {
+			return nil, err
+		}
+		template.URIs = append(template.URIs, url)
+	}
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
 	if err != nil {
 		return nil, err
@@ -307,4 +316,8 @@ func GenerateTenantSigningCert(
 	}
 
 	return certBytes, nil
+}
+
+func makeTenantURISAN(tenantID string) (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("crdb://tenant/%s", tenantID))
 }

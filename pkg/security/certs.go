@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -383,6 +384,7 @@ func CreateClientPair(
 	lifetime time.Duration,
 	overwrite bool,
 	user SQLUsername,
+	tenantScope string,
 	wantPKCS8Key bool,
 ) error {
 	if len(caKeyPath) == 0 {
@@ -390,6 +392,12 @@ func CreateClientPair(
 	}
 	if len(certsDir) == 0 {
 		return errors.New("the path to the certs directory is required")
+	}
+	if len(tenantScope) != 0 {
+		// Confirm tenantID is valid.
+		if _, err := strconv.ParseUint(tenantScope, 10, 64); err != nil {
+			return errors.Wrapf(err, "tenant scope %s is invalid uint64", tenantScope)
+		}
 	}
 
 	// The certificate manager expands the env for the certs directory.
@@ -423,18 +431,26 @@ func CreateClientPair(
 		return errors.Wrap(err, "could not generate new client key")
 	}
 
-	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user)
+	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user, tenantScope)
 	if err != nil {
 		return errors.Wrap(err, "error creating client certificate and key")
 	}
 
-	certPath := cm.ClientCertPath(user)
+	var certPath string
+	var keyPath string
+
+	if tenantScope != "" {
+		certPath = cm.ClientForTenantCertPath(user, tenantScope)
+		keyPath = cm.ClientForTenantKeyPath(user, tenantScope)
+	} else {
+		certPath = cm.ClientCertPath(user)
+		keyPath = cm.ClientKeyPath(user)
+	}
 	if err := writeCertificateToFile(certPath, clientCert, overwrite); err != nil {
 		return errors.Wrapf(err, "error writing client certificate to %s", certPath)
 	}
 	log.Infof(context.Background(), "generated client certificate: %s", certPath)
 
-	keyPath := cm.ClientKeyPath(user)
 	if err := writeKeyToFile(keyPath, clientKey, overwrite); err != nil {
 		return errors.Wrapf(err, "error writing client key to %s", keyPath)
 	}

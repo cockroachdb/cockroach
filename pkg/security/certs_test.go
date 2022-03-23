@@ -170,6 +170,77 @@ func TestGenerateTenantCerts(t *testing.T) {
 	}, infos)
 }
 
+// TestGenerateClientCerts tests client certificates are generated as expected:
+// - Regular client certificates have the username set correctly.
+// - Tenant scoped client certificates have the username set correctly and also
+//   have the tenant ID embedded as a SAN.
+func TestGenerateClientCerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	security.ResetAssetLoader()
+	defer ResetTest()
+
+	certsDir := t.TempDir()
+
+	caKeyFile := certsDir + "/ca.key"
+	// Generate CA key and crt.
+	security.CreateCAPair(certsDir, caKeyFile, testKeySize,
+		time.Hour*72, false /* allowReuse */, false /* overwrite */)
+	username := "test-user"
+	tenantScope := "123"
+	// Create tenant-scoped client cert.
+	require.NoError(t, security.CreateClientPair(
+		certsDir,
+		caKeyFile,
+		testKeySize,
+		48*time.Hour,
+		false, /*overwrite */
+		security.MakeSQLUsernameFromPreNormalizedString(username),
+		tenantScope,
+		false /* wantPKCS8Key */))
+
+	// Create a regular client cert that is not scoped to a specific tenant.
+	require.NoError(t, security.CreateClientPair(
+		certsDir,
+		caKeyFile,
+		testKeySize,
+		48*time.Hour,
+		false, /*overwrite */
+		security.MakeSQLUsernameFromPreNormalizedString(username),
+		"", /* tenantScope */
+		false /* wantPKCS8Key */))
+
+	// Load and verify the certificates.
+	cl := security.NewCertificateLoader(certsDir)
+	require.NoError(t, cl.Load())
+	infos := cl.Certificates()
+	for _, info := range infos {
+		require.NoError(t, info.Error)
+	}
+
+	// We expect three certificates: the CA certificate, the tenant scoped client certificate
+	// and the regular client certificate.
+	require.Equal(t, len(infos), 3)
+	expectedClientCrtName := fmt.Sprintf("client.%s.crt", username)
+	expectedTenantScopedClientCrtName := fmt.Sprintf("client.%s@tenant-%s.crt", username, tenantScope)
+	for _, info := range infos {
+		if info.Filename == "ca.crt" {
+			continue
+		}
+		require.Equal(t, info.FileUsage, security.ClientPem)
+		if info.Filename == expectedClientCrtName {
+			require.Equal(t, username, info.Name)
+		} else if info.Filename == expectedTenantScopedClientCrtName {
+			require.Equal(t, username, info.Name)
+			require.Equal(t, 1, len(info.ParsedCertificates))
+			require.Equal(t, 1, len(info.ParsedCertificates[0].URIs))
+			require.Equal(t, "crdb://tenant/123", info.ParsedCertificates[0].URIs[0].String())
+		} else {
+			t.Fatalf("Unexpected cert %s", info.Filename)
+		}
+	}
+}
+
 func TestGenerateNodeCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
@@ -227,7 +298,7 @@ func generateBaseCerts(certsDir string) error {
 
 		if err := security.CreateClientPair(
 			certsDir, caKey,
-			testKeySize, time.Hour*48, true, security.RootUserName(), false,
+			testKeySize, time.Hour*48, true, security.RootUserName(), "", false,
 		); err != nil {
 			return err
 		}
@@ -281,14 +352,14 @@ func generateSplitCACerts(certsDir string) error {
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, security.NodeUserName(), false,
+		testKeySize, time.Hour*48, true, security.NodeUserName(), "", false,
 	); err != nil {
 		return errors.Wrap(err, "could not generate Client pair")
 	}
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, security.RootUserName(), false,
+		testKeySize, time.Hour*48, true, security.RootUserName(), "", false,
 	); err != nil {
 		return errors.Wrap(err, "could not generate Client pair")
 	}
