@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -135,7 +136,13 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 			"can only deserialize matching session users",
 		)
 	}
-	if err := p.checkCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
+	sdUsername := sd.User()
+	sessionUserID, err := GetUserIDWithCache(evalCtx.Ctx(), p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, sdUsername)
+	if err != nil {
+		return nil, err
+	}
+	sdUserInfo := security.SQLUserInfo{Username: sdUsername, UserID: sessionUserID}
+	if err := p.checkCanBecomeUser(evalCtx.Context, sdUserInfo); err != nil {
 		return nil, err
 	}
 

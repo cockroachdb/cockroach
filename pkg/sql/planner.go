@@ -561,6 +561,14 @@ func (p *planner) User() security.SQLUsername {
 	return p.SessionData().User()
 }
 
+func (p *planner) UserInfo() security.SQLUserInfo {
+	userInfo, err := GetSQLUserInfo(p.extendedEvalCtx.Ctx(), p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, p.User())
+	if err != nil {
+		panic(err)
+	}
+	return userInfo
+}
+
 func (p *planner) TemporarySchemaName() string {
 	return temporarySchemaName(p.ExtendedEvalContext().SessionID)
 }

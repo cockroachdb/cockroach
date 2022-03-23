@@ -120,7 +120,11 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err = params.p.alterTypeOwner(params.ctx, n, owner); err != nil {
+		ownerInfo, err := GetSQLUserInfo(params.ctx, params.p.extendedEvalCtx.ExecCfg, params.p.extendedEvalCtx.Descs, params.p.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, owner)
+		if err != nil {
+			return err
+		}
+		if err = params.p.alterTypeOwner(params.ctx, n, ownerInfo); err != nil {
 			return err
 		}
 		eventLogDone = true // done inside alterTypeOwner().
@@ -395,7 +399,7 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 }
 
 func (p *planner) alterTypeOwner(
-	ctx context.Context, n *alterTypeNode, newOwner security.SQLUsername,
+	ctx context.Context, n *alterTypeNode, newOwner security.SQLUserInfo,
 ) error {
 	typeDesc := n.desc
 	oldOwner := typeDesc.GetPrivileges().Owner()
@@ -425,7 +429,7 @@ func (p *planner) alterTypeOwner(
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == oldOwner {
+	if newOwner.Username == oldOwner {
 		return nil
 	}
 
@@ -448,7 +452,7 @@ func (p *planner) setNewTypeOwner(
 	arrayTypeDesc *typedesc.Mutable,
 	typeName tree.TypeName,
 	arrayTypeName tree.TypeName,
-	newOwner security.SQLUsername,
+	newOwner security.SQLUserInfo,
 ) error {
 	privs := typeDesc.GetPrivileges()
 	privs.SetOwner(newOwner)
@@ -460,7 +464,7 @@ func (p *planner) setNewTypeOwner(
 		typeDesc.GetID(),
 		&eventpb.AlterTypeOwner{
 			TypeName: typeName.FQString(),
-			Owner:    newOwner.Normalized(),
+			Owner:    newOwner.Username.Normalized(),
 		}); err != nil {
 		return err
 	}
@@ -468,7 +472,7 @@ func (p *planner) setNewTypeOwner(
 		arrayTypeDesc.GetID(),
 		&eventpb.AlterTypeOwner{
 			TypeName: arrayTypeName.FQString(),
-			Owner:    newOwner.Normalized(),
+			Owner:    newOwner.Username.Normalized(),
 		})
 }
 

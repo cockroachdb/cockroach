@@ -33,6 +33,7 @@ message PrivilegeDescriptor {
                                    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
   optional uint32 version = 3 [(gogoproto.nullable) = false,
                               (gogoproto.casttype) = "PrivilegeDescVersion"];
+  optional uint32 owner_id = 4 [(gogoproto.nullable) = false];
 }
 
 // DefaultPrivilegesForRole contains the default privileges for a role.

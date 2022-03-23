@@ -58,7 +58,15 @@ func CreateUserDefinedSchemaDescriptor(
 	if err != nil {
 		return nil, nil, err
 	}
+	authRoleInfo, err := GetSQLUserInfo(ctx, execCfg, descriptors, execCfg.InternalExecutor, txn, authRole)
+	if err != nil {
+		return nil, nil, err
+	}
 	user := sessionData.User()
+	userInfo, err := GetSQLUserInfo(ctx, execCfg, descriptors, execCfg.InternalExecutor, txn, user)
+	if err != nil {
+		return nil, nil, err
+	}
 	var schemaName string
 	if !n.Schema.ExplicitSchema {
 		schemaName = authRole.Normalized()
@@ -103,9 +111,9 @@ func CreateUserDefinedSchemaDescriptor(
 		return nil, nil, err
 	}
 
-	owner := user
+	owner := userInfo
 	if !n.AuthRole.Undefined() {
-		exists, err := RoleExists(ctx, execCfg, txn, authRole)
+		exists, err := RoleExists(ctx, execCfg, txn, authRoleInfo)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -113,10 +121,10 @@ func CreateUserDefinedSchemaDescriptor(
 			return nil, nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist",
 				n.AuthRole)
 		}
-		owner = authRole
+		owner = authRoleInfo
 	}
 
-	desc, privs, err := CreateSchemaDescriptorWithPrivileges(ctx, execCfg.DB, execCfg.Codec, db, schemaName, user, owner, allocateID)
+	desc, privs, err := CreateSchemaDescriptorWithPrivileges(ctx, execCfg.DB, execCfg.Codec, db, schemaName, userInfo, owner, allocateID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -132,7 +140,7 @@ func CreateSchemaDescriptorWithPrivileges(
 	codec keys.SQLCodec,
 	db catalog.DatabaseDescriptor,
 	schemaName string,
-	user, owner security.SQLUsername,
+	user, owner security.SQLUserInfo,
 	allocateID bool,
 ) (*schemadesc.Mutable, *catpb.PrivilegeDescriptor, error) {
 	// Create the ID.
@@ -149,7 +157,7 @@ func CreateSchemaDescriptorWithPrivileges(
 		db.GetDefaultPrivilegeDescriptor(),
 		nil, /* schemaDefaultPrivilegeDescriptor */
 		db.GetID(),
-		user,
+		user.Username,
 		tree.Schemas,
 		db.GetPrivileges(),
 	)

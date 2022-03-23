@@ -252,7 +252,7 @@ FROM "".information_schema.type_privileges`
 		if err != nil {
 			return nil, err
 		}
-		userExists, err := d.catalog.RoleExists(d.ctx, user)
+		userExists, err := d.catalog.RoleExists(d.ctx, security.SQLUserInfo{user, 0})
 		if err != nil {
 			return nil, err
 		}

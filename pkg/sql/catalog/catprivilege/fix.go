@@ -126,9 +126,9 @@ func MaybeFixPrivileges(
 
 	if p.Owner().Undefined() {
 		if systemPrivs != nil {
-			p.SetOwner(security.NodeUserName())
+			p.SetOwner(security.NodeUserInfo())
 		} else {
-			p.SetOwner(security.RootUserName())
+			p.SetOwner(security.RootUserInfo())
 		}
 		changed = true
 	}
@@ -148,7 +148,7 @@ func MaybeUpdateGrantOptions(p *catpb.PrivilegeDescriptor) bool {
 	// created by a new binary, so all the other grant options are already
 	// correct. Note that admin always has SELECT on *every* table including
 	// system tables.
-	if p.CheckGrantOptions(security.AdminRoleName(), privilege.List{privilege.SELECT}) {
+	if p.CheckGrantOptions(security.AdminRoleInfo(), privilege.List{privilege.SELECT}) {
 		return false
 	}
 

@@ -157,7 +157,7 @@ func getCreateTypeParams(
 
 	// Check permissions on the schema.
 	if err := params.p.canCreateOnSchema(
-		params.ctx, schema.GetID(), dbID, params.p.User(), skipCheckPublicSchema); err != nil {
+		params.ctx, schema.GetID(), dbID, params.p.UserInfo(), skipCheckPublicSchema); err != nil {
 		return nil, err
 	}
 

@@ -164,7 +164,7 @@ func getSchemaForCreateTable(
 
 	// Check permissions on the schema.
 	if err := params.p.canCreateOnSchema(
-		params.ctx, schema.GetID(), db.GetID(), params.p.User(), skipCheckPublicSchema); err != nil {
+		params.ctx, schema.GetID(), db.GetID(), params.p.UserInfo(), skipCheckPublicSchema); err != nil {
 		return nil, err
 	}
 

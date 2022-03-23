@@ -212,9 +212,9 @@ func NewPublicSchemaPrivilegeDescriptor() *PrivilegeDescriptor {
 // CheckGrantOptions returns false if the user tries to grant a privilege that
 // it does not possess grant options for
 func (p *PrivilegeDescriptor) CheckGrantOptions(
-	user security.SQLUsername, privList privilege.List,
+	user security.SQLUserInfo, privList privilege.List,
 ) bool {
-	userPriv, exists := p.FindUser(user)
+	userPriv, exists := p.FindUser(user.Username)
 	if !exists {
 		return false
 	}
@@ -547,8 +547,9 @@ func (p PrivilegeDescriptor) HasAllPrivileges(
 }
 
 // SetOwner sets the owner of the privilege descriptor to the provided string.
-func (p *PrivilegeDescriptor) SetOwner(owner security.SQLUsername) {
-	p.OwnerProto = owner.EncodeProto()
+func (p *PrivilegeDescriptor) SetOwner(owner security.SQLUserInfo) {
+	p.OwnerProto = owner.Username.EncodeProto()
+	p.OwnerId = uint32(owner.UserID)
 }
 
 // SetVersion sets the version of the privilege descriptor.

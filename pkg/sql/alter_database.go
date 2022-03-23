@@ -70,9 +70,15 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	newOwnerID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, newOwner)
+	if err != nil {
+		return err
+	}
+	newOwnerInfo := security.SQLUserInfo{Username: newOwner, UserID: newOwnerID}
+
 	oldOwner := n.desc.GetPrivileges().Owner()
 
-	if err := params.p.checkCanAlterToNewOwner(params.ctx, n.desc, newOwner); err != nil {
+	if err := params.p.checkCanAlterToNewOwner(params.ctx, n.desc, newOwnerInfo); err != nil {
 		return err
 	}
 
@@ -81,12 +87,12 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := params.p.setNewDatabaseOwner(params.ctx, n.desc, newOwner); err != nil {
+	if err := params.p.setNewDatabaseOwner(params.ctx, n.desc, newOwnerInfo); err != nil {
 		return err
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == oldOwner {
+	if newOwnerInfo.Username == oldOwner {
 		return nil
 	}
 
@@ -104,7 +110,7 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 // setNewDatabaseOwner handles setting a new database owner.
 // Called in ALTER DATABASE and REASSIGN OWNED BY.
 func (p *planner) setNewDatabaseOwner(
-	ctx context.Context, desc catalog.MutableDescriptor, newOwner security.SQLUsername,
+	ctx context.Context, desc catalog.MutableDescriptor, newOwner security.SQLUserInfo,
 ) error {
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)
@@ -115,7 +121,7 @@ func (p *planner) setNewDatabaseOwner(
 		desc.GetID(),
 		&eventpb.AlterDatabaseOwner{
 			DatabaseName: desc.GetName(),
-			Owner:        newOwner.Normalized(),
+			Owner:        newOwner.Username.Normalized(),
 		})
 }
 

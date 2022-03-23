@@ -444,19 +444,19 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[security.SQLUserInfo]boo
 }
 
 // RoleExists returns true if the role exists.
-func (p *planner) RoleExists(ctx context.Context, role security.SQLUsername) (bool, error) {
+func (p *planner) RoleExists(ctx context.Context, role security.SQLUserInfo) (bool, error) {
 	return RoleExists(ctx, p.ExecCfg(), p.Txn(), role)
 }
 
 // RoleExists returns true if the role exists.
 func RoleExists(
-	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, role security.SQLUsername,
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, role security.SQLUserInfo,
 ) (bool, error) {
 	query := `SELECT username FROM system.users WHERE username = $1`
 	row, err := execCfg.InternalExecutor.QueryRowEx(
 		ctx, "read-users", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		query, role,
+		query, role.Username,
 	)
 	if err != nil {
 		return false, err
@@ -519,11 +519,14 @@ func (p *planner) bumpDatabaseRoleSettingsTableVersion(ctx context.Context) erro
 	)
 }
 
-func (p *planner) setRole(ctx context.Context, local bool, s security.SQLUsername) error {
+func (p *planner) setRole(ctx context.Context, local bool, s security.SQLUserInfo) error {
 	sessionUser := p.SessionData().SessionUser()
-	becomeUser := sessionUser
+	becomeUser, err := GetSQLUserInfo(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, sessionUser)
+	if err != nil {
+		return err
+	}
 	// Check the role exists - if so, populate becomeUser.
-	if !s.IsNoneRole() {
+	if !s.Username.IsNoneRole() {
 		becomeUser = s
 
 		exists, err := p.RoleExists(ctx, becomeUser)
@@ -534,7 +537,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s security.SQLUsernam
 			return pgerror.Newf(
 				pgcode.InvalidParameterValue,
 				"role %s does not exist",
-				becomeUser.Normalized(),
+				becomeUser.Username.Normalized(),
 			)
 		}
 	}
@@ -562,7 +565,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s security.SQLUsernam
 			m.bufferParamStatusUpdate("is_superuser", updateStr)
 
 			// The "none" user does resets the SessionUserProto in a SET ROLE.
-			if becomeUser.IsNoneRole() {
+			if becomeUser.Username.IsNoneRole() {
 				if m.data.SessionUserProto.Decode().Normalized() != "" {
 					m.data.UserProto = m.data.SessionUserProto
 					m.data.SessionUserProto = ""
@@ -576,7 +579,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s security.SQLUsernam
 			if m.data.SessionUserProto == "" {
 				m.data.SessionUserProto = m.data.UserProto
 			}
-			m.data.UserProto = becomeUser.EncodeProto()
+			m.data.UserProto = becomeUser.Username.EncodeProto()
 			m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
 			return nil
 		},
@@ -586,38 +589,37 @@ func (p *planner) setRole(ctx context.Context, local bool, s security.SQLUsernam
 
 // checkCanBecomeUser returns an error if the SessionUser cannot become the
 // becomeUser.
-func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQLUsername) error {
+func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQLUserInfo) error {
 	sessionUser := p.SessionData().SessionUser()
+	sessionUserInfo, err := GetSQLUserInfo(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, sessionUser)
+	if err != nil {
+		return err
+	}
 
 	// Switching to None can always succeed.
-	if becomeUser.IsNoneRole() {
+	if becomeUser.Username.IsNoneRole() {
 		return nil
 	}
 	// Root users are able to become anyone.
-	if sessionUser.IsRootUser() {
+	if sessionUserInfo.Username.IsRootUser() {
 		return nil
 	}
 	// You can always become yourself.
-	if becomeUser.Normalized() == sessionUser.Normalized() {
+	if becomeUser.Username.Normalized() == sessionUserInfo.Username.Normalized() {
 		return nil
 	}
 	// Only root can become root.
 	// This is a CockroachDB specialization of the superuser case, as we don't want
 	// to allow admins to become root in the tenant case, where only system
 	// admins can be the root user.
-	if becomeUser.IsRootUser() {
+	if becomeUser.Username.IsRootUser() {
 		return pgerror.Newf(
 			pgcode.InsufficientPrivilege,
 			"only root can become root",
 		)
 	}
 
-	userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, sessionUser)
-	if err != nil {
-		return err
-	}
-
-	memberships, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{Username: sessionUser, UserID: userID})
+	memberships, err := p.MemberOfWithAdminOption(ctx, sessionUserInfo)
 	if err != nil {
 		return err
 	}
@@ -626,11 +628,11 @@ func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQ
 		return nil
 	}
 	// Otherwise, check the session user is a member of the user they will become.
-	if _, ok := memberships[becomeUser]; !ok {
+	if _, ok := memberships[becomeUser.Username]; !ok {
 		return pgerror.Newf(
 			pgcode.InsufficientPrivilege,
 			`permission denied to set role "%s"`,
-			becomeUser.Normalized(),
+			becomeUser.Username.Normalized(),
 		)
 	}
 	return nil

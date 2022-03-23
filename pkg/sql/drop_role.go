@@ -35,7 +35,7 @@ import (
 type DropRoleNode struct {
 	ifExists  bool
 	isRole    bool
-	roleNames []security.SQLUsername
+	roleNames []security.SQLUserInfo
 }
 
 // DropRole represents a DROP ROLE statement.
@@ -61,11 +61,15 @@ func (p *planner) DropRoleNode(
 	if err != nil {
 		return nil, err
 	}
+	roleInfos, err := ToSQLUserInfosWithCache(ctx, p.extendedEvalCtx.ExecCfg, p.extendedEvalCtx.Descs, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, roleNames)
+	if err != nil {
+		return nil, err
+	}
 
 	return &DropRoleNode{
 		ifExists:  ifExists,
 		isRole:    isRole,
-		roleNames: roleNames,
+		roleNames: roleInfos,
 	}, nil
 }
 
@@ -103,12 +107,12 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	// Now check whether the user still has permission or ownership on any
 	// object in the database.
 
-	userNames := make(map[security.SQLUsername][]objectAndType)
+	userNames := make(map[security.SQLUsername][]objectAndType) // fenil - try updating after privileges have id and can do calls for owner info
 	for i, name := range n.roleNames {
 		// userNames maps users to the objects they own
-		userNames[n.roleNames[i]] = make([]objectAndType, 0)
-		if name.IsReserved() {
-			return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", name.Normalized())
+		userNames[n.roleNames[i].Username] = make([]objectAndType, 0)
+		if name.Username.IsReserved() {
+			return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", name.Username.Normalized())
 		}
 		// Non-admin users cannot drop admins.
 		if !hasAdmin {
@@ -244,7 +248,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			if i > 0 {
 				fnl.WriteString(", ")
 			}
-			fnl.FormatName(name.Normalized())
+			fnl.FormatName(name.Username.Normalized())
 		}
 		return pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"cannot drop role%s/user%s %s: grants still exist on %s",
@@ -256,7 +260,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	hasDependentDefaultPrivilege := false
 	for _, name := range n.roleNames {
 		// Did the user own any objects?
-		dependentObjects := userNames[name]
+		dependentObjects := userNames[name.Username]
 
 		// Sort the slice so we're guaranteed the same ordering on errors.
 		sort.SliceStable(dependentObjects, func(i int, j int) bool {
@@ -286,7 +290,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			objects := objectsMsg.CloseAndGetString()
 			err := pgerror.Newf(pgcode.DependentObjectsStillExist,
 				"role %s cannot be dropped because some objects depend on it%s",
-				name, objects)
+				name.Username, objects)
 			if hasDependentDefaultPrivilege {
 				err = errors.WithHint(err,
 					strings.Join(hints, "\n"),
@@ -413,7 +417,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 
 	normalizedNames := make([]string, len(n.roleNames))
 	for i, name := range n.roleNames {
-		normalizedNames[i] = name.Normalized()
+		normalizedNames[i] = name.Username.Normalized()
 	}
 	sort.Strings(normalizedNames)
 	for _, name := range normalizedNames {

@@ -2085,7 +2085,12 @@ func init() {
 				if err != nil {
 					return err
 				}
-				return p.setRole(ctx, local, u)
+				userID, err := GetUserIDWithCache(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, u)
+				if err != nil {
+					return err
+				}
+				userInfo := security.SQLUserInfo{Username: u, UserID: userID}
+				return p.setRole(ctx, local, userInfo)
 			},
 		},
 	} {

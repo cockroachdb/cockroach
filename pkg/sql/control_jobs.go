@@ -95,9 +95,13 @@ func (n *controlJobsNode) startExec(params runParams) error {
 
 		if job != nil {
 			owner := job.Payload().UsernameProto.Decode()
+			ownerInfo, err := GetSQLUserInfo(params.ctx, params.p.execCfg, params.p.Descriptors(), params.p.execCfg.InternalExecutor, params.p.txn, owner)
+			if err != nil {
+				return err
+			}
 
 			if !userIsAdmin {
-				ok, err := params.p.UserHasAdminRole(params.ctx, owner)
+				ok, err := params.p.UserHasAdminRole(params.ctx, ownerInfo)
 				if err != nil {
 					return err
 				}

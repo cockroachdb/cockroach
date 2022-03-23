@@ -106,7 +106,7 @@ func createPublicSchemaDescriptor(
 	b := txn.NewBatch()
 
 	publicSchemaDesc, _, err := sql.CreateSchemaDescriptorWithPrivileges(
-		ctx, d.DB, d.Codec, desc, tree.PublicSchema, security.AdminRoleName(), security.AdminRoleName(), true, /* allocateID */
+		ctx, d.DB, d.Codec, desc, tree.PublicSchema, security.AdminRoleInfo(), security.AdminRoleInfo(), true, /* allocateID */
 	)
 	// The public role has hardcoded privileges; see comment in
 	// descpb.NewPublicSchemaPrivilegeDescriptor.
