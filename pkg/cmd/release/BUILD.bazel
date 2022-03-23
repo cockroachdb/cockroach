@@ -12,6 +12,7 @@ go_library(
         "orchestration.go",
         "pick_sha.go",
         "sender.go",
+        "sentry.go",
         "templates.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
