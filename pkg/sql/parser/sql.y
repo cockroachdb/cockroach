@@ -780,13 +780,13 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FOREIGN FROM FULL FUNCTION FUNCTIONS
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FOREIGN FREEZE FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GOAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HASH HIGH HISTOGRAM HOUR
+%token <str> HAVING HASH HEADER HIGH HISTOGRAM HOUR
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDE_DEPRECATED_INTERLEAVES INCLUDING INCREMENT INCREMENTAL
@@ -822,7 +822,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
-%token <str> QUERIES QUERY
+%token <str> QUERIES QUERY QUOTE
 
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
@@ -3281,6 +3281,42 @@ copy_options:
 | NULL string_or_placeholder
   {
     $$.val = &tree.CopyOptions{Null: $2.expr()}
+  }
+| OIDS error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "oids")
+  }
+| FREEZE error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "freeze")
+  }
+| HEADER error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "header")
+  }
+| QUOTE SCONST error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "quote")
+  }
+| ESCAPE SCONST error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "escape")
+  }
+| FORCE QUOTE error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "force quote")
+  }
+| FORCE NOT NULL error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "force not null")
+  }
+| FORCE NULL error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "force null")
+  }
+| ENCODING SCONST error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "encoding")
   }
 
 // %Help: CANCEL
@@ -13202,6 +13238,7 @@ unreserved_keyword:
 | FOLLOWING
 | FORCE
 | FORCE_INDEX
+| FREEZE
 | FUNCTION
 | FUNCTIONS
 | GENERATED
@@ -13217,6 +13254,7 @@ unreserved_keyword:
 | GRANTS
 | GROUPS
 | HASH
+| HEADER
 | HIGH
 | HISTOGRAM
 | HOUR
@@ -13345,6 +13383,7 @@ unreserved_keyword:
 | PUBLICATION
 | QUERIES
 | QUERY
+| QUOTE
 | RANGE
 | RANGES
 | READ
