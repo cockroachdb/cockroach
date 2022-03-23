@@ -2357,6 +2357,10 @@ func (c *clusterImpl) IsLocal() bool {
 	return c.name == "local"
 }
 
+func (c *clusterImpl) IsSecure() bool {
+	return c.localCertsDir != ""
+}
+
 // Extend extends the cluster's expiration by d.
 func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Logger) error {
 	if ctx.Err() != nil {
