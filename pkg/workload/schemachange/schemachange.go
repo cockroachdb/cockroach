@@ -310,11 +310,17 @@ func (w *schemaChangeWorker) recordInHist(elapsed time.Duration, bin histBin) {
 func (w *schemaChangeWorker) getErrorState() string {
 	return fmt.Sprintf("Dumping state before death:\n"+
 		"Expected errors: %s"+
+		"Potential exec errors: %s"+
+		"Expected commit errors: %s"+
+		"Potential commit errors: %s"+
 		"==========================="+
 		"Executed queries for generating errors: %s"+
 		"==========================="+
 		"Previous statements %s",
 		w.opGen.expectedExecErrors.String(),
+		w.opGen.potentialExecErrors.String(),
+		w.opGen.expectedCommitErrors.String(),
+		w.opGen.potentialCommitErrors.String(),
 		w.opGen.GetOpGenLog(),
 		w.opGen.stmtsInTxt)
 }
@@ -342,8 +348,9 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 			return errors.Mark(err, errRunInTxnRbkSentinel)
 		} else if err != nil {
 			return errors.Mark(
-				errors.Wrapf(err, "***UNEXPECTED ERROR; Failed to generate a random operation\n OpGen log: \n%s",
+				errors.Wrapf(err, "***UNEXPECTED ERROR; Failed to generate a random operation\n OpGen log: \n%s\nStmts: \n%s\n",
 					w.opGen.GetOpGenLog(),
+					w.opGen.stmtsInTxt,
 				),
 				errRunInTxnFatalSentinel,
 			)
@@ -376,7 +383,8 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 				}
 
 				// Screen for any unexpected errors.
-				if !w.opGen.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
+				if !w.opGen.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
+					!w.opGen.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 					return errors.Mark(
 						errors.Wrapf(err, "***UNEXPECTED ERROR; Received an unexpected execution error. %s",
 							w.getErrorState()),
@@ -399,6 +407,7 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 					errRunInTxnFatalSentinel,
 				)
 			}
+			fmt.Printf("OK: %s", op)
 			w.recordInHist(timeutil.Since(start), operationOk)
 		}
 	}
@@ -477,9 +486,10 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		}
 
 		// Check for any expected errors.
-		if !w.opGen.expectedCommitErrors.contains(pgcode.MakeCode(pgErr.Code)) {
+		if !w.opGen.expectedCommitErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
+			!w.opGen.potentialCommitErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 			err = errors.Mark(
-				errors.Wrap(err, "***UNEXPECTED COMMIT ERROR; Received an unexpected commit error"),
+				errors.Wrapf(err, "***UNEXPECTED COMMIT ERROR; Received an unexpected commit error %s", w.getErrorState()),
 				errRunInTxnFatalSentinel,
 			)
 			w.logger.flushLog(tx, err.Error())
@@ -494,7 +504,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	}
 
 	if !w.opGen.expectedCommitErrors.empty() {
-		err := errors.New("***FAIL; Failed to receive a commit error when at least one commit error was expected")
+		err := errors.Newf("***FAIL; Failed to receive a commit error when at least one commit error was expected %s", w.getErrorState())
 		w.logger.flushLog(tx, err.Error())
 		w.preErrorHook()
 		return errors.Mark(err, errRunInTxnFatalSentinel)

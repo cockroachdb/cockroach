@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -47,9 +48,11 @@ type operationGeneratorParams struct {
 
 // The OperationBuilder has the sole responsibility of generating ops
 type operationGenerator struct {
-	params               *operationGeneratorParams
-	expectedExecErrors   errorCodeSet
-	expectedCommitErrors errorCodeSet
+	params                *operationGeneratorParams
+	expectedExecErrors    errorCodeSet
+	potentialExecErrors   errorCodeSet
+	expectedCommitErrors  errorCodeSet
+	potentialCommitErrors errorCodeSet
 
 	// This stores expected commit errors while an op statement
 	// is still being constructed. It is possible that one of the functions in opFuncs
@@ -97,6 +100,8 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 		params:                        params,
 		expectedExecErrors:            makeExpectedErrorSet(),
 		expectedCommitErrors:          makeExpectedErrorSet(),
+		potentialExecErrors:           makeExpectedErrorSet(),
+		potentialCommitErrors:         makeExpectedErrorSet(),
 		candidateExpectedCommitErrors: makeExpectedErrorSet(),
 	}
 }
@@ -105,12 +110,14 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 func (og *operationGenerator) resetOpState() {
 	og.expectedExecErrors.reset()
 	og.candidateExpectedCommitErrors.reset()
+	og.potentialExecErrors.reset()
 	og.opGenLog = strings.Builder{}
 }
 
 // Reset internal state used per transaction
 func (og *operationGenerator) resetTxnState() {
 	og.expectedCommitErrors.reset()
+	og.potentialCommitErrors.reset()
 	og.opsInTxn = nil
 	og.stmtsInTxt = nil
 }
@@ -215,7 +222,7 @@ func init() {
 var opWeights = []int{
 	addColumn:               1,
 	addConstraint:           0, // TODO(spaskob): unimplemented
-	addForeignKeyConstraint: 0,
+	addForeignKeyConstraint: 1,
 	addRegion:               1,
 	addUniqueConstraint:     0,
 	alterTableLocality:      1,
@@ -276,6 +283,7 @@ func (og *operationGenerator) randOp(ctx context.Context, tx pgx.Tx) (stmt strin
 		og.stmtsInTxt = append(og.stmtsInTxt, stmt)
 		// Add candidateExpectedCommitErrors to expectedCommitErrors
 		og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
+		og.opsInTxn = append(og.opsInTxn, op)
 		break
 	}
 
@@ -785,7 +793,15 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	if err != nil {
 		return "", err
 	}
-	childColumnIsComputed, err := og.columnIsComputed(ctx, tx, parentTable, parentColumn.name)
+	parentColumnIsVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, parentTable, parentColumn.name)
+	if err != nil {
+		return "", err
+	}
+	childColumnIsVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, childTable, childColumn.name)
+	if err != nil {
+		return "", err
+	}
+	childColumnIsStoredVirtual, err := og.columnIsStoredComputed(ctx, tx, childTable, childColumn.name)
 	if err != nil {
 		return "", err
 	}
@@ -793,21 +809,39 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	if err != nil {
 		return "", err
 	}
-	rowsSatisfyConstraint, err := og.rowsSatisfyFkConstraint(ctx, tx, parentTable, parentColumn, childTable, childColumn)
-	if err != nil {
-		return "", err
+	// If we are intentionally using an invalid child type, then it doesn't make
+	// sense to validate if the rows validate the constraint.
+	rowsSatisfyConstraint := true
+	if !fetchInvalidChild {
+		rowsSatisfyConstraint, err = og.rowsSatisfyFkConstraint(ctx, tx, parentTable, parentColumn, childTable, childColumn)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: !parentColumnHasUniqueConstraint},
-		{code: pgcode.FeatureNotSupported, condition: childColumnIsComputed},
+		{code: pgcode.FeatureNotSupported, condition: childColumnIsVirtualComputed},
+		{code: pgcode.FeatureNotSupported, condition: childColumnIsStoredVirtual},
+		{code: pgcode.FeatureNotSupported, condition: parentColumnIsVirtualComputed},
 		{code: pgcode.DuplicateObject, condition: constraintExists},
 		{code: pgcode.DatatypeMismatch, condition: !childColumn.typ.Equivalent(parentColumn.typ)},
 	}.add(og.expectedExecErrors)
+	codesWithConditions{}.add(og.expectedCommitErrors)
 
-	if !rowsSatisfyConstraint {
-		og.candidateExpectedCommitErrors.add(pgcode.ForeignKeyViolation)
-	}
+	// TODO(fqazi): We need to do after the fact validation for foreign key violations
+	// errors. Due to how adding foreign key constraints are implemented with a
+	// separate job validating the constraint, we can't at transaction time predict,
+	// perfectly if an error is expected. We can confirm post transaction with a time
+	// travel query.
+	_ = rowsSatisfyConstraint
+	og.potentialExecErrors.add(pgcode.ForeignKeyViolation)
+	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
+
+	// It's possible for the table to be dropped concurrently, while we are running
+	// validation. In which case a potential commit error is an undefined table
+	// error.
+	og.potentialCommitErrors.add(pgcode.UndefinedTable)
 
 	return tree.Serialize(def), nil
 }
@@ -2284,7 +2318,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (sq stri
 	// Only evaluate these if we know that the inserted values are sane, since
 	// we will need to evaluate generated expressions below.
 	uniqueConstraintViolation := false
-	foreignKeyViolation := false
+	fkViolation := false
 	if !anyInvalidInserts {
 		// Verify if the new row will violate unique constraints by checking the constraints and
 		// existing rows in the database.
@@ -2299,7 +2333,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (sq stri
 
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
-		foreignKeyViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
+		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
 		if err != nil {
 			return "", err
 		}
@@ -2307,8 +2341,13 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (sq stri
 
 	codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: uniqueConstraintViolation},
-		{code: pgcode.ForeignKeyViolation, condition: foreignKeyViolation},
 	}.add(og.expectedExecErrors)
+	codesWithConditions{
+		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
+	}.add(og.potentialExecErrors)
+	codesWithConditions{
+		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
+	}.add(og.expectedCommitErrors)
 
 	var formattedRows []string
 	for _, row := range rows {
@@ -2509,7 +2548,7 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 	query.WriteString(`
     SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable
       FROM information_schema.columns
-		 WHERE table_name ~ 'table[0-9]+'
+		 WHERE table_name ~ 'table[0-9]+' AND column_name <> 'rowid'
   `)
 	query.WriteString(fmt.Sprintf(`
 			AND crdb_sql_type = '%s'
@@ -2562,6 +2601,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
         SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable, ordinal_position,
                concat(table_schema, '.', table_name)::REGCLASS::INT8 AS tableid
           FROM information_schema.columns
+					WHERE column_name <> 'rowid'
            ) AS cols
 		  JOIN (
 		        SELECT contype, conkey, conrelid
@@ -2588,11 +2628,37 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	var typName string
 	var nullable string
 
-	err := tx.QueryRow(ctx, fmt.Sprintf(`
+	for {
+		nestedTxn, err := tx.Begin(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		err = nestedTxn.QueryRow(ctx, fmt.Sprintf(`
 	SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable FROM (
 		%s
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
-	if err != nil {
+		if err == nil {
+			err := nestedTxn.Commit(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+			break
+		}
+		pgErr := (*pgconn.PgError)(nil)
+		if !errors.As(err, &pgErr) {
+			return nil, nil, err
+		}
+		// Intermittent undefined table errors are valid for the query above, since
+		// we are not leasing out the tables, when picking our random table.
+		if code := pgcode.MakeCode(pgErr.Code); code == pgcode.UndefinedTable ||
+			code == pgcode.UndefinedSchema {
+			err := nestedTxn.Rollback(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+			continue
+		}
+		_ = nestedTxn.Rollback(ctx)
 		return nil, nil, err
 	}
 
@@ -2605,6 +2671,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 		ExplicitSchema: true,
 	}, tree.Name(tableName))
 
+	var err error
 	columnToReturn.typ, err = og.typeFromTypeName(ctx, tx, typName)
 	if err != nil {
 		return nil, nil, err
