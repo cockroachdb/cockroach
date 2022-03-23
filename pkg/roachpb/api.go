@@ -1689,8 +1689,10 @@ var _ = (*TenantConsumption).Equal
 func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.RU += other.RU
 	c.KVRU += other.KVRU
+	c.ReadBatches += other.ReadBatches
 	c.ReadRequests += other.ReadRequests
 	c.ReadBytes += other.ReadBytes
+	c.WriteBatches += other.WriteBatches
 	c.WriteRequests += other.WriteRequests
 	c.WriteBytes += other.WriteBytes
 	c.SQLPodsCPUSeconds += other.SQLPodsCPUSeconds
@@ -1713,6 +1715,12 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 		c.KVRU -= other.KVRU
 	}
 
+	if c.ReadBatches < other.ReadBatches {
+		c.ReadBatches = 0
+	} else {
+		c.ReadBatches -= other.ReadBatches
+	}
+
 	if c.ReadRequests < other.ReadRequests {
 		c.ReadRequests = 0
 	} else {
@@ -1723,6 +1731,12 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 		c.ReadBytes = 0
 	} else {
 		c.ReadBytes -= other.ReadBytes
+	}
+
+	if c.WriteBatches < other.WriteBatches {
+		c.WriteBatches = 0
+	} else {
+		c.WriteBatches -= other.WriteBatches
 	}
 
 	if c.WriteRequests < other.WriteRequests {

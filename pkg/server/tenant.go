@@ -334,12 +334,12 @@ func startTenantInternal(
 	}
 
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
-		userTimeMillis, _, err := status.GetCPUTime(ctx)
+		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
 		if err != nil {
 			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 		}
 		return multitenant.ExternalUsage{
-			CPUSecs:           float64(userTimeMillis) * 1e-3,
+			CPUSecs:           float64(userTimeMillis+sysTimeMillis) * 1e-3,
 			PGWireEgressBytes: s.pgServer.BytesOut(),
 		}
 	}
