@@ -22,7 +22,8 @@ import (
 
 const addAvgSizeCol = `
 ALTER TABLE system.table_statistics 
-ADD COLUMN IF NOT EXISTS "avgSize" INT8 NOT NULL DEFAULT (INT8 '0')
+ADD COLUMN IF NOT EXISTS "avgSize" INT8 NOT NULL DEFAULT (INT8 '0') 
+FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" 
 `
 
 func alterSystemTableStatisticsAddAvgSize(
