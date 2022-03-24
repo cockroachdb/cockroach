@@ -79,33 +79,23 @@ func loadSecurityOptions(
 		// (Re)populate the transport information.
 		u.WithTransport(pgurl.TransportTLS(tlsMode, caCertPath))
 
-		var missing bool // certs found on file system?
-
 		// Fetch client certs, but don't fail if they're absent, we may be
 		// using a password.
 		certPath := cl.ClientCertPath(user)
 		keyPath := cl.ClientKeyPath(user)
-		_, err1 := loader.Stat(certPath)
-		_, err2 := loader.Stat(keyPath)
-		if err1 != nil || err2 != nil {
-			missing = true
-		}
+		certsAvailable := checkCertAndKeyAvailable(certPath, keyPath)
+
 		// If the command specifies user node, and we did not find
 		// client.node.crt, try with just node.crt.
-		if missing && user.IsNodeUser() {
-			missing = false
+		if !certsAvailable && user.IsNodeUser() {
 			certPath = cl.NodeCertPath()
 			keyPath = cl.NodeKeyPath()
-			_, err1 = loader.Stat(certPath)
-			_, err2 = loader.Stat(keyPath)
-			if err1 != nil || err2 != nil {
-				missing = true
-			}
+			certsAvailable = checkCertAndKeyAvailable(certPath, keyPath)
 		}
 
 		// If we found some certs, add them to the URL authentication
 		// method.
-		if !missing {
+		if certsAvailable {
 			pwEnabled, hasPw, pwd := u.GetAuthnPassword()
 			if !pwEnabled {
 				u.WithAuthn(pgurl.AuthnClientCert(certPath, keyPath))
@@ -230,4 +220,11 @@ func MakeClientConnURL(copts ClientOptions) (*pgurl.URL, error) {
 	}
 
 	return purl, nil
+}
+
+func checkCertAndKeyAvailable(certPath string, keyPath string) bool {
+	loader := securityassets.GetLoader()
+	_, err1 := loader.Stat(certPath)
+	_, err2 := loader.Stat(keyPath)
+	return err1 == nil && err2 == nil
 }
