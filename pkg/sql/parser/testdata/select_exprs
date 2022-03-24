@@ -195,10 +195,10 @@ SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
 parse
 SELECT FAMILY (x)
 ----
-SELECT "family"(x) -- normalized!
-SELECT (("family")((x))) -- fully parenthesized
-SELECT "family"(x) -- literals removed
-SELECT "family"(_) -- identifiers removed
+SELECT family(x) -- normalized!
+SELECT ((family)((x))) -- fully parenthesized
+SELECT family(x) -- literals removed
+SELECT family(_) -- identifiers removed
 
 parse
 SELECT 1 IN (b)
