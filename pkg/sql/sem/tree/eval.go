@@ -4223,6 +4223,9 @@ func (expr *ColumnAccessExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
+	if d == DNull {
+		return d, nil
+	}
 	return d.(*DTuple).D[expr.ColIndex], nil
 }
 
