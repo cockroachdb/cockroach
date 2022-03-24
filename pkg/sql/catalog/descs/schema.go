@@ -66,8 +66,23 @@ func (tc *Collection) getSchemaByName(
 	schemaName string,
 	flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
+	const ignoreMissingPublicSchema = false
+	return tc.getSchemaByNameMaybeIgnoringMissingPublicSchema(
+		ctx, txn, db, schemaName, flags, ignoreMissingPublicSchema,
+	)
+}
+
+func (tc *Collection) getSchemaByNameMaybeIgnoringMissingPublicSchema(
+	ctx context.Context,
+	txn *kv.Txn,
+	db catalog.DatabaseDescriptor,
+	schemaName string,
+	flags tree.SchemaLookupFlags,
+	ignoreMissingPublicSchema bool,
+) (catalog.SchemaDescriptor, error) {
 	found, desc, err := tc.getByName(
-		ctx, txn, db, nil, schemaName, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
+		ctx, txn, db, nil, schemaName, flags.AvoidLeased, flags.RequireMutable,
+		flags.AvoidSynthetic, ignoreMissingPublicSchema,
 	)
 	if err != nil {
 		return nil, err

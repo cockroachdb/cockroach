@@ -60,8 +60,10 @@ func (tc *Collection) GetDatabaseDesc(
 func (tc *Collection) getDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (catalog.DatabaseDescriptor, error) {
+	const ignoreMissingPublicSchema = false
 	found, desc, err := tc.getByName(
 		ctx, txn, nil, nil, name, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
+		ignoreMissingPublicSchema,
 	)
 	if err != nil {
 		return nil, err
