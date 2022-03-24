@@ -26,7 +26,7 @@ import (
 
 func TestManagerWithEmbedded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cm, err := security.NewCertificateManager("test_certs", security.CommandTLSSettings{})
+	cm, err := security.NewCertificateManager(security.EmbeddedCertsDir, security.CommandTLSSettings{})
 	if err != nil {
 		t.Error(err)
 	}
@@ -42,6 +42,10 @@ func TestManagerWithEmbedded(t *testing.T) {
 	if a, e := len(clientCerts), 3; a != e {
 		t.Errorf("expected %d client certs, found %d", e, a)
 	}
+
+	// Verify that there are no embedded tenant scoped certificates for system tenant.
+	tenantScopedClientCerts := cm.TenantScopedClientCerts()
+	require.Equal(t, 0, len(tenantScopedClientCerts))
 
 	if _, ok := clientCerts[security.RootUserName()]; !ok {
 		t.Error("no client cert for root user found")
@@ -67,6 +71,17 @@ func TestManagerWithEmbedded(t *testing.T) {
 	if _, err := cm.GetClientTLSConfig(
 		security.MakeSQLUsernameFromPreNormalizedString("my-random-user")); err == nil {
 		t.Error("unexpected success")
+	}
+
+	// Verify tenant scoped certificates embedded certificates are loaded.
+	tenant := security.EmbeddedTenantIDs()[0]
+	cm, err = security.NewCertificateManager(security.EmbeddedCertsDir, security.CommandTLSSettings{}, security.ForTenant(tenant))
+	require.NoError(t, err)
+	tenantScopedClientCerts = cm.TenantScopedClientCerts()
+	require.Equal(t, 1, len(tenantScopedClientCerts))
+
+	if _, ok := tenantScopedClientCerts[security.TestUserName()]; !ok {
+		t.Errorf("no tenant scoped client cert for %s user found for tenant %d", security.TestUser, tenant)
 	}
 }
 

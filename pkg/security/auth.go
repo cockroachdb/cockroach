@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -108,12 +109,19 @@ func Contains(sl []string, s string) bool {
 
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
-func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAuthHook, error) {
+func UserAuthCertHook(
+	insecureMode bool, tlsState *tls.ConnectionState, tenantID roachpb.TenantID,
+) (UserAuthHook, error) {
 	var certUsers []string
-
+	var certTenantID roachpb.TenantID
+	var isTenantScopedCert bool
 	if !insecureMode {
 		var err error
 		certUsers, err = GetCertificateUsers(tlsState)
+		if err != nil {
+			return nil, err
+		}
+		certTenantID, isTenantScopedCert, err = maybeGetTenantScopeFromClientCert(tlsState)
 		if err != nil {
 			return nil, err
 		}
@@ -141,8 +149,19 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
-		// The client certificate user must match the requested user.
-		if !Contains(certUsers, systemIdentity.Normalized()) {
+		// If the certificate is a tenant scoped client certificate, we should enforce that the tenant ID
+		// and client name matches with the certificate. Otherwise, it is sufficient to just check that the
+		// client name matches the certificate.
+		// TODO(rima): Should we enforce always using tenant scoped client cert for non-system tenants?
+		if isTenantScopedCert {
+			// Enforce that the tenant ID *and* user matches the certificate
+			if tenantID != certTenantID {
+				return errors.Errorf("certificate is for tenant ID %s, but current tenant ID is %s", certTenantID, tenantID)
+			}
+			if !Contains(certUsers, systemIdentity.Normalized()) {
+				return errors.Errorf("requested user is %s, but certificate is for %s", systemIdentity, certUsers)
+			}
+		} else if !Contains(certUsers, systemIdentity.Normalized()) {
 			return errors.Errorf("requested user is %s, but certificate is for %s", systemIdentity, certUsers)
 		}
 
@@ -219,4 +238,38 @@ func (i *PasswordUserAuthError) Format(s fmt.State, verb rune) { errors.FormatEr
 // FormatError implements errors.Formatter.
 func (i *PasswordUserAuthError) FormatError(p errors.Printer) error {
 	return i.err
+}
+
+// maybeGetTenantScopeFromClientCert returns a tenantID if the client certificate is scoped
+// to a tenant. It returns a bool value which is set to true if the certificate is a tenant
+// scoped client certificate.
+func maybeGetTenantScopeFromClientCert(
+	tlsState *tls.ConnectionState,
+) (tenantScope roachpb.TenantID, isTenantScopedCert bool, _ error) {
+	if tlsState == nil {
+		return roachpb.TenantID{}, false, errors.Errorf("request is not using TLS")
+	}
+	if len(tlsState.PeerCertificates) == 0 {
+		return roachpb.TenantID{}, false, errors.Errorf("no client certificates in request")
+	}
+	// The go server handshake code verifies the first certificate, using
+	// any following certificates as intermediates. See:
+	// https://github.com/golang/go/blob/go1.8.1/src/crypto/tls/handshake_server.go#L723:L742
+	peerCert := tlsState.PeerCertificates[0]
+	uris := peerCert.URIs
+	var tenantID roachpb.TenantID
+	var err error
+	for _, uri := range uris {
+		if uri.Host == "tenant" {
+			tenantInfo := strings.TrimPrefix(uri.Path, "/")
+			tenantID, err = roachpb.ParseTenantID(tenantInfo)
+			if err != nil {
+				return roachpb.TenantID{}, true, errors.Wrapf(err, "tenant ID: %s contained in cert is invalid", tenantInfo)
+			}
+			return tenantID, true, nil
+		}
+	}
+
+	// No tenant info contained within cert, return default system tenant
+	return roachpb.SystemTenantID, false, nil
 }

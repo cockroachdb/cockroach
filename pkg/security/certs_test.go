@@ -227,10 +227,11 @@ func TestGenerateClientCerts(t *testing.T) {
 		if info.Filename == "ca.crt" {
 			continue
 		}
-		require.Equal(t, info.FileUsage, security.ClientPem)
 		if info.Filename == expectedClientCrtName {
+			require.Equal(t, info.FileUsage, security.ClientPem)
 			require.Equal(t, username, info.Name)
 		} else if info.Filename == expectedTenantScopedClientCrtName {
+			require.Equal(t, info.FileUsage, security.TenantScopedClientPem)
 			require.Equal(t, username, info.Name)
 			require.Equal(t, 1, len(info.ParsedCertificates))
 			require.Equal(t, 1, len(info.ParsedCertificates[0].URIs))
