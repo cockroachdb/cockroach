@@ -11989,7 +11989,19 @@ a_expr:
   {
     $$.val = &tree.IsNotNullExpr{Expr: $1.expr()}
   }
-| row OVERLAPS row { return unimplemented(sqllex, "overlaps") }
+| row OVERLAPS row
+  {
+   t1, t2 := $1.tuple(), $3.tuple()
+   if len(t1.Exprs) != 2 {
+     sqllex.Error("wrong number of parameters on left side of OVERLAPS expression")
+     return 1
+   }
+   if len(t2.Exprs) != 2 {
+     sqllex.Error("wrong number of parameters on right side of OVERLAPS expression")
+     return 1
+   }
+   $$.val = &tree.FuncExpr{Func: tree.WrapFunction("overlaps"), Exprs: tree.Exprs{t1.Exprs[0], t1.Exprs[1], t2.Exprs[0], t2.Exprs[1]}}
+  }
 | a_expr IS TRUE %prec IS
   {
     $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
