@@ -18,10 +18,10 @@ CREATE DATABASE d;
 CREATE TABLE d.foo (id INT);
 ----
 
-exec-sql
+new-schema-change expect-pausepoint
 DROP DATABASE d CASCADE;
 ----
-paused before it completed with reason: pause point "newschemachanger.before.exec" hit
+job paused at pausepoint
 
 # At this point, we have a descriptor entry for `d` in a DROP state.
 query-sql
@@ -130,15 +130,15 @@ exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec';
 ----
 
-exec-sql
+new-schema-change expect-pausepoint
 DROP SCHEMA d2.s CASCADE;
 ----
-paused before it completed with reason: pause point "newschemachanger.before.exec" hit
+job paused at pausepoint
 
-exec-sql
+new-schema-change expect-pausepoint
 DROP TYPE d2.typ;
 ----
-paused before it completed with reason: pause point "newschemachanger.before.exec" hit
+job paused at pausepoint
 
 query-sql
 WITH tbls AS (
