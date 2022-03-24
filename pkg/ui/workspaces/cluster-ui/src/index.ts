@@ -22,6 +22,7 @@ export * from "./databasesPage";
 export * from "./downloadFile";
 export * from "./dropdown";
 export * from "./empty";
+export * from "./filter";
 export * from "./highlightedText";
 export * from "./loading";
 export * from "./modal";
