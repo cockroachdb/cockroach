@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -24,6 +25,18 @@ import (
 var certPrincipalMap struct {
 	syncutil.RWMutex
 	m map[string]string
+}
+
+// CertificateUserScope indicates the scope of a user certificate i.e.
+// which tenants the user is allowed to authenticate on. A user can be
+// allowed to authenticate on multiple tenants. A certificate scope with
+// system tenant is treated as a global certificate which can authenticate
+// on any tenant.
+// TODO(rima): Should we remove this global authorization privilege for users
+// with system tenant scope?
+type CertificateUserScope struct {
+	Username  string
+	TenantIDs map[roachpb.TenantID]struct{}
 }
 
 // UserAuthHook authenticates a user based on their username and whether their
@@ -81,8 +94,32 @@ func getCertificatePrincipals(cert *x509.Certificate) []string {
 	return results
 }
 
-// GetCertificateUsers extract the users from a client certificate.
-func GetCertificateUsers(tlsState *tls.ConnectionState) ([]string, error) {
+// getCertificateTenantScopes retrieves the tenant scopes from a certificate.
+// TODO(#80312): Validate username within SAN and remove username from CN.
+func getCertificateTenantScopes(cert *x509.Certificate) (map[roachpb.TenantID]struct{}, error) {
+	tenantMap := make(map[roachpb.TenantID]struct{})
+	if len(cert.URIs) == 0 {
+		// No URI SAN, likely an old certificate. Populate tenant scope with default system tenant ID
+		// to generate a global client certificate
+		tenantMap[roachpb.SystemTenantID] = struct{}{}
+		return tenantMap, nil
+	}
+	for _, uri := range cert.URIs {
+		tenantID, _, err := ParseTenantURISAN(uri.String())
+		if err != nil {
+			return nil, err
+		}
+		tenantMap[tenantID] = struct{}{}
+	}
+	return tenantMap, nil
+}
+
+// GetCertificateUserScope extracts the users and tenant scopes from a client certificate.
+// We return it as a map from the username to the user scope to make certificate validation
+// based on username more efficient.
+func GetCertificateUserScope(
+	tlsState *tls.ConnectionState,
+) (userScopes map[string]CertificateUserScope, _ error) {
 	if tlsState == nil {
 		return nil, errors.Errorf("request is not using TLS")
 	}
@@ -93,7 +130,20 @@ func GetCertificateUsers(tlsState *tls.ConnectionState) ([]string, error) {
 	// any following certificates as intermediates. See:
 	// https://github.com/golang/go/blob/go1.8.1/src/crypto/tls/handshake_server.go#L723:L742
 	peerCert := tlsState.PeerCertificates[0]
-	return getCertificatePrincipals(peerCert), nil
+	users := getCertificatePrincipals(peerCert)
+	tenants, err := getCertificateTenantScopes(peerCert)
+	if err != nil {
+		return nil, err
+	}
+	userScopes = make(map[string]CertificateUserScope)
+	for _, user := range users {
+		scope := CertificateUserScope{
+			Username:  user,
+			TenantIDs: tenants,
+		}
+		userScopes[user] = scope
+	}
+	return userScopes, nil
 }
 
 // Contains returns true if the specified string is present in the given slice.
@@ -108,12 +158,13 @@ func Contains(sl []string, s string) bool {
 
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
-func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAuthHook, error) {
-	var certUsers []string
-
+func UserAuthCertHook(
+	insecureMode bool, tlsState *tls.ConnectionState, tenantID roachpb.TenantID,
+) (UserAuthHook, error) {
+	var certUserScope map[string]CertificateUserScope
 	if !insecureMode {
 		var err error
-		certUsers, err = GetCertificateUsers(tlsState)
+		certUserScope, err = GetCertificateUserScope(tlsState)
 		if err != nil {
 			return nil, err
 		}
@@ -141,12 +192,18 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
-		// The client certificate user must match the requested user.
-		if !Contains(certUsers, systemIdentity.Normalized()) {
-			return errors.Errorf("requested user is %s, but certificate is for %s", systemIdentity, certUsers)
+		userScope, ok := certUserScope[systemIdentity.Normalized()]
+		if !ok {
+			return errors.Errorf("requested user is %s is not authorized through this cert", systemIdentity)
 		}
-
-		return nil
+		// Verify either the tenantID or system tenant ID is contained in the userScope.
+		_, containsTenant := userScope.TenantIDs[tenantID]
+		_, containsSystem := userScope.TenantIDs[roachpb.SystemTenantID]
+		if containsTenant || containsSystem {
+			// Both user and tenant scope are satisfied by this certificate, allow authentication to succeed.
+			return nil
+		}
+		return errors.Errorf("request user %s is not authorized for tenant %d", systemIdentity, tenantID)
 	}, nil
 }
 

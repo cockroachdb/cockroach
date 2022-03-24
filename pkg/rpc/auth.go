@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -116,11 +117,6 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 		return roachpb.TenantID{}, errTLSInfoMissing
 	}
 
-	certUsers, err := security.GetCertificateUsers(&tlsInfo.State)
-	if err != nil {
-		return roachpb.TenantID{}, err
-	}
-
 	clientCert := tlsInfo.State.PeerCertificates[0]
 	if a.tenant.tenantID == roachpb.SystemTenantID {
 		// This node is a KV node.
@@ -155,16 +151,55 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	//   gateway uses a connection dialed as the node user.
 	//
 	// In both cases, we must check that the client cert is either root
-	// or node.
+	// or node. We also need to check that the tenant scope for the cert
+	// is either the system tenant ID or matches the tenant ID of the server.
 
 	// TODO(benesch): the vast majority of RPCs should be limited to just
 	// NodeUser. This is not a security concern, as RootUser has access to
 	// read and write all data, merely good hygiene. For example, there is
 	// no reason to permit the root user to send raw Raft RPCs.
-	if !security.Contains(certUsers, security.NodeUser) &&
-		!security.Contains(certUsers, security.RootUser) {
-		return roachpb.TenantID{}, authErrorf("user %s is not allowed to perform this RPC", certUsers)
+	certUserScope, err := security.GetCertificateUserScope(&tlsInfo.State)
+	if err != nil {
+		return roachpb.TenantID{}, err
 	}
 
+	// Confirm that the user scope is node/root. Otherwise, return an authentication error.
+	_, err = getActiveNodeOrUserScope(certUserScope, security.RootUser, a.tenant.tenantID)
+	if err != nil {
+		return roachpb.TenantID{}, authErrorf("client certificate %s cannot be used to perform RPC on tenant %d", clientCert.Subject, a.tenant.tenantID)
+	}
+
+	// User is node/root user authorized for this tenant, return success.
 	return roachpb.TenantID{}, nil
+}
+
+// getActiveNodeOrUserScope returns a node user scope if one is present in the set of certificate user scopes. If node
+// user scope is not present, it returns the user scope corresponding to the username parameter. The node user scope
+// will always override the user scope for authentication.
+func getActiveNodeOrUserScope(
+	certUserScope map[string]security.CertificateUserScope,
+	username string,
+	serverTenantID roachpb.TenantID,
+) (security.CertificateUserScope, error) {
+	var userScope security.CertificateUserScope
+	for _, scope := range certUserScope {
+		// If we get a scope that matches the Node user, immediately return.
+		if scope.Username == security.NodeUser {
+			return scope, nil
+		}
+		if scope.Username == username {
+			_, serverTenantMatch := scope.TenantIDs[serverTenantID]
+			_, systemTenantMatch := scope.TenantIDs[roachpb.SystemTenantID]
+			if serverTenantMatch || systemTenantMatch {
+				userScope = scope
+			}
+		}
+	}
+	// Double check we're not returning an empty scope
+	if userScope.Username == "" {
+		return userScope, errors.New("could not find active user scope for client certificate")
+	}
+
+	// Only return userScope if we haven't found a NodeUser.
+	return userScope, nil
 }
