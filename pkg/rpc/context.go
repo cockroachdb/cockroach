@@ -988,9 +988,22 @@ func (d *delayingConn) Read(b []byte) (n int, err error) {
 			return 0, errors.WithStack(errMagicNotFound)
 		}
 
-		// Once we receive our first packet, we set our delay to the expected
-		// delay that was sent on the write side.
-		d.latency = time.Duration(hdr.DelayMS) * time.Millisecond
+		// Once we receive our first packet with a DelayMS field set, we set our
+		// delay to the expected delay that was sent on the write side. We only
+		// want to set the latency the first time we receive a non-zero DelayMS
+		// because there are cases (still not yet fully debugged, but which
+		// occur when demo is run with the --insecure flag) where we set a
+		// non-zero DelayMS which is then overwritten, in a subsequent call to
+		// this function, with a zero value. Since the simulated latencies are
+		// not dynamic, overwriting a non-zero value with a zero value is
+		// never valid. Rather than perform the lengthy investigation to
+		// determine why we're being called with a zero DelayMS after we've set
+		// d.latency to a non-zero value, we instead key off of a zero value of
+		// d.latency to indicate that d.latency has not yet been initialized.
+		// Once it's initialized to a non-zero value, we won't update it again.
+		if d.latency == 0 && hdr.DelayMS != 0 {
+			d.latency = time.Duration(hdr.DelayMS) * time.Millisecond
+		}
 		defer func() {
 			time.Sleep(timeutil.Until(timeutil.Unix(0, hdr.ReadTime)))
 		}()
