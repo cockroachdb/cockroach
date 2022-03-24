@@ -150,5 +150,9 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 	if err := sendMailPickSHA(args, opts); err != nil {
 		return fmt.Errorf("cannot send email: %w", err)
 	}
+	fmt.Println("Generating panic")
+	if err := generatePanic(nextRelease.buildInfo.Tag); err != nil {
+		return fmt.Errorf("cannot generate panic: %w", err)
+	}
 	return nil
 }
