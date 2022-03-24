@@ -87,13 +87,19 @@ const (
 	BackupManifestAsJSON
 )
 
+// ShowBackupKind represents the kind of SHOW BACKUP statement
+type ShowBackupKind struct {
+	Details        BackupDetails
+	IncludeSchemas bool
+}
+
 // ShowBackup represents a SHOW BACKUP statement.
 type ShowBackup struct {
-	Path                 Expr
-	InCollection         Expr
-	Details              BackupDetails
-	ShouldIncludeSchemas bool
-	Options              KVOptions
+	Path         Expr
+	InCollection Expr
+	From         bool
+	Kind         ShowBackupKind
+	Options      KVOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -104,14 +110,12 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		return
 	}
 	ctx.WriteString("SHOW BACKUP ")
-	if node.Details == BackupRangeDetails {
-		ctx.WriteString("RANGES ")
-	} else if node.Details == BackupFileDetails {
-		ctx.WriteString("FILES ")
+
+	ctx.FormatNode(&node.Kind)
+	if node.From {
+		ctx.WriteString("FROM ")
 	}
-	if node.ShouldIncludeSchemas {
-		ctx.WriteString("SCHEMAS ")
-	}
+
 	ctx.FormatNode(node.Path)
 	if node.InCollection != nil {
 		ctx.WriteString(" IN ")
@@ -120,6 +124,18 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	if len(node.Options) > 0 {
 		ctx.WriteString(" WITH ")
 		ctx.FormatNode(&node.Options)
+	}
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowBackupKind) Format(ctx *FmtCtx) {
+	if node.Details == BackupRangeDetails {
+		ctx.WriteString("RANGES ")
+	} else if node.Details == BackupFileDetails {
+		ctx.WriteString("FILES ")
+	}
+	if node.IncludeSchemas {
+		ctx.WriteString("SCHEMAS ")
 	}
 }
 
