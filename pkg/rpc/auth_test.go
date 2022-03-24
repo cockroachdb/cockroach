@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -95,10 +96,11 @@ func TestTenantFromCert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	correctOU := []string{security.TenantsOU}
 	for _, tc := range []struct {
-		ous        []string
-		commonName string
-		expTenID   roachpb.TenantID
-		expErr     string
+		ous         []string
+		commonName  string
+		expTenID    roachpb.TenantID
+		expErr      string
+		tenantScope uint64
 	}{
 		{ous: correctOU, commonName: "10", expTenID: roachpb.MakeTenantID(10)},
 		{ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
@@ -109,9 +111,11 @@ func TestTenantFromCert(t *testing.T) {
 		{ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
 		{ous: correctOU, commonName: "root", expErr: `could not parse tenant ID from Common Name \(CN\)`},
 		{ous: correctOU, commonName: "other", expErr: `could not parse tenant ID from Common Name \(CN\)`},
-		{ous: []string{"foo"}, commonName: "other", expErr: `user \[other\] is not allowed to perform this RPC`},
-		{ous: nil, commonName: "other", expErr: `user \[other\] is not allowed to perform this RPC`},
+		{ous: []string{"foo"}, commonName: "other", expErr: `client certificate CN=other,OU=foo cannot be used to perform RPC on tenant {1}`},
+		{ous: nil, commonName: "other", expErr: `client certificate CN=other cannot be used to perform RPC on tenant {1}`},
 		{ous: append([]string{"foo"}, correctOU...), commonName: "other", expErr: `could not parse tenant ID from Common Name`},
+		{ous: nil, commonName: "root"},
+		{ous: nil, commonName: "root", tenantScope: 10, expErr: "client certificate CN=root cannot be used to perform RPC on tenant {1}"},
 	} {
 		t.Run(tc.commonName, func(t *testing.T) {
 			cert := &x509.Certificate{
@@ -119,6 +123,11 @@ func TestTenantFromCert(t *testing.T) {
 					CommonName:         tc.commonName,
 					OrganizationalUnit: tc.ous,
 				},
+			}
+			if tc.tenantScope > 0 {
+				tenantSAN, err := security.MakeTenantURISAN(username.MakeSQLUsernameFromPreNormalizedString(tc.commonName), roachpb.MakeTenantID(tc.tenantScope))
+				require.NoError(t, err)
+				cert.URIs = append(cert.URIs, tenantSAN)
 			}
 			tlsInfo := credentials.TLSInfo{
 				State: tls.ConnectionState{

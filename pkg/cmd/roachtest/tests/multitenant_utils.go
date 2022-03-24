@@ -63,6 +63,7 @@ func createTenantNode(
 		sqlPort:  sqlPort,
 	}
 	tn.createTenantCert(ctx, t, c)
+	tn.createTenantScopedClientCert(ctx, c)
 	return tn
 }
 
@@ -80,6 +81,13 @@ func (tn *tenantNode) createTenantCert(ctx context.Context, t test.Test, c clust
 	cmd := fmt.Sprintf(
 		"./cockroach cert create-tenant-client --certs-dir=certs --ca-key=certs/ca.key %d %s",
 		tn.tenantID, strings.Join(names, " "))
+	c.Run(ctx, c.Node(tn.node), cmd)
+}
+
+func (tn *tenantNode) createTenantScopedClientCert(ctx context.Context, c cluster.Cluster) {
+	cmd := fmt.Sprintf(
+		"./cockroach cert create-client --certs-dir=certs --ca-key=certs/ca.key root --tenant-scope %d",
+		tn.tenantID)
 	c.Run(ctx, c.Node(tn.node), cmd)
 }
 
