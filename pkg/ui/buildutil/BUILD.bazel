@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "buildutil",
+    srcs = ["hash_files.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ui/buildutil",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_test(
+    name = "buildutil_test",
+    srcs = ["hash_files_test.go"],
+    embed = [":buildutil"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
