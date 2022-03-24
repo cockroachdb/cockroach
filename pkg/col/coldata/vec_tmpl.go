@@ -284,7 +284,7 @@ func _COPY_WITH_REORDERED_SOURCE(_SRC_HAS_NULLS bool) { // */}}
 		} else
 		// {{end}}
 		{
-			// {{if .IsBytesLike}}
+			// {{if .Global.IsBytesLike}}
 			toCol.Copy(fromCol, destIdx, srcIdx)
 			// {{else}}
 			v := fromCol.Get(srcIdx)
