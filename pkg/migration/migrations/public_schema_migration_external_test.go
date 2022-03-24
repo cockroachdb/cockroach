@@ -13,7 +13,9 @@ package migrations_test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,8 +84,56 @@ func publicSchemaMigrationTest(t *testing.T, ctx context.Context, numTables int)
 	// This is also larger than the 2048 KiB max command size we set.
 	// The batch size in the migration is 512 KiB so this ensures we have at
 	// least two batches.
+	mkTableName := func(i int) string {
+		return fmt.Sprintf("t%s%d", strings.Repeat("x", 10000), i)
+	}
 	for i := 0; i < numTables; i++ {
-		tdb.Exec(t, fmt.Sprintf(`CREATE TABLE defaultdb.t%s%d()`, strings.Repeat("x", 10000), i))
+		tdb.Exec(t, fmt.Sprintf(`CREATE TABLE defaultdb.%s()`, mkTableName(i)))
+	}
+
+	// Create a few goroutines which are querying some new tables and might run
+	// into trouble resolving these tables during the migration. This code is
+	// to ensure that the resolution logic is robust to the adding of the
+	// public schema to the migration.
+	var g sync.WaitGroup
+	workerCtx, cancel := context.WithCancel(ctx)
+	defer g.Wait()
+	defer cancel()
+	runReader := func(ctx context.Context) {
+		conn, err := tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		{
+			_, err := conn.ExecContext(ctx, "USE defaultdb")
+			require.NoError(t, err)
+		}
+		g.Add(1)
+		go func() {
+			defer g.Done()
+			defer func() { _ = conn.Close() }()
+			const tablesToQuery = 5 // arbitrary, more is better, to a point
+			var buf strings.Builder
+			buf.WriteString("SELECT count(*) FROM ")
+			for i := 0; i < tablesToQuery; i++ {
+				if i > 0 {
+					buf.WriteString(", ")
+				}
+				_, _ = fmt.Fprintf(
+					&buf, "%s as t%d", mkTableName(rand.Intn(numTables)), i,
+				)
+			}
+			stmt := buf.String()
+			for {
+				_, err := conn.ExecContext(ctx, stmt)
+				if ctx.Err() != nil {
+					return
+				}
+				assert.NoError(t, err)
+			}
+		}()
+	}
+	const numWorkers = 32
+	for i := 0; i < numWorkers; i++ {
+		runReader(workerCtx)
 	}
 
 	{
@@ -169,9 +220,9 @@ WHERE grantee = 'public' AND privilege_type = $1`,
 	const oldPublicSchemaID = 29
 	var parentSchemaID int
 	for i := 0; i < numTables; i++ {
-		tdb.QueryRow(t, fmt.Sprintf(`
-SELECT "parentSchemaID" FROM system.namespace WHERE name = 't%s%d'
-`, strings.Repeat("x", 10000), i)).
+		tdb.QueryRow(t, `
+SELECT "parentSchemaID" FROM system.namespace WHERE name = $1
+`, mkTableName(i)).
 			Scan(&parentSchemaID)
 		require.NotEqual(t, parentSchemaID, descpb.InvalidID)
 		require.NotEqual(t, oldPublicSchemaID, parentSchemaID)
