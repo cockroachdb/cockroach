@@ -632,26 +632,24 @@ var dateStyle = settings.RegisterEnumSetting(
 const intervalStyleEnabledClusterSetting = "sql.defaults.intervalstyle.enabled"
 
 // intervalStyleEnabled controls intervals representation.
-// TODO(#sql-experience): remove session setting in v22.1 and have this
-// always enabled.
+// TODO(sql-exp): retire this setting in 22.2.
 var intervalStyleEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	intervalStyleEnabledClusterSetting,
 	"default value for intervalstyle_enabled session setting",
 	false,
-).WithPublic()
+)
 
 const dateStyleEnabledClusterSetting = "sql.defaults.datestyle.enabled"
 
 // dateStyleEnabled controls dates representation.
-// TODO(#sql-experience): remove session setting in v22.1 and have this
-// always enabled.
+// TODO(sql-exp): retire this setting in 22.2.
 var dateStyleEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	dateStyleEnabledClusterSetting,
 	"default value for datestyle_enabled session setting",
 	false,
-).WithPublic()
+)
 
 var txnRowsWrittenLog = settings.RegisterIntSetting(
 	settings.TenantWritable,

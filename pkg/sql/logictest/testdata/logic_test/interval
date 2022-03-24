@@ -400,14 +400,19 @@ SELECT i / 2 FROM ( VALUES
 
 subtest interval_session
 
-statement error setting IntervalStyle is not enabled
+query T noticetrace
+SET intervalstyle_enabled = 'off'
+----
+NOTICE: ignoring intervalstyle_enabled setting; it is always true
+
+statement ok
 SET intervalstyle = 'iso_8601'
 
-statement error setting IntervalStyle is not enabled
+statement ok
 SET intervalstyle = 'sql_standard'
 
 statement ok
-SET intervalstyle_enabled = 'on'
+SET intervalstyle = DEFAULT
 
 statement error context-dependent operators are not allowed in computed column\nHINT: INTERVAL to STRING casts depend on IntervalStyle; consider using to_char\(interval\)
 CREATE TABLE invalid_table (

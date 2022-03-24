@@ -769,12 +769,11 @@ statement error context-dependent operators are not allowed in computed column
 ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
 
 statement ok
-SET experimental_computed_column_rewrites = "(ts :: STRING) -> ((ts AT TIME ZONE 'utc')::STRING)";
+SET experimental_computed_column_rewrites = "(ts :: STRING) -> (to_char(ts AT TIME ZONE 'utc'))";
 
 statement ok
 ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
 
-# The cast also gets rewritten to use to_char during PostDeserializationChanges.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
