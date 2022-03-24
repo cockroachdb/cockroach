@@ -1356,6 +1356,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 
 		p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint(
+			"restore.after_publishing_descriptors"); err != nil {
+			return err
+		}
 		if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
 			if err := fn(); err != nil {
 				return err
@@ -1492,6 +1496,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 	}
 
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
+		"restore.after_publishing_descriptors"); err != nil {
+		return err
+	}
 	if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
 		if err := fn(); err != nil {
 			return err
@@ -1723,6 +1731,11 @@ func (r *restoreResumer) publishDescriptors(
 	if details.DescriptorsPublished {
 		return nil
 	}
+
+	if err := execCfg.JobRegistry.CheckPausepoint("restore.before_publishing_descriptors"); err != nil {
+		return err
+	}
+
 	if fn := r.testingKnobs.beforePublishingDescriptors; fn != nil {
 		if err := fn(); err != nil {
 			return err
@@ -1941,6 +1954,7 @@ func emitRestoreJobEvent(
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
+
 	// Emit to the event log that the job has started reverting.
 	emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
 
