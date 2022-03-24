@@ -1173,3 +1173,18 @@ FROM
       (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)]))
   )
     AS t2 (c3, c4)
+
+# Regression test for #78159. Column access of NULL should not cause an internal
+# error.
+subtest 78159
+
+statement ok
+CREATE TABLE t78159 (b BOOL)
+
+statement ok
+INSERT INTO t78159 VALUES (false)
+
+query B
+SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
+----
+NULL
