@@ -73,15 +73,18 @@ func (p *ProtectedTimestampStateReader) GetProtectionPoliciesForTenants() []Tena
 	return p.tenantProtections
 }
 
-// ProtectionExistsForTenant returns all the protected timestamps that
+// GetProtectionsForTenant returns all the protected timestamps that
 // apply to a particular tenant's keyspace.
-func (p *ProtectedTimestampStateReader) ProtectionExistsForTenant(tenantID roachpb.TenantID) bool {
+func (p *ProtectedTimestampStateReader) GetProtectionsForTenant(
+	tenantID roachpb.TenantID,
+) []roachpb.ProtectionPolicy {
+	protectionsOnTenant := make([]roachpb.ProtectionPolicy, 0)
 	for _, tp := range p.tenantProtections {
 		if tp.TenantID.Equal(tenantID) {
-			return true
+			protectionsOnTenant = append(protectionsOnTenant, tp.Protections...)
 		}
 	}
-	return false
+	return protectionsOnTenant
 }
 
 // GetProtectionPoliciesForSchemaObject returns all the protected timestamps
