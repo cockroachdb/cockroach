@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/idle"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/jackc/pgproto3/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
@@ -74,8 +76,10 @@ type ProxyOptions struct {
 	// Insecure if set, will not use TLS for the backend connection. For testing.
 	Insecure bool
 	// RoutingRule for constructing the backend address for each incoming
-	// connection. Optionally use '{{clusterName}}'
-	// which will be substituted with the cluster name.
+	// connection.
+	//
+	// TODO(jaylim-crl): Rename RoutingRule to TestRoutingRule to be
+	// explicit that this is only used in a testing environment.
 	RoutingRule string
 	// DirectoryAddr specified optional {HOSTNAME}:{PORT} for service that does
 	// the resolution from backend id to IP address. If specified - it will be
@@ -97,9 +101,22 @@ type ProxyOptions struct {
 	// response to the first connection failure.
 	ThrottleBaseDelay time.Duration
 
-	// Used for testing.
+	// testingKnobs are knobs used for testing.
 	testingKnobs struct {
+		// afterForward gets invoked after a connection was being forwarded.
+		//
+		// TODO(jaylim-crl): Once the connection manager is in, we can consider
+		// retrieving the forwarder from there, and get rid of this variable
+		// entirely.
 		afterForward func(*forwarder) error
+
+		// dirOpts is used to customize the directory cache created by the
+		// proxy.
+		dirOpts []tenant.DirOption
+
+		// directoryServer represents the in-memory directory server that is
+		// created whenever a routing rule is used.
+		directoryServer tenant.DirectoryServer
 	}
 }
 
@@ -130,7 +147,7 @@ type proxyHandler struct {
 	// to their IP addresses.
 	directoryCache tenant.DirectoryCache
 
-	// CertManger keeps up to date the certificates used.
+	// certManager keeps up to date the certificates used.
 	certManager *certmgr.CertManager
 }
 
@@ -173,33 +190,62 @@ func newProxyHandler(
 		throttler.WithBaseDelay(handler.ThrottleBaseDelay),
 	)
 
+	var conn *grpc.ClientConn
 	if handler.DirectoryAddr != "" {
-		//lint:ignore SA1019 grpc.WithInsecure is deprecated
-		conn, err := grpc.Dial(handler.DirectoryAddr, grpc.WithInsecure())
+		conn, err = grpc.Dial(
+			handler.DirectoryAddr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
 		if err != nil {
 			return nil, err
 		}
-		// nolint:grpcconnclose
-		stopper.AddCloser(stop.CloserFn(func() { _ = conn.Close() /* nolint:grpcconnclose */ }))
-
-		// If a drain timeout has been specified, then start the idle monitor
-		// and the pod watcher. When a pod enters the DRAINING state, the pod
-		// watcher will set the idle monitor to detect connections without
-		// activity and terminate them.
-		var dirOpts []tenant.DirOption
-		if options.DrainTimeout != 0 {
-			handler.idleMonitor = idle.NewMonitor(ctx, options.DrainTimeout)
-
-			podWatcher := make(chan *tenant.Pod)
-			go handler.startPodWatcher(ctx, podWatcher)
-			dirOpts = append(dirOpts, tenant.PodWatcher(podWatcher))
-		}
-
-		client := tenant.NewDirectoryClient(conn)
-		handler.directoryCache, err = tenant.NewDirectoryCache(ctx, stopper, client, dirOpts...)
+	} else {
+		// If no directory address was specified, assume routing rule, and
+		// start an in-memory simple directory server.
+		directoryServer, grpcServer := tenantdirsvr.NewTestSimpleDirectoryServer(handler.RoutingRule)
+		ln, err := tenantdirsvr.ListenAndServeInMemGRPC(ctx, stopper, grpcServer)
 		if err != nil {
 			return nil, err
 		}
+		handler.testingKnobs.directoryServer = directoryServer
+
+		dialerFunc := func(ctx context.Context, addr string) (net.Conn, error) {
+			return ln.DialContext(ctx)
+		}
+		conn, err = grpc.DialContext(
+			ctx,
+			"",
+			grpc.WithContextDialer(dialerFunc),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	stopper.AddCloser(stop.CloserFn(func() {
+		_ = conn.Close() // nolint:grpcconnclose
+	}))
+
+	// If a drain timeout has been specified, then start the idle monitor and
+	// the pod watcher. When a pod enters the DRAINING state, the pod watcher
+	// will set the idle monitor to detect connections without activity and
+	// terminate them.
+	var dirOpts []tenant.DirOption
+	if options.DrainTimeout != 0 {
+		handler.idleMonitor = idle.NewMonitor(ctx, options.DrainTimeout)
+
+		podWatcher := make(chan *tenant.Pod)
+		go handler.startPodWatcher(ctx, podWatcher)
+		dirOpts = append(dirOpts, tenant.PodWatcher(podWatcher))
+	}
+	if handler.testingKnobs.dirOpts != nil {
+		dirOpts = append(dirOpts, handler.testingKnobs.dirOpts...)
+	}
+
+	client := tenant.NewDirectoryClient(conn)
+	handler.directoryCache, err = tenant.NewDirectoryCache(ctx, stopper, client, dirOpts...)
+	if err != nil {
+		return nil, err
 	}
 
 	return &handler, nil
@@ -275,13 +321,10 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 
 	connector := &connector{
-		ClusterName: clusterName,
-		TenantID:    tenID,
-		RoutingRule: handler.RoutingRule,
-		StartupMsg:  backendStartupMsg,
-	}
-	if handler.directoryCache != nil {
-		connector.DirectoryCache = handler.directoryCache
+		ClusterName:    clusterName,
+		TenantID:       tenID,
+		DirectoryCache: handler.directoryCache,
+		StartupMsg:     backendStartupMsg,
 	}
 
 	// TLS options for the proxy are split into Insecure and SkipVerify.

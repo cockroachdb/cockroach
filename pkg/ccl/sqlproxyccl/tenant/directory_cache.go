@@ -182,8 +182,9 @@ func (d *directoryCache) EnsureTenantAddr(
 		return "", err
 	}
 
-	// Check the cluster name matches, if specified.
-	if clusterName != "" && clusterName != entry.ClusterName {
+	// Check if the cluster name matches. This can be skipped if clusterName
+	// is empty, or the ClusterName returned by the directory server is empty.
+	if clusterName != "" && entry.ClusterName != "" && clusterName != entry.ClusterName {
 		// Return a GRPC NotFound error.
 		log.Errorf(ctx, "cluster name %s doesn't match expected %s", clusterName, entry.ClusterName)
 		return "", status.Errorf(codes.NotFound,
