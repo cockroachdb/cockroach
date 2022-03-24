@@ -116,6 +116,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/GetSpanConfigs":
 		return a.authGetSpanConfigs(tenID, req.(*roachpb.GetSpanConfigsRequest))
 
+	case "/cockroach.roachpb.Internal/GetAllSystemSpanConfigsThatApply":
+		return a.authGetAllSystemSpanConfigsThatApply(tenID, req.(*roachpb.GetAllSystemSpanConfigsThatApplyRequest))
+
 	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
 		return a.authUpdateSpanConfigs(tenID, req.(*roachpb.UpdateSpanConfigsRequest))
 
@@ -278,6 +281,24 @@ func (a tenantAuthorizer) authTenantSettings(
 	}
 	if args.TenantID != tenID {
 		return authErrorf("tenant settings request for tenant %s not permitted", args.TenantID)
+	}
+	return nil
+}
+
+// authGetAllSystemSPanConfigsThatApply authorizes the provided tenant to invoke
+// GetAllSystemSpanConfigs RPC with the provided args.
+func (a tenantAuthorizer) authGetAllSystemSpanConfigsThatApply(
+	tenID roachpb.TenantID, args *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
+) error {
+	if !args.TenantID.IsSet() {
+		return authErrorf(
+			"GetAllSystemSpanConfigsThatApply request with unspecified tenant not permitted",
+		)
+	}
+	if args.TenantID != tenID {
+		return authErrorf(
+			"GetAllSystemSpanConfigsThatApply request for tenant %s not permitted", args.TenantID,
+		)
 	}
 	return nil
 }

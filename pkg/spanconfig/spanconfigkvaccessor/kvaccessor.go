@@ -86,6 +86,48 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 	return newKVAccessor(k.db, k.ie, k.settings, k.configurationsTableFQN, k.knobs, txn)
 }
 
+// GetAllSystemSpanConfigsThatApply is part of the spanconfig.KVAccessor
+// interface.
+func (k *KVAccessor) GetAllSystemSpanConfigsThatApply(
+	ctx context.Context, ID roachpb.TenantID,
+) (spanConfigs []roachpb.SpanConfig, _ error) {
+	hostSetOnTenant, err := spanconfig.MakeTenantKeyspaceTarget(
+		roachpb.SystemTenantID, ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct a list of system targets whose corresponding system span configs
+	// apply to ranges of the given tenant ID. These are:
+	// 1. The system span config that applies over the entire keyspace. (set by
+	// the host).
+	// 2. The system span config set by the host over just the tenant's keyspace.
+	// 3. The system span config set by the tenant over its own keyspace.
+	targets := []spanconfig.Target{
+		spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()),
+		spanconfig.MakeTargetFromSystemTarget(hostSetOnTenant),
+	}
+
+	// We only need to do this for secondary tenants; we've already added this
+	// target if tenID == system tenant.
+	if ID != roachpb.SystemTenantID {
+		target, err := spanconfig.MakeTenantKeyspaceTarget(ID, ID)
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, spanconfig.MakeTargetFromSystemTarget(target))
+	}
+
+	records, err := k.GetSpanConfigRecords(ctx, targets)
+
+	for _, record := range records {
+		spanConfigs = append(spanConfigs, record.GetConfig())
+	}
+
+	return spanConfigs, nil
+}
+
 // GetSpanConfigRecords is part of the KVAccessor interface.
 func (k *KVAccessor) GetSpanConfigRecords(
 	ctx context.Context, targets []spanconfig.Target,

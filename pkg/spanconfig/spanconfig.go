@@ -28,6 +28,13 @@ type KVAccessor interface {
 	// overlap with the supplied targets.
 	GetSpanConfigRecords(ctx context.Context, targets []Target) ([]Record, error)
 
+	// GetAllSystemSpanConfigsThatApply returns all system span configurations
+	// that apply over ranges of the supplied tenant ID. This includes those
+	// set by the tenant itself and those set by the system tenant.
+	GetAllSystemSpanConfigsThatApply(
+		ctx context.Context, ID roachpb.TenantID,
+	) ([]roachpb.SpanConfig, error)
+
 	// UpdateSpanConfigRecords updates configurations for the given key targets.
 	// This is a "targeted" API: the exact targets being deleted are expected to
 	// have been present; if targets are being updated with new configs, they're
