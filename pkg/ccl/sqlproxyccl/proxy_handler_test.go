@@ -75,16 +75,17 @@ func TestLongDBName(t *testing.T) {
 	defer testutils.TestingHook(&BackendDial, func(
 		_ *pgproto3.StartupMessage, outgoingAddr string, _ *tls.Config,
 	) (net.Conn, error) {
-		require.Equal(t, outgoingAddr, "dim-dog-28-0.cockroachdb:26257")
+		require.Equal(t, outgoingAddr, "127.0.0.1:26257")
 		return nil, newErrorf(codeParamsRoutingFailed, "boom")
 	})()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	s, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "{{clusterName}}-0.cockroachdb:26257"})
+	s, addr := newSecureProxyServer(
+		ctx, t, stopper, &ProxyOptions{RoutingRule: "127.0.0.1:26257"})
 
 	longDB := strings.Repeat("x", 70) // 63 is limit
-	pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, longDB)
+	pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=tenant-cluster-28&sslmode=require", addr, longDB)
 	te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
 	require.Equal(t, int64(1), s.metrics.RoutingErrCount.Count())
 }
@@ -100,23 +101,30 @@ func TestBackendDownRetry(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	callCount := 0
-	defer testutils.TestingHook(&resolveTCPAddr,
-		func(network, addr string) (*net.TCPAddr, error) {
-			callCount++
-			if callCount >= 3 {
-				return nil, errors.New("tenant not found")
-			}
-			return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26257}, nil
-		})()
-
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{RoutingRule: "undialable%$!@$:1234"})
+	opts := &ProxyOptions{RoutingRule: "undialable%$!@$:1234"}
+	// Set RefreshDelay to -1 so that we could simulate a ListPod call under
+	// the hood, which then triggers an EnsurePod again.
+	opts.testingKnobs.dirOpts = []tenant.DirOption{tenant.RefreshDelay(-1)}
+	server, addr := newSecureProxyServer(ctx, t, stopper, opts)
+	directoryServer := mustGetTestSimpleDirectoryServer(t, server.handler)
+
+	callCount := 0
+	defer testutils.TestingHook(&BackendDial, func(
+		_ *pgproto3.StartupMessage, outgoingAddr string, _ *tls.Config,
+	) (net.Conn, error) {
+		callCount++
+		// After 3 dials, we delete the tenant.
+		if callCount >= 3 {
+			directoryServer.DeleteTenant(roachpb.MakeTenantID(28))
+		}
+		return nil, newErrorf(codeBackendDown, "SQL pod is down")
+	})()
 
 	// Valid connection, but no backend server running.
-	pgurl := fmt.Sprintf("postgres://unused:unused@%s/db?options=--cluster=dim-dog-28&sslmode=require", addr)
-	te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "cluster dim-dog-28 not found")
+	pgurl := fmt.Sprintf("postgres://unused:unused@%s/db?options=--cluster=tenant-cluster-28&sslmode=require", addr)
+	te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "cluster tenant-cluster-28 not found")
 	require.Equal(t, 3, callCount)
 }
 
@@ -141,7 +149,7 @@ func TestFailedConnection(t *testing.T) {
 
 	// Unencrypted connections bounce.
 	te.TestConnectErr(
-		ctx, t, u+"?options=--cluster=dim-dog-28&sslmode=disable",
+		ctx, t, u+"?options=--cluster=tenant-cluster-28&sslmode=disable",
 		codeUnexpectedInsecureStartupMessage, "server requires encryption",
 	)
 	require.Equal(t, int64(0), s.metrics.RoutingErrCount.Count())
@@ -164,8 +172,8 @@ func TestFailedConnection(t *testing.T) {
 
 		// Bad TenantID. Ensure that we don't leak any parsing errors.
 		te.TestConnectErr(
-			ctx, t, u+"?options=--cluster=dim-dog-foo3&sslmode="+sslmode,
-			codeParamsRoutingFailed, "invalid cluster identifier 'dim-dog-foo3'",
+			ctx, t, u+"?options=--cluster=tenant-cluster-foo3&sslmode="+sslmode,
+			codeParamsRoutingFailed, "invalid cluster identifier 'tenant-cluster-foo3'",
 		)
 		require.Equal(t, int64(3+(i*3)), s.metrics.RoutingErrCount.Count())
 	}
@@ -229,13 +237,13 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
 	)
 
-	url := fmt.Sprintf("postgres://bob:wrong@%s/dim-dog-28.defaultdb?sslmode=require", addr)
+	url := fmt.Sprintf("postgres://bob:wrong@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
-	url = fmt.Sprintf("postgres://bob@%s/dim-dog-28.defaultdb?sslmode=require", addr)
+	url = fmt.Sprintf("postgres://bob@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
-	url = fmt.Sprintf("postgres://bob:builder@%s/dim-dog-28.defaultdb?sslmode=require", addr)
+	url = fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 		require.NoError(t, runTestQuery(ctx, conn))
@@ -264,10 +272,10 @@ func TestProxyTLSConf(t *testing.T) {
 		defer stopper.Stop(ctx)
 		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
 			Insecure:    true,
-			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+			RoutingRule: "127.0.0.1:26257",
 		})
 
-		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
+		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=tenant-cluster-28&sslmode=require", addr, "defaultdb")
 		te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
 	})
 
@@ -288,10 +296,10 @@ func TestProxyTLSConf(t *testing.T) {
 		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
 			Insecure:    false,
 			SkipVerify:  true,
-			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+			RoutingRule: "127.0.0.1:26257",
 		})
 
-		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
+		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=tenant-cluster-28&sslmode=require", addr, "defaultdb")
 		te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
 	})
 
@@ -316,10 +324,10 @@ func TestProxyTLSConf(t *testing.T) {
 		_, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{
 			Insecure:    false,
 			SkipVerify:  false,
-			RoutingRule: "{{clusterName}}-0.cockroachdb:26257",
+			RoutingRule: "127.0.0.1:26257",
 		})
 
-		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=dim-dog-28&sslmode=require", addr, "defaultdb")
+		pgurl := fmt.Sprintf("postgres://unused:unused@%s/%s?options=--cluster=tenant-cluster-28&sslmode=require", addr, "defaultdb")
 		te.TestConnectErr(ctx, t, pgurl, codeParamsRoutingFailed, "boom")
 	})
 
@@ -358,7 +366,7 @@ func TestProxyTLSClose(t *testing.T) {
 		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
 	)
 
-	url := fmt.Sprintf("postgres://bob:builder@%s/dim-dog-28.defaultdb?sslmode=require", addr)
+	url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 
 	conn, err := pgx.Connect(ctx, url)
 	require.NoError(t, err)
@@ -425,7 +433,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 
 	s, proxyAddr := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{})
 
-	u := fmt.Sprintf("postgres://bogususer:foo123@%s/?sslmode=require&authToken=abc123&options=--cluster=dim-dog-28&sslmode=require", proxyAddr)
+	u := fmt.Sprintf("postgres://bogususer:foo123@%s/?sslmode=require&authToken=abc123&options=--cluster=tenant-cluster-28&sslmode=require", proxyAddr)
 	te.TestConnect(ctx, t, u, func(conn *pgx.Conn) {
 		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 		require.NoError(t, runTestQuery(ctx, conn))
@@ -453,10 +461,10 @@ func TestInsecureProxy(t *testing.T) {
 		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
 	)
 
-	url := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
+	url := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable&options=--cluster=tenant-cluster-28&sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
-	url = fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
+	url = fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=tenant-cluster-28&sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.NoError(t, runTestQuery(ctx, conn))
 	})
@@ -482,7 +490,7 @@ func TestErroneousFrontend(t *testing.T) {
 	defer stopper.Stop(ctx)
 	_, addr := newProxyServer(ctx, t, stopper, &ProxyOptions{})
 
-	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
+	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=tenant-cluster-28&sslmode=require", addr)
 
 	// Generic message here as the Frontend's error is not codeError and
 	// by default we don't pass back error's text. The startup message doesn't
@@ -508,7 +516,7 @@ func TestErroneousBackend(t *testing.T) {
 	defer stopper.Stop(ctx)
 	_, addr := newProxyServer(ctx, t, stopper, &ProxyOptions{})
 
-	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=dim-dog-28&sslmode=require", addr)
+	url := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable&options=--cluster=tenant-cluster-28&sslmode=require", addr)
 
 	// Generic message here as the Backend's error is not codeError and
 	// by default we don't pass back error's text. The startup message has
@@ -534,7 +542,7 @@ func TestProxyRefuseConn(t *testing.T) {
 	defer stopper.Stop(ctx)
 	s, addr := newSecureProxyServer(ctx, t, stopper, &ProxyOptions{})
 
-	url := fmt.Sprintf("postgres://root:admin@%s?sslmode=require&options=--cluster=dim-dog-28&sslmode=require", addr)
+	url := fmt.Sprintf("postgres://root:admin@%s?sslmode=require&options=--cluster=tenant-cluster-28&sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, codeProxyRefusedConnection, "too many attempts")
 	require.Equal(t, int64(1), s.metrics.RefusedConnCount.Count())
 	require.Equal(t, int64(0), s.metrics.SuccessfulConnCount.Count())
@@ -597,7 +605,7 @@ func TestDenylistUpdate(t *testing.T) {
 	})
 	defer func() { _ = os.Remove(denyList.Name()) }()
 
-	url := fmt.Sprintf("postgres://testuser:foo123@%s/defaultdb_29?sslmode=require&options=--cluster=dim-dog-28&sslmode=require", addr)
+	url := fmt.Sprintf("postgres://testuser:foo123@%s/defaultdb_29?sslmode=require&options=--cluster=tenant-cluster-28&sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.Eventuallyf(
 			t,
@@ -649,17 +657,10 @@ func TestDirectoryConnect(t *testing.T) {
 	proxy, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
 
 	t.Run("fallback when tenant not found", func(t *testing.T) {
-		defer testutils.TestingHook(&resolveTCPAddr,
-			func(network, addr string) (*net.TCPAddr, error) {
-				// Expect fallback.
-				require.Equal(t, srv.ServingSQLAddr(), addr)
-				return net.ResolveTCPAddr(network, addr)
-			})()
-
 		url := fmt.Sprintf(
 			"postgres://root:admin@%s/?sslmode=disable&options=--cluster=tenant-cluster-%d",
 			addr, notFoundTenantID)
-		te.TestConnect(ctx, t, url, func(*pgx.Conn) {})
+		te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "cluster tenant-cluster-99 not found")
 	})
 
 	t.Run("fail to connect to backend", func(t *testing.T) {
@@ -1399,20 +1400,12 @@ type tester struct {
 		errToClient   *codeError
 	}
 
-	restoreResolveTCPAddr  func()
 	restoreAuthenticate    func()
 	restoreSendErrToClient func()
 }
 
 func newTester() *tester {
 	te := &tester{}
-
-	// Override default lookup function so that it does not use net.ResolveTCPAddr.
-	te.restoreResolveTCPAddr =
-		testutils.TestingHook(&resolveTCPAddr,
-			func(network, addr string) (*net.TCPAddr, error) {
-				return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26257}, nil
-			})
 
 	// Record successful connection and authentication.
 	originalAuthenticate := authenticate
@@ -1437,7 +1430,6 @@ func newTester() *tester {
 }
 
 func (te *tester) Close() {
-	te.restoreResolveTCPAddr()
 	te.restoreAuthenticate()
 	te.restoreSendErrToClient()
 }
@@ -1595,4 +1587,16 @@ func newDirectoryServer(
 	go func() { require.NoError(t, tds.Serve(listener)) }()
 
 	return tds, listener.Addr().(*net.TCPAddr)
+}
+
+// mustGetTestSimpleDirectoryServer returns the underlying simple directory
+// server. This can only be used with a routing rule.
+func mustGetTestSimpleDirectoryServer(
+	t *testing.T, handler *proxyHandler,
+) *tenantdirsvr.TestSimpleDirectoryServer {
+	t.Helper()
+	require.NotNil(t, handler.testingKnobs.directoryServer, "routing rule was not used")
+	svr, ok := handler.testingKnobs.directoryServer.(*tenantdirsvr.TestSimpleDirectoryServer)
+	require.True(t, ok)
+	return svr
 }
