@@ -26,16 +26,12 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// proxyConnHandler defines the signature of the function that handles each
-// individual new incoming connection.
-type proxyConnHandler func(ctx context.Context, conn *proxyConn) error
-
 // Server is a TCP server that proxies SQL connections to a configurable
 // backend. It may also run an HTTP server to expose a health check and
 // prometheus metrics.
 type Server struct {
 	Stopper         *stop.Stopper
-	connHandler     proxyConnHandler
+	handler         *proxyHandler
 	mux             *http.ServeMux
 	metrics         *metrics
 	metricsRegistry *metric.Registry
@@ -61,7 +57,7 @@ func NewServer(ctx context.Context, stopper *stop.Stopper, options ProxyOptions)
 
 	s := &Server{
 		Stopper:            stopper,
-		connHandler:        handler.handle,
+		handler:            handler,
 		mux:                mux,
 		metrics:            &proxyMetrics,
 		metricsRegistry:    registry,
@@ -182,7 +178,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 			defer s.metrics.CurConnCount.Dec(1)
 			remoteAddr := conn.RemoteAddr()
 			ctxWithTag := logtags.AddTag(ctx, "client", log.SafeOperational(remoteAddr))
-			if err := s.connHandler(ctxWithTag, conn); err != nil {
+			if err := s.handler.handle(ctxWithTag, conn); err != nil {
 				log.Infof(ctxWithTag, "connection error: %v", err)
 			}
 		})
