@@ -1514,16 +1514,14 @@ func (cf *changeFrontier) checkpointJobProgress(
 		changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 		changefeedProgress.Checkpoint = &checkpoint
 
-		if shouldProtectTimestamps(cf.flowCtx.Codec()) {
-			timestampManager := cf.manageProtectedTimestamps
-			// TODO(samiskin): Remove this conditional and the associated deprecated
-			// methods once we're confident in ActiveProtectedTimestampsEnabled
-			if !changefeedbase.ActiveProtectedTimestampsEnabled.Get(&cf.flowCtx.Cfg.Settings.SV) {
-				timestampManager = cf.deprecatedManageProtectedTimestamps
-			}
-			if err := timestampManager(cf.Ctx, txn, changefeedProgress); err != nil {
-				log.Warningf(cf.Ctx, "error managing protected timestamp record: %v", err)
-			}
+		timestampManager := cf.manageProtectedTimestamps
+		// TODO(samiskin): Remove this conditional and the associated deprecated
+		// methods once we're confident in ActiveProtectedTimestampsEnabled
+		if !changefeedbase.ActiveProtectedTimestampsEnabled.Get(&cf.flowCtx.Cfg.Settings.SV) {
+			timestampManager = cf.deprecatedManageProtectedTimestamps
+		}
+		if err := timestampManager(cf.Ctx, txn, changefeedProgress); err != nil {
+			log.Warningf(cf.Ctx, "error managing protected timestamp record: %v", err)
 		}
 
 		if updateRunStatus {
