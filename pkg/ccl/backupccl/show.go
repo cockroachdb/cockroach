@@ -91,6 +91,9 @@ func (m manifestInfoReader) header() colinfo.ResultColumns {
 // showBackup reads backup info from the manifest, populates the manifestInfoReader,
 // calls the backupShower to process the manifest info into datums,
 // and pipes the information to the user's sql console via the results channel.
+
+// TODO(msbutler): during the old backup syntax purge, remove store, incStore, incPaths,
+// and pass only `stores []cloud.ExternalStorage` object in signature
 func (m manifestInfoReader) showBackup(
 	ctx context.Context,
 	mem *mon.BoundAccount,
@@ -256,13 +259,11 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	if _, asJSON := opts[backupOptAsJSON]; asJSON {
-		backup.Details = tree.BackupManifestAsJSON
-	}
-
 	var infoReader backupInfoReader
 	if _, dumpSST := opts[backupOptDebugMetadataSST]; dumpSST {
 		infoReader = metadataSSTInfoReader{}
+	} else if _, asJSON := opts[backupOptAsJSON]; asJSON {
+		infoReader = manifestInfoReader{shower: jsonShower}
 	} else {
 		var shower backupShower
 		switch backup.Details {
@@ -270,10 +271,10 @@ func showBackupPlanHook(
 			shower = backupShowerRanges
 		case tree.BackupFileDetails:
 			shower = backupShowerFiles
-		case tree.BackupManifestAsJSON:
-			shower = jsonShower
+		case tree.BackupSchemaDetails:
+			shower = backupShowerDefault(ctx, p, true, opts)
 		default:
-			shower = backupShowerDefault(ctx, p, backup.ShouldIncludeSchemas, opts)
+			shower = backupShowerDefault(ctx, p, false, opts)
 		}
 		infoReader = manifestInfoReader{shower}
 	}
