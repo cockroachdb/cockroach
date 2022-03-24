@@ -133,16 +133,6 @@ func (a *AggregatorSpec) summary() (string, []string) {
 	return "Aggregator", details
 }
 
-func indexDetail(desc *descpb.TableDescriptor, indexIdx uint32) string {
-	var index string
-	if indexIdx > 0 {
-		index = desc.Indexes[indexIdx-1].Name
-	} else {
-		index = desc.PrimaryIndex.Name
-	}
-	return fmt.Sprintf("%s@%s", desc.Name, index)
-}
-
 func appendColumns(details []string, columns []descpb.IndexFetchSpec_Column) []string {
 	var b strings.Builder
 	b.WriteString("Columns:")
@@ -307,12 +297,13 @@ func (mj *MergeJoinerSpec) summary() (string, []string) {
 // summary implements the diagramCellType interface.
 func (zj *ZigzagJoinerSpec) summary() (string, []string) {
 	name := "ZigzagJoiner"
-	tables := zj.Tables
-	details := make([]string, 0, len(tables)+1)
-	for i, table := range tables {
+	details := make([]string, 0, len(zj.Sides)+1)
+	for i := range zj.Sides {
+		fetchSpec := &zj.Sides[i].FetchSpec
 		details = append(details, fmt.Sprintf(
-			"Side %d: %s", i, indexDetail(&table, zj.IndexOrdinals[i]),
+			"Side %d: %s@%s", i, fetchSpec.TableName, fetchSpec.IndexName,
 		))
+		details = appendColumns(details, fetchSpec.FetchedColumns)
 	}
 	if !zj.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", zj.OnExpr))

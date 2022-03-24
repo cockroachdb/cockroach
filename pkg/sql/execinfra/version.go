@@ -64,17 +64,21 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 67
+const Version execinfrapb.DistSQLVersion = 68
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 67
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 68
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 68 (MinAcceptedVersion: 68)
+  - ZigzagJoinerSpec now uses descpb.IndexFetchSpec instead of table and
+    index descriptors.
 
 - Version: 67 (MinAcceptedVersion: 67)
   - InvertedJoinerSpec now uses descpb.IndexFetchSpec instead of table and
