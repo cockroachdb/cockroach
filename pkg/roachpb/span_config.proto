@@ -329,3 +329,34 @@ message UpdateSpanConfigsRequest {
 
 message UpdateSpanConfigsResponse { };
 
+
+// GetAllSystemSpanConfigsThatApplyRequest is used to fetch all system span
+// configs that apply to a given tenant. For a specific tenant range, this
+// includes:
+// 1. The system span config that applies over the entire keyspace (set by the
+// host).
+// 2. The system span config set by the host over just the tenant's keyspace.
+// 3. The system span config set by the tenant over its own keyspace.
+//
+// This RPC is only ever meaningful in the context of secondary tenants as it
+// allows them a view into system span config state that applies over their
+// ranges that has been set by the host tenant.
+//
+// Tenants are only allowed to request system span configs that apply over their
+// own ranges. System span configs set by the requesting tenant itself are also
+// returned.
+message GetAllSystemSpanConfigsThatApplyRequest {
+  // TenantID identifies tenant ranges over which all system span configurations
+  // that apply are being requested. Given tenants are only allowed to fetch
+  // system span configs that apply over their ranges, we expect this field to
+  // be set to the requesting tenant's ID.
+  TenantID tenant_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+};
+
+// GetAllSystemSpanConfigsThatApplyResponse lists out all system span
+// configurations that have been requested.
+message GetAllSystemSpanConfigsThatApplyResponse {
+  // SpanConfigs captures all system span configurations that apply over the
+  // requested tenant IDs' ranges.
+  repeated SpanConfig span_configs = 1 [(gogoproto.nullable) = false];
+};

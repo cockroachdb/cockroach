@@ -592,6 +592,12 @@ func (*internalServer) GetSpanConfigs(
 	panic("unimplemented")
 }
 
+func (*internalServer) GetAllSystemSpanConfigsThatApply(
+	context.Context, *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
+	panic("unimplemented")
+}
+
 func (*internalServer) UpdateSpanConfigs(
 	context.Context, *roachpb.UpdateSpanConfigsRequest,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {

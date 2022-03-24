@@ -1,0 +1,62 @@
+# Sanity check when there's no system span configs.
+kvaccessor-get-all-system-span-configs-that-apply tenant-id=1
+----
+
+kvaccessor-get-all-system-span-configs-that-apply tenant-id=10
+----
+
+# Basic test to ensure only the secondary tenant to which a system span config
+# set by the host applies has view into it.
+kvaccessor-update
+upsert {source=1,target=10}:A
+----
+ok
+
+kvaccessor-get-all-system-span-configs-that-apply tenant-id=10
+----
+A
+
+kvaccessor-get-all-system-span-configs-that-apply tenant-id=20
+----
+
+kvaccessor-update
+upsert {entire-keyspace}:B
+upsert {source=10,target=10}:C
+upsert {source=1,target=1}:D
+----
+ok
+
+kvaccessor-get-all-system-span-configs-that-apply tenant-id=1
+----
+B
+D
+
+kvaccessor-get-all-system-span-configs-that-apply tenant-id=10
+----
+B
+A
+C
+
+kvaccessor-get-all-system-span-configs-that-apply tenant-id=20
+----
+B
+
+# Remove a system span config and update another; make sure it's reflected.
+kvaccessor-update
+delete {entire-keyspace}
+upsert {source=1,target=10}:E
+----
+ok
+
+
+kvaccessor-get-all-system-span-configs-that-apply tenant-id=1
+----
+D
+
+kvaccessor-get-all-system-span-configs-that-apply tenant-id=10
+----
+E
+C
+
+kvaccessor-get-all-system-span-configs-that-apply tenant-id=20
+----

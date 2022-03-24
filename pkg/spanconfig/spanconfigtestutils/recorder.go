@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -83,6 +84,14 @@ func (r *KVAccessorRecorder) UpdateSpanConfigRecords(
 	}
 	r.mu.batchCount++
 	return nil
+}
+
+// GetAllSystemSpanConfigsThatApply is part of the spanconfig.KVAccessor
+// interface.
+func (r *KVAccessorRecorder) GetAllSystemSpanConfigsThatApply(
+	ctx context.Context, id roachpb.TenantID,
+) ([]roachpb.SpanConfig, error) {
+	return r.underlying.GetAllSystemSpanConfigsThatApply(ctx, id)
 }
 
 // WithTxn is part of the KVAccessor interface.

@@ -693,6 +693,30 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: `secondary tenants cannot target the entire keyspace`,
 			},
 		},
+		"/cockroach.roachpb.Internal/GetAllSystemSpanConfigsThatApply": {
+			{
+				req:    &roachpb.GetAllSystemSpanConfigsThatApplyRequest{},
+				expErr: "GetAllSystemSpanConfigsThatApply request with unspecified tenant not permitted",
+			},
+			{
+				req: &roachpb.GetAllSystemSpanConfigsThatApplyRequest{
+					TenantID: roachpb.MakeTenantID(20),
+				},
+				expErr: "GetAllSystemSpanConfigsThatApply request for tenant 20 not permitted",
+			},
+			{
+				req: &roachpb.GetAllSystemSpanConfigsThatApplyRequest{
+					TenantID: roachpb.SystemTenantID,
+				},
+				expErr: "GetAllSystemSpanConfigsThatApply request for tenant system not permitted",
+			},
+			{
+				req: &roachpb.GetAllSystemSpanConfigsThatApplyRequest{
+					TenantID: roachpb.MakeTenantID(10),
+				},
+				expErr: noError,
+			},
+		},
 
 		"/cockroach.rpc.Heartbeat/Ping": {
 			{req: &PingRequest{}, expErr: noError},

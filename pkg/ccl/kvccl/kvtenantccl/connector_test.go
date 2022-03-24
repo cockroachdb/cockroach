@@ -108,6 +108,12 @@ func (m *mockServer) GetSpanConfigs(
 	panic("unimplemented")
 }
 
+func (m *mockServer) GetAllSystemSpanConfigsThatApply(
+	context.Context, *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
+	panic("unimplemented")
+}
+
 func (m *mockServer) UpdateSpanConfigs(
 	context.Context, *roachpb.UpdateSpanConfigsRequest,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
