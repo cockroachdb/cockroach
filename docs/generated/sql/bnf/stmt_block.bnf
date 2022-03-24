@@ -694,10 +694,8 @@ use_stmt ::=
 
 show_backup_stmt ::=
 	'SHOW' 'BACKUPS' 'IN' string_or_placeholder
-	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder 'IN' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' show_backup_kind string_or_placeholder 'IN' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' show_backup_kind string_or_placeholder opt_with_options
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
@@ -1758,6 +1756,11 @@ to_or_eq ::=
 var_value ::=
 	a_expr
 	| extra_var_value
+
+show_backup_kind ::=
+	'SCHEMAS'
+	| 'FILES'
+	| 'RANGES'
 
 with_comment ::=
 	'WITH' 'COMMENT'

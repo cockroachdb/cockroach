@@ -264,7 +264,7 @@ func showBackupPlanHook(
 	}
 
 	if _, asJSON := opts[backupOptAsJSON]; asJSON {
-		backup.Details = tree.BackupManifestAsJSON
+		backup.Kind.Details = tree.BackupManifestAsJSON
 	}
 
 	var infoReader backupInfoReader
@@ -272,7 +272,7 @@ func showBackupPlanHook(
 		infoReader = metadataSSTInfoReader{}
 	} else {
 		var shower backupShower
-		switch backup.Details {
+		switch backup.Kind.Details {
 		case tree.BackupRangeDetails:
 			shower = backupShowerRanges
 		case tree.BackupFileDetails:
@@ -280,7 +280,7 @@ func showBackupPlanHook(
 		case tree.BackupManifestAsJSON:
 			shower = jsonShower
 		default:
-			shower = backupShowerDefault(ctx, p, backup.ShouldIncludeSchemas, opts)
+			shower = backupShowerDefault(ctx, p, backup.Kind.IncludeSchemas, opts)
 		}
 		infoReader = manifestInfoReader{shower: shower}
 	}
