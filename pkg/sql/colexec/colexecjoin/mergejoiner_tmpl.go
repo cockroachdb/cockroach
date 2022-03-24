@@ -911,8 +911,12 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool) { // */}}
 							if srcNulls.NullAt(srcIdx) {
 								outNulls.SetNull(outStartIdx)
 							} else {
+								// {{if .IsBytesLike}}
+								outCol.Copy(srcCol, outStartIdx, srcIdx)
+								// {{else}}
 								v := srcCol.Get(srcIdx)
 								outCol.Set(outStartIdx, v)
+								// {{end}}
 							}
 						} else {
 							out.Copy(

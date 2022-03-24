@@ -184,8 +184,12 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 					case _TYPE_WIDTH:
 						srcCol := vec._TYPE()
 						outCol := o.outVecs._TYPECols[o.outVecs.ColsMap[i]]
+						// {{if .IsBytesLike}}
+						outCol.Copy(srcCol, outputIdx, srcRowIdx)
+						// {{else}}
 						v := srcCol.Get(srcRowIdx)
 						outCol.Set(outputIdx, v)
+						// {{end}}
 						// {{end}}
 					}
 					// {{end}}

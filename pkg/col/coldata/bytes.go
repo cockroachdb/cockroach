@@ -170,6 +170,9 @@ func NewBytes(n int) *Bytes {
 // Get returns the ith []byte in Bytes. Note that the returned byte slice is
 // unsafe for reuse if any write operation happens.
 //
+// If the returned value is then Set() into another Bytes, then use Bytes.Copy
+// instead.
+//
 // Note this function call is mostly inlined except in a handful of very large
 // generated functions, so we can't add the gcassert directive for it.
 func (b *Bytes) Get(i int) []byte {
@@ -177,6 +180,9 @@ func (b *Bytes) Get(i int) []byte {
 }
 
 // Set sets the ith []byte in Bytes.
+//
+// If the provided value is obtained via Get() from another Bytes, then use
+// Bytes.Copy instead.
 //
 // Note this function call is mostly inlined except in a handful of very large
 // generated functions, so we can't add the gcassert directive for it.
