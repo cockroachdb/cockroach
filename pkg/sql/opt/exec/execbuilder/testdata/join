@@ -2084,7 +2084,7 @@ vectorized: true
   left columns: (a, b)
   left fixed values: 1 column
   right table: zigzag@c_idx
-  right columns: (c)
+  right columns: (a, c)
   right fixed values: 1 column
 
 
@@ -2106,7 +2106,7 @@ vectorized: true
       left columns: (a, b)
       left fixed values: 1 column
       right table: zigzag@c_idx
-      right columns: (c)
+      right columns: (a, c)
       right fixed values: 1 column
 
 # Zigzag join nested inside a lookup, with an on condition on lookup join.
@@ -2128,7 +2128,7 @@ vectorized: true
       left columns: (a, b)
       left fixed values: 1 column
       right table: zigzag@c_idx
-      right columns: (c)
+      right columns: (a, c)
       right fixed values: 1 column
 
 

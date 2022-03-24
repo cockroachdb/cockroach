@@ -511,15 +511,18 @@ vectorized: true
 │ equality cols are key
 │ pred: (b->'a') @> '[1, 2]'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │ estimated row count: 12 (missing stats)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' <@ '[1, 2]'
@@ -746,15 +749,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c"}, "f": "g"}'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │ estimated row count: 12 (missing stats)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
@@ -770,15 +776,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │ estimated row count: 12 (missing stats)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
@@ -794,15 +803,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '[{"a": {"b": [[2]]}}, "d"]'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │ estimated row count: 12 (missing stats)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 statement ok
 SET enable_zigzag_join = true
@@ -821,15 +833,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c"}, "f": "g"}'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │ estimated row count: 12 (missing stats)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
@@ -845,15 +860,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │ estimated row count: 12 (missing stats)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
@@ -869,15 +887,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> '[{"a": {"b": [[2]]}}, "d"]'
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: d@foo_inv
-      left columns: (a)
-      left fixed values: 1 column
-      right table: d@foo_inv
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │ estimated row count: 12 (missing stats)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          left table: d@foo_inv
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: d@foo_inv
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 # TODO(rytaft): A better plan is probably to just scan the index with the span
 # from `b @> '{"b": 2}'` and apply `b @> '{"a": {}}'` as a remaining filter
@@ -954,10 +975,10 @@ vectorized: true
     │
     └── • zigzag join
           left table: d@foo_inv
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: d@foo_inv
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 
 # Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
@@ -979,10 +1000,10 @@ vectorized: true
     │
     └── • zigzag join
           left table: d@foo_inv
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: d@foo_inv
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 
 # Filter with a nested array. This index expression is not tight.
@@ -1004,10 +1025,10 @@ vectorized: true
     │
     └── • zigzag join
           left table: d@foo_inv
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: d@foo_inv
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 
 subtest array
@@ -1107,15 +1128,18 @@ vectorized: true
 │ equality cols are key
 │ pred: b @> ARRAY[1,2]
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: e@e_b_idx
-      left columns: (a)
-      left fixed values: 1 column
-      right table: e@e_b_idx
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │ estimated row count: 12 (missing stats)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          left table: e@e_b_idx
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: e@e_b_idx
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 query T
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
@@ -1131,15 +1155,18 @@ vectorized: true
 │ equality cols are key
 │ pred: (b @> ARRAY[1]) AND (b @> ARRAY[2])
 │
-└── • zigzag join
-      columns: (a)
-      estimated row count: 12 (missing stats)
-      left table: e@e_b_idx
-      left columns: (a)
-      left fixed values: 1 column
-      right table: e@e_b_idx
-      right columns: ()
-      right fixed values: 1 column
+└── • project
+    │ columns: (a)
+    │ estimated row count: 12 (missing stats)
+    │
+    └── • zigzag join
+          columns: (a, b_inverted_key, a, b_inverted_key)
+          left table: e@e_b_idx
+          left columns: (a, b_inverted_key)
+          left fixed values: 1 column
+          right table: e@e_b_idx
+          right columns: (a, b_inverted_key)
+          right fixed values: 1 column
 
 # Test that queries with the contained by <@ operator use the inverted index.
 query T

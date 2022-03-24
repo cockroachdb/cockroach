@@ -105,6 +105,30 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 	return colCfg
 }
 
+// tableToScanOrdinals finds for each table column ordinal in cols the
+// corresponding index in the scan columns.
+func tableToScanOrdinals(
+	scanCols exec.TableColumnOrdinalSet, cols []exec.TableColumnOrdinal,
+) ([]int, error) {
+	result := make([]int, len(cols))
+	for i, colOrd := range cols {
+		// Find the position in the scanCols set (makeScanColumnsConfig sets up the
+		// scan columns in increasing ordinal order).
+		j := 0
+		for ord, ok := scanCols.Next(0); ; ord, ok = scanCols.Next(ord + 1) {
+			if !ok {
+				return nil, errors.AssertionFailedf("column not among scanned columns")
+			}
+			if ord == int(colOrd) {
+				result[i] = j
+				break
+			}
+			j++
+		}
+	}
+	return result, nil
+}
+
 // getResultColumnsForSimpleProject populates result columns for a simple
 // projection. inputCols must be non-nil and contain the result columns before
 // the projection has been applied. It supports two configurations:
@@ -187,16 +211,6 @@ func getResultColumnsForGroupBy(
 // convertNodeOrdinalsToInts converts a slice of exec.NodeColumnOrdinals to a slice
 // of ints.
 func convertNodeOrdinalsToInts(ordinals []exec.NodeColumnOrdinal) []int {
-	ints := make([]int, len(ordinals))
-	for i := range ordinals {
-		ints[i] = int(ordinals[i])
-	}
-	return ints
-}
-
-// convertTableOrdinalsToInts converts a slice of exec.TableColumnOrdinal to a
-// slice of ints.
-func convertTableOrdinalsToInts(ordinals []exec.TableColumnOrdinal) []int {
 	ints := make([]int, len(ordinals))
 	for i := range ordinals {
 		ints[i] = int(ordinals[i])

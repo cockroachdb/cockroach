@@ -688,10 +688,13 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 	eqCols []exec.TableColumnOrdinal,
 ) (zigzagPlanningSide, error) {
 	desc := table.(*optTable).desc
-	colCfg := scanColumnsConfig{wantedColumns: make([]tree.ColumnID, 0, wantedCols.Len())}
-	for c, ok := wantedCols.Next(0); ok; c, ok = wantedCols.Next(c + 1) {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, desc.PublicColumns()[c].GetID())
+	colCfg := makeScanColumnsConfig(table, wantedCols)
+
+	eqColOrdinals, err := tableToScanOrdinals(wantedCols, eqCols)
+	if err != nil {
+		return zigzagPlanningSide{}, err
 	}
+
 	cols, err := initColsForScan(desc, colCfg)
 	if err != nil {
 		return zigzagPlanningSide{}, err
@@ -711,7 +714,7 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 		desc:        desc,
 		index:       index.(*optIndex).idx,
 		cols:        cols,
-		eqCols:      convertTableOrdinalsToInts(eqCols),
+		eqCols:      eqColOrdinals,
 		fixedValues: valuesSpec,
 	}, nil
 }
