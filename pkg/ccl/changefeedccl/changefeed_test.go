@@ -448,12 +448,6 @@ func TestChangefeedTenantsExternalIOEnabled(t *testing.T) {
 	tenantSQL.Exec(t, serverSetupStatements)
 	tenantSQL.Exec(t, `CREATE TABLE foo_in_tenant (pk INT PRIMARY KEY)`)
 
-	t.Run("sinkful changefeed fails if protect_data_from_gc_on_pause is set", func(t *testing.T) {
-		tenantSQL.ExpectErr(t, "operation is unsupported in multi-tenancy mode",
-			`CREATE CHANGEFEED FOR foo_in_tenant INTO 'kafka://does-not-matter' WITH protect_data_from_gc_on_pause`,
-		)
-	})
-
 	t.Run("sinkful changefeed works", func(t *testing.T) {
 		f := makeKafkaFeedFactory(&testServerShim{
 			TestTenantInterface: tenantServer,

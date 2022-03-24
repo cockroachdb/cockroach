@@ -43,11 +43,6 @@ func emitResolvedTimestamp(
 	return nil
 }
 
-func shouldProtectTimestamps(codec keys.SQLCodec) bool {
-	// TODO(smiskin): Remove this restriction once tenant based pts are enabled
-	return codec.ForSystemTenant()
-}
-
 // createProtectedTimestampRecord will create a record to protect the spans for
 // this changefeed at the resolved timestamp. The progress struct will be
 // updated to refer to this new protected timestamp record.
