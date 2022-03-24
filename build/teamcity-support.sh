@@ -307,9 +307,18 @@ generate_ssh_key() {
   fi
 }
 
-# Call this function with one argument, the error message to print if the
-# workspace is dirty.
+begin_check_generated_code_tests() {
+    echo "##teamcity[testSuiteStarted name='CheckGeneratedCode']"
+}
+
+end_check_generated_code_tests() {
+    echo "##teamcity[testSuiteFinished name='CheckGeneratedCode']"
+}
+
+# Call this function with two arguments: the name of the "test" that will be
+# reported to teamcity and the error message to print if the workspace is dirty.
 check_workspace_clean() {
+  echo "##teamcity[testStarted name='CheckGeneratedCode/$1' captureStandardOutput='true']"
   # The workspace is clean iff `git status --porcelain` produces no output. Any
   # output is either an error message or a listing of an untracked/dirty file.
   if [[ "$(git status --porcelain 2>&1)" != "" ]]; then
@@ -317,7 +326,10 @@ check_workspace_clean() {
     git diff -a >&2 || true
     echo "====================================================" >&2
     echo "Some automatically generated code is not up to date." >&2
-    echo $1 >&2
+    echo $2 >&2
+    echo "##teamcity[testFailed name='CheckGeneratedCode/$1']"
+    echo "##teamcity[testFinished name='CheckGeneratedCode/$1']"
     exit 1
   fi
+  echo "##teamcity[testFinished name='CheckGeneratedCode/$1']"
 }
