@@ -1546,9 +1546,9 @@ func getBackupDetailAndManifest(
 		mem.Shrink(ctx, memSize)
 	}()
 
-	err = updateBackupDetails(
+	fullDetails, shortDetails, err := updateBackupDetails(
 		ctx,
-		&initialDetails,
+		initialDetails,
 		collectionURI,
 		defaultURI,
 		resolvedSubdir,
@@ -1556,7 +1556,6 @@ func getBackupDetailAndManifest(
 		prevBackups,
 		encryptionOptions,
 		kmsEnv)
-
 	if err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
@@ -1565,29 +1564,17 @@ func getBackupDetailAndManifest(
 		ctx,
 		execCfg,
 		txn,
-		initialDetails,
+		fullDetails,
 		prevBackups)
 	if err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
 
-	if err := validateBackupDetailsAndManifest(ctx, execCfg, initialDetails, backupManifest, prevBackups, user); err != nil {
+	if err := validateBackupDetailsAndManifest(ctx, execCfg, fullDetails, backupManifest, prevBackups, user); err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
 
-	// Callers don't typically need all the details here - many were just used to generate the backup manifest.
-	filteredJobDetails := jobspb.BackupDetails{
-		Destination:       initialDetails.Destination,
-		StartTime:         initialDetails.StartTime,
-		EndTime:           initialDetails.EndTime,
-		URI:               initialDetails.URI,
-		URIsByLocalityKV:  initialDetails.URIsByLocalityKV,
-		EncryptionOptions: initialDetails.EncryptionOptions,
-		EncryptionInfo:    initialDetails.EncryptionInfo,
-		CollectionURI:     initialDetails.CollectionURI,
-	}
-
-	return filteredJobDetails, backupManifest, nil
+	return shortDetails, backupManifest, nil
 }
 
 func createBackupManifest(
@@ -1752,7 +1739,7 @@ func createBackupManifest(
 
 func updateBackupDetails(
 	ctx context.Context,
-	jobDetails *jobspb.BackupDetails,
+	details jobspb.BackupDetails,
 	collectionURI string,
 	defaultURI string,
 	resolvedSubdir string,
@@ -1760,9 +1747,8 @@ func updateBackupDetails(
 	prevBackups []BackupManifest,
 	encryptionOptions *jobspb.BackupEncryptionOptions,
 	kmsEnv *backupKMSEnv,
-) error {
+) (jobspb.BackupDetails, jobspb.BackupDetails, error) {
 	var err error
-
 	var startTime hlc.Timestamp
 	if len(prevBackups) > 0 {
 		startTime = prevBackups[len(prevBackups)-1].EndTime
@@ -1772,20 +1758,32 @@ func updateBackupDetails(
 	// need to generate encryption specific data.
 	var encryptionInfo *jobspb.EncryptionInfo
 	if encryptionOptions == nil {
-		encryptionOptions, encryptionInfo, err = makeNewEncryptionOptions(ctx, *jobDetails.EncryptionOptions, kmsEnv)
+		encryptionOptions, encryptionInfo, err = makeNewEncryptionOptions(ctx, *details.EncryptionOptions, kmsEnv)
 		if err != nil {
-			return err
+			return jobspb.BackupDetails{}, jobspb.BackupDetails{}, err
 		}
 	}
 
-	jobDetails.Destination = jobspb.BackupDetails_Destination{Subdir: resolvedSubdir}
-	jobDetails.StartTime = startTime
-	jobDetails.URI = defaultURI
-	jobDetails.URIsByLocalityKV = urisByLocalityKV
-	jobDetails.EncryptionOptions = encryptionOptions
-	jobDetails.EncryptionInfo = encryptionInfo
-	jobDetails.CollectionURI = collectionURI
-	return nil
+	details.Destination = jobspb.BackupDetails_Destination{Subdir: resolvedSubdir}
+	details.StartTime = startTime
+	details.URI = defaultURI
+	details.URIsByLocalityKV = urisByLocalityKV
+	details.EncryptionOptions = encryptionOptions
+	details.EncryptionInfo = encryptionInfo
+	details.CollectionURI = collectionURI
+
+	// Callers don't always need all the details here. A shorter version is helpful.
+	shortDetails := jobspb.BackupDetails{
+		Destination:       details.Destination,
+		StartTime:         details.StartTime,
+		EndTime:           details.EndTime,
+		URI:               details.URI,
+		URIsByLocalityKV:  details.URIsByLocalityKV,
+		EncryptionOptions: details.EncryptionOptions,
+		EncryptionInfo:    details.EncryptionInfo,
+		CollectionURI:     details.CollectionURI,
+	}
+	return details, shortDetails, nil
 }
 
 func validateBackupDetailsAndManifest(
