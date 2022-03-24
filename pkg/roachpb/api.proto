@@ -1762,6 +1762,12 @@ message AddSSTableRequest {
   // the usual write pipeline (on-disk raft log, WAL, etc).
   // TODO(dt): https://github.com/cockroachdb/cockroach/issues/34579#issuecomment-544627193
   bool ingest_as_writes = 5;
+
+  // CheckForDataAbove, if set, instructs the request to additionally inspect 
+  // the span between the end of the added file and the end of the range to 
+  // which it was added and return the lowest key, if any, at which that span 
+  // is non-empty in the response field NonEmptyAbove.
+  bool check_for_data_above = 9;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
@@ -1781,6 +1787,11 @@ message AddSSTableResponse {
   // should split first. Such callers can use RangeSpan to see if the file they
   // would be sending would also add to this range.
   int64 available_bytes = 3;
+
+  // NonEmptyAbove indicates the point above the file added where there may be
+  // data in the range to which the file was added. Only populated if the field
+  // CheckForDataAbove was set in the request.
+  bytes non_empty_above = 4 [(gogoproto.casttype) = "Key"];
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no

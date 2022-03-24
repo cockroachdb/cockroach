@@ -160,10 +160,11 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 			b.sink.flushCounts.scatterMoved,
 			timing(b.sink.flushCounts.commitWait),
 		)
-		log.VEventf(ctx, 2, "%s adder closing; flushed into %s %d times, %d due to buffer size (%s); flushing chunked into %d files (%d for ranges, %d for sst size, +%d after split-retries)",
+		log.VEventf(ctx, 2, "%s adder closing; flushed into %s %d times (%d extended max key), %d due to buffer size (%s); flushing chunked into %d files (%d for ranges, %d for sst size, +%d after split-retries)",
 			b.name,
 			b.flushCounts.span,
 			b.flushCounts.total,
+			b.sink.flushCounts.extended,
 			b.flushCounts.bufferSize,
 			sz(b.memAcc.Used()),
 			b.sink.flushCounts.total,
@@ -351,10 +352,11 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 	if log.V(5) {
 		log.Infof(ctx,
-			"%s adder has flushed into %s %d times, %d due to buffer size (%s), chunked as %d files (%d for ranges, %d for sst size, +%d for split-retries)",
+			"%s adder has flushed into %s %d times (%d extended max key), %d due to buffer size (%s), chunked as %d files (%d for ranges, %d for sst size, +%d for split-retries)",
 			b.name,
 			b.flushCounts.span,
 			b.flushCounts.total,
+			b.sink.flushCounts.extended,
 			b.flushCounts.bufferSize,
 			sz(b.memAcc.Used()),
 			b.sink.flushCounts.total,

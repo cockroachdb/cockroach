@@ -268,6 +268,21 @@ func EvalAddSSTable(
 	reply.RangeSpan = cArgs.EvalCtx.Desc().KeySpan().AsRawSpanWithNoLocals()
 	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes() - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
 
+	if args.CheckForDataAbove {
+		existingIter := readWriter.NewMVCCIterator(
+			storage.MVCCKeyIterKind, // don't care if it is committed or not, just that it isn't empty.
+			storage.IterOptions{UpperBound: reply.RangeSpan.EndKey},
+		)
+		defer existingIter.Close()
+		existingIter.SeekGE(end)
+		ok, err = existingIter.Valid()
+		if err != nil {
+			return result.Result{}, err
+		} else if ok {
+			reply.NonEmptyAbove = existingIter.Key().Key
+		}
+	}
+
 	if args.IngestAsWrites {
 		span.RecordStructured(&types.StringValue{Value: fmt.Sprintf("ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))})
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))

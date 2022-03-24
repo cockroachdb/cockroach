@@ -42,6 +42,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const noCheckAbove = false
+
 // TestEvalAddSSTable tests EvalAddSSTable directly, using only an on-disk
 // Pebble engine. This allows precise manipulation of timestamps.
 func TestEvalAddSSTable(t *testing.T) {
@@ -946,22 +948,22 @@ func runTestDBAddSSTable(
 		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bb", 2, "1"}})
 
 		// Key is before the range in the request span.
-		_, _, err := db.AddSSTable(
-			ctx, "d", "e", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+		_, _, _, err := db.AddSSTable(
+			ctx, "d", "e", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, noCheckAbove)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
 		// Key is after the range in the request span.
-		_, _, err = db.AddSSTable(
-			ctx, "a", "b", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+		_, _, _, err = db.AddSSTable(
+			ctx, "a", "b", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, noCheckAbove)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
 		// Do an initial ingest.
 		ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 		defer getRecAndFinish()
-		_, _, err = db.AddSSTable(
-			ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+		_, _, _, err = db.AddSSTable(
+			ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, noCheckAbove)
 		require.NoError(t, err)
 		trace := getRecAndFinish().String()
 		require.Contains(t, trace, "evaluating AddSSTable")
@@ -972,7 +974,7 @@ func runTestDBAddSSTable(
 			// Look for the ingested path and verify it still exists.
 			re := regexp.MustCompile(`ingested SSTable at index \d+, term \d+: (\S+)`)
 			match := re.FindStringSubmatch(trace)
-			require.Len(t, match, 2, "failed to extract ingested path from message %q,\n got: %v", trace, match)
+			require.Len(t, match, 2, "failed to extract ingested path from message %q,\n got: %v", trace, match, noCheckAbove)
 
 			// The on-disk paths have `.ingested` appended unlike in-memory.
 			_, err = os.Stat(strings.TrimSuffix(match[1], ".ingested"))
@@ -987,8 +989,8 @@ func runTestDBAddSSTable(
 	// the value returned by Get.
 	{
 		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bb", 1, "2"}})
-		_, _, err := db.AddSSTable(
-			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+		_, _, _, err := db.AddSSTable(
+			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, noCheckAbove)
 		require.NoError(t, err)
 		r, err := db.Get(ctx, "bb")
 		require.NoError(t, err)
@@ -1011,8 +1013,8 @@ func runTestDBAddSSTable(
 			ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 			defer getRecAndFinish()
 
-			_, _, err := db.AddSSTable(
-				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			_, _, _, err := db.AddSSTable(
+				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, noCheckAbove)
 			require.NoError(t, err)
 			trace := getRecAndFinish().String()
 			require.Contains(t, trace, "evaluating AddSSTable")
@@ -1048,8 +1050,8 @@ func runTestDBAddSSTable(
 			ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 			defer getRecAndFinish()
 
-			_, _, err := db.AddSSTable(
-				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsWrites, noTS)
+			_, _, _, err := db.AddSSTable(
+				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsWrites, noTS, noCheckAbove)
 			require.NoError(t, err)
 			trace := getRecAndFinish().String()
 			require.Contains(t, trace, "evaluating AddSSTable")
@@ -1080,8 +1082,8 @@ func runTestDBAddSSTable(
 		require.NoError(t, w.Put(key, value.RawBytes))
 		require.NoError(t, w.Finish())
 
-		_, _, err := db.AddSSTable(
-			ctx, "b", "c", sstFile.Data(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+		_, _, _, err := db.AddSSTable(
+			ctx, "b", "c", sstFile.Data(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS, noCheckAbove)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid checksum")
 	}

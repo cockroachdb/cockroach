@@ -777,6 +777,7 @@ func (b *Batch) addSSTable(
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	sstTimestampToRequestTimestamp hlc.Timestamp,
+	checkForDataAbove bool,
 ) {
 	begin, err := marshalKey(s)
 	if err != nil {
@@ -800,6 +801,7 @@ func (b *Batch) addSSTable(
 		MVCCStats:                      stats,
 		IngestAsWrites:                 ingestAsWrites,
 		SSTTimestampToRequestTimestamp: sstTimestampToRequestTimestamp,
+		CheckForDataAbove:              checkForDataAbove,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
