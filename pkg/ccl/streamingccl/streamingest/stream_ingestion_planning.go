@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -153,9 +152,9 @@ func ingestionPlanHook(
 		}
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
-
 		prefix := keys.MakeTenantPrefix(ingestionStmt.Targets.TenantID.TenantID)
-		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		// Empty start time indicates initial scan is enabled.
+		startTime := hlc.Timestamp{}
 		if ingestionStmt.AsOf.Expr != nil {
 			asOf, err := p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
 			if err != nil {
