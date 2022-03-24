@@ -38,6 +38,30 @@ func registerDiskFull(r registry.Registry) {
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, c.Spec().NodeCount))
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
+			// Node 1 will soon be killed, when the ballast file fills up its disk. To
+			// ensure that the ranges containing system tables are available on other
+			// nodes, we wait here for at least two replicas of each range. Without
+			// this, it's possible that we end up deadlocked on a system query that
+			// requires a range on node 1, but node 1 will not restart until the query
+			// completes.
+			t.Status("awaiting replication")
+			{
+				db := c.Conn(ctx, t.L(), 1)
+				for {
+					var fullReplicated bool
+					if err := db.QueryRow(
+						"SELECT min(array_length(replicas, 1)) >= 2 FROM crdb_internal.ranges",
+					).Scan(&fullReplicated); err != nil {
+						t.Fatal(err)
+					}
+					if fullReplicated {
+						break
+					}
+					time.Sleep(time.Second)
+				}
+				_ = db.Close()
+			}
+
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
