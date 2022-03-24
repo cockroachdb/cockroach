@@ -11,13 +11,11 @@ package tenant
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -54,7 +52,6 @@ type tenantEntry struct {
 	// accessing them.
 	pods struct {
 		syncutil.Mutex
-		rng  *rand.Rand
 		pods []*Pod
 	}
 
@@ -84,7 +81,6 @@ func (e *tenantEntry) Initialize(ctx context.Context, client DirectoryClient) er
 		}
 
 		e.ClusterName = tenantResp.ClusterName
-		e.pods.rng, _ = randutil.NewPseudoRand()
 	})
 
 	// If Initialize has already been called, return any error that occurred.
@@ -109,14 +105,6 @@ func (e *tenantEntry) RefreshPods(ctx context.Context, client DirectoryClient) e
 
 	_, err := e.fetchPodsLocked(ctx, client)
 	return err
-}
-
-// randFloat32 generates a random float32 within the bounds [0, 1) and is
-// thread safe.
-func (e *tenantEntry) randFloat32() float32 {
-	e.pods.Lock()
-	defer e.pods.Unlock()
-	return e.pods.rng.Float32()
 }
 
 // AddPod inserts the given pod into the tenant's list of pods. If it is
