@@ -500,7 +500,7 @@ func BenchmarkTableReader(b *testing.B) {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 			spec := execinfrapb.TableReaderSpec{
-				FetchSpec: makeFetchSpec(b, tableDesc, "test_pkey", "k,v"),
+				FetchSpec: makeFetchSpec(b, tableDesc, tableName+"_pkey", "k,v"),
 				// Spans will be set below.
 			}
 			post := execinfrapb.PostProcessSpec{}
