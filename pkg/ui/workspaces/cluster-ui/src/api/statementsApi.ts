@@ -34,5 +34,8 @@ export const getCombinedStatements = (
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
     `${STATEMENTS_PATH}?${queryStr}`,
+    null,
+    null,
+    "30M",
   );
 };
