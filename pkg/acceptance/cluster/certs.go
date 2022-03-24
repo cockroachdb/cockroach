@@ -55,12 +55,12 @@ func GenerateCerts(ctx context.Context) func() {
 	// Root user.
 	maybePanic(security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		2048, 48*time.Hour, false, username.RootUserName(), []roachpb.TenantID{}, true /* generate pk8 key */))
+		2048, 48*time.Hour, false, username.RootUserName(), roachpb.SystemTenantID, true /* generate pk8 key */))
 
 	// Test user.
 	maybePanic(security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		1024, 48*time.Hour, false, username.TestUserName(), []roachpb.TenantID{}, true /* generate pk8 key */))
+		1024, 48*time.Hour, false, username.TestUserName(), roachpb.SystemTenantID, true /* generate pk8 key */))
 
 	// Certs for starting a cockroach server. Key size is from cli/cert.go:defaultKeySize.
 	maybePanic(security.CreateNodePair(
