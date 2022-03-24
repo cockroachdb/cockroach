@@ -352,7 +352,14 @@ func ImportFixture(
 
 	var numNodes int
 	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
-		return 0, err
+		if strings.Contains(err.Error(), "operation is unsupported in multi-tenancy mode") {
+			// If the query is unsupported because we're in multi-tenant mode. Assume
+			// that the cluster has 1 node for the purposes of running CSV servers.
+			// Tenants won't use DistSQL to parallelize IMPORT across SQL pods.
+			numNodes = 1
+		} else {
+			return 0, err
+		}
 	}
 
 	var bytesAtomic int64
