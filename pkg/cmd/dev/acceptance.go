@@ -17,6 +17,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	noRebuildCockroachFlag = "no-rebuild-cockroach"
+)
+
 func makeAcceptanceCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	acceptanceCmd := &cobra.Command{
 		Use:     "acceptance",
@@ -28,6 +32,7 @@ func makeAcceptanceCmd(runE func(cmd *cobra.Command, args []string) error) *cobr
 	}
 	addCommonBuildFlags(acceptanceCmd)
 	addCommonTestFlags(acceptanceCmd)
+	acceptanceCmd.Flags().Bool(noRebuildCockroachFlag, false, "set if it is unnecessary to rebuild cockroach (artifacts/cockroach-short must already exist, e.g. after being created by a previous `dev acceptance` run)")
 	acceptanceCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
 	return acceptanceCmd
 }
@@ -35,20 +40,23 @@ func makeAcceptanceCmd(runE func(cmd *cobra.Command, args []string) error) *cobr
 func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	var (
-		filter  = mustGetFlagString(cmd, filterFlag)
-		short   = mustGetFlagBool(cmd, shortFlag)
-		timeout = mustGetFlagDuration(cmd, timeoutFlag)
+		filter             = mustGetFlagString(cmd, filterFlag)
+		noRebuildCockroach = mustGetFlagBool(cmd, noRebuildCockroachFlag)
+		short              = mustGetFlagBool(cmd, shortFlag)
+		timeout            = mustGetFlagDuration(cmd, timeoutFlag)
 	)
 
 	// First we have to build cockroach.
-	crossArgs, targets, err := d.getBasicBuildArgs(ctx, []string{"//pkg/cmd/cockroach-short:cockroach-short"})
-	if err != nil {
-		return err
-	}
-	volume := mustGetFlagString(cmd, volumeFlag)
-	err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume)
-	if err != nil {
-		return err
+	if !noRebuildCockroach {
+		crossArgs, targets, err := d.getBasicBuildArgs(ctx, []string{"//pkg/cmd/cockroach-short:cockroach-short"})
+		if err != nil {
+			return err
+		}
+		volume := mustGetFlagString(cmd, volumeFlag)
+		err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume)
+		if err != nil {
+			return err
+		}
 	}
 
 	workspace, err := d.getWorkspace(ctx)
