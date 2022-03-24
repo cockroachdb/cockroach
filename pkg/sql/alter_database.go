@@ -1080,7 +1080,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		}
 		for _, sr := range superRegions {
 			if err := multiregion.CanSatisfySurvivalGoal(descpb.SurvivalGoal_REGION_FAILURE, len(sr.Regions)); err != nil {
-				return errors.Wrapf(err, "super region %s only has %d regions", sr.SuperRegionName, len(sr.Regions))
+				return errors.Wrapf(err, "super region %s only has %d region(s)", sr.SuperRegionName, len(sr.Regions))
 			}
 		}
 	}
@@ -1347,71 +1347,7 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 		return err
 	}
 
-	regionNames, err := typeDesc.RegionNames()
-	if err != nil {
-		return err
-	}
-
-	regionsInDatabase := make(map[catpb.RegionName]struct{})
-	for _, regionName := range regionNames {
-		regionsInDatabase[regionName] = struct{}{}
-	}
-
-	regionSet := make(map[catpb.RegionName]struct{})
-	regions := make([]catpb.RegionName, len(n.n.Regions))
-
-	// Check that the region is part of the database.
-	// And create a slice of the regions in the super region.
-	for i, region := range n.n.Regions {
-		_, found := regionsInDatabase[catpb.RegionName(region)]
-		if !found {
-			return errors.Newf("region %s not part of database", region)
-		}
-
-		regionSet[catpb.RegionName(region)] = struct{}{}
-		regions[i] = catpb.RegionName(region)
-	}
-
-	if err := multiregion.CanSatisfySurvivalGoal(n.desc.RegionConfig.SurvivalGoal, len(n.n.Regions)); err != nil {
-		return errors.Wrapf(err, "super region %s only has %d regions", n.n.SuperRegionName, len(n.n.Regions))
-	}
-
-	sort.Slice(regions, func(i, j int) bool {
-		return regions[i] < regions[j]
-	})
-
-	// Ensure that the super region name is not already used and that
-	// the super regions don't overlap.
-	for _, superRegion := range typeDesc.RegionConfig.SuperRegions {
-		if superRegion.SuperRegionName == string(n.n.SuperRegionName) {
-			return errors.Newf("super region %s already exists", superRegion.SuperRegionName)
-		}
-
-		for _, region := range superRegion.Regions {
-			if _, found := regionSet[region]; found {
-				return errors.Newf("region %s is already defined in super region %s", region, superRegion.SuperRegionName)
-			}
-		}
-	}
-
-	addSuperRegion(typeDesc.RegionConfig, descpb.SuperRegion{
-		SuperRegionName: string(n.n.SuperRegionName),
-		Regions:         regions,
-	})
-
-	if err := params.p.writeTypeSchemaChange(params.ctx, typeDesc, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
-		return err
-	}
-
-	// Update all regional and regional by row tables.
-	if err := params.p.updateZoneConfigsForTables(
-		params.ctx,
-		n.desc,
-	); err != nil {
-		return err
-	}
-
-	return nil
+	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
 // addSuperRegion adds the super region in sorted order based on the
@@ -1491,16 +1427,9 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 		return err
 	}
 
-	found := false
-	for i, superRegion := range typeDesc.RegionConfig.SuperRegions {
-		if superRegion.SuperRegionName == string(n.n.SuperRegionName) {
-			typeDesc.RegionConfig.SuperRegions = append(typeDesc.RegionConfig.SuperRegions[:i], typeDesc.RegionConfig.SuperRegions[i+1:]...)
-			found = true
-			break
-		}
-	}
+	dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
 
-	if !found {
+	if !dropped {
 		return errors.Newf("super region %s not found", n.n.SuperRegionName)
 	}
 
@@ -1517,6 +1446,20 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 	}
 
 	return nil
+}
+
+func removeSuperRegion(
+	r *descpb.TypeDescriptor_RegionConfig, superRegionName tree.Name,
+) (dropped bool) {
+	for i, superRegion := range r.SuperRegions {
+		if superRegion.SuperRegionName == string(superRegionName) {
+			r.SuperRegions = append(r.SuperRegions[:i], r.SuperRegions[i+1:]...)
+			dropped = true
+			break
+		}
+	}
+
+	return dropped
 }
 
 func (n *alterDatabaseDropSuperRegion) Next(runParams) (bool, error) { return false, nil }
@@ -1550,4 +1493,149 @@ func (p *planner) getSuperRegionsForDatabase(
 	}
 
 	return typeDesc.RegionConfig.SuperRegions, nil
+}
+
+type alterDatabaseAlterSuperRegion struct {
+	n    *tree.AlterDatabaseAlterSuperRegion
+	desc *dbdesc.Mutable
+}
+
+func (n *alterDatabaseAlterSuperRegion) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseAlterSuperRegion) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseAlterSuperRegion) Close(context.Context)        {}
+
+func (p *planner) AlterDatabaseAlterSuperRegion(
+	ctx context.Context, n *tree.AlterDatabaseAlterSuperRegion,
+) (planNode, error) {
+	if err := p.isSuperRegionEnabled(); err != nil {
+		return nil, err
+	}
+
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	return &alterDatabaseAlterSuperRegion{n: n, desc: dbDesc}, nil
+}
+
+func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
+	// If the database is not a multi-region database, a super region cannot
+	// be added.
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidName,
+				"database must be multi-region to support super regions",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.DatabaseName.String(),
+		)
+	}
+
+	typeID, err := n.desc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+	if err != nil {
+		return err
+	}
+
+	// Remove the old super region.
+	dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
+	if !dropped {
+		return errors.WithHint(pgerror.Newf(pgcode.UndefinedObject,
+			"super region %q of database %q does not exist", n.n.SuperRegionName, n.n.DatabaseName),
+			"super region must be added before it can be altered")
+	}
+
+	// Validate that adding the super region with the new regions is valid.
+	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
+
+}
+
+func (p *planner) addSuperRegion(
+	ctx context.Context,
+	desc *dbdesc.Mutable,
+	typeDesc *typedesc.Mutable,
+	regionList []tree.Name,
+	superRegionName tree.Name,
+	op string,
+) error {
+
+	regionNames, err := typeDesc.RegionNames()
+	if err != nil {
+		return err
+	}
+
+	regionsInDatabase := make(map[catpb.RegionName]struct{})
+	for _, regionName := range regionNames {
+		regionsInDatabase[regionName] = struct{}{}
+	}
+
+	regionSet := make(map[catpb.RegionName]struct{})
+	regions := make([]catpb.RegionName, len(regionList))
+
+	// Check that the region is part of the database.
+	// And create a slice of the regions in the super region.
+	for i, region := range regionList {
+		_, found := regionsInDatabase[catpb.RegionName(region)]
+		if !found {
+			return errors.Newf("region %s not part of database", region)
+		}
+
+		regionSet[catpb.RegionName(region)] = struct{}{}
+		regions[i] = catpb.RegionName(region)
+	}
+
+	if err := multiregion.CanSatisfySurvivalGoal(desc.RegionConfig.SurvivalGoal, len(regionList)); err != nil {
+		return errors.Wrapf(err, "super region %s only has %d region(s)", superRegionName, len(regionList))
+	}
+
+	sort.Slice(regions, func(i, j int) bool {
+		return regions[i] < regions[j]
+	})
+
+	// Ensure that the super region name is not already used and that
+	// the super regions don't overlap.
+	for _, superRegion := range typeDesc.RegionConfig.SuperRegions {
+		if superRegion.SuperRegionName == string(superRegionName) {
+			return errors.Newf("super region %s already exists", superRegion.SuperRegionName)
+		}
+
+		for _, region := range superRegion.Regions {
+			if _, found := regionSet[region]; found {
+				return errors.Newf("region %s is already part of super region %s", region, superRegion.SuperRegionName)
+			}
+		}
+	}
+
+	addSuperRegion(typeDesc.RegionConfig, descpb.SuperRegion{
+		SuperRegionName: string(superRegionName),
+		Regions:         regions,
+	})
+
+	if err := p.writeTypeSchemaChange(ctx, typeDesc, op); err != nil {
+		return err
+	}
+
+	// Update all regional and regional by row tables.
+	return p.updateZoneConfigsForTables(
+		ctx,
+		desc,
+	)
 }

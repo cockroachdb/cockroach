@@ -988,6 +988,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <tree.Statement> alter_database_placement_stmt
 %type <tree.Statement> alter_database_set_stmt
 %type <tree.Statement> alter_database_add_super_region
+%type <tree.Statement> alter_database_alter_super_region
 %type <tree.Statement> alter_database_drop_super_region
 
 // ALTER INDEX
@@ -1772,6 +1773,7 @@ alter_database_stmt:
 | alter_database_placement_stmt
 | alter_database_set_stmt
 | alter_database_add_super_region
+| alter_database_alter_super_region
 | alter_database_drop_super_region
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
@@ -1884,6 +1886,15 @@ alter_database_drop_super_region:
     }
   }
 
+alter_database_alter_super_region:
+  ALTER DATABASE database_name ALTER SUPER REGION name VALUES name_list
+  {
+    $$.val = &tree.AlterDatabaseAlterSuperRegion{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+      Regions: $9.nameList(),
+    }
+  }
 
 // %Help: ALTER RANGE - change the parameters of a range
 // %Category: DDL
