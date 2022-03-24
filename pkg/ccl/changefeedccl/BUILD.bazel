@@ -86,7 +86,6 @@ go_library(
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
-        "//pkg/util/errorutil",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
