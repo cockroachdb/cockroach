@@ -25,7 +25,6 @@ go_library(
     srcs = [
         "directory_cache.go",
         "entry.go",
-        "pod.go",
     ],
     embed = [":tenant_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant",
@@ -34,7 +33,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/grpcutil",
         "//pkg/util/log",
-        "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -49,10 +47,9 @@ go_test(
     srcs = [
         "directory_cache_test.go",
         "main_test.go",
-        "pod_test.go",
     ],
-    embed = [":tenant"],
     deps = [
+        ":tenant",
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/kvccl/kvtenantccl",

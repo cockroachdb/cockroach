@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/idle"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
@@ -143,9 +144,11 @@ type proxyHandler struct {
 	// idleMonitor will detect idle connections to DRAINING pods.
 	idleMonitor *idle.Monitor
 
-	// directoryCache is optional and if set, will be used to resolve tenants
-	// to their IP addresses.
+	// directoryCache is used to resolve tenants to their IP addresses.
 	directoryCache tenant.DirectoryCache
+
+	// balancer is used to load balance incoming connections.
+	balancer *balancer.Balancer
 
 	// certManager keeps up to date the certificates used.
 	certManager *certmgr.CertManager
@@ -169,6 +172,7 @@ func newProxyHandler(
 		metrics:      proxyMetrics,
 		ProxyOptions: options,
 		certManager:  certmgr.NewCertManager(ctx),
+		balancer:     balancer.NewBalancer(),
 	}
 
 	err := handler.setupIncomingCert()
@@ -324,6 +328,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		ClusterName:    clusterName,
 		TenantID:       tenID,
 		DirectoryCache: handler.directoryCache,
+		Balancer:       handler.balancer,
 		StartupMsg:     backendStartupMsg,
 	}
 

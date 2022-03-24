@@ -27,19 +27,19 @@ import (
 //
 // See directoryCache for more information.
 type DirectoryCache interface {
-	// LookupTenantAddr returns an IP address of one of the given tenant's SQL
+	// LookupTenantPods returns an IP address of one of the given tenant's SQL
 	// processes based on the tenantID and clusterName fields. This should block
 	// until the process associated with the IP is ready.
 	//
 	// If no matching pods are found (e.g. cluster name mismatch, or tenant was
 	// deleted), this will return a GRPC NotFound error.
-	LookupTenantAddr(ctx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error)
+	LookupTenantPods(ctx context.Context, tenantID roachpb.TenantID, clusterName string) ([]*Pod, error)
 
 	// TryLookupTenantPods returns the IP addresses for all available SQL
 	// processes for the given tenant. It returns a GRPC NotFound error if the
 	// tenant does not exist.
 	//
-	// Unlike LookupTenantAddr which blocks until there is an associated
+	// Unlike LookupTenantPods which blocks until there is an associated
 	// process, TryLookupTenantPods will just return an empty set if no processes
 	// are available for the tenant.
 	TryLookupTenantPods(ctx context.Context, tenantID roachpb.TenantID) ([]*Pod, error)
@@ -154,28 +154,30 @@ func NewDirectoryCache(
 	return dir, nil
 }
 
-// LookupTenantAddr returns the IP address of one of the given tenant's SQL
-// processes. If the tenant was just created or is suspended, such that there
-// are no available processes, then LookupTenantAddr will trigger resumption of a
-// new instance and block until the process is ready. If there are multiple
-// processes for the tenant, then TryLookupTenantPods will choose one of them (note
-// that currently there is always at most one SQL process per tenant).
+// LookupTenantPods returns a list of SQL pods in the RUNNING state for the
+// given tenant. If the tenant was just created or is suspended, such that there
+// are no available processes, then LookupTenantPods will trigger resumption of a
+// new instance and block until the process is ready.
 //
 // If clusterName is non-empty, then a GRPC NotFound error is returned if no
-// pods match the cluster name. This can be used to ensure that the
-// incoming SQL connection "knows" some additional information about the tenant,
-// such as the name of the cluster, before being allowed to connect. Similarly,
-// if the tenant does not exist (e.g. because it was deleted), LookupTenantAddr
-// returns a GRPC NotFound error.
+// pods match the cluster name. This can be used to ensure that the incoming SQL
+// connection "knows" some additional information about the tenant, such as the
+// name of the cluster, before being allowed to connect. Similarly, if the
+// tenant does not exist (e.g. because it was deleted), LookupTenantPods returns
+// a GRPC NotFound error.
 //
-// LookupTenantAddr implements the DirectoryCache interface.
-func (d *directoryCache) LookupTenantAddr(
+// WARNING: Callers should never attempt to modify values returned by this
+// method, or else they may be a race. Other instances may be reading from the
+// same slice.
+//
+// LookupTenantPods implements the DirectoryCache interface.
+func (d *directoryCache) LookupTenantPods(
 	ctx context.Context, tenantID roachpb.TenantID, clusterName string,
-) (string, error) {
+) ([]*Pod, error) {
 	// Ensure that a directory entry has been created for this tenant.
 	entry, err := d.getEntry(ctx, tenantID, true /* allowCreate */)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Check if the cluster name matches. This can be skipped if clusterName
@@ -183,33 +185,37 @@ func (d *directoryCache) LookupTenantAddr(
 	if clusterName != "" && entry.ClusterName != "" && clusterName != entry.ClusterName {
 		// Return a GRPC NotFound error.
 		log.Errorf(ctx, "cluster name %s doesn't match expected %s", clusterName, entry.ClusterName)
-		return "", status.Errorf(codes.NotFound,
+		return nil, status.Errorf(codes.NotFound,
 			"cluster name %s doesn't match expected %s", clusterName, entry.ClusterName)
 	}
 
 	ctx, _ = d.stopper.WithCancelOnQuiesce(ctx)
-	pods := entry.GetPods()
-	if len(pods) == 0 {
-		// There are no known pod IP addresses, so fetch pod information
-		// from the directory server. Resume the tenant if it is suspended; that
+	tenantPods := entry.GetPods()
+	if len(tenantPods) == 0 {
+		// There are no known pod IP addresses, so fetch pod information from
+		// the directory server. Resume the tenant if it is suspended; that
 		// will always result in at least one pod IP address (or an error).
 		var err error
-		if pods, err = entry.EnsureTenantPod(ctx, d.client, d.options.deterministic); err != nil {
+		if tenantPods, err = entry.EnsureTenantPod(ctx, d.client, d.options.deterministic); err != nil {
 			if status.Code(err) == codes.NotFound {
 				d.deleteEntry(entry)
 			}
-			return "", err
+			return nil, err
 		}
 	}
-	return selectTenantPod(entry.randFloat32(), pods).Addr, nil
+	return tenantPods, nil
 }
 
-// TryLookupTenantPods returns the IP addresses for all available SQL processes for
-// the given tenant. It returns a GRPC NotFound error if the tenant does not
-// exist (e.g. it has not yet been created) or if it has not yet been fetched
-// into the directory's cache (TryLookupTenantPods will never attempt to fetch it).
-// If no processes are available for the tenant, TryLookupTenantPods will return the
-// empty set (unlike LookupTenantAddr).
+// TryLookupTenantPods returns a list of SQL pods in the RUNNING state for the
+// given tenant. It returns a GRPC NotFound error if the tenant does not exist
+// (e.g. it has not yet been created) or if it has not yet been fetched into the
+// directory's cache (TryLookupTenantPods will never attempt to fetch it). If no
+// processes are available for the tenant, TryLookupTenantPods will return the
+// empty set (unlike LookupTenantPod).
+//
+// WARNING: Callers should never attempt to modify values returned by this
+// method, or else they may be a race. Other instances may be reading from the
+// same slice.
 //
 // TryLookupTenantPods implements the DirectoryCache interface.
 func (d *directoryCache) TryLookupTenantPods(
@@ -226,25 +232,25 @@ func (d *directoryCache) TryLookupTenantPods(
 			codes.NotFound, "tenant %d not in directory cache", tenantID.ToUint64())
 	}
 
-	tenantPods := entry.GetPods()
-	pods := make([]*Pod, len(tenantPods))
-	for i, pod := range tenantPods {
-		// Make a copy of the tenant pod to avoid modifications by callers.
-		var retPod Pod
-		retPod = *pod
-		pods[i] = &retPod
-	}
-	return pods, nil
+	return entry.GetPods(), nil
 }
 
 // ReportFailure should be called when attempts to connect to a particular SQL
 // tenant pod have failed. Since this could be due to a failed process,
 // ReportFailure will attempt to refresh the cache with the latest information
 // about available tenant processes.
+//
 // TODO(andyk): In the future, the ip parameter will be used to mark a
 // particular pod as "unhealthy" so that it's less likely to be chosen.
 // However, today there can be at most one pod for a given tenant, so it
 // must always be chosen. Keep the parameter as a placeholder for the future.
+//
+// TODO(jaylim-crl): To implement the TODO above, one strawman idea is to add
+// a healthy/unhealthy field (or failureCount) to *tenant.Pod. ReportFailure
+// sets that field to unhealthy, and we'll have another ReportSuccess API that
+// will reset that field to healthy once we have sufficient connection counts.
+// When routing a connection to a SQL pod, the balancer could then use that
+// field when calculating likelihoods.
 //
 // ReportFailure implements the DirectoryCache interface.
 func (d *directoryCache) ReportFailure(
@@ -343,7 +349,7 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 	// helps us achieve this. Without the wait group, it will be possible to:
 	//
 	// 1. call watchPods
-	// 2. call LookupTenantAddr
+	// 2. call LookupTenantPods
 	// 3. wait forever to receive notification about the tenant that just started.
 	//
 	// The reason why the notification may not ever arrive is because the
@@ -405,7 +411,7 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 				select {
 				case d.options.podWatcher <- resp.Pod:
 				case <-ctx.Done():
-					break
+					return
 				}
 			}
 
