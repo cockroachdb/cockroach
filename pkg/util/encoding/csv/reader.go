@@ -129,8 +129,8 @@ type Reader struct {
 	// It is set to comma (',') by NewReader.
 	Comma rune
 
-	// Escape, if unset, is the character used to escape certain characters
-	// (e.g. `"` (Quote), `,`) and itself.
+	// Escape is the character used to escape certain characters (e.g. `"` (Quote),
+	// `,`) and itself. It is set to `"` by NewReader.
 	Escape rune
 
 	// Comment, if not 0, is the comment character. Lines beginning with the
