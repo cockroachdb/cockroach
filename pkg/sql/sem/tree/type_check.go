@@ -55,8 +55,10 @@ type SemaContext struct {
 	TableNameResolver QualifiedNameResolver
 
 	// IntervalStyleEnabled determines whether IntervalStyle is enabled.
+	// TODO(sql-exp): remove this field in 22.2, since it will always be true.
 	IntervalStyleEnabled bool
 	// DateStyleEnabled determines whether DateStyle is enabled.
+	// TODO(sql-exp): remove this field in 22.2, since it will always be true.
 	DateStyleEnabled bool
 
 	Properties SemaProperties
