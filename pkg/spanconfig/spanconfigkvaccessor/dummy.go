@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/errors"
 )
@@ -50,6 +51,14 @@ func (k dummyKVAccessor) UpdateSpanConfigRecords(
 	context.Context, []spanconfig.Target, []spanconfig.Record,
 ) error {
 	return k.error
+}
+
+// GetAllSystemSpanConfigsThatApply is part of the spanconfig.KVAccessor
+// interface.
+func (k dummyKVAccessor) GetAllSystemSpanConfigsThatApply(
+	context.Context, roachpb.TenantID,
+) ([]roachpb.SpanConfig, error) {
+	return nil, k.error
 }
 
 func (k dummyKVAccessor) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
