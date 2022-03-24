@@ -600,6 +600,13 @@ func (a internalClientAdapter) GetSpanConfigs(
 	return a.server.GetSpanConfigs(ctx, req)
 }
 
+// GetAllSystemSpanConfigsThatApply is part of the roachpb.InternalClient interface.
+func (a internalClientAdapter) GetAllSystemSpanConfigsThatApply(
+	ctx context.Context, req *roachpb.GetAllSystemSpanConfigsThatApplyRequest, _ ...grpc.CallOption,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
+	return a.server.GetAllSystemSpanConfigsThatApply(ctx, req)
+}
+
 // UpdateSpanConfigs is part of the roachpb.InternalClient interface.
 func (a internalClientAdapter) UpdateSpanConfigs(
 	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
