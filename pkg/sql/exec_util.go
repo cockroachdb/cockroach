@@ -850,6 +850,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaSQLTxnContended = metric.Metadata{
+		Name:        "sql.txn.contended.count",
+		Help:        "Number of SQL transactions experienced contention",
+		Measurement: "Contention",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaSelectStarted = metric.Metadata{
 		Name:        "sql.select.started.count",
 		Help:        "Number of SQL SELECT statements started",
