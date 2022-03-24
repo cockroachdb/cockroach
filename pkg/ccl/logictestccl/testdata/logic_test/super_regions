@@ -511,7 +511,7 @@ PARTITION "us-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-central-1" 
 
 # Test cases for survive region failure.
 
-statement error pq: super region r1 only has 2 regions: at least 3 regions are required for surviving a region failure
+statement error pq: super region r1 only has 2 region\(s\): at least 3 regions are required for surviving a region failure
 ALTER DATABASE mr3 SURVIVE REGION FAILURE;
 
 statement ok
