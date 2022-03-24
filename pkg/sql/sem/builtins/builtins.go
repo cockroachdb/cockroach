@@ -101,7 +101,8 @@ var (
 	errInvalidNull = pgerror.New(pgcode.InvalidParameterValue, "input cannot be NULL")
 	// SequenceNameArg represents the name of sequence (string) arguments in
 	// builtin functions.
-	SequenceNameArg = "sequence_name"
+	errInvalidOverloadForOverlaps = pgerror.New(pgcode.UndefinedFunction, "overlaps does not support the current overload")
+	SequenceNameArg               = "sequence_name"
 )
 
 const defaultFollowerReadDuration = -4800 * time.Millisecond
@@ -2818,6 +2819,18 @@ value if you rely on the HLC for accuracy.`,
 			Info:       "Returns the current system time on one of the cluster nodes as a string.",
 			Volatility: tree.VolatilityStable,
 		},
+	),
+
+	"overlaps": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryDateAndTime,
+			// If any argument is NULL, or is of type cast from NULL
+			// (e.g. NULL::DATE), returns null.
+			// This is different from postgres14's behavior for some overloads.
+			NullableArgs: false,
+		},
+
+		makeOverlapsOverloads()...,
 	),
 
 	"extract":   extractBuiltin,

@@ -1,0 +1,190 @@
+package builtins
+
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+)
+
+// overlapsOverloadVolatility is to define a certain overload for the overlaps
+// builtin, and also the function's volatility for this overload.
+type overlapsOverloadVolatility struct {
+	overload   []*types.T
+	volatility tree.Volatility
+}
+
+var (
+	validOverlapsOverloadVolatility = []overlapsOverloadVolatility{
+		{[]*types.T{types.Timestamp, types.Timestamp, types.Timestamp, types.Timestamp}, tree.VolatilityImmutable},
+		{[]*types.T{types.Timestamp, types.Interval, types.Timestamp, types.Interval}, tree.VolatilityImmutable},
+		{[]*types.T{types.TimeTZ, types.TimeTZ, types.TimeTZ, types.TimeTZ}, tree.VolatilityImmutable},
+		{[]*types.T{types.TimeTZ, types.Interval, types.TimeTZ, types.Interval}, tree.VolatilityImmutable},
+		{[]*types.T{types.Time, types.Time, types.Time, types.Time}, tree.VolatilityImmutable},
+		{[]*types.T{types.Time, types.Interval, types.Time, types.Interval}, tree.VolatilityImmutable},
+		{[]*types.T{types.TimestampTZ, types.TimestampTZ, types.TimestampTZ, types.TimestampTZ}, tree.VolatilityImmutable},
+		{[]*types.T{types.TimestampTZ, types.Interval, types.TimestampTZ, types.Interval}, tree.VolatilityStable},
+		{[]*types.T{types.Date, types.Date, types.Date, types.Date}, tree.VolatilityImmutable},
+		{[]*types.T{types.Date, types.Interval, types.Date, types.Interval}, tree.VolatilityImmutable},
+	}
+)
+
+// makeOverlapsOverloads returns a list of tree.Overload for the
+// overlaps builtin function.
+func makeOverlapsOverloads() []tree.Overload {
+	var res []tree.Overload
+	for _, in := range validOverlapsOverloadVolatility {
+		ovl := in.overload
+		s1, e1, s2, e2 := ovl[0], ovl[1], ovl[2], ovl[3]
+		res = append(res,
+			tree.Overload{
+				Types: tree.ArgTypes{
+					{"s1", s1},
+					{"e1", e1},
+					{"s1", s2},
+					{"e2", e2},
+				},
+				ReturnType: tree.FixedReturnType(types.Bool),
+				Fn:         overlapsBuiltinFunc,
+				Info:       "Returns if two time periods (defined by their endpoints) overlap.",
+				Volatility: in.volatility,
+			},
+		)
+	}
+	return res
+}
+
+// overlapsBuiltinFunc checks if two time periods overlaps, and returns possible
+// error.
+func overlapsBuiltinFunc(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	var err error
+	s1, e1, s2, e2 := args[0], args[1], args[2], args[3]
+	s1, e1, err = normalizeTimePeriodToEndpoints(ctx, s1, e1)
+	if err != nil {
+		return nil, err
+	}
+	s2, e2, err = normalizeTimePeriodToEndpoints(ctx, s2, e2)
+	if err != nil {
+		return nil, err
+	}
+	return EvalOverlaps(ctx, s1, e1, s2, e2)
+}
+
+// EvalOverlaps checks if two intervals overlap, return a bool
+// and a possible error. The passed `args` parameter consists of
+// [start/end_of_interval_1, end/start_of_interval_2, start/end_of_interval_2,
+// end/start_of_interval_2]. When a pair of values is provided, either the start
+// or the end can be written first; OVERLAPS automatically takes the earlier
+// value of the pair as the start.
+// Each interval is considered to represent the half-open
+// interval start <= time < end, unless start and end are equal in which case
+// it represents that single time instant.
+// `s` represents `interval start`, `e` represents `interval end`.
+// `1/2` represents interval 1/2.
+func EvalOverlaps(
+	ctx *tree.EvalContext, s1 tree.Datum, e1 tree.Datum, s2 tree.Datum, e2 tree.Datum,
+) (tree.Datum, error) {
+	compS1E1, err := s1.CompareError(ctx, e1)
+	if err != nil {
+		return nil, err
+	}
+	if compS1E1 > 0 {
+		s1, e1 = e1, s1
+	}
+
+	compS2E2, err := s2.CompareError(ctx, e2)
+	if err != nil {
+		return nil, err
+	}
+	if compS2E2 > 0 {
+		s2, e2 = e2, s2
+	}
+
+	compS1S2, err := s1.CompareError(ctx, s2)
+	if err != nil {
+		return nil, err
+	}
+	switch compS1S2 {
+
+	// Case s1 > s2.
+	case 1:
+		compS1E2, err := s1.CompareError(ctx, e2)
+		if err != nil {
+			return nil, err
+		}
+		if compS1E2 < 0 {
+			return tree.DBoolTrue, nil
+		}
+
+		// We had s1 <= e1 above, and we just found s1 >= e2, hence e1 >= e2.
+		return tree.DBoolFalse, nil
+
+	// Case s1 < s2.
+	case -1:
+		compS2E1, err := s2.CompareError(ctx, e1)
+		if err != nil {
+			return nil, err
+		}
+		if compS2E1 < 0 {
+			return tree.DBoolTrue, nil
+		}
+
+		// We had s2 <= e2 above, and we just found s2 >= e1, hence e2 >= e1.
+		return tree.DBoolFalse, nil
+
+	// Case s1 == s2.
+	default:
+		return tree.DBoolTrue, nil
+	}
+}
+
+// normalizeTimePeriodToEndpoints is to normalize a time period to a
+// representation of two endpoints.
+func normalizeTimePeriodToEndpoints(
+	ctx *tree.EvalContext, s tree.Datum, e tree.Datum,
+) (tree.Datum, tree.Datum, error) {
+	var err error
+	switch eType := e.(type) {
+	case *tree.DDate, *tree.DTimestamp, *tree.DTimestampTZ, *tree.DTime, *tree.DTimeTZ:
+	case *tree.DInterval:
+		// If the time period is represented as with a start time and an interval,
+		// add the interval's duration to the start time to get the end time.
+		var et tree.Datum
+
+		switch sType := s.(type) {
+		case *tree.DDate:
+			startTime, err := sType.ToTime()
+			if err != nil {
+				return nil, nil, err
+			}
+			et, err = tree.MakeDTimestamp(duration.Add(startTime, eType.Duration), time.Microsecond)
+			if err != nil {
+				return nil, nil, err
+			}
+		case *tree.DTimestamp:
+			et, err = tree.MakeDTimestamp(duration.Add(sType.Time, eType.Duration), time.Microsecond)
+			if err != nil {
+				return nil, nil, err
+			}
+		case *tree.DTimestampTZ:
+			endTime := duration.Add(sType.Time.In(ctx.GetLocation()), eType.Duration)
+			et, err = tree.MakeDTimestampTZ(endTime, time.Microsecond)
+			if err != nil {
+				return nil, nil, err
+			}
+		case *tree.DTime:
+			startTime := timeofday.TimeOfDay(*sType)
+			et = tree.MakeDTime(startTime.Add(eType.Duration))
+		case *tree.DTimeTZ:
+			et = tree.NewDTimeTZFromOffset(sType.Add(eType.Duration), sType.OffsetSecs)
+		}
+		return s, et, err
+	default:
+		// TODO(janexing): This case should never be hit, since the overload types
+		// has been checked.
+		return nil, nil, errInvalidOverloadForOverlaps
+	}
+	return s, e, nil
+}
