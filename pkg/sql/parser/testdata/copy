@@ -77,3 +77,11 @@ COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' -- n
 COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER (' ') destination = ('filename') -- fully parenthesized
 COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER '_' destination = '_' -- literals removed
 COPY _ (_, _, _) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' -- identifiers removed
+
+parse
+COPY t (a, b, c) FROM STDIN destination = 'filename' CSV DELIMITER ' ' ESCAPE 'x'
+----
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' ESCAPE 'x' -- normalized!
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER (' ') destination = ('filename') ESCAPE ('x') -- fully parenthesized
+COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER '_' destination = '_' ESCAPE '_' -- literals removed
+COPY _ (_, _, _) FROM STDIN WITH CSV DELIMITER ' ' destination = 'filename' ESCAPE 'x' -- identifiers removed
