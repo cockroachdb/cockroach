@@ -265,7 +265,7 @@ var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_
 //   which the monitor starts to log increases. Use 0 to always log
 //   or math.MaxInt64 to never log.
 func NewMonitor(
-	name string,
+	name redact.RedactableString,
 	res Resource,
 	curCount *metric.Gauge,
 	maxHist *metric.Histogram,
@@ -280,7 +280,7 @@ func NewMonitor(
 // NewMonitorWithLimit creates a new monitor with a limit local to this
 // monitor.
 func NewMonitorWithLimit(
-	name string,
+	name redact.RedactableString,
 	res Resource,
 	limit int64,
 	curCount *metric.Gauge,
@@ -296,7 +296,7 @@ func NewMonitorWithLimit(
 		limit = math.MaxInt64
 	}
 	m := &BytesMonitor{
-		name:                 redact.Sprint(name),
+		name:                 name,
 		resource:             res,
 		limit:                limit,
 		noteworthyUsageBytes: noteworthy,
@@ -318,7 +318,9 @@ func NewMonitorWithLimit(
 // Also note that because monitors pre-allocate resources from pool in chunks,
 // those chunks would be reported as used by pool while downstream monitors will
 // not.
-func NewMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) *BytesMonitor {
+func NewMonitorInheritWithLimit(
+	name redact.RedactableString, limit int64, m *BytesMonitor,
+) *BytesMonitor {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return NewMonitorWithLimit(
@@ -367,20 +369,19 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 // "detached" mode without a pool and without a maximum budget.
 func NewUnlimitedMonitor(
 	ctx context.Context,
-	name string,
+	name redact.RedactableString,
 	res Resource,
 	curCount *metric.Gauge,
 	maxHist *metric.Histogram,
 	noteworthy int64,
 	settings *cluster.Settings,
 ) *BytesMonitor {
-	safeName := redact.Sprint(name)
 	if log.V(2) {
-		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", safeName)
+		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", name)
 
 	}
 	m := &BytesMonitor{
-		name:                 safeName,
+		name:                 name,
 		resource:             res,
 		limit:                math.MaxInt64,
 		noteworthyUsageBytes: noteworthy,
