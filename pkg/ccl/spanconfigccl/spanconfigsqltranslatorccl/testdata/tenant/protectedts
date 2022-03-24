@@ -103,10 +103,10 @@ translate system-span-configurations
 ----
 {source=10,target=10}                      protection_policies=[{ts: 3}]
 
-# TODO(arul): Unskip this.
-# translate database=db
-# ----
-# /Tenant/10/Table/106{-/2}                  num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
-# /Tenant/10/Table/106/{2-3}                 ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
-# /Tenant/10/Table/10{6/3-7}                 num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
-# /Tenant/10/Table/10{7-8}                   num_replicas=7
+translate database=db
+----
+/Tenant/10/Table/106{-/2}                  num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
+/Tenant/10/Table/106/{2-3}                 ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
+/Tenant/10/Table/106/{3-4}                 ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
+/Tenant/10/Table/10{6/4-7}                 num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
+/Tenant/10/Table/10{7-8}                   num_replicas=7
