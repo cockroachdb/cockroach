@@ -1542,18 +1542,9 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	// This is only kept for backwards compatibility and no longer has any effect.
-	`enable_drop_enum_value`: {
-		Hidden:       true,
-		GetStringVal: makePostgresBoolGetStringValFn(`enable_drop_enum_value`),
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			_, err := paramparse.ParseBoolVar("enable_drop_enum_value", s)
-			return err
-		},
-		Get: func(evalCtx *extendedEvalContext) (string, error) {
-			return formatBoolAsPostgresSetting(true), nil
-		},
-		GlobalDefault: globalTrue,
-	},
+	`enable_drop_enum_value`: makeBackwardsCompatBoolVar(
+		"enable_drop_enum_value", true,
+	),
 
 	// CockroachDB extension.
 	`override_multi_region_zone_config`: {
@@ -1576,20 +1567,9 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	// This is only kept for backwards compatibility and no longer has any effect.
-	`experimental_enable_hash_sharded_indexes`: {
-		Hidden:       true,
-		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_hash_sharded_indexes`),
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			_, err := paramparse.ParseBoolVar("experimental_enable_hash_sharded_indexes", s)
-			return err
-		},
-		Get: func(evalCtx *extendedEvalContext) (string, error) {
-			return formatBoolAsPostgresSetting(true), nil
-		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(true)
-		},
-	},
+	`experimental_enable_hash_sharded_indexes`: makeBackwardsCompatBoolVar(
+		"experimental_enable_hash_sharded_indexes", true,
+	),
 
 	// CockroachDB extension.
 	`disallow_full_table_scans`: {
@@ -2179,6 +2159,24 @@ func makeCompatStringVar(varName, displayValue string, extraAllowed ...string) s
 			return err
 		},
 		GlobalDefault: func(sv *settings.Values) string { return displayValue },
+	}
+}
+
+func makeBackwardsCompatBoolVar(varName string, displayValue bool) sessionVar {
+	displayValStr := formatBoolAsPostgresSetting(displayValue)
+	return sessionVar{
+		Hidden:       true,
+		GetStringVal: makePostgresBoolGetStringValFn(varName),
+		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
+			p.BufferClientNotice(ctx, pgnotice.Newf("%s no longer has any effect", varName))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return displayValStr, nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return displayValStr
+		},
 	}
 }
 
