@@ -1156,13 +1156,13 @@ func NewStore(
 			cfg.StorePool,
 			cfg.RPCContext.RemoteClocks.Latency,
 			cfg.TestingKnobs.AllocatorKnobs,
+			s.metrics,
 		)
 	} else {
 		s.allocator = MakeAllocator(
 			cfg.StorePool, func(string) (time.Duration, bool) {
 				return 0, false
-			},
-			cfg.TestingKnobs.AllocatorKnobs,
+			}, cfg.TestingKnobs.AllocatorKnobs, s.metrics,
 		)
 	}
 	s.replRankings = newReplicaRankings()
