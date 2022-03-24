@@ -116,7 +116,7 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 		return roachpb.TenantID{}, errTLSInfoMissing
 	}
 
-	certUsers, err := security.GetCertificateUsers(&tlsInfo.State)
+	certUserScope, err := security.GetCertificateUserScope(&tlsInfo.State)
 	if err != nil {
 		return roachpb.TenantID{}, err
 	}
@@ -155,16 +155,35 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	//   gateway uses a connection dialed as the node user.
 	//
 	// In both cases, we must check that the client cert is either root
-	// or node.
+	// or node. We also need to check that the tenant scope for the cert
+	// is either the system tenant ID or matches the tenant ID of the server.
 
 	// TODO(benesch): the vast majority of RPCs should be limited to just
 	// NodeUser. This is not a security concern, as RootUser has access to
 	// read and write all data, merely good hygiene. For example, there is
 	// no reason to permit the root user to send raw Raft RPCs.
-	if !security.Contains(certUsers, security.NodeUser) &&
-		!security.Contains(certUsers, security.RootUser) {
-		return roachpb.TenantID{}, authErrorf("user %s is not allowed to perform this RPC", certUsers)
+	nodeUserScope, isNodeUser := certUserScope[security.NodeUser]
+	rootUserScope, isRootUser := certUserScope[security.RootUser]
+	if !isNodeUser && !isRootUser {
+		return roachpb.TenantID{}, authErrorf("user %s is not allowed to perform this RPC", clientCert.Subject.CommonName)
+	}
+	var userScope security.CertificateUserScope
+	if isNodeUser {
+		userScope = nodeUserScope
+	} else {
+		userScope = rootUserScope
+	}
+	_, isSystemTenant := userScope.TenantIDs[roachpb.SystemTenantID]
+	if isSystemTenant {
+		// Certificate scope includes system tenant, allow operation to proceed.
+		return roachpb.TenantID{}, nil
+	}
+	_, authorizedForCurrentTenant := userScope.TenantIDs[a.tenant.tenantID]
+	if authorizedForCurrentTenant {
+		// User to authorized to perform operations on current tenant, allow operation to proceed.
+		return roachpb.TenantID{}, nil
 	}
 
-	return roachpb.TenantID{}, nil
+	// User is not authorized on this particular tenant, return auth error.
+	return roachpb.TenantID{}, authErrorf("user %s is not allowed to perform RPC on tenant %d", userScope.Username, a.tenant.tenantID)
 }
