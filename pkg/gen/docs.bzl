@@ -21,6 +21,7 @@ DOCS_SRCS = [
   "//docs/generated/sql/bnf:alter_column.bnf",
   "//docs/generated/sql/bnf:alter_database_add_region_stmt.bnf",
   "//docs/generated/sql/bnf:alter_database_add_super_region.bnf",
+  "//docs/generated/sql/bnf:alter_database_alter_super_region.bnf",
   "//docs/generated/sql/bnf:alter_database_drop_region.bnf",
   "//docs/generated/sql/bnf:alter_database_drop_super_region.bnf",
   "//docs/generated/sql/bnf:alter_database_owner.bnf",
