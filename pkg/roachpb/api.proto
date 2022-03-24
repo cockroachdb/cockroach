@@ -1762,6 +1762,11 @@ message AddSSTableRequest {
   // the usual write pipeline (on-disk raft log, WAL, etc).
   // TODO(dt): https://github.com/cockroachdb/cockroach/issues/34579#issuecomment-544627193
   bool ingest_as_writes = 5;
+
+  // ReturnFollowingLikelyNonEmptySpanStart controls whether the request should
+  // also find and return the key at which the span after the added file span 
+  // is likely non-empty. See AddSSTableResponse.FollowingLikelyNonEmptySpanStart.
+  bool return_following_likely_non_empty_span_start = 9;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
@@ -1781,6 +1786,14 @@ message AddSSTableResponse {
   // should split first. Such callers can use RangeSpan to see if the file they
   // would be sending would also add to this range.
   int64 available_bytes = 3;
+
+  // FollowingLikelyNonEmptySpanStart if requested contains a key that is likely
+  // to be the first key greater than the end of the added file at which there
+  // is existing data in the range. It is not guarenteed however that there is
+  // not data before that key, or that that key actually exists; it may be 
+  // picked using cheaper, inconsistentent reads so it should be used only for 
+  // estimations of how ingested data and spans may overlap.
+  bytes following_likely_non_empty_span_start = 4 [(gogoproto.casttype) = "Key"];
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no
