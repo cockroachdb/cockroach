@@ -2359,6 +2359,14 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Count",
 			},
+			{
+				Title: "Contended Transactions",
+				Metrics: []string{
+					"sql.txn.contended.count",
+					"sql.txn.contended.count.internal",
+				},
+				AxisLabel: "Contended Transactions",
+			},
 		},
 	},
 	{
