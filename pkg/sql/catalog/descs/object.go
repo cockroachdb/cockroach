@@ -13,6 +13,8 @@ package descs
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -61,8 +63,10 @@ func (tc *Collection) getObjectByName(
 			err = sqlerrors.NewUndefinedRelationError(&tn)
 		}
 	}()
+	const ignoreMissingPublicSchema = false
 	prefix, desc, err = tc.getObjectByNameIgnoringRequiredAndType(
 		ctx, txn, catalogName, schemaName, objectName, flags,
+		ignoreMissingPublicSchema,
 	)
 	if err != nil || desc == nil {
 		return prefix, nil, err
@@ -136,6 +140,7 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 	txn *kv.Txn,
 	catalogName, schemaName, objectName string,
 	flags tree.ObjectLookupFlags,
+	ignoreMissingPublicSchema bool,
 ) (prefix catalog.ResolvedObjectPrefix, _ catalog.Descriptor, err error) {
 
 	flags.Required = false
@@ -184,8 +189,9 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 
 	// Read the ID of the schema out of the database descriptor
 	// to avoid the need to go look up the schema.
-
-	sc, err := tc.getSchemaByName(ctx, txn, db, schemaName, parentFlags)
+	sc, err := tc.getSchemaByNameMaybeIgnoringMissingPublicSchema(
+		ctx, txn, db, schemaName, parentFlags, ignoreMissingPublicSchema,
+	)
 	if err != nil || sc == nil {
 		return prefix, nil, err
 	}
@@ -193,10 +199,31 @@ func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
 	prefix.Schema = sc
 	found, obj, err := tc.getByName(
 		ctx, txn, db, sc, objectName, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
+		false, // ignoreMissingPublicSchema
 	)
 	if !found || err != nil {
+		// We add a special case to deal with the public schema migration. During
+		// that migration, we create a real descriptor for the public schema and we
+		// re-parent the members of the descriptor-less public schema into this new
+		// schema. The hazard is that we have a lease on the database descriptor
+		// which does not know about the new public schema, but the table we're
+		// going to lease does. There are more targeted things which could be done,
+		// but this situation should be exceedingly rare. To detect it, we notice
+		// that we're currently in the migration in question and not past it, then
+		// we return a restart error which will lead to the current transaction
+		// being retried.
+		//
+		// TODO(ajwerner): Remove this for 22.2.
+		if !ignoreMissingPublicSchema && sc.GetID() == keys.PublicSchemaID &&
+			!tc.settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) &&
+			tc.settings.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors-1) {
+			const ignoreMissingPublicSchema = true
+			return tc.getObjectByNameIgnoringRequiredAndType(
+				ctx, txn, catalogName, schemaName, objectName, flags,
+				ignoreMissingPublicSchema,
+			)
+		}
 		return prefix, nil, err
 	}
-
 	return prefix, obj, nil
 }

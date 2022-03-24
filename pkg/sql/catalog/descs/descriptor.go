@@ -271,13 +271,17 @@ func (tc *Collection) getByName(
 	sc catalog.SchemaDescriptor,
 	name string,
 	avoidLeased, mutable, avoidSynthetic bool,
+	ignoreMissingPublicSchema bool, // passed through to getSchemaByName
 ) (found bool, desc catalog.Descriptor, err error) {
 	var parentID, parentSchemaID descpb.ID
 	if db != nil {
 		if sc == nil {
 			// Schema descriptors are handled in a special way, see getSchemaByName
 			// function declaration for details.
-			return getSchemaByName(ctx, tc, txn, db, name, avoidLeased, mutable, avoidSynthetic)
+			return getSchemaByName(
+				ctx, tc, txn, db, name, avoidLeased, mutable, avoidSynthetic,
+				ignoreMissingPublicSchema,
+			)
 		}
 		parentID, parentSchemaID = db.GetID(), sc.GetID()
 	}
@@ -338,7 +342,7 @@ func (tc *Collection) getByName(
 	if err != nil {
 		return false, nil, err
 	}
-	return true, descs[0], err
+	return descs[0] != nil, descs[0], err
 }
 
 // withReadFromStore updates the state of the Collection, especially its
@@ -385,6 +389,16 @@ func (tc *Collection) deadlineHolder(txn *kv.Txn) deadlineHolder {
 //
 // TODO(ajwerner): Understand and rationalize the namespace lookup given the
 // schema lookup by ID path only returns descriptors owned by this session.
+//
+// The ignoreMissingPublicSchema parameter indicates that a missing public
+// schema entry in the database descriptor should not be interpreted to
+// mean that the public schema is the synthetic public schema, and, instead
+// the public schema should be looked up via the lease manager by name.
+// This is a workaround activated during the public schema migration to
+// avoid a situation where the database does not know about the new public
+// schema but the table in the lease manager does.
+//
+// TODO(ajwerner): Remove ignoreMissingPublicSchema in 22.2.
 func getSchemaByName(
 	ctx context.Context,
 	tc *Collection,
@@ -392,8 +406,17 @@ func getSchemaByName(
 	db catalog.DatabaseDescriptor,
 	name string,
 	avoidLeased, mutable, avoidSynthetic bool,
+	ignoreMissingPublicSchema bool,
 ) (bool, catalog.Descriptor, error) {
 	if !db.HasPublicSchemaWithDescriptor() && name == tree.PublicSchema {
+		// TODO(ajwerner): Remove ignoreMissingPublicSchema in 22.2.
+		if ignoreMissingPublicSchema {
+			desc, _, err := tc.leased.getByName(ctx, txn, db.GetID(), 0, catconstants.PublicSchemaName)
+			if err != nil {
+				return false, desc, err
+			}
+			return true, desc, nil
+		}
 		return true, schemadesc.GetPublicSchema(), nil
 	}
 	if sc := tc.virtual.getSchemaByName(name); sc != nil {
