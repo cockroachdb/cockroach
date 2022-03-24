@@ -112,7 +112,7 @@ func changefeedPlanHook(
 		}
 	}
 
-	//TODO: We're passing around the full output of optsFn a lot, make it a type.
+	// TODO: We're passing around the full output of optsFn a lot, make it a type.
 	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
 	if err != nil {
 		return nil, nil, nil, false, err
@@ -164,6 +164,15 @@ func changefeedPlanHook(
 		}
 
 		if details.SinkURI == `` {
+			// If this is a sinkless changefeed, then we should not hold on to the
+			// descriptor leases accessed to plan the changefeed. If changes happen
+			// to descriptors, they will be addressed during the execution.
+			// Failing to release the leases would result in preventing any schema
+			// changes on the relevant descriptors (including, potentially,
+			// system.role_membership, if the privileges to access the table were
+			// granted via an inherited role).
+			p.ExtendedEvalContext().Descs.ReleaseAll(ctx)
+
 			telemetry.Count(`changefeed.create.core`)
 			err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
 			if err != nil {
@@ -1129,7 +1138,7 @@ func getChangefeedTargetName(
 // from the statement time name map in old protos
 // or the TargetSpecifications in new ones.
 func AllTargets(cd jobspb.ChangefeedDetails) (targets []jobspb.ChangefeedTargetSpecification) {
-	//TODO: Use a version gate for this once we have CDC version gates
+	// TODO: Use a version gate for this once we have CDC version gates
 	if len(cd.TargetSpecifications) > 0 {
 		for _, ts := range cd.TargetSpecifications {
 			if ts.TableID > 0 {
