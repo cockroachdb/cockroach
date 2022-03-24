@@ -72,28 +72,28 @@ func (node *ShowClusterSettingList) Format(ctx *FmtCtx) {
 	ctx.WriteString(" CLUSTER SETTINGS")
 }
 
-// BackupDetails represents the type of details to display for a SHOW BACKUP
+// ShowBackupDetails represents the type of details to display for a SHOW BACKUP
 // statement.
-type BackupDetails int
+type ShowBackupDetails int
 
 const (
 	// BackupDefaultDetails identifies a bare SHOW BACKUP statement.
-	BackupDefaultDetails BackupDetails = iota
+	BackupDefaultDetails ShowBackupDetails = iota
 	// BackupRangeDetails identifies a SHOW BACKUP RANGES statement.
 	BackupRangeDetails
 	// BackupFileDetails identifies a SHOW BACKUP FILES statement.
 	BackupFileDetails
-	// BackupManifestAsJSON displays full backup manifest as json
-	BackupManifestAsJSON
+	// BackupSchemaDetails identifies a SHOW BACKUP SCHEMAS statement.
+	BackupSchemaDetails
 )
 
 // ShowBackup represents a SHOW BACKUP statement.
 type ShowBackup struct {
-	Path                 Expr
-	InCollection         Expr
-	Details              BackupDetails
-	ShouldIncludeSchemas bool
-	Options              KVOptions
+	Path         Expr
+	InCollection Expr
+	From         bool
+	Details      ShowBackupDetails
+	Options      KVOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -104,14 +104,20 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		return
 	}
 	ctx.WriteString("SHOW BACKUP ")
-	if node.Details == BackupRangeDetails {
+
+	switch node.Details {
+	case BackupRangeDetails:
 		ctx.WriteString("RANGES ")
-	} else if node.Details == BackupFileDetails {
+	case BackupFileDetails:
 		ctx.WriteString("FILES ")
-	}
-	if node.ShouldIncludeSchemas {
+	case BackupSchemaDetails:
 		ctx.WriteString("SCHEMAS ")
 	}
+
+	if node.From {
+		ctx.WriteString("FROM ")
+	}
+
 	ctx.FormatNode(node.Path)
 	if node.InCollection != nil {
 		ctx.WriteString(" IN ")
