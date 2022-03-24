@@ -1447,6 +1447,7 @@ CREATE TABLE crdb_internal.table_indexes (
    is_unique BOOL NOT NULL,
    is_inverted BOOL NOT NULL,
    is_sharded BOOL NOT NULL,
+   shard_bucket_count INT8 NULL,
    created_at TIMESTAMP NULL
 )  CREATE TABLE crdb_internal.table_indexes (
    descriptor_id INT8 NULL,
@@ -1457,6 +1458,7 @@ CREATE TABLE crdb_internal.table_indexes (
    is_unique BOOL NOT NULL,
    is_inverted BOOL NOT NULL,
    is_sharded BOOL NOT NULL,
+   shard_bucket_count INT8 NULL,
    created_at TIMESTAMP NULL
 )  {}  {}
 CREATE TABLE crdb_internal.table_row_statistics (

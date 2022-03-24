@@ -41,29 +41,29 @@ descriptor_id  descriptor_name  column_id  column_name  column_type             
 115            test_uwi_child   1          a            family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        true      NULL            false
 115            test_uwi_child   2          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     unique_rowid()  true
 
-query ITITTBBB colnames
-  SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_unique, is_inverted, is_sharded
+query ITITTBBBI colnames
+  SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_unique, is_inverted, is_sharded, shard_bucket_count
     FROM crdb_internal.table_indexes
    WHERE descriptor_name LIKE 'test_%'
 ORDER BY descriptor_id, index_id
 ----
-descriptor_id  descriptor_name  index_id  index_name            index_type  is_unique  is_inverted  is_sharded
-106            test_kv          1         test_kv_pkey          primary     true       false        false
-106            test_kv          2         test_v_idx            secondary   true       false        false
-106            test_kv          4         test_v_idx2           secondary   false      false        false
-106            test_kv          6         test_v_idx3           secondary   false      false        false
-107            test_kvr1        1         test_kvr1_pkey        primary     true       false        false
-108            test_kvr2        1         test_kvr2_pkey        primary     true       false        false
-108            test_kvr2        2         test_kvr2_v_key       secondary   true       false        false
-109            test_kvr3        1         test_kvr3_pkey        primary     true       false        false
-109            test_kvr3        2         test_kvr3_v_key       secondary   true       false        false
-110            test_kvi1        1         test_kvi1_pkey        primary     true       false        false
-111            test_kvi2        1         test_kvi2_pkey        primary     true       false        false
-111            test_kvi2        2         test_kvi2_idx         secondary   true       false        false
-112            test_v1          0         ·                     primary     false      false        false
-113            test_v2          0         ·                     primary     false      false        false
-114            test_uwi_parent  1         test_uwi_parent_pkey  primary     true       false        false
-115            test_uwi_child   1         test_uwi_child_pkey   primary     true       false        false
+descriptor_id  descriptor_name  index_id  index_name            index_type  is_unique  is_inverted  is_sharded  shard_bucket_count
+106            test_kv          1         test_kv_pkey          primary     true       false        false       NULL
+106            test_kv          2         test_v_idx            secondary   true       false        false       NULL
+106            test_kv          4         test_v_idx2           secondary   false      false        false       NULL
+106            test_kv          6         test_v_idx3           secondary   false      false        false       NULL
+107            test_kvr1        1         test_kvr1_pkey        primary     true       false        false       NULL
+108            test_kvr2        1         test_kvr2_pkey        primary     true       false        false       NULL
+108            test_kvr2        2         test_kvr2_v_key       secondary   true       false        false       NULL
+109            test_kvr3        1         test_kvr3_pkey        primary     true       false        false       NULL
+109            test_kvr3        2         test_kvr3_v_key       secondary   true       false        false       NULL
+110            test_kvi1        1         test_kvi1_pkey        primary     true       false        false       NULL
+111            test_kvi2        1         test_kvi2_pkey        primary     true       false        false       NULL
+111            test_kvi2        2         test_kvi2_idx         secondary   true       false        false       NULL
+112            test_v1          0         ·                     primary     false      false        false       NULL
+113            test_v2          0         ·                     primary     false      false        false       NULL
+114            test_uwi_parent  1         test_uwi_parent_pkey  primary     true       false        false       NULL
+115            test_uwi_child   1         test_uwi_child_pkey   primary     true       false        false       NULL
 
 query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, column_type, column_id
