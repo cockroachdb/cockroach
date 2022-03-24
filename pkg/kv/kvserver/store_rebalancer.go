@@ -94,7 +94,7 @@ var qpsRebalanceThreshold = func() *settings.FloatSetting {
 		settings.SystemOnly,
 		"kv.allocator.qps_rebalance_threshold",
 		"minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull",
-		0.25,
+		0.10,
 		settings.NonNegativeFloat,
 	)
 	s.SetVisibility(settings.Public)
