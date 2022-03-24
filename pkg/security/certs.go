@@ -24,9 +24,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -398,8 +398,8 @@ func CreateClientPair(
 	}
 	if len(tenantScope) != 0 {
 		// Confirm tenantID is valid.
-		if _, err := strconv.ParseUint(tenantScope, 10, 64); err != nil {
-			return errors.Wrapf(err, "tenant scope %s is invalid uint64", tenantScope)
+		if _, err := roachpb.ParseTenantID(tenantScope); err != nil {
+			return errors.Wrapf(err, "tenant scope %s is invalid", tenantScope)
 		}
 	}
 

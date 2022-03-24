@@ -53,6 +53,7 @@ func TestCertNomenclature(t *testing.T) {
 		{"client.root.crt", "", security.ClientPem, "root"},
 		{"client.foo-bar.crt", "", security.ClientPem, "foo-bar"},
 		{"client....foo.bar.baz.how.many.dots.do.you.need...really....crt", "", security.ClientPem, "...foo.bar.baz.how.many.dots.do.you.need...really..."},
+		{"client.foo-bar@tenant-123.crt", "", security.TenantScopedClientPem, "foo-bar"},
 
 		// Bad names. This function is only called on filenames ending with '.crt'.
 		{"crt", "not enough parts found", 0, ""},
@@ -68,6 +69,7 @@ func TestCertNomenclature(t *testing.T) {
 		{"client2.crt", "unknown prefix \"client2\"", 0, ""},
 		{"client.crt", "client certificate filename should match client.<user>.crt", 0, ""},
 		{"root.crt", "unknown prefix \"root\"", 0, ""},
+		{"client.foo-bar@tenant-123@456.crt", "tenant scoped client certificate filename should match <user>@tenant-<tenant-id>", 0, ""},
 	}
 
 	for i, tc := range testCases {

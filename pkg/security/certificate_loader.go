@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -93,6 +94,9 @@ const (
 	UIPem
 	// ClientPem describes a client certificate.
 	ClientPem
+	// TenantScopedClientPem describes a tenant scoped client certificate.
+	// This certificate can only be used to authenticate a client for a specific tenant.
+	TenantScopedClientPem
 	// TenantPem describes a SQL tenant client certificate.
 	TenantPem
 	// TenantSigningPem describes a SQL tenant signing certificate.
@@ -226,15 +230,16 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 		fileUsage = ClientPem
 		// Strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
-		if strings.Contains(name, "@") {
-			// This is a tenant scoped client certificate, drop tenant ID from the name.
+		if strings.Contains(name, "@tenant") {
+			// This is a tenant scoped client certificate, drop tenant ID from the name and update file usage.
+			fileUsage = TenantScopedClientPem
 			nameParts := strings.Split(name, "@")
-			if len(nameParts) != 2 {
+			if len(nameParts) != 2 || len(nameParts[0]) == 0 {
 				return nil, errors.Errorf("tenant scoped client certificate filename should match <user>@tenant-<tenant-id>")
 			}
 			name = nameParts[0]
-		}
-		if len(name) == 0 {
+		} else if len(name) == 0 {
+			// This is not a tenant scoped client certificate, enforce that username is not empty.
 			return nil, errors.Errorf("client certificate filename should match client.<user>%s", certExtension)
 		}
 	case `client-tenant`:
@@ -513,4 +518,27 @@ func validateCockroachCertificate(ci *CertInfo, cert *x509.Certificate) error {
 		}
 	}
 	return nil
+}
+
+func extractTenantAndUserFromCertName(filename string) (SQLUsername, roachpb.TenantID, error) {
+	tenantScopeFilenameError := errors.Errorf("expected tenant scoped cert name format is client.<user>@tenant-<tenant-id>.crt")
+	// Expected certificate filename format to be client.<user>@tenant-<tenant_id>.crt
+	parts := strings.Split(filename, ".")
+	if len(parts) != 3 {
+		return SQLUsername{}, roachpb.TenantID{}, tenantScopeFilenameError
+	}
+	userTenantPair := strings.Split(parts[1], "@")
+	if len(userTenantPair) != 2 {
+		return SQLUsername{}, roachpb.TenantID{}, tenantScopeFilenameError
+	}
+	username := MakeSQLUsernameFromPreNormalizedString(userTenantPair[0])
+	tenantInfo := strings.Split(userTenantPair[1], "-")
+	if len(tenantInfo) != 2 {
+		return SQLUsername{}, roachpb.TenantID{}, tenantScopeFilenameError
+	}
+	tenantID, err := roachpb.ParseTenantID(tenantInfo[1])
+	if err != nil {
+		return SQLUsername{}, roachpb.TenantID{}, errors.Errorf("invalid tenant id %s", tenantInfo[1])
+	}
+	return username, tenantID, nil
 }

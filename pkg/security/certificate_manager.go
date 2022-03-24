@@ -117,13 +117,14 @@ type CertificateManager struct {
 	initialized bool
 
 	// Set of certs. These are swapped in during Load(), and never mutated afterwards.
-	caCert         *CertInfo // default CA certificate
-	clientCACert   *CertInfo // optional: certificate to verify client certificates
-	uiCACert       *CertInfo // optional: certificate to verify UI certificates
-	nodeCert       *CertInfo // certificate for nodes (always server cert, sometimes client cert)
-	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
-	uiCert         *CertInfo // optional: server certificate for the admin UI.
-	clientCerts    map[SQLUsername]*CertInfo
+	caCert                  *CertInfo // default CA certificate
+	clientCACert            *CertInfo // optional: certificate to verify client certificates
+	uiCACert                *CertInfo // optional: certificate to verify UI certificates
+	nodeCert                *CertInfo // certificate for nodes (always server cert, sometimes client cert)
+	nodeClientCert          *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
+	uiCert                  *CertInfo // optional: server certificate for the admin UI.
+	clientCerts             map[SQLUsername]*CertInfo
+	tenantScopedClientCerts map[SQLUsername]*CertInfo
 
 	// Certs only used with multi-tenancy.
 	tenantCACert, tenantCert, tenantSigningCert *CertInfo
@@ -609,6 +610,14 @@ func (cm *CertificateManager) ClientCerts() map[SQLUsername]*CertInfo {
 	return cm.clientCerts
 }
 
+// TenantScopedClientCerts returns the tenant scoped client certs.
+// Callers should check for internal Error fields.
+func (cm *CertificateManager) TenantScopedClientCerts() map[SQLUsername]*CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.tenantScopedClientCerts
+}
+
 // Error is the error type for this package.
 // TODO(knz): make this an error wrapper.
 type Error struct {
@@ -643,6 +652,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
 	var tenantCACert, tenantCert, tenantSigningCert *CertInfo
 	clientCerts := make(map[SQLUsername]*CertInfo)
+	tenantScopedClientCerts := make(map[SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
 		switch ci.FileUsage {
 		case CAPem:
@@ -684,6 +694,14 @@ func (cm *CertificateManager) LoadCertificates() error {
 			clientCerts[username] = ci
 			if username.IsNodeUser() {
 				nodeClientCert = ci
+			}
+		case TenantScopedClientPem:
+			username, tenantID, err := extractTenantAndUserFromCertName(ci.Filename)
+			if err != nil {
+				return err
+			}
+			if cm.tenantIdentifier == tenantID.ToUint64() {
+				tenantScopedClientCerts[username] = ci
 			}
 		default:
 			return errors.Errorf("unsupported certificate %v", ci.Filename)
@@ -742,6 +760,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.nodeClientCert = nodeClientCert
 	cm.uiCert = uiCert
 	cm.clientCerts = clientCerts
+	cm.tenantScopedClientCerts = tenantScopedClientCerts
 
 	cm.initialized = true
 
@@ -1002,6 +1021,14 @@ func (cm *CertificateManager) getClientCertLocked(user SQLUsername) (*CertInfo, 
 	return ci, nil
 }
 
+func (cm *CertificateManager) getTenantScopedClientCertLocked(user SQLUsername) (*CertInfo, error) {
+	ci := cm.tenantScopedClientCerts[user]
+	if err := checkCertIsValid(ci); err != nil {
+		return nil, makeErrorf(err, "problem with client cert for user %s", user)
+	}
+	return ci, nil
+}
+
 // getNodeClientCertLocked returns the client cert/key for the node user.
 // Use the client certificate for 'node' if it exists, otherwise use
 // the node certificate which should be a combined client/server certificate.
@@ -1106,6 +1133,7 @@ func (cm *CertificateManager) GetTenantSigningCert() (*CertInfo, error) {
 // GetClientTLSConfig returns the most up-to-date client tls.Config.
 // Returns the dual-purpose node certs if user == NodeUser and there is no
 // separate client cert for 'node'.
+// Returns the tenant-scoped client certificate if there is no separate client certificate.
 func (cm *CertificateManager) GetClientTLSConfig(user SQLUsername) (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -1132,7 +1160,6 @@ func (cm *CertificateManager) GetClientTLSConfig(user SQLUsername) (*tls.Config,
 		if err != nil {
 			return nil, err
 		}
-
 		cfg, err := newClientTLSConfig(
 			cm.tlsSettings,
 			clientCert.FileContents,

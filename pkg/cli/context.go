@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
@@ -200,6 +201,10 @@ type cliContext struct {
 
 	// For `cockroach version --build-tag`.
 	showVersionUsingOnlyBuildTag bool
+
+	// tenantID indicates the tenant to run the CLI utility against.
+	// Default value is the system tenant.
+	tenantID roachpb.TenantID
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
@@ -233,6 +238,7 @@ func setCliContextDefaults() {
 	// TODO(knz): Deprecated in v21.1. Remove this.
 	cliCtx.deprecatedLogOverrides.reset()
 	cliCtx.showVersionUsingOnlyBuildTag = false
+	cliCtx.tenantID = roachpb.SystemTenantID
 }
 
 // sqlConnContext captures the connection configuration for all SQL
