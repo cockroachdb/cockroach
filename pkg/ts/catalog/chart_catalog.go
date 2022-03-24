@@ -2363,6 +2363,14 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Count",
 			},
+			{
+				Title: "SQL Transaction Contention",
+				Metrics: []string{
+					"sql.txn.contended.count",
+					"sql.txn.contended.count.internal",
+				},
+				AxisLabel: "Transactions",
+			},
 		},
 	},
 	{

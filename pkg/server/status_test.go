@@ -3138,6 +3138,9 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	server1Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 	server2Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(1))
 
+	contentionCountBefore := testCluster.Server(1).SQLServer().(*sql.Server).
+		Metrics.EngineMetrics.SQLContendedTxns.Count()
+
 	sqlutils.CreateTable(
 		t,
 		testCluster.ServerConn(0),
@@ -3214,6 +3217,13 @@ SET TRACING=off;
     (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT > 0
     AND app_name = 'contentionTest'
 `, [][]string{{"1"}})
+
+	contentionCountNow := testCluster.Server(1).SQLServer().(*sql.Server).
+		Metrics.EngineMetrics.SQLContendedTxns.Count()
+
+	require.Greaterf(t, contentionCountNow, contentionCountBefore,
+		"expected txn contention count to be more than %d, but it is %d",
+		contentionCountBefore, contentionCountNow)
 }
 
 func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
