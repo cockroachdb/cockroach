@@ -174,6 +174,7 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	sj *jobs.ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
