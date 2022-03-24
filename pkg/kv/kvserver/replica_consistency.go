@@ -732,7 +732,7 @@ func (*Replica) sha512(
 	result.PersistedMS = rangeAppliedState.RangeStats.ToStats()
 
 	if statsOnly {
-		b, err := protoutil.Marshal(&rangeAppliedState)
+		b, err := protoutil.Marshal(rangeAppliedState)
 		if err != nil {
 			return nil, err
 		}
@@ -743,7 +743,7 @@ func (*Replica) sha512(
 			}
 			kv.Key = keys.RangeAppliedStateKey(desc.RangeID)
 			var v roachpb.Value
-			if err := v.SetProto(&rangeAppliedState); err != nil {
+			if err := v.SetProto(rangeAppliedState); err != nil {
 				return nil, err
 			}
 			kv.Value = v.RawBytes

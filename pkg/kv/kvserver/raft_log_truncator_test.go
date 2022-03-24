@@ -184,7 +184,7 @@ func (r *replicaTruncatorTest) writeRaftAppliedIndex(
 	t *testing.T, eng storage.Engine, raftAppliedIndex uint64, flush bool,
 ) {
 	require.NoError(t, r.stateLoader.SetRangeAppliedState(context.Background(), eng,
-		raftAppliedIndex, 0, 0, &enginepb.MVCCStats{}, nil))
+		raftAppliedIndex, 0, 0, &enginepb.MVCCStats{}, nil, nil))
 	// Flush to make it satisfy the contract of OnlyReadGuaranteedDurable in
 	// Pebble.
 	if flush {
