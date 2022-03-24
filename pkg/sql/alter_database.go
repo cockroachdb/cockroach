@@ -1080,7 +1080,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		}
 		for _, sr := range superRegions {
 			if err := multiregion.CanSatisfySurvivalGoal(descpb.SurvivalGoal_REGION_FAILURE, len(sr.Regions)); err != nil {
-				return errors.Wrapf(err, "super region %s only has %d regions", sr.SuperRegionName, len(sr.Regions))
+				return errors.Wrapf(err, "super region %s only has %d region(s)", sr.SuperRegionName, len(sr.Regions))
 			}
 		}
 	}
