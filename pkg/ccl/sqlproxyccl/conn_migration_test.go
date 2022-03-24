@@ -256,6 +256,7 @@ func TestTransferConnection(t *testing.T) {
 			func(
 				tCtx context.Context,
 				token string,
+				selectPodFns ...podSelectorFunc,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
 				require.Equal(t, "token", token)
@@ -310,6 +311,7 @@ func TestTransferConnection(t *testing.T) {
 			func(
 				tCtx context.Context,
 				token string,
+				selectPodFns ...podSelectorFunc,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
 				require.Equal(t, "token", token)
@@ -381,6 +383,7 @@ func TestTransferConnection(t *testing.T) {
 			func(
 				tCtx context.Context,
 				token string,
+				selectPodFns ...podSelectorFunc,
 			) (net.Conn, error) {
 				require.Equal(t, ctx, tCtx)
 				require.Equal(t, "token", token)

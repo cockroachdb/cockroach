@@ -645,18 +645,16 @@ func TestDirectoryConnect(t *testing.T) {
 	// New test directory server.
 	tds1, tdsAddr := newDirectoryServer(ctx, t, srv, &net.TCPAddr{})
 
-	// New proxy server using the directory. Define both the directory and the
-	// routing rule so that fallback to the routing rule can be tested.
+	// New proxy server using the directory.
 	const drainTimeout = 200 * time.Millisecond
 	opts := &ProxyOptions{
-		RoutingRule:   srv.ServingSQLAddr(),
 		DirectoryAddr: tdsAddr.String(),
 		Insecure:      true,
 		DrainTimeout:  drainTimeout,
 	}
 	proxy, addr := newProxyServer(ctx, t, srv.Stopper(), opts)
 
-	t.Run("fallback when tenant not found", func(t *testing.T) {
+	t.Run("tenant not found", func(t *testing.T) {
 		url := fmt.Sprintf(
 			"postgres://root:admin@%s/?sslmode=disable&options=--cluster=tenant-cluster-%d",
 			addr, notFoundTenantID)
@@ -872,9 +870,13 @@ func TestConnectionMigration(t *testing.T) {
 		}
 
 		// Set up forwarder hooks.
+		//
+		// TODO(jaylim-crl): Once we have a static version of test directory,
+		// we should remove the hooks below, and use the actual implementation,
+		// so the connector functions can be further covered end-to-end.
 		prevTenant1 := true
 		var lookupAddrDelayDuration time.Duration
-		f.connector.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+		f.connector.testingKnobs.lookupAddr = func(ctx context.Context, selectPodFns ...podSelectorFunc) (string, error) {
 			if lookupAddrDelayDuration != 0 {
 				select {
 				case <-ctx.Done():
@@ -1081,7 +1083,7 @@ func TestConnectionMigration(t *testing.T) {
 
 		// Set up forwarder hooks.
 		prevTenant1 := true
-		f.connector.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+		f.connector.testingKnobs.lookupAddr = func(ctx context.Context, selectPodFns ...podSelectorFunc) (string, error) {
 			if prevTenant1 {
 				prevTenant1 = false
 				return tenant2.SQLAddr(), nil

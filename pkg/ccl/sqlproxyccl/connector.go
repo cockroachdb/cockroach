@@ -34,6 +34,10 @@ const sessionRevivalTokenStartupParam = "crdb:session_revival_token_base64"
 // remoteAddrStartupParam contains the remote address of the original client.
 const remoteAddrStartupParam = "crdb:remote_addr"
 
+// podSelectorFunc corresponds to the function that is used to filter the list
+// of pods before passing the list to the balancer for selection.
+type podSelectorFunc func(*tenant.Pod) bool
+
 // connector is a per-session tenant-associated component that can be used to
 // obtain a connection to the tenant cluster. This will also handle the
 // authentication phase. All connections returned by the connector should
@@ -85,16 +89,26 @@ type connector struct {
 	// Testing knobs for internal connector calls. If specified, these will
 	// be called instead of the actual logic.
 	testingKnobs struct {
-		dialTenantCluster func(ctx context.Context) (net.Conn, error)
-		lookupAddr        func(ctx context.Context) (string, error)
+		// TODO(jaylim-crl): Consider removing these testing knobs and replacing
+		// the tests with actual implementations of tenants. Now that we have
+		// the TestSimpleDirectoryServer merged, doing this should be more
+		// feasible.
+		dialTenantCluster func(ctx context.Context, selectPodFns ...podSelectorFunc) (net.Conn, error)
+		lookupAddr        func(ctx context.Context, selectPodFns ...podSelectorFunc) (string, error)
 		dialSQLServer     func(serverAddr string) (net.Conn, error)
 	}
 }
 
 // OpenTenantConnWithToken opens a connection to the tenant cluster using the
 // token-based authentication during connection migration.
+//
+// selectPodFns, if specified, will be used to filter the list of pods before
+// invoking the balancer. That will allow us to choose which pods we want to, or
+// do not want to, open a connection with. If more than one callback functions
+// are provided, all of them must satisfy the given pod in order for the pod to
+// be filtered.
 func (c *connector) OpenTenantConnWithToken(
-	ctx context.Context, token string,
+	ctx context.Context, token string, selectPodFns ...podSelectorFunc,
 ) (retServerConn net.Conn, retErr error) {
 	c.StartupMsg.Parameters[sessionRevivalTokenStartupParam] = token
 	defer func() {
@@ -102,7 +116,7 @@ func (c *connector) OpenTenantConnWithToken(
 		delete(c.StartupMsg.Parameters, sessionRevivalTokenStartupParam)
 	}()
 
-	serverConn, err := c.dialTenantCluster(ctx)
+	serverConn, err := c.dialTenantCluster(ctx, selectPodFns...)
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +162,8 @@ func (c *connector) OpenTenantConnWithAuth(
 	// previously, but that wouldn't happen based on the current proxy logic.
 	delete(c.StartupMsg.Parameters, sessionRevivalTokenStartupParam)
 
+	// Since OpenTenantConnWithAuth will be used for initial connections, a
+	// podSelectorFunc is not necessary since we have no restrictions.
 	serverConn, err := c.dialTenantCluster(ctx)
 	if err != nil {
 		return nil, false, err
@@ -174,7 +190,13 @@ func (c *connector) OpenTenantConnWithAuth(
 // dialTenantCluster returns a connection to the tenant cluster associated
 // with the connector. Once a connection has been established, the pgwire
 // startup message will be relayed to the server.
-func (c *connector) dialTenantCluster(ctx context.Context) (net.Conn, error) {
+//
+// selectPodFns, if specified, will be used to filter the list of pods before
+// invoking the balancer. All functions must satisfy the given pod in order for
+// the pod to be chosen.
+func (c *connector) dialTenantCluster(
+	ctx context.Context, selectPodFns ...podSelectorFunc,
+) (net.Conn, error) {
 	if c.testingKnobs.dialTenantCluster != nil {
 		return c.testingKnobs.dialTenantCluster(ctx)
 	}
@@ -198,7 +220,7 @@ func (c *connector) dialTenantCluster(ctx context.Context) (net.Conn, error) {
 
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		// Retrieve a SQL pod address to connect to.
-		serverAddr, err = c.lookupAddr(ctx)
+		serverAddr, err = c.lookupAddr(ctx, selectPodFns...)
 		if err != nil {
 			if isRetriableConnectorError(err) {
 				lookupAddrErrs++
@@ -258,48 +280,76 @@ func (c *connector) dialTenantCluster(ctx context.Context) (net.Conn, error) {
 	return nil, errors.Mark(err, ctx.Err())
 }
 
-// lookupAddr returns an address (that must include both host and port)
-// pointing to one of the SQL pods for the tenant associated with this
-// connector.
+// lookupAddr returns an address (that must include both host and port) pointing
+// to one of the SQL pods for the tenant associated with this connector. This
+// will be called within an infinite backoff loop. If an error is transient,
+// this will return an error that has been marked with errRetryConnectorSentinel
+// (i.e. markAsRetriableConnectorError).
 //
-// This will be called within an infinite backoff loop. If an error is
-// transient, this will return an error that has been marked with
-// errRetryConnectorSentinel (i.e. markAsRetriableConnectorError).
-func (c *connector) lookupAddr(ctx context.Context) (string, error) {
+// selectPodFns, if specified, will be used to filter the list of pods before
+// invoking the balancer. All functions must satisfy the given pod in order for
+// the pod to be chosen.
+func (c *connector) lookupAddr(
+	ctx context.Context, selectPodFns ...podSelectorFunc,
+) (string, error) {
 	if c.testingKnobs.lookupAddr != nil {
 		return c.testingKnobs.lookupAddr(ctx)
 	}
 
-	// Lookup tenant in the directory cache. Once we have retrieve the list of
-	// pods, use the Balancer for load balancing.
+	// Lookup tenant in the directory cache.
 	pods, err := c.DirectoryCache.LookupTenantPods(ctx, c.TenantID, c.ClusterName)
-	switch {
-	case err == nil:
-		// Note that LookupTenantPods will always return RUNNING pods, so this
-		// is fine for now. If we start changing that to also return DRAINING
-		// pods, we'd have to filter accordingly.
-		pod, err := c.Balancer.SelectTenantPod(pods)
-		if err != nil {
-			// This should never happen because LookupTenantPods ensured that
-			// len(pods) should never be 0. Mark it as a retriable connection
-			// anyway.
+	if err != nil {
+		switch {
+		case status.Code(err) == codes.FailedPrecondition:
+			if st, ok := status.FromError(err); ok {
+				return "", newErrorf(codeUnavailable, "%v", st.Message())
+			}
+			return "", newErrorf(codeUnavailable, "unavailable")
+		case status.Code(err) == codes.NotFound:
+			return "", newErrorf(codeParamsRoutingFailed,
+				"cluster %s-%d not found", c.ClusterName, c.TenantID.ToUint64())
+		default:
 			return "", markAsRetriableConnectorError(err)
 		}
-		return pod.Addr, nil
-
-	case status.Code(err) == codes.FailedPrecondition:
-		if st, ok := status.FromError(err); ok {
-			return "", newErrorf(codeUnavailable, "%v", st.Message())
-		}
-		return "", newErrorf(codeUnavailable, "unavailable")
-
-	case status.Code(err) == codes.NotFound:
-		return "", newErrorf(codeParamsRoutingFailed,
-			"cluster %s-%d not found", c.ClusterName, c.TenantID.ToUint64())
-
-	default:
-		return "", markAsRetriableConnectorError(err)
 	}
+
+	// Apply pod selector filters, if they are provided.
+	if len(selectPodFns) != 0 {
+		// allSelectPodFn returns true if all of the entries in selectPodFns
+		// return true for the given pod, and false otherwise.
+		allSelectPodFn := func(pod *tenant.Pod) bool {
+			for _, fn := range selectPodFns {
+				if !fn(pod) {
+					return false
+				}
+			}
+			return true
+		}
+
+		// Note: We cannot modify pods directly because that slice is likely
+		// to be used by the connectors in other groutines.
+		filteredPods := make([]*tenant.Pod, 0, len(pods))
+		for _, pod := range pods {
+			if allSelectPodFn(pod) {
+				filteredPods = append(filteredPods, pod)
+			}
+		}
+		pods = filteredPods
+	}
+
+	// Get the balancer to pick a pod from the list.
+	//
+	// Note that LookupTenantPods will always return RUNNING pods. If we start
+	// changing that to also return DRAINING pods, we'd have to filter
+	// accordingly.
+	pod, err := c.Balancer.SelectTenantPod(pods)
+	if err != nil {
+		// This error is non-retriable. LookupTenantPods ensured that there
+		// is at least one available SQL pod. If we got here, it has to be
+		// the case where applying the filter functions resulted in no pods.
+		return "", err
+	}
+	return pod.Addr, nil
 }
 
 // dialSQLServer dials the given address for the SQL pod, and forwards the

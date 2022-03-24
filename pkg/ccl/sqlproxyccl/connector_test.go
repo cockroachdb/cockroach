@@ -42,7 +42,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 				Parameters: make(map[string]string),
 			},
 		}
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(ctx context.Context, selectPodFns ...podSelectorFunc) (net.Conn, error) {
 			return nil, errors.New("foo")
 		}
 
@@ -66,7 +66,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 		defer conn.Close()
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(ctx context.Context, selectPodFns ...podSelectorFunc) (net.Conn, error) {
 			openCalled = true
 
 			// Validate that token is set.
@@ -108,7 +108,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 		defer conn.Close()
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(ctx context.Context, selectPodFns ...podSelectorFunc) (net.Conn, error) {
 			openCalled = true
 
 			// Validate that token is set.
@@ -156,7 +156,7 @@ func TestConnector_OpenTenantConnWithToken(t *testing.T) {
 		defer conn.Close()
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(ctx context.Context, selectPodFns ...podSelectorFunc) (net.Conn, error) {
 			openCalled = true
 
 			// Validate that token is set.
@@ -204,7 +204,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 				Parameters: make(map[string]string),
 			},
 		}
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(ctx context.Context, selectPodFns ...podSelectorFunc) (net.Conn, error) {
 			return nil, errors.New("foo")
 		}
 
@@ -226,7 +226,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		}
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(ctx context.Context, selectPodFns ...podSelectorFunc) (net.Conn, error) {
 			openCalled = true
 			return conn, nil
 		}
@@ -271,7 +271,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		}
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(ctx context.Context, selectPodFns ...podSelectorFunc) (net.Conn, error) {
 			openCalled = true
 
 			// Validate that token is not set.
@@ -328,7 +328,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		}
 
 		var openCalled bool
-		c.testingKnobs.dialTenantCluster = func(ctx context.Context) (net.Conn, error) {
+		c.testingKnobs.dialTenantCluster = func(ctx context.Context, selectPodFns ...podSelectorFunc) (net.Conn, error) {
 			openCalled = true
 
 			// Validate that token is not set.
@@ -377,7 +377,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 
 		c := &connector{}
 		var lookupAddrCount int
-		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+		c.testingKnobs.lookupAddr = func(ctx context.Context, selectPodFns ...podSelectorFunc) (string, error) {
 			lookupAddrCount++
 			if lookupAddrCount >= 2 {
 				// Cancel context to trigger loop exit on next retry.
@@ -400,7 +400,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		defer cancel()
 
 		c := &connector{}
-		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+		c.testingKnobs.lookupAddr = func(ctx context.Context, selectPodFns ...podSelectorFunc) (string, error) {
 			return "", errors.Wrap(context.Canceled, "foobar")
 		}
 
@@ -416,7 +416,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		defer cancel()
 
 		c := &connector{}
-		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+		c.testingKnobs.lookupAddr = func(ctx context.Context, selectPodFns ...podSelectorFunc) (string, error) {
 			return "", errors.New("baz")
 		}
 
@@ -451,7 +451,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		// 1. retriable error on lookupAddr.
 		// 2. retriable error on dialSQLServer.
 		var addrLookupFnCount, dialSQLServerCount int
-		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+		c.testingKnobs.lookupAddr = func(ctx context.Context, selectPodFns ...podSelectorFunc) (string, error) {
 			addrLookupFnCount++
 			if addrLookupFnCount == 1 {
 				return "", markAsRetriableConnectorError(errors.New("foo"))
@@ -480,6 +480,153 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 func TestConnector_lookupAddr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+
+	t.Run("FailedPrecondition error", func(t *testing.T) {
+		var lookupTenantPodsFnCount int
+		c := &connector{
+			ClusterName: "my-foo",
+			TenantID:    roachpb.MakeTenantID(10),
+			Balancer:    balancer.NewBalancer(),
+		}
+		c.DirectoryCache = &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				lookupTenantPodsFnCount++
+				require.Equal(t, ctx, fnCtx)
+				require.Equal(t, c.TenantID, tenantID)
+				require.Equal(t, c.ClusterName, clusterName)
+				return nil, status.Errorf(codes.FailedPrecondition, "foo")
+			},
+		}
+
+		addr, err := c.lookupAddr(ctx)
+		require.EqualError(t, err, "codeUnavailable: foo")
+		require.Equal(t, "", addr)
+		require.Equal(t, 1, lookupTenantPodsFnCount)
+	})
+
+	t.Run("NotFound error", func(t *testing.T) {
+		var lookupTenantPodsFnCount int
+		c := &connector{
+			ClusterName: "my-foo",
+			TenantID:    roachpb.MakeTenantID(10),
+			Balancer:    balancer.NewBalancer(),
+		}
+		c.DirectoryCache = &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				lookupTenantPodsFnCount++
+				require.Equal(t, ctx, fnCtx)
+				require.Equal(t, c.TenantID, tenantID)
+				require.Equal(t, c.ClusterName, clusterName)
+				return nil, status.Errorf(codes.NotFound, "foo")
+			},
+		}
+
+		addr, err := c.lookupAddr(ctx)
+		require.EqualError(t, err, "codeParamsRoutingFailed: cluster my-foo-10 not found")
+		require.Equal(t, "", addr)
+		require.Equal(t, 1, lookupTenantPodsFnCount)
+	})
+
+	t.Run("retriable error", func(t *testing.T) {
+		var lookupTenantPodsFnCount int
+		c := &connector{
+			ClusterName: "my-foo",
+			TenantID:    roachpb.MakeTenantID(10),
+			Balancer:    balancer.NewBalancer(),
+		}
+		c.DirectoryCache = &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				lookupTenantPodsFnCount++
+				require.Equal(t, ctx, fnCtx)
+				require.Equal(t, c.TenantID, tenantID)
+				require.Equal(t, c.ClusterName, clusterName)
+				return nil, errors.New("foo")
+			},
+		}
+
+		addr, err := c.lookupAddr(ctx)
+		require.EqualError(t, err, "foo")
+		require.True(t, isRetriableConnectorError(err))
+		require.Equal(t, "", addr)
+		require.Equal(t, 1, lookupTenantPodsFnCount)
+	})
+
+	t.Run("pod_selectors", func(t *testing.T) {
+		c := &connector{
+			ClusterName: "my-foo",
+			TenantID:    roachpb.MakeTenantID(10),
+			Balancer:    balancer.NewBalancer(),
+		}
+		c.DirectoryCache = &testTenantDirectoryCache{
+			lookupTenantPodsFn: func(
+				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
+			) ([]*tenant.Pod, error) {
+				require.Equal(t, ctx, fnCtx)
+				require.Equal(t, c.TenantID, tenantID)
+				require.Equal(t, c.ClusterName, clusterName)
+				return []*tenant.Pod{
+					{Addr: "127.0.0.10:80"},
+					{Addr: "127.0.0.20:80"},
+					{Addr: "127.0.0.30:80"},
+				}, nil
+			},
+		}
+
+		t.Run("no_available_pods", func(t *testing.T) {
+			addr, err := c.lookupAddr(ctx, func(*tenant.Pod) bool {
+				return false
+			})
+			require.EqualError(t, err, balancer.ErrNoAvailablePods.Error())
+			require.False(t, isRetriableConnectorError(err))
+			require.Equal(t, "", addr)
+		})
+
+		t.Run("contradictory_filters", func(t *testing.T) {
+			addr, err := c.lookupAddr(
+				ctx,
+				func(pod *tenant.Pod) bool {
+					return pod.Addr == "127.0.0.30:80"
+				},
+				func(pod *tenant.Pod) bool {
+					return pod.Addr == "127.0.0.20:80"
+				},
+			)
+			require.EqualError(t, err, balancer.ErrNoAvailablePods.Error())
+			require.False(t, isRetriableConnectorError(err))
+			require.Equal(t, "", addr)
+		})
+
+		t.Run("single_filter", func(t *testing.T) {
+			addr, err := c.lookupAddr(
+				ctx,
+				func(pod *tenant.Pod) bool {
+					return pod.Addr != "127.0.0.10:80"
+				},
+			)
+			require.NoError(t, err)
+			require.Contains(t, []string{"127.0.0.20:80", "127.0.0.30:80"}, addr)
+		})
+
+		t.Run("multiple_filters", func(t *testing.T) {
+			addr, err := c.lookupAddr(
+				ctx,
+				func(pod *tenant.Pod) bool {
+					return pod.Addr != "127.0.0.30:80"
+				},
+				func(pod *tenant.Pod) bool {
+					return pod.Addr != "127.0.0.20:80"
+				},
+			)
+			require.NoError(t, err)
+			require.Equal(t, "127.0.0.10:80", addr)
+		})
+	})
 
 	t.Run("successful", func(t *testing.T) {
 		var lookupTenantPodsFnCount int
@@ -581,82 +728,6 @@ func TestConnector_lookupAddr(t *testing.T) {
 		addr, err := c.lookupAddr(ctx)
 		require.NoError(t, err)
 		require.Equal(t, addr2, addr)
-	})
-
-	t.Run("FailedPrecondition error", func(t *testing.T) {
-		var lookupTenantPodsFnCount int
-		c := &connector{
-			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
-		}
-		c.DirectoryCache = &testTenantDirectoryCache{
-			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
-			) ([]*tenant.Pod, error) {
-				lookupTenantPodsFnCount++
-				require.Equal(t, ctx, fnCtx)
-				require.Equal(t, c.TenantID, tenantID)
-				require.Equal(t, c.ClusterName, clusterName)
-				return nil, status.Errorf(codes.FailedPrecondition, "foo")
-			},
-		}
-
-		addr, err := c.lookupAddr(ctx)
-		require.EqualError(t, err, "codeUnavailable: foo")
-		require.Equal(t, "", addr)
-		require.Equal(t, 1, lookupTenantPodsFnCount)
-	})
-
-	t.Run("NotFound error", func(t *testing.T) {
-		var lookupTenantPodsFnCount int
-		c := &connector{
-			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
-		}
-		c.DirectoryCache = &testTenantDirectoryCache{
-			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
-			) ([]*tenant.Pod, error) {
-				lookupTenantPodsFnCount++
-				require.Equal(t, ctx, fnCtx)
-				require.Equal(t, c.TenantID, tenantID)
-				require.Equal(t, c.ClusterName, clusterName)
-				return nil, status.Errorf(codes.NotFound, "foo")
-			},
-		}
-
-		addr, err := c.lookupAddr(ctx)
-		require.EqualError(t, err, "codeParamsRoutingFailed: cluster my-foo-10 not found")
-		require.Equal(t, "", addr)
-		require.Equal(t, 1, lookupTenantPodsFnCount)
-	})
-
-	t.Run("retriable error", func(t *testing.T) {
-		var lookupTenantPodsFnCount int
-		c := &connector{
-			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
-		}
-		c.DirectoryCache = &testTenantDirectoryCache{
-			lookupTenantPodsFn: func(
-				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
-			) ([]*tenant.Pod, error) {
-				lookupTenantPodsFnCount++
-				require.Equal(t, ctx, fnCtx)
-				require.Equal(t, c.TenantID, tenantID)
-				require.Equal(t, c.ClusterName, clusterName)
-				return nil, errors.New("foo")
-			},
-		}
-
-		addr, err := c.lookupAddr(ctx)
-		require.EqualError(t, err, "foo")
-		require.True(t, isRetriableConnectorError(err))
-		require.Equal(t, "", addr)
-		require.Equal(t, 1, lookupTenantPodsFnCount)
 	})
 }
 

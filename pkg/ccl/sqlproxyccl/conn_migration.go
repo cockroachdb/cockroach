@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -35,7 +36,7 @@ import (
 var defaultTransferTimeout = 15 * time.Second
 
 // Used in testing.
-var transferConnectionConnectorTestHook func(context.Context, string) (net.Conn, error) = nil
+var transferConnectionConnectorTestHook func(context.Context, string, ...podSelectorFunc) (net.Conn, error) = nil
 
 type transferContext struct {
 	context.Context
@@ -262,17 +263,17 @@ func transferConnection(
 
 	// Connect to a new SQL pod.
 	//
-	// TODO(jaylim-crl): There is a possibility where the same pod will get
-	// selected. Some ideas to solve this: pass in the remote address of
-	// serverConn to avoid choosing that pod, or maybe a filter callback?
-	// We can also consider adding a target pod as an argument to
-	// TransferConnection. That way a central component gets to choose where the
-	// connections go.
+	// TODO(jaylim-crl): Add a target pod as an argument to TransferConnection.
+	// That will allow us to choose where connections go if needed.
 	connectFn := connector.OpenTenantConnWithToken
 	if transferConnectionConnectorTestHook != nil {
 		connectFn = transferConnectionConnectorTestHook
 	}
-	netConn, err := connectFn(ctx, revivalToken)
+	// Use a pod selector function to avoid transferring to the same SQL pod.
+	excludePodFn := func(pod *tenant.Pod) bool {
+		return pod.Addr != serverConn.RemoteAddr().String()
+	}
+	netConn, err := connectFn(ctx, revivalToken, excludePodFn)
 	if err != nil {
 		return nil, errors.Wrap(err, "opening connection")
 	}
