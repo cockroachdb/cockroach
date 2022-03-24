@@ -1213,8 +1213,9 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 		// Couldn't find a VOTER_INCOMING target. This should not happen since we only go into the
 		// JOINT config if the leaseholder is being removed, when there is a VOTER_INCOMING replica.
 		// Killing the leaseholder to force lease transfer.
-		log.Fatalf(ctx, "no VOTER_INCOMING to transfer lease to. "+
+		log.Warningf(ctx, "no VOTER_INCOMING to transfer lease to. "+
 			"Range descriptor: %v", desc)
+		return nil
 	}
 	log.VEventf(ctx, 5, "current leaseholder %v is being removed through an"+
 		" atomic replication change. Transferring lease to %v", r.String(), voterIncomingTarget)
