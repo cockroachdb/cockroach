@@ -19,6 +19,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/util/httputil",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],
