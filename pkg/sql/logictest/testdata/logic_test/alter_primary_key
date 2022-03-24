@@ -276,19 +276,15 @@ t  CREATE TABLE public.t (
 
 # Test that the indexes we expect got rewritten. All but i3 should have been rewritten,
 # so all but i3's indexID should be larger than 7.
-
-query IT
-SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+query I
+SELECT index_id FROM crdb_internal.table_indexes WHERE descriptor_name = 't' AND index_name = 'i3'
 ----
-4   i3
-9   t_pkey
-11  t_x_key
-13  i1
-15  i2
-17  i4
-19  i5
-21  i6
-23  i7
+4
+
+query I
+SELECT min(index_id) FROM crdb_internal.table_indexes WHERE descriptor_name = 't' AND index_name != 'i3'
+----
+9
 
 # Make sure that each index can index join against the new primary key;
 
@@ -439,12 +435,10 @@ SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
   size: 7 columns, 1 row
 
 # Ensure that all of the indexes have been rewritten.
-query IT
-SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+query I
+SELECT min(index_id) FROM crdb_internal.table_indexes WHERE descriptor_name = 't'
 ----
-3  t_pkey
-5  t_x_key
-7  i1
+3
 
 query III
 SELECT * FROM t@t_pkey
@@ -948,11 +942,10 @@ t  CREATE TABLE public.t (
 
 # Ensure that index y got rewritten. If it was not rewritten,
 # it would have an id less than 3.
-query IT
-SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+query I
+SELECT min(index_id) FROM crdb_internal.table_indexes WHERE descriptor_name = 't'
 ----
-3  t_pkey
-5  t_y_idx
+3
 
 # Repeat the above test using ALTER PRIMARY KEY.
 
@@ -985,11 +978,10 @@ t  CREATE TABLE public.t (
 
 # Ensure that index y got rewritten. If it was not rewritten,
 # it would have an id less than 3.
-query IT
-SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+query I
+SELECT min(index_id) FROM crdb_internal.table_indexes WHERE descriptor_name = 't'
 ----
-3  t_pkey
-5  t_y_idx
+3
 
 # Test when multiple indexes get created and destroyed.
 statement ok
@@ -1029,13 +1021,10 @@ t  CREATE TABLE public.t (
 )
 
 # All index id's should be larger than 4.
-query IT
-SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
+query I
+SELECT min(index_id) FROM crdb_internal.table_indexes WHERE descriptor_name = 't'
 ----
-5  t_pkey
-7  i1
-9  i2
-11 i3
+5
 
 # Regression for #45889.
 # Primary key changes on a hash sharded index that just change the bucket

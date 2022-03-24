@@ -1109,104 +1109,140 @@ func TestTableMutationQueue(t *testing.T) {
 			},
 		},
 	}
-	server, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer server.Stopper().Stop(context.Background())
 
-	// Create a table with column i and an index on v and i.
-	if _, err := sqlDB.Exec(`
-SET use_declarative_schema_changer = 'off';
-CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Run some schema changes.
-
-	// This single command creates three columns and two indexes sharing the
-	// same mutation ID.
-	if _, err := sqlDB.Exec(
-		`ALTER TABLE t.test ADD d INT UNIQUE, ADD e INT UNIQUE, ADD f INT`,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// This command creates two mutations sharing the same mutation ID.
-	if _, err := sqlDB.Exec(
-		`ALTER TABLE t.test ADD g INT, ADD CONSTRAINT idx_f UNIQUE (f)`,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// This command creates a single mutation.
-	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_g ON t.test (g)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// This command created a drop mutation.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP v`); err != nil {
-		t.Fatal(err)
-	}
-
-	// read table descriptor
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-
-	expected := []struct {
+	type expectedMutation struct {
 		name  string
 		id    descpb.MutationID
 		state descpb.DescriptorMutation_State
-	}{
-		{"d", 1, descpb.DescriptorMutation_DELETE_ONLY},
-		{"test_d_key", 1, descpb.DescriptorMutation_BACKFILLING},
-		{"test_d_crdb_internal_dpe_key", 1, descpb.DescriptorMutation_DELETE_ONLY},
-		{"e", 1, descpb.DescriptorMutation_DELETE_ONLY},
-		{"test_e_key", 1, descpb.DescriptorMutation_BACKFILLING},
-		{"test_e_crdb_internal_dpe_key", 1, descpb.DescriptorMutation_DELETE_ONLY},
-		{"f", 1, descpb.DescriptorMutation_DELETE_ONLY},
-		// Second schema change.
-		{"g", 2, descpb.DescriptorMutation_DELETE_ONLY},
-		{"idx_f", 2, descpb.DescriptorMutation_BACKFILLING},
-		{"test_f_crdb_internal_dpe_key", 2, descpb.DescriptorMutation_DELETE_ONLY},
-		// Third.
-		{"idx_g", 3, descpb.DescriptorMutation_BACKFILLING},
-		{"test_g_crdb_internal_dpe_key", 3, descpb.DescriptorMutation_DELETE_ONLY},
-		// Drop mutations start off in the DELETE_AND_WRITE_ONLY state.
-		// UNIQUE column deletion gets split into two mutations with the same ID.
-		{"test_v_key", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},
-		{"v", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},
+	}
+	type testCase struct {
+		mvccIndexBackfiller bool
+		expectedMutations   []expectedMutation
 	}
 
-	if len(tableDesc.AllMutations()) != len(expected) {
-		t.Fatalf("%d mutations, instead of expected %d", len(tableDesc.AllMutations()), len(expected))
+	for _, tc := range []testCase{
+		{
+			mvccIndexBackfiller: true,
+			expectedMutations: []expectedMutation{
+				{"d", 1, descpb.DescriptorMutation_DELETE_ONLY},
+				{"test_d_key", 1, descpb.DescriptorMutation_BACKFILLING},
+				{"test_d_crdb_internal_dpe_key", 1, descpb.DescriptorMutation_DELETE_ONLY},
+				{"e", 1, descpb.DescriptorMutation_DELETE_ONLY},
+				{"test_e_key", 1, descpb.DescriptorMutation_BACKFILLING},
+				{"test_e_crdb_internal_dpe_key", 1, descpb.DescriptorMutation_DELETE_ONLY},
+				{"f", 1, descpb.DescriptorMutation_DELETE_ONLY},
+				// Second schema change.
+				{"g", 2, descpb.DescriptorMutation_DELETE_ONLY},
+				{"idx_f", 2, descpb.DescriptorMutation_BACKFILLING},
+				{"test_f_crdb_internal_dpe_key", 2, descpb.DescriptorMutation_DELETE_ONLY},
+				// Third.
+				{"idx_g", 3, descpb.DescriptorMutation_BACKFILLING},
+				{"test_g_crdb_internal_dpe_key", 3, descpb.DescriptorMutation_DELETE_ONLY},
+				// Drop mutations start off in the DELETE_AND_WRITE_ONLY state.
+				// UNIQUE column deletion gets split into two mutations with the same ID.
+				{"test_v_key", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},
+				{"v", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},
+			},
+		},
+		{
+			mvccIndexBackfiller: false,
+			expectedMutations: []expectedMutation{
+				{"d", 1, descpb.DescriptorMutation_DELETE_ONLY},
+				{"test_d_key", 1, descpb.DescriptorMutation_DELETE_ONLY},
+				{"e", 1, descpb.DescriptorMutation_DELETE_ONLY},
+				{"test_e_key", 1, descpb.DescriptorMutation_DELETE_ONLY},
+				{"f", 1, descpb.DescriptorMutation_DELETE_ONLY},
+				// Second schema change.
+				{"g", 2, descpb.DescriptorMutation_DELETE_ONLY},
+				{"idx_f", 2, descpb.DescriptorMutation_DELETE_ONLY},
+				// Third.
+				{"idx_g", 3, descpb.DescriptorMutation_DELETE_ONLY},
+				// Drop mutations start off in the DELETE_AND_WRITE_ONLY state.
+				// UNIQUE column deletion gets split into two mutations with the same ID.
+				{"test_v_key", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},
+				{"v", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},
+			},
+		},
+	} {
+		t.Run(fmt.Sprintf("mvcc-backfiller=%v", tc.mvccIndexBackfiller), func(t *testing.T) {
+			server, sqlDB, kvDB := serverutils.StartServer(t, params)
+			defer server.Stopper().Stop(context.Background())
+
+			// Create a table with column i and an index on v and i.
+			if _, err := sqlDB.Exec(fmt.Sprintf(`
+SET use_declarative_schema_changer = 'off';
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=%v;
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
+`, tc.mvccIndexBackfiller)); err != nil {
+				t.Fatal(err)
+			}
+
+			// Run some schema changes.
+
+			// This single command creates three columns and two indexes sharing the
+			// same mutation ID.
+			if _, err := sqlDB.Exec(
+				`ALTER TABLE t.test ADD d INT UNIQUE, ADD e INT UNIQUE, ADD f INT`,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			// This command creates two mutations sharing the same mutation ID.
+			if _, err := sqlDB.Exec(
+				`ALTER TABLE t.test ADD g INT, ADD CONSTRAINT idx_f UNIQUE (f)`,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			// This command creates a single mutation.
+			if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_g ON t.test (g)`); err != nil {
+				t.Fatal(err)
+			}
+
+			// This command created a drop mutation.
+			if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP v`); err != nil {
+				t.Fatal(err)
+			}
+
+			// read table descriptor
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+			expected := tc.expectedMutations
+
+			if len(tableDesc.AllMutations()) != len(expected) {
+				t.Fatalf("%d mutations, instead of expected %d", len(tableDesc.AllMutations()), len(expected))
+			}
+
+			for i, m := range tableDesc.AllMutations() {
+				name := expected[i].name
+				if col := m.AsColumn(); col != nil {
+					if col.GetName() != name {
+						t.Errorf("%d entry: name %s, expected %s", i, col.GetName(), name)
+					}
+				}
+				if idx := m.AsIndex(); idx != nil {
+					if idx.GetName() != name {
+						t.Errorf("%d entry: name %s, expected %s", i, idx.GetName(), name)
+					}
+				}
+				if id := expected[i].id; m.MutationID() != id {
+					t.Errorf("%d entry: id %d, expected %d", i, m.MutationID(), id)
+				}
+				actualState := descpb.DescriptorMutation_UNKNOWN
+				if m.WriteAndDeleteOnly() {
+					actualState = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+				} else if m.DeleteOnly() {
+					actualState = descpb.DescriptorMutation_DELETE_ONLY
+				} else if m.Backfilling() {
+					actualState = descpb.DescriptorMutation_BACKFILLING
+				}
+				if state := expected[i].state; actualState != state {
+					t.Errorf("%d entry: state %s, expected %s", i, actualState, state)
+				}
+			}
+		})
 	}
 
-	for i, m := range tableDesc.AllMutations() {
-		name := expected[i].name
-		if col := m.AsColumn(); col != nil {
-			if col.GetName() != name {
-				t.Errorf("%d entry: name %s, expected %s", i, col.GetName(), name)
-			}
-		}
-		if idx := m.AsIndex(); idx != nil {
-			if idx.GetName() != name {
-				t.Errorf("%d entry: name %s, expected %s", i, idx.GetName(), name)
-			}
-		}
-		if id := expected[i].id; m.MutationID() != id {
-			t.Errorf("%d entry: id %d, expected %d", i, m.MutationID(), id)
-		}
-		actualState := descpb.DescriptorMutation_UNKNOWN
-		if m.WriteAndDeleteOnly() {
-			actualState = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-		} else if m.DeleteOnly() {
-			actualState = descpb.DescriptorMutation_DELETE_ONLY
-		} else if m.Backfilling() {
-			actualState = descpb.DescriptorMutation_BACKFILLING
-		}
-		if state := expected[i].state; actualState != state {
-			t.Errorf("%d entry: state %s, expected %s", i, actualState, state)
-		}
-	}
 }
 
 // TestAddingFKs checks the behavior of a table in the non-public `ADD` state.

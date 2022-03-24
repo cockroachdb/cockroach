@@ -2,6 +2,11 @@
 
 # Verify pg_catalog database handles mutation statements correctly.
 
+# Some assertions depend on exact index IDs, so we need to specify
+# which index creation scheme we want.
+statement ok
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true
+
 query error database "pg_catalog" does not exist
 ALTER DATABASE pg_catalog RENAME TO not_pg_catalog
 

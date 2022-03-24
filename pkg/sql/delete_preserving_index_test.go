@@ -80,6 +80,7 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	_, err := sqlDB.Exec(`
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true;
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 SET use_declarative_schema_changer = 'off';
 `)

@@ -1,4 +1,7 @@
 statement ok
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true
+
+statement ok
 SET experimental_enable_unique_without_index_constraints = true
 
 statement ok

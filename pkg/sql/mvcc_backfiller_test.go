@@ -126,6 +126,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
@@ -244,7 +245,9 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	kvDB = tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 	sqlRunner = sqlutils.MakeSQLRunner(sqlDB)
-	sqlRunner.Exec(t, `CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v INT)`)
+	sqlRunner.Exec(t, `
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true;
+CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v INT)`)
 	sqlRunner.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = %d;`, chunkSize))
 	require.NoError(t, sqltestutils.BulkInsertIntoTable(sqlDB, rowCount))
 	sqlRunner.Exec(t, "CREATE INDEX new_idx ON t.test(v)")
@@ -372,6 +375,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 	}
 
 	if _, err := sqlDB.Exec(`
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4'));
 `); err != nil {
@@ -494,6 +498,7 @@ func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
 	}
 
 	if _, err := sqlDB.Exec(`
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v JSONB);
 `); err != nil {
@@ -562,29 +567,21 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 	}
 
 	s, sqlDB, kvDB = serverutils.StartServer(t, params)
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
 	var err error
 	scratch, err = s.ScratchRange()
 	require.NoError(t, err)
 
-	if _, err := sqlDB.Exec(`
+	sqlRunner.Exec(t, fmt.Sprintf(`
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true;
+SET CLUSTER SETTING bulkio.index_backfill.batch_size = %d;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = %d;`, maxValue/5)); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
-		t.Fatal(err)
-	}
+`, maxValue/5))
+	require.NoError(t, sqltestutils.BulkInsertIntoTable(sqlDB, maxValue))
 	addIndexSchemaChange(t, sqlDB, kvDB, maxValue+additionalRowsForMerge, 2, func() {
-		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])"); err != nil {
-			t.Fatal(err)
-		}
+		sqlRunner.Exec(t, "SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])")
 	})
 }
 

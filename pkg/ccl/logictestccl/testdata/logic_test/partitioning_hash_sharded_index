@@ -4,6 +4,9 @@ statement ok
 SET experimental_enable_implicit_column_partitioning = true;
 
 statement ok
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true
+
+statement ok
 CREATE TABLE t_hashed (
   a INT PRIMARY KEY,
   b STRING,

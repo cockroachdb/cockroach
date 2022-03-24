@@ -231,9 +231,14 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
-	// A long running schema change operation runs through
-	// a state machine that increments the version by 6.
-	expectedVersion := tableDesc.Version + 6
+	expectedVersion := tableDesc.Version
+	// A long running schema change operation runs through a state machine that
+	// increments the version multiple times.
+	if tabledesc.UseMVCCCompliantIndexCreation.Get(&s.ClusterSettings().SV) {
+		expectedVersion += 6
+	} else {
+		expectedVersion += 3
+	}
 
 	// Run some schema change
 	if _, err := sqlDB.Exec(`
@@ -495,7 +500,9 @@ func TestUniqueViolationsAreCaught(t *testing.T) {
 	server, sqlDB, _ := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
-	_, err := sqlDB.Exec(`CREATE DATABASE t;
+	_, err := sqlDB.Exec(`
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true;
+CREATE DATABASE t;
 CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
 INSERT INTO t.test VALUES (1,1), (2,2), (3,3)
 `)
@@ -2986,6 +2993,8 @@ func TestPrimaryKeyChangeKVOps(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	defer close(waitBeforeContinuing)
 
+	mvccComplianIndexCreation := tabledesc.UseMVCCCompliantIndexCreation.Get(&s.ClusterSettings().SV)
+
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (
@@ -3029,135 +3038,176 @@ CREATE TABLE t.test (
 		return found
 	}
 
-	// Test that we only insert the necessary k/v's.
-	rows, err := sqlDB.Query(fmt.Sprintf(`
+	traceQuery := func(query string) []string {
+		// Test that we only insert the necessary k/v's.
+		rows, err := sqlDB.Query(fmt.Sprintf(`
 	SET TRACING=on,kv,results;
-	INSERT INTO t.test VALUES (1, 2, 3, NULL, NULL, 6);
+  %s;
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE '%%Put /Table/%d%%' ORDER BY message;`, tableID))
-	if err != nil {
-		t.Fatal(err)
+		message LIKE '%%Put /Table/%[2]d%%' OR
+    message LIKE 'Put (delete) /Table/%[2]d%%' OR
+		message LIKE 'Del /Table/%[2]d%%'
+  ORDER BY message
+`, query, tableID))
+		require.NoError(t, err)
+		return scanToArray(rows)
 	}
 
-	expected := []string{
-		// The first CPut's are to the primary index.
-		fmt.Sprintf("CPut /Table/%d/1/1/0 -> /TUPLE/", tableID),
-		// TODO (rohany): this k/v is spurious and should be removed
-		//  when #45343 is fixed.
-		fmt.Sprintf("CPut /Table/%d/1/1/1/1 -> /INT/2", tableID),
-		fmt.Sprintf("CPut /Table/%d/1/1/2/1 -> /TUPLE/3:3:Int/3", tableID),
-		fmt.Sprintf("CPut /Table/%d/1/1/4/1 -> /INT/6", tableID),
-		// Temporary index that exists during the
-		// backfill. This should have the same number of Puts
-		// as there are CPuts above.
-		fmt.Sprintf("Put /Table/%d/3/2/0 -> /BYTES/0x0a030a1302", tableID),
-		// TODO (rohany): this k/v is spurious and should be removed
-		//  when #45343 is fixed.
-		fmt.Sprintf("Put /Table/%d/3/2/1/1 -> /BYTES/0x0a020104", tableID),
-		fmt.Sprintf("Put /Table/%d/3/2/2/1 -> /BYTES/0x0a030a3306", tableID),
-		fmt.Sprintf("Put /Table/%d/3/2/4/1 -> /BYTES/0x0a02010c", tableID),
-
-		// ALTER PRIMARY KEY makes an additional unique index
-		// based on the old primary key.
-		fmt.Sprintf("Put /Table/%d/5/1/0 -> /BYTES/0x0a02038a", tableID),
-
-		// Indexes 2 and 4 which are currently being added
-		// should have no writes because they are in the
-		// BACKFILLING state at this point.
+	insertTrace := traceQuery("INSERT INTO t.test VALUES (1, 2, 3, NULL, NULL, 6)")
+	var expected []string
+	if mvccComplianIndexCreation {
+		expected = []string{
+			// The first CPut's are to the primary index.
+			fmt.Sprintf("CPut /Table/%d/1/1/0 -> /TUPLE/", tableID),
+			// TODO (rohany): this k/v is spurious and should be removed
+			//  when #45343 is fixed.
+			fmt.Sprintf("CPut /Table/%d/1/1/1/1 -> /INT/2", tableID),
+			fmt.Sprintf("CPut /Table/%d/1/1/2/1 -> /TUPLE/3:3:Int/3", tableID),
+			fmt.Sprintf("CPut /Table/%d/1/1/4/1 -> /INT/6", tableID),
+			// Temporary index that exists during the backfill. This should have the
+			// same number of Puts as there are CPuts above.
+			fmt.Sprintf("Put /Table/%d/3/2/0 -> /BYTES/0x0a030a1302", tableID),
+			// TODO (rohany): this k/v is spurious and should be removed when #45343 is
+			// fixed.
+			fmt.Sprintf("Put /Table/%d/3/2/1/1 -> /BYTES/0x0a020104", tableID),
+			fmt.Sprintf("Put /Table/%d/3/2/2/1 -> /BYTES/0x0a030a3306", tableID),
+			fmt.Sprintf("Put /Table/%d/3/2/4/1 -> /BYTES/0x0a02010c", tableID),
+			// ALTER PRIMARY KEY makes an additional unique index based on the old
+			// primary key.
+			fmt.Sprintf("Put /Table/%d/5/1/0 -> /BYTES/0x0a02038a", tableID),
+			// Indexes 2 and 4 which are currently being added should have no writes
+			// because they are in the BACKFILLING state at this point.
+		}
+	} else {
+		expected = []string{
+			// The first CPut's are to the primary index.
+			fmt.Sprintf("CPut /Table/%d/1/1/0 -> /TUPLE/", tableID),
+			// TODO (rohany): this k/v is spurious and should be removed
+			//  when #45343 is fixed.
+			fmt.Sprintf("CPut /Table/%d/1/1/1/1 -> /INT/2", tableID),
+			fmt.Sprintf("CPut /Table/%d/1/1/2/1 -> /TUPLE/3:3:Int/3", tableID),
+			fmt.Sprintf("CPut /Table/%d/1/1/4/1 -> /INT/6", tableID),
+			// Backfilling index
+			fmt.Sprintf("InitPut /Table/%d/2/2/0 -> /TUPLE/1:1:Int/1", tableID),
+			// TODO (rohany): this k/v is spurious and should be removed when #45343 is
+			// fixed.
+			fmt.Sprintf("InitPut /Table/%d/2/2/1/1 -> /INT/2", tableID),
+			fmt.Sprintf("InitPut /Table/%d/2/2/2/1 -> /TUPLE/3:3:Int/3", tableID),
+			fmt.Sprintf("InitPut /Table/%d/2/2/4/1 -> /INT/6", tableID),
+			// ALTER PRIMARY KEY makes an additional unique index based on the old
+			// primary key.
+			fmt.Sprintf("InitPut /Table/%d/3/1/0 -> /BYTES/0x8a", tableID),
+		}
 	}
-	require.Equal(t, expected, scanToArray(rows))
+	require.Equal(t, expected, insertTrace)
 
 	// Test that we remove all families when deleting.
-	rows, err = sqlDB.Query(fmt.Sprintf(`
-	SET TRACING=on, kv, results;
-	DELETE FROM t.test WHERE y = 2;
-	SET TRACING=off;
-	SELECT message FROM [SHOW KV TRACE FOR SESSION]
-        WHERE
-		message LIKE 'Del /Table/%[1]d%%' OR
-                message LIKE 'Put (delete) /Table/%[1]d%%'
-        ORDER BY message;`, tableID))
-	if err != nil {
-		t.Fatal(err)
+	deleteTrace := traceQuery("DELETE FROM t.test WHERE y = 2")
+	if mvccComplianIndexCreation {
+		expected = []string{
+			// Primary index should see this delete.
+			fmt.Sprintf("Del /Table/%d/1/1/0", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/1/1", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/2/1", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/3/1", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/4/1", tableID),
+
+			// The temporary indexes are delete-preserving -- they
+			// should see the delete and issue Puts.
+			fmt.Sprintf("Put (delete) /Table/%d/3/2/0", tableID),
+			fmt.Sprintf("Put (delete) /Table/%d/3/2/1/1", tableID),
+			fmt.Sprintf("Put (delete) /Table/%d/3/2/2/1", tableID),
+			fmt.Sprintf("Put (delete) /Table/%d/3/2/3/1", tableID),
+			fmt.Sprintf("Put (delete) /Table/%d/3/2/4/1", tableID),
+			fmt.Sprintf("Put (delete) /Table/%d/5/1/0", tableID),
+		}
+	} else {
+		expected = []string{
+			// Primary index should see this delete.
+			fmt.Sprintf("Del /Table/%d/1/1/0", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/1/1", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/2/1", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/3/1", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/4/1", tableID),
+			// Secondary indexes also sees delete
+			fmt.Sprintf("Del /Table/%d/2/2/0", tableID),
+			fmt.Sprintf("Del /Table/%d/2/2/1/1", tableID),
+			fmt.Sprintf("Del /Table/%d/2/2/2/1", tableID),
+			fmt.Sprintf("Del /Table/%d/2/2/3/1", tableID),
+			fmt.Sprintf("Del /Table/%d/2/2/4/1", tableID),
+			fmt.Sprintf("Del /Table/%d/3/1/0", tableID),
+		}
 	}
+	require.Equal(t, expected, deleteTrace)
 
-	expected = []string{
-		// Primary index should see this delete.
-		fmt.Sprintf("Del /Table/%d/1/1/0", tableID),
-		fmt.Sprintf("Del /Table/%d/1/1/1/1", tableID),
-		fmt.Sprintf("Del /Table/%d/1/1/2/1", tableID),
-		fmt.Sprintf("Del /Table/%d/1/1/3/1", tableID),
-		fmt.Sprintf("Del /Table/%d/1/1/4/1", tableID),
-
-		// The temporary indexes are delete-preserving -- they
-		// should see the delete and issue Puts.
-		fmt.Sprintf("Put (delete) /Table/%d/3/2/0", tableID),
-		fmt.Sprintf("Put (delete) /Table/%d/3/2/1/1", tableID),
-		fmt.Sprintf("Put (delete) /Table/%d/3/2/2/1", tableID),
-		fmt.Sprintf("Put (delete) /Table/%d/3/2/3/1", tableID),
-		fmt.Sprintf("Put (delete) /Table/%d/3/2/4/1", tableID),
-		fmt.Sprintf("Put (delete) /Table/%d/5/1/0", tableID),
-	}
-	require.Equal(t, expected, scanToArray(rows))
-
+	_, err := sqlDB.Exec("INSERT INTO t.test VALUES (1, 2, 3, NULL, NULL, 6)")
+	require.NoError(t, err)
 	// Test that we update all families when the key changes.
-	rows, err = sqlDB.Query(fmt.Sprintf(`
-	INSERT INTO t.test VALUES (1, 2, 3, NULL, NULL, 6);
-	SET TRACING=on, kv, results;
-	UPDATE t.test SET y = 3 WHERE y = 2;
-	SET TRACING=off;
-	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Put /Table/%[1]d/%%' OR
-		message LIKE 'Del /Table/%[1]d/%%' OR
-		message LIKE 'CPut /Table/%[1]d/%%';`, tableID))
-	if err != nil {
-		t.Fatal(err)
-	}
+	updateTrace := traceQuery("UPDATE t.test SET y = 3 WHERE y = 2")
+	if mvccComplianIndexCreation {
+		expected = []string{
+			fmt.Sprintf("Put (delete) /Table/%d/3/2/0", tableID),
+			fmt.Sprintf("Put (delete) /Table/%d/3/2/1/1", tableID),
+			fmt.Sprintf("Put (delete) /Table/%d/3/2/2/1", tableID),
+			fmt.Sprintf("Put (delete) /Table/%d/3/2/4/1", tableID),
 
-	expected = []string{
-		// The primary index should see the update
-		fmt.Sprintf("Put /Table/%d/1/1/1/1 -> /INT/3", tableID),
-		// The temporary index for the newly added index sees
-		// a Put in all families.
-		fmt.Sprintf("Put /Table/%d/3/3/0 -> /BYTES/0x0a030a1302", tableID),
-		fmt.Sprintf("Put /Table/%d/3/3/1/1 -> /BYTES/0x0a020106", tableID),
-		fmt.Sprintf("Put /Table/%d/3/3/2/1 -> /BYTES/0x0a030a3306", tableID),
-		fmt.Sprintf("Put /Table/%d/3/3/4/1 -> /BYTES/0x0a02010c", tableID),
-		// TODO(ssd): double-check that this trace makes
-		// sense.
-		fmt.Sprintf("Put /Table/%d/5/1/0 -> /BYTES/0x0a02038b", tableID),
+			// The primary index should see the update
+			fmt.Sprintf("Put /Table/%d/1/1/1/1 -> /INT/3", tableID),
+			// The temporary index for the newly added index sees
+			// a Put in all families.
+			fmt.Sprintf("Put /Table/%d/3/3/0 -> /BYTES/0x0a030a1302", tableID),
+			fmt.Sprintf("Put /Table/%d/3/3/1/1 -> /BYTES/0x0a020106", tableID),
+			fmt.Sprintf("Put /Table/%d/3/3/2/1 -> /BYTES/0x0a030a3306", tableID),
+			fmt.Sprintf("Put /Table/%d/3/3/4/1 -> /BYTES/0x0a02010c", tableID),
+			// TODO(ssd): double-check that this trace makes
+			// sense.
+			fmt.Sprintf("Put /Table/%d/5/1/0 -> /BYTES/0x0a02038b", tableID),
+		}
+	} else {
+		expected = []string{
+			fmt.Sprintf("CPut /Table/%d/2/3/0 -> /TUPLE/1:1:Int/1 (expecting does not exist)", tableID),
+			fmt.Sprintf("CPut /Table/%d/2/3/1/1 -> /INT/3 (expecting does not exist)", tableID),
+			fmt.Sprintf("CPut /Table/%d/2/3/2/1 -> /TUPLE/3:3:Int/3 (expecting does not exist)", tableID),
+			fmt.Sprintf("CPut /Table/%d/2/3/4/1 -> /INT/6 (expecting does not exist)", tableID),
+			fmt.Sprintf("CPut /Table/%d/3/1/0 -> /BYTES/0x8b (replacing [3 138], if exists)", tableID),
+			fmt.Sprintf("Del /Table/%d/2/2/0", tableID),
+			fmt.Sprintf("Del /Table/%d/2/2/1/1", tableID),
+			fmt.Sprintf("Del /Table/%d/2/2/2/1", tableID),
+			fmt.Sprintf("Del /Table/%d/2/2/4/1", tableID),
+			fmt.Sprintf("Put /Table/%d/1/1/1/1 -> /INT/3", tableID),
+		}
 	}
-	require.Equal(t, expected, scanToArray(rows))
+	require.Equal(t, expected, updateTrace)
 
 	// Test that we only update necessary families when the key doesn't change.
-	rows, err = sqlDB.Query(fmt.Sprintf(`
-	SET TRACING=on, kv, results;
-	UPDATE t.test SET z = NULL, b = 5, c = NULL WHERE y = 3;
-	SET TRACING=off;
-	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Put /Table/%[1]d/%%' OR
-		message LIKE 'Del /Table/%[1]d/%%' OR
-		message LIKE 'CPut /Table/%[1]d/2%%';`, tableID))
-	if err != nil {
-		t.Fatal(err)
+	updateWithNoKeyChangeTrace := traceQuery("UPDATE t.test SET z = NULL, b = 5, c = NULL WHERE y = 3")
+	if mvccComplianIndexCreation {
+		expected = []string{
+			fmt.Sprintf("Del /Table/%d/1/1/2/1", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/4/1", tableID),
+			fmt.Sprintf("Put (delete) /Table/%d/3/3/2/1", tableID),
+			fmt.Sprintf("Put (delete) /Table/%d/3/3/4/1", tableID),
+			fmt.Sprintf("Put /Table/%d/1/1/3/1 -> /INT/5", tableID),
+			// The temporary index sees a Put in all families even though
+			// only some are changing. This is expected.
+			fmt.Sprintf("Put /Table/%d/3/3/0 -> /BYTES/0x0a030a1302", tableID),
+			fmt.Sprintf("Put /Table/%d/3/3/1/1 -> /BYTES/0x0a020106", tableID),
+			fmt.Sprintf("Put /Table/%d/3/3/3/1 -> /BYTES/0x0a02010a", tableID),
+		}
+	} else {
+		expected = []string{
+			fmt.Sprintf("CPut /Table/%d/2/3/3/1 -> /INT/5 (expecting does not exist)", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/2/1", tableID),
+			fmt.Sprintf("Del /Table/%d/1/1/4/1", tableID),
+			fmt.Sprintf("Del /Table/%d/2/3/2/1", tableID),
+			fmt.Sprintf("Del /Table/%d/2/3/4/1", tableID),
+			fmt.Sprintf("Put /Table/%d/1/1/3/1 -> /INT/5", tableID),
+		}
 	}
-
-	expected = []string{
-
-		fmt.Sprintf("Del /Table/%d/1/1/2/1", tableID),
-		fmt.Sprintf("Put /Table/%d/1/1/3/1 -> /INT/5", tableID),
-		fmt.Sprintf("Del /Table/%d/1/1/4/1", tableID),
-		// The temporary index sees a Put in all families even though
-		// only some are changing. This is expected.
-		fmt.Sprintf("Put /Table/%d/3/3/0 -> /BYTES/0x0a030a1302", tableID),
-		fmt.Sprintf("Put /Table/%d/3/3/1/1 -> /BYTES/0x0a020106", tableID),
-		fmt.Sprintf("Put /Table/%d/3/3/3/1 -> /BYTES/0x0a02010a", tableID),
-	}
-	require.Equal(t, expected, scanToArray(rows))
+	require.Equal(t, expected, updateWithNoKeyChangeTrace)
 
 	waitBeforeContinuing <- struct{}{}
-
 	wg.Wait()
 }
 
@@ -7491,10 +7541,14 @@ CREATE TABLE t.test_split(a INT PRIMARY KEY, b INT NOT NULL);
 `,
 	)
 
+	// 2 is the id for the new index
+	// 3 is the id for temp index for backfilling
+	indexIDs := []int{2}
+	if tabledesc.UseMVCCCompliantIndexCreation.Get(&s.ClusterSettings().SV) {
+		indexIDs = []int{2, 3}
+	}
 	runBeforePreSplitting = func(tableDesc *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error {
-		// 2 is the id for the new index
-		// 3 is the id for temp index for backfilling
-		for id := range []int{2, 3} {
+		for id := range indexIDs {
 			ranges, err := getShardedIndexRanges(tableDesc, kvDB, codec, descpb.IndexID(id))
 			if err != nil {
 				return err
@@ -7507,7 +7561,7 @@ CREATE TABLE t.test_split(a INT PRIMARY KEY, b INT NOT NULL);
 	}
 
 	runAfterPreSplitting = func(tableDesc *tabledesc.Mutable, kvDB *kv.DB, codec keys.SQLCodec) error {
-		for _, id := range []int{2, 3} {
+		for _, id := range indexIDs {
 			ranges, err := getShardedIndexRanges(tableDesc, kvDB, codec, descpb.IndexID(id))
 			if err != nil {
 				return err
@@ -7769,7 +7823,9 @@ func TestMixedAddIndexStyleFails(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	_, err := sqlDB.Exec("CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT)")
+	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT)")
 	require.NoError(t, err)
 
 	txn, err := sqlDB.Begin()
@@ -7812,6 +7868,8 @@ func TestAddIndexResumeAfterSettingFlippedFails(t *testing.T) {
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = true")
+	require.NoError(t, err)
 
 	errC := make(chan error)
 
@@ -7823,7 +7881,7 @@ func TestAddIndexResumeAfterSettingFlippedFails(t *testing.T) {
 	}()
 
 	<-changeSetting
-	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false")
+	_, err = sqlDB.Exec("SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false")
 	require.NoError(t, err)
 	close(wait)
 
@@ -7964,10 +8022,10 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 		setupSQL        string
 		schemaChangeSQL string
 		operation       func(sqlDB *gosql.DB, kvDB *kv.DB) error
-		verify          func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB)
+		verify          func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, mvccIndexBackfiller bool)
 	}
 
-	getTxnCount := func(t *testing.T, tc testCase) int {
+	getTxnCount := func(t *testing.T, tc testCase, mvccIndexBackfiller bool) int {
 		var (
 			count       int32 // accessed atomically
 			shouldCount int32 // accessed atomically
@@ -7985,16 +8043,16 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 			},
 		}
 		s, sqlDB, _ := serverutils.StartServer(t, params)
-		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 		defer s.Stopper().Stop(ctx)
-
+		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+		sqlRunner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=%v", mvccIndexBackfiller))
 		sqlRunner.Exec(t, tc.setupSQL)
 		atomic.StoreInt32(&shouldCount, 1)
 		sqlRunner.Exec(t, tc.schemaChangeSQL)
 		return int(atomic.LoadInt32(&count))
 	}
 
-	runOpAtTxn := func(t *testing.T, tc testCase, txnNum int) {
+	runOpAtTxn := func(t *testing.T, tc testCase, txnNum int, mvccIndexBackfiller bool) {
 		var (
 			count     int32 // accessed atomically
 			shouldRun int32 // accessed atomically
@@ -8023,12 +8081,12 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 		}
 		s, sqlDB, kvDB = serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
-		_, err := sqlDB.Exec(tc.setupSQL)
-		require.NoError(t, err)
+		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+		sqlRunner.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=%v", mvccIndexBackfiller))
+		sqlRunner.Exec(t, tc.setupSQL)
 		atomic.StoreInt32(&shouldRun, 1)
-		_, err = sqlDB.Exec(tc.schemaChangeSQL)
-		require.NoError(t, err)
-		tc.verify(t, sqlDB, kvDB)
+		sqlRunner.Exec(t, tc.schemaChangeSQL)
+		tc.verify(t, sqlDB, kvDB, mvccIndexBackfiller)
 	}
 
 	for _, tc := range []testCase{
@@ -8043,7 +8101,7 @@ INSERT INTO t.test (pk, a, b) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 				_, err := sqlDB.Exec("UPDATE t.test SET b = 22 WHERE pk = 1")
 				return err
 			},
-			verify: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB) {
+			verify: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, _ bool) {
 				row := sqlDB.QueryRow("SELECT * from t.test WHERE pk = 1")
 				var pk, a, b int
 				err := row.Scan(&pk, &a, &b)
@@ -8069,7 +8127,7 @@ INSERT INTO t.test (pk, a, b, c) VALUES (1, 1, 1, 1), (2, 2, 2, 2);
 				_, err := sqlDB.Exec("UPDATE t.test SET b = 42 WHERE pk = 1")
 				return err
 			},
-			verify: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB) {
+			verify: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, _ bool) {
 				row := sqlDB.QueryRow("SELECT c from t.test@tidx WHERE a = 1")
 				var c int
 				err := row.Scan(&c)
@@ -8104,7 +8162,7 @@ CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
 				// Write more rows so that there is something to truncate the next time.
 				return writeSomeRows()
 			},
-			verify: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB) {
+			verify: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, mvccIndexBackfiller bool) {
 				rowCount := 10
 				tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 				defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
@@ -8116,23 +8174,30 @@ CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
 				})
 				indexes := tableDesc.ActiveIndexes()
 				require.Equal(t, 2, len(indexes))
-				require.Equal(t, descpb.IndexID(4), indexes[0].GetID())
-				require.Equal(t, descpb.IndexID(5), indexes[1].GetID())
+				if mvccIndexBackfiller {
+					require.Equal(t, descpb.IndexID(4), indexes[0].GetID())
+					require.Equal(t, descpb.IndexID(5), indexes[1].GetID())
+				} else {
+					require.Equal(t, descpb.IndexID(3), indexes[0].GetID())
+					require.Equal(t, descpb.IndexID(4), indexes[1].GetID())
+				}
 			},
 		},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			const runAll = false
-			txnCount := getTxnCount(t, tc)
-			if runAll {
-				for i := 1; i <= txnCount; i++ {
-					t.Run(fmt.Sprintf("%d", i), func(t *testing.T) { runOpAtTxn(t, tc, i) })
+		for _, mvccBackfiller := range []bool{true, false} {
+			t.Run(fmt.Sprintf("mvcc-backfiller=%v/%s", mvccBackfiller, tc.name), func(t *testing.T) {
+				const runAll = false
+				txnCount := getTxnCount(t, tc, mvccBackfiller)
+				if runAll {
+					for i := 1; i <= txnCount; i++ {
+						t.Run(fmt.Sprintf("%d", i), func(t *testing.T) { runOpAtTxn(t, tc, i, mvccBackfiller) })
+					}
+				} else {
+					rng, _ := randutil.NewPseudoRand()
+					i := rng.Intn(txnCount) + 1
+					t.Run(fmt.Sprintf("%d", i), func(t *testing.T) { runOpAtTxn(t, tc, i, mvccBackfiller) })
 				}
-			} else {
-				rng, _ := randutil.NewPseudoRand()
-				i := rng.Intn(txnCount) + 1
-				t.Run(fmt.Sprintf("%d", i), func(t *testing.T) { runOpAtTxn(t, tc, i) })
-			}
-		})
+			})
+		}
 	}
 }

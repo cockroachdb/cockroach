@@ -9,6 +9,11 @@ CREATE TABLE t1 (
   UNIQUE INDEX uniqueidxstoring (y) STORING (z, a, b)
 )
 
+# The traces in this file depend on the index IDs, which change
+# depending on which index creation strategy is used.
+statement ok
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true
+
 # Ensure that inserts into each index look like we expect them to.
 
 # Inserts into nonuniqueidx or uniqueidx (which don't store anything) should

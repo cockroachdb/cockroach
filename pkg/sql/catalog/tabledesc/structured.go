@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -74,7 +75,7 @@ var UseMVCCCompliantIndexCreation = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.mvcc_compliant_index_creation.enabled",
 	"if true, schema changes will use the an index backfiller designed for MVCC-compliant bulk operations",
-	true,
+	util.ConstantWithMetamorphicTestBool("sql-mvcc-compliant-index-create", true),
 )
 
 // DescriptorType returns the type of this descriptor.

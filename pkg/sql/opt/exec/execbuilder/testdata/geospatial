@@ -21,6 +21,11 @@ CREATE TABLE c(
   INVERTED INDEX (geom)
 )
 
+# The traces in this file depend on the index ID, which change
+# depending on which index creation strategy is used.
+statement ok
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true
+
 query T kvtrace
 INSERT INTO b VALUES
   (1, 'POINT(1.0 1.0)', 'POINT(2.0 2.0)'),

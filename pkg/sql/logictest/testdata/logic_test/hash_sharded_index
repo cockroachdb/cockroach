@@ -1,6 +1,9 @@
 # Tests for creating a hash sharded primary key
-statement ok 
+statement ok
 CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH (bucket_count=10))
+
+statement ok
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled=true
 
 query TT
 SHOW CREATE TABLE sharded_primary

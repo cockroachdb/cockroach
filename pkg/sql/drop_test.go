@@ -493,17 +493,20 @@ func TestDropIndex(t *testing.T) {
 	})
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
-			Username:    security.RootUserName(),
-			Description: `GC for temporary index used during index backfill`,
-			DescriptorIDs: descpb.IDs{
-				tableDesc.GetID(),
-			},
-		}); err != nil {
-			return err
+		offset := 0
+		if tabledesc.UseMVCCCompliantIndexCreation.Get(&s.ClusterSettings().SV) {
+			if err := jobutils.VerifySystemJob(t, sqlRun, offset, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+				Username:    security.RootUserName(),
+				Description: `GC for temporary index used during index backfill`,
+				DescriptorIDs: descpb.IDs{
+					tableDesc.GetID(),
+				},
+			}); err != nil {
+				return err
+			}
+			offset++
 		}
-
-		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+		return jobutils.VerifySystemJob(t, sqlRun, offset, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
 			Username:    security.RootUserName(),
 			Description: `GC for DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
@@ -782,7 +785,11 @@ func TestDropTableDeleteData(t *testing.T) {
 
 		// Ensure that the job is marked as succeeded.
 		testutils.SucceedsSoon(t, func() error {
-			return jobutils.VerifySystemJob(t, sqlRun, (i*2)+1, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+			gcJobOffset := i
+			if tabledesc.UseMVCCCompliantIndexCreation.Get(&s.ClusterSettings().SV) {
+				gcJobOffset = (i * 2) + 1
+			}
+			return jobutils.VerifySystemJob(t, sqlRun, gcJobOffset, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUserName(),
 				Description: fmt.Sprintf(`GC for DROP TABLE t.public.%s`, descs[i].GetName()),
 				DescriptorIDs: descpb.IDs{
