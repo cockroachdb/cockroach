@@ -329,3 +329,27 @@ message UpdateSpanConfigsRequest {
 
 message UpdateSpanConfigsResponse { };
 
+
+// GetAllSystemSPanConfigsThatApplyRequest is used to fetch all system span
+// configs that apply to a given tenant. This is only ever meaningful in the
+// context of secondary tenants as it allows them a view into system span config
+// state that applies over their ranges that has been set by the system tenant.
+//
+// Tenants are only allowed to request system span configs that apply over their
+// own ranges. System span configs set by the requesting tenant itself are also
+// returned.
+message GetAllSystemSpanConfigsThatApplyRequest {
+  // TenantID identifies tenant ranges over which all system span configurations
+  // that apply are being requested. Given tenants are only allowed to fetch
+  // system span configs that apply over their ranges, we expect this field to
+  // be set to the requesting tenant's ID.
+  TenantID tenant_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+};
+
+// GetAllSystemSpanConfigsThatApplyResponse lists out all system span
+// configurations that have been requested.
+message GetAllSystemSpanConfigsThatApplyResponse {
+  // SpanConfigs captures all system span configurations that apply over the
+  // requested tenant IDs' ranges.
+  repeated SpanConfig span_configs = 1 [(gogoproto.nullable) = false];
+};
