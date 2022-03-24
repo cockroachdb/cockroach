@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,6 +94,9 @@ const (
 	UIPem
 	// ClientPem describes a client certificate.
 	ClientPem
+	// TenantScopedClientPem describes a tenant scoped client certificate.
+	// This certificate can only be used to authenticate a client for a specific tenant.
+	TenantScopedClientPem
 	// TenantPem describes a SQL tenant client certificate.
 	TenantPem
 	// TenantSigningPem describes a SQL tenant signing certificate.
@@ -223,11 +227,20 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 			return nil, errors.Errorf("UI certificate filename should match ui%s", certExtension)
 		}
 	case `client`:
-		fileUsage = ClientPem
+		// This could be a client certificate or a tenant scoped client certificate.
+		if strings.Contains(filename, "tenant") {
+			fileUsage = TenantScopedClientPem
+		} else {
+			fileUsage = ClientPem
+		}
 		// Strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
 		if len(name) == 0 {
-			return nil, errors.Errorf("client certificate filename should match client.<user>%s", certExtension)
+			if fileUsage == ClientPem {
+				return nil, errors.Errorf("client certificate filename should match client.<user>%s", certExtension)
+			} else {
+				return nil, errors.Errorf("tenant scoped client certificate filename should match client.<user>.tenant-<tenant_id>%s", certExtension)
+			}
 		}
 	case `client-tenant`:
 		fileUsage = TenantPem
@@ -505,4 +518,21 @@ func validateCockroachCertificate(ci *CertInfo, cert *x509.Certificate) error {
 		}
 	}
 	return nil
+}
+
+func extractTenantAndUserFromCertName(filename string) (SQLUsername, uint64, error) {
+	parts := strings.Split(filename, ".")
+	if len(parts) != 2 {
+		return SQLUsername{}, 0, errors.Errorf("expected tenant scoped cert name format is <user>.tenant-<tenant-id>")
+	}
+	tenantInfo := strings.Split(parts[1], "-")
+	if len(tenantInfo) != 2 {
+		return SQLUsername{}, 0, errors.Errorf("expected tenant ID format within tenant scoped client cert is tenant-<tenant-id>")
+	}
+	tenantID, err := strconv.ParseUint(tenantInfo[1], 10, 64)
+	if err != nil {
+		return SQLUsername{}, 0, errors.Errorf("invalid tenant id %s", tenantInfo[1])
+	}
+	username := MakeSQLUsernameFromPreNormalizedString(parts[0])
+	return username, tenantID, nil
 }

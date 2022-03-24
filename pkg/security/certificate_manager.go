@@ -117,13 +117,14 @@ type CertificateManager struct {
 	initialized bool
 
 	// Set of certs. These are swapped in during Load(), and never mutated afterwards.
-	caCert         *CertInfo // default CA certificate
-	clientCACert   *CertInfo // optional: certificate to verify client certificates
-	uiCACert       *CertInfo // optional: certificate to verify UI certificates
-	nodeCert       *CertInfo // certificate for nodes (always server cert, sometimes client cert)
-	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
-	uiCert         *CertInfo // optional: server certificate for the admin UI.
-	clientCerts    map[SQLUsername]*CertInfo
+	caCert                  *CertInfo // default CA certificate
+	clientCACert            *CertInfo // optional: certificate to verify client certificates
+	uiCACert                *CertInfo // optional: certificate to verify UI certificates
+	nodeCert                *CertInfo // certificate for nodes (always server cert, sometimes client cert)
+	nodeClientCert          *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
+	uiCert                  *CertInfo // optional: server certificate for the admin UI.
+	clientCerts             map[SQLUsername]*CertInfo
+	tenantScopedClientCerts map[SQLUsername]*CertInfo
 
 	// Certs only used with multi-tenancy.
 	tenantCACert, tenantCert, tenantSigningCert *CertInfo
@@ -643,6 +644,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
 	var tenantCACert, tenantCert, tenantSigningCert *CertInfo
 	clientCerts := make(map[SQLUsername]*CertInfo)
+	tenantScopedClientCerts := make(map[SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
 		switch ci.FileUsage {
 		case CAPem:
@@ -684,6 +686,14 @@ func (cm *CertificateManager) LoadCertificates() error {
 			clientCerts[username] = ci
 			if username.IsNodeUser() {
 				nodeClientCert = ci
+			}
+		case TenantScopedClientPem:
+			username, tenantID, err := extractTenantAndUserFromCertName(ci.Name)
+			if err != nil {
+				return errors.Wrapf(err, "invalid tenant scoped client cert name %s", ci.Name)
+			}
+			if cm.tenantIdentifier == tenantID {
+				tenantScopedClientCerts[username] = ci
 			}
 		default:
 			return errors.Errorf("unsupported certificate %v", ci.Filename)
@@ -742,6 +752,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.nodeClientCert = nodeClientCert
 	cm.uiCert = uiCert
 	cm.clientCerts = clientCerts
+	cm.tenantScopedClientCerts = tenantScopedClientCerts
 
 	cm.initialized = true
 

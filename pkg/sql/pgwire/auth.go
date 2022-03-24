@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"net"
 	"strings"
 
@@ -78,6 +79,7 @@ type authOptions struct {
 	// testingAuthHook, if provided, replaces the logic in
 	// handleAuthentication().
 	testingAuthHook func(ctx context.Context) error
+	tenantID        roachpb.TenantID
 }
 
 // handleAuthentication checks the connection's user. Errors are sent to the
@@ -109,7 +111,7 @@ func (c *conn) handleAuthentication(
 	// Populate the AuthMethod with per-connection information so that it
 	// can compose the next layer of behaviors that we're going to apply
 	// to the incoming connection.
-	behaviors, err := authMethod(ctx, ac, tlsState, execCfg, hbaEntry, authOpt.identMap)
+	behaviors, err := authMethod(ctx, ac, tlsState, execCfg, hbaEntry, authOpt.identMap, authOpt.tenantID)
 	connClose = behaviors.ConnClose
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)

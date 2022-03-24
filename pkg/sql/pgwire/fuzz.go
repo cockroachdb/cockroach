@@ -38,6 +38,7 @@ func FuzzServeConn(data []byte) int {
 		&sql.ExecutorConfig{
 			Settings: &cluster.Settings{},
 		},
+		roachpb.SystemTenantID,
 	)
 
 	// Fake a connection using a pipe.

@@ -15,6 +15,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"strings"
 	"testing"
 
@@ -217,7 +218,7 @@ func TestAuthenticationHook(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hook, err := security.UserAuthCertHook(tc.insecure, makeFakeTLSState(tc.tlsSpec))
+			hook, err := security.UserAuthCertHook(tc.insecure, makeFakeTLSState(tc.tlsSpec), roachpb.SystemTenantID)
 			if (err == nil) != tc.buildHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.buildHookSuccess, err)
 			}

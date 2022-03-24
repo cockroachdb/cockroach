@@ -15,6 +15,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"io"
 	"net"
 	"net/url"
@@ -264,6 +265,7 @@ type Server struct {
 	// certain peer IPs, or with certain certificates. (could it be a
 	// special hba.conf directive?)
 	trustClientProvidedRemoteAddr syncutil.AtomicBool
+	tenantID                      roachpb.TenantID
 }
 
 // ServerMetrics is the set of metrics for the pgwire server.
@@ -318,12 +320,14 @@ func MakeServer(
 	parentMemoryMonitor *mon.BytesMonitor,
 	histogramWindow time.Duration,
 	executorConfig *sql.ExecutorConfig,
+	tenantID roachpb.TenantID,
 ) *Server {
 	server := &Server{
 		AmbientCtx: ambientCtx,
 		cfg:        cfg,
 		execCfg:    executorConfig,
 		metrics:    makeServerMetrics(sqlMemMetrics, histogramWindow),
+		tenantID:   tenantID,
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
@@ -868,6 +872,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 			auth:            hbaConf,
 			identMap:        identMap,
 			testingAuthHook: testingAuthHook,
+			tenantID:        s.tenantID,
 		},
 	)
 	return nil

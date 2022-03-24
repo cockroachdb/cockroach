@@ -15,6 +15,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -95,6 +96,7 @@ type AuthMethod = func(
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 	identMap *identmap.Conf,
+	tenantID roachpb.TenantID,
 ) (*AuthBehaviors, error)
 
 var _ AuthMethod = authPassword
@@ -116,6 +118,7 @@ func authPassword(
 	execCfg *sql.ExecutorConfig,
 	_ *hba.Entry,
 	_ *identmap.Conf,
+	_ roachpb.TenantID,
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
@@ -234,6 +237,7 @@ func authScram(
 	execCfg *sql.ExecutorConfig,
 	_ *hba.Entry,
 	_ *identmap.Conf,
+	_ roachpb.TenantID,
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
@@ -411,6 +415,7 @@ func authCert(
 	_ *sql.ExecutorConfig,
 	hbaEntry *hba.Entry,
 	identMap *identmap.Conf,
+	tenantID roachpb.TenantID,
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(HbaMapper(hbaEntry, identMap))
@@ -427,7 +432,7 @@ func authCert(
 		tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
 			tlsState.PeerCertificates[0].Subject.CommonName,
 		).Normalize()
-		hook, err := security.UserAuthCertHook(false /*insecure*/, &tlsState)
+		hook, err := security.UserAuthCertHook(false /*insecure*/, &tlsState, tenantID)
 		if err != nil {
 			return err
 		}
@@ -452,6 +457,7 @@ func authCertPassword(
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 	identMap *identmap.Conf,
+	tenantID roachpb.TenantID,
 ) (*AuthBehaviors, error) {
 	var fn AuthMethod
 	if len(tlsState.PeerCertificates) == 0 {
@@ -468,7 +474,7 @@ func authCertPassword(
 		c.LogAuthInfof(ctx, "client presented certificate, proceeding with certificate validation")
 		fn = authCert
 	}
-	return fn(ctx, c, tlsState, execCfg, entry, identMap)
+	return fn(ctx, c, tlsState, execCfg, entry, identMap, tenantID)
 }
 
 // AutoSelectPasswordAuth determines whether CockroachDB automatically promotes the password
@@ -497,6 +503,7 @@ func authAutoSelectPasswordProtocol(
 	execCfg *sql.ExecutorConfig,
 	_ *hba.Entry,
 	_ *identmap.Conf,
+	_ roachpb.TenantID,
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
@@ -546,6 +553,7 @@ func authCertScram(
 	execCfg *sql.ExecutorConfig,
 	entry *hba.Entry,
 	identMap *identmap.Conf,
+	tenantID roachpb.TenantID,
 ) (*AuthBehaviors, error) {
 	var fn AuthMethod
 	if len(tlsState.PeerCertificates) == 0 {
@@ -555,7 +563,7 @@ func authCertScram(
 		c.LogAuthInfof(ctx, "client presented certificate, proceeding with certificate validation")
 		fn = authCert
 	}
-	return fn(ctx, c, tlsState, execCfg, entry, identMap)
+	return fn(ctx, c, tlsState, execCfg, entry, identMap, tenantID)
 }
 
 // authTrust is the AuthMethod constructor for HBA method "trust":
@@ -567,6 +575,7 @@ func authTrust(
 	_ *sql.ExecutorConfig,
 	_ *hba.Entry,
 	_ *identmap.Conf,
+	_ roachpb.TenantID,
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
@@ -585,6 +594,7 @@ func authReject(
 	_ *sql.ExecutorConfig,
 	_ *hba.Entry,
 	_ *identmap.Conf,
+	_ roachpb.TenantID,
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
@@ -604,6 +614,7 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 		execCfg *sql.ExecutorConfig,
 		_ *hba.Entry,
 		_ *identmap.Conf,
+		_ roachpb.TenantID,
 	) (*AuthBehaviors, error) {
 		b := &AuthBehaviors{}
 		b.SetRoleMapper(UseProvidedIdentity)
