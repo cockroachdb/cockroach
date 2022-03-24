@@ -19,6 +19,7 @@ import (
 	"math/big"
 	"net"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -326,4 +327,16 @@ func MakeTenantURISAN(username username.SQLUsername, tenantID roachpb.TenantID) 
 		return nil, err
 	}
 	return uri, nil
+}
+
+// ParseTenantURISAN extracts the user and tenant ID contained within a tenant URI SAN.
+func ParseTenantURISAN(rawURL string) (roachpb.TenantID, string, error) {
+	r := strings.NewReader(rawURL)
+	var tID uint64
+	var username string
+	_, err := fmt.Fscanf(r, tenantURISANFormatString, &tID, &username)
+	if err != nil {
+		return roachpb.TenantID{}, "", errors.Errorf("invalid tenant URI SAN %s", rawURL)
+	}
+	return roachpb.MakeTenantID(tID), username, nil
 }
