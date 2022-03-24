@@ -220,7 +220,9 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 		failures = append(failures, failedStampTestMsg)
 	}
 
-	if !noCache {
+	// We want to make sure there are no other failures before trying to
+	// set up the cache.
+	if !noCache && len(failures) == 0 {
 		d.log.Println("doctor: setting up cache")
 		bazelRcLine, err := d.setUpCache(ctx)
 		if err != nil {
@@ -233,6 +235,8 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 		if msg != "" {
 			failures = append(failures, msg)
 		}
+	} else if !noCache {
+		log.Println("doctor: skipping cache set up due to previous failures")
 	}
 
 	if len(failures) > 0 {
