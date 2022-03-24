@@ -136,7 +136,7 @@ func (rsl StateLoader) Save(
 	}
 	rai, lai, rait, ct := state.RaftAppliedIndex, state.LeaseAppliedIndex, state.RaftAppliedIndexTerm,
 		&state.RaftClosedTimestamp
-	if err := rsl.SetRangeAppliedState(ctx, readWriter, rai, lai, rait, ms, ct); err != nil {
+	if err := rsl.SetRangeAppliedState(ctx, readWriter, rai, lai, rait, ms, ct, nil); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return *ms, nil
@@ -163,11 +163,11 @@ func (rsl StateLoader) SetLease(
 // LoadRangeAppliedState loads the Range applied state.
 func (rsl StateLoader) LoadRangeAppliedState(
 	ctx context.Context, reader storage.Reader,
-) (enginepb.RangeAppliedState, error) {
+) (*enginepb.RangeAppliedState, error) {
 	var as enginepb.RangeAppliedState
 	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, &as,
 		storage.MVCCGetOptions{})
-	return as, err
+	return &as, err
 }
 
 // LoadMVCCStats loads the MVCC stats.
@@ -199,8 +199,13 @@ func (rsl StateLoader) SetRangeAppliedState(
 	appliedIndex, leaseAppliedIndex, appliedIndexTerm uint64,
 	newMS *enginepb.MVCCStats,
 	raftClosedTimestamp *hlc.Timestamp,
+	asAlloc *enginepb.RangeAppliedState, // optional
 ) error {
-	as := enginepb.RangeAppliedState{
+	if asAlloc == nil {
+		asAlloc = new(enginepb.RangeAppliedState)
+	}
+	as := asAlloc
+	*as = enginepb.RangeAppliedState{
 		RaftAppliedIndex:     appliedIndex,
 		LeaseAppliedIndex:    leaseAppliedIndex,
 		RangeStats:           newMS.ToPersistentStats(),
@@ -210,10 +215,10 @@ func (rsl StateLoader) SetRangeAppliedState(
 		as.RaftClosedTimestamp = raftClosedTimestamp
 	}
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
-	// in C.MVCCComputeStats and ComputeStatsForRange.
+	// in ComputeStatsForRange.
 	ms := (*enginepb.MVCCStats)(nil)
 	return storage.MVCCPutProto(ctx, readWriter, ms, rsl.RangeAppliedStateKey(),
-		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &as)
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, as)
 }
 
 // SetMVCCStats overwrites the MVCC stats. This needs to perform a read on the
@@ -226,9 +231,10 @@ func (rsl StateLoader) SetMVCCStats(
 	if err != nil {
 		return err
 	}
+	alloc := as // reuse
 	return rsl.SetRangeAppliedState(
 		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm, newMS,
-		as.RaftClosedTimestamp)
+		as.RaftClosedTimestamp, alloc)
 }
 
 // SetClosedTimestamp overwrites the closed timestamp.
@@ -239,9 +245,10 @@ func (rsl StateLoader) SetClosedTimestamp(
 	if err != nil {
 		return err
 	}
+	alloc := as // reuse
 	return rsl.SetRangeAppliedState(
 		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm,
-		as.RangeStats.ToStatsPtr(), closedTS)
+		as.RangeStats.ToStatsPtr(), closedTS, alloc)
 }
 
 // LoadGCThreshold loads the GC threshold.
