@@ -372,7 +372,7 @@ func importPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer span.Finish()
 
-		if !(p.IsAutoCommit() || isDetached) {
+		if !(p.ExtendedEvalContext().TxnIsSingleStmt || isDetached) {
 			return errors.Errorf("IMPORT cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
