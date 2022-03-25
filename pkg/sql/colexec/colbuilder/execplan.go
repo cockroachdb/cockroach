@@ -762,7 +762,7 @@ func NewColOperator(
 				ctx, getStreamingAllocator(ctx, args),
 				colmem.NewAllocator(ctx, cFetcherMemAcc, factory),
 				kvFetcherMemAcc, streamerBudgetAcc, flowCtx,
-				inputs[0].Root, core.JoinReader, inputTypes, streamerDiskMonitor,
+				inputs[0].Root, core.JoinReader, post, inputTypes, streamerDiskMonitor,
 			)
 			if err != nil {
 				return r, err
