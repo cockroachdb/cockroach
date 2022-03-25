@@ -315,6 +315,8 @@ CREATE TABLE c (a INT, b INT, c INT, d INT, PRIMARY KEY (a, c), INDEX sec (b));
 CREATE TABLE d (a INT, b INT, PRIMARY KEY (b, a));
 INSERT INTO c VALUES (1, 1, 1, 0), (2, 1, 2, 0);
 INSERT INTO d VALUES (1, 1), (1, 2);
+
+statement ok
 ALTER TABLE c INJECT STATISTICS '[
   {
     "columns": ["a"],

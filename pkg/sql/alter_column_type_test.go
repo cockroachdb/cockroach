@@ -330,10 +330,10 @@ func TestSchemaChangeBeforeAlterColumnType(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(ctx)
-
+	sqlDB.ExecMultiple(t,
+		`SET use_declarative_schema_changer = 'off';`,
+		`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';`)
 	sqlDB.Exec(t, `
-SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
-SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT NOT NULL, y INT);
 `)
