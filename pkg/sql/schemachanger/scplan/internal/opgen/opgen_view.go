@@ -62,6 +62,11 @@ func init() {
 						RelationIDs:          this.UsesRelationIDs,
 					}
 				}),
+				emit(func(this *scpb.View) scop.Op {
+					return &scop.RemoveAllTableComments{
+						TableID: this.ViewID,
+					}
+				}),
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
