@@ -2022,6 +2022,12 @@ func (r *Replica) GetResponseMemoryAccount() *mon.BoundAccount {
 	return nil
 }
 
+// GetEngineCapacity returns the store's underlying engine capacity; other
+// StoreCapacity fields not related to engine capacity are not populated.
+func (r *Replica) GetEngineCapacity() (roachpb.StoreCapacity, error) {
+	return r.store.Engine().Capacity()
+}
+
 func init() {
 	tracing.RegisterTagRemapping("r", "range")
 }
