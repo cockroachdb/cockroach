@@ -199,8 +199,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(rawSpec)), err
 			},
 			Info: "This function can be used on the consumer side to get a replication stream specification " +
-				"for the specified stream starting from the specified 'start_from' timestamp. The consumer will " +
-				"later call 'stream_partition' to a partition with the spec to start streaming.",
+				"for the specified stream. The consumer will later call 'stream_partition' to a partition with " +
+				"the spec to start streaming.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
