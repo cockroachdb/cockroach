@@ -65,6 +65,7 @@ type tpch struct {
 	vectorize                  string
 	useClusterVectorizeSetting bool
 	verbose                    bool
+	useBackgroundTxnQoS        bool
 
 	queriesRaw      string
 	selectedQueries []int
@@ -113,6 +114,8 @@ var tpchMeta = workload.Meta{
 			`Ignore vectorize option and use the current cluster setting sql.defaults.vectorize`)
 		g.flags.BoolVar(&g.verbose, `verbose`, false,
 			`Prints out the queries being run as well as histograms`)
+		g.flags.BoolVar(&g.useBackgroundTxnQoS, `background-qos`, false,
+			`Set default_transaction_quality_of_service session variable to "background".`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -341,6 +344,9 @@ func (w *worker) run(ctx context.Context) error {
 	var prefix string
 	if !w.config.useClusterVectorizeSetting {
 		prefix = fmt.Sprintf("SET vectorize = '%s';", w.config.vectorize)
+	}
+	if w.config.useBackgroundTxnQoS {
+		prefix += " SET default_transaction_quality_of_service = background;"
 	}
 	query := fmt.Sprintf("%s %s", prefix, QueriesByNumber[queryNum])
 
