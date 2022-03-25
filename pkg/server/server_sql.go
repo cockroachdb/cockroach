@@ -966,7 +966,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		execCfg.SpanConfigReconciler = spanConfigReconciler
 	}
-	execCfg.SpanConfigKVAccessor = cfg.sqlServerOptionalKVArgs.spanConfigKVAccessor
+	execCfg.SpanConfigKVAccessor = cfg.spanConfigAccessor
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
