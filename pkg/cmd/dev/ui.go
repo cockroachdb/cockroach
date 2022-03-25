@@ -35,9 +35,10 @@ func makeUICmd(d *dev) *cobra.Command {
 		Long:  "Builds UI & runs UI-related commands to ease development flows",
 	}
 
-	uiCmd.AddCommand(makeUIWatchCmd(d))
+	uiCmd.AddCommand(makeUICleanCmd(d))
 	uiCmd.AddCommand(makeUILintCmd(d))
 	uiCmd.AddCommand(makeUITestCmd(d))
+	uiCmd.AddCommand(makeUIWatchCmd(d))
 
 	return uiCmd
 }
@@ -246,6 +247,58 @@ Replaces 'make ui-lint'.`,
 	lintCmd.Flags().Bool(verboseFlag, false, "show all linter output")
 
 	return lintCmd
+}
+
+func makeUICleanCmd(d *dev) *cobra.Command {
+	const (
+		allFlag = "all"
+	)
+
+	cleanCmd := &cobra.Command{
+		Use:   "clean [--all]",
+		Short: "clean artifacts produced by `dev ui`",
+		Long:  "Clean the workspace of artifacts produced by `dev ui`. Pass the --all option to also delete all installed dependencies.",
+		Args:  cobra.MaximumNArgs(0),
+		RunE: func(cmd *cobra.Command, commandLine []string) error {
+			all := mustGetFlagBool(cmd, allFlag)
+			uiDirs, err := getUIDirs(d)
+			if err != nil {
+				return err
+			}
+			pathsToDelete := []string{
+				filepath.Join(uiDirs.dbConsole, "src", "js", "protos.js"),
+				filepath.Join(uiDirs.dbConsole, "src", "js", "protos.d.ts"),
+				filepath.Join(uiDirs.dbConsole, "ccl", "src", "js", "protos.js"),
+				filepath.Join(uiDirs.dbConsole, "ccl", "src", "js", "protos.d.ts"),
+				filepath.Join(uiDirs.clusterUI, "dist"),
+			}
+			if all {
+				workspace, err := d.getWorkspace(d.cli.Context())
+				if err != nil {
+					return err
+				}
+
+				pathsToDelete = append(
+					pathsToDelete,
+					filepath.Join(workspace, "pkg", "ui", "node_modules"),
+					filepath.Join(uiDirs.dbConsole, "node_modules"),
+					filepath.Join(uiDirs.clusterUI, "node_modules"),
+				)
+			}
+
+			for _, toDelete := range pathsToDelete {
+				err := d.os.RemoveAll(toDelete)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+
+	cleanCmd.Flags().Bool(allFlag, false, "additionally clean installed dependencies")
+
+	return cleanCmd
 }
 
 // arrangeFilesForTestWatchers moves files from Bazel's build output directory
