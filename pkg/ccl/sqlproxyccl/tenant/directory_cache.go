@@ -375,9 +375,12 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 					firstRun = false
 				}
 				if err != nil {
-					if grpcutil.IsContextCanceled(err) {
+					// If our local context is Done, break out of this loop, shutting down
+					// the pod watcher.
+					if ctx.Err() != nil {
 						break
 					}
+
 					if watchPodsErr.ShouldLog() {
 						log.Errorf(ctx, "err creating new watch pod client: %s", err)
 					}
@@ -391,9 +394,12 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 			// Read the next watcher event.
 			resp, err := client.Recv()
 			if err != nil {
-				if grpcutil.IsContextCanceled(err) {
+				// If our local context is Done, break out of this loop, shutting down
+				// the pod watcher.
+				if ctx.Err() != nil {
 					break
 				}
+
 				if recvErr.ShouldLog() {
 					log.Errorf(ctx, "err receiving stream events: %s", err)
 				}
