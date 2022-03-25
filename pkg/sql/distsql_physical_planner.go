@@ -1149,6 +1149,9 @@ func (dsp *DistSQLPlanner) partitionSpansTenant(
 	if err != nil {
 		return nil, err
 	}
+	if len(instances) == 0 {
+		return nil, errors.New("no healthy sql instances available for planning")
+	}
 	// Randomize the order in which we assign partitions, so that work is
 	// allocated fairly across queries.
 	rand.Shuffle(len(instances), func(i, j int) {
