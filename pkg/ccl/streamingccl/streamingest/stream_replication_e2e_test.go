@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -183,7 +184,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 		c, cleanup := createtenantStreamingClusters(ctx, t, tenantStreamingClustersArgs{
 			srcTenantID: roachpb.MakeTenantID(10),
 			srcInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-				sysSQL.Exec(t, srcClusterSetting)
+				sysSQL.ExecMultiple(t, strings.Split(srcClusterSetting, ";")...)
 				if withInitialScan {
 					sysSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
 				}
@@ -202,7 +203,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 			srcNumNodes:  3,
 			destTenantID: roachpb.MakeTenantID(10),
 			destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-				sysSQL.Exec(t, destClusterSetting)
+				sysSQL.ExecMultiple(t, strings.Split(destClusterSetting, ";")...)
 			},
 			destNumNodes: 2,
 		})

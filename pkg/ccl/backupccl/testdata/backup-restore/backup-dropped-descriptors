@@ -7,7 +7,13 @@ new-server name=s1
 
 exec-sql
 SET use_declarative_schema_changer = 'off';
+----
+
+exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
+----
+
+exec-sql
 CREATE DATABASE d;
 CREATE TABLE d.foo (id INT);
 DROP DATABASE d CASCADE;
@@ -115,6 +121,9 @@ CREATE TABLE d2.s.t (id INT);
 
 exec-sql
 SET use_declarative_schema_changer = 'off';
+----
+
+exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
 ----
 
@@ -125,6 +134,9 @@ paused before it completed with reason: pause point "schemachanger.before.exec" 
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'typeschemachanger.before.exec';
+----
+
+exec-sql
 DROP TYPE d2.typ;
 ----
 paused before it completed with reason: pause point "typeschemachanger.before.exec" hit

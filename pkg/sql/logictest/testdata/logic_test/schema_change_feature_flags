@@ -17,7 +17,11 @@ CREATE SCHEMA s;
 # Test CREATE TYPE.
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+
+statement ok
 CREATE SCHEMA s;
+
+statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 statement error pq: feature CREATE TYPE is part of the schema change category, which was disabled by the database administrator
@@ -34,7 +38,11 @@ CREATE SEQUENCE seq
 # Test CREATE INDEX.
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+
+statement ok
 CREATE TABLE t1(a INT8, b INT8);
+
+statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 statement error pq: feature CREATE INDEX is part of the schema change category, which was disabled by the database administrator
@@ -43,7 +51,11 @@ CREATE INDEX on t1 (a, b)
 # Test ALTER DATABASE OWNER.
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+
+statement ok
 CREATE DATABASE d;
+
+statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 statement error pq: feature ALTER DATABASE is part of the schema change category, which was disabled by the database administrator
@@ -71,7 +83,11 @@ ALTER DATABASE d CONVERT TO SCHEMA WITH PARENT test
 
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+
+statement ok
 CREATE TABLE t();
+
+statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 # Test ALTER TABLE PARTITION BY.
@@ -140,7 +156,11 @@ ALTER TABLE t1 UNSPLIT ALL
 
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+
+statement ok
 CREATE INDEX i on t1 (a, b);
+
+statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE;
 
 # Test RENAME COLUMN, throws ALTER TABLE error.
@@ -178,7 +198,11 @@ ALTER SCHEMA s OWNER TO testuser
 # Test ALTER TYPE.
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+
+statement ok
 CREATE TYPE s.typ AS ENUM ();
+
+statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 # Test ALTER TYPE ADD VALUE.
@@ -200,7 +224,11 @@ ALTER TYPE s.typ SET SCHEMA s
 # Test ALTER SEQUENCE.
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+
+statement ok
 CREATE SEQUENCE seq;
+
+statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 # Test RENAME SEQUENCE.
@@ -245,7 +273,11 @@ DROP SEQUENCE seq
 # Test DROP VIEW.
 statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
+
+statement ok
 CREATE VIEW public.bar (x) AS SELECT 1 AS x;
+
+statement ok
 SET CLUSTER SETTING feature.schema_change.enabled = FALSE
 
 # Test ALTER VIEW SET SCHEMA
