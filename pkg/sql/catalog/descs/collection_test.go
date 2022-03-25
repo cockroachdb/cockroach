@@ -13,6 +13,7 @@ package descs_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -596,4 +599,72 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 
 		return nil
 	}))
+}
+
+// TestCollectionProperlyUsesMemoryMonitoring ensures that memory monitoring
+// on Collection is working properly.
+// Namely, we are currently only tracking memory usage on Collection.kvDescriptors
+// since it reads all descriptors from storage, which can be huge.
+//
+// The testing strategy is to
+// 1. Create tables that are very large into the database (so that when we read them
+//    into memory later with Collection, a lot of memory will be allocated and used).
+// 2. Hook up a monitor with infinite budget to this Collection and invoke method
+//    so that this Collection reads all the descriptors into memory. With an unlimited
+//    monitor, this should succeed without error.
+// 3. Change the monitor budget to something small. Repeat step 2 and expect an error
+//    being thrown out when reading all those descriptors into memory to validate the
+//    memory monitor indeed kicked in and had an effect.
+func TestKVDescriptorsProperlyUsesMemoryMonitoring(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	txn := tc.Server(0).DB().NewTxn(ctx, "test txn")
+
+	// Create a lot of descriptors.
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	numTblsToInsert := 100
+	for i := 0; i < numTblsToInsert; i++ {
+		tdb.Exec(t, fmt.Sprintf("CREATE TABLE table_%v()", i))
+	}
+
+	// Create a monitor to be used to track memory usage in a Collection.
+	monitor := mon.NewMonitor("test_monitor", mon.MemoryResource,
+		nil, nil, -1, 0, cluster.MakeTestingClusterSettings())
+
+	// Start the monitor with unlimited budget.
+	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+
+	// Create a `Collection` with monitor hooked up.
+	col := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
+		MakeCollection(ctx, nil /* temporarySchemaProvider */, monitor)
+	require.Equal(t, int64(0), monitor.AllocBytes())
+
+	// Read all the descriptors into `col` and assert this read will finish without error.
+	_, err1 := col.GetAllDescriptors(ctx, txn)
+	require.NoError(t, err1)
+
+	// Clean up and assert the monitor's allocation is back to 0 properly after releasing.
+	allocatedMemoryInBytes := monitor.AllocBytes()
+	col.ReleaseAll(ctx)
+	require.Equal(t, int64(0), monitor.AllocBytes())
+
+	// Restart the monitor to a smaller budget (in fact, let's be bold by setting it to be only one byte below
+	// what has been allocated in the previous round).
+	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(allocatedMemoryInBytes-1))
+	require.Equal(t, int64(0), monitor.AllocBytes())
+
+	// Repeat the process again and assert this time memory allocation will err out.
+	col = tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
+		MakeCollection(ctx, nil /* temporarySchemaProvider */, monitor)
+	_, err2 := col.GetAllDescriptors(ctx, txn)
+	require.Error(t, err2)
+
+	// Clean up
+	col.ReleaseAll(ctx)
+	require.Equal(t, int64(0), monitor.AllocBytes())
+	monitor.Stop(ctx)
 }
