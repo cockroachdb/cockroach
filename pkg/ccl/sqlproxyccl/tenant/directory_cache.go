@@ -367,7 +367,7 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 		watchPodsErr := log.Every(10 * time.Second)
 		recvErr := log.Every(10 * time.Second)
 
-		for {
+		for ctx.Err() == nil {
 			if client == nil {
 				client, err = d.client.WatchPods(ctx, &req)
 				if firstRun {
@@ -375,9 +375,6 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 					firstRun = false
 				}
 				if err != nil {
-					if grpcutil.IsContextCanceled(err) {
-						break
-					}
 					if watchPodsErr.ShouldLog() {
 						log.Errorf(ctx, "err creating new watch pod client: %s", err)
 					}
@@ -391,9 +388,6 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 			// Read the next watcher event.
 			resp, err := client.Recv()
 			if err != nil {
-				if grpcutil.IsContextCanceled(err) {
-					break
-				}
 				if recvErr.ShouldLog() {
 					log.Errorf(ctx, "err receiving stream events: %s", err)
 				}

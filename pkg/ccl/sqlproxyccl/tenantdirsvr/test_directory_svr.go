@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Make sure that TestDirectoryServer implements the DirectoryServer interface.
@@ -129,6 +131,10 @@ func (s *TestDirectoryServer) Get(id roachpb.TenantID) (result map[net.Addr]*Pro
 	return
 }
 
+// serverShutdownErr is returned when TestDirectoryServer is no longer accepting
+// new requests.
+var serverShutdownErr = status.Error(codes.Unavailable, "server shutting down")
+
 // StartTenant will forcefully start a new tenant pod
 // instance. This may be useful to test the behavior when more
 // than one tenant is running.
@@ -210,7 +216,7 @@ func (s *TestDirectoryServer) WatchPods(
 ) error {
 	select {
 	case <-s.stopper.ShouldQuiesce():
-		return context.Canceled
+		return serverShutdownErr
 	default:
 	}
 	// Make the channel with a small buffer to allow for a burst of notifications
