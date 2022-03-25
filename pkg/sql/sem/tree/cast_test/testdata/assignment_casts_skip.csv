@@ -1,0 +1,5 @@
+literal,type,note
++9223372036854775807,INTEGER,"postgres integer is only 4 bytes"
+-9223372036854775807,INTEGER,"postgres integer is only 4 bytes"
+INT8 '+9223372036854775807',INTEGER,"postgres integer is only 4 bytes"
+INT8 '-9223372036854775807',INTEGER,"postgres integer is only 4 bytes"
