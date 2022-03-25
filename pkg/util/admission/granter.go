@@ -451,12 +451,36 @@ func (tg *tokenGranter) continueGrantChain(grantChainID grantChainID) {
 // kvGranter implements granterWithLockedCalls. It is used for grants to
 // KVWork, that are limited by slots (CPU bound work) and/or tokens (IO
 // bound work).
+//
+// In production, a kvGranter is doing either slots (ioTokensEnabled=false),
+// or tokens (totalSlots=MaxInt). The former is used for (typically) cpu-bound
+// work (KV and storage layer) across the whole node, and latter for the
+// per-store write admission control (see StoreGrantCoordinators).
+//
+
+// For the cpu-bound slot case we have background activities (like Pebble
+// compactions) that would like to utilize additional slots if available (e.g.
+// to do concurrent compression of ssblocks). These activities do not want to
+// wait for a slot, since they can proceed without the slot at their usual
+// slower pace. They also are performance sensitive, and can't afford to
+// interact with admission control at a fine granularity (like asking for a
+// slot when compressing each ssblock). A coarse granularity interaction
+// causes a delay in returning slots to admission control, and we don't want
+// that delay to cause admission delay for normal work. Hence, we model slots
+// granted to background activities as "soft-slots". Granting a soft-slot has
+// to conform to usedSoftSlots+usedSlots <= totalSlots. Granting a regular
+// slot only has to conform to usedSlots <= totalSlots. That is, soft-slots
+// allow for over-commitment until the soft-slots are returned, which may mean
+// some additional queueing in the goroutine scheduler.
 type kvGranter struct {
 	coord               *GrantCoordinator
 	requester           requester
 	usedSlots           int
+	usedSoftSlots       int
 	totalSlots          int
+	totalSoftSlots      int
 	skipSlotEnforcement bool
+	failedSoftSlotsGet  bool
 
 	ioTokensEnabled bool
 	// There is no rate limiting in granting these tokens. That is, they are all
@@ -552,6 +576,35 @@ func (sg *kvGranter) setAvailableIOTokensLocked(tokens int64) {
 	if wasExhausted && sg.availableIOTokens > 0 && sg.ioTokensExhaustedDurationMetric != nil {
 		exhaustedMicros := timeutil.Since(sg.exhaustedStart).Microseconds()
 		sg.ioTokensExhaustedDurationMetric.Inc(exhaustedMicros)
+	}
+}
+
+func (sg *kvGranter) tryGetSoftSlots(count int) int {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
+	spareSoftSlots := sg.totalSoftSlots - sg.usedSoftSlots
+	spareSlots := sg.totalSlots - (sg.usedSlots + sg.usedSoftSlots)
+	if spareSlots < spareSoftSlots {
+		spareSoftSlots = spareSlots
+	}
+	if spareSoftSlots <= 0 {
+		sg.failedSoftSlotsGet = true
+		return 0
+	}
+	alloctedSlots := count
+	if alloctedSlots > spareSoftSlots {
+		alloctedSlots = spareSoftSlots
+	}
+	sg.usedSoftSlots += alloctedSlots
+	return alloctedSlots
+}
+
+func (sg *kvGranter) returnSoftSlots(count int) {
+	sg.coord.mu.Lock()
+	defer sg.coord.mu.Unlock()
+	sg.usedSoftSlots -= count
+	if sg.usedSoftSlots < 0 {
+		panic("used soft slots is negative")
 	}
 }
 
@@ -717,6 +770,7 @@ func NewGrantCoordinators(
 	kvg := &kvGranter{
 		coord:           coord,
 		totalSlots:      opts.MinCPUSlots,
+		totalSoftSlots:  opts.MinCPUSlots,
 		usedSlotsMetric: metrics.KVUsedSlots,
 	}
 	kvSlotAdjuster.granter = kvg
@@ -1175,7 +1229,11 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 		switch kind {
 		case KVWork:
 			g := coord.granters[i].(*kvGranter)
-			s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalSlots)
+			s.Printf("%s%s: used: %d, total(soft): %d(%d)", curSep, workKindString(kind),
+				g.usedSlots, g.totalSlots, g.totalSoftSlots)
+			if g.usedSoftSlots > 0 {
+				s.Printf(" used-soft: %d", g.usedSoftSlots)
+			}
 			if g.ioTokensEnabled {
 				s.Printf(" io-avail: %d", g.availableIOTokens)
 			}
@@ -1398,7 +1456,8 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, _ time.Duration) {
 
 	// Simple heuristic, which worked ok in experiments. More sophisticated ones
 	// could be devised.
-	if runnable >= threshold*procs {
+	usedSlots := kvsa.granter.usedSlots + kvsa.granter.usedSoftSlots
+	tryDecreaseSlots := func(used int, total int) int {
 		// Overload.
 		// If using some slots, and the used slots is less than the total slots,
 		// and total slots hasn't bottomed out at the min, decrease the total
@@ -1411,24 +1470,50 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, _ time.Duration) {
 		// so it is suggests that the drop in slots should not be causing cpu
 		// under-utilization, but one cannot be sure. Experiment with a smoothed
 		// signal or other ways to prevent a fast drop.
-		if kvsa.granter.usedSlots > 0 && kvsa.granter.totalSlots > kvsa.minCPUSlots &&
-			kvsa.granter.usedSlots <= kvsa.granter.totalSlots {
-			kvsa.granter.totalSlots--
+		if used > 0 && total > kvsa.minCPUSlots && used <= total {
+			total--
 		}
-	} else if float64(runnable) <= float64((threshold*procs)/2) {
+		return total
+	}
+	tryIncreaseSlots := func(used int, total int) int {
+		// TODO: 0.8 is arbitrary.
+		closeToTotalSlots := int(float64(total) * 0.8)
 		// Underload.
-		// Used all its slots and can increase further, so additive increase.
-		if kvsa.granter.usedSlots >= kvsa.granter.totalSlots &&
-			kvsa.granter.totalSlots < kvsa.maxCPUSlots {
+		// Used all its slots and can increase further, so additive increase. We
+		// also handle the case where the used slots are a bit less than total
+		// slots, since callers for soft slots don't block.
+		if (used >= total || (used >= closeToTotalSlots && kvsa.granter.failedSoftSlotsGet)) &&
+			total < kvsa.maxCPUSlots {
 			// NB: If the workload is IO bound, the slot count here will keep
 			// incrementing until these slots are no longer the bottleneck for
 			// admission. So it is not unreasonable to see this slot count go into
 			// the 1000s. If the workload switches to being CPU bound, we can
 			// decrease by 1000 slots every second (because the CPULoad ticks are at
 			// 1ms intervals, and we do additive decrease).
-			kvsa.granter.totalSlots++
+			total++
 		}
+		return total
 	}
+	// TODO: the fractions below are arbitrary and subject to tuning.
+	if runnable >= threshold*procs {
+		kvsa.granter.totalSlots = tryDecreaseSlots(usedSlots, kvsa.granter.totalSlots)
+		kvsa.granter.totalSoftSlots = tryDecreaseSlots(
+			kvsa.granter.usedSoftSlots, kvsa.granter.totalSoftSlots)
+	} else if float64(runnable) <= float64((threshold*procs)/4) {
+		kvsa.granter.totalSlots = tryIncreaseSlots(usedSlots, kvsa.granter.totalSlots)
+		kvsa.granter.totalSoftSlots = tryIncreaseSlots(
+			kvsa.granter.usedSoftSlots, kvsa.granter.totalSoftSlots)
+	} else if float64(runnable) <= float64((threshold*procs)/2) {
+		kvsa.granter.totalSlots = tryIncreaseSlots(usedSlots, kvsa.granter.totalSlots)
+	} else if runnable >= 3*threshold*procs/4 {
+		// NB: decreasing soft slots may not halt the runnable growth since the
+		// regular slot traffic may be high. Which means we will keep decreasing
+		// soft slots and undershoot. This is acceptable since we soft slots are
+		// strictly best-effort.
+		kvsa.granter.totalSoftSlots = tryDecreaseSlots(
+			kvsa.granter.usedSoftSlots, kvsa.granter.totalSoftSlots)
+	}
+	kvsa.granter.failedSoftSlotsGet = false
 	kvsa.totalSlotsMetric.Update(int64(kvsa.granter.totalSlots))
 }
 
@@ -1755,3 +1840,26 @@ var _ = (*GrantCoordinator)(nil).GetWorkQueue
 // uses the term "slot" for these is that we have a completion indicator, and
 // when we do have such an indicator it can be beneficial to be able to keep
 // track of how many ongoing work items we have.
+
+type SoftSlotGranter struct {
+	kvGranter *kvGranter
+}
+
+func MakeSoftSlotGranter(gc *GrantCoordinator) (*SoftSlotGranter, error) {
+	kvGranter, ok := gc.granters[KVWork].(*kvGranter)
+	if !ok {
+		return nil, errors.Errorf("GrantCoordinator does not support soft slots")
+	}
+	return &SoftSlotGranter{
+		kvGranter: kvGranter,
+	}, nil
+}
+
+// TODO: experiment with calling this when opening an sstable.Writer.
+func (ssg *SoftSlotGranter) TryGetSlots(count int) int {
+	return ssg.kvGranter.tryGetSoftSlots(count)
+}
+
+func (ssg *SoftSlotGranter) ReturnSlots(count int) {
+	ssg.kvGranter.returnSoftSlots(count)
+}
