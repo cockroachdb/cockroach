@@ -1182,10 +1182,6 @@ func RemoveIndexZoneConfigs(
 	tableDesc catalog.TableDescriptor,
 	indexIDs []uint32,
 ) error {
-	if !execCfg.Codec.ForSystemTenant() {
-		// Tenants are agnostic to zone configs.
-		return nil
-	}
 	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, tableDesc.GetID())
 	if err != nil {
 		return err
