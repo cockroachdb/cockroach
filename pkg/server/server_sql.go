@@ -548,6 +548,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	collectionFactory := descs.NewCollectionFactory(
+		ctx,
 		cfg.Settings,
 		leaseMgr,
 		virtualSchemas,
