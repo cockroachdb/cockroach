@@ -223,13 +223,10 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 
 	if err := rf.Init(
 		context.TODO(),
-		false, /* reverse */
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		0, /* lockTimeout */
-		&c.a,
-		nil, /* memMonitor */
-		&spec,
+		row.FetcherInitArgs{
+			Alloc: &c.a,
+			Spec:  &spec,
+		},
 	); err != nil {
 		return nil, err
 	}
