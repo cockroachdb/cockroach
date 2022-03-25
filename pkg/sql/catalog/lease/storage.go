@@ -88,7 +88,8 @@ func (s storage) acquire(
 	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID,
 ) (desc catalog.Descriptor, expiration hlc.Timestamp, _ error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	acquireInTxn := func(ctx context.Context, txn *kv.Txn) (err error) {
+
 		// Run the descriptor read as high-priority, thereby pushing any intents out
 		// of its way. We don't want schema changes to prevent lease acquisitions;
 		// we'd rather force them to refresh. Also this prevents deadlocks in cases
@@ -97,6 +98,29 @@ func (s storage) acquire(
 		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
 		}
+
+		nodeID := s.nodeIDContainer.SQLInstanceID()
+		if nodeID == 0 {
+			panic("zero nodeID")
+		}
+		// If there was a previous iteration of the loop, we'd know because the
+		// desc and expiration is non-empty. In this case, we may have successfully
+		// written a value to the database, which we'd leak if we did not delete it.
+		// Note that the expiration is part of the primary key in the table, so we
+		// would not overwrite the old entry if we just were to do another insert.
+		if !expiration.IsEmpty() && desc != nil {
+			prevExpirationTS := storedLeaseExpiration(expiration)
+			deleteLease := fmt.Sprintf(
+				`DELETE FROM system.public.lease WHERE "descID" = %d AND version = %d AND "nodeID" = %d AND expiration = %s`,
+				desc.GetID(), desc.GetVersion(), nodeID, &prevExpirationTS,
+			)
+			if _, err := s.internalExecutor.Exec(
+				ctx, "lease-insert", txn, deleteLease,
+			); err != nil {
+				return err
+			}
+		}
+
 		expiration = txn.ReadTimestamp().Add(int64(s.jitteredLeaseDuration()), 0)
 		if expiration.LessEq(minExpiration) {
 			// In the rare circumstances where expiration <= minExpiration
@@ -116,10 +140,6 @@ func (s storage) acquire(
 			return err
 		}
 		log.VEventf(ctx, 2, "storage acquired lease %v@%v", desc, expiration)
-		nodeID := s.nodeIDContainer.SQLInstanceID()
-		if nodeID == 0 {
-			panic("zero nodeID")
-		}
 
 		// We use string interpolation here, instead of passing the arguments to
 		// InternalExecutor.Exec() because we don't want to pay for preparing the
@@ -139,16 +159,27 @@ func (s storage) acquire(
 		if count != 1 {
 			return errors.Errorf("%s: expected 1 result, found %d", insertLease, count)
 		}
-		s.outstandingLeases.Inc(1)
 		return nil
-	})
-	if err != nil {
-		return nil, hlc.Timestamp{}, err
 	}
-	if s.testingKnobs.LeaseAcquiredEvent != nil {
-		s.testingKnobs.LeaseAcquiredEvent(desc, err)
+
+	// Run a retry loop to deal with AmbiguousResultErrors. All other error types
+	// are propagated up to the caller.
+	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
+		err := s.db.Txn(ctx, acquireInTxn)
+		var pErr *roachpb.AmbiguousResultError
+		if errors.As(err, &pErr) {
+			continue
+		}
+		if err != nil {
+			return nil, hlc.Timestamp{}, err
+		}
+		if s.testingKnobs.LeaseAcquiredEvent != nil {
+			s.testingKnobs.LeaseAcquiredEvent(desc, err)
+		}
+		s.outstandingLeases.Inc(1)
+		return desc, expiration, nil
 	}
-	return desc, expiration, nil
+	return nil, hlc.Timestamp{}, ctx.Err()
 }
 
 // Release a previously acquired descriptor. Never let this method
