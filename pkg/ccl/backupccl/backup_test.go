@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -172,16 +173,23 @@ func (d *datadrivenTestState) addServer(
 	var cleanup func()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODirConfig = ioConf
+	params.ServerArgs.Knobs = base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	settings := cluster.MakeTestingClusterSettings()
+	closedts.TargetDuration.Override(context.Background(), &settings.SV, 10*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
+
 	if tempCleanupFrequency != "" {
 		duration, err := time.ParseDuration(tempCleanupFrequency)
 		if err != nil {
 			return errors.New("unable to parse tempCleanupFrequency during server creation")
 		}
-		settings := cluster.MakeTestingClusterSettings()
 		sql.TempObjectCleanupInterval.Override(context.Background(), &settings.SV, duration)
 		sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Millisecond)
-		params.ServerArgs.Settings = settings
 	}
+	params.ServerArgs.Settings = settings
 
 	clusterSize := singleNode
 
