@@ -53,6 +53,7 @@ func decodeArrayKey(
 	}
 
 	result := tree.NewDArray(t.ArrayContents())
+	result.MaybeSetCustomOid(t)
 
 	for {
 		if len(buf) == 0 {
