@@ -1424,8 +1424,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									if srcNulls.NullAt(bs.curSrcStartIdx) {
 										outNulls.SetNull(outStartIdx)
 									} else {
-										v := srcCol.Get(bs.curSrcStartIdx)
-										outCol.Set(outStartIdx, v)
+										outCol.Copy(srcCol, outStartIdx, bs.curSrcStartIdx)
 									}
 								} else {
 									out.Copy(
@@ -1632,8 +1631,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									if srcNulls.NullAt(bs.curSrcStartIdx) {
 										outNulls.SetNull(outStartIdx)
 									} else {
-										v := srcCol.Get(bs.curSrcStartIdx)
-										outCol.Set(outStartIdx, v)
+										outCol.Copy(srcCol, outStartIdx, bs.curSrcStartIdx)
 									}
 								} else {
 									out.Copy(

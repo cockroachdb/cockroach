@@ -250,8 +250,12 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									if srcNulls.NullAt(bs.curSrcStartIdx) {
 										outNulls.SetNull(outStartIdx)
 									} else {
+										// {{if .IsBytesLike}}
+										outCol.Copy(srcCol, outStartIdx, bs.curSrcStartIdx)
+										// {{else}}
 										v := srcCol.Get(bs.curSrcStartIdx)
 										outCol.Set(outStartIdx, v)
+										// {{end}}
 									}
 								} else {
 									out.Copy(

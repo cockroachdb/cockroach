@@ -125,8 +125,7 @@ func (c *BytesVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx].Set(dstIdx, v)
+		c.vecs[dstVecIdx].Copy(c.vecs[srcVecIdx], dstIdx, srcIdx)
 	}
 }
 
@@ -486,8 +485,7 @@ func (c *JSONVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
-		v := c.vecs[srcVecIdx].Get(srcIdx)
-		c.vecs[dstVecIdx].Set(dstIdx, v)
+		c.vecs[dstVecIdx].Copy(c.vecs[srcVecIdx], dstIdx, srcIdx)
 	}
 }
 

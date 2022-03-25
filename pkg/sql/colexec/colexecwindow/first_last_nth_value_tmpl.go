@@ -171,11 +171,15 @@ func (w *_OP_NAME_TYPEWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 			continue
 		}
 		col := vec.TemplateType()
+		// {{if .IsBytesLike}}
+		outputCol.Copy(col, i, idx)
+		// {{else}}
 		val := col.Get(idx)
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		outputCol.Set(i, val)
+		// {{end}}
 	}
 }
 
