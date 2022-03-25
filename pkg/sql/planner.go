@@ -470,6 +470,7 @@ func internalExtendedEvalCtx(
 			SessionDataStack:          sds,
 			TxnReadOnly:               false,
 			TxnImplicit:               true,
+			TxnIsSingleStmt:           true,
 			Context:                   ctx,
 			Mon:                       plannerMon,
 			TestingKnobs:              evalContextTestingKnobs,
@@ -499,11 +500,6 @@ func (p *planner) SemaCtx() *tree.SemaContext {
 // Note: if the context will be modified, use ExtendedEvalContextCopy instead.
 func (p *planner) ExtendedEvalContext() *extendedEvalContext {
 	return &p.extendedEvalCtx
-}
-
-// IsAutoCommit implements the PlanHookState interface.
-func (p *planner) IsAutoCommit() bool {
-	return p.autoCommit
 }
 
 func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {
