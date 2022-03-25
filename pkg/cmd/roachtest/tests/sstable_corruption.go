@@ -100,13 +100,36 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 		m := c.NewMonitor(ctx)
 		// Run a workload to try to get the node to notice corruption and crash.
 		m.Go(func(ctx context.Context) error {
-			_ = c.RunE(ctx, workloadNode,
-				fmt.Sprintf("./cockroach workload run tpcc --warehouses=100 --tolerate-errors --duration=%s", 2*time.Minute))
+			_ = c.RunE(
+				ctx, workloadNode,
+				"./cockroach workload run tpcc --warehouses=100 --tolerate-errors",
+			)
 			// Don't return an error from the workload. We want outcome of WaitE to be
 			// determined by the monitor noticing that a node died. The workload may
 			// also fail, despite --tolerate-errors, if a node crashes too early.
 			return nil
 		})
+
+		// There's a subtle race condition here that we want to guard against. The
+		// monitor's WaitE waits on either a) the first error from a node that it is
+		// monitoring, OR b) all goroutines derived from the monitor to exit. If the
+		// previous goroutine exits, the wait group may return (with nil) before the
+		// monitor has detected failure from a node. To guard against this, we spawn
+		// a second goroutine on the monitor that acts as a timeout. We expect to
+		// see corruption within the timeout, if not, this goroutine will fail the
+		// test.
+		const timeout = 5 * time.Minute
+		m.Go(func(ctx context.Context) error {
+			timer := time.NewTimer(timeout)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-timer.C:
+				t.Fatal("did not encounter corruption within the timeout")
+				return nil
+			}
+		})
+
 		require.Error(t, m.WaitE())
 	}
 
