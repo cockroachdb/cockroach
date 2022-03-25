@@ -442,13 +442,12 @@ func (z *zigzagJoiner) setupInfo(
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
-		false, /* reverse */
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		flowCtx.EvalCtx.SessionData().LockTimeout,
-		&info.alloc,
-		flowCtx.EvalCtx.Mon,
-		&spec.FetchSpec,
+		row.FetcherInitArgs{
+			LockTimeout: flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:       &info.alloc,
+			MemMonitor:  flowCtx.EvalCtx.Mon,
+			Spec:        &spec.FetchSpec,
+		},
 	); err != nil {
 		return err
 	}
