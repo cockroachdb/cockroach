@@ -3603,6 +3603,8 @@ type EvalContext struct {
 	// TxnReadOnly specifies if the current transaction is read-only.
 	TxnReadOnly bool
 	TxnImplicit bool
+	// TxnIsSingleStmt transaction consists of only a single statement.
+	TxnIsSingleStmt bool
 
 	Settings    *cluster.Settings
 	ClusterID   uuid.UUID

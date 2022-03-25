@@ -471,6 +471,7 @@ func internalExtendedEvalCtx(
 			SessionDataStack:          sds,
 			TxnReadOnly:               false,
 			TxnImplicit:               true,
+			TxnIsSingleStmt:           true,
 			Context:                   ctx,
 			Mon:                       plannerMon,
 			TestingKnobs:              evalContextTestingKnobs,
@@ -897,4 +898,12 @@ func (p *planner) QueryIteratorEx(
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
 	return rows.(tree.InternalRows), err
+}
+
+// IsSingleStatementTxn returns if the current transaction is a single statement
+// one or consists of multiple statements.
+func (p *planner) IsSingleStatementTxn() bool {
+	// If autocommit is enabled, and no earlier statement executed, then this
+	// is an implicit transaction.
+	return p.extendedEvalCtx.TxnIsSingleStmt
 }
