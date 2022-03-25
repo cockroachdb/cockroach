@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>description</key>
+  <string>Language support for data-driven test files (*.ddt).</string>
+  <key>name</key>
+  <string>DataDriven</string>
+  <key>uuid</key>
+  <string>DED65AE3-C4DF-4D47-B6DD-42893438049D</string>
+</dict>
+</plist>
