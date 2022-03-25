@@ -379,6 +379,15 @@ message JoinReaderSpec {
   // used for lookups - it depends on whether the joiner decides it wants
   // DistSender-parallelism or not.
   optional int64 lookup_batch_bytes_limit = 18 [(gogoproto.nullable) = false];
+
+  // A hint for how many rows the consumer of the join reader output might
+  // need. This is used to size the initial batches of input rows to try to
+  // avoid reading many more rows than needed by the processor receiving the
+  // output.
+  //
+  // Not used if there is a limit set in the PostProcessSpec of this processor
+  // (that value will be used for sizing batches instead).
+  optional int64 limit_hint = 21 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
