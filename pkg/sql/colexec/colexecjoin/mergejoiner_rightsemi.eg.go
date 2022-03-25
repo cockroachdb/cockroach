@@ -9268,8 +9268,7 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											if srcNulls.NullAt(srcIdx) {
 												outNulls.SetNull(outStartIdx)
 											} else {
-												v := srcCol.Get(srcIdx)
-												outCol.Set(outStartIdx, v)
+												outCol.Copy(srcCol, outStartIdx, srcIdx)
 											}
 										} else {
 											out.Copy(
@@ -9796,8 +9795,7 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											if srcNulls.NullAt(srcIdx) {
 												outNulls.SetNull(outStartIdx)
 											} else {
-												v := srcCol.Get(srcIdx)
-												outCol.Set(outStartIdx, v)
+												outCol.Copy(srcCol, outStartIdx, srcIdx)
 											}
 										} else {
 											out.Copy(
@@ -10007,8 +10005,7 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											if srcNulls.NullAt(srcIdx) {
 												outNulls.SetNull(outStartIdx)
 											} else {
-												v := srcCol.Get(srcIdx)
-												outCol.Set(outStartIdx, v)
+												outCol.Copy(srcCol, outStartIdx, srcIdx)
 											}
 										} else {
 											out.Copy(
@@ -10535,8 +10532,7 @@ func (o *mergeJoinRightSemiOp) buildRightGroupsFromBatch(
 											if srcNulls.NullAt(srcIdx) {
 												outNulls.SetNull(outStartIdx)
 											} else {
-												v := srcCol.Get(srcIdx)
-												outCol.Set(outStartIdx, v)
+												outCol.Copy(srcCol, outStartIdx, srcIdx)
 											}
 										} else {
 											out.Copy(
