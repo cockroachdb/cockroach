@@ -665,7 +665,7 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if !(p.IsAutoCommit() || backupStmt.Options.Detached) {
+		if !(p.ExtendedEvalContext().TxnIsSingleStmt || backupStmt.Options.Detached) {
 			return errors.Errorf("BACKUP cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 

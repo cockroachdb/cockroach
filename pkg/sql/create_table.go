@@ -377,7 +377,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 		// If we have an implicit txn we want to run CTAS async, and consequently
 		// ensure it gets queued as a SchemaChange.
-		if params.p.ExtendedEvalContext().TxnImplicit {
+		if params.extendedEvalCtx.TxnIsSingleStmt {
 			desc.State = descpb.DescriptorState_ADD
 		}
 	} else {
@@ -502,7 +502,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// If we are in an explicit txn or the source has placeholders, we execute the
 	// CTAS query synchronously.
-	if n.n.As() && !params.p.ExtendedEvalContext().TxnImplicit {
+	if n.n.As() && !params.extendedEvalCtx.TxnIsSingleStmt {
 		err = func() error {
 			// The data fill portion of CREATE AS must operate on a read snapshot,
 			// so that it doesn't end up observing its own writes.
