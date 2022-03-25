@@ -52,13 +52,14 @@ const (
 )
 
 type tpccOptions struct {
-	Warehouses     int
-	ExtraRunArgs   string
-	ExtraSetupArgs string
-	Chaos          func() Chaos                // for late binding of stopper
-	During         func(context.Context) error // for running a function during the test
-	Duration       time.Duration               // if zero, TPCC is not invoked
-	SetupType      tpccSetupType
+	Warehouses             int
+	DontOverrideWarehouses bool // Don't force Warehouses=1 for local clusters during setup.
+	ExtraRunArgs           string
+	ExtraSetupArgs         string
+	Chaos                  func() Chaos                // for late binding of stopper
+	During                 func(context.Context) error // for running a function during the test
+	Duration               time.Duration               // if zero, TPCC is not invoked
+	SetupType              tpccSetupType
 	// PrometheusConfig, if set, overwrites the default prometheus config settings.
 	PrometheusConfig *prometheus.Config
 	// DisablePrometheus will force prometheus to not start up.
@@ -126,7 +127,7 @@ func setupTPCC(
 	// Randomize starting with encryption-at-rest enabled.
 	crdbNodes = c.Range(1, c.Spec().NodeCount-1)
 	workloadNode = c.Node(c.Spec().NodeCount)
-	if c.IsLocal() {
+	if c.IsLocal() && !opts.DontOverrideWarehouses {
 		opts.Warehouses = 1
 	}
 

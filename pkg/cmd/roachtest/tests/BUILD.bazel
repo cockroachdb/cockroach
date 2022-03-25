@@ -90,6 +90,7 @@ go_library(
         "psycopg.go",
         "psycopg_blocklist.go",
         "python_helpers.go",
+        "qos_tpcc_background_olap.go",
         "queue.go",
         "quit.go",
         "rapid_restart.go",
