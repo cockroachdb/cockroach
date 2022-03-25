@@ -559,13 +559,20 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
+	_, err := t.db.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = t.db.Exec(`SET use_declarative_schema_changer = 'off';`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	sql := `
-SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
-SET use_declarative_schema_changer = 'off';
 CREATE DATABASE test;
 CREATE TABLE test.t(a INT PRIMARY KEY);
 `
-	_, err := t.db.Exec(sql)
+	_, err = t.db.Exec(sql)
 	if err != nil {
 		t.Fatal(err)
 	}

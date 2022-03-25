@@ -2832,6 +2832,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		atomic.StoreInt32(ex.extraTxnState.atomicAutoRetryCounter, 0)
 		ex.extraTxnState.autoRetryReason = nil
 		ex.recordTransactionStart(advInfo.txnEvent.txnID)
+		// Start of the transaction, so no statements were executed earlier.
+		ex.planner.afterFirstStmt = false
 		// Bump the txn counter for logging.
 		ex.extraTxnState.txnCounter++
 		if !ex.server.cfg.Codec.ForSystemTenant() {
@@ -2914,6 +2916,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent); err != nil {
 			return advanceInfo{}, err
 		}
+		// Transaction is restarting, so back to the first statement again.
+		ex.planner.afterFirstStmt = false
 	default:
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))

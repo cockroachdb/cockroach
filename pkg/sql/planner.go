@@ -207,6 +207,9 @@ type planner struct {
 	// auto-commit. This is dependent on information from the optimizer.
 	autoCommit bool
 
+	// afterFirstStmt indicates that an earlier statement was executed before the commit.
+	afterFirstStmt bool
+
 	// cancelChecker is used by planNodes to check for cancellation of the associated
 	// query.
 	cancelChecker cancelchecker.CancelChecker
@@ -897,4 +900,12 @@ func (p *planner) QueryIteratorEx(
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
 	return rows.(tree.InternalRows), err
+}
+
+// IsSingleStatementTxn returns if the current transaction is a single statement
+// one or consists of multiple statements.
+func (p *planner) IsSingleStatementTxn() bool {
+	// If autocommit is enabled, and no earlier statement executed, then this
+	// is an implicit transaction.
+	return p.autoCommit && !p.afterFirstStmt
 }
