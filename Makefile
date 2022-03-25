@@ -1390,11 +1390,13 @@ pkg/ui/workspaces/db-console/dist/%.ccl.dll.js pkg/ui/workspaces/db-console/%.cc
 
 .PHONY: ui-test
 ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
+	$(info $(yellow)NOTE: consider using `./dev ui test` instead of `make ui-test`$(term-reset))
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start
 	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn ci
 
 .PHONY: ui-test-watch
 ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
+	$(info $(yellow)NOTE: consider using `./dev ui test --watch` instead of `make ui-test-watch`$(term-reset))
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start --no-single-run --auto-watch & \
 	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn test
 
@@ -1430,11 +1432,13 @@ ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
   #
   # `node-run.sh` wrapper is removed because this command is supposed to be run in dev environment (not in docker of CI)
   # so it is safe to run yarn commands directly to preserve formatting and colors for outputs
+	$(info $(yellow)NOTE: consider using `./dev ui watch [--secure]` instead of `make ui-watch[-secure]`$(term-reset))
 	yarn --cwd pkg/ui/workspaces/cluster-ui build:watch & \
 	yarn --cwd pkg/ui/workspaces/db-console webpack-dev-server --config webpack.app.js --env.dist=ccl --env.WEBPACK_SERVE --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
+	$(info $(yellow)NOTE: consider using `./dev ui clean` instead of `make ui-clean`$(term-reset))
 	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name .gitkeep -delete
 	rm -rf pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
 	rm -rf pkg/ui/dist_vendor/*
@@ -1445,6 +1449,7 @@ ui-clean: ## Remove build artifacts.
 .PHONY: ui-maintainer-clean
 ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
+	$(info $(yellow)NOTE: consider using `./dev ui clean --all` instead of `make ui-maintainer-clean`$(term-reset))
 	rm -rf pkg/ui/node_modules pkg/ui/workspaces/db-console/node_modules pkg/ui/yarn.installed pkg/ui/workspaces/cluster-ui/node_modules
 
 pkg/roachprod/vm/aws/embedded.go: bin/.bootstrap pkg/roachprod/vm/aws/config.json pkg/roachprod/vm/aws/old.json bin/terraformgen
