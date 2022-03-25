@@ -100,6 +100,9 @@ block-gc-jobs
 # with the mvcc-index-backfiller.
 exec-sql
 SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = true;
+----
+
+exec-sql
 CREATE INDEX idx2 ON db.t (j);
 ALTER INDEX db.t@idx2 CONFIGURE ZONE USING gc.ttlseconds = 1;
 ----
@@ -134,6 +137,9 @@ translate database=db table=t
 # with the non-mvcc-index-backfiller.
 exec-sql
 SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false;
+----
+
+exec-sql
 CREATE INDEX idx3 ON db.t (j);
 ALTER INDEX db.t@idx3 CONFIGURE ZONE USING gc.ttlseconds = 1;
 ----
@@ -153,6 +159,9 @@ translate database=db table=t
 # zone configuration should also be cleaned up.
 exec-sql
 SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = true;
+----
+
+exec-sql
 CREATE TABLE db.t2(i INT PRIMARY KEY, j INT);
 CREATE INDEX idx ON db.t2 (j);
 ALTER INDEX db.t2@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
@@ -165,6 +174,9 @@ translate database=db table=t2
 
 exec-sql
 SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false;
+----
+
+exec-sql
 CREATE TABLE db.t3(i INT PRIMARY KEY, j INT);
 CREATE INDEX idx ON db.t3 (j);
 ALTER INDEX db.t3@idx CONFIGURE ZONE USING gc.ttlseconds = 1;

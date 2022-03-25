@@ -5,6 +5,8 @@
 # we need to wait for the system config to propagate.
 statement ok
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+
+statement ok
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
 
 statement ok

@@ -44,7 +44,7 @@ BEGIN
 exec
 SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
 ----
-ERROR: crdb_internal.deserialize_session(): cannot deserialize a session whilst inside a transaction (SQLSTATE 25000)
+ERROR: crdb_internal.deserialize_session(): cannot deserialize a session whilst inside a multi-statement transaction (SQLSTATE 25000)
 
 reset
 ----

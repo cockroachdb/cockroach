@@ -2,6 +2,8 @@
 
 statement ok
 SET CLUSTER SETTING sql.defaults.primary_region = "invalid-region-name";
+
+statement ok
 SET CLUSTER SETTING sql.multiregion.drop_primary_region.enabled = 'off'
 
 # Test invalid default primary region name.
