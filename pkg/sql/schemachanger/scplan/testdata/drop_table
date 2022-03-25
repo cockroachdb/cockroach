@@ -233,6 +233,7 @@ PreCommitPhase stage 1 of 1 with 33 MutationType ops
       - 108
       - 109
       JobID: 1
+      NonCancelable: true
       Statements:
       - statement: DROP TABLE defaultdb.shipments CASCADE
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
@@ -892,6 +893,7 @@ PreCommitPhase stage 1 of 1 with 18 MutationType ops
       - 111
       - 112
       JobID: 1
+      NonCancelable: true
       Statements:
       - statement: DROP TABLE defaultdb.greeter
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹greeter›

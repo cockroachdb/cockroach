@@ -574,6 +574,7 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
       - 116
       - 117
       JobID: 1
+      NonCancelable: true
       Statements:
       - statement: DROP DATABASE db1 CASCADE
         redactedstatement: DROP DATABASE ‹db1› CASCADE

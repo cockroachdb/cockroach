@@ -155,6 +155,7 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 106
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:
@@ -327,6 +328,7 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
@@ -545,6 +547,7 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
@@ -703,6 +706,7 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
@@ -962,6 +966,7 @@ PostCommitPhase stage 4 of 4 with 15 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 107
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:

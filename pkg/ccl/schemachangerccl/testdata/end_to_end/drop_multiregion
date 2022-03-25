@@ -367,7 +367,7 @@ upsert descriptor #108
   -  version: "1"
   +  version: "2"
 delete all comments for table descriptors [108]
-create job #1: "schema change job"
+create job #1 (non-cancelable: true): "schema change job"
   descriptor IDs: [105 107 108]
 # end PreCommitPhase
 commit transaction #1
@@ -710,10 +710,9 @@ upsert descriptor #108
   -  version: "2"
   +  version: "3"
 write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
-create job #2: "GC for dropping descriptor 108"
+create job #2 (non-cancelable: true): "GC for dropping descriptor 108"
   descriptor IDs: [108]
 update progress of schema change job #1
-set schema change job #1 to non-cancellable
 commit transaction #3
 # end PostCommitPhase
 
@@ -972,7 +971,7 @@ upsert descriptor #109
   -  version: "1"
   +  version: "2"
 delete all comments for table descriptors [109]
-create job #1: "schema change job"
+create job #1 (non-cancelable: true): "schema change job"
   descriptor IDs: [105 109]
 # end PreCommitPhase
 commit transaction #1
@@ -1209,10 +1208,9 @@ upsert descriptor #109
   -  version: "2"
   +  version: "3"
 write *eventpb.DropTable to event log for descriptor #109: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
-create job #2: "GC for dropping descriptor 109"
+create job #2 (non-cancelable: true): "GC for dropping descriptor 109"
   descriptor IDs: [109]
 update progress of schema change job #1
-set schema change job #1 to non-cancellable
 commit transaction #3
 # end PostCommitPhase
 
@@ -1660,7 +1658,7 @@ upsert descriptor #107
 delete comment for descriptor #104 of type DatabaseCommentType
 delete comment for descriptor #106 of type SchemaCommentType
 delete role settings for database on #104
-create job #1: "schema change job"
+create job #1 (non-cancelable: true): "schema change job"
   descriptor IDs: [104 105 106 107]
 # end PreCommitPhase
 commit transaction #1
@@ -1676,6 +1674,5 @@ delete descriptor #107
 deleting zone config for #104
 write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹multi_region_test_db› CASCADE
 update progress of schema change job #1
-set schema change job #1 to non-cancellable
 commit transaction #3
 # end PostCommitPhase

@@ -41,6 +41,7 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
+      NonCancelable: true
       Statements:
       - statement: DROP SEQUENCE defaultdb.sq1
         redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1›
@@ -143,6 +144,7 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
       - 105
       - 106
       JobID: 1
+      NonCancelable: true
       Statements:
       - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
         redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
