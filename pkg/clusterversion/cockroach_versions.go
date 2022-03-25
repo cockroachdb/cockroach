@@ -324,6 +324,9 @@ const (
 	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
 	// 22.1.
 	EnableNewStoreRebalancer
+	// ClusterLocksVirtualTable enables querying the crdb_internal.cluster_locks
+	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
+	ClusterLocksVirtualTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
