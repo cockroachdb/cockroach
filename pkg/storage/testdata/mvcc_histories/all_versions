@@ -1,0 +1,60 @@
+## Test all_versions mode for scan.
+## This is expected to fail in error "Write too old".
+
+run ok
+with t=A
+  txn_begin ts=44
+  put  k=a v=abc resolve
+  txn_remove
+----
+>> at end:
+data: "a"/44.000000000,0 -> /BYTES/abc
+
+run ok
+with t=A
+  txn_begin ts=46
+  put  k=a v=def resolve
+  txn_remove
+----
+>> at end:
+data: "a"/46.000000000,0 -> /BYTES/def
+data: "a"/44.000000000,0 -> /BYTES/abc
+
+run ok
+with ts=50,0 k=a end=z
+  scan allVersions=true
+----
+scan: "a" -> /BYTES/def @46.000000000,0
+scan: "a" -> /BYTES/abc @44.000000000,0
+
+run ok
+with t=A
+  txn_begin ts=48
+  put  k=b v=b resolve
+  txn_remove
+----
+>> at end:
+data: "a"/46.000000000,0 -> /BYTES/def
+data: "a"/44.000000000,0 -> /BYTES/abc
+data: "b"/48.000000000,0 -> /BYTES/b
+
+run ok
+with t=A
+  txn_begin ts=49
+  put  k=b v=c resolve
+  txn_remove
+----
+>> at end:
+data: "a"/46.000000000,0 -> /BYTES/def
+data: "a"/44.000000000,0 -> /BYTES/abc
+data: "b"/49.000000000,0 -> /BYTES/c
+data: "b"/48.000000000,0 -> /BYTES/b
+
+run ok
+with ts=50,0 k=a end=z
+  scan allVersions=true
+----
+scan: "a" -> /BYTES/def @46.000000000,0
+scan: "a" -> /BYTES/abc @44.000000000,0
+scan: "b" -> /BYTES/c @49.000000000,0
+scan: "b" -> /BYTES/b @48.000000000,0

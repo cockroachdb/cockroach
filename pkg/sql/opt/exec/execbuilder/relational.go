@@ -654,6 +654,7 @@ func (b *Builder) scanParams(
 		HardLimit:          hardLimit,
 		SoftLimit:          softLimit,
 		Reverse:            reverse,
+		AllVersions:        scan.AllVersions,
 		Parallelize:        parallelize,
 		Locking:            locking,
 		EstimatedRowCount:  rowCount,

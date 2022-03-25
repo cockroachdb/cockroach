@@ -133,6 +133,7 @@ func newTableReader(
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
 		row.FetcherInitArgs{
+			AllVersions:    spec.AllVersions,
 			Reverse:        spec.Reverse,
 			LockStrength:   spec.LockingStrength,
 			LockWaitPolicy: spec.LockingWaitPolicy,

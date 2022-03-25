@@ -613,7 +613,7 @@ func (node *From) docRow(p *PrettyCfg) pretty.TableRow {
 		return emptyRow
 	}
 	d := node.Tables.doc(p)
-	if node.AsOf.Expr != nil {
+	if node.AsOf.Expr != nil || node.AsOf.All {
 		d = p.nestUnder(
 			d,
 			p.Doc(&node.AsOf),
@@ -2153,6 +2153,9 @@ func (node *AsOfClause) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *AsOfClause) docRow(p *PrettyCfg) pretty.TableRow {
+	if node.All {
+		return p.row("AS OF SYSTEM TIME", pretty.Text("ALL"))
+	}
 	return p.row("AS OF SYSTEM TIME", p.Doc(node.Expr))
 }
 

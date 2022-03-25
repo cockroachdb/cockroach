@@ -505,6 +505,7 @@ func NewColIndexJoin(
 		// joiner for each set of spans to read.
 		0,     /* estimatedRowCount */
 		false, /* reverse */
+		false, /* allVersions */
 		flowCtx.TraceKV,
 	}
 	if err = fetcher.Init(

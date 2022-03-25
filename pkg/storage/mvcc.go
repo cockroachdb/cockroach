@@ -2269,6 +2269,7 @@ func mvccScanToBytes(
 		inconsistent:           opts.Inconsistent,
 		tombstones:             opts.Tombstones,
 		failOnMoreRecent:       opts.FailOnMoreRecent,
+		allVersions:            opts.AllVersions,
 		keyBuf:                 mvccScanner.keyBuf,
 	}
 
@@ -2416,6 +2417,10 @@ type MVCCScanOptions struct {
 	MaxIntents int64
 	// MemoryAccount is used for tracking memory allocations.
 	MemoryAccount *mon.BoundAccount
+	// AllVersions is set to true if this scan should return all MVCC versions up
+	// to the input timestamp, rather than just the most recent MVCC version
+	// before the input timestamp. It's used for "all versions" queries.
+	AllVersions bool
 }
 
 func (opts *MVCCScanOptions) validate() error {

@@ -208,12 +208,18 @@ func (a *AliasClause) Format(ctx *FmtCtx) {
 // AsOfClause represents an as of time.
 type AsOfClause struct {
 	Expr Expr
+	// All is true if this is an AS OF SYSTEM TIME ALL modifier.
+	All bool
 }
 
 // Format implements the NodeFormatter interface.
 func (a *AsOfClause) Format(ctx *FmtCtx) {
 	ctx.WriteString("AS OF SYSTEM TIME ")
-	ctx.FormatNode(a.Expr)
+	if a.All {
+		ctx.WriteString("ALL")
+	} else {
+		ctx.FormatNode(a.Expr)
+	}
 }
 
 // From represents a FROM clause.
@@ -226,7 +232,7 @@ type From struct {
 func (node *From) Format(ctx *FmtCtx) {
 	ctx.WriteString("FROM ")
 	ctx.FormatNode(&node.Tables)
-	if node.AsOf.Expr != nil {
+	if node.AsOf.Expr != nil || node.AsOf.All {
 		ctx.WriteByte(' ')
 		ctx.FormatNode(&node.AsOf)
 	}

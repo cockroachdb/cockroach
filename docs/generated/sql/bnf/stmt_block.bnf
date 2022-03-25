@@ -1544,6 +1544,7 @@ set_or_reset_csetting_stmt ::=
 
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
+	| 'AS' 'OF' 'SYSTEM' 'TIME' 'ALL'
 
 backup_options_list ::=
 	( backup_options ) ( ( ',' backup_options ) )*

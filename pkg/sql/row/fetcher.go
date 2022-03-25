@@ -130,6 +130,9 @@ type Fetcher struct {
 	// or not when StartScan is invoked.
 	reverse bool
 
+	// allVersions denotes whether or not to return all MVCC versions.
+	allVersions bool
+
 	// True if the index key must be decoded. This is only false if there are no
 	// needed columns.
 	mustDecodeIndexKey bool
@@ -206,6 +209,7 @@ func (rf *Fetcher) Close(ctx context.Context) {
 // FetcherInitArgs contains arguments for Fetcher.Init.
 type FetcherInitArgs struct {
 	Reverse        bool
+	AllVersions    bool
 	LockStrength   descpb.ScanLockingStrength
 	LockWaitPolicy descpb.ScanLockingWaitPolicy
 	LockTimeout    time.Duration
@@ -226,6 +230,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	rf.lockWaitPolicy = args.LockWaitPolicy
 	rf.lockTimeout = args.LockTimeout
 	rf.alloc = args.Alloc
+	rf.allVersions = args.AllVersions
 
 	if args.MemMonitor != nil {
 		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, args.MemMonitor)
@@ -366,6 +371,7 @@ func (rf *Fetcher) StartScan(
 			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
 			spans:                      spans,
 			reverse:                    rf.reverse,
+			allVersions:                rf.allVersions,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
 			lockStrength:               rf.lockStrength,

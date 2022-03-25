@@ -98,6 +98,8 @@ type txnKVFetcher struct {
 	// existing lock in order to perform a non-locking read on a key.
 	lockTimeout time.Duration
 
+	allVersions bool
+
 	// alreadyFetched indicates whether fetch() has already been executed at
 	// least once.
 	alreadyFetched bool
@@ -190,6 +192,7 @@ type kvBatchFetcherArgs struct {
 	sendFn                     sendFunc
 	spans                      roachpb.Spans
 	reverse                    bool
+	allVersions                bool
 	batchBytesLimit            rowinfra.BytesLimit
 	firstBatchKeyLimit         rowinfra.KeyLimit
 	lockStrength               descpb.ScanLockingStrength
@@ -268,6 +271,7 @@ func makeKVBatchFetcher(ctx context.Context, args kvBatchFetcherArgs) (txnKVFetc
 	f := txnKVFetcher{
 		sendFn:                     args.sendFn,
 		reverse:                    args.reverse,
+		allVersions:                args.allVersions,
 		batchBytesLimit:            args.batchBytesLimit,
 		firstBatchKeyLimit:         args.firstBatchKeyLimit,
 		lockStrength:               getKeyLockingStrength(args.lockStrength),
@@ -316,6 +320,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.LockTimeout = f.lockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
+	ba.Header.ScanAllVersions = f.allVersions
 	ba.AdmissionHeader = f.requestAdmissionHeader
 	ba.Requests = spansToRequests(f.spans, f.reverse, f.lockStrength)
 

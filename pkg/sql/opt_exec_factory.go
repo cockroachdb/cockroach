@@ -103,6 +103,7 @@ func (ef *execFactory) ConstructScan(
 	scan.softLimit = params.SoftLimit
 
 	scan.reverse = params.Reverse
+	scan.allVersions = params.AllVersions
 	scan.parallelize = params.Parallelize
 	var err error
 	scan.spans, err = generateScanSpans(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, idx, params)

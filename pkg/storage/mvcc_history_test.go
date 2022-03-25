@@ -781,6 +781,9 @@ func cmdScan(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
+	if e.hasArg("allVersions") {
+		opts.AllVersions = true
+	}
 	opts.Uncertainty = uncertainty.Interval{
 		GlobalLimit: e.getTsWithName(nil, "globalUncertaintyLimit"),
 		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName(nil, "localUncertaintyLimit")),

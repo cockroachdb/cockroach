@@ -1775,7 +1775,7 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*tree.AsOfSy
 		if !ok {
 			return nil, nil
 		}
-		if sc.From.AsOf.Expr == nil {
+		if sc.From.AsOf.Expr == nil && !sc.From.AsOf.All {
 			return nil, nil
 		}
 

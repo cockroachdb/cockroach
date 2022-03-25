@@ -201,6 +201,7 @@ func NewColBatchScan(
 		execinfra.GetWorkMemLimit(flowCtx),
 		estimatedRowCount,
 		spec.Reverse,
+		spec.AllVersions,
 		flowCtx.TraceKV,
 	}
 

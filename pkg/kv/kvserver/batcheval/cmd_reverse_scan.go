@@ -54,6 +54,7 @@ func ReverseScan(
 		FailOnMoreRecent:       args.KeyLocking != lock.None,
 		Reverse:                true,
 		MemoryAccount:          cArgs.EvalCtx.GetResponseMemoryAccount(),
+		AllVersions:            h.ScanAllVersions,
 	}
 
 	switch args.ScanFormat {

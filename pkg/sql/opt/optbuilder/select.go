@@ -507,6 +507,9 @@ func (b *Builder) buildScan(
 	}
 
 	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
+	if b.evalCtx.AsOfSystemTime != nil {
+		private.AllVersions = b.evalCtx.AsOfSystemTime.All
+	}
 	if indexFlags != nil {
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
 		private.Flags.NoZigzagJoin = indexFlags.NoZigzagJoin
