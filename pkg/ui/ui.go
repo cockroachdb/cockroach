@@ -57,8 +57,6 @@ var indexHTMLTemplate = template.Must(template.New("index").Parse(`<!DOCTYPE htm
 			window.dataFromServer = {{.}};
 		</script>
 
-		<script src="protos.dll.js" type="text/javascript"></script>
-		<script src="vendor.dll.js" type="text/javascript"></script>
 		<script src="bundle.js" type="text/javascript"></script>
 	</body>
 </html>
