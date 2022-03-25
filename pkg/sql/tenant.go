@@ -534,7 +534,7 @@ func gcTenantJob(
 func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	// TODO(jeffswenson): Delete internal_crdb.gc_tenant after the DestroyTenant
 	// changes are deployed to all Cockroach Cloud serverless hosts.
-	if !p.ExtendedEvalContext().TxnImplicit {
+	if !p.extendedEvalCtx.TxnIsSingleStmt {
 		return errors.Errorf("gc_tenant cannot be used inside a transaction")
 	}
 	var info *descpb.TenantInfo

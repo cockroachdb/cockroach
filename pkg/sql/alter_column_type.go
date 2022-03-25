@@ -260,7 +260,7 @@ func alterColumnTypeGeneral(
 	}
 
 	// Disallow ALTER COLUMN TYPE general inside an explicit transaction.
-	if !params.p.EvalContext().TxnImplicit {
+	if !params.extendedEvalCtx.TxnIsSingleStmt {
 		return AlterColTypeInTxnNotSupportedErr
 	}
 

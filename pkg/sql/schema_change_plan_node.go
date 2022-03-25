@@ -53,7 +53,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	// support it.
 	if mode == sessiondatapb.UseNewSchemaChangerOff ||
 		((mode == sessiondatapb.UseNewSchemaChangerOn ||
-			mode == sessiondatapb.UseNewSchemaChangerUnsafe) && !p.extendedEvalCtx.TxnImplicit) {
+			mode == sessiondatapb.UseNewSchemaChangerUnsafe) && !p.extendedEvalCtx.TxnIsSingleStmt) {
 		return nil, false, nil
 	}
 	scs := p.extendedEvalCtx.SchemaChangerState
