@@ -492,7 +492,8 @@ func TestShowBackups(t *testing.T) {
 	// check that we can show the inc layers in the individual full backups.
 	b1 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP $1 IN $2] WHERE object_type='table'`, rows[0][0], full)
 	require.Equal(t, 4, len(b1))
-	b2 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
+	b2 := sqlDBRestore.QueryStr(t,
+		`SELECT * FROM [SHOW BACKUP FROM $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
 	require.Equal(t, 3, len(b2))
 
 	require.Equal(t,
@@ -526,7 +527,8 @@ func TestShowNonDefaultBackups(t *testing.T) {
 	// Get base number of files, schemas, and ranges in the backup
 	var oldCount [3]int
 	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES"} {
-		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s LATEST IN '%s']`, typ, fullNonDefault)
+		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s']`, typ,
+			fullNonDefault)
 		count, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])
 		require.NoError(t, err, "error converting original count to integer")
 		oldCount[i] = count

@@ -695,6 +695,7 @@ use_stmt ::=
 show_backup_stmt ::=
 	'SHOW' 'BACKUPS' 'IN' string_or_placeholder
 	| 'SHOW' 'BACKUP' show_backup_kind string_or_placeholder 'IN' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' show_backup_kind 'FROM' string_or_placeholder 'IN' string_or_placeholder opt_with_options
 	| 'SHOW' 'BACKUP' show_backup_kind string_or_placeholder opt_with_options
 
 show_columns_stmt ::=

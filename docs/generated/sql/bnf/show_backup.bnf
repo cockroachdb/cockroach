@@ -3,6 +3,9 @@ show_backup_stmt ::=
 	| 'SHOW' 'BACKUP' show_backup_kind string_or_placeholder 'IN' string_or_placeholder 'WITH' kv_option_list
 	| 'SHOW' 'BACKUP' show_backup_kind string_or_placeholder 'IN' string_or_placeholder 'WITH' 'OPTIONS' '(' kv_option_list ')'
 	| 'SHOW' 'BACKUP' show_backup_kind string_or_placeholder 'IN' string_or_placeholder 
+	| 'SHOW' 'BACKUP' show_backup_kind 'FROM' string_or_placeholder 'IN' string_or_placeholder 'WITH' kv_option_list
+	| 'SHOW' 'BACKUP' show_backup_kind 'FROM' string_or_placeholder 'IN' string_or_placeholder 'WITH' 'OPTIONS' '(' kv_option_list ')'
+	| 'SHOW' 'BACKUP' show_backup_kind 'FROM' string_or_placeholder 'IN' string_or_placeholder 
 	| 'SHOW' 'BACKUP' show_backup_kind string_or_placeholder 'WITH' kv_option_list
 	| 'SHOW' 'BACKUP' show_backup_kind string_or_placeholder 'WITH' 'OPTIONS' '(' kv_option_list ')'
 	| 'SHOW' 'BACKUP' show_backup_kind string_or_placeholder 

@@ -5690,6 +5690,15 @@ show_backup_stmt:
       Options: $7.kvOptions(),
     }
   }
+| SHOW BACKUP show_backup_kind FROM string_or_placeholder IN string_or_placeholder opt_with_options
+	{
+		$$.val = &tree.ShowBackup{
+			Kind:    *$3.showBackupKind(),
+			Path:    $5.expr(),
+			InCollection: $7.expr(),
+			Options: $8.kvOptions(),
+		}
+	}
 | SHOW BACKUP show_backup_kind string_or_placeholder opt_with_options
 	{
 		$$.val = &tree.ShowBackup{
