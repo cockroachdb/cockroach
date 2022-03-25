@@ -456,7 +456,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if params.SessionData().SafeUpdates {
 				err := pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
 					"remove all data in that column")
-				if !params.extendedEvalCtx.TxnImplicit {
+				if !params.extendedEvalCtx.TxnIsSingleStmt {
 					err = errors.WithIssueLink(err, errors.IssueLink{
 						IssueURL: "https://github.com/cockroachdb/cockroach/issues/46541",
 						Detail: "when used in an explicit transaction combined with other " +
@@ -707,7 +707,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if !ok {
 				return errors.AssertionFailedf("missing stats data")
 			}
-			if !params.p.EvalContext().TxnImplicit {
+			if !params.extendedEvalCtx.TxnIsSingleStmt {
 				return errors.New("cannot inject statistics in an explicit transaction")
 			}
 			if err := injectTableStats(params, n.tableDesc, sd); err != nil {
