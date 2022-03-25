@@ -122,7 +122,7 @@ func newWindower(
 		for i, argIdx := range windowFn.ArgsIdxs {
 			argTypes[i] = w.inputTypes[argIdx]
 		}
-		windowConstructor, outputType, err := execinfrapb.GetWindowFunctionInfo(windowFn.Func, argTypes...)
+		windowConstructor, outputType, err := execinfra.GetWindowFunctionInfo(windowFn.Func, argTypes...)
 		if err != nil {
 			return nil, err
 		}
