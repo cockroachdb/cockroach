@@ -91,13 +91,10 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	var rf row.Fetcher
 	if err := rf.Init(
 		ctx,
-		false, /* reverse */
-		descpb.ScanLockingStrength_FOR_NONE,
-		descpb.ScanLockingWaitPolicy_BLOCK,
-		0, /* lockTimeout */
-		&tree.DatumAlloc{},
-		nil, /* memMonitor */
-		&spec,
+		row.FetcherInitArgs{
+			Alloc: &tree.DatumAlloc{},
+			Spec:  &spec,
+		},
 	); err != nil {
 		t.Fatal(err)
 	}
