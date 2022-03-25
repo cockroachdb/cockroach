@@ -133,6 +133,10 @@ type EvalContext interface {
 	// non-nil on those paths (a nil account is safe to use since it functions
 	// as an unlimited account).
 	GetResponseMemoryAccount() *mon.BoundAccount
+
+	// GetEngineCapacity returns the store's underlying engine capacity; other
+	// StoreCapacity fields not related to engine capacity are not populated.
+	GetEngineCapacity() (roachpb.StoreCapacity, error)
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -265,4 +269,7 @@ func (m *mockEvalCtxImpl) WatchForMerge(ctx context.Context) error {
 func (m *mockEvalCtxImpl) GetResponseMemoryAccount() *mon.BoundAccount {
 	// No limits.
 	return nil
+}
+func (m *mockEvalCtxImpl) GetEngineCapacity() (roachpb.StoreCapacity, error) {
+	return roachpb.StoreCapacity{Available: 1, Capacity: 1}, nil
 }

@@ -666,3 +666,23 @@ message Error {
 
   reserved 2;
 }
+
+
+// InsufficientSpaceError is an error due to insufficient space remaining.
+message InsufficientSpaceError {
+   // StoreID is the store that had insufficient space.
+   optional int64 store_id = 1 [(gogoproto.nullable) = false,
+   (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
+
+  // Op is the operaton that was unable to be performed. 
+  optional string op = 2 [(gogoproto.nullable) = false];
+
+   // Available is remaining capacity.
+   optional int64 available = 3 [(gogoproto.nullable) = false];
+
+   // Capacity is total capacity. 
+   optional int64 capacity = 4 [(gogoproto.nullable) = false];
+
+   // RequiredFraction is the required remaining capacity fraction.
+   optional double required = 5 [(gogoproto.nullable) = false];
+}
