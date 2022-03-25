@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -193,13 +194,17 @@ func NewReplicationHelper(
 	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
 
 	// Set required cluster settings.
-	_, err := db.Exec(`
+	for _, stmt := range strings.Split(`
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
-`)
-	require.NoError(t, err)
+`,
+		";") {
+		_, err := db.Exec(stmt)
+		require.NoError(t, err)
+
+	}
 
 	// Start tenant server
 	tenantID := serverutils.TestTenantID()

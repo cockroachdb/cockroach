@@ -392,6 +392,9 @@ sql.multiregion.import
 # rapidly.
 exec
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+----
+
+exec
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5ms';
 ----
 
