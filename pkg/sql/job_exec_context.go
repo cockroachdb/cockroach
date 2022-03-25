@@ -85,4 +85,5 @@ type JobExecContext interface {
 	User() security.SQLUsername
 	MigrationJobDeps() migration.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
+	//SpanConfigKVAccessor() spanconfig.KVAccessor
 }

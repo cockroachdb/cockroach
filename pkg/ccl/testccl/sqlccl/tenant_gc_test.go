@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -128,6 +129,253 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, len(records), beforeDelete-2)
+}
+
+// TestGCTablesWaitsForProtectedTimestamps is an integration test to ensure that
+// the GC job responsible for clearing ranging a dropped table's data respects
+// protected timestamps. Sketch:
+// Setup of PTS-es on system span configs:
+// Entire keyspace:  (ts@8, ts@23, ts@30)
+// Host on secondary tenant: (ts@6, ts@28, ts@35)
+// Tenant on tenant: (ts@2, ts@40)
+// Host on another secondary tenant not being tested: (ts@3, ts@4, ts@5)
+// We drop the table at ts@10. We then start updating system span configs or
+// entirely removing them to unblock GC in the order above. For the host, we
+// ensure only the PTS from the entire keyspace target applies. For the
+// secondary tenant variant, we ensure that the first 3 system span configs
+// all have effect.
+func TestGCTablesWaitsForProtectedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer gcjob.SetSmallMaxGCIntervalForTest()
+
+	var mu struct {
+		syncutil.Mutex
+
+		isSet       bool
+		isProtected bool
+	}
+
+	ctx := context.Background()
+	ts, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			GCJob: &sql.GCJobTestingKnobs{
+				RunAfterIsProtectedCheck: func(isProtected bool) {
+					mu.Lock()
+					defer mu.Unlock()
+
+					mu.isSet = true
+					mu.isProtected = isProtected
+				},
+			},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+	tsKVAccessor := ts.SpanConfigKVAccessor().(spanconfig.KVAccessor)
+
+	tenantID := roachpb.MakeTenantID(10)
+
+	tt, ttSQLDBRaw := serverutils.StartTenant(
+		t, ts, base.TestTenantArgs{
+			TenantID: tenantID,
+			TestingKnobs: base.TestingKnobs{
+				GCJob: &sql.GCJobTestingKnobs{
+					RunAfterIsProtectedCheck: func(isProtected bool) {
+						mu.Lock()
+						defer mu.Unlock()
+
+						mu.isSet = true
+						mu.isProtected = isProtected
+					},
+				},
+			},
+			Stopper: ts.Stopper(),
+		},
+	)
+	ttSQLDB := sqlutils.MakeSQLRunner(ttSQLDBRaw)
+	ttKVAccessor := ts.SpanConfigKVAccessor().(spanconfig.KVAccessor)
+
+	makeGCJobRecord := func(dropTime int64, id descpb.ID) jobs.Record {
+		return jobs.Record{
+			Details: jobspb.SchemaChangeGCDetails{
+				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
+					{
+						ID:       id,
+						DropTime: dropTime,
+					},
+				},
+			},
+			Progress: jobspb.SchemaChangeGCProgress{},
+		}
+	}
+
+	resetTestingKnob := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		mu.isSet = false
+	}
+
+	makeSystemSpanConfig := func(nanosTimestamps ...int) roachpb.SpanConfig {
+		var protectionPolicies []roachpb.ProtectionPolicy
+		for _, nanos := range nanosTimestamps {
+			protectionPolicies = append(protectionPolicies, roachpb.ProtectionPolicy{
+				ProtectedTimestamp: hlc.Timestamp{
+					WallTime: int64(nanos),
+				},
+			})
+		}
+		return roachpb.SpanConfig{
+			GCPolicy: roachpb.GCPolicy{
+				ProtectionPolicies: protectionPolicies,
+			},
+		}
+	}
+
+	ensureGCBlockedByPTS := func(t *testing.T, registry *jobs.Registry, sj *jobs.StartableJob) {
+		testutils.SucceedsSoon(t, func() error {
+			job, err := registry.LoadJob(ctx, sj.ID())
+			require.NoError(t, err)
+			require.Equal(t, jobs.StatusRunning, job.Status())
+
+			mu.Lock()
+			defer mu.Unlock()
+			if !mu.isSet {
+				return errors.Newf("waiting for isProtected status to be set")
+			}
+			require.Equal(t, true, mu.isProtected)
+			return nil
+		})
+	}
+
+	ensureGCSucceeded := func(t *testing.T, registry *jobs.Registry, sj *jobs.StartableJob) {
+		// Await job completion, ensure protection status was checked, and it was
+		// determined safe to GC.
+		require.NoError(t, sj.AwaitCompletion(ctx))
+		job, err := registry.LoadJob(ctx, sj.ID())
+		require.NoError(t, err)
+		require.Equal(t, jobs.StatusSucceeded, job.Status())
+		progress := job.Progress()
+		require.Equal(t, jobspb.SchemaChangeGCProgress_DELETED, progress.GetSchemaChangeGC().Tables[0].Status)
+
+		mu.Lock()
+		defer mu.Unlock()
+		require.Equal(t, false, mu.isProtected)
+	}
+
+	testutils.RunTrueAndFalse(t, "secondary-tenant", func(t *testing.T, forSecondaryTenant bool) {
+		resetTestingKnob()
+		if !forSecondaryTenant {
+			return
+		}
+		registry := ts.JobRegistry().(*jobs.Registry)
+		execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
+		sqlRunner := sqlDB
+		if forSecondaryTenant {
+			registry = tt.JobRegistry().(*jobs.Registry)
+			execCfg = tt.ExecutorConfig().(sql.ExecutorConfig)
+			sqlRunner = ttSQLDB
+		}
+		sqlRunner.Exec(t, "CREATE TABLE t()")
+		var tableID int
+		sqlRunner.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 't'").Scan(&tableID)
+		// Drop the table. We'll also create another GC job for this table with
+		// an injected drop time.
+		sqlRunner.Exec(t, "DROP TABLE t")
+
+		// Write a PTS over the entire keyspace. We'll include multiple
+		// timestamps, one of which is before the drop time.
+		r1, err := spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()),
+			makeSystemSpanConfig(8, 23, 30),
+		)
+
+		// We do something similar for a PTS set by the host over the tenant's
+		// keyspace.
+		hostOnTenant, err := spanconfig.MakeTenantKeyspaceTarget(roachpb.SystemTenantID, tenantID)
+		require.NoError(t, err)
+		r2, err := spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSystemTarget(hostOnTenant),
+			makeSystemSpanConfig(6, 28, 35),
+		)
+
+		// Lastly, we'll also add a PTS set by the host over a different
+		// secondary tenant's keyspace. This should have no bearing on our test.
+		hostOnTenant20, err := spanconfig.MakeTenantKeyspaceTarget(
+			roachpb.SystemTenantID, roachpb.MakeTenantID(20),
+		)
+		require.NoError(t, err)
+		r3, err := spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSystemTarget(hostOnTenant20),
+			makeSystemSpanConfig(3, 4, 5),
+		)
+
+		require.NoError(t, err)
+		err = tsKVAccessor.UpdateSpanConfigRecords(ctx, nil /*toDelete */, []spanconfig.Record{r1, r2, r3})
+		require.NoError(t, err)
+
+		// One more, this time set by the tenant itself on its entire keyspace.
+		// Note that we must do this upsert using the tenant's KVAccessor.
+		tenantOnTenant, err := spanconfig.MakeTenantKeyspaceTarget(tenantID, tenantID)
+		require.NoError(t, err)
+		r4, err := spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSystemTarget(tenantOnTenant),
+			makeSystemSpanConfig(2, 40),
+		)
+		require.NoError(t, err)
+		err = ttKVAccessor.UpdateSpanConfigRecords(ctx, nil /*toDelete */, []spanconfig.Record{r4})
+		require.NoError(t, err)
+
+		sj, err := jobs.TestingCreateAndStartJob(
+			ctx, registry, execCfg.DB, makeGCJobRecord(10, descpb.ID(tableID)),
+		)
+		require.NoError(t, err)
+
+		ensureGCBlockedByPTS(t, registry, sj)
+
+		// Update PTS state that applies to the entire keyspace -- we only
+		// remove the timestamp before the drop time. We should expect GC to
+		// succeed on if we're not testing for the system tenant at this point.
+		r1, err = spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()),
+			makeSystemSpanConfig(23, 30),
+		)
+		require.NoError(t, err)
+		err = tsKVAccessor.UpdateSpanConfigRecords(ctx, nil /*toDelete */, []spanconfig.Record{r1})
+		require.NoError(t, err)
+
+		resetTestingKnob()
+
+		if !forSecondaryTenant {
+			ensureGCSucceeded(t, registry, sj)
+			return
+		}
+
+		// Next, we'll remove the host set system span config on our secondary
+		// tenant.
+		r1, err = spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()),
+			makeSystemSpanConfig(23, 30),
+		)
+		require.NoError(t, err)
+		err = tsKVAccessor.UpdateSpanConfigRecords(ctx, []spanconfig.Target{r2.GetTarget()}, nil /* ToUpdate */)
+		require.NoError(t, err)
+
+		resetTestingKnob()
+		ensureGCBlockedByPTS(t, registry, sj)
+
+		// The only remaining PTS is from the system span config applied by
+		// the secondary tenant itself.
+		err = ttKVAccessor.UpdateSpanConfigRecords(ctx, []spanconfig.Target{r4.GetTarget()}, nil /* ToUpdate */)
+		require.NoError(t, err)
+
+		// At this point, GC should succeed.
+		resetTestingKnob()
+		ensureGCSucceeded(t, registry, sj)
+	})
 }
 
 // TestGCTenantJobWaitsForProtectedTimestamps tests that the GC job responsible

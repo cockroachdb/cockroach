@@ -2265,6 +2265,10 @@ func CreateGCJobRecord(
 type GCJobTestingKnobs struct {
 	RunBeforeResume    func(jobID jobspb.JobID) error
 	RunBeforePerformGC func(jobID jobspb.JobID) error
+	// RunAfterIsProtectedCheck is called after a successfully checking the
+	// protected timestamp status of a table or an index. The protection status is
+	// passed in.
+	RunAfterIsProtectedCheck func(isProtected bool)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
