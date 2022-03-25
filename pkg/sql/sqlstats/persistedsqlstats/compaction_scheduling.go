@@ -83,16 +83,8 @@ func CreateSQLStatsCompactionScheduleIfNotYetExist(
 // SQL Stats compaction job running. This is invoked by the scheduled job
 // Executor.
 func CreateCompactionJob(
-	ctx context.Context,
-	createdByInfo *jobs.CreatedByInfo,
-	txn *kv.Txn,
-	ie sqlutil.InternalExecutor,
-	jobRegistry *jobs.Registry,
+	ctx context.Context, createdByInfo *jobs.CreatedByInfo, txn *kv.Txn, jobRegistry *jobs.Registry,
 ) (jobspb.JobID, error) {
-	if err := CheckExistingCompactionJob(ctx, nil /* job */, ie, txn); err != nil {
-		return jobspb.InvalidJobID, err
-	}
-
 	record := jobs.Record{
 		Description: "automatic SQL Stats compaction",
 		Username:    security.NodeUserName(),

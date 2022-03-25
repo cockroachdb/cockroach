@@ -204,7 +204,7 @@ func (e *scheduledSQLStatsCompactionExecutor) createSQLStatsCompactionJob(
 		persistedsqlstats.CreateCompactionJob(ctx, &jobs.CreatedByInfo{
 			ID:   sj.ScheduleID(),
 			Name: jobs.CreatedByScheduledJobs,
-		}, txn, cfg.InternalExecutor, p.(*planner).ExecCfg().JobRegistry)
+		}, txn, p.(*planner).ExecCfg().JobRegistry)
 
 	if err != nil {
 		return err
