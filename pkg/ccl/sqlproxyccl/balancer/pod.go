@@ -6,18 +6,24 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package tenant
+package balancer
 
-// selectTenantPod selects a tenant pod from the given list to received
-// incoming traffic. Pods are weighted by their reported CPU load. rand must be
-// a pseudo random number within the bounds [0, 1). It is suggested to use
-// Float32() of a PseudoRand instance that is guarded by a mutex.
+import "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+
+// selectTenantPod selects a tenant pod from the given list to receive incoming
+// traffic. Pods are weighted by their reported CPU load. rand must be a pseudo
+// random number within the bounds [0, 1). It is suggested to use Float32() of a
+// PseudoRand instance that is guarded by a mutex.
 //
 //	rngMu.Lock()
 //	rand := rng.Float32()
 //	rngMu.Unlock()
 //	selectTenantPod(rand, pods)
-func selectTenantPod(rand float32, pods []*Pod) *Pod {
+func selectTenantPod(rand float32, pods []*tenant.Pod) *tenant.Pod {
+	if len(pods) == 0 {
+		return nil
+	}
+
 	if len(pods) == 1 {
 		return pods[0]
 	}

@@ -21,6 +21,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/sqlproxyccl/balancer",
         "//pkg/ccl/sqlproxyccl/denylist",
         "//pkg/ccl/sqlproxyccl/idle",
         "//pkg/ccl/sqlproxyccl/interceptor",
@@ -70,6 +71,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",
+        "//pkg/ccl/sqlproxyccl/balancer",
         "//pkg/ccl/sqlproxyccl/denylist",
         "//pkg/ccl/sqlproxyccl/interceptor",
         "//pkg/ccl/sqlproxyccl/tenant",
