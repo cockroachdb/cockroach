@@ -13,12 +13,14 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -80,6 +83,18 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 
+	gcWaiter := sync.NewCond(&syncutil.Mutex{})
+	allowGC := true
+	gcTestingKnobs := &sql.GCJobTestingKnobs{
+		RunBeforeResume: func(_ jobspb.JobID) error {
+			gcWaiter.L.Lock()
+			for !allowGC {
+				gcWaiter.Wait()
+			}
+			gcWaiter.L.Unlock()
+			return nil
+		},
+	}
 	scKnobs := &spanconfig.TestingKnobs{
 		// Instead of relying on the GC job to wait out TTLs and clear out
 		// descriptors, let's simply exclude dropped tables to simulate
@@ -94,6 +109,7 @@ func TestDataDriven(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
+					GCJob:      gcTestingKnobs,
 					SpanConfig: scKnobs,
 				},
 			},
@@ -239,6 +255,17 @@ func TestDataDriven(t *testing.T) {
 				var recordID string
 				d.ScanArgs(t, "record-id", &recordID)
 				tenant.ReleaseProtectedTimestampRecord(ctx, recordID)
+
+			case "block-gc-jobs":
+				gcWaiter.L.Lock()
+				allowGC = false
+				gcWaiter.L.Unlock()
+
+			case "unblock-gc-jobs":
+				gcWaiter.L.Lock()
+				allowGC = true
+				gcWaiter.Signal()
+				gcWaiter.L.Unlock()
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
