@@ -34,8 +34,9 @@ func (t byNameMap) getByName(parentID, parentSchemaID descpb.ID, name string) ca
 	return got
 }
 
-func (t byNameMap) delete(d catalog.NameKey) {
-	delete(t.t, makeByNameItem(d).get())
+func (t byNameMap) delete(d catalog.NameKey) (removed catalog.NameEntry) {
+	removed, _ = delete(t.t, makeByNameItem(d).get()).(catalog.NameEntry)
+	return removed
 }
 
 func (t byNameMap) clear() {

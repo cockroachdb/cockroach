@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,6 +55,10 @@ type kvDescriptors struct {
 	// observed.
 	// These are purged at the same time as allDescriptors.
 	allSchemasForDatabase map[descpb.ID]map[descpb.ID]string
+
+	// memAcc is the actual account of an injected, upstream monitor
+	// to track memory usage of kvDescriptors.
+	memAcc mon.BoundAccount
 }
 
 // allDescriptors is an abstraction to capture the complete set of descriptors
@@ -85,16 +90,18 @@ func (d *allDescriptors) contains(id descpb.ID) bool {
 }
 
 func makeKVDescriptors(
-	codec keys.SQLCodec, systemNamespace *systemDatabaseNamespaceCache,
+	codec keys.SQLCodec, systemNamespace *systemDatabaseNamespaceCache, monitor *mon.BytesMonitor,
 ) kvDescriptors {
 	return kvDescriptors{
 		codec:           codec,
 		systemNamespace: systemNamespace,
+		memAcc:          monitor.MakeBoundAccount(),
 	}
 }
 
-func (kd *kvDescriptors) reset() {
+func (kd *kvDescriptors) reset(ctx context.Context) {
 	kd.releaseAllDescriptors()
+	kd.memAcc.Clear(ctx)
 }
 
 // releaseAllDescriptors releases the cached slice of all descriptors
@@ -259,6 +266,12 @@ func (kd *kvDescriptors) getAllDescriptors(
 	if kd.allDescriptors.isUnset() {
 		c, err := catkv.GetCatalogUnvalidated(ctx, kd.codec, txn)
 		if err != nil {
+			return nstree.Catalog{}, err
+		}
+
+		// Monitor memory usage of the catalog recently read from storage.
+		if err := kd.memAcc.Grow(ctx, c.ByteSize()); err != nil {
+			err = errors.Wrap(err, "Memory usage exceeds limit for kvDescriptors.allDescriptors.")
 			return nstree.Catalog{}, err
 		}
 
