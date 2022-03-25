@@ -83,16 +83,8 @@ func CreateSQLStatsCompactionScheduleIfNotYetExist(
 // SQL Stats compaction job running. This is invoked by the scheduled job
 // Executor.
 func CreateCompactionJob(
-	ctx context.Context,
-	createdByInfo *jobs.CreatedByInfo,
-	txn *kv.Txn,
-	ie sqlutil.InternalExecutor,
-	jobRegistry *jobs.Registry,
+	ctx context.Context, createdByInfo *jobs.CreatedByInfo, txn *kv.Txn, jobRegistry *jobs.Registry,
 ) (jobspb.JobID, error) {
-	if err := CheckExistingCompactionJob(ctx, nil /* job */, ie, txn); err != nil {
-		return jobspb.InvalidJobID, err
-	}
-
 	record := jobs.Record{
 		Description: "automatic SQL Stats compaction",
 		Username:    security.NodeUserName(),
@@ -106,26 +98,6 @@ func CreateCompactionJob(
 		return jobspb.InvalidJobID, err
 	}
 	return jobID, nil
-}
-
-// CheckExistingCompactionJob checks for existing SQL Stats Compaction job
-// that are either PAUSED, CANCELED, or RUNNING. If so, it returns a
-// ErrConcurrentSQLStatsCompaction.
-func CheckExistingCompactionJob(
-	ctx context.Context, job *jobs.Job, ie sqlutil.InternalExecutor, txn *kv.Txn,
-) error {
-	jobID := jobspb.InvalidJobID
-	if job != nil {
-		jobID = job.ID()
-	}
-	exists, err := jobs.RunningJobExists(ctx, jobID, ie, txn, func(payload *jobspb.Payload) bool {
-		return payload.Type() == jobspb.TypeAutoSQLStatsCompaction
-	})
-
-	if err == nil && exists {
-		err = ErrConcurrentSQLStatsCompaction
-	}
-	return err
 }
 
 func checkExistingCompactionSchedule(

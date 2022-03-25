@@ -310,7 +310,6 @@ func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 func launchSQLStatsCompactionJob(server serverutils.TestServerInterface) (jobspb.JobID, error) {
 	return persistedsqlstats.CreateCompactionJob(
 		context.Background(), nil /* createdByInfo */, nil, /* txn */
-		server.InternalExecutor().(sqlutil.InternalExecutor),
 		server.JobRegistry().(*jobs.Registry),
 	)
 }
