@@ -93,16 +93,18 @@ func (tr *testRequester) setStoreRequestEstimates(estimates storeRequestEstimate
 // TestGranterBasic is a datadriven test with the following commands:
 //
 // init-grant-coordinator min-cpu=<int> max-cpu=<int> sql-kv-tokens=<int>
-//   sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
+// sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
 // set-has-waiting-requests work=<kind> v=<true|false>
 // set-return-value-from-granted work=<kind> v=<int>
 // try-get work=<kind> [v=<int>]
 // return-grant work=<kind> [v=<int>]
 // took-without-permission work=<kind> [v=<int>]
 // continue-grant-chain work=<kind>
-// cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
+// cpu-load runnable=<int> procs=<int> [infrequent=<bool>] [clamp=<int>]
 // init-store-grant-coordinator
 // set-io-tokens tokens=<int>
+// try-get-soft-slots slots=<int>
+// return-soft-slots slots=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -110,6 +112,7 @@ func TestGranterBasic(t *testing.T) {
 	var ambientCtx log.AmbientContext
 	var requesters [numWorkKinds]*testRequester
 	var coord *GrantCoordinator
+	var ssg *SoftSlotGranter
 	clearRequesterAndCoord := func() {
 		coord = nil
 		for i := range requesters {
@@ -154,8 +157,12 @@ func TestGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
+			opts.RunnableAverageAlpha = 0 // This gives weight to only the most recent sample.
 			coords, _ := NewGrantCoordinators(ambientCtx, opts)
 			coord = coords.Regular
+			var err error
+			ssg, err = MakeSoftSlotGranter(coord)
+			require.NoError(t, err)
 			return flushAndReset()
 
 		case "init-store-grant-coordinator":
@@ -241,6 +248,12 @@ func TestGranterBasic(t *testing.T) {
 				samplePeriod = 250 * time.Millisecond
 			}
 			coord.CPULoad(runnable, procs, samplePeriod)
+
+			if d.HasArg("clamp") {
+				var clamp int
+				d.ScanArgs(t, "clamp", &clamp)
+				ssg.kvGranter.setModerateSlotsClamp(clamp)
+			}
 			return flushAndReset()
 
 		case "set-io-tokens":
@@ -252,6 +265,19 @@ func TestGranterBasic(t *testing.T) {
 			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableIOTokensLocked(int64(tokens))
 			coord.mu.Unlock()
 			coord.testingTryGrant()
+			return flushAndReset()
+
+		case "try-get-soft-slots":
+			var slots int
+			d.ScanArgs(t, "slots", &slots)
+			granted := ssg.TryGetSlots(slots)
+			fmt.Fprintf(&buf, "requested: %d, granted: %d\n", slots, granted)
+			return flushAndReset()
+
+		case "return-soft-slots":
+			var slots int
+			d.ScanArgs(t, "slots", &slots)
+			ssg.ReturnSlots(slots)
 			return flushAndReset()
 
 		default:
