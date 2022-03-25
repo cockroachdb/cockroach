@@ -226,7 +226,12 @@ SELECT ARRAY[1,2,3]::TEXT[]
 query T
 SELECT ARRAY[1,2,3]::INT2VECTOR
 ----
-{1,2,3}
+1 2 3
+
+query T
+SELECT ARRAY[1,2,3]::OIDVECTOR
+----
+1 2 3
 
 # array subscript access
 
@@ -2223,3 +2228,19 @@ query T
 SELECT array_positions(NULL::letter[], 'b'::letter)
 ----
 NULL
+
+# Regression test for losing the OID of the array during spilling to disk.
+
+# Lower the distsql_workmem so that the sort in the query below has to spill to
+# disk.
+statement ok
+SET distsql_workmem = '2B'
+
+# The output must be printed without the curly braces.
+query T
+SELECT indkey FROM pg_index WHERE indrelid = (SELECT oid FROM pg_class WHERE relname = 'k') ORDER BY 1
+----
+1
+
+statement ok
+RESET distsql_workmem
