@@ -14,6 +14,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -50,6 +51,12 @@ type connector struct {
 	//
 	// NOTE: This field is required.
 	DirectoryCache tenant.DirectoryCache
+
+	// Balancer represents the load balancer component that will be used to
+	// choose which SQL pod to route the connection to.
+	//
+	// NOTE: This field is required.
+	Balancer *balancer.Balancer
 
 	// StartupMsg represents the startup message associated with the client.
 	// This will be used when establishing a pgwire connection with the SQL pod.
@@ -263,19 +270,33 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 		return c.testingKnobs.lookupAddr(ctx)
 	}
 
-	// Lookup tenant in the directory cache.
-	addr, err := c.DirectoryCache.EnsureTenantAddr(ctx, c.TenantID, c.ClusterName)
+	// Lookup tenant in the directory cache. Once we have retrieve the list of
+	// pods, use the Balancer for load balancing.
+	pods, err := c.DirectoryCache.LookupTenantPods(ctx, c.TenantID, c.ClusterName)
 	switch {
 	case err == nil:
-		return addr, nil
+		// Note that LookupTenantPods will always return RUNNING pods, so this
+		// is fine for now. If we start changing that to also return DRAINING
+		// pods, we'd have to filter accordingly.
+		pod, err := c.Balancer.SelectTenantPod(pods)
+		if err != nil {
+			// This should never happen because LookupTenantPods ensured that
+			// len(pods) should never be 0. Mark it as a retriable connection
+			// anyway.
+			return "", markAsRetriableConnectorError(err)
+		}
+		return pod.Addr, nil
+
 	case status.Code(err) == codes.FailedPrecondition:
 		if st, ok := status.FromError(err); ok {
 			return "", newErrorf(codeUnavailable, "%v", st.Message())
 		}
 		return "", newErrorf(codeUnavailable, "unavailable")
+
 	case status.Code(err) == codes.NotFound:
 		return "", newErrorf(codeParamsRoutingFailed,
 			"cluster %s-%d not found", c.ClusterName, c.TenantID.ToUint64())
+
 	default:
 		return "", markAsRetriableConnectorError(err)
 	}
