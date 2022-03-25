@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -109,7 +110,7 @@ func (s *windowPlanState) createWindowFnSpec(
 	for i, argIdx := range funcInProgress.argsIdxs {
 		argTypes[i] = s.plan.GetResultTypes()[argIdx]
 	}
-	_, outputType, err := execinfrapb.GetWindowFunctionInfo(funcSpec, argTypes...)
+	_, outputType, err := execinfra.GetWindowFunctionInfo(funcSpec, argTypes...)
 	if err != nil {
 		return execinfrapb.WindowerSpec_WindowFn{}, outputType, err
 	}
