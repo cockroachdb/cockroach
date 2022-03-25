@@ -140,6 +140,9 @@ reset-matching-stmt-for-tracing
 # Set a super high closed bounded staleness target and execute a schema change.
 exec
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1hr';
+----
+
+exec
 ALTER TABLE t ADD COLUMN new_col INT NOT NULL DEFAULT 2
 ----
 

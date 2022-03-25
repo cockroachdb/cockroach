@@ -1547,4 +1547,6 @@ hash8  SCRAM-SHA-256$200000
 # Reset cluster setting after test completion.
 statement ok
 RESET CLUSTER SETTING server.user_login.password_encryption;
+
+statement ok
 RESET CLUSTER SETTING server.user_login.password_hashes.default_cost.scram_sha_256

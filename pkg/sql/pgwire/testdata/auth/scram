@@ -4,12 +4,32 @@ config secure
 sql
 -- prevent auto-converting passwords, so that each sub-test exercises its own hash method.
 SET CLUSTER SETTING server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled = false;
+----
+ok
+
+sql
 -- Explicit hash.
 CREATE USER abc WITH PASSWORD 'SCRAM-SHA-256$4096:pAlYy62NTdETKb291V/Wow==$OXMAj9oD53QucEYVMBcdhRnjg2/S/iZY/88ShZnputA=:r8l4c1pk9bmDi+8an059l/nt9Bg1zb1ikkg+DeRv4UQ=';
+----
+ok
+
+sql
 -- Automatic hashes.
 SET CLUSTER SETTING server.user_login.password_encryption = 'crdb-bcrypt';
+----
+ok
+
+sql
 CREATE USER foo WITH PASSWORD 'abc';
+----
+ok
+
+sql
 SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';
+----
+ok
+
+sql
 CREATE USER abc2 WITH PASSWORD 'abc'
 ----
 ok

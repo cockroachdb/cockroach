@@ -1414,6 +1414,8 @@ SET prefer_lookup_joins_for_fks = false
 # into the child table.
 statement ok
 CREATE TABLE small_parent (p INT PRIMARY KEY);
+
+statement ok
 ALTER TABLE small_parent INJECT STATISTICS '[
   {
     "columns": ["p"],

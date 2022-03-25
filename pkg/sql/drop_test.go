@@ -1409,8 +1409,10 @@ func dropLargeDatabaseGeneric(
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `
-CREATE DATABASE largedb;
 SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled=no;
+`)
+	sqlDB.Exec(t, `
+CREATE DATABASE largedb;
 `)
 	stmts, err := sqltestutils.GenerateViewBasedGraphSchema(workloadParams)
 	require.NoError(t, err)

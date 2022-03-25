@@ -24,6 +24,9 @@ SET CLUSTER SETTING feature.schema_change.enabled = TRUE;
 exec
 CREATE TABLE t(a int, b int);
 INSERT INTO t (a, b) VALUES (0, 1);
+----
+
+exec
 SET CLUSTER SETTING feature.stats.enabled = FALSE;
 ----
 
