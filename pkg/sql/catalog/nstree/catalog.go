@@ -13,6 +13,7 @@ package nstree
 import (
 	"context"
 	"strings"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -26,6 +27,7 @@ import (
 // thereof.
 type Catalog struct {
 	underlying Map
+	byteSize   int64
 }
 
 // ForEachDescriptorEntry iterates over all descriptor table entries in an
@@ -208,6 +210,11 @@ func (c Catalog) ValidateWithRecover(
 	return c.Validate(ctx, version, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, desc)
 }
 
+// ByteSize returns memory usage of the underlying map in bytes.
+func (c Catalog) ByteSize() int64 {
+	return c.byteSize
+}
+
 // MutableCatalog is like Catalog but mutable.
 type MutableCatalog struct {
 	Catalog
@@ -219,7 +226,10 @@ func (mc *MutableCatalog) UpsertDescriptorEntry(desc catalog.Descriptor) {
 		return
 	}
 	mc.underlying.maybeInitialize()
-	mc.underlying.byID.upsert(desc)
+	if replaced := mc.underlying.byID.upsert(desc); replaced != nil {
+		mc.byteSize -= replaced.(catalog.Descriptor).ByteSize()
+	}
+	mc.byteSize += desc.ByteSize()
 }
 
 // DeleteDescriptorEntry removes a descriptor from the MutableCatalog.
@@ -228,7 +238,9 @@ func (mc *MutableCatalog) DeleteDescriptorEntry(id descpb.ID) {
 		return
 	}
 	mc.underlying.maybeInitialize()
-	mc.underlying.byID.delete(id)
+	if removed := mc.underlying.byID.delete(id); removed != nil {
+		mc.byteSize -= removed.(catalog.Descriptor).ByteSize()
+	}
 }
 
 // UpsertNamespaceEntry adds a name -> id mapping to the MutableCatalog.
@@ -237,14 +249,18 @@ func (mc *MutableCatalog) UpsertNamespaceEntry(key catalog.NameKey, id descpb.ID
 		return
 	}
 	mc.underlying.maybeInitialize()
-	mc.underlying.byName.upsert(&namespaceEntry{
+	nsEntry := &namespaceEntry{
 		NameInfo: descpb.NameInfo{
 			ParentID:       key.GetParentID(),
 			ParentSchemaID: key.GetParentSchemaID(),
 			Name:           key.GetName(),
 		},
 		ID: id,
-	})
+	}
+	if replaced := mc.underlying.byName.upsert(nsEntry); replaced != nil {
+		mc.byteSize -= replaced.(*namespaceEntry).ByteSize()
+	}
+	mc.byteSize += nsEntry.ByteSize()
 }
 
 // DeleteNamespaceEntry removes a name -> id mapping from the MutableCatalog.
@@ -253,7 +269,9 @@ func (mc *MutableCatalog) DeleteNamespaceEntry(key catalog.NameKey) {
 		return
 	}
 	mc.underlying.maybeInitialize()
-	mc.underlying.byName.delete(key)
+	if removed := mc.underlying.byName.delete(key); removed != nil {
+		mc.byteSize -= removed.(*namespaceEntry).ByteSize()
+	}
 }
 
 // Clear empties the MutableCatalog.
@@ -271,4 +289,9 @@ var _ catalog.NameEntry = namespaceEntry{}
 // GetID implements the catalog.NameEntry interface.
 func (e namespaceEntry) GetID() descpb.ID {
 	return e.ID
+}
+
+// ByteSize returns the number of bytes a namespaceEntry object takes.
+func (e namespaceEntry) ByteSize() int64 {
+	return int64(e.NameInfo.Size()) + int64(unsafe.Sizeof(e.ID))
 }
