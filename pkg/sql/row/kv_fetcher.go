@@ -92,18 +92,20 @@ func NewKVFetcher(
 
 	kvBatchFetcher, err := makeKVBatchFetcher(
 		ctx,
-		sendFn,
-		spans,
-		reverse,
-		batchBytesLimit,
-		firstBatchLimit,
-		lockStrength,
-		lockWaitPolicy,
-		lockTimeout,
-		acc,
-		forceProductionKVBatchSize,
-		txn.AdmissionHeader(),
-		txn.DB().SQLKVResponseAdmissionQ,
+		kvBatchFetcherArgs{
+			sendFn:                     sendFn,
+			spans:                      spans,
+			reverse:                    reverse,
+			batchBytesLimit:            batchBytesLimit,
+			firstBatchKeyLimit:         firstBatchLimit,
+			lockStrength:               lockStrength,
+			lockWaitPolicy:             lockWaitPolicy,
+			lockTimeout:                lockTimeout,
+			acc:                        acc,
+			forceProductionKVBatchSize: forceProductionKVBatchSize,
+			requestAdmissionHeader:     txn.AdmissionHeader(),
+			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+		},
 	)
 	return newKVFetcher(&kvBatchFetcher), err
 }

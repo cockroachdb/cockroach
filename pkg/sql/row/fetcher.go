@@ -214,9 +214,7 @@ type FetcherInitArgs struct {
 	Spec           *descpb.IndexFetchSpec
 }
 
-// Init sets up a Fetcher for a given table and index. If we are using a
-// non-primary index, tables.ValNeededForCol can only refer to columns in the
-// index.
+// Init sets up a Fetcher for a given table and index.
 func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	if args.Spec.Version != descpb.IndexFetchSpecVersionInitial {
 		return errors.Newf("unsupported IndexFetchSpec version %d", args.Spec.Version)
@@ -362,18 +360,20 @@ func (rf *Fetcher) StartScan(
 
 	f, err := makeKVBatchFetcher(
 		ctx,
-		makeKVBatchFetcherDefaultSendFunc(txn),
-		spans,
-		rf.reverse,
-		batchBytesLimit,
-		rf.rowLimitToKeyLimit(rowLimitHint),
-		rf.lockStrength,
-		rf.lockWaitPolicy,
-		rf.lockTimeout,
-		rf.kvFetcherMemAcc,
-		forceProductionKVBatchSize,
-		txn.AdmissionHeader(),
-		txn.DB().SQLKVResponseAdmissionQ,
+		kvBatchFetcherArgs{
+			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
+			spans:                      spans,
+			reverse:                    rf.reverse,
+			batchBytesLimit:            batchBytesLimit,
+			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
+			lockStrength:               rf.lockStrength,
+			lockWaitPolicy:             rf.lockWaitPolicy,
+			lockTimeout:                rf.lockTimeout,
+			acc:                        rf.kvFetcherMemAcc,
+			forceProductionKVBatchSize: forceProductionKVBatchSize,
+			requestAdmissionHeader:     txn.AdmissionHeader(),
+			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+		},
 	)
 	if err != nil {
 		return err
@@ -463,18 +463,20 @@ func (rf *Fetcher) StartInconsistentScan(
 
 	f, err := makeKVBatchFetcher(
 		ctx,
-		sendFunc(sendFn),
-		spans,
-		rf.reverse,
-		batchBytesLimit,
-		rf.rowLimitToKeyLimit(rowLimitHint),
-		rf.lockStrength,
-		rf.lockWaitPolicy,
-		rf.lockTimeout,
-		rf.kvFetcherMemAcc,
-		forceProductionKVBatchSize,
-		txn.AdmissionHeader(),
-		txn.DB().SQLKVResponseAdmissionQ,
+		kvBatchFetcherArgs{
+			sendFn:                     sendFn,
+			spans:                      spans,
+			reverse:                    rf.reverse,
+			batchBytesLimit:            batchBytesLimit,
+			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
+			lockStrength:               rf.lockStrength,
+			lockWaitPolicy:             rf.lockWaitPolicy,
+			lockTimeout:                rf.lockTimeout,
+			acc:                        rf.kvFetcherMemAcc,
+			forceProductionKVBatchSize: forceProductionKVBatchSize,
+			requestAdmissionHeader:     txn.AdmissionHeader(),
+			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+		},
 	)
 	if err != nil {
 		return err
