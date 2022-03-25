@@ -140,17 +140,16 @@ func matchFullUnacceptableKeyQuery(
 // query:
 //
 // SELECT s.a_id, s.b_id, s.rowid
-//  FROM (
-//        SELECT a_id, b_id, rowid
-//          FROM [<ID of child> AS src]@{IGNORE_FOREIGN_KEYS}
-//         WHERE a_id IS NOT NULL AND b_id IS NOT NULL
-//       ) AS s
-//       LEFT JOIN [<id of parent> AS target] AS t ON s.a_id = t.a AND s.b_id = t.b
-// WHERE t.a IS NULL
-// LIMIT 1  -- if limitResults is set
-//
-// TODO(radu): change this to a query which executes as an anti-join when we
-// remove the heuristic planner.
+//   FROM (
+//          SELECT a_id, b_id, rowid
+//            FROM [<ID of child> AS src]@{IGNORE_FOREIGN_KEYS}
+//          WHERE a_id IS NOT NULL AND b_id IS NOT NULL
+//        ) AS s
+//   WHERE NOT EXISTS(
+//                    SELECT NULL FROM [<id of parent> AS target] AS t
+//                    WHERE s.a_id = t.a AND s.b_id = t.b
+//                   )
+//   LIMIT 1  -- if limitResults is set
 func nonMatchingRowQuery(
 	srcTbl catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
@@ -210,19 +209,18 @@ func nonMatchingRowQuery(
 	return fmt.Sprintf(
 		`SELECT %[1]s FROM 
 		  (SELECT %[2]s FROM [%[3]d AS src]@{IGNORE_FOREIGN_KEYS} WHERE %[4]s) AS s
-			LEFT OUTER JOIN
-			[%[5]d AS target] AS t
-			ON %[6]s
-		 WHERE %[7]s IS NULL %[8]s`,
+			WHERE NOT EXISTS (
+      SELECT NULL FROM [%[5]d AS target] AS t
+      WHERE %[6]s
+      ) %[7]s
+		 `,
 		strings.Join(qualifiedSrcCols, ", "), // 1
 		strings.Join(srcCols, ", "),          // 2
 		srcTbl.GetID(),                       // 3
 		strings.Join(srcWhere, " AND "),      // 4
 		targetTbl.GetID(),                    // 5
 		strings.Join(on, " AND "),            // 6
-		// Sufficient to check the first column to see whether there was no matching row
-		targetCols[0], // 7
-		limit,         // 8
+		limit,                                // 7
 	), originColNames, nil
 }
 
