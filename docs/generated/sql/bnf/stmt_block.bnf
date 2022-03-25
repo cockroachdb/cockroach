@@ -159,7 +159,6 @@ create_stmt ::=
 	| create_stats_stmt
 	| create_schedule_for_backup_stmt
 	| create_changefeed_stmt
-	| create_replication_stream_stmt
 	| create_extension_stmt
 
 delete_stmt ::=
@@ -532,9 +531,6 @@ create_schedule_for_backup_stmt ::=
 
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
-
-create_replication_stream_stmt ::=
-	'CREATE' 'REPLICATION' 'STREAM' 'FOR' targets opt_changefeed_sink opt_with_replication_options
 
 create_extension_stmt ::=
 	'CREATE' 'EXTENSION' 'IF' 'NOT' 'EXISTS' name
@@ -1636,11 +1632,6 @@ changefeed_targets ::=
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
 
-opt_with_replication_options ::=
-	'WITH' replication_options_list
-	| 'WITH' 'OPTIONS' '(' replication_options_list ')'
-	| 
-
 with_clause ::=
 	'WITH' cte_list
 	| 'WITH' 'RECURSIVE' cte_list
@@ -2252,9 +2243,6 @@ changefeed_target ::=
 	| 'TABLE' table_name 'FAMILY' family_name
 	| table_name 'FAMILY' family_name
 
-replication_options_list ::=
-	( replication_options ) ( ( ',' replication_options ) )*
-
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*
 
@@ -2775,10 +2763,6 @@ enum_val_list ::=
 
 family_name ::=
 	name
-
-replication_options ::=
-	'CURSOR' '=' a_expr
-	| 'DETACHED'
 
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
