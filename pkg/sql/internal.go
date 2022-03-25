@@ -748,6 +748,7 @@ func (ie *InternalExecutor) execInternal(
 				TimeReceived: timeReceived,
 				ParseStart:   parseStart,
 				ParseEnd:     parseEnd,
+				LastInBatch:  true,
 			}); err != nil {
 			return nil, err
 		}
@@ -769,7 +770,7 @@ func (ie *InternalExecutor) execInternal(
 			return nil, err
 		}
 
-		if err := stmtBuf.Push(ctx, ExecPortal{TimeReceived: timeReceived}); err != nil {
+		if err := stmtBuf.Push(ctx, ExecPortal{TimeReceived: timeReceived, FollowedBySync: true}); err != nil {
 			return nil, err
 		}
 	}

@@ -30,7 +30,7 @@ type refreshMaterializedViewNode struct {
 func (p *planner) RefreshMaterializedView(
 	ctx context.Context, n *tree.RefreshMaterializedView,
 ) (planNode, error) {
-	if !p.EvalContext().TxnImplicit {
+	if !p.IsSingleStatementTxn() {
 		return nil, pgerror.Newf(pgcode.InvalidTransactionState, "cannot refresh view in an explicit transaction")
 	}
 	_, desc, err := p.ResolveMutableTableDescriptorEx(ctx, n.Name, true /* required */, tree.ResolveRequireViewDesc)

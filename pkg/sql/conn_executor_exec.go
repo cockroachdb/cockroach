@@ -117,6 +117,8 @@ func (ex *connExecutor) execStmt(
 		// for every statement. It is important to minimize the amount of work and
 		// allocations performed up to this point.
 		ev, payload = ex.execStmtInNoTxnState(ctx, ast)
+		// Tell the planner that no statements have been executed earlier.
+		ex.planner.afterFirstStmt = false
 
 	case stateOpen:
 		if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
@@ -142,6 +144,8 @@ func (ex *connExecutor) execStmt(
 		} else {
 			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res, canAutoCommit)
 		}
+		// Tell the planner that we just executed a statement.
+		ex.planner.afterFirstStmt = true
 		switch ev.(type) {
 		case eventNonRetriableErr:
 			ex.recordFailure()
