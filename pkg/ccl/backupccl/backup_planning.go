@@ -1532,6 +1532,15 @@ func getBackupDetailAndManifest(
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
 
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
+	if err != nil {
+		return jobspb.BackupDetails{}, BackupManifest{}, err
+	}
+
+	if err := checkForPreviousBackup(ctx, defaultStore, defaultURI); err != nil {
+		return jobspb.BackupDetails{}, BackupManifest{}, err
+	}
+
 	kmsEnv := &backupKMSEnv{settings: execCfg.Settings, conf: &execCfg.ExternalIODirConfig}
 
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
@@ -1539,6 +1548,28 @@ func getBackupDetailAndManifest(
 
 	prevBackups, encryptionOptions, memSize, err := fetchPreviousBackups(ctx, &mem, user,
 		makeCloudStorage, prevs, *initialDetails.EncryptionOptions, kmsEnv)
+
+	if len(prevBackups) > 0 {
+		baseManifest := prevBackups[0]
+		if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
+			!initialDetails.FullCluster {
+			return jobspb.BackupDetails{}, BackupManifest{}, errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
+		}
+
+		if err := requireEnterprise(execCfg, "incremental"); err != nil {
+			return jobspb.BackupDetails{}, BackupManifest{}, err
+		}
+	}
+
+	for i := range prevBackups {
+		// IDs are how we identify tables, and those are only meaningful in the
+		// context of their own cluster, so we need to ensure we only allow
+		// incremental previous backups that we created.
+		if fromCluster := prevBackups[i].ClusterID; !fromCluster.Equal(execCfg.ClusterID()) {
+			return jobspb.BackupDetails{}, BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
+		}
+	}
+
 	if err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
@@ -1546,7 +1577,7 @@ func getBackupDetailAndManifest(
 		mem.Shrink(ctx, memSize)
 	}()
 
-	fullDetails, shortDetails, err := updateBackupDetails(
+	updatedDetails, err := updateBackupDetails(
 		ctx,
 		initialDetails,
 		collectionURI,
@@ -1564,17 +1595,51 @@ func getBackupDetailAndManifest(
 		ctx,
 		execCfg,
 		txn,
-		fullDetails,
+		updatedDetails,
 		prevBackups)
 	if err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
 
-	if err := validateBackupDetailsAndManifest(ctx, execCfg, fullDetails, backupManifest, prevBackups, user); err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
-	}
+	return updatedDetails, backupManifest, nil
+}
 
-	return shortDetails, backupManifest, nil
+func getTenantInfo(
+	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, jobDetails jobspb.BackupDetails,
+) ([]roachpb.Span, []descpb.TenantInfoWithUsage, error) {
+	var spans []roachpb.Span
+	var tenants []descpb.TenantInfoWithUsage
+	var err error
+	if jobDetails.FullCluster && execCfg.Codec.ForSystemTenant() {
+		// Include all tenants.
+		tenants, err = retrieveAllTenantsMetadata(
+			ctx, execCfg.InternalExecutor, txn,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else if len(jobDetails.SpecificTenantIds) > 0 {
+		for _, id := range jobDetails.SpecificTenantIds {
+			tenantInfo, err := retrieveSingleTenantMetadata(
+				ctx, execCfg.InternalExecutor, txn, id,
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+			tenants = append(tenants, tenantInfo)
+		}
+	}
+	if len(tenants) > 0 && jobDetails.RevisionHistory {
+		return spans, tenants, errors.UnimplementedError(
+			errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/47896"},
+			"can not backup tenants with revision history",
+		)
+	}
+	for i := range tenants {
+		prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenants[i].ID))
+		spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+	}
+	return spans, tenants, nil
 }
 
 func createBackupManifest(
@@ -1639,31 +1704,14 @@ func createBackupManifest(
 
 	var spans []roachpb.Span
 	var tenants []descpb.TenantInfoWithUsage
-
-	if jobDetails.FullCluster && execCfg.Codec.ForSystemTenant() {
-		// Include all tenants.
-		tenants, err = retrieveAllTenantsMetadata(
-			ctx, execCfg.InternalExecutor, txn,
-		)
-		if err != nil {
-			return BackupManifest{}, err
-		}
-	} else if len(jobDetails.SpecificTenantIds) > 0 {
-		for _, id := range jobDetails.SpecificTenantIds {
-			tenantInfo, err := retrieveSingleTenantMetadata(
-				ctx, execCfg.InternalExecutor, txn, id,
-			)
-			if err != nil {
-				return BackupManifest{}, err
-			}
-			tenants = append(tenants, tenantInfo)
-		}
+	tenantSpans, tenantInfos, err := getTenantInfo(
+		ctx, execCfg, txn, jobDetails,
+	)
+	if err != nil {
+		return BackupManifest{}, err
 	}
-
-	for i := range tenants {
-		prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenants[i].ID))
-		spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
-	}
+	spans = append(spans, tenantSpans...)
+	tenants = append(tenants, tenantInfos...)
 
 	tableSpans, err := spansForAllTableIndexes(execCfg, tables, revs)
 	if err != nil {
@@ -1733,7 +1781,9 @@ func createBackupManifest(
 		StatisticsFilenames: statsFiles,
 		DescriptorCoverage:  coverage,
 	}
-
+	if err := checkCoverage(ctx, backupManifest.Spans, append(prevBackups, backupManifest)); err != nil {
+		return BackupManifest{}, errors.Wrap(err, "new backup would not cover expected time")
+	}
 	return backupManifest, nil
 }
 
@@ -1747,7 +1797,7 @@ func updateBackupDetails(
 	prevBackups []BackupManifest,
 	encryptionOptions *jobspb.BackupEncryptionOptions,
 	kmsEnv *backupKMSEnv,
-) (jobspb.BackupDetails, jobspb.BackupDetails, error) {
+) (jobspb.BackupDetails, error) {
 	var err error
 	var startTime hlc.Timestamp
 	if len(prevBackups) > 0 {
@@ -1760,7 +1810,7 @@ func updateBackupDetails(
 	if encryptionOptions == nil {
 		encryptionOptions, encryptionInfo, err = makeNewEncryptionOptions(ctx, *details.EncryptionOptions, kmsEnv)
 		if err != nil {
-			return jobspb.BackupDetails{}, jobspb.BackupDetails{}, err
+			return jobspb.BackupDetails{}, err
 		}
 	}
 
@@ -1772,71 +1822,7 @@ func updateBackupDetails(
 	details.EncryptionInfo = encryptionInfo
 	details.CollectionURI = collectionURI
 
-	// Callers don't always need all the details here. A shorter version is helpful.
-	shortDetails := jobspb.BackupDetails{
-		Destination:       details.Destination,
-		StartTime:         details.StartTime,
-		EndTime:           details.EndTime,
-		URI:               details.URI,
-		URIsByLocalityKV:  details.URIsByLocalityKV,
-		EncryptionOptions: details.EncryptionOptions,
-		EncryptionInfo:    details.EncryptionInfo,
-		CollectionURI:     details.CollectionURI,
-	}
-	return details, shortDetails, nil
-}
-
-func validateBackupDetailsAndManifest(
-	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	jobDetails jobspb.BackupDetails,
-	backupManifest BackupManifest,
-	prevBackups []BackupManifest,
-	user security.SQLUsername,
-) error {
-	defaultURI := jobDetails.URI
-	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
-	if err != nil {
-		return err
-	}
-	defer defaultStore.Close()
-
-	if err := checkForPreviousBackup(ctx, defaultStore, defaultURI); err != nil {
-		return err
-	}
-
-	if len(prevBackups) > 0 {
-		baseManifest := prevBackups[0]
-		if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
-			!jobDetails.FullCluster {
-			return errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
-		}
-
-		if err := requireEnterprise(execCfg, "incremental"); err != nil {
-			return err
-		}
-	}
-	for i := range prevBackups {
-		// IDs are how we identify tables, and those are only meaningful in the
-		// context of their own cluster, so we need to ensure we only allow
-		// incremental previous backups that we created.
-		if fromCluster := prevBackups[i].ClusterID; !fromCluster.Equal(backupManifest.ClusterID) {
-			return errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
-		}
-	}
-	if len(backupManifest.Tenants) > 0 && jobDetails.RevisionHistory {
-		return errors.UnimplementedError(
-			errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/47896"},
-			"can not backup tenants with revision history",
-		)
-	}
-
-	// Verify this backup on its prior chain cover its spans up to its end time,
-	// as restore would do if it tried to restore this backup.
-	if err := checkCoverage(ctx, backupManifest.Spans, append(prevBackups, backupManifest)); err != nil {
-		return errors.Wrap(err, "new backup would not cover expected time")
-	}
-	return nil
+	return details, nil
 }
 
 func init() {
