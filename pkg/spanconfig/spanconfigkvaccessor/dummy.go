@@ -24,9 +24,6 @@ var (
 	// returning nothing).
 	NoopKVAccessor = dummyKVAccessor{error: nil}
 
-	// IllegalKVAccessor is a KVAccessor that only returns "illegal use" errors.
-	IllegalKVAccessor = dummyKVAccessor{error: errors.New("illegal use of kvaccessor")}
-
 	// DisabledKVAccessor is a KVAccessor that only returns "disabled" errors.
 	DisabledKVAccessor = dummyKVAccessor{error: errors.New("span configs disabled")}
 )
