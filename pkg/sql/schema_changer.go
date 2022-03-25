@@ -1213,11 +1213,16 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 	return nil
 }
 
+var (
+	minimumDropTime int64 = 1
+
+	tempIndexGCJobDescription string = "temporary index used during index backfill"
+)
+
 func (sc *SchemaChanger) createTemporaryIndexGCJob(
-	ctx context.Context, indexID descpb.IndexID, txn *kv.Txn, jobDesc string,
+	ctx context.Context, indexID descpb.IndexID, txn *kv.Txn,
 ) error {
-	minimumDropTime := int64(1)
-	return sc.createIndexGCJobWithDropTime(ctx, indexID, txn, jobDesc, minimumDropTime)
+	return sc.createIndexGCJobWithDropTime(ctx, indexID, txn, tempIndexGCJobDescription, minimumDropTime)
 }
 
 func (sc *SchemaChanger) createIndexGCJob(
@@ -1362,11 +1367,15 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			isRollback = m.IsRollback()
 			if idx := m.AsIndex(); m.Dropped() && idx != nil {
 				description := sc.job.Payload().Description
-				if isRollback {
-					description = "ROLLBACK of " + description
-				}
 				if idx.IsTemporaryIndexForBackfill() {
-					if err := sc.createTemporaryIndexGCJob(ctx, idx.GetID(), txn, "temporary index used during index backfill"); err != nil {
+					if err := sc.createTemporaryIndexGCJob(ctx, idx.GetID(), txn); err != nil {
+						return err
+					}
+				} else if isRollback {
+					// If this is a rollback, then we know the index was never online and
+					// it can be GC'd immediately.
+					description = "ROLLBACK of " + description
+					if err := sc.createIndexGCJobWithDropTime(ctx, idx.GetID(), txn, description, minimumDropTime); err != nil {
 						return err
 					}
 				} else {
