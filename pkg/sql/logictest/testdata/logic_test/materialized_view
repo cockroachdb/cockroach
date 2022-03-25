@@ -81,7 +81,7 @@ SELECT y FROM v WHERE y > 4
 statement ok
 BEGIN
 
-statement error pq: cannot refresh view in an explicit transaction
+statement error  pq: cannot refresh view in a single statement transaction
 REFRESH MATERIALIZED VIEW v
 
 statement ok
