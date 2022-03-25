@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -100,9 +101,16 @@ func declareKeysAddSSTable(
 	}
 }
 
-// EvalAddSSTable evaluates an AddSSTable command.
-// NB: These sstables do not contain intents/locks, so the code below only
-// needs to deal with MVCCKeys.
+// addSSTableCapacityRemainingLimit is the fraction of remaining store capacity
+// under which addsstable requests are rejected.
+var addSSTableCapacityRemainingLimit = settings.RegisterFloatSetting(
+	"kv.bulk_io_write.min_capacity_remaining_fraction",
+	"remaining store capacity fraction below which an addsstable request is rejected",
+	0,
+)
+
+// EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
+// on AddSSTableRequest.
 func EvalAddSSTable(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
 ) (result.Result, error) {
@@ -115,6 +123,22 @@ func EvalAddSSTable(
 	ctx, span = tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
+
+	if min := addSSTableCapacityRemainingLimit.Get(&cArgs.EvalCtx.ClusterSettings().SV); min > 0 {
+		cap, err := cArgs.EvalCtx.GetEngineCapacity()
+		if err != nil {
+			return result.Result{}, err
+		}
+		if remaining := float64(cap.Available) / float64(cap.Capacity); remaining < min {
+			return result.Result{}, &roachpb.InsufficientSpaceError{
+				StoreID:   cArgs.EvalCtx.StoreID(),
+				Op:        "ingest data",
+				Available: cap.Available,
+				Capacity:  cap.Capacity,
+				Required:  min,
+			}
+		}
+	}
 
 	// IMPORT INTO should not proceed if any KVs from the SST shadow existing data
 	// entries - #38044.

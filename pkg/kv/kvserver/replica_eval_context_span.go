@@ -251,3 +251,8 @@ func (rec *SpanSetReplicaEvalContext) WatchForMerge(ctx context.Context) error {
 func (rec *SpanSetReplicaEvalContext) GetResponseMemoryAccount() *mon.BoundAccount {
 	return rec.i.GetResponseMemoryAccount()
 }
+
+// GetEngineCapacity implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetEngineCapacity() (roachpb.StoreCapacity, error) {
+	return rec.i.GetEngineCapacity()
+}
