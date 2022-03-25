@@ -219,7 +219,7 @@ func (p *planner) AlterPrimaryKey(
 		deletable := tableDesc.DeletableColumns()
 		newPrimaryIndexDesc.StoreColumnNames = make([]string, 0, len(deletable))
 		for _, col := range deletable {
-			if _, found := names[col.GetName()]; found || col.IsVirtual() {
+			if _, found := names[col.GetName()]; found || col.IsVirtual() || col.GetName() == "rowid" {
 				continue
 			}
 			newPrimaryIndexDesc.StoreColumnNames = append(newPrimaryIndexDesc.StoreColumnNames, col.GetName())

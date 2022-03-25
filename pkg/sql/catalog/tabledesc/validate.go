@@ -940,7 +940,8 @@ func (desc *wrapper) validateColumnFamilies(
 	}
 	for colID, colDesc := range columnIDs {
 		if !colDesc.Virtual {
-			if _, ok := colIDToFamilyID[colID]; !ok {
+			// TODO(XXX): rowid can be dropping.
+			if _, ok := colIDToFamilyID[colID]; !ok && colDesc.Name != "rowid" {
 				return errors.Newf("column %q is not in any column family", colDesc.Name)
 			}
 		}

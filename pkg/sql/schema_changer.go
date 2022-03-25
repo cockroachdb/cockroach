@@ -1573,6 +1573,16 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 				}
 
+				// Drop the rowid column.
+
+				for i := range scTable.Columns {
+					if scTable.Columns[i].Name == "rowid" {
+						//scTable.RemoveColumnFromFamilyAndPrimaryIndex(scTable.Columns[i].ID)
+						scTable.AddColumnMutation(&scTable.Columns[i], descpb.DescriptorMutation_DROP)
+						scTable.Columns = append(scTable.Columns[:i:i], scTable.Columns[i+1:]...)
+					}
+				}
+
 				// If we performed MakeMutationComplete on a PrimaryKeySwap mutation, then we need to start
 				// a job for the index deletion mutations that the primary key swap mutation added, if any.
 				jobID, err := sc.queueCleanupJob(ctx, scTable, txn)
