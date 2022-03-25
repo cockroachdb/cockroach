@@ -28,6 +28,7 @@ go_test(
         "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/gcjob",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlliveness/slinstance",

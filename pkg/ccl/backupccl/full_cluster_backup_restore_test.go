@@ -57,6 +57,9 @@ func TestFullClusterBackup(t *testing.T) {
 					// the progress data during the backup/restore process.
 					JobDisablePersistingCheckpoints: true,
 				},
+				GCJob: &sql.GCJobTestingKnobs{
+					DisableNewProtectedTimestampSubsystemCheck: true,
+				},
 			},
 		}}
 	const numAccounts = 10
