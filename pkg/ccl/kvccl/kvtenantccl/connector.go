@@ -533,9 +533,12 @@ func (c *Connector) GetAllSystemSpanConfigsThatApply(
 			ctx, &roachpb.GetAllSystemSpanConfigsThatApplyRequest{
 				TenantID: id,
 			})
+		if err != nil {
+			return err
+		}
 
 		spanConfigs = resp.SpanConfigs
-		return err
+		return nil
 	}); err != nil {
 		return nil, err
 	}
