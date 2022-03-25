@@ -145,6 +145,21 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     sort: job => util.TimestampToMoment(job?.created).valueOf(),
   },
   {
+    name: "lastModifiedTime",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>Date and time the job was last modified.</p>}
+      >
+        {"Modified Time (UTC)"}
+      </Tooltip>
+    ),
+    cell: job =>
+      util.TimestampToMoment(job?.modified).format(DATE_FORMAT_24_UTC),
+    sort: job => util.TimestampToMoment(job?.modified).valueOf(),
+  },
+  {
     name: "lastExecutionTime",
     title: (
       <Tooltip
@@ -172,6 +187,25 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     ),
     cell: job => String(job.num_runs),
     sort: job => job.num_runs?.toNumber(),
+  },
+  {
+    name: "coordinatorID",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>ID of the coordinating node.</p>}
+      >
+        {"Coordinator Node"}
+      </Tooltip>
+    ),
+    // If the coordinator ID is unset, we don't want to display anything, but
+    // the default value of `0` is fine for sorting.
+    cell: job =>
+      Object.prototype.hasOwnProperty.call(job, "coordinator_id")
+        ? String(job.coordinator_id)
+        : "",
+    sort: job => job.coordinator_id?.toNumber(),
   },
 ];
 
