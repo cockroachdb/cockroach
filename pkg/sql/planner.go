@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
@@ -352,9 +353,14 @@ func newInternalPlanner(
 	p.isInternalPlanner = true
 
 	p.semaCtx = tree.MakeSemaContext()
+	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
+		p.semaCtx.IntervalStyleEnabled = true
+		p.semaCtx.DateStyleEnabled = true
+	} else {
+		p.semaCtx.IntervalStyleEnabled = sd.IntervalStyleEnabled
+		p.semaCtx.DateStyleEnabled = sd.DateStyleEnabled
+	}
 	p.semaCtx.SearchPath = sd.SearchPath
-	p.semaCtx.IntervalStyleEnabled = sd.IntervalStyleEnabled
-	p.semaCtx.DateStyleEnabled = sd.DateStyleEnabled
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
