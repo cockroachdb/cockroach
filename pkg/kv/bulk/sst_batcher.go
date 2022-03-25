@@ -423,9 +423,9 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		if err != nil {
 			log.Warningf(ctx, "%s failed to generate split key: %v", b.name, err)
 		} else {
-			hour := hlc.Timestamp{WallTime: beforeFlush.Add(time.Hour).UnixNano()}
+			expire := hlc.Timestamp{WallTime: beforeFlush.Add(time.Minute * 10).UnixNano()}
 			beforeSplit := timeutil.Now()
-			if err := b.db.AdminSplit(ctx, splitAt, hour); err != nil {
+			if err := b.db.AdminSplit(ctx, splitAt, expire); err != nil {
 				log.Warningf(ctx, "%s failed to split: %v", b.name, err)
 			} else {
 				b.flushCounts.splitWait += timeutil.Since(beforeSplit)
