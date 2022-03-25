@@ -378,6 +378,9 @@ exec
 USE survive_region;
 CREATE TABLE t7 (a INT);
 INSERT INTO t7 VALUES (1),(2),(3);
+----
+
+exec
 EXPORT INTO CSV 'nodelocal://0/t7' FROM TABLE t7;
 ----
 
@@ -392,6 +395,9 @@ sql.multiregion.import
 # rapidly.
 exec
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+----
+
+exec
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5ms';
 ----
 

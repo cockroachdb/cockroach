@@ -171,12 +171,16 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				// Speed up closing of timestamps, in order to sleep less below before
 				// we can use follower_read_timestamp(). follower_read_timestamp() uses
 				// sum of the following settings.
-				_, err = sqlConn.Exec(
-					"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s';" +
-						"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s';" +
-						"SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'")
-				if err != nil {
-					return err.Error()
+				for _, stmt := range strings.Split(`
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s';
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s';
+SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'
+`,
+					";") {
+					_, err = sqlConn.Exec(stmt)
+					if err != nil {
+						return err.Error()
+					}
 				}
 
 			case "cleanup-cluster":

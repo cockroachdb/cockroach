@@ -46,6 +46,9 @@ pq: row larger than max row size: table 112 family 0 primary key /Table/112/1/2/
 
 exec-sql
 SET CLUSTER SETTING sql.guardrails.max_row_size_err = DEFAULT;
+----
+
+exec-sql
 INSERT INTO d2.maxrow VALUES (2, repeat('y', 20000));
 ----
 

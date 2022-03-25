@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,13 +68,14 @@ func TestTenantStreaming(t *testing.T) {
 	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
 	defer resetFreq()
 	// Set required cluster settings.
-	_, err := sourceDB.Exec(`
+	sourceDBRunner := sqlutils.MakeSQLRunner(sourceDB)
+	sourceDBRunner.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
-`)
-	require.NoError(t, err)
+`,
+		";")...)
 
 	// Start the destination server.
 	hDest, cleanupDest := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
@@ -81,12 +83,13 @@ SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
 	// destSQL refers to the system tenant as that's the one that's running the
 	// job.
 	destSQL := hDest.SysDB
-	destSQL.Exec(t, `
+	destSQL.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '2s';
 SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '5us';
 SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
 SET enable_experimental_stream_replication = true;
-`)
+`,
+		";")...)
 
 	// Sink to read data from.
 	pgURL, cleanupSink := sqlutils.PGUrl(t, source.ServingSQLAddr(), t.Name(), url.User(security.RootUser))

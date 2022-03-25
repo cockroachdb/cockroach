@@ -41,6 +41,9 @@ func TestBytesRead(t *testing.T) {
 	// first row in one batch and then the second row in another batch.
 	_, err := conn.ExecContext(ctx, `
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false;
+`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, INDEX(b));
 INSERT INTO t VALUES (1, 1, 1), (2, 2, 2);
 `)

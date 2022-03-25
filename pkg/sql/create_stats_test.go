@@ -52,7 +52,9 @@ func TestStatsWithLowTTL(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, `
-		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+`)
+	r.Exec(t, `
 		CREATE DATABASE test;
 		USE test;
 		CREATE TABLE t (k INT PRIMARY KEY, a INT, b INT);

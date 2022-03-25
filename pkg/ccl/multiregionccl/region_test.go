@@ -401,10 +401,10 @@ ALTER TABLE db.public.global CONFIGURE ZONE USING
 
 			_, err := sqlDB.Exec(`
 CREATE DATABASE db PRIMARY REGION "us-east1" REGIONS "us-east2";
-CREATE TABLE db.global () LOCALITY GLOBAL;
-SET CLUSTER SETTING sql.defaults.multiregion_placement_policy.enabled = true;`)
+CREATE TABLE db.global () LOCALITY GLOBAL;`)
 			require.NoError(t, err)
-
+			_, err = sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.multiregion_placement_policy.enabled = true;`)
+			require.NoError(t, err)
 			go func() {
 				defer func() {
 					close(regionOpFinished)

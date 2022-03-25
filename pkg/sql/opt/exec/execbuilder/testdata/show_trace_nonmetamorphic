@@ -117,7 +117,10 @@ batch flow coordinator  InitPut /Table/108/2/2/0 -> /BYTES/0x8a
 sql query               execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
 statement ok
-SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv; SET tracing = off
+SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv;
+
+statement ok
+SET tracing = off
 
 query TT
 $trace_query
@@ -127,7 +130,10 @@ batch flow coordinator  CPut /Table/3/1/109/2/1 -> table:<name:"kv2" id:109 vers
 sql query               rows affected: 0
 
 statement ok
-SET tracing = on,kv,results; UPDATE t.kv2 SET v = v + 2; SET tracing = off
+SET tracing = on,kv,results; UPDATE t.kv2 SET v = v + 2;
+
+statement ok
+SET tracing = off
 
 query TT
 $trace_query

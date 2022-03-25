@@ -13,6 +13,8 @@ CREATE TABLE lineitem
     INDEX l_sd (l_shipdate ASC)
 );
 INSERT INTO lineitem VALUES (1, 200, '1994-01-01');
+
+statement ok
 ALTER TABLE lineitem INJECT STATISTICS '[
   {
     "columns": ["l_orderkey"],

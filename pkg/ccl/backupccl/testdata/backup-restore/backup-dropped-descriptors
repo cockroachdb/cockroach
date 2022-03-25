@@ -7,7 +7,13 @@ new-server name=s1
 
 exec-sql
 SET use_declarative_schema_changer = 'off';
+----
+
+exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
+----
+
+exec-sql
 CREATE DATABASE d;
 CREATE TABLE d.foo (id INT);
 ----
@@ -118,6 +124,9 @@ CREATE TABLE d2.s.t (id INT);
 
 exec-sql
 SET use_declarative_schema_changer = 'off';
+----
+
+exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
 ----
 

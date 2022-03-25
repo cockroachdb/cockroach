@@ -50,13 +50,14 @@ func TestShowBackup(t *testing.T) {
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
-	sqlDB.Exec(t, `
+	sqlDB.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
 USE data; CREATE SCHEMA sc;
 CREATE TABLE data.sc.t1 (a INT);
 CREATE TABLE data.sc.t2 (a data.welcome);
-`)
+`,
+		`;`)...)
 
 	const full, inc, inc2 = localFoo + "/full", localFoo + "/inc", localFoo + "/inc2"
 
@@ -768,13 +769,13 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 	defer cleanupFn()
 
 	// add 1 type, 1 schema, and 2 tables to the database
-	sqlDB.Exec(t, `
+	sqlDB.ExecMultiple(t, strings.Split(`
 		SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
 		CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
 		USE data; CREATE SCHEMA sc;
 		CREATE TABLE data.sc.t1 (a INT);
-		CREATE TABLE data.sc.t2 (a data.welcome);
-  `)
+		CREATE TABLE data.sc.t2 (a data.welcome);`,
+		`;`)...)
 
 	const full = localFoo + "/full"
 
