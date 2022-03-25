@@ -374,8 +374,9 @@ func TestChangefeedTenants(t *testing.T) {
 
 	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
-	tenantSQL.Exec(t, serverSetupStatements)
-
+	for _, stmt := range strings.Split(serverSetupStatements, ";") {
+		tenantSQL.Exec(t, stmt)
+	}
 	tenantSQL.Exec(t, `CREATE TABLE foo_in_tenant (pk INT PRIMARY KEY)`)
 	t.Run("changefeed on non-tenant table fails", func(t *testing.T) {
 		kvSQL := sqlutils.MakeSQLRunner(kvSQLdb)
@@ -445,7 +446,9 @@ func TestChangefeedTenantsExternalIOEnabled(t *testing.T) {
 
 	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
-	tenantSQL.Exec(t, serverSetupStatements)
+	for _, stmt := range strings.Split(serverSetupStatements, ";") {
+		tenantSQL.Exec(t, stmt)
+	}
 	tenantSQL.Exec(t, `CREATE TABLE foo_in_tenant (pk INT PRIMARY KEY)`)
 
 	t.Run("sinkful changefeed works", func(t *testing.T) {
@@ -952,7 +955,9 @@ func TestChangefeedExternalIODisabled(t *testing.T) {
 		})
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, serverSetupStatements)
+		for _, stmt := range strings.Split(serverSetupStatements, ";") {
+			sqlDB.Exec(t, stmt)
+		}
 		sqlDB.Exec(t, "CREATE TABLE target_table (pk INT PRIMARY KEY)")
 		for _, proto := range disallowedSinkProtos {
 			sqlDB.ExpectErr(t, "Outbound IO is disabled by configuration, cannot create changefeed",

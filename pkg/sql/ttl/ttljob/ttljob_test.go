@@ -270,7 +270,9 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 			})
 			defer cleanupFunc()
 
-			th.sqlDB.Exec(t, tc.setup)
+			for _, stmt := range strings.Split(tc.setup, ";") {
+				th.sqlDB.Exec(t, stmt)
+			}
 
 			// Force the schedule to execute.
 			th.env.SetTime(timeutil.Now().Add(time.Hour * 24))

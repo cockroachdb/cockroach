@@ -694,7 +694,9 @@ func TestPerfLogging(t *testing.T) {
 	for _, tc := range testCases {
 		if tc.setup != "" {
 			t.Log(tc.setup)
-			db.Exec(t, tc.setup)
+			for _, s := range strings.Split(tc.setup, ";") {
+				db.Exec(t, s)
+			}
 			if tc.query == "" {
 				continue
 			}
@@ -739,7 +741,9 @@ func TestPerfLogging(t *testing.T) {
 
 		if tc.cleanup != "" {
 			t.Log(tc.cleanup)
-			db.Exec(t, tc.cleanup)
+			for _, s := range strings.Split(tc.cleanup, ";") {
+				db.Exec(t, s)
+			}
 		}
 	}
 }

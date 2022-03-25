@@ -109,7 +109,10 @@ SELECT x FROM test WHERE y = 1/z
 # Set a cluster setting to make it show up below. Which one is set
 # does not matter.
 statement ok
-SET CLUSTER SETTING debug.panic_on_failed_assertions = true; RESET CLUSTER SETTING debug.panic_on_failed_assertions
+SET CLUSTER SETTING debug.panic_on_failed_assertions = true;
+
+statement ok
+RESET CLUSTER SETTING debug.panic_on_failed_assertions
 
 statement ok
 SHOW application_name
