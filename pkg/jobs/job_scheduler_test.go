@@ -457,8 +457,13 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 	daemon.runDaemon(ctx, stopper)
 
+	readyToRunStmt := fmt.Sprintf(
+		"SELECT count(*) FROM %s WHERE next_run < %s",
+		h.env.ScheduledJobsTableName(), h.env.NowExpr())
 	testutils.SucceedsSoon(t, func() error {
-		if ready := daemon.metrics.ReadyToRun.Value(); numJobs != ready {
+		var ready int
+		h.sqlDB.QueryRow(t, readyToRunStmt).Scan(&ready)
+		if ready != numJobs-jobsPerIteration {
 			return errors.Errorf("waiting for metric %d = %d", ready, numJobs)
 		}
 		return nil
