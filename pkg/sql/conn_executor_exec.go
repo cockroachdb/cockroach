@@ -142,6 +142,8 @@ func (ex *connExecutor) execStmt(
 		} else {
 			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res, canAutoCommit)
 		}
+		// Track that the first statement has been executed.
+		ex.extraTxnState.firstStmtExecuted = true
 		switch ev.(type) {
 		case eventNonRetriableErr:
 			ex.recordFailure()
@@ -669,6 +671,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.cancelChecker.Reset(ctx)
 
 	p.autoCommit = canAutoCommit && !ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec
+	p.isSingleStmtTxn = canAutoCommit && !ex.extraTxnState.firstStmtExecuted
 
 	var stmtThresholdSpan *tracing.Span
 	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()

@@ -164,7 +164,7 @@ func (p *planner) applyOnSessionDataMutators(
 	if local {
 		// We don't allocate a new SessionData object on implicit transactions.
 		// This no-ops in postgres with a warning, so copy accordingly.
-		if p.EvalContext().TxnImplicit {
+		if p.IsSingleStatementTxn() {
 			p.BufferClientNotice(
 				ctx,
 				pgnotice.NewWithSeverityf(

@@ -39,7 +39,7 @@ var maxSerializedSessionSize = settings.RegisterByteSizeSetting(
 func (p *planner) SerializeSessionState() (*tree.DBytes, error) {
 	evalCtx := p.EvalContext()
 	return serializeSessionState(
-		!evalCtx.TxnImplicit,
+		!p.IsSingleStatementTxn(),
 		evalCtx.PreparedStatementState,
 		p.SessionData(),
 		p.ExecCfg(),
@@ -111,7 +111,7 @@ func serializeSessionState(
 // DeserializeSessionState deserializes the given state into the current session.
 func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, error) {
 	evalCtx := p.ExtendedEvalContext()
-	if !evalCtx.TxnImplicit {
+	if !p.IsSingleStatementTxn() {
 		return nil, pgerror.Newf(
 			pgcode.InvalidTransactionState,
 			"cannot deserialize a session whilst inside a transaction",

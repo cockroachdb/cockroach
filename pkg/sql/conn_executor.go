@@ -1245,6 +1245,10 @@ type connExecutor struct {
 		// statement traces to give more information in statement diagnostic bundles.
 		autoRetryReason error
 
+		// firstStmtExecuted indicates that the first statement inside this
+		// transaction has been executed.
+		firstStmtExecuted bool
+
 		// numDDL keeps track of how many DDL statements have been
 		// executed so far.
 		numDDL int
@@ -1626,6 +1630,7 @@ func (ns *prepStmtNamespace) resetTo(
 // (e.g. onTxnFinish() and onTxnRestart()).
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
+	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.schemaChangerState = SchemaChangerState{
 		mode: ex.sessionData().NewSchemaChangerMode,
@@ -2831,7 +2836,9 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case txnStart:
 		atomic.StoreInt32(ex.extraTxnState.atomicAutoRetryCounter, 0)
 		ex.extraTxnState.autoRetryReason = nil
+		ex.extraTxnState.firstStmtExecuted = false
 		ex.recordTransactionStart(advInfo.txnEvent.txnID)
+		// Start of the transaction, so no statements were executed earlier.
 		// Bump the txn counter for logging.
 		ex.extraTxnState.txnCounter++
 		if !ex.server.cfg.Codec.ForSystemTenant() {
