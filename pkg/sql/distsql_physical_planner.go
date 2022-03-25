@@ -1929,7 +1929,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 					for j, c := range e.ColIdx {
 						argTypes[j] = inputTypes[c]
 					}
-					_, outputType, err := execinfrapb.GetAggregateInfo(localFunc, argTypes...)
+					_, outputType, err := execinfra.GetAggregateInfo(localFunc, argTypes...)
 					if err != nil {
 						return err
 					}
@@ -1981,7 +1981,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 							// the current aggregation e.
 							argTypes[i] = intermediateTypes[argIdxs[i]]
 						}
-						_, outputType, err := execinfrapb.GetAggregateInfo(finalInfo.Fn, argTypes...)
+						_, outputType, err := execinfra.GetAggregateInfo(finalInfo.Fn, argTypes...)
 						if err != nil {
 							return err
 						}
@@ -2136,7 +2136,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		}
 		copy(argTypes[len(agg.ColIdx):], info.argumentsColumnTypes[i])
 		var err error
-		_, returnTyp, err := execinfrapb.GetAggregateInfo(agg.Func, argTypes...)
+		_, returnTyp, err := execinfra.GetAggregateInfo(agg.Func, argTypes...)
 		if err != nil {
 			return err
 		}
