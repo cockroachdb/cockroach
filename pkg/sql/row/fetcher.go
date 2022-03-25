@@ -362,18 +362,20 @@ func (rf *Fetcher) StartScan(
 
 	f, err := makeKVBatchFetcher(
 		ctx,
-		makeKVBatchFetcherDefaultSendFunc(txn),
-		spans,
-		rf.reverse,
-		batchBytesLimit,
-		rf.rowLimitToKeyLimit(rowLimitHint),
-		rf.lockStrength,
-		rf.lockWaitPolicy,
-		rf.lockTimeout,
-		rf.kvFetcherMemAcc,
-		forceProductionKVBatchSize,
-		txn.AdmissionHeader(),
-		txn.DB().SQLKVResponseAdmissionQ,
+		kvBatchFetcherArgs{
+			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
+			spans:                      spans,
+			reverse:                    rf.reverse,
+			batchBytesLimit:            batchBytesLimit,
+			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
+			lockStrength:               rf.lockStrength,
+			lockWaitPolicy:             rf.lockWaitPolicy,
+			lockTimeout:                rf.lockTimeout,
+			acc:                        rf.kvFetcherMemAcc,
+			forceProductionKVBatchSize: forceProductionKVBatchSize,
+			requestAdmissionHeader:     txn.AdmissionHeader(),
+			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+		},
 	)
 	if err != nil {
 		return err
@@ -463,18 +465,20 @@ func (rf *Fetcher) StartInconsistentScan(
 
 	f, err := makeKVBatchFetcher(
 		ctx,
-		sendFunc(sendFn),
-		spans,
-		rf.reverse,
-		batchBytesLimit,
-		rf.rowLimitToKeyLimit(rowLimitHint),
-		rf.lockStrength,
-		rf.lockWaitPolicy,
-		rf.lockTimeout,
-		rf.kvFetcherMemAcc,
-		forceProductionKVBatchSize,
-		txn.AdmissionHeader(),
-		txn.DB().SQLKVResponseAdmissionQ,
+		kvBatchFetcherArgs{
+			sendFn:                     sendFn,
+			spans:                      spans,
+			reverse:                    rf.reverse,
+			batchBytesLimit:            batchBytesLimit,
+			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
+			lockStrength:               rf.lockStrength,
+			lockWaitPolicy:             rf.lockWaitPolicy,
+			lockTimeout:                rf.lockTimeout,
+			acc:                        rf.kvFetcherMemAcc,
+			forceProductionKVBatchSize: forceProductionKVBatchSize,
+			requestAdmissionHeader:     txn.AdmissionHeader(),
+			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+		},
 	)
 	if err != nil {
 		return err
