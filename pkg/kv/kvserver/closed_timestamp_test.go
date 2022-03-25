@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -707,12 +708,14 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			// lease but not over the RHS lease.
 			tc, _ := setupTestClusterWithDummyRange(t, clusterArgs, "cttest" /* dbName */, "kv" /* tableName */, numNodes)
 			defer tc.Stopper().Stop(ctx)
-			_, err := tc.ServerConn(0).Exec(fmt.Sprintf(`
+			for _, stmt := range strings.Split(fmt.Sprintf(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
-`, 5*time.Second, 100*time.Millisecond))
-			require.NoError(t, err)
+`, 5*time.Second, 100*time.Millisecond), ";") {
+				_, err := tc.ServerConn(0).Exec(stmt)
+				require.NoError(t, err)
+			}
 			leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, "cttest", "kv", hlc.Timestamp{} /* splitExpirationTime */)
 
 			leftLeaseholder := getCurrentLeaseholder(t, tc, leftDesc)
@@ -1184,12 +1187,16 @@ func setupClusterForClosedTSTesting(
 	dbName, tableName string,
 ) (tc serverutils.TestClusterInterface, db0 *gosql.DB, kvTableDesc roachpb.RangeDescriptor) {
 	tc, desc := setupTestClusterWithDummyRange(t, clusterArgs, dbName, tableName, numNodes)
-	_, err := tc.ServerConn(0).Exec(fmt.Sprintf(`
+	for _, stmt := range strings.Split(
+		fmt.Sprintf(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
-`, targetDuration, targetDuration/4))
-	require.NoError(t, err)
+`, targetDuration, targetDuration/4),
+		";") {
+		_, err := tc.ServerConn(0).Exec(stmt)
+		require.NoError(t, err)
+	}
 
 	return tc, tc.ServerConn(0), desc
 }
