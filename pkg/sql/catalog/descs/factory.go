@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // CollectionFactory is used to construct a new Collection.
@@ -61,16 +62,16 @@ func NewBareBonesCollectionFactory(
 
 // MakeCollection constructs a Collection for the purposes of embedding.
 func (cf *CollectionFactory) MakeCollection(
-	ctx context.Context, temporarySchemaProvider TemporarySchemaProvider,
+	ctx context.Context, temporarySchemaProvider TemporarySchemaProvider, monitor *mon.BytesMonitor,
 ) Collection {
 	return makeCollection(ctx, cf.leaseMgr, cf.settings, cf.codec, cf.hydratedTables, cf.systemDatabase,
-		cf.virtualSchemas, temporarySchemaProvider)
+		cf.virtualSchemas, temporarySchemaProvider, monitor)
 }
 
 // NewCollection constructs a new Collection.
 func (cf *CollectionFactory) NewCollection(
 	ctx context.Context, temporarySchemaProvider TemporarySchemaProvider,
 ) *Collection {
-	c := cf.MakeCollection(ctx, temporarySchemaProvider)
+	c := cf.MakeCollection(ctx, temporarySchemaProvider, nil /* monitor */)
 	return &c
 }

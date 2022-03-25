@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,16 +49,28 @@ func makeCollection(
 	systemNamespace *systemDatabaseNamespaceCache,
 	virtualSchemas catalog.VirtualSchemas,
 	temporarySchemaProvider TemporarySchemaProvider,
+	monitor *mon.BytesMonitor,
 ) Collection {
+	isMonitorSelfCreated := false
+	if monitor == nil {
+		// If an upstream monitor is not provided, create one for itself with unlimited budget so that any
+		// future resource allocation/release code on Collection can work properly as no-ops.
+		monitor = mon.NewUnlimitedMonitor(ctx, "CollectionMonUnlimited", mon.MemoryResource,
+			nil /* curCount */, nil /* maxHist */, 0 /* noteworthy */, settings)
+		isMonitorSelfCreated = true
+	}
+
 	return Collection{
-		settings:       settings,
-		version:        settings.Version.ActiveVersion(ctx),
-		hydratedTables: hydratedTables,
-		virtual:        makeVirtualDescriptors(virtualSchemas),
-		leased:         makeLeasedDescriptors(leaseMgr),
-		kv:             makeKVDescriptors(codec, systemNamespace),
-		temporary:      makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
-		direct:         makeDirect(ctx, codec, settings),
+		settings:             settings,
+		version:              settings.Version.ActiveVersion(ctx),
+		hydratedTables:       hydratedTables,
+		virtual:              makeVirtualDescriptors(virtualSchemas),
+		leased:               makeLeasedDescriptors(leaseMgr),
+		kv:                   makeKVDescriptors(codec, systemNamespace, monitor),
+		temporary:            makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
+		direct:               makeDirect(ctx, codec, settings),
+		monitor:              monitor,
+		isMonitorSelfCreated: isMonitorSelfCreated,
 	}
 }
 
@@ -131,6 +144,18 @@ type Collection struct {
 	// direct provides low-level access to descriptors via the Direct interface.
 	// For the most part, it is in deprecated or testing settings.
 	direct direct
+
+	// monitor is injected, if provided, to track memory usage of this Collection.
+	// It will be further passed down to each descriptor set where we create an
+	// account to track memory allocation/releases.
+	// If a nil is provided, we will create an unlimited monitor so that any
+	// downstream resource allocation/releases will be no-ops.
+	monitor *mon.BytesMonitor
+
+	// Set to true if monitor is not injected and an unlimited one was created.
+	// It is informative to help this Collection properly manages monitor if
+	// it's self-created (e.g. call Stop on monitor during clean-up phase of Collection).
+	isMonitorSelfCreated bool
 }
 
 var _ catalog.Accessor = (*Collection)(nil)
@@ -176,10 +201,13 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.uncommitted.reset()
-	tc.kv.reset()
+	tc.kv.reset(ctx)
 	tc.synthetic.reset()
 	tc.deletedDescs = catalog.DescriptorIDSet{}
 	tc.skipValidationOnWrite = false
+	if tc.isMonitorSelfCreated {
+		tc.monitor.Stop(ctx)
+	}
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
