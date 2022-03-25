@@ -958,6 +958,11 @@ type AutoCommitError struct {
 	cause error
 }
 
+// Cause implements errors.Causer.
+func (e *AutoCommitError) Cause() error {
+	return e.cause
+}
+
 func (e *AutoCommitError) Error() string {
 	return e.cause.Error()
 }
