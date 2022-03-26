@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type execSchedulesFn func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error
+type execSchedulesFn func(ctx context.Context, maxSchedules int64) error
 type testHelper struct {
 	env           *jobstest.JobSchedulerTestEnv
 	server        serverutils.TestServerInterface
@@ -70,7 +70,7 @@ func newTestHelperForTables(
 	env := jobstest.NewJobSchedulerTestEnv(envTableType, timeutil.Now())
 	knobs := &TestingKnobs{
 		JobSchedulerEnv: env,
-		TakeOverJobsScheduling: func(daemon func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
+		TakeOverJobsScheduling: func(daemon func(ctx context.Context, maxSchedules int64) error) {
 			execSchedules = daemon
 		},
 	}
