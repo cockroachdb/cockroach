@@ -174,7 +174,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
-	rec := NewReplicaEvalContext(ctx, r, todoSpanSet)
+	rec := NewReplicaEvalContext(ctx, r, todoSpanSet, false /* requireClosedTS */)
 	rw := r.Engine().NewReadOnly(storage.StandardDurability)
 	defer rw.Close()
 
@@ -217,7 +217,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemConfigSpan)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
-	rec := NewReplicaEvalContext(ctx, r, todoSpanSet)
+	rec := NewReplicaEvalContext(ctx, r, todoSpanSet, false /* requireClosedTS */)
 	rw := r.Engine().NewReadOnly(storage.StandardDurability)
 	defer rw.Close()
 
