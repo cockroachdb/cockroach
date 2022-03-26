@@ -121,11 +121,6 @@ func (p _OP_CONST_NAME) Next() coldata.Batch {
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		if projVec.MaybeHasNulls() {
-			// We need to make sure that there are no left over null values in the
-			// output vector.
-			projVec.Nulls().UnsetNulls()
-		}
 		projCol := projVec._RET_TYP()
 		// Some operators can result in NULL with non-NULL inputs, like the JSON
 		// fetch value operator, ->. Therefore, _outNulls is defined to allow
