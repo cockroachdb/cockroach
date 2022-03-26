@@ -67,12 +67,10 @@ func newRowLevelTTLTestJobTestHelper(
 
 	knobs := &jobs.TestingKnobs{
 		JobSchedulerEnv: th.env,
-		TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
+		TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
 			th.executeSchedules = func() error {
 				defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-				return th.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-					return fn(ctx, 0 /* allSchedules */, txn)
-				})
+				return fn(context.Background(), 0 /* allSchedules */)
 			}
 		},
 
