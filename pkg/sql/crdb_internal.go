@@ -901,11 +901,11 @@ CREATE TABLE crdb_internal.jobs (
 							return nil, err
 						}
 
-						if len(progress.RunningStatus) > 0 {
-							if s, ok := status.(*tree.DString); ok {
-								if jobs.Status(*s) == jobs.StatusRunning {
-									runningStatus = tree.NewDString(progress.RunningStatus)
-								}
+						if s, ok := status.(*tree.DString); ok {
+							if jobs.Status(*s) == jobs.StatusRunning && len(progress.RunningStatus) > 0 {
+								runningStatus = tree.NewDString(progress.RunningStatus)
+							} else if jobs.Status(*s) == jobs.StatusPaused && payload != nil && payload.PauseReason != "" {
+								errorStr = tree.NewDString(fmt.Sprintf("%s: %s", jobs.PauseRequestExplained, payload.PauseReason))
 							}
 						}
 						traceID = tree.NewDInt(tree.DInt(progress.TraceID))
