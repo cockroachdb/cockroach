@@ -1872,7 +1872,7 @@ func TestRemoveLeaseholder(t *testing.T) {
 	require.Equal(t, tc.Target(0), leaseHolder)
 
 	// Remove server 1.
-	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0))
+	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0), tc.Target(1))
 
 	// Check that the lease moved away from 1.
 	leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
