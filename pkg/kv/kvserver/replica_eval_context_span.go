@@ -262,3 +262,8 @@ func (rec *SpanSetReplicaEvalContext) GetResponseMemoryAccount() *mon.BoundAccou
 func (rec *SpanSetReplicaEvalContext) GetMaxBytes() int64 {
 	return rec.i.GetMaxBytes()
 }
+
+// GetEngineCapacity implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetEngineCapacity() (roachpb.StoreCapacity, error) {
+	return rec.i.GetEngineCapacity()
+}

@@ -72,6 +72,15 @@ var AddSSTableRequireAtRequestTimestamp = settings.RegisterBoolSetting(
 	false,
 )
 
+// addSSTableCapacityRemainingLimit is the fraction of remaining store capacity
+// under which addsstable requests are rejected.
+var addSSTableCapacityRemainingLimit = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.bulk_io_write.min_capacity_remaining_fraction",
+	"remaining store capacity fraction below which an addsstable request is rejected",
+	0.05,
+)
+
 var forceRewrite = util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)
 
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
@@ -91,6 +100,22 @@ func EvalAddSSTable(
 	ctx, span = tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", start.Key, end.Key))
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
+
+	if min := addSSTableCapacityRemainingLimit.Get(&cArgs.EvalCtx.ClusterSettings().SV); min > 0 {
+		cap, err := cArgs.EvalCtx.GetEngineCapacity()
+		if err != nil {
+			return result.Result{}, err
+		}
+		if remaining := float64(cap.Available) / float64(cap.Capacity); remaining < min {
+			return result.Result{}, &roachpb.InsufficientSpaceError{
+				StoreID:   cArgs.EvalCtx.StoreID(),
+				Op:        "ingest data",
+				Available: cap.Available,
+				Capacity:  cap.Capacity,
+				Required:  min,
+			}
+		}
+	}
 
 	// Reject AddSSTable requests not writing at the request timestamp if requested.
 	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.MVCCAddSSTable) &&
