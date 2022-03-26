@@ -210,6 +210,8 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 		return nil, nil, false
 	}
 
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	// Determine overlapping types.
 	var available [][2]tree.TypedExpr
 	for _, leftCol := range leftRefs {
