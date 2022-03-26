@@ -945,7 +945,7 @@ func TestReplicaLease(t *testing.T) {
 	} {
 		if _, err := batcheval.RequestLease(ctx, tc.store.Engine(),
 			batcheval.CommandArgs{
-				EvalCtx: NewReplicaEvalContext(tc.repl, allSpans()),
+				EvalCtx: NewReplicaEvalContext(tc.repl, allSpans(), false /* requireClosedTS */),
 				Args: &roachpb.RequestLeaseRequest{
 					Lease: lease,
 				},
@@ -4976,7 +4976,7 @@ func TestEndTxnDirectGC(t *testing.T) {
 				var gr roachpb.GetResponse
 				if _, err := batcheval.Get(
 					ctx, tc.engine, batcheval.CommandArgs{
-						EvalCtx: NewReplicaEvalContext(tc.repl, allSpans()),
+						EvalCtx: NewReplicaEvalContext(tc.repl, allSpans(), false /* requireClosedTS */),
 						Args: &roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{
 							Key: keys.TransactionKey(txn.Key, txn.ID),
 						}},
@@ -5359,7 +5359,7 @@ func TestAbortSpanError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := &SpanSetReplicaEvalContext{newEvalContextImpl(tc.repl), *allSpans()}
+	rec := &SpanSetReplicaEvalContext{newEvalContextImpl(tc.repl, false /* requireClosedTS */), *allSpans()}
 	pErr := checkIfTxnAborted(ctx, rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
@@ -5769,7 +5769,10 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	// return args.PusherTxn.
 	h = roachpb.Header{Timestamp: tc.Clock().Now()}
 	var reply roachpb.PushTxnResponse
-	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{EvalCtx: newEvalContextImpl(tc.repl), Stats: &ms, Header: h, Args: &pa}, &reply); err != nil {
+	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{EvalCtx: newEvalContextImpl(
+		tc.repl,
+		false, /* requireClosedTS */
+	), Stats: &ms, Header: h, Args: &pa}, &reply); err != nil {
 		t.Fatal(err)
 	} else if reply.Txn != nil {
 		t.Fatalf("expected nil response txn, but got %s", reply.Txn)
@@ -8457,7 +8460,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 			if _, err := batcheval.GC(ctx, rw, batcheval.CommandArgs{
 				Args:    &gc,
-				EvalCtx: NewReplicaEvalContext(tc.repl, &spans),
+				EvalCtx: NewReplicaEvalContext(tc.repl, &spans, false /* requireClosedTS */),
 			}, &resp); err != nil {
 				t.Fatal(err)
 			}

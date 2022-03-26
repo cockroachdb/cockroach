@@ -32,18 +32,34 @@ var todoSpanSet = &spanset.SpanSet{}
 // evalContextImpl implements the batcheval.EvalContext interface.
 type evalContextImpl struct {
 	*Replica
-	closedTS hlc.Timestamp
+	// NB: We cannot use the emptiness of `closedTS` to determine whether the
+	// closed timestamp was elided during the creation of this eval context, so we
+	// track it separately.
+	closedTSElided bool
+	closedTS       hlc.Timestamp
 }
 
-func newEvalContextImpl(r *Replica) *evalContextImpl {
+func newEvalContextImpl(r *Replica, requireClosedTS bool) *evalContextImpl {
+	var closedTS hlc.Timestamp
+	if requireClosedTS {
+		// We elide this call to get the replica's current closed timestamp unless
+		// the request requires it, in order to avoid redundant mutex contention.
+		closedTS = r.GetCurrentClosedTimestamp(context.Background())
+	}
+
 	return &evalContextImpl{
-		Replica:  r,
-		closedTS: r.GetCurrentClosedTimestamp(context.TODO()),
+		Replica:        r,
+		closedTSElided: !requireClosedTS,
+		closedTS:       closedTS,
 	}
 }
 
 // GetClosedTimestamp implements the EvalContext interface.
-func (ec *evalContextImpl) GetClosedTimestamp(_ context.Context) hlc.Timestamp {
+func (ec *evalContextImpl) GetClosedTimestamp() hlc.Timestamp {
+	if ec.closedTSElided {
+		panic("closed timestamp was elided during eval context creation; does the" +
+			" request set the requiresClosedTimestamp flag?")
+	}
 	return ec.closedTS
 }
 
@@ -53,12 +69,14 @@ var _ batcheval.EvalContext = &evalContextImpl{}
 // evaluation. The supplied SpanSet will be ignored except for race builds, in
 // which case state access is asserted against it. A SpanSet must always be
 // passed.
-func NewReplicaEvalContext(r *Replica, ss *spanset.SpanSet) batcheval.EvalContext {
+func NewReplicaEvalContext(
+	r *Replica, ss *spanset.SpanSet, requireClosedTS bool,
+) batcheval.EvalContext {
 	if ss == nil {
 		log.Fatalf(r.AnnotateCtx(context.Background()), "can't create a ReplicaEvalContext with assertions but no SpanSet")
 	}
 
-	ec := newEvalContextImpl(r)
+	ec := newEvalContextImpl(r, requireClosedTS)
 	if util.RaceEnabled {
 		return &SpanSetReplicaEvalContext{
 			i:  ec,

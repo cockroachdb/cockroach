@@ -95,6 +95,7 @@ const (
 	needsRefresh                                   // commands which require refreshes to avoid serializable retries
 	canBackpressure                                // commands which deserve backpressure when a Range grows too large
 	bypassesReplicaCircuitBreaker                  // commands which bypass the replica circuit breaker, i.e. opt out of fail-fast
+	requiresClosedTimestamp                        // commands which read a replica's closed timestamp
 )
 
 // flagDependencies specifies flag dependencies, asserted by TestFlagCombinations.
@@ -1404,9 +1405,11 @@ func (r *RefreshRangeRequest) flags() flag {
 	return isRead | isTxn | isRange | updatesTSCache
 }
 
-func (*SubsumeRequest) flags() flag                { return isRead | isAlone | updatesTSCache }
+func (*SubsumeRequest) flags() flag {
+	return isRead | isAlone | updatesTSCache | requiresClosedTimestamp
+}
 func (*RangeStatsRequest) flags() flag             { return isRead }
-func (*QueryResolvedTimestampRequest) flags() flag { return isRead | isRange }
+func (*QueryResolvedTimestampRequest) flags() flag { return isRead | isRange | requiresClosedTimestamp }
 func (*ScanInterleavedIntentsRequest) flags() flag { return isRead | isRange }
 func (*BarrierRequest) flags() flag                { return isWrite | isRange }
 

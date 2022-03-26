@@ -275,6 +275,12 @@ func (ba *BatchRequest) Require1PC() bool {
 	return etArg.Require1PC
 }
 
+// RequiresClosedTS returns true if the batch contains a request that needs to
+// read a replica's closed timestamp.
+func (ba *BatchRequest) RequiresClosedTS() bool {
+	return ba.hasFlag(requiresClosedTimestamp)
+}
+
 // IsSingleAbortTxnRequest returns true iff the batch contains a single request,
 // and that request is an EndTxnRequest(commit=false).
 func (ba *BatchRequest) IsSingleAbortTxnRequest() bool {
