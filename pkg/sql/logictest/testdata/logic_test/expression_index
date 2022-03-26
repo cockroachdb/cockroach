@@ -424,7 +424,7 @@ CREATE TABLE public.copy_indexes (
    INDEX src_expr_idx ((a + b) ASC),
    INDEX named_idx ((a + 1:::INT8) ASC),
    UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-   INVERTED INDEX src_expr_expr1_idx ((a + b), (j->'a':::STRING))
+   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING) ASC)
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
@@ -451,7 +451,7 @@ CREATE TABLE public.copy_all (
    INDEX src_expr_idx ((a + b) ASC),
    INDEX named_idx ((a + 1:::INT8) ASC),
    UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-   INVERTED INDEX src_expr_expr1_idx ((a + b), (j->'a':::STRING))
+   INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING) ASC)
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
