@@ -180,11 +180,6 @@ func (r *_RANK_STRINGOp) Next() coldata.Batch {
 	// {{end}}
 	peersCol := batch.ColVec(r.peersColIdx).Bool()
 	rankVec := batch.ColVec(r.outputColIdx)
-	if rankVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		rankVec.Nulls().UnsetNulls()
-	}
 	rankCol := rankVec.Int64()
 	sel := batch.Selection()
 	if sel != nil {

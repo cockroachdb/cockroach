@@ -222,6 +222,7 @@ func (a *Allocator) NewMemColumn(t *types.T, capacity int) coldata.Vec {
 // compares to the width of b:
 // 1. if colIdx < b.Width(), then we expect that correctly-typed vector is
 // already present in position colIdx. If that's not the case, we will panic.
+// Nulls are unset on the vector.
 // 2. if colIdx == b.Width(), then we will append a newly allocated coldata.Vec
 // of the given type.
 // 3. if colIdx > b.Width(), then we will panic because such condition
@@ -266,6 +267,9 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				a.ReleaseMemory(presentVec.Datum().Reset())
 			} else {
 				coldata.ResetIfBytesLike(presentVec)
+			}
+			if presentVec.MaybeHasNulls() {
+				presentVec.Nulls().UnsetNulls()
 			}
 			return
 		}
