@@ -65,6 +65,9 @@ func MarkPauseRequestError(reason error) error {
 	return errors.Mark(reason, errPauseSelfSentinel)
 }
 
+// PauseRequestExplained is a prose used to wrap and explain a pause-request error.
+const PauseRequestExplained = "pausing due to error; use RESUME JOB to try to proceed once the issue is resolved, or CANCEL JOB to rollback"
+
 // InvalidStatusError is the error returned when the desired operation is
 // invalid given the job's current status.
 type InvalidStatusError struct {
