@@ -64,11 +64,6 @@ func (t *tupleProjOp) Next() coldata.Batch {
 	}
 	t.converter.ConvertBatchAndDeselect(batch)
 	projVec := batch.ColVec(t.outputIdx)
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
 
 	t.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
 		// Preallocate the tuples and their underlying datums in a contiguous

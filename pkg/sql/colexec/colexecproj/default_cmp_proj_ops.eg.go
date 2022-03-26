@@ -38,11 +38,6 @@ func (d *defaultCmpProjOp) Next() coldata.Batch {
 	}
 	sel := batch.Selection()
 	output := batch.ColVec(d.outputIdx)
-	if output.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		output.Nulls().UnsetNulls()
-	}
 	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		leftColumn := d.toDatumConverter.GetDatumColumn(d.col1Idx)
@@ -102,11 +97,6 @@ func (d *defaultCmpRConstProjOp) Next() coldata.Batch {
 	}
 	sel := batch.Selection()
 	output := batch.ColVec(d.outputIdx)
-	if output.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		output.Nulls().UnsetNulls()
-	}
 	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		nonConstColumn := d.toDatumConverter.GetDatumColumn(d.colIdx)

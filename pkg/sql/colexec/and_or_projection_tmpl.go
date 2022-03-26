@@ -274,11 +274,6 @@ func (o *_OP_LOWERProjOp) Next() coldata.Batch {
 	outputCol := batch.ColVec(o.outputIdx)
 	outputVals := outputCol.Bool()
 	outputNulls := outputCol.Nulls()
-	if outputCol.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputNulls.UnsetNulls()
-	}
 	// This is where we populate the output - do the actual evaluation of the
 	// logical operation.
 	if leftVec.MaybeHasNulls() {

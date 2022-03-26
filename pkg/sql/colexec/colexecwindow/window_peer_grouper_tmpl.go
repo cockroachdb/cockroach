@@ -121,11 +121,6 @@ func (p *_PEER_GROUPER_STRINGOp) Next() coldata.Batch {
 	// {{end}}
 	sel := b.Selection()
 	peersVec := b.ColVec(p.outputColIdx)
-	if peersVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		peersVec.Nulls().UnsetNulls()
-	}
 	peersCol := peersVec.Bool()
 	if sel != nil {
 		for _, i := range sel[:n] {
