@@ -146,7 +146,7 @@ type ImmutableEvalContext interface {
 	// It is expected that a caller will have performed some action (either
 	// calling RevokeLease or WatchForMerge) to freeze further progression of
 	// the closed timestamp before calling this method.
-	GetClosedTimestamp(ctx context.Context) hlc.Timestamp
+	GetClosedTimestamp() hlc.Timestamp
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -261,7 +261,7 @@ func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 func (m *mockEvalCtxImpl) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	return m.CurrentReadSummary
 }
-func (m *mockEvalCtxImpl) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
+func (m *mockEvalCtxImpl) GetClosedTimestamp() hlc.Timestamp {
 	return m.ClosedTimestamp
 }
 func (m *mockEvalCtxImpl) GetExternalStorage(

@@ -223,8 +223,8 @@ func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(ctx context.Context)
 }
 
 // GetClosedTimestamp is part of the EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
-	return rec.i.GetClosedTimestamp(ctx)
+func (rec *SpanSetReplicaEvalContext) GetClosedTimestamp() hlc.Timestamp {
+	return rec.i.GetClosedTimestamp()
 }
 
 // GetExternalStorage returns an ExternalStorage object, based on

@@ -152,7 +152,7 @@ func Subsume(
 	// think about.
 	priorReadSum.Merge(rspb.FromTimestamp(reply.FreezeStart.ToTimestamp()))
 	reply.ReadSummary = &priorReadSum
-	reply.ClosedTimestamp = cArgs.EvalCtx.GetClosedTimestamp(ctx)
+	reply.ClosedTimestamp = cArgs.EvalCtx.GetClosedTimestamp()
 
 	return result.Result{}, nil
 }
