@@ -4832,7 +4832,7 @@ CREATE INDEX regression_46450_idx ON regression_46450 USING gin(json)
 query T
 select indexdef from pg_indexes where indexname = 'regression_46450_idx'
 ----
-CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json)
+CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
 
 # Make sure indexdef uses user-defined schemas.
 
@@ -4891,8 +4891,8 @@ WHERE tablename = 'geospatial_table'
 ----
 indexname              indexdef
 geospatial_table_pkey  CREATE UNIQUE INDEX geospatial_table_pkey ON test.public.geospatial_table USING btree (id ASC)
-idxa                   CREATE INDEX idxa ON test.public.geospatial_table USING gin (a)
-idxb                   CREATE INDEX idxb ON test.public.geospatial_table USING gin (b)
+idxa                   CREATE INDEX idxa ON test.public.geospatial_table USING gin (a ASC)
+idxb                   CREATE INDEX idxb ON test.public.geospatial_table USING gin (b ASC)
 
 subtest partial_index
 
