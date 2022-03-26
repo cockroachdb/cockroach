@@ -150,7 +150,7 @@ type EvalContext interface {
 type ImmutableEvalContext interface {
 	// GetClosedTimestamp returns the closed timestamp that was active when the
 	// evaluation context was created.
-	GetClosedTimestamp(ctx context.Context) hlc.Timestamp
+	GetClosedTimestamp() hlc.Timestamp
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -265,7 +265,7 @@ func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 func (m *mockEvalCtxImpl) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	return m.CurrentReadSummary
 }
-func (m *mockEvalCtxImpl) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
+func (m *mockEvalCtxImpl) GetClosedTimestamp() hlc.Timestamp {
 	return m.ClosedTimestamp
 }
 func (m *mockEvalCtxImpl) GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp {

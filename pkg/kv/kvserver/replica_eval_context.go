@@ -43,7 +43,7 @@ func newEvalContextImpl(ctx context.Context, r *Replica) *evalContextImpl {
 }
 
 // GetClosedTimestamp implements the EvalContext interface.
-func (ec *evalContextImpl) GetClosedTimestamp(_ context.Context) hlc.Timestamp {
+func (ec *evalContextImpl) GetClosedTimestamp() hlc.Timestamp {
 	return ec.closedTS
 }
 
