@@ -41,6 +41,7 @@ export function jobToVisual(job: Job): JobStatusVisual {
     case JOB_STATUS_CANCELED:
     case JOB_STATUS_CANCEL_REQUESTED:
     case JOB_STATUS_PAUSED:
+      return job.error == "" ? JobStatusVisual.BadgeOnly :  JobStatusVisual.BadgeWithErrorMessage;
     case JOB_STATUS_PAUSE_REQUESTED:
     case JOB_STATUS_REVERTING:
     default:
