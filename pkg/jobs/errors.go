@@ -62,7 +62,7 @@ var errPauseSelfSentinel = errors.New("job requested it be paused")
 // indicates to the Registry that the job would like to be paused rather than
 // failing.
 func MarkPauseRequestError(reason error) error {
-	return errors.Mark(reason, errPauseSelfSentinel)
+	return errors.Mark(errors.Wrap(reason, "pausing due to error; use RESUME JOB to try to proceed once the issue is resolved, or CANCEL JOB to rollback"), errPauseSelfSentinel)
 }
 
 // InvalidStatusError is the error returned when the desired operation is
