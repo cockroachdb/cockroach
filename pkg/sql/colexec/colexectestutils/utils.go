@@ -923,7 +923,6 @@ func (s *opTestInput) Next() coldata.Batch {
 	if len(s.tuples) == 0 {
 		return coldata.ZeroBatch
 	}
-	s.batch.ResetInternalBatch()
 	batchSize := s.batchSize
 	if len(s.tuples) < batchSize {
 		batchSize = len(s.tuples)
@@ -978,19 +977,16 @@ func (s *opTestInput) Next() coldata.Batch {
 
 		s.batch.SetSelection(true)
 		copy(s.batch.Selection(), s.selection)
-	}
-
-	// Reset nulls for all columns in this batch.
-	for _, colVec := range s.batch.ColVecs() {
-		if colVec.CanonicalTypeFamily() != types.UnknownFamily {
-			colVec.Nulls().UnsetNulls()
-		}
+	} else {
+		s.batch.SetSelection(false)
 	}
 
 	rng, _ := randutil.NewTestRand()
 
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
+		// Unset nulls only on the vectors owned by the opTestInput.
+		vec.Nulls().UnsetNulls()
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
 		col := reflect.ValueOf(vec.Col())
@@ -1127,11 +1123,6 @@ func (s *opFixedSelTestInput) Init(context.Context) {
 			colexecerror.InternalError(errors.AssertionFailedf("mismatched tuple lens: found %+v expected %d vals",
 				s.tuples[i], tupleLen))
 		}
-	}
-
-	// Reset nulls for all columns in this batch.
-	for i := 0; i < s.batch.Width(); i++ {
-		s.batch.ColVec(i).Nulls().UnsetNulls()
 	}
 
 	if s.sel != nil {
