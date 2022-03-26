@@ -1144,7 +1144,7 @@ func (r *Registry) stepThroughStateMachine(
 			if err := r.PauseRequested(ctx, nil, job.ID(), err.Error()); err != nil {
 				return err
 			}
-			return errPauseSelfSentinel
+			return err
 		}
 		// TODO(spaskob): enforce a limit on retries.
 
