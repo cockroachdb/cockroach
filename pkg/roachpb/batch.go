@@ -275,6 +275,15 @@ func (ba *BatchRequest) Require1PC() bool {
 	return etArg.Require1PC
 }
 
+// RequiresClosedTSOlderThanStorageSnapshot returns true if the batch contains a
+// request that needs to read a replica's closed timestamp that is older than
+// the state of the storage snapshot the request is evaluating over.
+//
+// NB: This is only used by QueryResolvedTimestampRequest at the moment.
+func (ba *BatchRequest) RequiresClosedTSOlderThanStorageSnapshot() bool {
+	return ba.hasFlag(requiresClosedTSOlderThanStorageSnapshot)
+}
+
 // IsSingleAbortTxnRequest returns true iff the batch contains a single request,
 // and that request is an EndTxnRequest(commit=false).
 func (ba *BatchRequest) IsSingleAbortTxnRequest() bool {
