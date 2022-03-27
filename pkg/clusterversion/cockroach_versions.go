@@ -536,6 +536,10 @@ var versionsSingleton = keyedVersions{
 		Key:     DateStyleIntervalStyleCastRewrite,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
 	},
+	{
+		Key:     EnableNewStoreRebalancer,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
+	},
 
 	// *************************************************
 	// Step (2): Add new versions here.
