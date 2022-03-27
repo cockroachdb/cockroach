@@ -69,15 +69,6 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 		return err
 	}
 
-	// We check for concurrently running SQL Stats compaction jobs. We only allow
-	// one job to be running at the same time.
-	if err := persistedsqlstats.CheckExistingCompactionJob(ctx, r.job, ie, nil /* txn */); err != nil {
-		if errors.Is(err, persistedsqlstats.ErrConcurrentSQLStatsCompaction) {
-			log.Infof(ctx, "exiting due to a running sql stats compaction job")
-		}
-		return err
-	}
-
 	statsCompactor := persistedsqlstats.NewStatsCompactor(
 		r.st,
 		ie,
@@ -204,7 +195,7 @@ func (e *scheduledSQLStatsCompactionExecutor) createSQLStatsCompactionJob(
 		persistedsqlstats.CreateCompactionJob(ctx, &jobs.CreatedByInfo{
 			ID:   sj.ScheduleID(),
 			Name: jobs.CreatedByScheduledJobs,
-		}, txn, cfg.InternalExecutor, p.(*planner).ExecCfg().JobRegistry)
+		}, txn, p.(*planner).ExecCfg().JobRegistry)
 
 	if err != nil {
 		return err
