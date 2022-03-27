@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // We ignore any limits that are higher than this value to avoid integer
@@ -123,4 +124,78 @@ func (s *SpansWithCopy) Reset() {
 	}
 	s.Spans = nil
 	s.SpansCopy = s.SpansCopy[:0]
+}
+
+// limitHintBatchCount tracks how many times the caller has read LimitHint()
+// number of rows.
+type limitHintBatchCount int
+
+const (
+	limitHintFirstBatch limitHintBatchCount = iota
+	limitHintSecondBatch
+	limitHintDisabled
+)
+
+// limitHintSecondBatchFactor is a multiple used when determining the limit hint
+// for the second batch of rows. This will be used when the original limit hint
+// turned out to be insufficient to satisfy the query.
+const limitHintSecondBatchFactor = 10
+
+// LimitHintHelper is used for lookup and index joins in order to limit batches
+// of input rows in the presence of hard and soft limits.
+type LimitHintHelper struct {
+	origLimitHint int64
+	// currentLimitHint of zero indicates that the limit hint is disabled.
+	currentLimitHint int64
+	limitHintIdx     limitHintBatchCount
+}
+
+// MakeLimitHintHelper creates a new LimitHintHelper.
+func MakeLimitHintHelper(specLimitHint int64, post *execinfrapb.PostProcessSpec) LimitHintHelper {
+	limitHint := LimitHint(specLimitHint, post)
+	return LimitHintHelper{
+		origLimitHint:    limitHint,
+		currentLimitHint: limitHint,
+		limitHintIdx:     limitHintFirstBatch,
+	}
+}
+
+// LimitHint returns the current guess on the remaining rows that need to be
+// read. Zero is returned when the limit hint is disabled.
+func (h *LimitHintHelper) LimitHint() int64 {
+	return h.currentLimitHint
+}
+
+// ReadSomeRows notifies the helper that its user has fetched the specified
+// number of rows. An error is returned when the user fetched more rows than the
+// current limit hint.
+func (h *LimitHintHelper) ReadSomeRows(rowsRead int64) error {
+	if h.currentLimitHint != 0 {
+		h.currentLimitHint -= rowsRead
+		if h.currentLimitHint == 0 {
+			// Set up the limit hint for the next batch of input rows if the
+			// current batch turns out to be insufficient.
+			//
+			// If we just finished the first batch of rows, then use the
+			// original limit hint times limitHintSecondBatchFactor. If we
+			// finished the second or any of the following batches, then we keep
+			// the limit hint as zero (i.e. disabled) since it appears that our
+			// original hint was either way off or many input rows result in
+			// lookup misses.
+			switch h.limitHintIdx {
+			case limitHintFirstBatch:
+				h.currentLimitHint = limitHintSecondBatchFactor * h.origLimitHint
+				h.limitHintIdx = limitHintSecondBatch
+			default:
+				h.currentLimitHint = 0
+				h.limitHintIdx = limitHintDisabled
+			}
+		} else if h.currentLimitHint < 0 {
+			return errors.AssertionFailedf(
+				"unexpectedly the user of LimitHintHelper read " +
+					"more rows that the current limit hint",
+			)
+		}
+	}
+	return nil
 }
