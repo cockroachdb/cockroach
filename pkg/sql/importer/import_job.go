@@ -1221,6 +1221,10 @@ func ingestWithRetry(
 			break
 		}
 
+		if errors.HasType(err, &roachpb.InsufficientSpaceError{}) {
+			return res, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+		}
+
 		if joberror.IsPermanentBulkJobError(err) {
 			return res, err
 		}

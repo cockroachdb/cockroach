@@ -158,6 +158,10 @@ func restoreWithRetry(
 			break
 		}
 
+		if errors.HasType(err, &roachpb.InsufficientSpaceError{}) {
+			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+		}
+
 		if joberror.IsPermanentBulkJobError(err) {
 			return roachpb.RowCount{}, err
 		}
