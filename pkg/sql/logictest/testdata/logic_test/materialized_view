@@ -29,6 +29,15 @@ SELECT * FROM v
 3 4
 5 6
 
+let $orig_crdb_timestamp
+SELECT max(crdb_internal_mvcc_timestamp) FROM v
+
+# All the rows have the same crdb_internal_mvcc_timestamp.
+query I
+SELECT count(*) FROM v WHERE crdb_internal_mvcc_timestamp != $orig_crdb_timestamp
+----
+0
+
 # Now refresh the view.
 statement ok
 REFRESH MATERIALIZED VIEW v
@@ -41,6 +50,12 @@ SELECT * FROM v
 3 4
 5 6
 7 8
+
+# Verify that crdb_internal_mvcc_timestamp is updated for all rows.
+query I
+SELECT count(*) FROM v WHERE crdb_internal_mvcc_timestamp > $orig_crdb_timestamp
+----
+4
 
 # Now add an index to the view, and use it.
 statement ok
