@@ -423,8 +423,11 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			}
 
 			sstBytes := mkSST(sstKVs)
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext()
 
 			cArgs := batcheval.CommandArgs{
+				EvalCtx: evalCtx,
 				Header: roachpb.Header{
 					Timestamp: hlc.Timestamp{WallTime: 7},
 				},
@@ -464,7 +467,8 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			}
 
 			cArgsWithStats := batcheval.CommandArgs{
-				Header: roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 7}},
+				EvalCtx: evalCtx,
+				Header:  roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 7}},
 				Args: &roachpb.AddSSTableRequest{
 					RequestHeader: roachpb.RequestHeader{Key: keys.MinKey, EndKey: keys.MaxKey},
 					Data: mkSST([]storage.MVCCKeyValue{{
