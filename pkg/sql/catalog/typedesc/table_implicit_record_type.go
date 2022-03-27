@@ -205,7 +205,8 @@ func (v TableImplicitRecordType) GetReferencedDescIDs() (catalog.DescriptorIDSet
 }
 
 // ValidateSelf implements the Descriptor interface.
-func (v TableImplicitRecordType) ValidateSelf(_ catalog.ValidationErrorAccumulator) {}
+func (v TableImplicitRecordType) ValidateSelf(_ catalog.ValidationErrorAccumulator) {
+}
 
 // ValidateCrossReferences implements the Descriptor interface.
 func (v TableImplicitRecordType) ValidateCrossReferences(
@@ -305,6 +306,12 @@ func (v TableImplicitRecordType) SuperRegions() ([]descpb.SuperRegion, error) {
 	return nil, errors.AssertionFailedf(
 		"can not get super regions of a implicit table record type",
 	)
+}
+
+// ZoneConfigExtensions implements the TypeDescriptorInterface.
+func (v TableImplicitRecordType) ZoneConfigExtensions() (descpb.ZoneConfigExtensions, error) {
+	return descpb.ZoneConfigExtensions{}, errors.AssertionFailedf(
+		"can not get the zone config extensions of a implicit table record type")
 }
 
 // GetArrayTypeID implements the TypeDescriptorInterface.

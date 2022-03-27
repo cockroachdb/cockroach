@@ -15,7 +15,7 @@ increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 7 MutationType ops
@@ -23,7 +23,8 @@ delete schema namespace entry {104 0 sc} -> 106
 upsert descriptor #104
    database:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    jobId: "1"
      id: 104
      modificationTime: {}
@@ -37,9 +38,9 @@ upsert descriptor #104
 upsert descriptor #106
    schema:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -61,7 +62,6 @@ upsert descriptor #106
   +    - 4
   +    - 5
   +    - 6
-  +    - 7
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -85,14 +85,6 @@ upsert descriptor #106
   +          descriptorId: 106
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 106
-  +          userName: public
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -142,6 +134,7 @@ create job #1 (non-cancelable: true): "DROP SCHEMA db.sc"
   descriptor IDs: [104 106]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -150,7 +143,8 @@ begin transaction #3
 upsert descriptor #104
    database:
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    jobId: "1"
      id: 104
      modificationTime: {}
@@ -161,7 +155,7 @@ upsert descriptor #104
   +  version: "4"
 delete descriptor #106
 write *eventpb.DropSchema to event log for descriptor #106: DROP SCHEMA ‹db›.‹sc›
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 # end PostCommitPhase
 
@@ -183,7 +177,7 @@ checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 9 MutationType ops
@@ -193,9 +187,9 @@ upsert descriptor #108
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -251,7 +245,6 @@ upsert descriptor #108
   +    - 21
   +    - 22
   +    - 23
-  +    - 24
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -276,14 +269,6 @@ upsert descriptor #108
   +          descriptorId: 108
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 108
-  +          userName: public
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -510,6 +495,7 @@ create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
   descriptor IDs: [108]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -520,9 +506,9 @@ upsert descriptor #108
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -578,7 +564,6 @@ upsert descriptor #108
   -    - 21
   -    - 22
   -    - 23
-  -    - 24
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -603,14 +588,6 @@ upsert descriptor #108
   -          descriptorId: 108
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 108
-  -          userName: public
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -832,8 +809,9 @@ upsert descriptor #108
 write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹db›.‹sc›.‹t›
 create job #2 (non-cancelable: true): "GC for DROP TABLE db.sc.t"
   descriptor IDs: [108]
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase
 
 test
@@ -854,7 +832,8 @@ delete object namespace entry {104 107 _e} -> 110
 upsert descriptor #104
    database:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    jobId: "1"
      id: 104
      modificationTime: {}
@@ -868,9 +847,9 @@ upsert descriptor #104
 upsert descriptor #107
    schema:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -892,7 +871,6 @@ upsert descriptor #107
   +    - 4
   +    - 5
   +    - 6
-  +    - 7
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -916,14 +894,6 @@ upsert descriptor #107
   +          descriptorId: 107
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 107
-  +          userName: public
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -972,7 +942,8 @@ upsert descriptor #109
    type:
      arrayTypeId: 110
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -988,13 +959,13 @@ upsert descriptor #109
   +        statement: DROP SCHEMA db.sc CASCADE
   +        statementTag: DROP SCHEMA
   +    targetRanks:
+  +    - 7
   +    - 8
   +    - 9
   +    - 10
   +    - 11
   +    - 12
   +    - 13
-  +    - 14
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1070,7 +1041,8 @@ upsert descriptor #110
        family: ArrayFamily
        oid: 100110
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1086,13 +1058,13 @@ upsert descriptor #110
   +        statement: DROP SCHEMA db.sc CASCADE
   +        statementTag: DROP SCHEMA
   +    targetRanks:
+  +    - 14
   +    - 15
   +    - 16
   +    - 17
   +    - 18
   +    - 19
   +    - 20
-  +    - 21
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1180,6 +1152,7 @@ create job #1 (non-cancelable: true): "DROP SCHEMA db.sc CASCADE"
   descriptor IDs: [104 107 109 110]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -1188,7 +1161,8 @@ begin transaction #3
 upsert descriptor #104
    database:
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    jobId: "1"
      id: 104
      modificationTime: {}
@@ -1201,7 +1175,7 @@ delete descriptor #107
 delete descriptor #109
 delete descriptor #110
 write *eventpb.DropSchema to event log for descriptor #107: DROP SCHEMA ‹db›.‹sc› CASCADE
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 # end PostCommitPhase
 
@@ -1221,7 +1195,8 @@ delete schema namespace entry {104 0 public} -> 105
 upsert descriptor #104
    database:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1324,7 +1299,8 @@ upsert descriptor #104
 upsert descriptor #105
    schema:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1433,6 +1409,7 @@ create job #1 (non-cancelable: true): "DROP DATABASE db CASCADE"
   descriptor IDs: [104 105]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -1442,7 +1419,7 @@ delete descriptor #104
 delete descriptor #105
 deleting zone config for #104
 write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹db› CASCADE
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 # end PostCommitPhase
 
@@ -1507,7 +1484,8 @@ delete object namespace entry {111 113 v5} -> 125
 upsert descriptor #111
    database:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1610,7 +1588,8 @@ upsert descriptor #111
 upsert descriptor #112
    schema:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1715,9 +1694,9 @@ upsert descriptor #112
 upsert descriptor #113
    schema:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -1739,7 +1718,6 @@ upsert descriptor #113
   +    - 20
   +    - 21
   +    - 22
-  +    - 23
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1763,14 +1741,6 @@ upsert descriptor #113
   +          descriptorId: 113
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 2
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 113
-  +          userName: public
   +      metadata:
   +        sourceElementId: 2
   +        subWorkId: 1
@@ -1820,9 +1790,9 @@ upsert descriptor #114
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -1837,14 +1807,13 @@ upsert descriptor #114
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 23
   +    - 24
   +    - 25
   +    - 26
   +    - 27
   +    - 28
   +    - 29
-  +    - 30
-  +    - 31
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1869,14 +1838,6 @@ upsert descriptor #114
   +          descriptorId: 114
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 3
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 114
-  +          userName: public
   +      metadata:
   +        sourceElementId: 3
   +        subWorkId: 1
@@ -1927,9 +1888,9 @@ upsert descriptor #115
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -1944,14 +1905,13 @@ upsert descriptor #115
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 76
+  +    - 77
+  +    - 78
+  +    - 79
   +    - 80
   +    - 81
   +    - 82
-  +    - 83
-  +    - 84
-  +    - 85
-  +    - 86
-  +    - 87
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1976,14 +1936,6 @@ upsert descriptor #115
   +          descriptorId: 115
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 7
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 115
-  +          userName: public
   +      metadata:
   +        sourceElementId: 7
   +        subWorkId: 1
@@ -2034,9 +1986,9 @@ upsert descriptor #116
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -2068,6 +2020,11 @@ upsert descriptor #116
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 83
+  +    - 84
+  +    - 85
+  +    - 86
+  +    - 87
   +    - 88
   +    - 89
   +    - 90
@@ -2087,12 +2044,6 @@ upsert descriptor #116
   +    - 104
   +    - 105
   +    - 106
-  +    - 107
-  +    - 108
-  +    - 109
-  +    - 110
-  +    - 111
-  +    - 112
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -2117,14 +2068,6 @@ upsert descriptor #116
   +          descriptorId: 116
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 7
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 116
-  +          userName: public
   +      metadata:
   +        sourceElementId: 7
   +        subWorkId: 1
@@ -2358,9 +2301,9 @@ upsert descriptor #117
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -2392,6 +2335,8 @@ upsert descriptor #117
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 30
+  +    - 31
   +    - 32
   +    - 33
   +    - 34
@@ -2414,9 +2359,6 @@ upsert descriptor #117
   +    - 51
   +    - 52
   +    - 53
-  +    - 54
-  +    - 55
-  +    - 56
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -2441,14 +2383,6 @@ upsert descriptor #117
   +          descriptorId: 117
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 3
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 117
-  +          userName: public
   +      metadata:
   +        sourceElementId: 3
   +        subWorkId: 1
@@ -2678,9 +2612,9 @@ upsert descriptor #118
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -2710,6 +2644,9 @@ upsert descriptor #118
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 54
+  +    - 55
+  +    - 56
   +    - 57
   +    - 58
   +    - 59
@@ -2729,10 +2666,6 @@ upsert descriptor #118
   +    - 73
   +    - 74
   +    - 75
-  +    - 76
-  +    - 77
-  +    - 78
-  +    - 79
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -2757,14 +2690,6 @@ upsert descriptor #118
   +          descriptorId: 118
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 3
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 118
-  +          userName: public
   +      metadata:
   +        sourceElementId: 3
   +        subWorkId: 1
@@ -2968,9 +2893,9 @@ upsert descriptor #119
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -2989,18 +2914,17 @@ upsert descriptor #119
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 107
+  +    - 108
+  +    - 109
+  +    - 110
+  +    - 111
+  +    - 112
   +    - 113
   +    - 114
   +    - 115
   +    - 116
   +    - 117
-  +    - 118
-  +    - 119
-  +    - 120
-  +    - 121
-  +    - 122
-  +    - 123
-  +    - 124
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3025,14 +2949,6 @@ upsert descriptor #119
   +          descriptorId: 119
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 9
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 119
-  +          userName: public
   +      metadata:
   +        sourceElementId: 9
   +        subWorkId: 1
@@ -3128,9 +3044,9 @@ upsert descriptor #120
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -3153,6 +3069,13 @@ upsert descriptor #120
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 118
+  +    - 119
+  +    - 120
+  +    - 121
+  +    - 122
+  +    - 123
+  +    - 124
   +    - 125
   +    - 126
   +    - 127
@@ -3161,14 +3084,6 @@ upsert descriptor #120
   +    - 130
   +    - 131
   +    - 132
-  +    - 133
-  +    - 134
-  +    - 135
-  +    - 136
-  +    - 137
-  +    - 138
-  +    - 139
-  +    - 140
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3193,14 +3108,6 @@ upsert descriptor #120
   +          descriptorId: 120
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 10
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 120
-  +          userName: public
   +      metadata:
   +        sourceElementId: 10
   +        subWorkId: 1
@@ -3338,9 +3245,9 @@ upsert descriptor #121
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -3363,6 +3270,14 @@ upsert descriptor #121
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 133
+  +    - 134
+  +    - 135
+  +    - 136
+  +    - 137
+  +    - 138
+  +    - 139
+  +    - 140
   +    - 141
   +    - 142
   +    - 143
@@ -3370,15 +3285,6 @@ upsert descriptor #121
   +    - 145
   +    - 146
   +    - 147
-  +    - 148
-  +    - 149
-  +    - 150
-  +    - 151
-  +    - 152
-  +    - 153
-  +    - 154
-  +    - 155
-  +    - 156
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3403,14 +3309,6 @@ upsert descriptor #121
   +          descriptorId: 121
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 11
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 121
-  +          userName: public
   +      metadata:
   +        sourceElementId: 11
   +        subWorkId: 1
@@ -3549,9 +3447,9 @@ upsert descriptor #122
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -3574,22 +3472,21 @@ upsert descriptor #122
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 148
+  +    - 149
+  +    - 150
+  +    - 151
+  +    - 152
+  +    - 153
+  +    - 154
+  +    - 155
+  +    - 156
   +    - 157
   +    - 158
   +    - 159
   +    - 160
   +    - 161
   +    - 162
-  +    - 163
-  +    - 164
-  +    - 165
-  +    - 166
-  +    - 167
-  +    - 168
-  +    - 169
-  +    - 170
-  +    - 171
-  +    - 172
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3614,14 +3511,6 @@ upsert descriptor #122
   +          descriptorId: 122
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 11
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 122
-  +          userName: public
   +      metadata:
   +        sourceElementId: 11
   +        subWorkId: 1
@@ -3758,7 +3647,8 @@ upsert descriptor #123
    type:
      arrayTypeId: 124
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -3774,13 +3664,13 @@ upsert descriptor #123
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 173
-  +    - 174
-  +    - 175
-  +    - 176
-  +    - 177
-  +    - 178
-  +    - 179
+  +    - 163
+  +    - 164
+  +    - 165
+  +    - 166
+  +    - 167
+  +    - 168
+  +    - 169
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3856,7 +3746,8 @@ upsert descriptor #124
        family: ArrayFamily
        oid: 100124
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -3872,13 +3763,13 @@ upsert descriptor #124
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 180
-  +    - 181
-  +    - 182
-  +    - 183
-  +    - 184
-  +    - 185
-  +    - 186
+  +    - 170
+  +    - 171
+  +    - 172
+  +    - 173
+  +    - 174
+  +    - 175
+  +    - 176
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3966,9 +3857,9 @@ upsert descriptor #125
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -3995,6 +3886,16 @@ upsert descriptor #125
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 177
+  +    - 178
+  +    - 179
+  +    - 180
+  +    - 181
+  +    - 182
+  +    - 183
+  +    - 184
+  +    - 185
+  +    - 186
   +    - 187
   +    - 188
   +    - 189
@@ -4004,17 +3905,6 @@ upsert descriptor #125
   +    - 193
   +    - 194
   +    - 195
-  +    - 196
-  +    - 197
-  +    - 198
-  +    - 199
-  +    - 200
-  +    - 201
-  +    - 202
-  +    - 203
-  +    - 204
-  +    - 205
-  +    - 206
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -4039,14 +3929,6 @@ upsert descriptor #125
   +          descriptorId: 125
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 13
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 125
-  +          userName: public
   +      metadata:
   +        sourceElementId: 13
   +        subWorkId: 1
@@ -4231,6 +4113,7 @@ create job #1 (non-cancelable: true): "DROP DATABASE db1 CASCADE"
   descriptor IDs: [111 112 113 114 115 116 117 118 119 120 121 122 123 124 125]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -4241,9 +4124,9 @@ upsert descriptor #114
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -4258,14 +4141,13 @@ upsert descriptor #114
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
+  -    - 23
   -    - 24
   -    - 25
   -    - 26
   -    - 27
   -    - 28
   -    - 29
-  -    - 30
-  -    - 31
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -4290,14 +4172,6 @@ upsert descriptor #114
   -          descriptorId: 114
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 3
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 114
-  -          userName: public
   -      metadata:
   -        sourceElementId: 3
   -        subWorkId: 1
@@ -4346,9 +4220,9 @@ upsert descriptor #115
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -4363,14 +4237,13 @@ upsert descriptor #115
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
+  -    - 76
+  -    - 77
+  -    - 78
+  -    - 79
   -    - 80
   -    - 81
   -    - 82
-  -    - 83
-  -    - 84
-  -    - 85
-  -    - 86
-  -    - 87
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -4395,14 +4268,6 @@ upsert descriptor #115
   -          descriptorId: 115
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 7
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 115
-  -          userName: public
   -      metadata:
   -        sourceElementId: 7
   -        subWorkId: 1
@@ -4451,9 +4316,9 @@ upsert descriptor #116
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -4485,6 +4350,11 @@ upsert descriptor #116
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
+  -    - 83
+  -    - 84
+  -    - 85
+  -    - 86
+  -    - 87
   -    - 88
   -    - 89
   -    - 90
@@ -4504,12 +4374,6 @@ upsert descriptor #116
   -    - 104
   -    - 105
   -    - 106
-  -    - 107
-  -    - 108
-  -    - 109
-  -    - 110
-  -    - 111
-  -    - 112
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -4534,14 +4398,6 @@ upsert descriptor #116
   -          descriptorId: 116
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 7
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 116
-  -          userName: public
   -      metadata:
   -        sourceElementId: 7
   -        subWorkId: 1
@@ -4768,9 +4624,9 @@ upsert descriptor #117
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -4802,6 +4658,8 @@ upsert descriptor #117
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
+  -    - 30
+  -    - 31
   -    - 32
   -    - 33
   -    - 34
@@ -4824,9 +4682,6 @@ upsert descriptor #117
   -    - 51
   -    - 52
   -    - 53
-  -    - 54
-  -    - 55
-  -    - 56
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -4851,14 +4706,6 @@ upsert descriptor #117
   -          descriptorId: 117
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 3
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 117
-  -          userName: public
   -      metadata:
   -        sourceElementId: 3
   -        subWorkId: 1
@@ -5085,9 +4932,9 @@ upsert descriptor #118
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -5117,6 +4964,9 @@ upsert descriptor #118
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
+  -    - 54
+  -    - 55
+  -    - 56
   -    - 57
   -    - 58
   -    - 59
@@ -5136,10 +4986,6 @@ upsert descriptor #118
   -    - 73
   -    - 74
   -    - 75
-  -    - 76
-  -    - 77
-  -    - 78
-  -    - 79
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -5164,14 +5010,6 @@ upsert descriptor #118
   -          descriptorId: 118
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 3
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 118
-  -          userName: public
   -      metadata:
   -        sourceElementId: 3
   -        subWorkId: 1
@@ -5381,6 +5219,7 @@ write *eventpb.DropDatabase to event log for descriptor #111: DROP DATABASE ‹d
 delete scheduleId: <redacted>
 create job #2 (non-cancelable: true): "GC for DROP DATABASE db1 CASCADE"
   descriptor IDs: [114 115 116 117 118 111]
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase

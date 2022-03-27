@@ -1310,6 +1310,13 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return security.GetConfiguredPasswordHashMethod(evalCtx.Ctx(), &evalCtx.Settings.SV).String(), nil
 		},
+		SetWithPlanner: func(ctx context.Context, p *planner, local bool, val string) error {
+			method := security.GetConfiguredPasswordHashMethod(ctx, &p.ExecCfg().Settings.SV)
+			if val != method.String() {
+				return newCannotChangeParameterError("password_encryption")
+			}
+			return nil
+		},
 	},
 
 	// Supported for PG compatibility only.
@@ -2039,6 +2046,24 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().ExpectAndIgnoreNotVisibleColumnsInCopy), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// TODO(michae2): Remove this when #70731 is fixed.
+	// CockroachDB extension.
+	`enable_multiple_modifications_of_table`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_multiple_modifications_of_table`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_multiple_modifications_of_table", s)
+			if err != nil {
+				return err
+			}
+			m.SetMultipleModificationsOfTable(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().MultipleModificationsOfTable), nil
 		},
 		GlobalDefault: globalFalse,
 	},

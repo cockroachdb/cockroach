@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -143,17 +142,24 @@ func restoreWithRetry(
 	var res roachpb.RowCount
 	var err error
 	for r := retry.StartWithCtx(restoreCtx, retryOpts); r.Next(); {
-		res, err = restore(
-			restoreCtx,
-			execCtx,
-			numNodes,
-			backupManifests,
-			backupLocalityInfo,
-			endTime,
-			dataToRestore,
-			job,
-			encryption,
-		)
+		// Re-plan inner loop (does not count as retries, done by outer loop).
+		for {
+			res, err = restore(
+				restoreCtx,
+				execCtx,
+				numNodes,
+				backupManifests,
+				backupLocalityInfo,
+				endTime,
+				dataToRestore,
+				job,
+				encryption,
+			)
+			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
+				break
+			}
+		}
+
 		if err == nil {
 			break
 		}
@@ -876,7 +882,11 @@ func createImportingDescriptors(
 							if err != nil {
 								return err
 							}
-							superRegions, err := t.SuperRegions()
+							superRegions, err := typeDesc.SuperRegions()
+							if err != nil {
+								return err
+							}
+							zoneCfgExtensions, err := typeDesc.ZoneConfigExtensions()
 							if err != nil {
 								return err
 							}
@@ -887,6 +897,7 @@ func createImportingDescriptors(
 								desc.RegionConfig.RegionEnumID,
 								desc.RegionConfig.Placement,
 								superRegions,
+								zoneCfgExtensions,
 							)
 							if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
 								ctx,
@@ -1279,13 +1290,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	if !backupCodec.TenantPrefix().Equal(p.ExecCfg().Codec.TenantPrefix()) {
-		// Disallow cluster restores until values like jobs are relocatable.
-		if details.DescriptorCoverage == tree.AllDescriptors {
-			return unimplemented.NewWithIssuef(62277,
-				"cannot cluster RESTORE backups taken from different tenant: %s",
-				backupTenantID.String())
-		}
-
 		// Ensure old processors fail if this is a previously unsupported restore of
 		// a tenant backup by the system tenant, which the old rekey processor would
 		// mishandle since it assumed the system tenant always restored tenant keys
@@ -2092,9 +2096,6 @@ func (r *restoreResumer) dropDescriptors(
 		tableToDrop.DropTime = dropTime
 		b.Del(catalogkeys.EncodeNameKey(codec, tableToDrop))
 		descsCol.AddDeletedDescriptor(tableToDrop.GetID())
-		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, tableToDrop, b); err != nil {
-			return errors.Wrap(err, "writing dropping table to batch")
-		}
 	}
 
 	// Drop the type descriptors that this restore created.
@@ -2114,9 +2115,6 @@ func (r *restoreResumer) dropDescriptors(
 
 		b.Del(catalogkeys.EncodeNameKey(codec, typDesc))
 		mutType.SetDropped()
-		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, mutType, b); err != nil {
-			return errors.Wrap(err, "writing dropping type to batch")
-		}
 		// Remove the system.descriptor entry.
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, typDesc.ID))
 		descsCol.AddDeletedDescriptor(mutType.GetID())
@@ -2272,6 +2270,16 @@ func (r *restoreResumer) dropDescriptors(
 		b.Del(nameKey)
 		descsCol.AddDeletedDescriptor(db.GetID())
 		deletedDBs[db.GetID()] = struct{}{}
+	}
+
+	// Avoid telling the descriptor collection about the mutated descriptors
+	// until after all relevant relations have been retrieved to avoid a
+	// scenario whereby we make a descriptor invalid too early.
+	const kvTrace = false
+	for _, t := range mutableTables {
+		if err := descsCol.WriteDescToBatch(ctx, kvTrace, t, b); err != nil {
+			return errors.Wrap(err, "writing dropping table to batch")
+		}
 	}
 
 	if err := txn.Run(ctx, b); err != nil {

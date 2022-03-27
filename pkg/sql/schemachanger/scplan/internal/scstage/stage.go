@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	scgraph2 "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
 )
@@ -67,15 +67,17 @@ func (s Stage) Ops() []scop.Op {
 // String returns a short string representation of this stage.
 func (s Stage) String() string {
 	ops := "no ops"
-	if n := len(s.Ops()); n > 0 {
+	if n := len(s.Ops()); n > 1 {
 		ops = fmt.Sprintf("%d %s ops", n, s.Type())
+	} else if n == 1 {
+		ops = fmt.Sprintf("1 %s op", s.Type())
 	}
 	return fmt.Sprintf("%s stage %d of %d with %s",
 		s.Phase.String(), s.Ordinal, s.StagesInPhase, ops)
 }
 
 // ValidateStages checks that the plan is valid.
-func ValidateStages(ts scpb.TargetState, stages []Stage, g *scgraph2.Graph) error {
+func ValidateStages(ts scpb.TargetState, stages []Stage, g *scgraph.Graph) error {
 	if len(stages) == 0 {
 		return nil
 	}
@@ -141,9 +143,9 @@ func validateAdjacentStagesStates(previous, next Stage) error {
 	return nil
 }
 
-func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph2.Graph) error {
+func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) error {
 	// Transform the ops in a non-repeating sequence of their original op edges.
-	var queue []*scgraph2.OpEdge
+	var queue []*scgraph.OpEdge
 	for _, op := range stage.EdgeOps {
 		oe := g.GetOpEdgeFromOp(op)
 		if oe == nil {
@@ -169,8 +171,8 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph2.Graph) 
 		current[i] = n
 	}
 	{
-		edgesTo := make(map[*screl.Node][]scgraph2.Edge, g.Order())
-		_ = g.ForEachEdge(func(e scgraph2.Edge) error {
+		edgesTo := make(map[*screl.Node][]scgraph.Edge, g.Order())
+		_ = g.ForEachEdge(func(e scgraph.Edge) error {
 			edgesTo[e.To()] = append(edgesTo[e.To()], e)
 			return nil
 		})
@@ -211,7 +213,7 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph2.Graph) 
 
 			// Prevent making progress on this target if there are unmet dependencies.
 			var hasUnmetDeps bool
-			if err := g.ForEachDepEdgeTo(oe.To(), func(de *scgraph2.DepEdge) error {
+			if err := g.ForEachDepEdgeTo(oe.To(), func(de *scgraph.DepEdge) error {
 				hasUnmetDeps = hasUnmetDeps || !fulfilled[de.From()]
 				return nil
 			}); err != nil {

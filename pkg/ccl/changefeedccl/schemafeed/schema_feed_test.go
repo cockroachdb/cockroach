@@ -11,12 +11,20 @@ package schemafeed
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -142,4 +150,32 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.NoError(t, m.ingestDescriptors(ctx, ts(7), ts(8), nil, validateFn))
 	require.Equal(t, ts(8), m.highWater())
 	require.NoError(t, <-errCh8)
+}
+
+func TestIssuesHighPriorityReadsIfBlocked(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Lay down an intent on system.descriptors table.
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `BEGIN; CREATE TABLE defaultdb.foo (a INT);`)
+
+	// Attempt to fetch descriptors; it should succeed withing reasonable time.
+	priorityAfter := 500 * time.Millisecond
+	highPriorityAfter.Override(ctx, &s.ClusterSettings().SV, priorityAfter)
+	var responseFiles []roachpb.ExportResponse_File
+	testutils.SucceedsWithin(t, func() error {
+		resp, err := fetchDescriptorsWithPriorityOverride(ctx, s.ClusterSettings(),
+			kvDB.NonTransactionalSender(), keys.SystemSQLCodec, hlc.Timestamp{}, s.Clock().Now())
+		if err != nil {
+			return err
+		}
+		responseFiles = resp.(*roachpb.ExportResponse).Files
+		return nil
+	}, 10*priorityAfter)
+	require.Less(t, 0, len(responseFiles))
 }

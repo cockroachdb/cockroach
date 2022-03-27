@@ -1253,14 +1253,20 @@ func ingestWithRetry(
 	var err error
 	var retryCount int32
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		retryCount++
-		resumerSpan.RecordStructured(&roachpb.RetryTracingEvent{
-			Operation:     "importResumer.ingestWithRetry",
-			AttemptNumber: retryCount,
-			RetryError:    tracing.RedactAndTruncateError(err),
-		})
-		res, err = distImport(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
-			alwaysFlushProgress, procsPerNode)
+		for {
+			retryCount++
+			resumerSpan.RecordStructured(&roachpb.RetryTracingEvent{
+				Operation:     "importResumer.ingestWithRetry",
+				AttemptNumber: retryCount,
+				RetryError:    tracing.RedactAndTruncateError(err),
+			})
+			res, err = distImport(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
+				alwaysFlushProgress, procsPerNode)
+			// Replanning errors should not count towards retry limits.
+			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
+				break
+			}
+		}
 		if err == nil {
 			break
 		}
@@ -1509,6 +1515,7 @@ func (r *importResumer) dropTables(
 
 	b := txn.NewBatch()
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
+	toWrite := make([]*tabledesc.Mutable, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
 		newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
 		if err != nil {
@@ -1530,9 +1537,13 @@ func (r *importResumer) dropTables(
 			// IMPORT did not create this table, so we should not drop it.
 			newTableDesc.SetPublic()
 		}
-		if err := descsCol.WriteDescToBatch(
-			ctx, false /* kvTrace */, newTableDesc, b,
-		); err != nil {
+		// Accumulate the changes before adding them to the batch to avoid
+		// making any table invalid before having read it.
+		toWrite = append(toWrite, newTableDesc)
+	}
+	for _, d := range toWrite {
+		const kvTrace = false
+		if err := descsCol.WriteDescToBatch(ctx, kvTrace, d, b); err != nil {
 			return err
 		}
 	}

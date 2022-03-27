@@ -32,16 +32,17 @@ import (
 // dependencies, like scbuild.Dependencies or scexec.Dependencies, for the
 // purpose of facilitating end-to-end testing of the declarative schema changer.
 type TestState struct {
-	catalog, synthetic  nstree.MutableCatalog
-	currentDatabase     string
-	phase               scop.Phase
-	sessionData         sessiondata.SessionData
-	statements          []string
-	testingKnobs        *scrun.TestingKnobs
-	jobs                []jobs.Record
-	jobCounter          int
-	txnCounter          int
-	sideEffectLogBuffer strings.Builder
+	catalog, synthetic      nstree.MutableCatalog
+	currentDatabase         string
+	phase                   scop.Phase
+	sessionData             sessiondata.SessionData
+	statements              []string
+	testingKnobs            *scrun.TestingKnobs
+	jobs                    []jobs.Record
+	createdJobsInCurrentTxn []jobspb.JobID
+	jobCounter              int
+	txnCounter              int
+	sideEffectLogBuffer     strings.Builder
 
 	// The below portions fo the Dependencies are stored as interfaces because
 	// we permit users of this package to override the default implementations.
@@ -86,6 +87,15 @@ func (s *TestState) SideEffectLog() string {
 func (s *TestState) WithTxn(fn func(s *TestState)) {
 	s.txnCounter++
 	defer s.synthetic.Clear()
+	defer func() {
+		if len(s.createdJobsInCurrentTxn) == 0 {
+			return
+		}
+		s.LogSideEffectf(
+			"notified job registry to adopt jobs: %v", s.createdJobsInCurrentTxn,
+		)
+		s.createdJobsInCurrentTxn = nil
+	}()
 	defer s.LogSideEffectf("commit transaction #%d", s.txnCounter)
 	s.LogSideEffectf("begin transaction #%d", s.txnCounter)
 	fn(s)

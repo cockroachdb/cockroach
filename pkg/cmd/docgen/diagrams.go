@@ -360,9 +360,21 @@ var specs = []stmtSpec{
 		unlink:  []string{"table_name"},
 	},
 	{
+		name: "alter_backup",
+		stmt: "alter_backup_stmt",
+		replace: map[string]string{
+			"'ALTER' 'BACKUP' string_or_placeholder":                   "'ALTER' 'BACKUP' ( 'LATEST' | subdirectory ) 'IN' collectionURI",
+			"'IN' string_or_placeholder":                               "",
+			"alter_backup_cmds":                                        "'ADD' 'NEW_KMS' kmsURI 'WITH' 'OLD_KMS' kmsURI",
+			"'ALTER' 'BACKUP' string_or_placeholder alter_backup_cmds": "",
+		},
+		unlink: []string{"subdirectory", "collectionURI", "kmsURI"},
+	},
+	{
 		name:    "alter_changefeed",
 		stmt:    "alter_changefeed_stmt",
-		replace: map[string]string{"a_expr": "job_id", "alter_changefeed_cmds": "( 'ADD' 'target' ( 'WITH' ( 'initial_scan' | 'no_initial_scan' ) )? | 'DROP' 'target' | ( 'SET' | 'UNSET' ) 'option' )+"},
+		replace: map[string]string{"a_expr": "job_id", "alter_changefeed_cmds": "( 'ADD' target ( ( ',' target ) )* ( 'WITH' ( initial_scan | no_initial_scan ) )? | 'DROP' target ( ( ',' target ) )* | ( 'SET' | 'UNSET' ) option ( ( ',' option ) )* )+"},
+		unlink:  []string{"job_id", "target", "option", "initial_scan", "no_initial_scan"},
 	},
 	{
 		name:   "alter_column",
@@ -373,7 +385,8 @@ var specs = []stmtSpec{
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' ")},
 		replace: map[string]string{
-			"relation_expr": "table_name",
+			"relation_expr":        "table_name",
+			"alter_column_visible": "'SET' ('NOT' | ) 'VISIBLE'",
 		},
 		exclude: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' 'PRIMARY' 'KEY' ")},
 		unlink:  []string{"table_name"},
@@ -397,14 +410,14 @@ var specs = []stmtSpec{
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_hash_sharded"},
 		regreplace: map[string]string{
-			"'=' a_expr": "'=' n_buckets",
-			regList:      "",
+			"opt_hash_sharded_bucket_count ": "",
+			regList:                          "",
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' 'PRIMARY' 'KEY' ")},
 		replace: map[string]string{
-			"relation_expr": "table_name",
+			"relation_expr":                  "table_name",
+			"opt_hash_sharded_bucket_count ": "",
 		},
-		unlink: []string{"table_name", "n_buckets"},
 	},
 	{
 		name:   "alter_role_stmt",
@@ -436,7 +449,9 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"'VALIDATE' 'CONSTRAINT' name": "",
 			"opt_validate_behavior":        "",
-			"relation_expr":                "table_name"},
+			"relation_expr":                "table_name",
+			"alter_column_visible":         "'SET' ('NOT' | ) 'VISIBLE'",
+		},
 		unlink:  []string{"table_name"},
 		nosplit: true,
 	},
@@ -493,12 +508,12 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' targets 'INTO'")},
 		replace: map[string]string{
 			"targets":                        "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
+			"string_or_placeholder_opt_list": "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
 			"'INTO'":                         "'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN')",
 			"sconst_or_placeholder":          "subdirectory",
 			"a_expr":                         "timestamp",
 		},
-		unlink:  []string{"targets", "subdirectory", "destination", "timestamp", "partitioned_backup_location"},
+		unlink:  []string{"targets", "collectionURI", "destination", "timestamp", "localityURI", "subdirectory"},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
@@ -547,9 +562,8 @@ var specs = []stmtSpec{
 		stmt:   "col_qualification",
 		inline: []string{"col_qualification_elem", "opt_hash_sharded", "generated_always_as", "generated_by_default_as"},
 		replace: map[string]string{
-			"'=' a_expr": "'=' n_buckets",
+			"opt_hash_sharded_bucket_count ": "",
 		},
-		unlink: []string{"n_buckets"},
 	},
 	{
 		name:    "comment",
@@ -620,11 +634,10 @@ var specs = []stmtSpec{
 		name:   "create_index_stmt",
 		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_index_access_method", "opt_hash_sharded", "opt_concurrently", "opt_with_storage_parameter_list", "storage_parameter_list"},
 		replace: map[string]string{
-			"'ON' a_expr":     "'ON' column_name",
-			"'=' a_expr":      "'=' n_buckets",
-			"opt_nulls_order": "",
+			"'ON' a_expr":                    "'ON' column_name",
+			"opt_hash_sharded_bucket_count ": "",
+			"opt_nulls_order":                "",
 		},
-		unlink: []string{"n_buckets"},
 		regreplace: map[string]string{
 			".* 'CREATE' .* 'INVERTED' 'INDEX' .*": "",
 		},
@@ -886,8 +899,7 @@ var specs = []stmtSpec{
 	{
 		name:    "index_def",
 		inline:  []string{"opt_storing", "storing", "index_params", "opt_name", "opt_hash_sharded"},
-		replace: map[string]string{"a_expr": "n_buckets"},
-		unlink:  []string{"n_buckets"},
+		replace: map[string]string{"opt_hash_sharded_bucket_count ": ""},
 	},
 	{
 		name:   "import_csv",
@@ -1042,10 +1054,10 @@ var specs = []stmtSpec{
 			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
 			"targets":                                "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"string_or_placeholder":                  "subdirectory",
-			"list_of_string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
+			"string_or_placeholder":                  "( ( subdirectory | 'LATEST' ) )",
+			"list_of_string_or_placeholder_opt_list": "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
 		},
-		unlink: []string{"subdirectory", "timestamp", "destination", "partitioned_backup_location"},
+		unlink: []string{"subdirectory", "timestamp", "collectionURI", "localityURI"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'REPLICATION' 'STREAM' 'FROM'"),
 		},
@@ -1371,9 +1383,8 @@ var specs = []stmtSpec{
 		name:   "table_constraint",
 		inline: []string{"constraint_elem", "opt_storing", "storing", "opt_hash_sharded"},
 		replace: map[string]string{
-			"'=' a_expr": "'=' n_buckets",
+			"opt_hash_sharded_bucket_count ": "",
 		},
-		unlink: []string{"n_buckets"},
 	},
 	{
 		name:   "opt_persistence_temp_table",

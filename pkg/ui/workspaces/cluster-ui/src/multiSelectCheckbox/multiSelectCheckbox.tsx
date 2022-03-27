@@ -36,7 +36,7 @@ export interface MultiSelectCheckboxProps {
  * @param props
  * @constructor
  */
-const CheckboxOption = (props: any) => {
+export const CheckboxOption = (props: any) => {
   return (
     <components.Option {...props}>
       <input

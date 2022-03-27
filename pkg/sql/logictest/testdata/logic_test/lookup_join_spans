@@ -462,7 +462,7 @@ FROM metric_values as v
 INNER JOIN metrics as m
 ON metric_id=id
 WHERE
-  time < '2020-01-01 00:00:10+00:00' AND  
+  time < '2020-01-01 00:00:10+00:00' AND
   name='cpu' AND
   v.nullable = m.nullable
 ORDER BY value

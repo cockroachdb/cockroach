@@ -49,6 +49,8 @@ type Limiters struct {
 // underlying state.
 type EvalContext interface {
 	fmt.Stringer
+	ImmutableEvalContext
+
 	ClusterSettings() *cluster.Settings
 	EvalKnobs() kvserverbase.BatchEvalTestingKnobs
 
@@ -111,12 +113,6 @@ type EvalContext interface {
 	// requests on the range.
 	GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary
 
-	// GetClosedTimestamp returns the current closed timestamp on the range.
-	// It is expected that a caller will have performed some action (either
-	// calling RevokeLease or WatchForMerge) to freeze further progression of
-	// the closed timestamp before calling this method.
-	GetClosedTimestamp(ctx context.Context) hlc.Timestamp
-
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
 	GetExternalStorageFromURI(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
 		error)
@@ -141,6 +137,24 @@ type EvalContext interface {
 	// GetEngineCapacity returns the store's underlying engine capacity; other
 	// StoreCapacity fields not related to engine capacity are not populated.
 	GetEngineCapacity() (roachpb.StoreCapacity, error)
+
+	// GetCurrentClosedTimestamp returns the current closed timestamp on the
+	// range. It is expected that a caller will have performed some action (either
+	// calling RevokeLease or WatchForMerge) to freeze further progression of the
+	// closed timestamp before calling this method.
+	GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp
+
+	// Release returns the memory allocated by the EvalContext implementation to a
+	// sync.Pool.
+	Release()
+}
+
+// ImmutableEvalContext is like EvalContext, but it encapsulates state that
+// needs to be immutable during the course of command evaluation.
+type ImmutableEvalContext interface {
+	// GetClosedTimestampOlderThanStorageSnapshot returns the closed timestamp
+	// that was active before the state of the storage engine was pinned.
+	GetClosedTimestampOlderThanStorageSnapshot() hlc.Timestamp
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -255,7 +269,10 @@ func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 func (m *mockEvalCtxImpl) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	return m.CurrentReadSummary
 }
-func (m *mockEvalCtxImpl) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
+func (m *mockEvalCtxImpl) GetClosedTimestampOlderThanStorageSnapshot() hlc.Timestamp {
+	return m.ClosedTimestamp
+}
+func (m *mockEvalCtxImpl) GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp {
 	return m.ClosedTimestamp
 }
 func (m *mockEvalCtxImpl) GetExternalStorage(
@@ -287,3 +304,4 @@ func (m *mockEvalCtxImpl) GetMaxBytes() int64 {
 func (m *mockEvalCtxImpl) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 	return roachpb.StoreCapacity{Available: 1, Capacity: 1}, nil
 }
+func (m *mockEvalCtxImpl) Release() {}

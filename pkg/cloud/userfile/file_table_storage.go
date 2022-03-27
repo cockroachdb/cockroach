@@ -252,7 +252,7 @@ func (f *fileTableStorage) Writer(ctx context.Context, basename string) (io.Writ
 
 // List implements the ExternalStorage interface.
 func (f *fileTableStorage) List(
-	ctx context.Context, prefix, delim string, fn cloud.ListingFn, limit int,
+	ctx context.Context, prefix, delim string, fn cloud.ListingFn,
 ) error {
 	dest := cloud.JoinPathPreservingTrailingSlash(f.prefix, prefix)
 
@@ -263,7 +263,6 @@ func (f *fileTableStorage) List(
 
 	sort.Strings(res)
 	var prevPrefix string
-	count := 0
 	for _, f := range res {
 		f = strings.TrimPrefix(f, dest)
 		if delim != "" {
@@ -277,9 +276,6 @@ func (f *fileTableStorage) List(
 		}
 		if err := fn(f); err != nil {
 			return err
-		}
-		if count++; limit != 0 && count >= limit {
-			return nil
 		}
 	}
 

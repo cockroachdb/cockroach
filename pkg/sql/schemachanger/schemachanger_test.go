@@ -13,6 +13,7 @@ package schemachanger_test
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/hex"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -40,7 +41,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -656,9 +659,114 @@ func TestConcurrentSchemaChangesWait(t *testing.T) {
 	}
 }
 
+func TestSchemaChangerJobRunningStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	var runningStatus0, runningStatus1 atomic.Value
+	var jr *jobs.Registry
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			AfterStage: func(p scplan.Plan, stageIdx int) error {
+				if p.Params.ExecutionPhase < scop.PostCommitPhase || stageIdx > 1 {
+					return nil
+				}
+				job, err := jr.LoadJob(ctx, p.JobID)
+				require.NoError(t, err)
+				switch stageIdx {
+				case 0:
+					runningStatus0.Store(job.Progress().RunningStatus)
+				case 1:
+					runningStatus1.Store(job.Progress().RunningStatus)
+				}
+				return nil
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	jr = s.JobRegistry().(*jobs.Registry)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+	tdb.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
+	tdb.Exec(t, `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
+
+	require.NotNil(t, runningStatus0.Load())
+	require.Regexp(t, "PostCommit.* pending", runningStatus0.Load().(string))
+	require.NotNil(t, runningStatus1.Load())
+	require.Regexp(t, "PostCommit.* pending", runningStatus1.Load().(string))
+}
+
+func TestSchemaChangerJobErrorDetails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	var jobIDValue int64
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			AfterStage: func(p scplan.Plan, stageIdx int) error {
+				if p.Params.ExecutionPhase == scop.PostCommitPhase && stageIdx == 1 {
+					atomic.StoreInt64(&jobIDValue, int64(p.JobID))
+					// We need to explicitly decorate the error here.
+					// In any case, what we're testing here is that the decoration gets
+					// properly serialized inside the job payload.
+					return p.DecorateErrorWithPlanDetails(errors.Errorf("boom"))
+				}
+				return nil
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+	tdb.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
+	tdb.ExpectErr(t, `boom`, `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
+	jobID := jobspb.JobID(atomic.LoadInt64(&jobIDValue))
+
+	// Check that the error is featured in the jobs table.
+	results := tdb.QueryStr(t, `SELECT execution_errors FROM crdb_internal.jobs WHERE job_id = $1`, jobID)
+	require.Len(t, results, 1)
+	require.Regexp(t, `^\{\"reverting execution from .* on 1 failed: boom\"\}$`, results[0][0])
+
+	// Check that the error details are also featured in the jobs table.
+	checkErrWithDetails := func(ee *errorspb.EncodedError) {
+		require.NotNil(t, ee)
+		jobErr := errors.DecodeError(ctx, *ee)
+		require.Error(t, jobErr)
+		require.Equal(t, "boom", jobErr.Error())
+		ed := errors.GetAllDetails(jobErr)
+		require.Len(t, ed, 3)
+		require.Regexp(t, "^• Schema change plan for .*", ed[0])
+		require.Regexp(t, "^stages graphviz: https.*", ed[1])
+		require.Regexp(t, "^dependencies graphviz: https.*", ed[2])
+	}
+	results = tdb.QueryStr(t, `SELECT encode(payload, 'hex') FROM system.jobs WHERE id = $1`, jobID)
+	require.Len(t, results, 1)
+	b, err := hex.DecodeString(results[0][0])
+	require.NoError(t, err)
+	var p jobspb.Payload
+	err = protoutil.Unmarshal(b, &p)
+	require.NoError(t, err)
+	checkErrWithDetails(p.FinalResumeError)
+	require.LessOrEqual(t, 1, len(p.RetriableExecutionFailureLog))
+	checkErrWithDetails(p.RetriableExecutionFailureLog[0].Error)
+}
+
 func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	ctx := context.Background()
 
 	var doOnce sync.Once
@@ -890,7 +998,6 @@ func TestNewSchemaChangerVersionGating(t *testing.T) {
 		results := tdb.QueryStr(t, "EXPLAIN (DDL) DROP TABLE db.t;")
 		require.Equal(t, len(results), 1)
 		require.Equal(t, len(results[0]), 1)
-		require.Contains(t, results[0][0], "https://cockroachdb.github.io/scplan/viz.html")
 	})
 
 	t.Run("new_schema_changer_version_disabled", func(t *testing.T) {

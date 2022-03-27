@@ -282,6 +282,7 @@ var tagsWithRowsAffected = map[string]struct{}{
 	"DELETE":    {},
 	"MOVE":      {},
 	"DROP USER": {},
+	"COPY":      {},
 	// This one is used with e.g. CREATE TABLE AS (other SELECT
 	// statements have type Rows, not RowsAffected).
 	"SELECT": {},

@@ -445,7 +445,10 @@ func (n *createTableNode) startExec(params runParams) error {
 			params.ctx,
 			params.p.txn,
 			desc.ParentID,
-			tree.DatabaseLookupFlags{Required: true},
+			tree.DatabaseLookupFlags{
+				Required:    true,
+				AvoidLeased: true,
+			},
 		)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")
@@ -1547,6 +1550,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
+				primaryIndexColumnSet[shardCol.GetName()] = struct{}{}
 				checkConstraint, err := makeShardCheckConstraintDef(int(buckets), shardCol)
 				if err != nil {
 					return nil, err
@@ -1598,6 +1602,7 @@ func NewTableDesc(
 			if err := desc.AddPrimaryIndex(*implicitColumnDefIdx.idx); err != nil {
 				return nil, err
 			}
+			primaryIndexColumnSet[string(implicitColumnDefIdx.def.Name)] = struct{}{}
 		} else {
 			// If it is a non-primary index that is implicitly created, ensure
 			// partitioning for PARTITION ALL BY.
@@ -1975,6 +1980,14 @@ func NewTableDesc(
 
 	for i := range desc.Columns {
 		if _, ok := primaryIndexColumnSet[desc.Columns[i].Name]; ok {
+			if !st.Version.IsActive(ctx, clusterversion.Start22_1) {
+				if desc.Columns[i].Virtual {
+					return nil, pgerror.Newf(
+						pgcode.FeatureNotSupported,
+						"cannot use virtual column %q in primary key", desc.Columns[i].Name,
+					)
+				}
+			}
 			desc.Columns[i].Nullable = false
 		}
 	}

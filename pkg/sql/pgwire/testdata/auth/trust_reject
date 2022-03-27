@@ -76,7 +76,7 @@ ok
 
 connect user=nocert sslcert= sslmode=require
 ----
-ERROR: password authentication failed for user nocert (SQLSTATE 28000)
+ERROR: password authentication failed for user nocert (SQLSTATE 28P01)
 
 
 subtest end

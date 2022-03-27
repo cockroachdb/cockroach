@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -35,6 +36,8 @@ import (
 func init() {
 	sql.AddPlanHook("alter changefeed", alterChangefeedPlanHook)
 }
+
+const telemetryPath = `changefeed.alter`
 
 // alterChangefeedPlanHook implements sql.PlanHookFn.
 func alterChangefeedPlanHook(
@@ -88,7 +91,7 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
-		newTargets, newProgress, newStatementTime, err := generateNewTargets(ctx,
+		newTargets, newProgress, newStatementTime, originalSpecs, err := generateNewTargets(ctx,
 			p,
 			alterChangefeedStmt.Cmds,
 			newOptions,
@@ -109,10 +112,15 @@ func alterChangefeedPlanHook(
 		}
 		newChangefeedStmt.SinkURI = tree.NewDString(newSinkURI)
 
+		annotatedStmt := &annotatedChangefeedStatement{
+			CreateChangefeed: newChangefeedStmt,
+			originalSpecs:    originalSpecs,
+		}
+
 		jobRecord, err := createChangefeedJobRecord(
 			ctx,
 			p,
-			newChangefeedStmt,
+			annotatedStmt,
 			newSinkURI,
 			newOptions,
 			jobID,
@@ -147,6 +155,8 @@ func alterChangefeedPlanHook(
 		if err != nil {
 			return err
 		}
+
+		telemetry.Count(telemetryPath)
 
 		select {
 		case <-ctx.Done():
@@ -245,6 +255,7 @@ func generateNewOpts(
 					newOptions[key] = value
 				}
 			}
+			telemetry.CountBucketed(telemetryPath+`.set_options`, int64(len(opts)))
 		case *tree.AlterChangefeedUnsetOptions:
 			optKeys := v.Options.ToStrings()
 			for _, key := range optKeys {
@@ -259,6 +270,7 @@ func generateNewOpts(
 				}
 				delete(newOptions, key)
 			}
+			telemetry.CountBucketed(telemetryPath+`.unset_options`, int64(len(optKeys)))
 		}
 	}
 
@@ -272,7 +284,13 @@ func generateNewTargets(
 	opts map[string]string,
 	prevDetails jobspb.ChangefeedDetails,
 	prevProgress jobspb.Progress,
-) (tree.ChangefeedTargets, *jobspb.Progress, hlc.Timestamp, error) {
+) (
+	tree.ChangefeedTargets,
+	*jobspb.Progress,
+	hlc.Timestamp,
+	map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification,
+	error,
+) {
 
 	type targetKey struct {
 		TableID    descpb.ID
@@ -281,6 +299,13 @@ func generateNewTargets(
 	newTargets := make(map[targetKey]tree.ChangefeedTarget)
 	droppedTargets := make(map[targetKey]tree.ChangefeedTarget)
 	newTableDescs := make(map[descpb.ID]catalog.Descriptor)
+
+	// originalSpecs provides a mapping between tree.ChangefeedTargets that
+	// existed prior to the alteration of the changefeed to their corresponding
+	// jobspb.ChangefeedTargetSpecification. The purpose of this mapping is to ensure
+	// that the StatementTimeName of the existing targets are not modified when the
+	// name of the target was modified.
+	originalSpecs := make(map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification)
 
 	// When we add new targets with or without initial scans, indicating
 	// initial_scan or no_initial_scan in the job description would lose its
@@ -308,20 +333,35 @@ func generateNewTargets(
 	// perform these validations in the validateNewTargets function.
 	allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg(), statementTime)
 	if err != nil {
-		return nil, nil, hlc.Timestamp{}, err
+		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 	descResolver, err := backupresolver.NewDescriptorResolver(allDescs)
 	if err != nil {
-		return nil, nil, hlc.Timestamp{}, err
+		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
-	for _, target := range AllTargets(prevDetails) {
-		k := targetKey{TableID: target.TableID, FamilyName: tree.Name(target.FamilyName)}
-		newTargets[k] = tree.ChangefeedTarget{
-			TableName:  tree.NewUnresolvedName(target.StatementTimeName),
-			FamilyName: tree.Name(target.FamilyName),
+	for _, targetSpec := range AllTargets(prevDetails) {
+		k := targetKey{TableID: targetSpec.TableID, FamilyName: tree.Name(targetSpec.FamilyName)}
+		desc := descResolver.DescByID[targetSpec.TableID].(catalog.TableDescriptor)
+
+		tbName, err := getQualifiedTableNameObj(ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, desc)
+		if err != nil {
+			return nil, nil, hlc.Timestamp{}, nil, err
 		}
-		newTableDescs[target.TableID] = descResolver.DescByID[target.TableID]
+
+		tablePattern, err := tbName.NormalizeTablePattern()
+		if err != nil {
+			return nil, nil, hlc.Timestamp{}, nil, err
+		}
+
+		newTarget := tree.ChangefeedTarget{
+			TableName:  tablePattern,
+			FamilyName: tree.Name(targetSpec.FamilyName),
+		}
+		newTargets[k] = newTarget
+		newTableDescs[targetSpec.TableID] = descResolver.DescByID[targetSpec.TableID]
+
+		originalSpecs[newTarget] = targetSpec
 	}
 
 	for _, cmd := range alterCmds {
@@ -329,17 +369,17 @@ func generateNewTargets(
 		case *tree.AlterChangefeedAddTarget:
 			targetOptsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedbase.AlterChangefeedTargetOptions)
 			if err != nil {
-				return nil, nil, hlc.Timestamp{}, err
+				return nil, nil, hlc.Timestamp{}, nil, err
 			}
 			targetOpts, err := targetOptsFn()
 			if err != nil {
-				return nil, nil, hlc.Timestamp{}, err
+				return nil, nil, hlc.Timestamp{}, nil, err
 			}
 
 			_, withInitialScan := targetOpts[changefeedbase.OptInitialScan]
 			_, noInitialScan := targetOpts[changefeedbase.OptNoInitialScan]
 			if withInitialScan && noInitialScan {
-				return nil, nil, hlc.Timestamp{}, pgerror.Newf(
+				return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 					pgcode.InvalidParameterValue,
 					`cannot specify both %q and %q`, changefeedbase.OptInitialScan,
 					changefeedbase.OptNoInitialScan,
@@ -352,17 +392,17 @@ func generateNewTargets(
 			}
 			existingTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, existingTargetDescs)
 			if err != nil {
-				return nil, nil, hlc.Timestamp{}, err
+				return nil, nil, hlc.Timestamp{}, nil, err
 			}
 
 			var newTargetDescs []catalog.Descriptor
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
 				if err != nil {
-					return nil, nil, hlc.Timestamp{}, err
+					return nil, nil, hlc.Timestamp{}, nil, err
 				}
 				if !found {
-					return nil, nil, hlc.Timestamp{}, pgerror.Newf(
+					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`target %q does not exist`,
 						tree.ErrString(&target),
@@ -376,7 +416,7 @@ func generateNewTargets(
 
 			addedTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, newTargetDescs)
 			if err != nil {
-				return nil, nil, hlc.Timestamp{}, err
+				return nil, nil, hlc.Timestamp{}, nil, err
 			}
 
 			// By default, we will not perform an initial scan on newly added
@@ -390,16 +430,17 @@ func generateNewTargets(
 				withInitialScan,
 			)
 			if err != nil {
-				return nil, nil, hlc.Timestamp{}, err
+				return nil, nil, hlc.Timestamp{}, nil, err
 			}
+			telemetry.CountBucketed(telemetryPath+`.added_targets`, int64(len(v.Targets)))
 		case *tree.AlterChangefeedDropTarget:
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
 				if err != nil {
-					return nil, nil, hlc.Timestamp{}, err
+					return nil, nil, hlc.Timestamp{}, nil, err
 				}
 				if !found {
-					return nil, nil, hlc.Timestamp{}, pgerror.Newf(
+					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`target %q does not exist`,
 						tree.ErrString(&target),
@@ -409,7 +450,7 @@ func generateNewTargets(
 				droppedTargets[k] = target
 				_, recognized := newTargets[k]
 				if !recognized {
-					return nil, nil, hlc.Timestamp{}, pgerror.Newf(
+					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`target %q already not watched by changefeed`,
 						tree.ErrString(&target),
@@ -417,6 +458,7 @@ func generateNewTargets(
 				}
 				delete(newTargets, k)
 			}
+			telemetry.CountBucketed(telemetryPath+`.dropped_targets`, int64(len(v.Targets)))
 		}
 	}
 
@@ -443,7 +485,7 @@ func generateNewTargets(
 		if len(droppedTargetDescs) > 0 {
 			droppedTargetSpans, err := fetchSpansForDescs(ctx, p, opts, statementTime, droppedTargetDescs)
 			if err != nil {
-				return nil, nil, hlc.Timestamp{}, err
+				return nil, nil, hlc.Timestamp{}, nil, err
 			}
 			removeSpansFromProgress(newJobProgress, droppedTargetSpans)
 		}
@@ -456,10 +498,10 @@ func generateNewTargets(
 	}
 
 	if err := validateNewTargets(ctx, p, newTargetList, newJobProgress, newJobStatementTime); err != nil {
-		return nil, nil, hlc.Timestamp{}, err
+		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
-	return newTargetList, &newJobProgress, newJobStatementTime, nil
+	return newTargetList, &newJobProgress, newJobStatementTime, originalSpecs, nil
 }
 
 func validateNewTargets(
@@ -633,16 +675,12 @@ func fetchSpansForDescs(
 	statementTime hlc.Timestamp,
 	descs []catalog.Descriptor,
 ) ([]roachpb.Span, error) {
-	_, tables, err := getTargetsAndTables(ctx, p, descs, tree.ChangefeedTargets{}, opts)
-	if err != nil {
-		return nil, err
+	targets := make([]jobspb.ChangefeedTargetSpecification, len(descs))
+	for i, d := range descs {
+		targets[i] = jobspb.ChangefeedTargetSpecification{TableID: d.GetID()}
 	}
 
-	details := jobspb.ChangefeedDetails{
-		Tables: tables,
-	}
-
-	spans, err := fetchSpansForTargets(ctx, p.ExecCfg(), AllTargets(details), statementTime)
+	spans, err := fetchSpansForTargets(ctx, p.ExecCfg(), targets, statementTime)
 
 	return spans, err
 }

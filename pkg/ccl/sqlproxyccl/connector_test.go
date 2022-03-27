@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
@@ -480,13 +481,26 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 func TestConnector_lookupAddr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	balancer, err := balancer.NewBalancer(
+		ctx,
+		stopper,
+		nil, /* metrics */
+		nil, /* directoryCache */
+		nil, /* connTracker */
+		balancer.NoRebalanceLoop(),
+	)
+	require.NoError(t, err)
 
 	t.Run("successful", func(t *testing.T) {
 		var lookupTenantPodsFnCount int
+
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
+			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -496,7 +510,10 @@ func TestConnector_lookupAddr(t *testing.T) {
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
-				return []*tenant.Pod{{Addr: "127.0.0.10:80"}}, nil
+				return []*tenant.Pod{
+					{Addr: "127.0.0.10:70", State: tenant.DRAINING},
+					{Addr: "127.0.0.10:80", State: tenant.RUNNING},
+				}, nil
 			},
 		}
 
@@ -525,7 +542,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
+			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -536,7 +553,11 @@ func TestConnector_lookupAddr(t *testing.T) {
 
 				pods := make([]*tenant.Pod, 0, len(mu.pods))
 				for addr, load := range mu.pods {
-					pods = append(pods, &tenant.Pod{Addr: addr, Load: load})
+					pods = append(pods, &tenant.Pod{
+						Addr:  addr,
+						Load:  load,
+						State: tenant.RUNNING,
+					})
 				}
 				return pods, nil
 			},
@@ -588,7 +609,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
+			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -613,7 +634,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
+			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -638,7 +659,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
+			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(

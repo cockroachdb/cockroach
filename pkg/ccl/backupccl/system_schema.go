@@ -113,6 +113,43 @@ func defaultSystemTableRestoreFunc(
 
 // Custom restore functions for different system tables.
 
+// tenantSettingsTableRestoreFunc restores the system.tenant_settings table. It
+// returns an error when trying to restore a non-empty tenant_settings table
+// into a non-system tenant.
+func tenantSettingsTableRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	if execCfg.Codec.ForSystemTenant() {
+		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+	}
+
+	if count, err := queryTableRowCount(ctx, execCfg.InternalExecutor, txn, tempTableName); err == nil && count > 0 {
+		log.Warningf(ctx, "skipping restore of %d entries in system.tenant_settings table", count)
+	} else if err != nil {
+		log.Warningf(ctx, "skipping restore of entries in system.tenant_settings table (count failed: %s)", err.Error())
+	}
+	return nil
+}
+
+func queryTableRowCount(
+	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn, tableName string,
+) (int64, error) {
+	countQuery := fmt.Sprintf("SELECT count(1) FROM %s", tableName)
+	row, err := ie.QueryRow(ctx, fmt.Sprintf("count-%s", tableName), txn, countQuery)
+	if err != nil {
+		return 0, errors.Wrapf(err, "counting rows in %q", tableName)
+	}
+
+	count, ok := row[0].(*tree.DInt)
+	if !ok {
+		return 0, errors.AssertionFailedf("failed to read count as DInt (was %T)", row[0])
+	}
+	return int64(*count), nil
+}
+
 // jobsMigrationFunc resets the progress on schema change jobs, and marks all
 // other jobs as reverting.
 func jobsMigrationFunc(
@@ -360,6 +397,10 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.TenantSettingsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            tenantSettingsTableRestoreFunc,
+	},
+	systemschema.SpanCountTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 }
 

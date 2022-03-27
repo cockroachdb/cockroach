@@ -11,13 +11,13 @@ package changefeedccl
 import (
 	"context"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,18 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
-
-// TopicDescriptor describes topic emitted by the sink.
-type TopicDescriptor interface {
-	// GetName returns topic name.
-	GetName() string
-	// GetID returns topic identifier.
-	GetID() descpb.ID
-	// GetVersion returns topic version.
-	// For example, the underlying data source (e.g. table) may change, in which case
-	// we may want to emit same Name/ID, but a different version number.
-	GetVersion() descpb.DescriptorVersion
-}
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
@@ -327,11 +315,12 @@ func (s *bufferSink) EmitRow(
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
+
 	s.buf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
-		{Datum: s.alloc.NewDString(tree.DString(topic.GetName()))}, // topic
-		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},               // key
-		{Datum: s.alloc.NewDBytes(tree.DBytes(value))},             // value
+		{Datum: s.getTopicDatum(topic)},
+		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},   // key
+		{Datum: s.alloc.NewDBytes(tree.DBytes(value))}, // value
 	})
 	return nil
 }
@@ -375,6 +364,12 @@ func (s *bufferSink) Close() error {
 // Dial implements the Sink interface.
 func (s *bufferSink) Dial() error {
 	return nil
+}
+
+// TODO (zinger): Make this a tuple or array datum if it can be
+// done without breaking backwards compatibility.
+func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
+	return s.alloc.NewDString(tree.DString(strings.Join(t.GetNameComponents(), ".")))
 }
 
 type nullSink struct {

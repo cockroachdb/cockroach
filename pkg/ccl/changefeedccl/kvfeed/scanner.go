@@ -128,7 +128,7 @@ func (p *scanRequestScanner) exportSpan(
 	}
 	stopwatchStart := timeutil.Now()
 	var scanDuration, bufferDuration time.Duration
-	const targetBytesPerScan = 16 << 20 // 16 MiB
+	targetBytesPerScan := changefeedbase.ScanRequestSize.Get(&p.settings.SV)
 	for remaining := &span; remaining != nil; {
 		start := timeutil.Now()
 		b := txn.NewBatch()

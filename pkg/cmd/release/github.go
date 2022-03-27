@@ -152,8 +152,10 @@ func (c *githubClientImpl) issueEvents(issueNum int) ([]githubEvent, error) {
 		}
 		for _, event := range events {
 			detail := githubEvent{
-				CreatedAt: *event.CreatedAt,
-				Event:     *event.Event,
+				Event: *event.Event,
+			}
+			if event.CreatedAt != nil {
+				detail.CreatedAt = *event.CreatedAt
 			}
 			if event.ProjectCard != nil && event.ProjectCard.ProjectID != nil {
 				project, _, err := c.client.Projects.GetProject(c.ctx, *event.ProjectCard.ProjectID)

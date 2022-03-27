@@ -76,8 +76,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -1127,10 +1127,18 @@ func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
 
 // NodeInfo contains metadata about the executing node and cluster.
 type NodeInfo struct {
-	ClusterID func() uuid.UUID
-	NodeID    *base.SQLIDContainer
-	AdminURL  func() *url.URL
-	PGURL     func(*url.Userinfo) (*pgurl.URL, error)
+	// LogicalClusterID is the cluster ID of the tenant, unique per
+	// tenant.
+	LogicalClusterID func() uuid.UUID
+	// NodeID is either the SQL instance ID or node ID, depending on
+	// circumstances.
+	// TODO(knz): Split this across node ID and instance ID. Likely,
+	// the SQL layer only needs instance ID.
+	NodeID *base.SQLIDContainer
+	// AdminURL is the URL of the DB Console for this server.
+	AdminURL func() *url.URL
+	// PGURL is the SQL connection URL for this server.
+	PGURL func(*url.Userinfo) (*pgurl.URL, error)
 }
 
 // nodeStatusGenerator is a limited portion of the status.MetricsRecorder
@@ -1180,8 +1188,8 @@ type ExecutorConfig struct {
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
-	RowMetrics           *row.Metrics
-	InternalRowMetrics   *row.Metrics
+	RowMetrics           *rowinfra.Metrics
+	InternalRowMetrics   *rowinfra.Metrics
 
 	TestingKnobs                         ExecutorTestingKnobs
 	MigrationTestingKnobs                *migration.TestingKnobs
@@ -1280,6 +1288,13 @@ type ExecutorConfig struct {
 	// SpanConfigReconciler is used to drive the span config reconciliation job
 	// and related migrations.
 	SpanConfigReconciler spanconfig.Reconciler
+
+	// SpanConfigSplitter is used during migrations to seed system.span_count with
+	// the right number of tenant spans.
+	SpanConfigSplitter spanconfig.Splitter
+
+	// SpanConfigLimiter is used to limit how many span configs installed.
+	SpanConfigLimiter spanconfig.Limiter
 
 	// SpanConfigKVAccessor is used when creating and deleting tenant
 	// records.
@@ -3189,6 +3204,10 @@ func (m *sessionDataMutator) SetExpectAndIgnoreNotVisibleColumnsInCopy(val bool)
 	m.data.ExpectAndIgnoreNotVisibleColumnsInCopy = val
 }
 
+func (m *sessionDataMutator) SetMultipleModificationsOfTable(val bool) {
+	m.data.MultipleModificationsOfTable = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
@@ -3309,18 +3328,18 @@ func TestingDescsTxn(
 	return DescsTxn(ctx, &execCfg, f)
 }
 
-// NewRowMetrics creates a row.Metrics struct for either internal or user
+// NewRowMetrics creates a rowinfra.Metrics struct for either internal or user
 // queries.
-func NewRowMetrics(internal bool) row.Metrics {
-	return row.Metrics{
-		MaxRowSizeLogCount: metric.NewCounter(getMetricMeta(row.MetaMaxRowSizeLog, internal)),
-		MaxRowSizeErrCount: metric.NewCounter(getMetricMeta(row.MetaMaxRowSizeErr, internal)),
+func NewRowMetrics(internal bool) rowinfra.Metrics {
+	return rowinfra.Metrics{
+		MaxRowSizeLogCount: metric.NewCounter(getMetricMeta(rowinfra.MetaMaxRowSizeLog, internal)),
+		MaxRowSizeErrCount: metric.NewCounter(getMetricMeta(rowinfra.MetaMaxRowSizeErr, internal)),
 	}
 }
 
-// GetRowMetrics returns the proper RowMetrics for either internal or user
+// GetRowMetrics returns the proper rowinfra.Metrics for either internal or user
 // queries.
-func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *row.Metrics {
+func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *rowinfra.Metrics {
 	if internal {
 		return cfg.InternalRowMetrics
 	}

@@ -776,6 +776,9 @@ func (u *sqlSymUnion) cursorScrollOption() tree.CursorScrollOption {
 func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
     return u.val.(tree.CursorStmt)
 }
+func (u *sqlSymUnion) asTenantClause() tree.TenantID {
+    return u.val.(tree.TenantID)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -874,7 +877,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
-%token <str> RELEASE RESET RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
+%token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
@@ -1485,6 +1488,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <tree.NameList> opt_for_roles
 %type <tree.ObjectNamePrefixList>  opt_in_schemas
 %type <tree.AlterDefaultPrivilegesTargetObject> alter_default_privileges_target_object
+%type <tree.TenantID> opt_as_tenant_clause
 
 
 // Precedence: lowest to highest
@@ -1725,7 +1729,8 @@ alter_view_stmt:
 //   [INCREMENT <increment>]
 //   [MINVALUE <minvalue> | NO MINVALUE]
 //   [MAXVALUE <maxvalue> | NO MAXVALUE]
-//   [START <start>]
+//   [START [WITH] <start>]
+//   [RESTART [[WITH] <restart>]]
 //   [[NO] CYCLE]
 // ALTER SEQUENCE [IF EXISTS] <name> RENAME TO <newname>
 // ALTER SEQUENCE [IF EXISTS] <name> SET SCHEMA <newschemaname>
@@ -1745,6 +1750,7 @@ alter_sequence_options_stmt:
   {
     $$.val = &tree.AlterSequence{Name: $5.unresolvedObjectName(), Options: $6.seqOpts(), IfExists: true}
   }
+
 
 // %Help: ALTER DATABASE - change the definition of a database
 // %Category: DDL
@@ -3170,12 +3176,13 @@ restore_stmt:
       Options: *($9.restoreOptions()),
     }
   }
-| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause
+| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause opt_as_tenant_clause
   {
    $$.val = &tree.StreamIngestion{
      Targets: $2.targetList(),
      From: $7.stringOrPlaceholderOptList(),
      AsOf: $8.asOfClause(),
+     AsTenant: $9.asTenantClause(),
    }
   }
 | RESTORE error // SHOW HELP: RESTORE
@@ -3198,6 +3205,28 @@ list_of_string_or_placeholder_opt_list:
 | list_of_string_or_placeholder_opt_list ',' string_or_placeholder_opt_list
   {
     $$.val = append($1.listOfStringOrPlaceholderOptList(), $3.stringOrPlaceholderOptList())
+  }
+
+// Optional AS TENANT clause.
+opt_as_tenant_clause:
+  AS TENANT iconst64
+  {
+    tenID := uint64($3.int64())
+    if tenID == 0 {
+      return setErr(sqllex, errors.New("invalid tenant ID"))
+    }
+    $$.val = tree.TenantID{Specified: true, TenantID: roachpb.MakeTenantID(tenID)}
+  }
+| AS TENANT IDENT
+  {
+    if $3 != "_" {
+       return setErr(sqllex, errors.New("invalid syntax"))
+    }
+    $$.val = tree.TenantID{Specified: true}
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.TenantID{Specified: false}
   }
 
 // Optional restore options.
@@ -8094,6 +8123,12 @@ sequence_option_elem:
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
 | START WITH signed_iconst64   { x := $3.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
+| RESTART                      { $$.val = tree.SequenceOption{Name: tree.SeqOptRestart} }
+| RESTART signed_iconst64      { x := $2.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
+| RESTART WITH signed_iconst64 { x := $3.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalWord: true} }
+
 | VIRTUAL                      { $$.val = tree.SequenceOption{Name: tree.SeqOptVirtual} }
 
 // %Help: TRUNCATE - empty one or more tables
@@ -14226,6 +14261,7 @@ unreserved_keyword:
 | REPLACE
 | REPLICATION
 | RESET
+| RESTART
 | RESTORE
 | RESTRICT
 | RESTRICTED

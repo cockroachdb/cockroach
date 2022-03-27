@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
@@ -192,9 +191,9 @@ func TestUnexpectedError(t *testing.T) {
 	// non-codeError error.
 	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
-	) (net.Conn, *pgproto3.StartupMessage, error) {
+	) *FrontendAdmitInfo {
 		log.Infof(context.Background(), "frontend admitter returning unexpected error")
-		return conn, nil, errors.New("unexpected error")
+		return &FrontendAdmitInfo{conn: conn, err: errors.New("unexpected error")}
 	})()
 
 	stopper := stop.NewStopper()
@@ -237,6 +236,8 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	s, addr := newSecureProxyServer(
 		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
 	)
+	_, port, err := net.SplitHostPort(addr)
+	require.NoError(t, err)
 
 	url := fmt.Sprintf("postgres://bob:wrong@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
@@ -244,13 +245,43 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	url = fmt.Sprintf("postgres://bob@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
+	url = fmt.Sprintf("postgres://bob:builder@toothless-28.blah:%s/defaultdb?sslmode=require", port)
+	te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "server error")
+
+	url = fmt.Sprintf("postgres://bob:builder@tenant-cluster-28.blah:%s/defaultdb?sslmode=require", port)
+	te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "server error")
+
 	url = fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 		require.NoError(t, runTestQuery(ctx, conn))
 	})
-	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+
+	// SNI provides tenant ID.
+	url = fmt.Sprintf("postgres://bob:builder@serverless-28.blah:%s/defaultdb?sslmode=require", port)
+	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
+		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+		require.NoError(t, runTestQuery(ctx, conn))
+	})
+
+	// SNI and database provide tenant IDs that match.
+	url = fmt.Sprintf(
+		"postgres://bob:builder@serverless-28.blah:%s/tenant-cluster-28.defaultdb?sslmode=require", port,
+	)
+	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
+		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+		require.NoError(t, runTestQuery(ctx, conn))
+	})
+
+	// SNI and database provide tenant IDs that don't match.
+	url = fmt.Sprintf(
+		"postgres://bob:builder@serverless-28.blah:%s/tenant-cluster-29.defaultdb?sslmode=require", port,
+	)
+	te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "server error")
+
+	require.Equal(t, int64(3), s.metrics.SuccessfulConnCount.Count())
 	require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
+	require.Equal(t, int64(3), s.metrics.RoutingErrCount.Count())
 }
 
 func TestProxyTLSConf(t *testing.T) {
@@ -358,7 +389,7 @@ func TestProxyTLSClose(t *testing.T) {
 	originalFrontendAdmit := FrontendAdmit
 	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
-	) (net.Conn, *pgproto3.StartupMessage, error) {
+	) *FrontendAdmitInfo {
 		proxyIncomingConn.Store(conn)
 		return originalFrontendAdmit(conn, incomingTLSConfig)
 	})()
@@ -483,8 +514,8 @@ func TestErroneousFrontend(t *testing.T) {
 
 	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
-	) (net.Conn, *pgproto3.StartupMessage, error) {
-		return conn, nil, errors.New(frontendError)
+	) *FrontendAdmitInfo {
+		return &FrontendAdmitInfo{conn: conn, err: errors.New(frontendError)}
 	})()
 
 	stopper := stop.NewStopper()
@@ -855,12 +886,17 @@ func TestConnectionMigration(t *testing.T) {
 			_ = db.PingContext(tCtx)
 		}()
 
-		var conns []balancer.ConnectionHandle
+		var f *forwarder
 		require.Eventually(t, func() bool {
-			conns = proxy.handler.connTracker.GetConns(tenantID)
-			return len(conns) != 0
+			connsMap := proxy.handler.connTracker.GetConnsMap(tenantID)
+			for _, conns := range connsMap {
+				if len(conns) != 0 {
+					f = conns[0].(*forwarder)
+					return true
+				}
+			}
+			return false
 		}, 10*time.Second, 100*time.Millisecond)
-		f := conns[0].(*forwarder)
 
 		// Set up forwarder hooks.
 		prevTenant1 := true
@@ -1060,12 +1096,17 @@ func TestConnectionMigration(t *testing.T) {
 			_ = conn.PingContext(tCtx)
 		}()
 
-		var conns []balancer.ConnectionHandle
+		var f *forwarder
 		require.Eventually(t, func() bool {
-			conns = proxy.handler.connTracker.GetConns(tenantID)
-			return len(conns) != 0
+			connsMap := proxy.handler.connTracker.GetConnsMap(tenantID)
+			for _, conns := range connsMap {
+				if len(conns) != 0 {
+					f = conns[0].(*forwarder)
+					return true
+				}
+			}
+			return false
 		}, 10*time.Second, 100*time.Millisecond)
-		f := conns[0].(*forwarder)
 
 		initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
 		initErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
@@ -1140,8 +1181,8 @@ func TestConnectionMigration(t *testing.T) {
 
 	// All connections should eventually be terminated.
 	require.Eventually(t, func() bool {
-		conns := proxy.handler.connTracker.GetConns(tenantID)
-		return len(conns) == 0
+		connsMap := proxy.handler.connTracker.GetConnsMap(tenantID)
+		return len(connsMap) == 0
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
@@ -1365,7 +1406,8 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				originalParams[k] = v
 			}
 
-			outMsg, clusterName, tenantID, err := clusterNameAndTenantFromParams(ctx, msg)
+			fe := &FrontendAdmitInfo{msg: msg}
+			outMsg, clusterName, tenantID, err := clusterNameAndTenantFromParams(ctx, fe)
 			if tc.expectedError == "" {
 				require.NoErrorf(t, err, "failed test case\n%+v", tc)
 
@@ -1465,7 +1507,13 @@ func (te *tester) TestConnect(ctx context.Context, t *testing.T, url string, fn 
 	t.Helper()
 	te.setAuthenticated(false)
 	te.setErrToClient(nil)
-	conn, err := pgx.Connect(ctx, url)
+	connConfig, err := pgx.ParseConfig(url)
+	require.NoError(t, err)
+	if !strings.EqualFold(connConfig.Host, "127.0.0.1") {
+		connConfig.TLSConfig.ServerName = connConfig.Host
+		connConfig.Host = "127.0.0.1"
+	}
+	conn, err := pgx.ConnectConfig(ctx, connConfig)
 	require.NoError(t, err)
 	fn(conn)
 	require.NoError(t, conn.Close(ctx))
@@ -1486,6 +1534,10 @@ func (te *tester) TestConnectErr(
 
 	// Prevent pgx from tying to connect to the `::1` ipv6 address for localhost.
 	cfg.LookupFunc = func(ctx context.Context, s string) ([]string, error) { return []string{s}, nil }
+	if !strings.EqualFold(cfg.Host, "127.0.0.1") && cfg.TLSConfig != nil {
+		cfg.TLSConfig.ServerName = cfg.Host
+		cfg.Host = "127.0.0.1"
+	}
 	conn, err := pgx.ConnectConfig(ctx, cfg)
 	if err == nil {
 		_ = conn.Close(ctx)

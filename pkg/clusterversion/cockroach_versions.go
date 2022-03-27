@@ -313,11 +313,9 @@ const (
 	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
 	PebbleFormatSplitUserKeysMarked
-
 	// IncrementalBackupSubdir enables backing up new incremental backups to a
 	// dedicated subdirectory, to make it easier to apply a different ttl.
 	IncrementalBackupSubdir
-
 	// DateStyleIntervalStyleCastRewrite rewrites cast that cause inconsistencies
 	// when DateStyle/IntervalStyle is enabled.
 	DateStyleIntervalStyleCastRewrite
@@ -327,7 +325,6 @@ const (
 	// ClusterLocksVirtualTable enables querying the crdb_internal.cluster_locks
 	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
 	ClusterLocksVirtualTable
-
 	// AutoStatsTableSettings is the version where we allow auto stats related
 	// table settings.
 	AutoStatsTableSettings
@@ -335,6 +332,19 @@ const (
 	ForecastStats
 	// SuperRegions enables the usage on super regions.
 	SuperRegions
+	// EnableNewChangefeedOptions enables the usage of new changefeed options
+	// such as end_time, initial_scan_only, and setting the value of initial_scan
+	// to 'yes|no|only'
+	EnableNewChangefeedOptions
+	// SpanCountTable adds system.span_count to track the number of committed
+	// tenant spans.
+	SpanCountTable
+	// PreSeedSpanCountTable precedes PreSeedSpanCountTable, it enables span
+	// accounting for incremental schema changes.
+	PreSeedSpanCountTable
+	// SeedSpanCountTable seeds system.span_count with the number of committed
+	// tenant spans.
+	SeedSpanCountTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -569,6 +579,22 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SuperRegions,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 104},
+	},
+	{
+		Key:     EnableNewChangefeedOptions,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
+	},
+	{
+		Key:     SpanCountTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 108},
+	},
+	{
+		Key:     PreSeedSpanCountTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 110},
+	},
+	{
+		Key:     SeedSpanCountTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 112},
 	},
 
 	// *************************************************

@@ -504,7 +504,7 @@ var AutoDetectPasswordHashes = settings.RegisterBoolSetting(
 	"server.user_login.store_client_pre_hashed_passwords.enabled",
 	"whether the server accepts to store passwords pre-hashed by clients",
 	true,
-).WithPublic()
+)
 
 const crdbBcryptPrefix = "CRDB-BCRYPT"
 

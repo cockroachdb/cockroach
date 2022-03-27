@@ -12,6 +12,7 @@ package builtins
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -146,18 +147,23 @@ func initPGBuiltins() {
 		builtins[name] = builtin
 	}
 
-	// Make crdb_internal.create_regfoo builtins.
-	for _, typ := range []*types.T{
-		types.RegClass,
-		types.RegNamespace,
-		types.RegProc,
-		types.RegProcedure,
-		types.RegRole,
-		types.RegType,
+	// Make crdb_internal.create_regfoo and to_regfoo builtins.
+	for _, b := range []struct {
+		toRegOverloadHelpText string
+		typ                   *types.T
+	}{
+		{"Translates a textual relation name to its OID", types.RegClass},
+		{"Translates a textual schema name to its OID", types.RegNamespace},
+		{"Translates a textual function or procedure name to its OID", types.RegProc},
+		{"Translates a textual function or procedure name(with argument types) to its OID", types.RegProcedure},
+		{"Translates a textual role name to its OID", types.RegRole},
+		{"Translates a textual type name to its OID", types.RegType},
 	} {
-		typName := typ.SQLStandardName()
-		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(typ)
+		typName := b.typ.SQLStandardName()
+		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(b.typ)
+		builtins["to_"+typName] = makeToRegOverload(b.typ, b.toRegOverloadHelpText)
 	}
+
 }
 
 var errUnimplemented = pgerror.New(pgcode.FeatureNotSupported, "unimplemented")
@@ -516,6 +522,33 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 			},
 			Info:       notUsableInfo,
 			Volatility: tree.VolatilityImmutable,
+		},
+	)
+}
+
+func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
+	return makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"text", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.RegType),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typName := tree.MustBeDString(args[0])
+				int, _ := strconv.Atoi(strings.TrimSpace(string(typName)))
+				if int > 0 {
+					return tree.DNull, nil
+				}
+				typOid, err := tree.ParseDOid(ctx, string(typName), typ)
+				if err != nil {
+					//nolint:returnerrcheck
+					return tree.DNull, nil
+				}
+
+				return typOid, nil
+			},
+			Info:       helpText,
+			Volatility: tree.VolatilityStable,
 		},
 	)
 }

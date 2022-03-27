@@ -470,7 +470,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 		// Collect telemetry, once per backup after resolving its destination.
 		lic := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "",
+			p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(), "",
 		) != nil
 		collectTelemetry(m, details, details, lic)
 	}
@@ -731,10 +731,10 @@ func (b *backupResumer) readManifestOnResume(
 		}
 	}
 
-	if !desc.ClusterID.Equal(cfg.ClusterID()) {
+	if !desc.ClusterID.Equal(cfg.LogicalClusterID()) {
 		mem.Shrink(ctx, memSize)
 		return nil, 0, errors.Newf("cannot resume backup started on another cluster (%s != %s)",
-			desc.ClusterID, cfg.ClusterID())
+			desc.ClusterID, cfg.LogicalClusterID())
 	}
 	return &desc, memSize, nil
 }
@@ -835,7 +835,7 @@ func (b *backupResumer) deleteCheckpoint(
 		// all files and delete each file one by one.
 		return exportStore.List(ctx, backupProgressDirectory, "", func(p string) error {
 			return exportStore.Delete(ctx, backupProgressDirectory+p)
-		}, 0 /*limit*/)
+		})
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in progress directory: %+v", err)
 	}

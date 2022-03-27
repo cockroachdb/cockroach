@@ -12,10 +12,11 @@ package sql
 
 import (
 	"context"
-	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -50,7 +51,7 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	// planCtx.NodeStatuses map ourselves. CheckInstanceHealthAndVersion() will
 	// populate it.
 	for _, node := range resp.Nodes {
-		_ /* NodeStatus */ = dsp.CheckInstanceHealthAndVersion(planCtx, base.SQLInstanceID(node.Desc.NodeID))
+		_ /* NodeStatus */ = dsp.CheckInstanceHealthAndVersion(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
 	}
 	nodes := make([]base.SQLInstanceID, 0, len(planCtx.NodeStatuses))
 	for nodeID, status := range planCtx.NodeStatuses {
@@ -58,13 +59,6 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 			nodes = append(nodes, nodeID)
 		}
 	}
-	// Shuffle node order so that multiple IMPORTs done in parallel will not
-	// identically schedule CSV reading. For example, if there are 3 nodes and 4
-	// files, the first node will get 2 files while the other nodes will each get 1
-	// file. Shuffling will make that first node random instead of always the same.
-	rand.Shuffle(len(nodes), func(i, j int) {
-		nodes[i], nodes[j] = nodes[j], nodes[i]
-	})
 	return planCtx, nodes, nil
 }
 
@@ -86,12 +80,108 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	for i, pod := range pods {
 		sqlInstanceIDs[i] = pod.InstanceID
 	}
-	// Shuffle node order so that multiple IMPORTs done in parallel will not
-	// identically schedule CSV reading. For example, if there are 3 nodes and 4
-	// files, the first node will get 2 files while the other nodes will each get 1
-	// file. Shuffling will make that first node random instead of always the same.
-	rand.Shuffle(len(sqlInstanceIDs), func(i, j int) {
-		sqlInstanceIDs[i], sqlInstanceIDs[j] = sqlInstanceIDs[j], sqlInstanceIDs[i]
-	})
 	return planCtx, sqlInstanceIDs, nil
+}
+
+// PhysicalPlanMaker describes a function that makes a physical plan.
+type PhysicalPlanMaker func(context.Context, *DistSQLPlanner) (*PhysicalPlan, *PlanningCtx, error)
+
+// calculatePlanGrowth returns the number of new or updated sql instances in one
+// physical plan relative to an old one, as well as that number as a fraction of
+// the number in the old one.
+func calculatePlanGrowth(before, after *PhysicalPlan) (int, float64) {
+	var changed int
+	beforeSpecs := before.GenerateFlowSpecs()
+	afterSpecs := after.GenerateFlowSpecs()
+
+	// How many nodes are in after that are not in before, or are in both but
+	// have changed their spec?
+	for n, afterSpec := range afterSpecs {
+		if beforeSpec, ok := beforeSpecs[n]; !ok {
+			changed++ // not in before at all
+		} else if len(beforeSpec.Processors) != len(afterSpec.Processors) {
+			changed++ // in before with different procs
+		} else {
+			for i := range beforeSpec.Processors {
+				// TODO(dt): add equality check method gen, use it.
+				if afterSpec.Processors[i].Size() != beforeSpec.Processors[i].Size() {
+					changed++ // procs have differnet specs
+					break
+				}
+			}
+		}
+	}
+
+	var frac float64
+	if changed > 0 {
+		frac = float64(changed) / float64(len(beforeSpecs))
+	}
+	return changed, frac
+}
+
+// PlanChangeDecision descrubes a function that decides if a plan has "changed"
+// within a given context, for example, if enough of its processor placements
+// have changed that it should be replanned.
+type PlanChangeDecision func(ctx context.Context, old, new *PhysicalPlan) bool
+
+// ReplanOnChangedFraction returns a PlanChangeDecision that returns true when a
+// new plan has a number of instances that would be assigned new or changed
+// processors exceeding the passed fraction of the old plan's total instances.
+// For example, if the old plan had three instances, A, B, and C, and the new
+// plan has B, C' and D, where D is new and C' differs from C, then it would
+// compare 2/3 = 0.6 to the threshold's value.
+func ReplanOnChangedFraction(thresholdFn func() float64) PlanChangeDecision {
+	return func(ctx context.Context, oldPlan, newPlan *PhysicalPlan) bool {
+		changed, growth := calculatePlanGrowth(oldPlan, newPlan)
+		threshold := thresholdFn()
+		replan := threshold != 0.0 && growth > threshold
+		if replan || growth > 0.1 || log.V(1) {
+			log.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, replan %v",
+				changed, growth, threshold, replan)
+		}
+		return replan
+	}
+}
+
+// ErrPlanChanged is a sentinel marker error for use to signal a plan changed.
+var ErrPlanChanged = errors.New("physical plan has changed")
+
+// PhysicalPlanChangeChecker returns a function which will periodically call the
+// passed function at the requested interval until the returned channel is
+// closed and compare the plan it returns to the passed initial plan, returning
+// and error if it has changed (as defined by CalculatePlanGrowth) by more than
+// the passed threshold. A threshold of 0 disables it.
+func PhysicalPlanChangeChecker(
+	ctx context.Context,
+	initial *PhysicalPlan,
+	fn PhysicalPlanMaker,
+	execCtx interface{ DistSQLPlanner() *DistSQLPlanner },
+	decider PlanChangeDecision,
+	freq func() time.Duration,
+) (func(context.Context) error, func()) {
+	stop := make(chan struct{})
+
+	return func(ctx context.Context) error {
+		tick := time.NewTicker(freq())
+		defer tick.Stop()
+		done := ctx.Done()
+		for {
+			select {
+			case <-stop:
+				return nil
+			case <-done:
+				return ctx.Err()
+			case <-tick.C:
+				dsp := execCtx.DistSQLPlanner()
+				p, _, err := fn(ctx, dsp)
+				if err != nil {
+					log.Warningf(ctx, "job replanning check failed to generate plan: %v", err)
+					continue
+				}
+				if decider(ctx, initial, p) {
+					return ErrPlanChanged
+				}
+			}
+		}
+	}, func() { close(stop) }
 }

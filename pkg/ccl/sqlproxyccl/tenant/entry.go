@@ -153,7 +153,7 @@ func (e *tenantEntry) UpdatePod(pod *Pod) bool {
 }
 
 // RemovePodByAddr removes the pod with the given IP address from the tenant's
-// list of pod addresses. If it was not present, RemovePodAddr returns false.
+// list of pod addresses. If it was not present, RemovePodByAddr returns false.
 func (e *tenantEntry) RemovePodByAddr(addr string) bool {
 	e.pods.Lock()
 	defer e.pods.Unlock()
@@ -247,26 +247,17 @@ func (e *tenantEntry) fetchPodsLocked(
 		return nil, err
 	}
 
-	// Get updated list of RUNNING pod IP addresses and save it to the entry.
-	tenantPods = make([]*Pod, 0, len(list.Pods))
-	for i := range list.Pods {
-		pod := list.Pods[i]
-		if pod.State == RUNNING {
-			tenantPods = append(tenantPods, pod)
-		}
-	}
-
 	// Need to lock in case another thread is reading the IP addresses (e.g. in
 	// ChoosePodAddr).
 	e.pods.Lock()
 	defer e.pods.Unlock()
-	e.pods.pods = tenantPods
+	e.pods.pods = list.Pods
 
-	if len(tenantPods) != 0 {
-		log.Infof(ctx, "fetched IP addresses: %v", tenantPods)
+	if len(e.pods.pods) != 0 {
+		log.Infof(ctx, "fetched IP addresses: %v", e.pods.pods)
 	}
 
-	return tenantPods, nil
+	return e.pods.pods, nil
 }
 
 // canRefreshLocked returns true if it's been at least X milliseconds since the

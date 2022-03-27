@@ -918,7 +918,7 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds))
+	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
@@ -931,6 +931,8 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
 	ex.extraTxnState.atomicAutoRetryCounter = new(int32)
+
+	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
 	ex.initPlanner(ctx, &ex.planner)
 
@@ -1381,6 +1383,10 @@ type connExecutor struct {
 		// has admin privilege. hasAdminRoleCache is set for the first statement
 		// in a transaction.
 		hasAdminRoleCache HasAdminRoleCache
+
+		// createdSequences keeps track of sequences created in the current transaction.
+		// The map key is the sequence descpb.ID.
+		createdSequences map[descpb.ID]struct{}
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -1650,6 +1656,8 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 
 	// Close all cursors.
 	ex.extraTxnState.sqlCursors.closeAll()
+
+	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
 	switch ev.eventType {
 	case txnCommit, txnRollback:
@@ -2750,6 +2758,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
+	p.createdSequences = ex.getCreatedSequencesAccessor()
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
@@ -3113,6 +3122,12 @@ func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 
 func (ex *connExecutor) getCursorAccessor() sqlCursors {
 	return connExCursorAccessor{
+		ex: ex,
+	}
+}
+
+func (ex *connExecutor) getCreatedSequencesAccessor() createdSequences {
+	return connExCreatedSequencesAccessor{
 		ex: ex,
 	}
 }

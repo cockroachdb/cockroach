@@ -474,10 +474,11 @@ SELECT * FROM a WHERE (a1, a2) IN (SELECT c1, d1 FROM c, d WHERE c3 = d3 or c3 =
 ----
 0  0  0  0
 
-query IIII rowsort
-SELECT * FROM a WHERE (a1, a2) IN (SELECT c1, d1 FROM c, d WHERE c3 = d3 or c2 = d2 EXCEPT ALL
-                                   SELECT c1, d1 FROM c, d WHERE c3 = d3 or c2 = d2)
-----
+# TODO: Enable this test once issue #74554 is fixed.
+# query IIII rowsort
+# SELECT * FROM a WHERE (a1, a2) IN (SELECT c1, d1 FROM c, d WHERE c3 = d3 or c2 = d2 EXCEPT ALL
+#                                    SELECT c1, d1 FROM c, d WHERE c3 = d3 or c2 = d2)
+# ----
 
 query IIII rowsort
 SELECT * FROM a WHERE (a1, a2) IN (SELECT c1, d1 FROM c, d WHERE c1 IS NULL OR c1 = d1)

@@ -470,7 +470,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				ex.server.cfg,
 				ex.statsCollector,
 				&ex.extraTxnState.accumulatedStats,
-				ex.extraTxnState.shouldCollectTxnExecutionStats,
+				ih.collectExecStats,
 				p,
 				ast,
 				sql,
@@ -834,6 +834,17 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 	if knobs := ex.server.cfg.SchemaChangerTestingKnobs; knobs != nil {
 		inRetryBackoff = knobs.TwoVersionLeaseViolation
 	}
+
+	if err := descs.CheckSpanCountLimit(
+		ctx,
+		&ex.extraTxnState.descCollection,
+		ex.server.cfg.SpanConfigSplitter,
+		ex.server.cfg.SpanConfigLimiter,
+		ex.state.mu.txn,
+	); err != nil {
+		return err
+	}
+
 	retryErr, err := descs.CheckTwoVersionInvariant(
 		ctx,
 		ex.server.cfg.Clock,
@@ -2230,7 +2241,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RetryLatency:            txnRetryLat,
 		CommitLatency:           commitLat,
 		RowsAffected:            ex.extraTxnState.numRows,
-		CollectedExecStats:      ex.extraTxnState.shouldCollectTxnExecutionStats,
+		CollectedExecStats:      ex.planner.instrumentation.collectExecStats,
 		ExecStats:               ex.extraTxnState.accumulatedStats,
 		RowsRead:                ex.extraTxnState.rowsRead,
 		RowsWritten:             ex.extraTxnState.rowsWritten,

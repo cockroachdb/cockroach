@@ -59,7 +59,7 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		ctx,
 		mvs.descriptorsToDelete,
 		dbZoneConfigsToDelete,
-		mvs.checkedOutDescriptors,
+		mvs.modifiedDescriptors,
 		mvs.drainedNames,
 		deps.Catalog(),
 	); err != nil {
@@ -86,15 +86,15 @@ func performBatchedCatalogWrites(
 	ctx context.Context,
 	descriptorsToDelete catalog.DescriptorIDSet,
 	dbZoneConfigsToDelete catalog.DescriptorIDSet,
-	checkedOutDescriptors nstree.Map,
+	modifiedDescriptors nstree.Map,
 	drainedNames map[descpb.ID][]descpb.NameInfo,
 	cat Catalog,
 ) error {
 	b := cat.NewCatalogChangeBatcher()
 	descriptorsToDelete.ForEach(func(id descpb.ID) {
-		checkedOutDescriptors.Remove(id)
+		modifiedDescriptors.Remove(id)
 	})
-	err := checkedOutDescriptors.IterateByID(func(entry catalog.NameEntry) error {
+	err := modifiedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
 		return b.CreateOrUpdateDescriptor(ctx, entry.(catalog.MutableDescriptor))
 	})
 	if err != nil {
@@ -305,6 +305,7 @@ func manageJobs(
 			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), setNonCancelable func(),
 		) error {
 			progress := *md.Progress
+			progress.RunningStatus = update.runningStatus
 			updateProgress(&progress)
 			if !md.Payload.Noncancelable && update.isNonCancelable {
 				setNonCancelable()
@@ -319,7 +320,7 @@ func manageJobs(
 
 type mutationVisitorState struct {
 	c                            Catalog
-	checkedOutDescriptors        nstree.Map
+	modifiedDescriptors          nstree.Map
 	drainedNames                 map[descpb.ID][]descpb.NameInfo
 	descriptorsToDelete          catalog.DescriptorIDSet
 	commentsToUpdate             []commentToUpdate
@@ -361,10 +362,11 @@ type eventPayload struct {
 
 type schemaChangerJobUpdate struct {
 	isNonCancelable bool
+	runningStatus   string
 }
 
 func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
-	jobID jobspb.JobID, isNonCancelable bool,
+	jobID jobspb.JobID, isNonCancelable bool, runningStatus string,
 ) error {
 	if mvs.schemaChangerJobUpdates == nil {
 		mvs.schemaChangerJobUpdates = make(map[jobspb.JobID]schemaChangerJobUpdate)
@@ -373,6 +375,7 @@ func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
 	}
 	mvs.schemaChangerJobUpdates[jobID] = schemaChangerJobUpdate{
 		isNonCancelable: isNonCancelable,
+		runningStatus:   runningStatus,
 	}
 	return nil
 }
@@ -390,7 +393,7 @@ var _ scmutationexec.MutationVisitorStateUpdater = (*mutationVisitorState)(nil)
 func (mvs *mutationVisitorState) GetDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	if entry := mvs.checkedOutDescriptors.GetByID(id); entry != nil {
+	if entry := mvs.modifiedDescriptors.GetByID(id); entry != nil {
 		return entry.(catalog.Descriptor), nil
 	}
 	descs, err := mvs.c.MustReadImmutableDescriptors(ctx, id)
@@ -403,7 +406,7 @@ func (mvs *mutationVisitorState) GetDescriptor(
 func (mvs *mutationVisitorState) CheckOutDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
-	entry := mvs.checkedOutDescriptors.GetByID(id)
+	entry := mvs.modifiedDescriptors.GetByID(id)
 	if entry != nil {
 		return entry.(catalog.MutableDescriptor), nil
 	}
@@ -412,12 +415,12 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 		return nil, err
 	}
 	mut.MaybeIncrementVersion()
-	mvs.checkedOutDescriptors.Upsert(mut)
+	mvs.modifiedDescriptors.Upsert(mut)
 	return mut, nil
 }
 
 func (mvs *mutationVisitorState) MaybeCheckedOutDescriptor(id descpb.ID) catalog.Descriptor {
-	entry := mvs.checkedOutDescriptors.GetByID(id)
+	entry := mvs.modifiedDescriptors.GetByID(id)
 	if entry == nil {
 		return nil
 	}
@@ -478,11 +481,19 @@ func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
 	isNonCancelable bool,
 	auth scpb.Authorization,
 	descriptorIDs descpb.IDs,
+	runningStatus string,
 ) error {
 	if mvs.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
 	}
-	mvs.schemaChangerJob = MakeDeclarativeSchemaChangeJobRecord(jobID, stmts, isNonCancelable, auth, descriptorIDs)
+	mvs.schemaChangerJob = MakeDeclarativeSchemaChangeJobRecord(
+		jobID,
+		stmts,
+		isNonCancelable,
+		auth,
+		descriptorIDs,
+		runningStatus,
+	)
 	return nil
 }
 
@@ -501,6 +512,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 	isNonCancelable bool,
 	auth scpb.Authorization,
 	descriptorIDs descpb.IDs,
+	runningStatus string,
 ) *jobs.Record {
 	stmtStrs := make([]string, len(stmts))
 	for i, stmt := range stmts {
@@ -522,8 +534,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 		DescriptorIDs: descriptorIDs,
 		Details:       jobspb.NewSchemaChangeDetails{},
 		Progress:      jobspb.NewSchemaChangeProgress{},
-		// TODO(ajwerner): It'd be good to populate the RunningStatus at all times.
-		RunningStatus: "",
+		RunningStatus: jobs.RunningStatus(runningStatus),
 		NonCancelable: isNonCancelable,
 	}
 	return rec

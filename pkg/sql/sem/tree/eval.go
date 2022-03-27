@@ -435,6 +435,26 @@ func ArrayContains(ctx *EvalContext, haystack *DArray, needles *DArray) (*DBool,
 	return DBoolTrue, nil
 }
 
+// ArrayOverlaps return true if there is even one element
+// common between the left and right arrays.
+func ArrayOverlaps(ctx *EvalContext, array, other *DArray) (*DBool, error) {
+	if !array.ParamTyp.Equivalent(other.ParamTyp) {
+		return nil, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
+	}
+	for _, needle := range array.Array {
+		// Nulls don't compare to each other in && syntax.
+		if needle == DNull {
+			continue
+		}
+		for _, hay := range other.Array {
+			if needle.Compare(ctx, hay) == 0 {
+				return DBoolTrue, nil
+			}
+		}
+	}
+	return DBoolFalse, nil
+}
+
 // JSONExistsAny return true if any value in dArray is exist in the json
 func JSONExistsAny(_ *EvalContext, json DJSON, dArray *DArray) (*DBool, error) {
 	// TODO(justin): this can be optimized.
@@ -2602,21 +2622,7 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 				Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 					array := MustBeDArray(left)
 					other := MustBeDArray(right)
-					if !array.ParamTyp.Equivalent(other.ParamTyp) {
-						return nil, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
-					}
-					for _, needle := range array.Array {
-						// Nulls don't compare to each other in && syntax.
-						if needle == DNull {
-							continue
-						}
-						for _, hay := range other.Array {
-							if needle.Compare(ctx, hay) == 0 {
-								return DBoolTrue, nil
-							}
-						}
-					}
-					return DBoolFalse, nil
+					return ArrayOverlaps(ctx, array, other)
 				},
 				Volatility: VolatilityImmutable,
 			},
@@ -3609,11 +3615,16 @@ type EvalContext struct {
 	// a single statement.
 	TxnIsSingleStmt bool
 
-	Settings    *cluster.Settings
-	ClusterID   uuid.UUID
+	Settings *cluster.Settings
+	// ClusterID is the logical cluster ID for this tenant.
+	ClusterID uuid.UUID
+	// ClusterName is the security string used to secure the RPC layer.
 	ClusterName string
-	NodeID      *base.SQLIDContainer
-	Codec       keys.SQLCodec
+	// NodeID is either the SQL instance ID or KV Node ID, depending on
+	// circumstances.
+	// TODO(knz,radu): Split this into separate fields.
+	NodeID *base.SQLIDContainer
+	Codec  keys.SQLCodec
 
 	// Locality contains the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there
@@ -4231,6 +4242,9 @@ func (expr *ColumnAccessExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if d == DNull {
+		return d, nil
 	}
 	return d.(*DTuple).D[expr.ColIndex], nil
 }

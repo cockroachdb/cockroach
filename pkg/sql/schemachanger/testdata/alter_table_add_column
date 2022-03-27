@@ -23,7 +23,8 @@ upsert descriptor #106
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - PUBLIC
   +    - PUBLIC
@@ -209,6 +210,7 @@ create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j I
   descriptor IDs: [106]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -246,14 +248,14 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
-update progress of schema change job #1
+update progress of schema change job #1: "PostCommitPhase stage 2 of 4 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+## PostCommitPhase stage 2 of 4 with 1 BackfillType op
 backfill indexes [2] from index #1 in table #106
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+## PostCommitPhase stage 3 of 4 with 1 ValidationType op
 validate forward indexes [2] in table #106
 commit transaction #5
 begin transaction #6
@@ -272,7 +274,7 @@ upsert descriptor #106
      createAsOfTime:
        wallTime: "1"
   ...
-       authorization: {}
+         userName: root
        currentStatuses:
   +    - VALIDATED
   +    - ABSENT
@@ -370,14 +372,14 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
-update progress of schema change job #1
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 1 MutationType op pending"
 set schema change job #1 to non-cancellable
 commit transaction #6
 begin transaction #7
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
 upsert descriptor #106
   ...
-       authorization: {}
+         userName: root
        currentStatuses:
   -    - VALIDATED
   +    - DELETE_ONLY
@@ -395,7 +397,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"
-update progress of schema change job #1
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
 commit transaction #7
 begin transaction #8
 ## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
@@ -404,7 +406,8 @@ upsert descriptor #106
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
   -    - DELETE_ONLY
   -    - ABSENT
@@ -558,6 +561,7 @@ upsert descriptor #106
   +  version: "6"
 create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
   descriptor IDs: [106]
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #8
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase

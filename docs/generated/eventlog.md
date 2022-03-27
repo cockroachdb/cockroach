@@ -359,8 +359,6 @@ is changed, either for another tenant or for all tenants.
 Events in this category are generated when a table has been
 marked as audited via `ALTER TABLE ... EXPERIMENTAL_AUDIT SET`.
 
-{% include {{ page.version.version }}/misc/experimental-warning.md %}
-
 Note: These events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
@@ -2244,6 +2242,7 @@ An event of type `alter_role` is recorded when a role is altered.
 |--|--|--|
 | `RoleName` | The name of the affected user/role. | yes |
 | `Options` | The options set on the user/role. | no |
+| `SetInfo` | Information corresponding to an ALTER ROLE SET statement. | no |
 
 
 #### Common fields
@@ -2381,6 +2380,48 @@ An event of type `captured_index_usage_stats`
 |--|--|--|
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
+
+### `changefeed_failed`
+
+An event of type `changefeed_failed` is an event for any Changefeed failure since the plan hook
+was triggered.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `FailureType` | The reason / environment with which the changefeed failed (ex: connection_closed, changefeed_behind) | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Description` | The description of that would show up in the job's description field, redacted | no |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
+| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
+
+### `create_changefeed`
+
+An event of type `create_changefeed` is an event for any CREATE CHANGEFEED query that
+successfully starts running.  Failed CREATE statements will show up as
+ChangefeedFailed events.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Description` | The description of that would show up in the job's description field, redacted | no |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
+| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
 
 ### `sampled_query`
 

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
 )
@@ -156,6 +157,9 @@ type cliState struct {
 	useContinuePrompt bool
 	// The current prompt, either fullPrompt or continuePrompt.
 	currentPrompt string
+
+	// State of COPY FROM on the client.
+	copyFromState *clisqlclient.CopyFromState
 
 	// State
 	//
@@ -281,6 +285,14 @@ func (c *cliState) addHistory(line string) {
 
 func (c *cliState) invalidSyntax(nextState cliStateEnum) cliStateEnum {
 	return c.invalidSyntaxf(nextState, `%s. Try \? for help.`, c.lastInputLine)
+}
+
+func (c *cliState) inCopy() bool {
+	return c.copyFromState != nil
+}
+
+func (c *cliState) resetCopy() {
+	c.copyFromState = nil
 }
 
 func (c *cliState) invalidSyntaxf(
@@ -756,7 +768,9 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	}
 
 	if c.useContinuePrompt {
-		if len(c.fullPrompt) < 3 {
+		if c.inCopy() {
+			c.continuePrompt = ">> "
+		} else if len(c.fullPrompt) < 3 {
 			c.continuePrompt = "> "
 		} else {
 			// continued statement prompt is: "        -> ".
@@ -767,61 +781,64 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
-	// Configure the editor to use the new prompt.
+	if c.inCopy() {
+		c.fullPrompt = ">>"
+	} else {
+		// Configure the editor to use the new prompt.
 
-	parsedURL, err := url.Parse(c.conn.GetURL())
-	if err != nil {
-		// If parsing fails, we'll keep the entire URL. The Open call succeeded, and that
-		// is the important part.
-		c.fullPrompt = c.conn.GetURL() + "> "
-		c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
-		return nextState
-	}
-
-	userName := ""
-	if parsedURL.User != nil {
-		userName = parsedURL.User.Username()
-	}
-
-	dbName := unknownDbName
-	c.lastKnownTxnStatus = unknownTxnStatus
-
-	wantDbStateInPrompt := rePromptDbState.MatchString(c.iCtx.customPromptPattern)
-	if wantDbStateInPrompt {
-		c.refreshTransactionStatus()
-		// refreshDatabaseName() must be called *after* refreshTransactionStatus(),
-		// even when %/ appears before %x in the prompt format.
-		// This is because the database name should not be queried during
-		// some transaction phases.
-		dbName = c.refreshDatabaseName()
-	}
-
-	c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.iCtx.customPromptPattern, func(m string) string {
-		switch m {
-		case "%M":
-			return parsedURL.Host // full host name.
-		case "%m":
-			return parsedURL.Hostname() // host name.
-		case "%>":
-			return parsedURL.Port() // port.
-		case "%n": // user name.
-			return userName
-		case "%/": // database name.
-			return dbName
-		case "%x": // txn status.
-			return c.lastKnownTxnStatus
-		case "%%":
-			return "%"
-		default:
-			err = fmt.Errorf("unrecognized format code in prompt: %q", m)
-			return ""
+		parsedURL, err := url.Parse(c.conn.GetURL())
+		if err != nil {
+			// If parsing fails, we'll keep the entire URL. The Open call succeeded, and that
+			// is the important part.
+			c.fullPrompt = c.conn.GetURL() + "> "
+			c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
+			return nextState
 		}
 
-	})
-	if err != nil {
-		c.fullPrompt = err.Error()
-	}
+		userName := ""
+		if parsedURL.User != nil {
+			userName = parsedURL.User.Username()
+		}
 
+		dbName := unknownDbName
+		c.lastKnownTxnStatus = unknownTxnStatus
+
+		wantDbStateInPrompt := rePromptDbState.MatchString(c.iCtx.customPromptPattern)
+		if wantDbStateInPrompt {
+			c.refreshTransactionStatus()
+			// refreshDatabaseName() must be called *after* refreshTransactionStatus(),
+			// even when %/ appears before %x in the prompt format.
+			// This is because the database name should not be queried during
+			// some transaction phases.
+			dbName = c.refreshDatabaseName()
+		}
+
+		c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.iCtx.customPromptPattern, func(m string) string {
+			switch m {
+			case "%M":
+				return parsedURL.Host // full host name.
+			case "%m":
+				return parsedURL.Hostname() // host name.
+			case "%>":
+				return parsedURL.Port() // port.
+			case "%n": // user name.
+				return userName
+			case "%/": // database name.
+				return dbName
+			case "%x": // txn status.
+				return c.lastKnownTxnStatus
+			case "%%":
+				return "%"
+			default:
+				err = fmt.Errorf("unrecognized format code in prompt: %q", m)
+				return ""
+			}
+
+		})
+		if err != nil {
+			c.fullPrompt = err.Error()
+		}
+	}
 	c.fullPrompt += " "
 	c.currentPrompt = c.fullPrompt
 
@@ -896,8 +913,13 @@ func (c *cliState) refreshDatabaseName() string {
 var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachsql_history")
 
 // GetCompletions implements the readline.CompletionGenerator interface.
-func (c *cliState) GetCompletions(_ string) []string {
+func (c *cliState) GetCompletions(s string) []string {
 	sql, _ := c.ins.GetLineInfo()
+
+	// In COPY mode, just add a tab character.
+	if c.inCopy() {
+		return []string{s + "\t"}
+	}
 
 	if !strings.HasSuffix(sql, "??") {
 		query := fmt.Sprintf(`SHOW COMPLETIONS AT OFFSET %d FOR %s`, len(sql), lexbase.EscapeSQLString(sql))
@@ -1027,6 +1049,26 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 			return cliStop
 		}
 
+		if c.inCopy() {
+			// CTRL+C in COPY cancels the copy.
+			defer func() {
+				c.resetCopy()
+				c.partialLines = c.partialLines[:0]
+				c.partialStmtsLen = 0
+				c.useContinuePrompt = false
+			}()
+			c.exitErr = errors.CombineErrors(
+				pgerror.Newf(pgcode.QueryCanceled, "COPY canceled by user"),
+				c.copyFromState.Cancel(),
+			)
+			if c.exitErr != nil {
+				if !c.singleStatement {
+					clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+				}
+			}
+			return cliRefreshPrompt
+		}
+
 		if l != "" {
 			// Ctrl+C after the beginning of a line cancels the current
 			// line.
@@ -1046,6 +1088,11 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 		return cliStartLine
 
 	case errors.Is(err, io.EOF):
+		// If we're in COPY and we're interactive, this signifies the copy is complete.
+		if c.inCopy() && c.cliCtx.IsInteractive {
+			return cliRunStatement
+		}
+
 		c.atEOF = true
 
 		if c.cliCtx.IsInteractive {
@@ -1178,6 +1225,25 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\dt`:
 		c.concatLines = `SHOW TABLES`
 		return cliRunStatement
+
+	case `\copy`:
+		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
+			return c.beginCopyFrom(ctx, c.concatLines)
+		})
+		if !c.singleStatement {
+			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		}
+		if c.exitErr != nil && c.iCtx.errExit {
+			return cliStop
+		}
+		return cliStartLine
+
+	case `\.`:
+		if c.inCopy() {
+			c.concatLines += "\n" + `\.`
+			return cliRunStatement
+		}
+		return c.invalidSyntax(errState)
 
 	case `\dT`:
 		c.concatLines = `SHOW TYPES`
@@ -1527,12 +1593,13 @@ func (c *cliState) doPrepareStatementLine(
 		}
 		return startState
 	}
-	endOfStmt := isEndOfStatement(lastTok)
-	if c.singleStatement && c.atEOF {
+	endOfStmt := (!c.inCopy() && isEndOfStatement(lastTok)) ||
+		// We're always at the end of a statement if we're in COPY and encounter
+		// the \. or EOF character.
+		(c.inCopy() && (strings.HasSuffix(c.concatLines, "\n"+`\.`) || c.atEOF)) ||
 		// We're always at the end of a statement if EOF is reached in the
 		// single statement mode.
-		endOfStmt = true
-	}
+		c.singleStatement && c.atEOF
 	if c.atEOF {
 		// Definitely no more input expected.
 		if !endOfStmt {
@@ -1551,7 +1618,9 @@ func (c *cliState) doPrepareStatementLine(
 	}
 
 	// Complete input. Remember it in the history.
-	c.addHistory(c.concatLines)
+	if !c.inCopy() {
+		c.addHistory(c.concatLines)
+	}
 
 	if !c.iCtx.checkSyntax {
 		return execState
@@ -1561,6 +1630,10 @@ func (c *cliState) doPrepareStatementLine(
 }
 
 func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnum) cliStateEnum {
+	// If we are in COPY, we have no valid SQL, so skip directly to the next state.
+	if c.inCopy() {
+		return execState
+	}
 	// From here on, client-side syntax checking is enabled.
 	helpText, err := c.serverSideParse(c.concatLines)
 	if err != nil {
@@ -1626,9 +1699,24 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 
 	// Now run the statement/query.
 	c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
-		return c.sqlExecCtx.RunQueryAndFormatResults(ctx,
-			c.conn, c.iCtx.stdout, c.iCtx.stderr,
-			clisqlclient.MakeQuery(c.concatLines))
+		if scanner.FirstLexicalToken(c.concatLines) == lexbase.COPY {
+			return c.beginCopyFrom(ctx, c.concatLines)
+		}
+		q := clisqlclient.MakeQuery(c.concatLines)
+		if c.inCopy() {
+			q = c.copyFromState.Commit(
+				ctx,
+				c.resetCopy,
+				c.concatLines,
+			)
+		}
+		return c.sqlExecCtx.RunQueryAndFormatResults(
+			ctx,
+			c.conn,
+			c.iCtx.stdout,
+			c.iCtx.stderr,
+			q,
+		)
 	})
 	if c.exitErr != nil {
 		if !c.singleStatement {
@@ -1683,6 +1771,26 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	}
 
 	return nextState
+}
+
+func (c *cliState) beginCopyFrom(ctx context.Context, sql string) error {
+	c.refreshTransactionStatus()
+	if c.lastKnownTxnStatus != "" {
+		return unimplemented.Newf(
+			"cli_copy_in_txn",
+			"cannot use COPY inside a transaction",
+		)
+	}
+	copyFromState, err := clisqlclient.BeginCopyFrom(ctx, c.conn, sql)
+	if err != nil {
+		return err
+	}
+	c.copyFromState = copyFromState
+	if c.cliCtx.IsInteractive {
+		fmt.Fprintln(c.iCtx.stdout, `Enter data to be copied followed by a newline.`)
+		fmt.Fprintln(c.iCtx.stdout, `End with a backslash and a period on a line by itself, or an EOF signal.`)
+	}
+	return nil
 }
 
 func (c *cliState) doDecidePath() cliStateEnum {
@@ -2010,6 +2118,14 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 	return "", nil
 }
 
+// At this time, lib/pq contains a bug whereby a query cancellation
+// results in the driver dropping the connection. This results in poor
+// user UX. Instead of suffering the UX drawback, we choose to disable
+// query cancellation for a little while more until we switch the shell
+// to use pgx instead.
+// See: https://github.com/cockroachdb/cockroach/issues/76483
+const queryCancelEnabled = false
+
 func (c *cliState) maybeHandleInterrupt() func() {
 	if !c.cliCtx.IsInteractive {
 		return func() {}
@@ -2017,49 +2133,66 @@ func (c *cliState) maybeHandleInterrupt() func() {
 	intCh := make(chan os.Signal, 1)
 	signal.Notify(intCh, os.Interrupt)
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		for {
-			select {
-			case <-intCh:
-				c.iCtx.mu.Lock()
-				cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
-				c.iCtx.mu.Unlock()
-				if cancelFn == nil {
-					// No query currently executing; nothing to do.
-					continue
+
+	if !queryCancelEnabled {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					// Shell is terminating.
+					return
+				case <-intCh:
 				}
-
-				fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")
-				// Cancel the query's context, which should make the driver
-				// send a cancellation message.
-				cancelFn()
-
-				// Now wait for the shell to process the cancellation.
-				//
-				// If it takes too long (e.g. server has become unresponsive,
-				// or we're connected to a pre-22.1 server which does not
-				// support cancellation), fall back to the previous behavior
-				// which is to interrupt the shell altogether.
-				tooLongTimer := time.After(3 * time.Second)
-			wait:
-				for {
-					select {
-					case <-doneCh:
-						break wait
-					case <-tooLongTimer:
-						fmt.Fprintln(c.iCtx.stderr, "server does not respond to query cancellation; a second interrupt will stop the shell.")
-						signal.Reset(os.Interrupt)
-					}
-				}
-				// Re-arm the signal handler.
-				signal.Notify(intCh, os.Interrupt)
-
-			case <-ctx.Done():
-				// Shell is terminating.
-				return
+				fmt.Fprintln(c.iCtx.stderr,
+					"query cancellation disabled in this client; a second interrupt will stop the shell.")
+				signal.Reset(os.Interrupt)
 			}
-		}
-	}()
+		}()
+	} else {
+		go func() {
+			for {
+				select {
+				case <-intCh:
+					c.iCtx.mu.Lock()
+					cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
+					c.iCtx.mu.Unlock()
+					if cancelFn == nil {
+						// No query currently executing; nothing to do.
+						continue
+					}
+
+					fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")
+					// Cancel the query's context, which should make the driver
+					// send a cancellation message.
+					cancelFn()
+
+					// Now wait for the shell to process the cancellation.
+					//
+					// If it takes too long (e.g. server has become unresponsive,
+					// or we're connected to a pre-22.1 server which does not
+					// support cancellation), fall back to the previous behavior
+					// which is to interrupt the shell altogether.
+					tooLongTimer := time.After(3 * time.Second)
+				wait:
+					for {
+						select {
+						case <-doneCh:
+							break wait
+						case <-tooLongTimer:
+							fmt.Fprintln(c.iCtx.stderr, "server does not respond to query cancellation; a second interrupt will stop the shell.")
+							signal.Reset(os.Interrupt)
+						}
+					}
+					// Re-arm the signal handler.
+					signal.Notify(intCh, os.Interrupt)
+
+				case <-ctx.Done():
+					// Shell is terminating.
+					return
+				}
+			}
+		}()
+	}
 	return cancel
 }
 

@@ -264,7 +264,7 @@ func (n *dropIndexNode) finalizeDropColumn(params runParams, tableDesc *tabledes
 	if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
 		return err
 	}
-	mutationID := tableDesc.ClusterVersion.NextMutationID
+	mutationID := tableDesc.ClusterVersion().NextMutationID
 	if err := params.p.writeSchemaChange(
 		params.ctx, tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
@@ -349,7 +349,7 @@ func (p *planner) dropIndexByName(
 		if s.IndexID != uint32(idx.GetID()) {
 			_, err = GenerateSubzoneSpans(
 				p.ExecCfg().Settings,
-				p.ExecCfg().ClusterID(),
+				p.ExecCfg().LogicalClusterID(),
 				p.ExecCfg().Codec,
 				tableDesc,
 				zone.Subzones,
@@ -550,7 +550,7 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 
-	mutationID := tableDesc.ClusterVersion.NextMutationID
+	mutationID := tableDesc.ClusterVersion().NextMutationID
 	if err := p.writeSchemaChange(ctx, tableDesc, mutationID, jobDesc); err != nil {
 		return err
 	}

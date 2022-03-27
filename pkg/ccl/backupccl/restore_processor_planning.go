@@ -12,20 +12,38 @@ import (
 	"bytes"
 	"context"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+)
+
+var replanRestoreThreshold = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"bulkio.restore.replan_flow_threshold",
+	"fraction of initial flow instances that would be added or updated above which a RESTORE execution plan is restarted from the last checkpoint (0=disabled)",
+	0.0,
+)
+
+var replanRestoreFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"bulkio.restore.replan_flow_frequency",
+	"frequency at which RESTORE checks to see if restarting would change its updates its physical execution plan",
+	time.Minute*2,
+	settings.PositiveDuration,
 )
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It
@@ -52,9 +70,6 @@ func distRestore(
 	defer close(progCh)
 	var noTxn *kv.Txn
 
-	dsp := execCtx.DistSQLPlanner()
-	evalCtx := execCtx.ExtendedEvalContext()
-
 	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
 		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
 			settings: execCtx.ExecCfg().Settings,
@@ -77,163 +92,192 @@ func distRestore(
 		fileEncryption = &roachpb.FileEncryptionOptions{Key: encryption.Key}
 	}
 
-	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
-	if err != nil {
-		return err
-	}
+	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 
-	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(sqlInstanceIDs, chunks, tableRekeys, tenantRekeys)
-	if err != nil {
-		return err
-	}
-
-	restoreDataSpec := execinfrapb.RestoreDataSpec{
-		JobID:        jobID,
-		RestoreTime:  restoreTime,
-		Encryption:   fileEncryption,
-		TableRekeys:  tableRekeys,
-		TenantRekeys: tenantRekeys,
-		PKIDs:        pkIDs,
-		Validation:   jobspb.RestoreValidation_DefaultRestore,
-	}
-
-	if len(splitAndScatterSpecs) == 0 {
-		// We should return an error here as there are no nodes that are compatible,
-		// but we should have at least found ourselves.
-		return nil
-	}
-
-	p := planCtx.NewPhysicalPlan()
-
-	// Plan SplitAndScatter in a round-robin fashion.
-	splitAndScatterStageID := p.NewStageOnNodes(sqlInstanceIDs)
-	splitAndScatterProcs := make(map[base.SQLInstanceID]physicalplan.ProcessorIdx)
-
-	defaultStream := int32(0)
-	rangeRouterSpec := execinfrapb.OutputRouterSpec_RangeRouterSpec{
-		Spans:       nil,
-		DefaultDest: &defaultStream,
-		Encodings: []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
-			{
-				Column:   0,
-				Encoding: descpb.DatumEncoding_ASCENDING_KEY,
-			},
-		},
-	}
-	for stream, sqlInstanceID := range sqlInstanceIDs {
-		startBytes, endBytes, err := routingSpanForSQLInstance(sqlInstanceID)
+		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 
-		span := execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
-			Start:  startBytes,
-			End:    endBytes,
-			Stream: int32(stream),
+		p := planCtx.NewPhysicalPlan()
+
+		splitAndScatterSpecs, err := makeSplitAndScatterSpecs(sqlInstanceIDs, chunks, tableRekeys, tenantRekeys)
+		if err != nil {
+			return nil, nil, err
 		}
-		rangeRouterSpec.Spans = append(rangeRouterSpec.Spans, span)
+
+		restoreDataSpec := execinfrapb.RestoreDataSpec{
+			JobID:        jobID,
+			RestoreTime:  restoreTime,
+			Encryption:   fileEncryption,
+			TableRekeys:  tableRekeys,
+			TenantRekeys: tenantRekeys,
+			PKIDs:        pkIDs,
+			Validation:   jobspb.RestoreValidation_DefaultRestore,
+		}
+
+		if len(splitAndScatterSpecs) == 0 {
+			// We should return an error here as there are no nodes that are compatible,
+			// but we should have at least found ourselves.
+			return nil, nil, errors.AssertionFailedf("no compatible nodes")
+		}
+
+		// Plan SplitAndScatter in a round-robin fashion.
+		splitAndScatterStageID := p.NewStageOnNodes(sqlInstanceIDs)
+		splitAndScatterProcs := make(map[base.SQLInstanceID]physicalplan.ProcessorIdx)
+
+		defaultStream := int32(0)
+		rangeRouterSpec := execinfrapb.OutputRouterSpec_RangeRouterSpec{
+			Spans:       nil,
+			DefaultDest: &defaultStream,
+			Encodings: []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
+				{
+					Column:   0,
+					Encoding: descpb.DatumEncoding_ASCENDING_KEY,
+				},
+			},
+		}
+		for stream, sqlInstanceID := range sqlInstanceIDs {
+			startBytes, endBytes, err := routingSpanForSQLInstance(sqlInstanceID)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			span := execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
+				Start:  startBytes,
+				End:    endBytes,
+				Stream: int32(stream),
+			}
+			rangeRouterSpec.Spans = append(rangeRouterSpec.Spans, span)
+		}
+		// The router expects the spans to be sorted.
+		sort.Slice(rangeRouterSpec.Spans, func(i, j int) bool {
+			return bytes.Compare(rangeRouterSpec.Spans[i].Start, rangeRouterSpec.Spans[j].Start) == -1
+		})
+
+		for _, n := range sqlInstanceIDs {
+			spec := splitAndScatterSpecs[n]
+			if spec == nil {
+				// We may have fewer chunks than we have nodes for very small imports. In
+				// this case we only want to plan splitAndScatter nodes on a subset of
+				// nodes. Note that we still want to plan a RestoreData processor on every
+				// node since each entry could be scattered anywhere.
+				continue
+			}
+			proc := physicalplan.Processor{
+				SQLInstanceID: n,
+				Spec: execinfrapb.ProcessorSpec{
+					Core: execinfrapb.ProcessorCoreUnion{SplitAndScatter: splitAndScatterSpecs[n]},
+					Post: execinfrapb.PostProcessSpec{},
+					Output: []execinfrapb.OutputRouterSpec{
+						{
+							Type:            execinfrapb.OutputRouterSpec_BY_RANGE,
+							RangeRouterSpec: rangeRouterSpec,
+						},
+					},
+					StageID:     splitAndScatterStageID,
+					ResultTypes: splitAndScatterOutputTypes,
+				},
+			}
+			pIdx := p.AddProcessor(proc)
+			splitAndScatterProcs[n] = pIdx
+		}
+
+		// Plan RestoreData.
+		restoreDataStageID := p.NewStageOnNodes(sqlInstanceIDs)
+		restoreDataProcs := make(map[base.SQLInstanceID]physicalplan.ProcessorIdx)
+		for _, sqlInstanceID := range sqlInstanceIDs {
+			proc := physicalplan.Processor{
+				SQLInstanceID: sqlInstanceID,
+				Spec: execinfrapb.ProcessorSpec{
+					Input: []execinfrapb.InputSyncSpec{
+						{ColumnTypes: splitAndScatterOutputTypes},
+					},
+					Core:        execinfrapb.ProcessorCoreUnion{RestoreData: &restoreDataSpec},
+					Post:        execinfrapb.PostProcessSpec{},
+					Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+					StageID:     restoreDataStageID,
+					ResultTypes: []*types.T{},
+				},
+			}
+			pIdx := p.AddProcessor(proc)
+			restoreDataProcs[sqlInstanceID] = pIdx
+			p.ResultRouters = append(p.ResultRouters, pIdx)
+		}
+
+		for _, srcProc := range splitAndScatterProcs {
+			slot := 0
+			for _, destSQLInstanceID := range sqlInstanceIDs {
+				// Streams were added to the range router in the same order that the
+				// nodes appeared in `nodes`. Make sure that the `slot`s here are
+				// ordered the same way.
+				destProc := restoreDataProcs[destSQLInstanceID]
+				p.Streams = append(p.Streams, physicalplan.Stream{
+					SourceProcessor:  srcProc,
+					SourceRouterSlot: slot,
+					DestProcessor:    destProc,
+					DestInput:        0,
+				})
+				slot++
+			}
+		}
+
+		dsp.FinalizePlan(planCtx, p)
+		return p, planCtx, nil
 	}
-	// The router expects the spans to be sorted.
-	sort.Slice(rangeRouterSpec.Spans, func(i, j int) bool {
-		return bytes.Compare(rangeRouterSpec.Spans[i].Start, rangeRouterSpec.Spans[j].Start) == -1
+
+	dsp := execCtx.DistSQLPlanner()
+	evalCtx := execCtx.ExtendedEvalContext()
+
+	p, planCtx, err := makePlan(ctx, dsp)
+	if err != nil {
+		return err
+	}
+
+	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
+		p,
+		makePlan,
+		execCtx,
+		sql.ReplanOnChangedFraction(func() float64 { return replanRestoreThreshold.Get(execCtx.ExecCfg().SV()) }),
+		func() time.Duration { return replanRestoreFrequency.Get(execCtx.ExecCfg().SV()) },
+	)
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		defer stopReplanner()
+
+		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+			if meta.BulkProcessorProgress != nil {
+				// Send the progress up a level to be written to the manifest.
+				progCh <- meta.BulkProcessorProgress
+			}
+			return nil
+		}
+
+		rowResultWriter := sql.NewRowResultWriter(nil)
+
+		recv := sql.MakeDistSQLReceiver(
+			ctx,
+			sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+			tree.Rows,
+			nil,   /* rangeCache */
+			noTxn, /* txn - the flow does not read or write the database */
+			nil,   /* clockUpdater */
+			evalCtx.Tracing,
+			evalCtx.ExecCfg.ContentionRegistry,
+			nil, /* testingPushCallback */
+		)
+		defer recv.Release()
+
+		// Copy the evalCtx, as dsp.Run() might change it.
+		evalCtxCopy := *evalCtx
+		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
+		return rowResultWriter.Err()
 	})
 
-	for _, n := range sqlInstanceIDs {
-		spec := splitAndScatterSpecs[n]
-		if spec == nil {
-			// We may have fewer chunks than we have nodes for very small imports. In
-			// this case we only want to plan splitAndScatter nodes on a subset of
-			// nodes. Note that we still want to plan a RestoreData processor on every
-			// node since each entry could be scattered anywhere.
-			continue
-		}
-		proc := physicalplan.Processor{
-			SQLInstanceID: n,
-			Spec: execinfrapb.ProcessorSpec{
-				Core: execinfrapb.ProcessorCoreUnion{SplitAndScatter: splitAndScatterSpecs[n]},
-				Post: execinfrapb.PostProcessSpec{},
-				Output: []execinfrapb.OutputRouterSpec{
-					{
-						Type:            execinfrapb.OutputRouterSpec_BY_RANGE,
-						RangeRouterSpec: rangeRouterSpec,
-					},
-				},
-				StageID:     splitAndScatterStageID,
-				ResultTypes: splitAndScatterOutputTypes,
-			},
-		}
-		pIdx := p.AddProcessor(proc)
-		splitAndScatterProcs[n] = pIdx
-	}
+	g.GoCtx(replanner)
 
-	// Plan RestoreData.
-	restoreDataStageID := p.NewStageOnNodes(sqlInstanceIDs)
-	restoreDataProcs := make(map[base.SQLInstanceID]physicalplan.ProcessorIdx)
-	for _, sqlInstanceID := range sqlInstanceIDs {
-		proc := physicalplan.Processor{
-			SQLInstanceID: sqlInstanceID,
-			Spec: execinfrapb.ProcessorSpec{
-				Input: []execinfrapb.InputSyncSpec{
-					{ColumnTypes: splitAndScatterOutputTypes},
-				},
-				Core:        execinfrapb.ProcessorCoreUnion{RestoreData: &restoreDataSpec},
-				Post:        execinfrapb.PostProcessSpec{},
-				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID:     restoreDataStageID,
-				ResultTypes: []*types.T{},
-			},
-		}
-		pIdx := p.AddProcessor(proc)
-		restoreDataProcs[sqlInstanceID] = pIdx
-		p.ResultRouters = append(p.ResultRouters, pIdx)
-	}
-
-	for _, srcProc := range splitAndScatterProcs {
-		slot := 0
-		for _, destSQLInstanceID := range sqlInstanceIDs {
-			// Streams were added to the range router in the same order that the
-			// nodes appeared in `nodes`. Make sure that the `slot`s here are
-			// ordered the same way.
-			destProc := restoreDataProcs[destSQLInstanceID]
-			p.Streams = append(p.Streams, physicalplan.Stream{
-				SourceProcessor:  srcProc,
-				SourceRouterSlot: slot,
-				DestProcessor:    destProc,
-				DestInput:        0,
-			})
-			slot++
-		}
-	}
-
-	dsp.FinalizePlan(planCtx, p)
-
-	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
-		if meta.BulkProcessorProgress != nil {
-			// Send the progress up a level to be written to the manifest.
-			progCh <- meta.BulkProcessorProgress
-		}
-		return nil
-	}
-
-	rowResultWriter := sql.NewRowResultWriter(nil)
-
-	recv := sql.MakeDistSQLReceiver(
-		ctx,
-		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
-		tree.Rows,
-		nil,   /* rangeCache */
-		noTxn, /* txn - the flow does not read or write the database */
-		nil,   /* clockUpdater */
-		evalCtx.Tracing,
-		evalCtx.ExecCfg.ContentionRegistry,
-		nil, /* testingPushCallback */
-	)
-	defer recv.Release()
-
-	// Copy the evalCtx, as dsp.Run() might change it.
-	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
-	return rowResultWriter.Err()
+	return g.Wait()
 }
 
 // makeSplitAndScatterSpecs returns a map from nodeID to the SplitAndScatter

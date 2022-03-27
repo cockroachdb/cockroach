@@ -51,7 +51,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	physPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, n.plan.main)
+	physPlan, err := newPhysPlanForExplainPurposes(params.ctx, planCtx, distSQLPlanner, n.plan.main)
 	if err != nil {
 		if len(n.plan.subqueryPlans) > 0 {
 			return errors.New("running EXPLAIN (VEC) on this query is " +
@@ -90,11 +90,11 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.F
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
 		Cfg: &execinfra.ServerConfig{
-			Settings:       p.execCfg.Settings,
-			ClusterID:      p.DistSQLPlanner().rpcCtx.ClusterID,
-			VecFDSemaphore: p.execCfg.DistSQLSrv.VecFDSemaphore,
-			NodeDialer:     p.DistSQLPlanner().nodeDialer,
-			PodNodeDialer:  p.DistSQLPlanner().podNodeDialer,
+			Settings:         p.execCfg.Settings,
+			LogicalClusterID: p.DistSQLPlanner().distSQLSrv.ServerConfig.LogicalClusterID,
+			VecFDSemaphore:   p.execCfg.DistSQLSrv.VecFDSemaphore,
+			NodeDialer:       p.DistSQLPlanner().nodeDialer,
+			PodNodeDialer:    p.DistSQLPlanner().podNodeDialer,
 		},
 		Descriptors: p.Descriptors(),
 		DiskMonitor: &mon.BytesMonitor{},

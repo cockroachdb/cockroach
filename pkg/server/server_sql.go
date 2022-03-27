@@ -51,8 +51,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfiglimiter"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsplitter"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -106,6 +108,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/service"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 	"google.golang.org/grpc"
@@ -308,7 +311,7 @@ type sqlServerArgs struct {
 	// Used to query status information useful for debugging on the server.
 	tenantStatusServer serverpb.TenantStatusServer
 
-	// Used for multi-tenant cost control (on the host cluster side).
+	// Used for multi-tenant cost control (on the storage cluster side).
 	tenantUsageServer multitenant.TenantUsageServer
 
 	// Used for multi-tenant cost control (on the tenant side).
@@ -430,7 +433,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.clock,
 			cfg.db,
 			cfg.circularInternalExecutor,
-			cfg.ClusterIDContainer,
+			cfg.rpcContext.LogicalClusterID,
 			cfg.nodeIDContainer,
 			cfg.sqlLivenessProvider,
 			cfg.Settings,
@@ -551,27 +554,52 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		compactEngineSpanFunc = cli.CompactEngineSpan
 	}
 
+	spanConfig := struct {
+		manager              *spanconfigmanager.Manager
+		sqlTranslatorFactory *spanconfigsqltranslator.Factory
+		sqlWatcher           *spanconfigsqlwatcher.SQLWatcher
+		splitter             spanconfig.Splitter
+		limiter              spanconfig.Limiter
+	}{}
+	if codec.ForSystemTenant() {
+		spanConfig.limiter = spanconfiglimiter.NoopLimiter{}
+		spanConfig.splitter = spanconfigsplitter.NoopSplitter{}
+	} else {
+		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+		spanConfig.splitter = spanconfigsplitter.New(codec, spanConfigKnobs)
+		spanConfig.limiter = spanconfiglimiter.New(
+			cfg.circularInternalExecutor,
+			cfg.Settings,
+			spanConfigKnobs,
+		)
+	}
+
 	collectionFactory := descs.NewCollectionFactory(
+		ctx,
 		cfg.Settings,
 		leaseMgr,
 		virtualSchemas,
 		hydratedTablesCache,
+		spanConfig.splitter,
+		spanConfig.limiter,
 	)
+
+	clusterIDForSQL := cfg.rpcContext.LogicalClusterID
 
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
-		AmbientContext: cfg.AmbientCtx,
-		Settings:       cfg.Settings,
-		RuntimeStats:   cfg.runtime,
-		ClusterID:      cfg.rpcContext.ClusterID,
-		ClusterName:    cfg.ClusterName,
-		NodeID:         cfg.nodeIDContainer,
-		Locality:       cfg.Locality,
-		Codec:          codec,
-		DB:             cfg.db,
-		Executor:       cfg.circularInternalExecutor,
-		RPCContext:     cfg.rpcContext,
-		Stopper:        cfg.stopper,
+		AmbientContext:   cfg.AmbientCtx,
+		Settings:         cfg.Settings,
+		RuntimeStats:     cfg.runtime,
+		LogicalClusterID: clusterIDForSQL,
+		ClusterName:      cfg.ClusterName,
+		NodeID:           cfg.nodeIDContainer,
+		Locality:         cfg.Locality,
+		Codec:            codec,
+		DB:               cfg.db,
+		Executor:         cfg.circularInternalExecutor,
+		RPCContext:       cfg.rpcContext,
+		Stopper:          cfg.stopper,
 
 		TempStorage:     tempEngine,
 		TempStoragePath: cfg.TempStorageConfig.Path,
@@ -635,10 +663,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	nodeInfo := sql.NodeInfo{
-		AdminURL:  cfg.AdminURL,
-		PGURL:     cfg.rpcContext.PGURL,
-		ClusterID: cfg.rpcContext.ClusterID.Get,
-		NodeID:    cfg.nodeIDContainer,
+		AdminURL:         cfg.AdminURL,
+		PGURL:            cfg.rpcContext.PGURL,
+		LogicalClusterID: cfg.rpcContext.LogicalClusterID.Get,
+		NodeID:           cfg.nodeIDContainer,
 	}
 
 	var isAvailable func(sqlInstanceID base.SQLInstanceID) bool
@@ -933,11 +961,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.MigrationTestingKnobs = knobs
 	}
 
-	spanConfig := struct {
-		manager              *spanconfigmanager.Manager
-		sqlTranslatorFactory *spanconfigsqltranslator.Factory
-		sqlWatcher           *spanconfigsqlwatcher.SQLWatcher
-	}{}
 	if !codec.ForSystemTenant() || !cfg.SpanConfigsDisabled {
 		// Instantiate a span config manager. If we're the host tenant we'll
 		// only do it unless COCKROACH_DISABLE_SPAN_CONFIGS is set.
@@ -977,6 +1000,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.SpanConfigReconciler = spanConfigReconciler
 	}
 	execCfg.SpanConfigKVAccessor = cfg.spanConfigAccessor
+	execCfg.SpanConfigLimiter = spanConfig.limiter
+	execCfg.SpanConfigSplitter = spanConfig.splitter
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
@@ -991,18 +1016,19 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 
 	reporter := &diagnostics.Reporter{
-		StartTime:     timeutil.Now(),
-		AmbientCtx:    &cfg.AmbientCtx,
-		Config:        cfg.BaseConfig.Config,
-		Settings:      cfg.Settings,
-		ClusterID:     cfg.rpcContext.ClusterID.Get,
-		TenantID:      cfg.rpcContext.TenantID,
-		SQLInstanceID: cfg.nodeIDContainer.SQLInstanceID,
-		SQLServer:     pgServer.SQLServer,
-		InternalExec:  cfg.circularInternalExecutor,
-		DB:            cfg.db,
-		Recorder:      cfg.recorder,
-		Locality:      cfg.Locality,
+		StartTime:        timeutil.Now(),
+		AmbientCtx:       &cfg.AmbientCtx,
+		Config:           cfg.BaseConfig.Config,
+		Settings:         cfg.Settings,
+		StorageClusterID: cfg.rpcContext.StorageClusterID.Get,
+		LogicalClusterID: clusterIDForSQL.Get,
+		TenantID:         cfg.rpcContext.TenantID,
+		SQLInstanceID:    cfg.nodeIDContainer.SQLInstanceID,
+		SQLServer:        pgServer.SQLServer,
+		InternalExec:     cfg.circularInternalExecutor,
+		DB:               cfg.db,
+		Recorder:         cfg.recorder,
+		Locality:         cfg.Locality,
 	}
 
 	if cfg.TestingKnobs.Server != nil {
@@ -1377,4 +1403,10 @@ func (s *SQLServer) startServeSQL(
 	s.isReady.Set(true)
 
 	return nil
+}
+
+// LogicalClusterID retrieves the logical (tenant-level) cluster ID
+// for this server.
+func (s *SQLServer) LogicalClusterID() uuid.UUID {
+	return s.execCfg.LogicalClusterID()
 }

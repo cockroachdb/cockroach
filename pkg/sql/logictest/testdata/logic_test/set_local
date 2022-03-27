@@ -11,6 +11,11 @@ SET LOCAL TIME ZONE +6
 ----
 WARNING: SET LOCAL can only be used in transaction blocks
 
+query T noticetrace
+SELECT 1; SET LOCAL TIME ZONE +6
+----
+WARNING: SET LOCAL can only be used in transaction blocks
+
 statement ok
 SET intervalstyle_enabled = 'on'
 

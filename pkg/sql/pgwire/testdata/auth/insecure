@@ -52,6 +52,6 @@ subtest user_does_not_exist
 
 connect user=nonexistent sslmode=disable
 ----
-ERROR: password authentication failed for user nonexistent (SQLSTATE 28000)
+ERROR: password authentication failed for user nonexistent (SQLSTATE 28P01)
 
 subtest end

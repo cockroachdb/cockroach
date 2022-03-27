@@ -745,6 +745,7 @@ func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) error {
 		return errors.New("invalid 0 job ID")
 	}
 	record.JobID = jobspb.JobID(1 + len(s.jobs))
+	s.createdJobsInCurrentTxn = append(s.createdJobsInCurrentTxn, record.JobID)
 	s.jobs = append(s.jobs, record)
 	s.LogSideEffectf("create job #%d (non-cancelable: %v): %q\n  descriptor IDs: %v",
 		record.JobID,
@@ -753,6 +754,11 @@ func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) error {
 		record.DescriptorIDs,
 	)
 	return nil
+}
+
+// CreatedJobs implements the scexec.TransactionalJobRegistry interface.
+func (s *TestState) CreatedJobs() []jobspb.JobID {
+	return s.createdJobsInCurrentTxn
 }
 
 // CheckPausepoint is a no-op.
@@ -798,7 +804,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 	}
 	updateProgress := func(progress *jobspb.Progress) {
 		scJob.Progress = *progress.GetNewSchemaChange()
-		s.LogSideEffectf("update progress of schema change job #%d", scJob.JobID)
+		s.LogSideEffectf("update progress of schema change job #%d: %q", scJob.JobID, progress.RunningStatus)
 	}
 	setNonCancelable := func() {
 		scJob.NonCancelable = true

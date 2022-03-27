@@ -492,7 +492,7 @@ func runDecommissionNodeImpl(
 		}
 
 		if numReplicaReport > 0 {
-			printDecommissionReplicas(ctx, *resp)
+			printDecommissionReplicas(*resp)
 		}
 
 		if !reflect.DeepEqual(&prevResponse, resp) {
@@ -622,13 +622,13 @@ func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
 		clisqlexec.NewRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
 }
 
-func printDecommissionReplicas(ctx context.Context, resp serverpb.DecommissionStatusResponse) {
-	fmt.Fprintln(stderr, "\npossible decommission stall detected; reporting decommissioning replicas")
+func printDecommissionReplicas(resp serverpb.DecommissionStatusResponse) {
+	fmt.Fprintln(stderr, "\npossible decommission stall detected")
 
 	for _, nodeStatus := range resp.Status {
 		for _, replica := range nodeStatus.ReportedReplicas {
 			fmt.Fprintf(stderr,
-				"n%d still has replica id %d for range r%d",
+				"n%d still has replica id %d for range r%d\n",
 				nodeStatus.NodeID,
 				replica.ReplicaID,
 				replica.RangeID,

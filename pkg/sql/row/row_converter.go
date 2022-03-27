@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -261,7 +262,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 	// TODO(postamar): give the tree.EvalContext a useful interface
 	// instead of cobbling a descs.Collection in this way.
 	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
-	descsCol := cf.MakeCollection(evalCtx.Context, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
+	descsCol := cf.MakeCollection(evalCtx.Context, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack), nil /* monitor */)
 	err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)
@@ -294,7 +295,7 @@ func NewDatumRowConverter(
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,
 	seqChunkProvider *SeqChunkProvider,
-	metrics *Metrics,
+	metrics *rowinfra.Metrics,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,

@@ -651,6 +651,17 @@ var charts = []sectionDescription{
 	{
 		Organization: [][]string{
 			{DistributionLayer, "Rebalancing"},
+		},
+		Charts: []chartDescription{
+			{
+				Title:   "L0 sub-level rebalancing",
+				Metrics: []string{"rebalancing.l0_sublevels_histogram"},
+			},
+		},
+	},
+	{
+		Organization: [][]string{
+			{DistributionLayer, "Rebalancing"},
 			{ReplicationLayer, "Leases"},
 		},
 		Charts: []chartDescription{
@@ -2270,6 +2281,13 @@ var charts = []sectionDescription{
 				AxisLabel: "Latency",
 			},
 			{
+				Title: "Connection Failures",
+				Metrics: []string{
+					"sql.conn.failures",
+				},
+				AxisLabel: "Failures",
+			},
+			{
 				Title: "Open Transactions",
 				Metrics: []string{
 					"sql.txns.open",
@@ -2859,6 +2877,12 @@ var charts = []sectionDescription{
 	{
 		Organization: [][]string{{Jobs, "Execution"}},
 		Charts: []chartDescription{
+			{
+				Title: "Active",
+				Metrics: []string{
+					"jobs.running_non_idle",
+				},
+			},
 			{
 				Title: "Currently Running",
 				Metrics: []string{

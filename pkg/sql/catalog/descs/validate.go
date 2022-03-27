@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 )
 
 // Validate returns any descriptor validation errors after validating using the
@@ -125,14 +124,8 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 func (c collectionBackedDereferencer) fastDescLookup(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	if uc, status := c.tc.uncommitted.getImmutableByID(id); uc != nil {
-		if status == checkedOutAtLeastOnce {
-			return nil, nil
-		}
+	if uc, _ := c.tc.uncommitted.getImmutableByID(id); uc != nil {
 		return uc, nil
-	}
-	if ld := c.tc.leased.cache.GetByID(id); ld != nil {
-		return ld.(lease.LeasedDescriptor).Underlying(), nil
 	}
 	return nil, nil
 }

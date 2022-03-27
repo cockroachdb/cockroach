@@ -180,7 +180,7 @@ func (m *Manager) createAndStartJobIfNoneExists(ctx context.Context) (bool, erro
 	record := jobs.Record{
 		JobID:         m.jr.MakeJobID(),
 		Description:   "reconciling span configurations",
-		Username:      security.RootUserName(),
+		Username:      security.NodeUserName(),
 		Details:       jobspb.AutoSpanConfigReconciliationDetails{},
 		Progress:      jobspb.AutoSpanConfigReconciliationProgress{},
 		NonCancelable: true,

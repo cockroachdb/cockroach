@@ -394,6 +394,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 // encountered) cleanup function that must be called in order to release the
 // resources.
 func (dsp *DistSQLPlanner) Run(
+	ctx context.Context,
 	planCtx *PlanningCtx,
 	txn *kv.Txn,
 	plan *PhysicalPlan,
@@ -402,7 +403,6 @@ func (dsp *DistSQLPlanner) Run(
 	finishedSetupFn func(),
 ) (cleanup func()) {
 	cleanup = func() {}
-	ctx := planCtx.ctx
 
 	flows := plan.GenerateFlowSpecs()
 	defer func() {
@@ -1267,7 +1267,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// Don't close the top-level plan from subqueries - someone else will handle
 	// that.
 	subqueryPlanCtx.ignoreClose = true
-	subqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(subqueryPlanCtx, subqueryPlan.plan)
+	subqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, subqueryPlanCtx, subqueryPlan.plan)
 	defer physPlanCleanup()
 	if err != nil {
 		return err
@@ -1294,7 +1294,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryRowReceiver := NewRowResultWriter(&rows)
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
-	dsp.Run(subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(ctx, subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)()
 	if err := subqueryRowReceiver.Err(); err != nil {
 		return err
 	}
@@ -1419,14 +1419,14 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 ) (cleanup func()) {
 	log.VEventf(ctx, 2, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
-	physPlan, physPlanCleanup, err := dsp.createPhysPlan(planCtx, plan)
+	physPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, planCtx, plan)
 	if err != nil {
 		recv.SetError(err)
 		return physPlanCleanup
 	}
 	dsp.finalizePlanWithRowCount(planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-	runCleanup := dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	runCleanup := dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 	return func() {
 		runCleanup()
 		physPlanCleanup()
@@ -1613,7 +1613,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata
 	postqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 
-	postqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(postqueryPlanCtx, postqueryPlan)
+	postqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, postqueryPlanCtx, postqueryPlan)
 	defer physPlanCleanup()
 	if err != nil {
 		return err
@@ -1627,6 +1627,6 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryResultWriter := &errOnlyResultWriter{}
 	postqueryRecv.resultWriter = postqueryResultWriter
 	postqueryRecv.batchWriter = postqueryResultWriter
-	dsp.Run(postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
 	return postqueryRecv.resultWriter.Err()
 }

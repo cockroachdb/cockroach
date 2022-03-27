@@ -2953,15 +2953,19 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.check_password_hash_format"></a><code>crdb_internal.check_password_hash_format(password: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function checks whether a string is a precomputed password hash. Returns the hash algorithm.</p>
 </span></td></tr>
-<tr><td><a name="crdb_internal.cluster_id"></a><code>crdb_internal.cluster_id() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns the cluster ID.</p>
+<tr><td><a name="crdb_internal.cluster_id"></a><code>crdb_internal.cluster_id() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns the logical cluster ID for this tenant.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.cluster_name"></a><code>crdb_internal.cluster_name() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the cluster name.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.cluster_setting_encoded_default"></a><code>crdb_internal.cluster_setting_encoded_default(setting: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the encoded default value of the given cluster setting.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.completed_migrations"></a><code>crdb_internal.completed_migrations() &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.create_join_token"></a><code>crdb_internal.create_join_token() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Creates a join token for use when adding a new node to a secure cluster.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.create_session_revival_token"></a><code>crdb_internal.create_session_revival_token() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generate a token that can be used to create a new session for the current user.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.decode_cluster_setting"></a><code>crdb_internal.decode_cluster_setting(setting: <a href="string.html">string</a>, value: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Decodes the given encoded value for a cluster setting.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.deserialize_session"></a><code>crdb_internal.deserialize_session(session: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function deserializes the serialized variables into the current session.</p>
 </span></td></tr>
@@ -3071,6 +3075,18 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="current_user"></a><code>current_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current user. This function is provided for compatibility with PostgreSQL.</p>
 </span></td></tr>
 <tr><td><a name="session_user"></a><code>session_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the session user. This function is provided for compatibility with PostgreSQL.</p>
+</span></td></tr>
+<tr><td><a name="to_regclass"></a><code>to_regclass(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual relation name to its OID</p>
+</span></td></tr>
+<tr><td><a name="to_regnamespace"></a><code>to_regnamespace(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual schema name to its OID</p>
+</span></td></tr>
+<tr><td><a name="to_regproc"></a><code>to_regproc(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual function or procedure name to its OID</p>
+</span></td></tr>
+<tr><td><a name="to_regprocedure"></a><code>to_regprocedure(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual function or procedure name(with argument types) to its OID</p>
+</span></td></tr>
+<tr><td><a name="to_regrole"></a><code>to_regrole(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual role name to its OID</p>
+</span></td></tr>
+<tr><td><a name="to_regtype"></a><code>to_regtype(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual type name to its OID</p>
 </span></td></tr>
 <tr><td><a name="version"></a><code>version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the node’s version of CockroachDB.</p>
 </span></td></tr></tbody>

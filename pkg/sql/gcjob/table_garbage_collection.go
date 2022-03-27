@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -71,6 +72,19 @@ func gcTables(
 			return errors.Wrapf(err, "clearing data for table %d", table.GetID())
 		}
 
+		delta, err := spanconfig.Delta(ctx, execCfg.SpanConfigSplitter, table, nil /* uncommitted */)
+		if err != nil {
+			return err
+		}
+
+		// Deduct from system.span_count appropriately.
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := execCfg.SpanConfigLimiter.ShouldLimit(ctx, txn, delta)
+			return err
+		}); err != nil {
+			return errors.Wrapf(err, "deducting span count for table %d", table.GetID())
+		}
+
 		// Finished deleting all the table data, now delete the table meta data.
 		if err := sql.DeleteTableDescAndZoneConfig(
 			ctx, execCfg.DB, execCfg.Settings, execCfg.Codec, table,
@@ -93,14 +107,7 @@ func ClearTableData(
 	sv *settings.Values,
 	table catalog.TableDescriptor,
 ) error {
-	// If DropTime isn't set, assume this drop request is from a version
-	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
-	if table.GetDropTime() == 0 {
-		log.Infof(ctx, "clearing data in chunks for table %d", table.GetID())
-		return sql.ClearTableDataInChunks(ctx, db, codec, sv, table, false /* traceKV */)
-	}
 	log.Infof(ctx, "clearing data for table %d", table.GetID())
-
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 	return clearSpanData(ctx, db, distSender, tableSpan)

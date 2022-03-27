@@ -18,7 +18,8 @@ upsert descriptor #104
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - DELETE_ONLY
   +    - ABSENT
@@ -105,6 +106,7 @@ create job #1 (non-cancelable: false): "CREATE INDEX idx1 ON defaultdb.public.t 
   descriptor IDs: [104]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -112,7 +114,7 @@ begin transaction #3
 ## PostCommitPhase stage 1 of 4 with 3 MutationType ops
 upsert descriptor #104
   ...
-       authorization: {}
+         userName: root
        currentStatuses:
   -    - DELETE_ONLY
   +    - WRITE_ONLY
@@ -130,14 +132,14 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
-update progress of schema change job #1
+update progress of schema change job #1: "PostCommitPhase stage 2 of 4 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+## PostCommitPhase stage 2 of 4 with 1 BackfillType op
 backfill indexes [2] from index #1 in table #104
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+## PostCommitPhase stage 3 of 4 with 1 ValidationType op
 validate forward indexes [2] in table #104
 commit transaction #5
 begin transaction #6
@@ -147,7 +149,8 @@ upsert descriptor #104
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
   -    - WRITE_ONLY
   -    - ABSENT
@@ -244,7 +247,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "3"
   +  version: "4"
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 commit transaction #6
 # end PostCommitPhase

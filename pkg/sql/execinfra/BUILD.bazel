@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "execinfra",
@@ -46,9 +47,9 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/execinfrapb",
-        "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
+        "//pkg/sql/rowinfra",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
@@ -84,7 +85,6 @@ go_test(
     size = "small",
     srcs = [
         "base_test.go",
-        "dep_test.go",
         "main_test.go",
     ],
     embed = [":execinfra"],
@@ -98,7 +98,6 @@ go_test(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
@@ -116,4 +115,16 @@ stringer(
     name = "gen-consumerstatus-stringer",
     src = "base.go",
     typ = "ConsumerStatus",
+)
+
+disallowed_imports_test(
+    "execinfra",
+    [
+        "//pkg/sql/colexec",
+        "//pkg/sql/colflow",
+        "//pkg/sql/flowinfra",
+        "//pkg/sql/row",
+        "//pkg/sql/rowexec",
+        "//pkg/sql/rowflow",
+    ],
 )

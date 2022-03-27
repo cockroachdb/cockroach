@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -2291,7 +2292,7 @@ var builtins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(dOid.DInt), int64(newVal), false /* isCalled */); err != nil {
+					evalCtx.Ctx(), uint32(dOid.DInt), int64(newVal), true /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2307,7 +2308,7 @@ var builtins = map[string]builtinDefinition{
 				oid := tree.MustBeDOid(args[0])
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(oid.DInt), int64(newVal), false /* isCalled */); err != nil {
+					evalCtx.Ctx(), uint32(oid.DInt), int64(newVal), true /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -4610,6 +4611,78 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"crdb_internal.cluster_setting_encoded_default": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"setting", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.AssertionFailedf("expected string value, got %T", args[0])
+				}
+				name := strings.ToLower(string(s))
+				rawSetting, ok := settings.Lookup(
+					name, settings.LookupForLocalAccess, ctx.Codec.ForSystemTenant(),
+				)
+				if !ok {
+					return nil, errors.Newf("unknown cluster setting '%s'", name)
+				}
+				setting, ok := rawSetting.(settings.NonMaskedSetting)
+				if !ok {
+					// If we arrive here, this means Lookup() did not properly
+					// ignore the masked setting, which is a bug in Lookup().
+					return nil, errors.AssertionFailedf("setting '%s' is masked", name)
+				}
+
+				return tree.NewDString(setting.EncodedDefault()), nil
+			},
+			Info:       "Returns the encoded default value of the given cluster setting.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"crdb_internal.decode_cluster_setting": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"setting", types.String},
+				{"value", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDString(args[0])
+				if !ok {
+					return nil, errors.AssertionFailedf("expected string value, got %T", args[0])
+				}
+				encoded, ok := tree.AsDString(args[1])
+				if !ok {
+					return nil, errors.AssertionFailedf("expected string value, got %T", args[1])
+				}
+				name := strings.ToLower(string(s))
+				rawSetting, ok := settings.Lookup(
+					name, settings.LookupForLocalAccess, ctx.Codec.ForSystemTenant(),
+				)
+				if !ok {
+					return nil, errors.Newf("unknown cluster setting '%s'", name)
+				}
+				setting, ok := rawSetting.(settings.NonMaskedSetting)
+				if !ok {
+					// If we arrive here, this means Lookup() did not properly
+					// ignore the masked setting, which is a bug in Lookup().
+					return nil, errors.AssertionFailedf("setting '%s' is masked", name)
+				}
+				repr, err := setting.DecodeToString(string(encoded))
+				if err != nil {
+					return nil, errors.Wrapf(err, "%v", name)
+				}
+				return tree.NewDString(repr), nil
+			},
+			Info:       "Decodes the given encoded value for a cluster setting.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	"crdb_internal.node_executable_version": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
@@ -4695,7 +4768,7 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDUuid(tree.DUuid{UUID: ctx.ClusterID}), nil
 			},
-			Info:       "Returns the cluster ID.",
+			Info:       "Returns the logical cluster ID for this tenant.",
 			Volatility: tree.VolatilityStable,
 		},
 	),
@@ -5473,7 +5546,7 @@ value if you rely on the HLC for accuracy.`,
 				// TODO(postamar): give the tree.EvalContext a useful interface
 				// instead of cobbling a descs.Collection in this way.
 				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
-				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack))
+				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack), nil /* monitor */)
 				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
@@ -5511,7 +5584,7 @@ value if you rely on the HLC for accuracy.`,
 				// TODO(postamar): give the tree.EvalContext a useful interface
 				// instead of cobbling a descs.Collection in this way.
 				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
-				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack))
+				descsCol := cf.MakeCollection(ctx.Context, descs.NewTemporarySchemaProvider(ctx.SessionDataStack), nil /* monitor */)
 				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
@@ -9201,7 +9274,7 @@ var errInsufficientPriv = pgerror.New(
 // to determine the appropriate offset from now which is likely to be safe for
 // follower reads. It is injected by followerreadsccl. An error may be returned
 // if an enterprise license is not installed.
-var EvalFollowerReadOffset func(clusterID uuid.UUID, _ *cluster.Settings) (time.Duration, error)
+var EvalFollowerReadOffset func(logicalClusterID uuid.UUID, _ *cluster.Settings) (time.Duration, error)
 
 func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 	if EvalFollowerReadOffset == nil {

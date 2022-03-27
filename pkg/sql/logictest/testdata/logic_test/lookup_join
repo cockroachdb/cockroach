@@ -665,3 +665,31 @@ SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) WHERE NOT EXISTS (
 )
 ----
 3  NULL
+
+# Regression test for #79384. Do not generate unnecessary cross-joins on a
+# lookup join's input when the lookup join uses a lookup expression.
+statement ok
+CREATE TABLE t79384a (
+  k INT NOT NULL
+)
+
+statement ok
+CREATE TABLE t79384b (
+  a INT,
+  b INT,
+  c INT,
+  INDEX (a, b, c)
+)
+
+statement ok
+INSERT INTO t79384a VALUES (1)
+
+statement ok
+INSERT INTO t79384b VALUES (1, 1, 1)
+
+# The joined tables have a single row each, so this query should never return
+# more than one row.
+query I
+SELECT k FROM t79384a INNER LOOKUP JOIN t79384b ON k = a AND b IN (1, 2, 3) AND c > 0
+----
+1

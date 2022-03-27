@@ -63,6 +63,7 @@ func writeJSONResponse(ctx context.Context, w http.ResponseWriter, code int, pay
 	res, err := json.Marshal(payload)
 	if err != nil {
 		apiV2InternalError(ctx, err, w)
+		return
 	}
 	_, _ = w.Write(res)
 }
@@ -345,6 +346,7 @@ func (a *apiV2Server) listRules(w http.ResponseWriter, r *http.Request) {
 	response, err := a.promRuleExporter.PrintAsYAML()
 	if err != nil {
 		apiV2InternalError(r.Context(), err, w)
+		return
 	}
 	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
 	_, _ = w.Write(response)

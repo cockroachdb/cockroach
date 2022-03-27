@@ -431,7 +431,7 @@ func (rq *replicateQueue) shouldQueue(
 			nonVoterReplicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			rq.allocator.scorerOptions(),
+			rq.allocator.scorerOptions(ctx),
 		)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found for voter, enqueuing")
@@ -445,7 +445,7 @@ func (rq *replicateQueue) shouldQueue(
 			nonVoterReplicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			rq.allocator.scorerOptions(),
+			rq.allocator.scorerOptions(ctx),
 		)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found for non-voter, enqueuing")
@@ -458,7 +458,7 @@ func (rq *replicateQueue) shouldQueue(
 	status := repl.LeaseStatusAt(ctx, now)
 	if status.IsValid() &&
 		rq.canTransferLeaseFrom(ctx, repl) &&
-		rq.allocator.ShouldTransferLease(ctx, conf, voterReplicas, status.Lease.Replica.StoreID, repl.leaseholderStats) {
+		rq.allocator.ShouldTransferLease(ctx, conf, voterReplicas, repl, repl.leaseholderStats) {
 
 		log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 		return true, 0
@@ -542,8 +542,6 @@ func (rq *replicateQueue) processOneChange(
 	// range descriptor.
 	desc, conf := repl.DescAndSpanConfig()
 
-	// Avoid taking action if the range has too many dead replicas to make quorum.
-	// Consider stores marked suspect as live in order to make this determination.
 	voterReplicas := desc.Replicas().VoterDescriptors()
 	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
@@ -1006,7 +1004,7 @@ func (rq *replicateQueue) findRemoveVoter(
 		candidates,
 		existingVoters,
 		existingNonVoters,
-		rq.allocator.scorerOptions(),
+		rq.allocator.scorerOptions(ctx),
 	)
 }
 
@@ -1049,7 +1047,11 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 		desc,
 		conf,
 		transferLeaseOptions{
+			goal:   leaseCountConvergence,
 			dryRun: dryRun,
+			// NB: This option means that the allocator is asked to not consider the
+			// current replica in its set of potential candidates.
+			excludeLeaseRepl: true,
 		},
 	)
 	return transferred == transferOK, err
@@ -1117,7 +1119,7 @@ func (rq *replicateQueue) removeNonVoter(
 		existingNonVoters,
 		existingVoters,
 		existingNonVoters,
-		rq.allocator.scorerOptions(),
+		rq.allocator.scorerOptions(ctx),
 	)
 	if err != nil {
 		return false, err
@@ -1299,9 +1301,9 @@ func (rq *replicateQueue) considerRebalance(
 	desc, conf := repl.DescAndSpanConfig()
 	rebalanceTargetType := voterTarget
 
-	scorerOpts := scorerOptions(rq.allocator.scorerOptions())
+	scorerOpts := scorerOptions(rq.allocator.scorerOptions(ctx))
 	if scatter {
-		scorerOpts = rq.allocator.scorerOptionsForScatter()
+		scorerOpts = rq.allocator.scorerOptionsForScatter(ctx)
 	}
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 		rangeUsageInfo := rangeUsageInfoForRepl(repl)
@@ -1407,10 +1409,10 @@ func (rq *replicateQueue) considerRebalance(
 		desc,
 		conf,
 		transferLeaseOptions{
-			goal:                     followTheWorkload,
-			checkTransferLeaseSource: true,
-			checkCandidateFullness:   true,
-			dryRun:                   dryRun,
+			goal:                   followTheWorkload,
+			excludeLeaseRepl:       false,
+			checkCandidateFullness: true,
+			dryRun:                 dryRun,
 		},
 	)
 	return false, err
@@ -1528,10 +1530,10 @@ const (
 
 type transferLeaseOptions struct {
 	goal transferLeaseGoal
-	// checkTransferLeaseSource, when false, tells `TransferLeaseTarget` to
-	// exclude the current leaseholder from consideration as a potential target
-	// (i.e. when the caller explicitly wants to shed its lease away).
-	checkTransferLeaseSource bool
+	// excludeLeaseRepl, when true, tells `TransferLeaseTarget` to exclude the
+	// current leaseholder from consideration as a potential target (i.e. when the
+	// caller explicitly wants to shed its lease away).
+	excludeLeaseRepl bool
 	// checkCandidateFullness, when false, tells `TransferLeaseTarget`
 	// to disregard the existing lease counts on candidates.
 	checkCandidateFullness bool

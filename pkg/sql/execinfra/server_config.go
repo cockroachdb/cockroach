@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -52,10 +52,16 @@ type ServerConfig struct {
 	Settings     *cluster.Settings
 	RuntimeStats RuntimeStats
 
-	ClusterID   *base.ClusterIDContainer
+	// LogicalClusterID is the logical cluster ID for this tenant.
+	LogicalClusterID *base.ClusterIDContainer
+
+	// ClusterName is the security string used to protect the RPC layer
+	// against connections to the wrong cluster.
 	ClusterName string
 
-	// NodeID is the id of the node on which this Server is running.
+	// NodeID is either the KV node ID or the SQL instance ID, depending
+	// on circumstances.
+	// TODO(knz,radu): Split this into different fields.
 	NodeID *base.SQLIDContainer
 
 	// Locality is the locality of the node on which this Server is running.
@@ -114,8 +120,8 @@ type ServerConfig struct {
 	ParentDiskMonitor *mon.BytesMonitor
 
 	Metrics            *DistSQLMetrics
-	RowMetrics         *row.Metrics
-	InternalRowMetrics *row.Metrics
+	RowMetrics         *rowinfra.Metrics
+	InternalRowMetrics *rowinfra.Metrics
 
 	// SQLLivenessReader provides access to reading the liveness of sessions.
 	SQLLivenessReader sqlliveness.Reader
@@ -310,9 +316,9 @@ func GetWorkMemLimit(flowCtx *FlowCtx) int64 {
 	return flowCtx.EvalCtx.SessionData().WorkMemLimit
 }
 
-// GetRowMetrics returns the proper RowMetrics for either internal or user
+// GetRowMetrics returns the proper rowinfra.Metrics for either internal or user
 // queries.
-func (flowCtx *FlowCtx) GetRowMetrics() *row.Metrics {
+func (flowCtx *FlowCtx) GetRowMetrics() *rowinfra.Metrics {
 	if flowCtx.EvalCtx.SessionData().Internal {
 		return flowCtx.Cfg.InternalRowMetrics
 	}

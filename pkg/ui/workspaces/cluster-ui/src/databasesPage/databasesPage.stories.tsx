@@ -87,6 +87,7 @@ const withData: DatabasesPageProps = {
       missingTables: [],
       nodesByRegionString:
         "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
+      numIndexRecommendations: 0,
     };
   }),
   onSortingChange: () => {},

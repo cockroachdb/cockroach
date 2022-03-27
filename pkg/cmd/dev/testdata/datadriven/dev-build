@@ -66,3 +66,11 @@ mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
 rm crdb-checkout/bin/stress
 cp sandbox/external/com_github_cockroachdb_stress/stress_/stress crdb-checkout/bin/stress
+
+exec
+dev build tests
+----
+bazel build //pkg:all_tests --config=test
+bazel info workspace --color=no
+mkdir crdb-checkout/bin
+bazel info bazel-bin --color=no

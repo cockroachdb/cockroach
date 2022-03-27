@@ -414,7 +414,7 @@ SELECT nextval('setval_test')
 2
 
 query I
-SELECT setval('setval_test', 10)
+SELECT setval('setval_test', 10, false)
 ----
 10
 
@@ -1825,7 +1825,7 @@ SELECT nextval('seq71135')
 ----
 201
 
-# The 2-parameter version of setval uses is_called=false.
+# The 2-parameter version of setval uses is_called=true.
 query I
 SELECT setval('seq71135'::regclass::oid, 500)
 ----
@@ -1834,17 +1834,17 @@ SELECT setval('seq71135'::regclass::oid, 500)
 query I
 SELECT lastval()
 ----
-201
+500
 
 query I
 SELECT currval('seq71135')
 ----
-201
+500
 
 query I
 SELECT nextval('seq71135')
 ----
-500
+501
 
 subtest sequence_in_txn
 
@@ -2072,3 +2072,161 @@ CREATE SEQUENCE seqas_error
   INCREMENT BY 1
   MAXVALUE 123456
   CACHE 1
+
+subtest sequence_in_transaction
+
+# create a sequence and nextval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE nextval_txn_seq
+
+query I
+SELECT nextval('nextval_txn_seq')
+----
+1
+
+statement ok
+END
+
+query I
+SELECT nextval('nextval_txn_seq')
+----
+2
+
+# create a sequence and setval in the same transaction then nextval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_nextval_seq
+
+query I
+SELECT setval('setval_txn_nextval_seq', 2)
+----
+2
+
+statement ok
+END
+
+query I
+SELECT nextval('setval_txn_nextval_seq')
+----
+3
+
+# create a sequence and setval then nextval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_nextval_txn_seq
+
+query I
+SELECT setval('setval_nextval_txn_seq', 2)
+----
+2
+
+query I
+SELECT nextval('setval_nextval_txn_seq')
+----
+3
+
+statement ok
+END
+
+# create a sequence and setval in the same transaction then currval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_currval_seq
+
+query I
+SELECT setval('setval_txn_currval_seq', 1)
+----
+1
+
+statement ok
+END
+
+query I
+SELECT currval('setval_txn_currval_seq')
+----
+1
+
+# create a sequence and setval then currval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_currval_txn_seq
+
+query I
+SELECT setval('setval_currval_txn_seq', 1)
+----
+1
+
+query I
+SELECT currval('setval_currval_txn_seq')
+----
+1
+
+statement ok
+END
+
+# create a sequence and setval in the same transaction then lastval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_lastval_seq
+
+query I
+SELECT setval('setval_txn_lastval_seq', 101)
+----
+101
+
+statement ok
+END
+
+query I
+SELECT lastval()
+----
+101
+
+# create a sequence and setval then lastval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_lastval_txn_seq
+
+query I
+SELECT setval('setval_lastval_txn_seq', 202)
+----
+202
+
+query I
+SELECT lastval()
+----
+202
+
+statement ok
+END
+
+statement ok
+CREATE SEQUENCE restart_seqas START WITH 5 RESTART 1
+
+query I
+select nextval('restart_seqas')
+----
+1
+
+statement ok
+ALTER SEQUENCE restart_seqas RESTART
+
+query I
+select nextval('restart_seqas')
+----
+5

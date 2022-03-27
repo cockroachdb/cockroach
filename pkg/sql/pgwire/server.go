@@ -146,6 +146,12 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	MetaConnFailures = metric.Metadata{
+		Name:        "sql.conn.failures",
+		Help:        "Number of sql conection failures",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaPGWireCancelTotal = metric.Metadata{
 		Name:        "sql.pgwire_cancel.total",
 		Help:        "Counter of the number of pgwire query cancel requests",
@@ -273,6 +279,7 @@ type ServerMetrics struct {
 	Conns                       *metric.Gauge
 	NewConns                    *metric.Counter
 	ConnLatency                 *metric.Histogram
+	ConnFailures                *metric.Counter
 	PGWireCancelTotalCount      *metric.Counter
 	PGWireCancelIgnoredCount    *metric.Counter
 	PGWireCancelSuccessfulCount *metric.Counter
@@ -289,6 +296,7 @@ func makeServerMetrics(
 		Conns:                       metric.NewGauge(MetaConns),
 		NewConns:                    metric.NewCounter(MetaNewConns),
 		ConnLatency:                 metric.NewLatency(MetaConnLatency, histogramWindow),
+		ConnFailures:                metric.NewCounter(MetaConnFailures),
 		PGWireCancelTotalCount:      metric.NewCounter(MetaPGWireCancelTotal),
 		PGWireCancelIgnoredCount:    metric.NewCounter(MetaPGWireCancelIgnored),
 		PGWireCancelSuccessfulCount: metric.NewCounter(MetaPGWireCancelSuccessful),
@@ -710,7 +718,13 @@ func (s *Server) TestingEnableAuthLogging() {
 // compatible with postgres.
 //
 // An error is returned if the initial handshake of the connection fails.
-func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType SocketType) error {
+func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType SocketType) (err error) {
+	defer func() {
+		if err != nil {
+			s.metrics.ConnFailures.Inc(1)
+		}
+	}()
+
 	ctx, rejectNewConnections, onCloseFn := s.registerConn(ctx)
 	defer onCloseFn()
 

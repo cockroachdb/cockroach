@@ -4674,12 +4674,27 @@ test               pg_catalog        zh-Hant              NULL                  
 ## information_schema.session_variables
 subtest variables
 
-## excluding crdb_version and session_id variables as they are generated on each
-## commit/session; distsql, experimental_distsql_planning and vectorize as they
-## depend on distsql and vectorization turned on/off. Also excluding
-## use_declarative_schema_changer, which can be adjusted based on the mode.
+## Excluding crdb_version and session_id variables as they are generated on each
+## commit/session.; , experimental_distsql_planning and vectorize as they
+## depend on distsql and vectorization turned on/off. Also excluding distsql,
+## vectorize, experimental_distsql_planning, use_declarative_schema_changer,
+## and distsql_workmem which can be adjusted based on the logic test mode.
 query TT colnames
-SELECT * FROM information_schema.session_variables where variable not in ('crdb_version', 'session_id', 'distsql', 'vectorize', 'experimental_distsql_planning', 'use_declarative_schema_changer')
+SELECT
+  *
+FROM
+  information_schema.session_variables
+WHERE
+  variable
+  NOT IN (
+      'crdb_version',
+      'session_id',
+      'distsql',
+      'vectorize',
+      'experimental_distsql_planning',
+      'use_declarative_schema_changer',
+      'distsql_workmem'
+    );
 ----
 variable                                              value
 allow_prepare_as_opt_plan                             off
@@ -4707,13 +4722,13 @@ default_with_oids                                     off
 disable_partially_distributed_plans                   off
 disable_plan_gists                                    off
 disallow_full_table_scans                             off
-distsql_workmem                                       64 MiB
 enable_drop_enum_value                                on
 enable_experimental_alter_column_type_general         off
 enable_experimental_stream_replication                off
 enable_implicit_select_for_update                     on
 enable_implicit_transaction_for_batch_statements      on
 enable_insert_fast_path                               on
+enable_multiple_modifications_of_table                off
 enable_multiregion_placement_policy                   off
 enable_seqscan                                        on
 enable_super_regions                                  off

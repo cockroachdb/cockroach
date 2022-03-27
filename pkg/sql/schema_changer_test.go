@@ -2262,6 +2262,8 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -2282,7 +2284,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	}
 
 	// A schema change that fails.
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		// This query stays blocked until the end of the test.
 		_, _ = sqlDB.Exec(`ALTER TABLE t.test DROP column v`)
 	}()
@@ -8228,4 +8232,35 @@ DROP VIEW IF EXISTS v
 		go runWorker(i)
 	}
 	wg.Wait()
+}
+
+func TestVirtualColumnNotAllowedInPkeyBefore22_1(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: make(chan struct{}),
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V21_2),
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec(`CREATE TABLE t (a INT NOT NULL AS (1+1) VIRTUAL, PRIMARY KEY (a))`)
+	require.Error(t, err)
+	require.Equal(t, "pq: cannot use virtual column \"a\" in primary key", err.Error())
+
+	_, err = sqlDB.Exec(`CREATE TABLE t (a INT NOT NULL AS (1+1) VIRTUAL PRIMARY KEY)`)
+	require.Error(t, err)
+	require.Equal(t, "pq: cannot use virtual column \"a\" in primary key", err.Error())
+
+	_, err = sqlDB.Exec(`CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL AS (1+1) VIRTUAL)`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b)`)
+	require.Error(t, err)
+	require.Equal(t, "pq: cannot use virtual column \"b\" in primary key", err.Error())
 }

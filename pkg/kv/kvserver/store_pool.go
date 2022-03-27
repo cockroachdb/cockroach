@@ -645,6 +645,16 @@ func (sp *StorePool) IsUnknown(storeID roachpb.StoreID) (bool, error) {
 	return status == storeStatusUnknown, nil
 }
 
+// IsDraining returns true if the given store's status is `storeStatusDraining`
+// or an error if the store is not found in the pool.
+func (sp *StorePool) IsDraining(storeID roachpb.StoreID) (bool, error) {
+	status, err := sp.storeStatus(storeID)
+	if err != nil {
+		return false, err
+	}
+	return status == storeStatusDraining, nil
+}
+
 // IsLive returns true if the node is considered alive by the store pool or an error
 // if the store is not found in the pool.
 func (sp *StorePool) IsLive(storeID roachpb.StoreID) (bool, error) {
@@ -755,6 +765,10 @@ type StoreList struct {
 	// candidateWritesPerSecond tracks writes-per-second stats for stores that are
 	// eligible to be rebalance targets.
 	candidateWritesPerSecond stat
+
+	// candidateWritesPerSecond tracks L0 sub-level stats for stores that are
+	// eligible to be rebalance targets.
+	candidateL0Sublevels stat
 }
 
 // Generates a new store list based on the passed in descriptors. It will
@@ -769,6 +783,7 @@ func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 		sl.candidateLogicalBytes.update(float64(desc.Capacity.LogicalBytes))
 		sl.candidateQueriesPerSecond.update(desc.Capacity.QueriesPerSecond)
 		sl.candidateWritesPerSecond.update(desc.Capacity.WritesPerSecond)
+		sl.candidateL0Sublevels.update(float64(desc.Capacity.L0Sublevels))
 	}
 	return sl
 }

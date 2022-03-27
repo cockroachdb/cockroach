@@ -13,9 +13,10 @@
 // +build execgen_template
 
 //
-// This file is the execgen template for default_cmp_proj_ops.eg.go. It's
-// formatted in a special way, so it's both valid Go and a valid text/template
-// input. This permits editing this file with editor support.
+// This file is the execgen template for default_cmp_proj_op.eg.go and
+// default_cmp_proj_const_op.eg.go. It's formatted in a special way, so it's
+// both valid Go and a valid text/template input. This permits editing this file
+// with editor support.
 //
 // */}}
 
@@ -31,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// {{range .}}
+// {{define "defaultCmpProjOp"}}
 
 type defaultCmp_KINDProjOp struct {
 	// {{if .IsRightConst}}

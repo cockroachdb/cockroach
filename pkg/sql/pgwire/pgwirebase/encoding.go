@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"strconv"
@@ -513,7 +514,7 @@ func DecodeDatum(
 	case FormatBinary:
 		switch id {
 		case oid.T_record:
-			return decodeBinaryTuple(evalCtx, t, b)
+			return decodeBinaryTuple(evalCtx, b)
 		case oid.T_bool:
 			if len(b) > 0 {
 				switch b[0] {
@@ -846,7 +847,7 @@ func validateStringBytes(b []byte) error {
 	return nil
 }
 
-//PGNumericSign indicates the sign of a numeric.
+// PGNumericSign indicates the sign of a numeric.
 //go:generate stringer -type=PGNumericSign
 type PGNumericSign uint16
 
@@ -989,53 +990,92 @@ func decodeBinaryArray(
 	return arr, nil
 }
 
-func decodeBinaryTuple(evalCtx *tree.EvalContext, t *types.T, b []byte) (tree.Datum, error) {
-	if len(b) < 4 {
-		return nil, pgerror.Newf(pgcode.Syntax, "tuple requires a 4 byte header for binary format")
+const tupleHeaderSize, oidSize, elementSize = 4, 4, 4
+
+func decodeBinaryTuple(evalCtx *tree.EvalContext, b []byte) (tree.Datum, error) {
+
+	bufferLength := len(b)
+	if bufferLength < tupleHeaderSize {
+		return nil, pgerror.Newf(
+			pgcode.Syntax,
+			"tuple requires a %d byte header for binary format. bufferLength=%d",
+			tupleHeaderSize, bufferLength)
 	}
 
-	totalLength := int32(len(b))
-	numberOfElements := int32(binary.BigEndian.Uint32(b[0:4]))
+	bufferStartIdx := 0
+	bufferEndIdx := bufferStartIdx + tupleHeaderSize
+	numberOfElements := int32(binary.BigEndian.Uint32(b[bufferStartIdx:bufferEndIdx]))
+	if numberOfElements < 0 {
+		return nil, pgerror.Newf(
+			pgcode.Syntax,
+			"tuple must have non-negative number of elements. numberOfElements=%d",
+			numberOfElements)
+	}
+	bufferStartIdx = bufferEndIdx
+
 	typs := make([]*types.T, numberOfElements)
 	datums := make(tree.Datums, numberOfElements)
-	curByte := int32(4)
-	curIdx := int32(0)
 
-	for curIdx < numberOfElements {
+	elementIdx := int32(0)
 
-		if totalLength < curByte+4 {
-			return nil, pgerror.Newf(pgcode.Syntax, "tuple requires 4 bytes for each element OID for binary format")
+	// getStateString is used to output current state in error messages
+	getSyntaxError := func(message string, args ...interface{}) error {
+		formattedMessage := fmt.Sprintf(message, args...)
+		return pgerror.Newf(
+			pgcode.Syntax,
+			"%s elementIdx=%d bufferLength=%d bufferStartIdx=%d bufferEndIdx=%d",
+			formattedMessage, elementIdx, bufferLength, bufferStartIdx, bufferEndIdx)
+	}
+
+	for elementIdx < numberOfElements {
+
+		bufferEndIdx = bufferStartIdx + oidSize
+		if bufferEndIdx < bufferStartIdx {
+			return nil, getSyntaxError("integer overflow reading element OID for binary format. ")
+		}
+		if bufferLength < bufferEndIdx {
+			return nil, getSyntaxError("insufficient bytes reading element OID for binary format. ")
 		}
 
-		elementOID := int32(binary.BigEndian.Uint32(b[curByte : curByte+4]))
-		elementType := types.OidToType[oid.Oid(elementOID)]
-		typs[curIdx] = elementType
-		curByte = curByte + 4
+		elementOID := int32(binary.BigEndian.Uint32(b[bufferStartIdx:bufferEndIdx]))
+		elementType, ok := types.OidToType[oid.Oid(elementOID)]
+		if !ok {
+			return nil, getSyntaxError("element type not found for OID %d. ", elementOID)
+		}
+		typs[elementIdx] = elementType
+		bufferStartIdx = bufferEndIdx
 
-		if totalLength < curByte+4 {
-			return nil, pgerror.Newf(pgcode.Syntax, "tuple requires 4 bytes for the size of each element for binary format")
+		bufferEndIdx = bufferStartIdx + elementSize
+		if bufferEndIdx < bufferStartIdx {
+			return nil, getSyntaxError("integer overflow reading element size for binary format. ")
+		}
+		if bufferLength < bufferEndIdx {
+			return nil, getSyntaxError("insufficient bytes reading element size for binary format. ")
 		}
 
-		elementLength := int32(binary.BigEndian.Uint32(b[curByte : curByte+4]))
-		curByte = curByte + 4
-
-		if elementLength == -1 {
-			datums[curIdx] = tree.DNull
+		bytesToRead := binary.BigEndian.Uint32(b[bufferStartIdx:bufferEndIdx])
+		bufferStartIdx = bufferEndIdx
+		if int32(bytesToRead) == -1 {
+			datums[elementIdx] = tree.DNull
 		} else {
-			if totalLength < curByte+elementLength {
-				return nil, pgerror.Newf(pgcode.Syntax, "tuple requires %d bytes for element %d for binary format", elementLength, curIdx)
+			bufferEndIdx = bufferStartIdx + int(bytesToRead)
+			if bufferEndIdx < bufferStartIdx {
+				return nil, getSyntaxError("integer overflow reading element for binary format. ")
+			}
+			if bufferLength < bufferEndIdx {
+				return nil, getSyntaxError("insufficient bytes reading element for binary format. ")
 			}
 
-			colDatum, err := DecodeDatum(evalCtx, elementType, FormatBinary, b[curByte:curByte+elementLength])
+			colDatum, err := DecodeDatum(evalCtx, elementType, FormatBinary, b[bufferStartIdx:bufferEndIdx])
 
 			if err != nil {
 				return nil, err
 			}
 
-			curByte = curByte + elementLength
-			datums[curIdx] = colDatum
+			bufferStartIdx = bufferEndIdx
+			datums[elementIdx] = colDatum
 		}
-		curIdx++
+		elementIdx++
 	}
 
 	tupleTyps := types.MakeTuple(typs)

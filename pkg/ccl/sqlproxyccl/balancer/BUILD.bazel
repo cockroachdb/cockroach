@@ -6,6 +6,7 @@ go_library(
         "balancer.go",
         "conn.go",
         "conn_tracker.go",
+        "metrics.go",
         "pod.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer",
@@ -14,10 +15,14 @@ go_library(
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/roachpb",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/randutil",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_marusama_semaphore//:semaphore",
     ],
 )
 
@@ -32,7 +37,13 @@ go_test(
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/roachpb",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

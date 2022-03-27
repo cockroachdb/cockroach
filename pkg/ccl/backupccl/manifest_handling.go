@@ -20,7 +20,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -325,10 +324,12 @@ func readManifest(
 		if err != nil {
 			return BackupManifest{}, 0, err
 		}
-		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
+		plaintextBytes, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
 		if err != nil {
 			return BackupManifest{}, 0, err
 		}
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = plaintextBytes
 	}
 
 	if isGZipped(descBytes) {
@@ -378,7 +379,6 @@ func readManifest(
 			t.ModificationTime = hlc.Timestamp{WallTime: 1}
 		}
 	}
-
 	return backupManifest, approxMemSize, nil
 }
 
@@ -408,10 +408,12 @@ func readBackupPartitionDescriptor(
 		if err != nil {
 			return BackupPartitionDescriptor{}, 0, err
 		}
-		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
+		plaintextData, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
 		if err != nil {
 			return BackupPartitionDescriptor{}, 0, err
 		}
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = plaintextData
 	}
 
 	if isGZipped(descBytes) {
@@ -462,7 +464,7 @@ func readTableStatistics(
 		if err != nil {
 			return nil, err
 		}
-		statsBytes, err = storageccl.DecryptFile(statsBytes, encryptionKey)
+		statsBytes, err = storageccl.DecryptFile(ctx, statsBytes, encryptionKey, nil /* mm */)
 		if err != nil {
 			return nil, err
 		}
@@ -531,45 +533,6 @@ func getChecksum(data []byte) ([]byte, error) {
 			`"It never returns an error." -- https://golang.org/pkg/hash`)
 	}
 	return hash.Sum(nil)[:checksumSizeBytes], nil
-}
-
-func getEncryptionKey(
-	ctx context.Context,
-	encryption *jobspb.BackupEncryptionOptions,
-	settings *cluster.Settings,
-	ioConf base.ExternalIODirConfig,
-) ([]byte, error) {
-	if encryption == nil {
-		return nil, errors.New("FileEncryptionOptions is nil when retrieving encryption key")
-	}
-	switch encryption.Mode {
-	case jobspb.EncryptionMode_Passphrase:
-		return encryption.Key, nil
-	case jobspb.EncryptionMode_KMS:
-		// Contact the selected KMS to derive the decrypted data key.
-		// TODO(pbardea): Add a check here if encryption.KMSInfo is unexpectedly nil
-		// here to avoid a panic, and return an error instead.
-		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
-			settings: settings,
-			conf:     &ioConf,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		defer func() {
-			_ = kms.Close()
-		}()
-
-		plaintextDataKey, err := kms.Decrypt(ctx, encryption.KMSInfo.EncryptedDataKey)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to decrypt data key")
-		}
-
-		return plaintextDataKey, nil
-	}
-
-	return nil, errors.New("invalid encryption mode")
 }
 
 // writeBackupPartitionDescriptor writes metadata (containing a locality KV and
@@ -1102,92 +1065,6 @@ func sanitizeLocalityKV(kv string) string {
 	return string(sanitizedKV)
 }
 
-// readEncryptionOptions takes in a backup location and tries to find
-// and return all encryption option files in the backup. A backup
-// normally only creates one encryption option file, but if the user
-// uses ALTER BACKUP to add new keys, a new encryption option file
-// will be placed side by side with the old one. Since the old file
-// is still valid, as we never want to modify or delete an existing
-// backup, we return both new and old files.
-func readEncryptionOptions(
-	ctx context.Context, src cloud.ExternalStorage,
-) ([]jobspb.EncryptionInfo, error) {
-	const encryptionReadErrorMsg = `could not find or read encryption information`
-
-	files, err := getEncryptionInfoFiles(ctx, src)
-	if err != nil {
-		return nil, errors.Mark(errors.Wrap(err, encryptionReadErrorMsg), errEncryptionInfoRead)
-	}
-	var encInfo []jobspb.EncryptionInfo
-	// The user is more likely to pass in a KMS URI that was used to
-	// encrypt the backup recently, so we iterate the ENCRYPTION-INFO
-	// files from latest to oldest.
-	for i := len(files) - 1; i >= 0; i-- {
-		r, err := src.ReadFile(ctx, files[i])
-		if err != nil {
-			return nil, errors.Wrap(err, encryptionReadErrorMsg)
-		}
-		defer r.Close(ctx)
-
-		encInfoBytes, err := ioctx.ReadAll(ctx, r)
-		if err != nil {
-			return nil, errors.Wrap(err, encryptionReadErrorMsg)
-		}
-		var currentEncInfo jobspb.EncryptionInfo
-		if err := protoutil.Unmarshal(encInfoBytes, &currentEncInfo); err != nil {
-			return nil, err
-		}
-		encInfo = append(encInfo, currentEncInfo)
-	}
-	return encInfo, nil
-}
-
-func getEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]string, error) {
-	var files []string
-	// Look for all files in dest that start with "/ENCRYPTION-INFO"
-	// and return them.
-	err := dest.List(ctx, "", "", func(p string) error {
-		paths := strings.Split(p, "/")
-		p = paths[len(paths)-1]
-		if match := strings.HasPrefix(p, backupEncryptionInfoFile); match {
-			files = append(files, p)
-		}
-
-		return nil
-	}, 0 /*limit*/)
-	if len(files) < 1 {
-		return nil, errors.New("no ENCRYPTION-INFO files found")
-	}
-
-	return files, err
-}
-
-func writeEncryptionInfoIfNotExists(
-	ctx context.Context, opts *jobspb.EncryptionInfo, dest cloud.ExternalStorage,
-) error {
-	r, err := dest.ReadFile(ctx, backupEncryptionInfoFile)
-	if err == nil {
-		r.Close(ctx)
-		// If the file already exists, then we don't need to create a new one.
-		return nil
-	}
-
-	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-		return errors.Wrapf(err,
-			"returned an unexpected error when checking for the existence of %s file",
-			backupEncryptionInfoFile)
-	}
-
-	buf, err := protoutil.Marshal(opts)
-	if err != nil {
-		return err
-	}
-	if err := cloud.WriteFile(ctx, dest, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
-		return err
-	}
-	return nil
-}
-
 // RedactURIForErrorMessage redacts any storage secrets before returning a URI which is safe to
 // return to the client in an error message.
 func RedactURIForErrorMessage(uri string) string {
@@ -1255,7 +1132,7 @@ func ListFullBackupsInCollection(
 			backupPaths = append(backupPaths, f)
 		}
 		return nil
-	}, 0 /*limit*/); err != nil {
+	}); err != nil {
 		return nil, err
 	}
 	for i, backupPath := range backupPaths {
@@ -1287,8 +1164,10 @@ func readLatestCheckpointFile(
 		p = strings.TrimPrefix(p, "/")
 		checkpoint = strings.TrimSuffix(p, backupManifestChecksumSuffix)
 		checkpointFound = true
-		return nil
-	}, 1 /*limit*/)
+		// We only want the first checkpoint so return an error that it is
+		// done listing.
+		return cloud.ErrListingDone
+	})
 	// If the list failed because the storage used does not support listing,
 	// such as http we can try reading the non timestamped backup checkpoint
 	// directly. This can still fail if it is a mixed cluster and the
@@ -1300,7 +1179,7 @@ func readLatestCheckpointFile(
 		if err == nil {
 			return r, nil
 		}
-	} else if err != nil {
+	} else if err != nil && !errors.Is(err, cloud.ErrListingDone) {
 		return nil, err
 	}
 

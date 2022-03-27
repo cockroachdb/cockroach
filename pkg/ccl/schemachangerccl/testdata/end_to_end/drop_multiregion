@@ -19,7 +19,7 @@ checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 12 MutationType ops
@@ -28,7 +28,8 @@ upsert descriptor #105
    type:
      arrayTypeId: 107
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    jobId: "1"
      enumMembers:
      - logicalRepresentation: us-east1
@@ -39,6 +40,7 @@ upsert descriptor #105
   -  - 108
      regionConfig:
        primaryRegion: us-east1
+       zoneConfigExtensions: {}
   -  version: "2"
   +  version: "3"
 upsert descriptor #107
@@ -46,7 +48,8 @@ upsert descriptor #107
        family: ArrayFamily
        oid: 100107
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    jobId: "1"
      id: 107
      kind: ALIAS
@@ -62,9 +65,9 @@ upsert descriptor #108
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -116,7 +119,6 @@ upsert descriptor #108
   +    - 19
   +    - 20
   +    - 21
-  +    - 22
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -141,14 +143,6 @@ upsert descriptor #108
   +          descriptorId: 108
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 108
-  +          userName: public
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -371,6 +365,7 @@ create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.ta
   descriptor IDs: [105 107 108]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -380,13 +375,14 @@ upsert descriptor #105
    type:
      arrayTypeId: 107
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    jobId: "1"
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-     regionConfig:
        primaryRegion: us-east1
+       zoneConfigExtensions: {}
   -  version: "3"
   +  version: "4"
 upsert descriptor #107
@@ -394,7 +390,8 @@ upsert descriptor #107
        family: ArrayFamily
        oid: 100107
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    jobId: "1"
      id: 107
      kind: ALIAS
@@ -408,9 +405,9 @@ upsert descriptor #108
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -462,7 +459,6 @@ upsert descriptor #108
   -    - 19
   -    - 20
   -    - 21
-  -    - 22
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -487,14 +483,6 @@ upsert descriptor #108
   -          descriptorId: 108
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 108
-  -          userName: public
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -712,8 +700,9 @@ upsert descriptor #108
 write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
 create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [108]
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase
 
 setup
@@ -731,7 +720,7 @@ checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 8 MutationType ops
@@ -740,7 +729,8 @@ upsert descriptor #105
    type:
      arrayTypeId: 107
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    jobId: "1"
      enumMembers:
      - logicalRepresentation: us-east1
@@ -751,6 +741,7 @@ upsert descriptor #105
   -  - 109
      regionConfig:
        primaryRegion: us-east1
+       zoneConfigExtensions: {}
   -  version: "5"
   +  version: "6"
 upsert descriptor #109
@@ -758,9 +749,9 @@ upsert descriptor #109
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -802,7 +793,6 @@ upsert descriptor #109
   +    - 13
   +    - 14
   +    - 15
-  +    - 16
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -827,14 +817,6 @@ upsert descriptor #109
   +          descriptorId: 109
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 109
-  +          userName: public
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -975,6 +957,7 @@ create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.ta
   descriptor IDs: [105 109]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -984,13 +967,14 @@ upsert descriptor #105
    type:
      arrayTypeId: 107
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    jobId: "1"
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-     regionConfig:
        primaryRegion: us-east1
+       zoneConfigExtensions: {}
   -  version: "6"
   +  version: "7"
 upsert descriptor #109
@@ -998,9 +982,9 @@ upsert descriptor #109
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -1042,7 +1026,6 @@ upsert descriptor #109
   -    - 13
   -    - 14
   -    - 15
-  -    - 16
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -1067,14 +1050,6 @@ upsert descriptor #109
   -          descriptorId: 109
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 109
-  -          userName: public
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -1210,8 +1185,9 @@ upsert descriptor #109
 write *eventpb.DropTable to event log for descriptor #109: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
 create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
   descriptor IDs: [109]
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase
 
 test
@@ -1232,7 +1208,8 @@ delete object namespace entry {104 106 _crdb_internal_region} -> 107
 upsert descriptor #104
    database:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1346,7 +1323,8 @@ upsert descriptor #105
    type:
      arrayTypeId: 107
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1435,15 +1413,16 @@ upsert descriptor #105
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-     regionConfig:
        primaryRegion: us-east1
+       zoneConfigExtensions: {}
   -  version: "7"
   +  state: DROP
   +  version: "8"
 upsert descriptor #106
    schema:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1550,7 +1529,8 @@ upsert descriptor #107
        family: ArrayFamily
        oid: 100107
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1662,6 +1642,7 @@ create job #1 (non-cancelable: true): "DROP DATABASE multi_region_test_db CASCAD
   descriptor IDs: [104 105 106 107]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -1673,6 +1654,6 @@ delete descriptor #106
 delete descriptor #107
 deleting zone config for #104
 write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹multi_region_test_db› CASCADE
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 # end PostCommitPhase

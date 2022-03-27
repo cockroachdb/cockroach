@@ -24,4 +24,5 @@ $(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release \
   --smtp-port=587 \
   --publish-date="$PUBLISH_DATE" \
   --prep-date="$PREP_DATE" \
+  --days-before-prep-date=$DAYS_BEFORE_PREP_DATE \
   --to=$to

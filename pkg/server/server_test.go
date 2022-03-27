@@ -81,7 +81,7 @@ func TestSelfBootstrap(t *testing.T) {
 	}
 	defer s.Stopper().Stop(context.Background())
 
-	if s.RPCContext().ClusterID.Get() == uuid.Nil {
+	if s.RPCContext().StorageClusterID.Get() == uuid.Nil {
 		t.Error("cluster ID failed to be set on the RPC context")
 	}
 }
@@ -1232,7 +1232,7 @@ func Test_makeFakeNodeStatuses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := makeFakeNodeStatuses(tt.mapping)
+			result := makeFakeNodeStatuses(tt.mapping, nil, nil)
 			var err error
 			if err = checkFakeStatuses(result, tt.storesSeen); err != nil {
 				result = nil

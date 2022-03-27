@@ -115,7 +115,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.SQLLivenessReader = execCfg.SQLLiveness
 	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
 	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
-	evalCtx.ClusterID = execCfg.ClusterID()
+	evalCtx.ClusterID = execCfg.LogicalClusterID()
 	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	evalCtx.NodeID = execCfg.NodeID
 	evalCtx.Locality = execCfg.Locality
@@ -187,6 +187,8 @@ type planner struct {
 	preparedStatements preparedStatementsAccessor
 
 	sqlCursors sqlCursors
+
+	createdSequences createdSequences
 
 	// avoidLeasedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
@@ -395,7 +397,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Tenant = p
 	p.extendedEvalCtx.Regions = p
 	p.extendedEvalCtx.JoinTokenCreator = p
-	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
+	p.extendedEvalCtx.ClusterID = execCfg.LogicalClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
@@ -411,6 +413,7 @@ func newInternalPlanner(
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
+	p.createdSequences = emptyCreatedSequences{}
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create

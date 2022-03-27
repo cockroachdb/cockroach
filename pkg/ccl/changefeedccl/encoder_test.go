@@ -682,8 +682,8 @@ func TestAvroSchemaNaming(t *testing.T) {
 		sqlDB.Exec(t, `UPDATE movr.drivers SET vehicle_id = 1 WHERE id=1`)
 
 		assertPayloads(t, multiFamilyFeed, []string{
-			`drivers: {"id":{"long":1}}->{"after":{"driversprimary":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
-			`drivers: {"id":{"long":1}}->{"after":{"driversvolatile":{"vehicle_id":{"long":1}}}}`,
+			`drivers.primary: {"id":{"long":1}}->{"after":{"drivers_u002e_primary":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			`drivers.volatile: {"id":{"long":1}}->{"after":{"drivers_u002e_volatile":{"vehicle_id":{"long":1}}}}`,
 		})
 
 		assertRegisteredSubjects(t, foo.registry, []string{
