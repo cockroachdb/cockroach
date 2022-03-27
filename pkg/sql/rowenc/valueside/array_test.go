@@ -123,7 +123,7 @@ func TestArrayEncoding(t *testing.T) {
 		})
 
 		t.Run("decode "+test.name, func(t *testing.T) {
-			d, _, err := decodeArray(&tree.DatumAlloc{}, test.datum.ParamTyp, test.encoding)
+			d, _, err := decodeArray(&tree.DatumAlloc{}, types.MakeArray(test.datum.ParamTyp), test.encoding)
 			hasNulls := d.(*tree.DArray).HasNulls
 			if test.datum.HasNulls != hasNulls {
 				t.Fatalf("expected %v to have HasNulls=%t, got %t", test.encoding, test.datum.HasNulls, hasNulls)
