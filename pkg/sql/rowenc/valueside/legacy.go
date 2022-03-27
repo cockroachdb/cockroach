@@ -334,7 +334,7 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		datum, _, err := decodeArray(a, typ.ArrayContents(), v)
+		datum, _, err := decodeArray(a, typ, v)
 		// TODO(yuzefovich): do we want to create a new object via tree.DatumAlloc?
 		return datum, err
 	case types.JsonFamily:
