@@ -31,12 +31,8 @@ func (m *ExecutorMetrics) MetricStruct() {}
 
 // SchedulerMetrics are metrics specific to job scheduler daemon.
 type SchedulerMetrics struct {
-	// Number of schedules that were ready to execute.
-	ReadyToRun *metric.Gauge
 	// Number of scheduled jobs started.
 	NumStarted *metric.Gauge
-	// Number of jobs started by schedules that are currently running.
-	NumRunning *metric.Gauge
 	// Number of schedules rescheduled due to SKIP policy.
 	RescheduleSkip *metric.Gauge
 	// Number of schedules rescheduled due to WAIT policy.
@@ -51,20 +47,6 @@ type SchedulerMetrics struct {
 // MakeSchedulerMetrics returns metrics for scheduled job daemon.
 func MakeSchedulerMetrics() SchedulerMetrics {
 	return SchedulerMetrics{
-		ReadyToRun: metric.NewGauge(metric.Metadata{
-			Name:        "schedules.round.schedules-ready-to-run",
-			Help:        "The number of jobs ready to execute",
-			Measurement: "Schedules",
-			Unit:        metric.Unit_COUNT,
-		}),
-
-		NumRunning: metric.NewGauge(metric.Metadata{
-			Name:        "schedules.round.num-jobs-running",
-			Help:        "The number of jobs started by schedules that are currently running",
-			Measurement: "Jobs",
-			Unit:        metric.Unit_COUNT,
-		}),
-
 		NumStarted: metric.NewGauge(metric.Metadata{
 			Name:        "schedules.round.jobs-started",
 			Help:        "The number of jobs started",

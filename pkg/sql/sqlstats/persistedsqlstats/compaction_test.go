@@ -20,19 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -202,76 +197,6 @@ func TestSQLStatsCompactor(t *testing.T) {
 	}
 }
 
-func TestAtMostOneSQLStatsCompactionJob(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	var serverArgs base.TestServerArgs
-	var allowRequest chan struct{}
-
-	serverArgs.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
-		AOSTClause: "AS OF SYSTEM TIME '-1us'",
-	}
-
-	params := base.TestClusterArgs{ServerArgs: serverArgs}
-	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-
-	allowRequest = make(chan struct{})
-	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: createStatsRequestFilter(t, allowRequest),
-	}
-
-	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 3 /* numNodes */, params)
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ServerConn(0 /* idx */)
-	sqlDB := sqlutils.MakeSQLRunner(conn)
-	server := tc.Server(0 /* idx */)
-
-	jobID, err := launchSQLStatsCompactionJob(server)
-	require.NoError(t, err)
-
-	// We wait until the job appears in the system.jobs table.
-	sqlDB.CheckQueryResultsRetry(
-		t,
-		fmt.Sprintf(`SELECT count(*) FROM system.jobs where id = %d`, jobID),
-		[][]string{{"1"}},
-	)
-
-	allowRequest <- struct{}{}
-
-	// Launching a second job should fail here since we are still blocking the
-	// the first job's execution through allowRequest. (Since we need to send
-	// struct{}{} twice into the channel to fully unblock it.)
-	_, err = launchSQLStatsCompactionJob(server)
-	expected := persistedsqlstats.ErrConcurrentSQLStatsCompaction.Error()
-	if !testutils.IsError(err, expected) {
-		t.Fatalf("expected '%s' error, but got %+v", expected, err)
-	}
-
-	allowRequest <- struct{}{}
-	close(allowRequest)
-
-	// We wait until the first job finishes.
-	sqlDB.CheckQueryResultsRetry(
-		t,
-		fmt.Sprintf(`SELECT count(*) FROM system.jobs where id = %d AND status = 'succeeded'`, jobID),
-		[][]string{{"1"}},
-	)
-
-	// Launching the job now should succeed.
-	jobID, err = launchSQLStatsCompactionJob(server)
-	require.NoError(t, err)
-
-	// Wait until the second job to finish for sanity check.
-	server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-	sqlDB.CheckQueryResultsRetry(
-		t,
-		fmt.Sprintf(`SELECT count(*) FROM system.jobs where id = %d AND status = 'succeeded'`, jobID),
-		[][]string{{"1"}},
-	)
-}
-
 func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -310,7 +235,6 @@ func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 func launchSQLStatsCompactionJob(server serverutils.TestServerInterface) (jobspb.JobID, error) {
 	return persistedsqlstats.CreateCompactionJob(
 		context.Background(), nil /* createdByInfo */, nil, /* txn */
-		server.InternalExecutor().(sqlutil.InternalExecutor),
 		server.JobRegistry().(*jobs.Registry),
 	)
 }
@@ -366,39 +290,4 @@ ORDER BY aggregated_ts`
 	require.NoError(t, rows.Close())
 
 	return stmtFingerprints, txnFingerprints
-}
-
-func createStatsRequestFilter(
-	t *testing.T, allowToProgress chan struct{},
-) kvserverbase.ReplicaRequestFilter {
-	// Start a test server here, so we can get the descriptor ID for the system
-	// table. This allows us to not hardcode the descriptor ID.
-	s, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer func() {
-		s.Stopper().Stop(context.Background())
-		err := sqlConn.Close()
-		require.NoError(t, err)
-	}()
-	sqlDB := sqlutils.MakeSQLRunner(sqlConn)
-
-	stmtStatsTableID, txnStatsTableID := getStatsTablesIDs(t, sqlDB)
-	return func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
-		if req, ok := ba.GetArg(roachpb.Scan); ok {
-			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
-			if descpb.ID(tableID) == stmtStatsTableID || descpb.ID(tableID) == txnStatsTableID {
-				<-allowToProgress
-				<-allowToProgress
-			}
-		}
-		return nil
-	}
-}
-
-func getStatsTablesIDs(
-	t *testing.T, sqlDB *sqlutils.SQLRunner,
-) (stmtStatsTableID, txnStatsTableID descpb.ID) {
-	stmt :=
-		"select 'system.statement_statistics'::regclass::oid, 'system.transaction_statistics'::regclass::oid"
-	sqlDB.QueryRow(t, stmt).Scan(&stmtStatsTableID, &txnStatsTableID)
-	return stmtStatsTableID, txnStatsTableID
 }
