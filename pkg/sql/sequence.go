@@ -447,7 +447,6 @@ func assignSequenceOptions(
 	sequenceParentID descpb.ID,
 	existingType *types.T,
 ) error {
-
 	wasAscending := opts.Increment > 0
 
 	// Set the default integer type of a sequence.
@@ -555,6 +554,17 @@ func assignSequenceOptions(
 			}
 		case tree.SeqOptStart:
 			opts.Start = *option.IntVal
+		case tree.SeqOptRestart:
+			fmt.Println("Run at right after case tree.SeqOptResta")
+			if !option.OptionalVal {
+				fmt.Print("when OptionVal is false:")
+				opts.Restart = &opts.Start
+				fmt.Println("Success")
+			} else {
+				fmt.Print("when OptionVal is true:")
+				opts.Restart = option.IntVal
+				fmt.Println("Success")
+			}
 		case tree.SeqOptVirtual:
 			opts.Virtual = true
 		case tree.SeqOptOwnedBy:

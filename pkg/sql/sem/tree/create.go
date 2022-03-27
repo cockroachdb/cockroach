@@ -1703,6 +1703,19 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			} else {
 				ctx.Printf("%d", *option.IntVal)
 			}
+		case SeqOptRestart:
+			ctx.WriteString(option.Name)
+			ctx.WriteByte(' ')
+			if option.OptionalWord {
+				ctx.WriteString("WITH ")
+			}
+			// TODO(knz): replace all this with ctx.FormatNode if/when
+			// the restart option supports expressions.
+			if ctx.flags.HasFlags(FmtHideConstants) {
+				ctx.WriteByte('0')
+			} else if option.OptionalVal {
+				ctx.Printf("%d", *option.IntVal)
+			}
 		case SeqOptIncrement:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
@@ -1745,6 +1758,9 @@ type SequenceOption struct {
 	OptionalWord bool
 
 	ColumnItemVal *ColumnItem
+
+	// Whether the IntVal is optional.
+	OptionalVal bool
 }
 
 // Names of options on CREATE SEQUENCE.
@@ -1758,6 +1774,7 @@ const (
 	SeqOptMinValue  = "MINVALUE"
 	SeqOptMaxValue  = "MAXVALUE"
 	SeqOptStart     = "START"
+	SeqOptRestart   = "RESTART"
 	SeqOptVirtual   = "VIRTUAL"
 
 	// Avoid unused warning for constants.

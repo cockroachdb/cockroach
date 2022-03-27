@@ -1179,6 +1179,7 @@ unreserved_keyword ::=
 	| 'REPLACE'
 	| 'REPLICATION'
 	| 'RESET'
+	| 'RESTART'
 	| 'RESTORE'
 	| 'RESTRICT'
 	| 'RESTRICTED'
@@ -1961,8 +1962,8 @@ alter_rename_sequence_stmt ::=
 	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' sequence_name
 
 alter_sequence_options_stmt ::=
-	'ALTER' 'SEQUENCE' sequence_name sequence_option_list
-	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' sequence_name sequence_option_list
+	'ALTER' 'SEQUENCE' sequence_name alter_sequence_option_list
+	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' sequence_name alter_sequence_option_list
 
 alter_sequence_set_schema_stmt ::=
 	'ALTER' 'SEQUENCE' relation_expr 'SET' 'SCHEMA' schema_name
@@ -2529,8 +2530,8 @@ locality ::=
 alter_index_cmds ::=
 	( alter_index_cmd ) ( ( ',' alter_index_cmd ) )*
 
-sequence_option_list ::=
-	( sequence_option_elem ) ( ( sequence_option_elem ) )*
+alter_sequence_option_list ::=
+	( alter_sequence_option_elem ) ( ( alter_sequence_option_elem ) )*
 
 region_name ::=
 	name
@@ -2766,6 +2767,9 @@ create_as_table_defs ::=
 enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
 
+sequence_option_list ::=
+	( sequence_option_elem ) ( ( sequence_option_elem ) )*
+
 family_name ::=
 	name
 
@@ -2946,21 +2950,11 @@ var_set_list ::=
 alter_index_cmd ::=
 	partition_by_index
 
-sequence_option_elem ::=
-	'AS' typename
-	| 'NO' 'CYCLE'
-	| 'OWNED' 'BY' 'NONE'
-	| 'OWNED' 'BY' column_path
-	| 'CACHE' signed_iconst64
-	| 'INCREMENT' signed_iconst64
-	| 'INCREMENT' 'BY' signed_iconst64
-	| 'MINVALUE' signed_iconst64
-	| 'NO' 'MINVALUE'
-	| 'MAXVALUE' signed_iconst64
-	| 'NO' 'MAXVALUE'
-	| 'START' signed_iconst64
-	| 'START' 'WITH' signed_iconst64
-	| 'VIRTUAL'
+alter_sequence_option_elem ::=
+	sequence_option_elem
+	| 'RESTART'
+	| 'RESTART' signed_iconst64
+	| 'RESTART' 'WITH' signed_iconst64
 
 backup_kms ::=
 	'NEW_KMS' '=' string_or_placeholder_opt_list 'WITH' 'OLD_KMS' '=' string_or_placeholder_opt_list
@@ -3127,6 +3121,22 @@ family_def ::=
 
 create_as_constraint_def ::=
 	create_as_constraint_elem
+
+sequence_option_elem ::=
+	'AS' typename
+	| 'NO' 'CYCLE'
+	| 'OWNED' 'BY' 'NONE'
+	| 'OWNED' 'BY' column_path
+	| 'CACHE' signed_iconst64
+	| 'INCREMENT' signed_iconst64
+	| 'INCREMENT' 'BY' signed_iconst64
+	| 'MINVALUE' signed_iconst64
+	| 'NO' 'MINVALUE'
+	| 'MAXVALUE' signed_iconst64
+	| 'NO' 'MAXVALUE'
+	| 'START' signed_iconst64
+	| 'START' 'WITH' signed_iconst64
+	| 'VIRTUAL'
 
 materialize_clause ::=
 	'MATERIALIZED'
