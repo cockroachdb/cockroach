@@ -66,6 +66,11 @@ type concurrentSchemaChangeError struct {
 	descID descpb.ID
 }
 
+// ClientVisibleRetryError is detected by the pgwire layer and will convert
+// this error into a serialization error to be retried. See
+// pgcode.ClientVisibleRetryError.
+func (e *concurrentSchemaChangeError) ClientVisibleRetryError() {}
+
 func (e *concurrentSchemaChangeError) Error() string {
 	return fmt.Sprintf("descriptor %d is undergoing another schema change", e.descID)
 }
