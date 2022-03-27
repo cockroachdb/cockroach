@@ -874,7 +874,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
-%token <str> RELEASE RESET RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
+%token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
@@ -1724,7 +1724,8 @@ alter_view_stmt:
 //   [INCREMENT <increment>]
 //   [MINVALUE <minvalue> | NO MINVALUE]
 //   [MAXVALUE <maxvalue> | NO MAXVALUE]
-//   [START <start>]
+//   [START [WITH] <start>]
+//   [RESTART [[WITH] <restart>]]
 //   [[NO] CYCLE]
 // ALTER SEQUENCE [IF EXISTS] <name> RENAME TO <newname>
 // ALTER SEQUENCE [IF EXISTS] <name> SET SCHEMA <newschemaname>
@@ -1744,6 +1745,7 @@ alter_sequence_options_stmt:
   {
     $$.val = &tree.AlterSequence{Name: $5.unresolvedObjectName(), Options: $6.seqOpts(), IfExists: true}
   }
+
 
 // %Help: ALTER DATABASE - change the definition of a database
 // %Category: DDL
@@ -8113,6 +8115,12 @@ sequence_option_elem:
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
 | START WITH signed_iconst64   { x := $3.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
+| RESTART                      { $$.val = tree.SequenceOption{Name: tree.SeqOptRestart} }
+| RESTART signed_iconst64      { x := $2.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
+| RESTART WITH signed_iconst64 { x := $3.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalWord: true} }
+
 | VIRTUAL                      { $$.val = tree.SequenceOption{Name: tree.SeqOptVirtual} }
 
 // %Help: TRUNCATE - empty one or more tables
@@ -14219,6 +14227,7 @@ unreserved_keyword:
 | REPLACE
 | REPLICATION
 | RESET
+| RESTART
 | RESTORE
 | RESTRICT
 | RESTRICTED
