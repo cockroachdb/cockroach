@@ -2924,18 +2924,12 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 	ctx context.Context, descID descpb.ID,
 ) error {
-	if err := ex.planner.WaitForDescriptorSchemaChanges(
+	if err := ex.planner.waitForDescriptorSchemaChanges(
 		ctx, descID, ex.extraTxnState.schemaChangerState,
 	); err != nil {
 		return err
 	}
-	// Restart the transaction at a higher timestamp after waiting.
-	ex.state.mu.Lock()
-	defer ex.state.mu.Unlock()
-	userPriority := ex.state.mu.txn.UserPriority()
-	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db,
-		ex.transitionCtx.nodeIDOrZero, ex.QualityOfService())
-	return ex.state.mu.txn.SetUserPriority(userPriority)
+	return ex.resetTransactionOnSchemaChangeRetry(ctx)
 }
 
 // initStatementResult initializes res according to a query.

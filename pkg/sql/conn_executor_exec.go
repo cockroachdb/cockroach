@@ -822,6 +822,11 @@ func formatWithPlaceholders(ast tree.Statement, evalCtx *tree.EvalContext) strin
 	return fmtCtx.CloseAndGetString()
 }
 
+// checkDescriptorTwoVersionInvariant ensures that the two version invariant is
+// upheld. It calls descs.CheckTwoVersionInvariant, which will restart the
+// underlying transaction in the case that the invariant is not upheld, and
+// it will cleanup any intents due to that transaction. When this happens, the
+// transaction will be reset internally.
 func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) error {
 	var inRetryBackoff func()
 	if knobs := ex.server.cfg.SchemaChangerTestingKnobs; knobs != nil {
@@ -836,16 +841,22 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		inRetryBackoff,
 	)
 	if retryErr {
-		// Create a new transaction to retry with a higher timestamp than the
-		// timestamps used in the retry loop above.
-		userPriority := ex.state.mu.txn.UserPriority()
-		ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db,
-			ex.transitionCtx.nodeIDOrZero, ex.QualityOfService())
-		if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
-			return err
+		if newTransactionErr := ex.resetTransactionOnSchemaChangeRetry(ctx); newTransactionErr != nil {
+			return newTransactionErr
 		}
 	}
 	return err
+}
+
+// Create a new transaction to retry with a higher timestamp than the timestamps
+// used in any retry loop above. Additionally, make sure to copy out the
+// priority from the previous transaction to ensure that livelock does not
+// occur.
+func (ex *connExecutor) resetTransactionOnSchemaChangeRetry(ctx context.Context) error {
+	userPriority := ex.state.mu.txn.UserPriority()
+	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db,
+		ex.transitionCtx.nodeIDOrZero, ex.QualityOfService())
+	return ex.state.mu.txn.SetUserPriority(userPriority)
 }
 
 // commitSQLTransaction executes a commit after the execution of a

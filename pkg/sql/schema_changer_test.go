@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -69,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -8135,4 +8137,79 @@ CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
 			}
 		})
 	}
+}
+
+// TestConcurrentSchemaChangesDoNotDeadlock exercises the schema change retry
+// behavior in a case where concurrent old and new-style schema changes
+// interact with multiple descriptors concurrently. In this case the
+// descriptors in question are a table and a view which references that
+// table. The schema changes are to create the view if it does not exist
+// and to drop the view. The test is a regression against cases where locks
+// were not dropped when a schema change waits for concurrent schema changes
+// to conclude. If the locks were not dropped, a deadlock could occur.
+func TestConcurrentSchemaChangesDoNotDeadlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	tdb.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
+	tdb.Exec(t, "INSERT INTO t VALUES (1), (2)")
+
+	isUndefinedTableError := func(err error) bool {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			return pqErr.Code == pq.ErrorCode(pgcode.UndefinedTable.String())
+		}
+		return false
+	}
+
+	// These constants are pretty arbitrary. They are high enough that before
+	// the fix accompanying this test, the test would fail roughly every time,
+	// and low enough that it would not take too long.
+	const workers, runs = 8, 5
+	var wg sync.WaitGroup
+	runWorker := func(workerNum int) {
+		defer wg.Done()
+		conn, err := sqlDB.Conn(ctx)
+		if !assert.NoError(t, err) {
+			return
+		}
+		runStmt := func(stmt string) (ok bool) {
+			_, err := conn.ExecContext(ctx, stmt)
+			return assert.NoError(t, err)
+		}
+		for i := 0; i < runs; i++ {
+			if !runStmt(`CREATE VIEW IF NOT EXISTS v AS SELECT i FROM t`) {
+				return
+			}
+			rows, err := conn.QueryContext(ctx, `SELECT * FROM v`)
+			switch {
+			case isUndefinedTableError(err):
+				continue
+			case !assert.NoError(t, err):
+				return
+			}
+			got, err := sqlutils.RowsToStrMatrix(rows)
+			switch {
+			case isUndefinedTableError(err):
+				continue
+			case !assert.NoError(t, err), !assert.Equal(
+				t, [][]string{{"1"}, {"2"}}, got,
+			):
+				return
+			}
+			if !runStmt(`DROP VIEW IF EXISTS v`) {
+				return
+			}
+		}
+	}
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go runWorker(i)
+	}
+	wg.Wait()
 }
