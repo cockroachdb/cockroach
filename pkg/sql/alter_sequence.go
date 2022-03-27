@@ -140,6 +140,12 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 			}
 		}
 	}
+	if opts.Restart != nil {
+		err := params.p.SetSequenceValueByID(params.ctx, uint32(desc.ID), *opts.Restart, false)
+		if err != nil {
+			return err
+		}
+	}
 
 	if err := params.p.writeSchemaChange(
 		params.ctx, n.seqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),

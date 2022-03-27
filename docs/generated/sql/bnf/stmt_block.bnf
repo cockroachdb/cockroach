@@ -1179,6 +1179,7 @@ unreserved_keyword ::=
 	| 'REPLACE'
 	| 'REPLICATION'
 	| 'RESET'
+	| 'RESTART'
 	| 'RESTORE'
 	| 'RESTRICT'
 	| 'RESTRICTED'
@@ -2960,6 +2961,9 @@ sequence_option_elem ::=
 	| 'NO' 'MAXVALUE'
 	| 'START' signed_iconst64
 	| 'START' 'WITH' signed_iconst64
+	| 'RESTART'
+	| 'RESTART' signed_iconst64
+	| 'RESTART' 'WITH' signed_iconst64
 	| 'VIRTUAL'
 
 backup_kms ::=
