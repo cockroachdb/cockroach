@@ -3281,6 +3281,11 @@ func (r *Replica) adminScatter(
 	maxAttempts := len(r.Desc().Replicas().Descriptors())
 	currentAttempt := 0
 
+	if args.MaxSize > 0 {
+		if existing, limit := r.GetMVCCStats().Total(), args.MaxSize; existing > limit {
+			return roachpb.AdminScatterResponse{}, errors.Errorf("existing range size %d exceeds specified limit %d", existing, limit)
+		}
+	}
 	// Loop until the replicate queue decides there is nothing left to do or until
 	// we hit `maxAttempts` for the range. Note that we disable lease transfers
 	// until the final step as transferring the lease prevents any further action
