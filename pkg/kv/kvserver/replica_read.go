@@ -352,6 +352,9 @@ func (r *Replica) collectSpansRead(
 		}
 
 		switch t := resp.(type) {
+		case *roachpb.GetResponse:
+			// The request did not evaluate. Ignore it.
+			continue
 		case *roachpb.ScanResponse:
 			if header.Key.Equal(t.ResumeSpan.Key) {
 				// The request did not evaluate. Ignore it.
