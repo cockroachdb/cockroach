@@ -2072,3 +2072,19 @@ CREATE SEQUENCE seqas_error
   INCREMENT BY 1
   MAXVALUE 123456
   CACHE 1
+
+statement ok
+CREATE SEQUENCE restart_seqas START WITH 5 RESTART 1
+
+query I
+select nextval('restart_seqas')
+----
+1
+
+statement ok
+ALTER SEQUENCE restart_seqas RESTART
+
+query I
+select nextval('restart_seqas')
+----
+5
