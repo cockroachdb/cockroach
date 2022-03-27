@@ -328,7 +328,7 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDOid(tree.MakeDOid(tree.DInt(v))), nil
+		return a.NewDOid(tree.MakeDOid(tree.DInt(v), typ)), nil
 	case types.ArrayFamily:
 		v, err := value.GetBytes()
 		if err != nil {
