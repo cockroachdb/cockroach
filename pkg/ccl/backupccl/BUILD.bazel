@@ -208,6 +208,7 @@ go_test(
         "//pkg/kv/bulk",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
