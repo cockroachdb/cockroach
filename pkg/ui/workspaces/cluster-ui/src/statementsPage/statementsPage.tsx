@@ -15,7 +15,6 @@ import classNames from "classnames/bind";
 import { getValidErrorsList, Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
-  ColumnDescriptor,
   handleSortSettingFromQueryString,
   SortSetting,
   updateSortSettingQueryParamsOnTab,
@@ -77,6 +76,8 @@ import {
 
 import { commonStyles } from "../common";
 import { flattenTreeAttributes, planNodeToString } from "../statementDetails";
+import { isSelectedColumn } from "src/columnsSelector/utils";
+import { StatementViewType } from "./statementPageTypes";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -534,15 +535,6 @@ export class StatementsPage extends React.Component<
       .filter(c => !(c.name === "regionNodes" && regions.length < 2))
       .filter(c => !(isTenant && c.hideIfTenant));
 
-    const isColumnSelected = (c: ColumnDescriptor<AggregateStatistics>) => {
-      return (
-        (userSelectedColumnsToShow === null && c.showByDefault !== false) || // show column if list of visible was never defined and can be show by default.
-        (userSelectedColumnsToShow !== null &&
-          userSelectedColumnsToShow.includes(c.name)) || // show column if user changed its visibility.
-        c.alwaysShow === true // show column if alwaysShow option is set explicitly.
-      );
-    };
-
     // Iterate over all available columns and create list of SelectOptions with initial selection
     // values based on stored user selections in local storage and default column configs.
     // Columns that are set to alwaysShow are filtered from the list.
@@ -552,12 +544,14 @@ export class StatementsPage extends React.Component<
         (c): SelectOption => ({
           label: getLabel(c.name as StatisticTableColumnKeys, "statement"),
           value: c.name,
-          isSelected: isColumnSelected(c),
+          isSelected: isSelectedColumn(userSelectedColumnsToShow, c),
         }),
       );
 
     // List of all columns that will be displayed based on the column selection.
-    const displayColumns = columns.filter(c => isColumnSelected(c));
+    const displayColumns = columns.filter(c =>
+      isSelectedColumn(userSelectedColumnsToShow, c),
+    );
 
     return (
       <div>
@@ -585,6 +579,7 @@ export class StatementsPage extends React.Component<
             renderNoResult={
               <EmptyStatementsPlaceholder
                 isEmptySearchResults={isEmptySearchResults}
+                statementView={StatementViewType.FINGERPRINTS}
               />
             }
             pagination={pagination}
@@ -635,11 +630,11 @@ export class StatementsPage extends React.Component<
       );
 
     return (
-      <div className={cx("root", "table-area")}>
+      <div className={cx("root")}>
         <PageConfig>
           <PageConfigItem>
             <Search
-              onSubmit={this.onSubmitSearchField as any}
+              onSubmit={this.onSubmitSearchField}
               onClear={this.onClearSearchField}
               defaultValue={search}
             />
@@ -675,24 +670,26 @@ export class StatementsPage extends React.Component<
             />
           </PageConfigItem>
         </PageConfig>
-        <Loading
-          loading={isNil(this.props.statements)}
-          page={"statements"}
-          error={this.props.statementsError}
-          render={() => this.renderStatements(regions)}
-          renderError={() =>
-            SQLActivityError({
-              statsType: "statements",
-            })
-          }
-        />
-        {longLoadingMessage}
-        <ActivateStatementDiagnosticsModal
-          ref={this.activateDiagnosticsRef}
-          activate={onActivateStatementDiagnostics}
-          refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
-          onOpenModal={onDiagnosticsModalOpen}
-        />
+        <div className={cx("table-area")}>
+          <Loading
+            loading={isNil(this.props.statements)}
+            page={"statements"}
+            error={this.props.statementsError}
+            render={() => this.renderStatements(regions)}
+            renderError={() =>
+              SQLActivityError({
+                statsType: "statements",
+              })
+            }
+          />
+          {longLoadingMessage}
+          <ActivateStatementDiagnosticsModal
+            ref={this.activateDiagnosticsRef}
+            activate={onActivateStatementDiagnostics}
+            refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
+            onOpenModal={onDiagnosticsModalOpen}
+          />
+        </div>
       </div>
     );
   }
