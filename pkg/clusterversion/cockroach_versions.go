@@ -321,6 +321,9 @@ const (
 	// DateStyleIntervalStyleCastRewrite rewrites cast that cause inconsistencies
 	// when DateStyle/IntervalStyle is enabled.
 	DateStyleIntervalStyleCastRewrite
+	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
+	// 22.1.
+	EnableNewStoreRebalancer
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -535,6 +538,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DateStyleIntervalStyleCastRewrite,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
+	},
+	{
+		Key:     EnableNewStoreRebalancer,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
 	},
 
 	// *************************************************
