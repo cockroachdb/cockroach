@@ -73,3 +73,27 @@ cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/
 bazel info workspace --color=no
 bazel run @nodejs//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console karma:watch
 bazel run @nodejs//:yarn -- --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui jest --watch
+
+exec
+dev ui clean
+----
+bazel info workspace --color=no
+rm -rf crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.js
+rm -rf crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.d.ts
+rm -rf crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.js
+rm -rf crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
+rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
+
+exec
+dev ui clean --all
+----
+bazel info workspace --color=no
+bazel info workspace --color=no
+rm -rf crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.js
+rm -rf crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.d.ts
+rm -rf crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.js
+rm -rf crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
+rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
+rm -rf crdb-checkout/pkg/ui/node_modules
+rm -rf crdb-checkout/pkg/ui/workspaces/db-console/node_modules
+rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/node_modules
