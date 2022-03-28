@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -268,9 +269,15 @@ func TestStoreCoordinators(t *testing.T) {
 	require.Equal(t, 3, len(requesters))
 	// Confirm that the store IDs are as expected.
 	var actualStores []int32
-	for s := range storeCoords.gcMap {
-		actualStores = append(actualStores, s)
-	}
+
+	storeCoords.gcMap.Range(func(s int64, _ unsafe.Pointer) bool {
+		// The int32 conversion is lossless since we only store int32s in the
+		// gcMap.
+		actualStores = append(actualStores, int32(s))
+		// true indicates that iteration should continue after the
+		// current entry has been processed.
+		return true
+	})
 	sort.Slice(actualStores, func(i, j int) bool { return actualStores[i] < actualStores[j] })
 	require.Equal(t, []int32{10, 20}, actualStores)
 	// Do tryGet on all requesters. The requester for the Regular
