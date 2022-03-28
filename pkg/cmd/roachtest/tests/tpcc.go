@@ -723,8 +723,8 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 12,
 		CPUs:  16,
 
-		LoadWarehouses: gceOrAws(cloud, 8000, 10000),
-		EstimatedMax:   gceOrAws(cloud, 7000, 8000),
+		LoadWarehouses: gceOrAws(cloud, 10000, 10000),
+		EstimatedMax:   gceOrAws(cloud, 8000, 8000),
 
 		Tags: []string{`weekly`},
 	})
