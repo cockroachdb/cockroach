@@ -16,6 +16,7 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -6215,18 +6216,17 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldRefreshInterval, oldAsOf time.Duration) {
-		stats.DefaultRefreshInterval = oldRefreshInterval
-		stats.DefaultAsOfTime = oldAsOf
-	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
-	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = time.Microsecond
+	tsa := base.TestServerArgs{Knobs: base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			DefaultRefreshIntervalOverride: time.Millisecond
+			DefaultAsOfTimeOverride: time.Microsecond,
+		}}}
 
 	const nodes = 1
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, tsa)
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
