@@ -919,7 +919,7 @@ func (tt *Table) makeIndexName(defName tree.Name, cols tree.IndexElemList, typ i
 	}
 
 	if typ == primaryIndex {
-		return fmt.Sprintf("%s_pkey", tt.TabName.Table())
+		return tt.TabName.Table() + "_pkey"
 	}
 
 	var sb strings.Builder
