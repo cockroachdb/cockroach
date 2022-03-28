@@ -209,10 +209,20 @@ func makeEquiJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, c
 		return nil, nil, false
 	}
 
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	// Determine overlapping types.
 	var available [][2]tree.TypedExpr
 	for _, leftCol := range leftRefs {
 		for _, rightCol := range rightRefs {
+			// Don't compare non-scalar types. This avoids trying to
+			// compare types like arrays of tuples, tuple[], which
+			// cannot be compared. However, it also avoids comparing
+			// some types that can be compared, like arrays.
+			if !s.isScalarType(leftCol.typ) || !s.isScalarType(rightCol.typ) {
+				continue
+			}
+
 			if leftCol.typ.Equivalent(rightCol.typ) {
 				available = append(available, [2]tree.TypedExpr{
 					typedParen(leftCol.item, leftCol.typ),
@@ -271,7 +281,7 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 	// Now look for one that satisfies our constraints (some shared prefix
 	// of type + direction), might end up being the same one. We rely on
 	// Go's non-deterministic map iteration ordering for randomness.
-	rightTableName, cols := func() (*tree.TableIndexName, [][2]colRef) {
+	rightTableName, cols, ok := func() (*tree.TableIndexName, [][2]colRef, bool) {
 		s.lock.RLock()
 		defer s.lock.RUnlock()
 		for tbl, idxs := range s.indexes {
@@ -292,13 +302,22 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 					if !tree.MustBeStaticallyKnownType(rightCol.Type).Equivalent(tree.MustBeStaticallyKnownType(leftCol.Type)) {
 						break
 					}
+					leftType := tree.MustBeStaticallyKnownType(leftCol.Type)
+					rightType := tree.MustBeStaticallyKnownType(rightCol.Type)
+					// Don't compare non-scalar types. This avoids trying to
+					// compare types like arrays of tuples, tuple[], which
+					// cannot be compared. However, it also avoids comparing
+					// some types that can be compared, like arrays.
+					if !s.isScalarType(leftType) || !s.isScalarType(rightType) {
+						break
+					}
 					cols = append(cols, [2]colRef{
 						{
-							typ:  tree.MustBeStaticallyKnownType(leftCol.Type),
+							typ:  leftType,
 							item: tree.NewColumnItem(leftAliasName, leftColElem.Column),
 						},
 						{
-							typ:  tree.MustBeStaticallyKnownType(rightCol.Type),
+							typ:  rightType,
 							item: tree.NewColumnItem(rightAliasName, rightColElem.Column),
 						},
 					})
@@ -307,13 +326,15 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 					}
 				}
 				if len(cols) > 0 {
-					return rightTableName, cols
+					return rightTableName, cols, true
 				}
 			}
 		}
-		// Since we can always match leftIdx we should never get here.
-		panic("unreachable")
+		return nil, nil, false
 	}()
+	if !ok {
+		return nil, nil, false
+	}
 
 	// joinRefs are limited to columns in the indexes (even if they don't
 	// appear in the join condition) because non-stored columns will cause
