@@ -480,7 +480,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			wait := ""
 			switch private.Locking.WaitPolicy {
 			case tree.LockWaitBlock:
-			case tree.LockWaitSkip:
+			case tree.LockWaitSkipLocked:
 				wait = ",skip-locked"
 			case tree.LockWaitError:
 				wait = ",nowait"

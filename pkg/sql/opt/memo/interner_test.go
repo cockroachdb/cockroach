@@ -460,7 +460,7 @@ func TestInterner(t *testing.T) {
 				equal: false,
 			},
 			{
-				val1:  &tree.LockingItem{WaitPolicy: tree.LockWaitSkip},
+				val1:  &tree.LockingItem{WaitPolicy: tree.LockWaitSkipLocked},
 				val2:  &tree.LockingItem{WaitPolicy: tree.LockWaitError},
 				equal: false,
 			},
