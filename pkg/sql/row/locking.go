@@ -51,7 +51,7 @@ func GetWaitPolicy(lockWaitPolicy descpb.ScanLockingWaitPolicy) lock.WaitPolicy 
 	case descpb.ScanLockingWaitPolicy_BLOCK:
 		return lock.WaitPolicy_Block
 
-	case descpb.ScanLockingWaitPolicy_SKIP:
+	case descpb.ScanLockingWaitPolicy_SKIP_LOCKED:
 		// Should not get here. Query should be rejected during planning.
 		panic(errors.AssertionFailedf("unsupported wait policy %s", lockWaitPolicy))
 

@@ -10081,7 +10081,7 @@ opt_locked_rels:
 
 opt_nowait_or_skip:
   /* EMPTY */ { $$.val = tree.LockWaitBlock }
-| SKIP LOCKED { $$.val = tree.LockWaitSkip }
+| SKIP LOCKED { $$.val = tree.LockWaitSkipLocked }
 | NOWAIT      { $$.val = tree.LockWaitError }
 
 select_clause:
