@@ -1312,8 +1312,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
-	// Stores have been initialized, so Node can now provide Pebble metrics.
-	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node)
 
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(ctx, hlcUpperBoundExists); err != nil {
@@ -1384,6 +1382,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//   the hazard described in Node.start, around initializing additional
 	//   stores)
 	s.node.waitForAdditionalStoreInit()
+
+	// Stores have been initialized, so Node can now provide Pebble metrics.
+	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node)
 
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.
