@@ -650,7 +650,11 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 }
 
 // maybeUpgradeSecondaryIndexFormatVersion tries to promote a secondary index to
-// version PrimaryIndexWithStoredColumnsVersion whenever possible.
+// version LatestIndexDescriptorVersion whenever possible.
+//
+// TODO(postamar): upgrade all the way to LatestIndexDescriptorVersion in 22.2
+// This is not possible until then because of a limitation in 21.2 which affects
+// mixed-21.2-22.1-version clusters (issue #78426).
 func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
 	switch idx.Version {
 	case descpb.SecondaryIndexFamilyFormatVersion:
@@ -659,9 +663,6 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 		}
 	case descpb.EmptyArraysInInvertedIndexesVersion:
 		break
-	case descpb.StrictIndexColumnIDGuaranteesVersion:
-		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
-		return true
 	default:
 		return false
 	}
@@ -676,7 +677,7 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 	if set.Contains(0) {
 		return false
 	}
-	idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 	return true
 }
 

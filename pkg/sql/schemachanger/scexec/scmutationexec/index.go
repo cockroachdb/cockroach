@@ -54,7 +54,7 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 	}
 	// Set up the encoding type.
 	encodingType := descpb.PrimaryIndexEncoding
-	indexVersion := descpb.PrimaryIndexWithStoredColumnsVersion
+	indexVersion := descpb.LatestIndexDescriptorVersion
 	if op.IsSecondaryIndex {
 		encodingType = descpb.SecondaryIndexEncoding
 	}

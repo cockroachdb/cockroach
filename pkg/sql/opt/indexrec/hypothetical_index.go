@@ -212,9 +212,7 @@ func (hi *hypotheticalIndex) GeoConfig() geoindex.Config {
 
 // Version is part of the cat.Index interface.
 func (hi *hypotheticalIndex) Version() descpb.IndexDescriptorVersion {
-	// Return the latest version for non-primary indexes, since hypothetical
-	// indexes are not primary indexes.
-	return descpb.PrimaryIndexWithStoredColumnsVersion
+	return descpb.LatestIndexDescriptorVersion
 }
 
 // PartitionCount is part of the cat.Index interface.

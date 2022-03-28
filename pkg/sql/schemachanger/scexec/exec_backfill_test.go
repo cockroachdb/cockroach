@@ -80,7 +80,7 @@ func TestExecBackfill(t *testing.T) {
 		require.NoError(t, mut.DeprecatedAddIndexMutation(&descpb.IndexDescriptor{
 			Name:                name,
 			ID:                  id,
-			Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+			Version:             descpb.LatestIndexDescriptorVersion,
 			KeyColumnNames:      columns,
 			KeyColumnDirections: dirs,
 			KeyColumnIDs:        columnIDs,

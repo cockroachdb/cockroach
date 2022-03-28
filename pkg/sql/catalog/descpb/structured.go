@@ -115,6 +115,8 @@ const (
 	// these were implicitly derived based on the set of non-virtual columns in
 	// the table.
 	PrimaryIndexWithStoredColumnsVersion
+	// LatestIndexDescriptorVersion corresponds to the latest encoding version.
+	LatestIndexDescriptorVersion = PrimaryIndexWithStoredColumnsVersion
 )
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
