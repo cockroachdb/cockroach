@@ -226,6 +226,12 @@ type listSessionsResponse struct {
 //   description: Username of user to return sessions for; if unspecified,
 //     sessions from all users are returned.
 //   required: false
+// - name: exclude_closed_sessions
+//   type: bool
+//   in: query
+//   description: Boolean to exclude closed sessions; if unspecified, defaults
+//     to false and closed sessions are included in the response.
+//   required: false
 // - name: limit
 //   type: integer
 //   in: query
@@ -249,7 +255,8 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, start := getRPCPaginationValues(r)
 	reqUsername := r.URL.Query().Get("username")
-	req := &serverpb.ListSessionsRequest{Username: reqUsername}
+	reqExcludeClosed := r.URL.Query().Get("exclude_closed_sessions") == "true"
+	req := &serverpb.ListSessionsRequest{Username: reqUsername, ExcludeClosedSessions: reqExcludeClosed}
 	response := &listSessionsResponse{}
 	outgoingCtx := apiToOutgoingGatewayCtx(ctx, r)
 
