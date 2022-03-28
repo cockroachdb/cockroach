@@ -375,7 +375,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 				true, /* transferLeaseToFirstVoter */
 			)
 		}); err != nil {
-			log.Errorf(ctx, "unable to relocate range to %v: %+v", voterTargets, err)
+			log.Errorf(ctx, "unable to relocate range to %v: %v", voterTargets, err)
 			continue
 		}
 		sr.metrics.RangeRebalanceCount.Inc(1)
