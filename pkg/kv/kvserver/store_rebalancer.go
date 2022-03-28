@@ -325,7 +325,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 		if err := contextutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
 			return sr.rq.store.AdminRelocateRange(ctx, *descBeforeRebalance, voterTargets, nonVoterTargets)
 		}); err != nil {
-			log.Errorf(ctx, "unable to relocate range to %v: %+v", voterTargets, err)
+			log.Errorf(ctx, "unable to relocate range to %v: %v", voterTargets, err)
 			continue
 		}
 		sr.metrics.RangeRebalanceCount.Inc(1)
