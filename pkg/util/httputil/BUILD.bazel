@@ -10,6 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/httputil",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
@@ -20,5 +21,8 @@ go_test(
     name = "httputil_test",
     srcs = ["etag_handler_test.go"],
     embed = [":httputil"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
 )

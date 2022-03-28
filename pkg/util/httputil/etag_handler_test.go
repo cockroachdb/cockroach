@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,6 +39,8 @@ func mustParseURL(unparsed string) *url.URL {
 }
 
 func TestEtagHandler(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := w.Write([]byte("(http response body)"))
 		require.NoError(t, err, "HTTP handler that always returns 200 failed to write response. Something's very wrong.")
@@ -100,6 +103,7 @@ func TestEtagHandler(t *testing.T) {
 			})
 
 			require.NoError(t, err)
+			defer resp.Body.Close()
 			require.Equal(t, tc.expectedStatusCode, resp.StatusCode)
 
 			checksum, checksumExists := hashedFiles["/"+tc.path]
