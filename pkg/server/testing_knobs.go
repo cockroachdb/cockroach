@@ -14,6 +14,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -21,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 )
+
+var _ base.ModuleTestingKnobs = &TestingKnobs{}
 
 // TestingKnobs groups testing knobs for the Server.
 type TestingKnobs struct {
@@ -105,6 +108,14 @@ type TestingKnobs struct {
 	// BlobClientFactory supplies a BlobClientFactory for
 	// use by servers.
 	BlobClientFactory blobs.BlobClientFactory
+
+	// DefaultRefreshIntervalOverride, if greater than 0, overrides the autostats
+	// refresh interval as defined by DefaultRefreshInterval.
+	DefaultRefreshIntervalOverride time.Duration
+
+	// DefaultAsOfTimeOverride, if greater than 0, overrides the AS OF time for
+	// automatic runs of CREATE STATISTICS as defined by DefaultAsOfTime.
+	DefaultAsOfTimeOverride time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

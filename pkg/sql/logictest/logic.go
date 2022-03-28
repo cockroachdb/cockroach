@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
@@ -1554,6 +1553,13 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					AOSTClause: "AS OF SYSTEM TIME '-1us'",
 				},
+				// Update the defaults for automatic statistics to avoid delays in testing.
+				// Avoid making the DefaultAsOfTime too small to avoid interacting with
+				// schema changes and causing transaction retries.
+				Server: &server.TestingKnobs{
+					DefaultRefreshIntervalOverride: time.Millisecond,
+					DefaultAsOfTimeOverride:        10 * time.Millisecond,
+				},
 			},
 			ClusterName:   "testclustername",
 			ExternalIODir: t.sharedIODir,
@@ -1639,13 +1645,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 		paramsPerNode[i] = nodeParams
 	}
 	params.ServerArgsPerNode = paramsPerNode
-
-	// Update the defaults for automatic statistics to avoid delays in testing.
-	// Avoid making the DefaultAsOfTime too small to avoid interacting with
-	// schema changes and causing transaction retries.
-	// TODO(radu): replace these with testing knobs.
-	stats.DefaultAsOfTime = 10 * time.Millisecond
-	stats.DefaultRefreshInterval = time.Millisecond
 
 	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {

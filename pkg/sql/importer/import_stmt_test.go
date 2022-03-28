@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -54,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -6215,18 +6215,17 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldRefreshInterval, oldAsOf time.Duration) {
-		stats.DefaultRefreshInterval = oldRefreshInterval
-		stats.DefaultAsOfTime = oldAsOf
-	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
-	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = time.Microsecond
+	tsa := base.TestServerArgs{Knobs: base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			DefaultRefreshIntervalOverride: time.Millisecond,
+			DefaultAsOfTimeOverride:        time.Microsecond,
+		}}}
 
 	const nodes = 1
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartNewTestCluster(t, nodes, tsa)
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
