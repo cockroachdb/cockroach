@@ -87,7 +87,7 @@ server.web_session.purge.period	duration	1h0m0s	the time until old sessions are 
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged
 server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid
 sql.auth.resolve_membership_single_scan.enabled	boolean	true	determines whether to populate the role membership cache with a single scan
-sql.closed_session_cache.capacity	integer	100	the maximum number of sessions in the cache
+sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache
 sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds
 sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capacity per-node of contention event store
 sql.contention.event_store.duration_threshold	duration	0s	minimum contention duration to cause the contention events to be collected into crdb_internal.transaction_contention_events

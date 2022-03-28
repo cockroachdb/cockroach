@@ -21,6 +21,8 @@ import {
   CancelSessionRequestMessage,
 } from "src/api/terminateQueryApi";
 
+import Status = cockroach.server.serverpb.Session.Status;
+
 const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
 const toUuid = function(s: string): Uint8Array {
@@ -45,6 +47,7 @@ export const idleSession: SessionInfo = {
     alloc_bytes: Long.fromNumber(0),
     max_alloc_bytes: Long.fromNumber(10240),
     active_queries: [],
+    status: Status.ACTIVE,
     toJSON: () => ({}),
   },
 };
@@ -82,6 +85,7 @@ export const idleTransactionSession: SessionInfo = {
     },
     last_active_query_no_constants: "SHOW database",
     active_queries: [],
+    status: Status.ACTIVE,
     toJSON: () => ({}),
   },
 };
@@ -133,6 +137,7 @@ export const activeSession: SessionInfo = {
       num_auto_retries: 3,
     },
     last_active_query_no_constants: "SHOW database",
+    status: Status.ACTIVE,
     toJSON: () => ({}),
   },
 };

@@ -59,6 +59,7 @@ func TestListSessionsV2(t *testing.T) {
 		req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"sessions/", nil)
 		require.NoError(t, err)
 		query := req.URL.Query()
+		query.Add("exclude_closed_sessions", "true")
 		if limit > 0 {
 			query.Add("limit", strconv.Itoa(limit))
 		}
