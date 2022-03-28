@@ -350,10 +350,6 @@ func TestAlterChangefeedErrors(t *testing.T) {
 			`pq: cannot alter option "initial_scan_only"`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET initial_scan_only`, feed.JobID()),
 		)
-		sqlDB.ExpectErr(t,
-			`pq: cannot alter option "end_time"`,
-			fmt.Sprintf(`ALTER CHANGEFEED %d UNSET end_time`, feed.JobID()),
-		)
 
 		sqlDB.ExpectErr(t,
 			`cannot unset option "sink"`,
@@ -989,4 +985,96 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 	}
 
 	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
+}
+
+func TestChangefeedAlterEndTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		jobRegistry := f.Server().JobRegistry().(*jobs.Registry)
+
+		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
+
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH resolved = '1s'")
+		defer closeFeed(t, feed)
+		jobFeed := feed.(cdctest.EnterpriseTestFeed)
+
+		assertPayloads(t, feed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+		})
+
+		expectResolvedTimestamp(t, feed)
+
+		require.NoError(t, jobFeed.Pause())
+		waitForJobStatus(sqlDB, t, jobFeed.JobID(), `paused`)
+
+		job, err := jobRegistry.LoadJob(context.Background(), jobFeed.JobID())
+		require.NoError(t, err)
+
+		progress := job.Progress()
+		highWater := progress.GetHighWater()
+		require.NotNil(t, highWater)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET end_time = '%s'`, jobFeed.JobID(), highWater.AsOfSystemTime()))
+
+		require.NoError(t, jobFeed.Resume())
+
+		require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
+			return s == jobs.StatusSucceeded
+		}))
+	}
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestChangefeedAlterEndTimeBeforeHighwaterError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		jobRegistry := f.Server().JobRegistry().(*jobs.Registry)
+
+		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
+
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH resolved = '1s'")
+		defer closeFeed(t, feed)
+		jobFeed := feed.(cdctest.EnterpriseTestFeed)
+
+		assertPayloads(t, feed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+		})
+
+		// Our goal is to attempt to set an end_time that is greater than the
+		// statement time, but less than the high watermark. Hence, we will wait for
+		// two resolved timestamps so that we can try to set the end_time to the
+		// next earliest timestamp before the high watermark. Since we wait for two
+		// resolved timestamps, the next earliest timestamp before the high
+		// watermark will be greater than the statement time.
+		expectResolvedTimestamp(t, feed)
+		expectResolvedTimestamp(t, feed)
+
+		require.NoError(t, jobFeed.Pause())
+		waitForJobStatus(sqlDB, t, jobFeed.JobID(), `paused`)
+
+		job, err := jobRegistry.LoadJob(context.Background(), jobFeed.JobID())
+		require.NoError(t, err)
+
+		progress := job.Progress()
+		highWater := progress.GetHighWater()
+		require.NotNil(t, highWater)
+
+		sqlDB.ExpectErr(t,
+			fmt.Sprintf(`end time %s cannot be less than the highwater mark %s`, highWater.Prev().AsOfSystemTime(), highWater.AsOfSystemTime()),
+			fmt.Sprintf(`ALTER CHANGEFEED %d SET end_time = '%s'`, jobFeed.JobID(), highWater.Prev().AsOfSystemTime()),
+		)
+	}
+	t.Run(`kafka`, kafkaTest(testFn))
 }

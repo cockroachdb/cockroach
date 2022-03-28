@@ -83,6 +83,8 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
+		// newStatementTime will either be the StatementTime of the job prior to the
+		// alteration, or it will be the high watermark of the job.
 		newTargets, newProgress, newStatementTime, err := generateNewTargets(ctx,
 			p,
 			alterChangefeedStmt.Cmds,
@@ -108,6 +110,7 @@ func alterChangefeedPlanHook(
 			ctx,
 			p,
 			newChangefeedStmt,
+			newStatementTime,
 			newSinkURI,
 			newOptions,
 			jobID,
@@ -120,14 +123,22 @@ func alterChangefeedPlanHook(
 		newDetails := jobRecord.Details.(jobspb.ChangefeedDetails)
 		newDetails.Opts[changefeedbase.OptInitialScan] = ``
 
-		// newStatementTime will either be the StatementTime of the job prior to the
-		// alteration, or it will be the high watermark of the job.
-		newDetails.StatementTime = newStatementTime
-
 		newPayload := job.Payload()
 		newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
 		newPayload.Description = jobRecord.Description
 		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
+
+		{
+			newHighWater := newProgress.GetHighWater()
+			newHighWaterNonEmpty := newHighWater != nil && !newHighWater.IsEmpty()
+			if newHighWaterNonEmpty && newDetails.EndTime.Less(*newHighWater) {
+				return errors.Errorf(
+					`end time %s cannot be less than the highwater mark %s`,
+					newDetails.EndTime.AsOfSystemTime(),
+					newHighWater.AsOfSystemTime(),
+				)
+			}
+		}
 
 		err = p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn, lockForUpdate, func(
 			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
