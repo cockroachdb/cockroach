@@ -142,6 +142,13 @@ type granter interface {
 	// 5x and shifted ~2s of latency (at p99) from the scheduler into admission
 	// control (which is desirable since the latter is where we can
 	// differentiate between work).
+	//
+	// TODO(sumeer): the "grant chain" concept is subtle and under-documented.
+	// It's easy to go through most of this package thinking it has something to
+	// do with dependent requests (e.g. intent resolution chains on an end txn).
+	// It would help for a top-level comment on grantChainID or continueGrantChain
+	// to spell out what grant chains are, their purpose, and how they work with
+	// an example.
 	continueGrantChain(grantChainID grantChainID)
 }
 
