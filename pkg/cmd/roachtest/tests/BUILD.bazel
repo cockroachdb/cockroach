@@ -217,6 +217,7 @@ go_test(
     srcs = [
         "blocklist_test.go",
         "drt_test.go",
+        "tests_test.go",
         "tpcc_test.go",
         "util_load_group_test.go",
         ":mocks_drt",  # keep
@@ -226,6 +227,7 @@ go_test(
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/prometheus",
         "//pkg/cmd/roachtest/spec",
+        "//pkg/cmd/roachtest/test",
         "//pkg/roachprod/logger",
         "//pkg/testutils/skip",
         "//pkg/util/version",
