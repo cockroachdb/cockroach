@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1136,7 +1137,11 @@ type StoreGrantCoordinators struct {
 	// These metrics are shared by WorkQueues across stores.
 	workQueueMetrics WorkQueueMetrics
 
-	gcMap                 map[int32]*GrantCoordinator
+	gcMap syncutil.IntMap // map[int64(StoreID)]*GrantCoordinator
+	// numStores is used to track the number of stores which have been added
+	// to the gcMap. This is used because the IntMap doesn't expose a size
+	// api.
+	numStores             int
 	pebbleMetricsProvider PebbleMetricsProvider
 	closeCh               chan struct{}
 }
@@ -1147,13 +1152,18 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(pmp PebbleMetricsPro
 	if sgc.pebbleMetricsProvider != nil {
 		panic(errors.AssertionFailedf("SetPebbleMetricsProvider called more than once"))
 	}
-	sgc.gcMap = make(map[int32]*GrantCoordinator)
 	sgc.pebbleMetricsProvider = pmp
 	sgc.closeCh = make(chan struct{})
 	metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
 	for _, m := range metrics {
 		gc := sgc.initGrantCoordinator(m.StoreID)
-		sgc.gcMap[m.StoreID] = gc
+		// Defensive call to LoadAndStore even though Store ought to be sufficient
+		// since SetPebbleMetricsProvider can only be called once. This code
+		// guards against duplication of stores returned by GetPebbleMetrics.
+		_, loaded := sgc.gcMap.LoadOrStore(int64(m.StoreID), unsafe.Pointer(gc))
+		if !loaded {
+			sgc.numStores++
+		}
 		gc.pebbleMetricsTick(*m.Metrics)
 		gc.allocateIOTokensTick()
 	}
@@ -1167,12 +1177,13 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(pmp PebbleMetricsPro
 				ticks++
 				if ticks%adjustmentInterval == 0 {
 					metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
-					if len(metrics) != len(sgc.gcMap) {
+					if len(metrics) != sgc.numStores {
 						log.Warningf(context.Background(),
-							"expected %d store metrics and found %d metrics", len(sgc.gcMap), len(metrics))
+							"expected %d store metrics and found %d metrics", sgc.numStores, len(metrics))
 					}
 					for _, m := range metrics {
-						if gc, ok := sgc.gcMap[m.StoreID]; ok {
+						if unsafeGc, ok := sgc.gcMap.Load(int64(m.StoreID)); ok {
+							gc := (*GrantCoordinator)(unsafeGc)
 							gc.pebbleMetricsTick(*m.Metrics)
 						} else {
 							log.Warningf(context.Background(),
@@ -1180,9 +1191,13 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(pmp PebbleMetricsPro
 						}
 					}
 				}
-				for _, gc := range sgc.gcMap {
+				sgc.gcMap.Range(func(_ int64, unsafeGc unsafe.Pointer) bool {
+					gc := (*GrantCoordinator)(unsafeGc)
 					gc.allocateIOTokensTick()
-				}
+					// true indicates that iteration should continue after the
+					// current entry has been processed.
+					return true
+				})
 			case <-sgc.closeCh:
 				done = true
 			}
@@ -1242,7 +1257,8 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 // TryGetQueueForStore returns a WorkQueue for the given storeID, or nil if
 // the storeID is not known.
 func (sgc *StoreGrantCoordinators) TryGetQueueForStore(storeID int32) *WorkQueue {
-	if granter, ok := sgc.gcMap[storeID]; ok {
+	if unsafeGranter, ok := sgc.gcMap.Load(int64(storeID)); ok {
+		granter := (*GrantCoordinator)(unsafeGranter)
 		return granter.GetWorkQueue(KVWork)
 	}
 	return nil
@@ -1253,9 +1269,14 @@ func (sgc *StoreGrantCoordinators) close() {
 	if sgc.closeCh != nil {
 		close(sgc.closeCh)
 	}
-	for _, c := range sgc.gcMap {
-		c.Close()
-	}
+
+	sgc.gcMap.Range(func(_ int64, unsafeGc unsafe.Pointer) bool {
+		gc := (*GrantCoordinator)(unsafeGc)
+		gc.Close()
+		// true indicates that iteration should continue after the
+		// current entry has been processed.
+		return true
+	})
 }
 
 // GrantCoordinators holds a regular GrantCoordinator for all work, and a
