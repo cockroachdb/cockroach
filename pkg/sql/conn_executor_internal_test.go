@@ -280,6 +280,12 @@ func startConnExecutor(
 	}
 	defer tempEngine.Close()
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
+	pool := mon.NewUnlimitedMonitor(
+		context.Background(), "test", mon.MemoryResource,
+		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
+	)
+	// This pool should never be Stop()ed because, if the test is failing, memory
+	// is not properly released.
 	cfg := &ExecutorConfig{
 		AmbientCtx: ambientCtx,
 		Settings:   st,
@@ -288,7 +294,8 @@ func startConnExecutor(
 		SystemConfig: config.NewConstantSystemConfigProvider(
 			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
 		),
-		SessionRegistry: NewSessionRegistry(),
+		SessionRegistry:    NewSessionRegistry(),
+		ClosedSessionCache: NewClosedSessionCache(st, pool, time.Now),
 		NodeInfo: NodeInfo{
 			NodeID:           nodeID,
 			LogicalClusterID: func() uuid.UUID { return uuid.UUID{} },
@@ -326,12 +333,6 @@ func startConnExecutor(
 		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
 		CollectionFactory:       descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec),
 	}
-	pool := mon.NewUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource,
-		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
-	)
-	// This pool should never be Stop()ed because, if the test is failing, memory
-	// is not properly released.
 
 	s := NewServer(cfg, pool)
 	buf := NewStmtBuf()
