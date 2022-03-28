@@ -1775,7 +1775,12 @@ func (ex *connExecutor) run(
 	ex.sessionID = ex.generateID()
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex.queryCancelKey, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
-	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID, ex.queryCancelKey)
+
+	defer func() {
+		ex.server.cfg.SessionRegistry.deregister(ex.sessionID, ex.queryCancelKey)
+		ex.server.cfg.ClosedSessionCache.add(ex.sessionID, ex.serialize())
+	}()
+
 	for {
 		ex.curStmtAST = nil
 		if err := ctx.Err(); err != nil {
@@ -3091,6 +3096,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		AllocBytes:                 ex.mon.AllocBytes(),
 		MaxAllocBytes:              ex.mon.MaximumBytes(),
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,
+		Status:                     serverpb.Session_OPEN,
 	}
 }
 

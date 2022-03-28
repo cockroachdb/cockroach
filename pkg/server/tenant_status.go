@@ -81,6 +81,7 @@ func newTenantStatusServer(
 	ambient log.AmbientContext,
 	privilegeChecker *adminPrivilegeChecker,
 	sessionRegistry *sql.SessionRegistry,
+	closedSessionCache *sql.ClosedSessionCache,
 	flowScheduler *flowinfra.FlowScheduler,
 	st *cluster.Settings,
 	sqlServer *SQLServer,
@@ -90,14 +91,15 @@ func newTenantStatusServer(
 	ambient.AddLogTag("tenant-status", nil)
 	return &tenantStatusServer{
 		baseStatusServer: baseStatusServer{
-			AmbientContext:   ambient,
-			privilegeChecker: privilegeChecker,
-			sessionRegistry:  sessionRegistry,
-			flowScheduler:    flowScheduler,
-			st:               st,
-			sqlServer:        sqlServer,
-			rpcCtx:           rpcCtx,
-			stopper:          stopper,
+			AmbientContext:     ambient,
+			privilegeChecker:   privilegeChecker,
+			sessionRegistry:    sessionRegistry,
+			closedSessionCache: closedSessionCache,
+			flowScheduler:      flowScheduler,
+			st:                 st,
+			sqlServer:          sqlServer,
+			rpcCtx:             rpcCtx,
+			stopper:            stopper,
 		},
 	}
 }

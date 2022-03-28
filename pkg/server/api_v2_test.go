@@ -12,8 +12,6 @@ package server
 
 import (
 	"context"
-	gosql "database/sql"
-	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"sort"
@@ -21,6 +19,9 @@ import (
 	"testing"
 	"time"
 
+	gosql "database/sql"
+	"encoding/json"
+	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -55,10 +56,27 @@ func TestListSessionsV2(t *testing.T) {
 		}
 	}()
 
+	countStatus := func(sessions []serverpb.Session) {
+		open := 0
+		closed := 0
+		total := 0
+		for _, s := range sessions {
+			if s.Status.String() == "OPEN" {
+				open += 1
+			}
+			if s.Status.String() == "CLOSED" {
+				closed += 1
+			}
+			total += 1
+		}
+		fmt.Printf("Total: %d Open: %d, Closed: %d\n", total, open, closed)
+	}
+
 	doSessionsRequest := func(client http.Client, limit int, start string) listSessionsResponse {
 		req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"sessions/", nil)
 		require.NoError(t, err)
 		query := req.URL.Query()
+		query.Add("exclude_closed_sessions", "true")
 		if limit > 0 {
 			query.Add("limit", strconv.Itoa(limit))
 		}
@@ -108,6 +126,7 @@ func TestListSessionsV2(t *testing.T) {
 		sort.Slice(paginatedSessions, func(i, j int) bool {
 			return paginatedSessions[i].Start.Before(paginatedSessions[j].Start)
 		})
+		countStatus(doSessionsRequest(adminClient, 0, "").Sessions)
 		// Sometimes there can be a transient session that pops up in one of the two
 		// calls. Exclude it by only comparing the first 15 sessions.
 		require.Equal(t, paginatedSessions[:15], allSessions[:15])
