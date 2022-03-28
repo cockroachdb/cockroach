@@ -510,6 +510,10 @@ func (s *adminServer) databaseDetailsHelper(
 		if err != nil {
 			return nil, err
 		}
+		resp.Stats.NumIndexRecommendations, err = s.getNumDatabaseIndexRecommendations(ctx, req.Database, resp.TableNames)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &resp, nil
@@ -605,6 +609,25 @@ func (s *adminServer) getDatabaseStats(
 	})
 
 	return &stats, nil
+}
+
+func (s *adminServer) getNumDatabaseIndexRecommendations(
+	ctx context.Context, databaseName string, tableNames []string,
+) (int32, error) {
+	var numDatabaseIndexRecommendations int
+	idxUsageStatsProvider := s.server.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
+	for _, tableName := range tableNames {
+		tableIndexStatsRequest := &serverpb.TableIndexStatsRequest{
+			Database: databaseName,
+			Table:    tableName,
+		}
+		tableIndexStatsResponse, err := getTableIndexUsageStats(ctx, tableIndexStatsRequest, idxUsageStatsProvider, s.ie, s.server.st, s.server.sqlServer.execCfg)
+		if err != nil {
+			return 0, err
+		}
+		numDatabaseIndexRecommendations += len(tableIndexStatsResponse.IndexRecommendations)
+	}
+	return int32(numDatabaseIndexRecommendations), nil
 }
 
 // getFullyQualifiedTableName, given a database name and a tableName that either
@@ -960,6 +983,16 @@ func (s *adminServer) tableDetailsHelper(
 		resp.RangeCount = rangeCount
 	}
 
+	idxUsageStatsProvider := s.server.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics()
+	tableIndexStatsRequest := &serverpb.TableIndexStatsRequest{
+		Database: req.Database,
+		Table:    req.Table,
+	}
+	tableIndexStatsResponse, err := getTableIndexUsageStats(ctx, tableIndexStatsRequest, idxUsageStatsProvider, s.ie, s.server.st, s.server.sqlServer.execCfg)
+	if err != nil {
+		return nil, err
+	}
+	resp.HasIndexRecommendations = len(tableIndexStatsResponse.IndexRecommendations) > 0
 	return &resp, nil
 }
 
@@ -1750,11 +1783,40 @@ func (s *adminServer) Settings(
 		}
 	}
 
+	// Read the system.settings table to determine the settings for which we have
+	// explicitly set values -- the in-memory SV has the set and default values
+	// flattened for quick reads, but we'd only need the non-defaults for comparison.
+	alteredSettings := make(map[string]*time.Time)
+	if it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
+		ctx, "read-setting", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		`SELECT name, "lastUpdated" FROM system.settings`,
+	); err != nil {
+		log.Warningf(ctx, "failed to read settings: %s", err)
+	} else {
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
+			name := string(tree.MustBeDString(row[0]))
+			lastUpdated := row[1].(*tree.DTimestamp)
+			alteredSettings[name] = &lastUpdated.Time
+		}
+		if err != nil {
+			// No need to clear AlteredSettings map since we only make best
+			// effort to populate it.
+			log.Warningf(ctx, "failed to read settings: %s", err)
+		}
+	}
+
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
 	for _, k := range keys {
 		v, ok := settings.Lookup(k, lookupPurpose, settings.ForSystemTenant)
 		if !ok {
 			continue
+		}
+		var altered *time.Time
+		if val, ok := alteredSettings[k]; ok {
+			altered = val
 		}
 		resp.KeyValues[k] = serverpb.SettingsResponse_Value{
 			Type: v.Typ(),
@@ -1762,9 +1824,9 @@ func (s *adminServer) Settings(
 			Value:       v.String(&s.server.st.SV),
 			Description: v.Description(),
 			Public:      v.Visibility() == settings.Public,
+			LastUpdated: altered,
 		}
 	}
-
 	return &resp, nil
 }
 

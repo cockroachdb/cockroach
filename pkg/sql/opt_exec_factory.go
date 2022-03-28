@@ -123,7 +123,7 @@ func (ef *execFactory) ConstructScan(
 		scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	}
 	scan.localityOptimized = params.LocalityOptimized
-	if !ef.isExplain {
+	if !ef.isExplain && !ef.planner.isInternalPlanner {
 		idxUsageKey := roachpb.IndexUsageKey{
 			TableID: roachpb.TableID(tabDesc.GetID()),
 			IndexID: roachpb.IndexID(idx.GetID()),

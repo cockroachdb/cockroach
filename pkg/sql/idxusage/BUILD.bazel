@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cluster_settings.go",
         "index_usage_stats_controller.go",
+        "index_usage_stats_rec.go",
         "local_idx_usage_stats.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/idxusage",
@@ -22,10 +23,14 @@ go_library(
 
 go_test(
     name = "idxusage_test",
-    srcs = ["local_index_usage_stats_test.go"],
+    srcs = [
+        "index_usage_stats_rec_test.go",
+        "local_index_usage_stats_test.go",
+    ],
     embed = [":idxusage"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",

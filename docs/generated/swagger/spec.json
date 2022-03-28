@@ -1276,6 +1276,11 @@
           },
           "x-go-name": "Grants"
         },
+        "has_index_recommendations": {
+          "description": "has_index_recommendations notifies if the there are index recommendations\non this table.",
+          "type": "boolean",
+          "x-go-name": "HasIndexRecommendations"
+        },
         "indexes": {
           "type": "array",
           "items": {
