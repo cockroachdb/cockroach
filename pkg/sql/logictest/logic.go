@@ -534,6 +534,10 @@ var (
 		"enables generation and storage of a declarative schema changer	corpus",
 	)
 
+	// BackupRestoreProbability is the environment variable for `3node-backup` config.
+	BackupRestoreProbability = envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0)
+)
+
 	// globalMVCCRangeTombstone will write a global MVCC range tombstone across
 	// the entire user keyspace during cluster bootstrapping. This should not
 	// semantically affect the test data written above it, but will activate MVCC
@@ -2057,6 +2061,8 @@ func (t *logicTest) hasOpenTxns(ctx context.Context) bool {
 	return false
 }
 
+var numBR int
+
 // maybeBackupRestore will randomly issue a cluster backup, create a new
 // cluster, and restore that backup to the cluster before continuing the test.
 // The probability of executing a backup and restore is specified in the
@@ -2074,6 +2080,9 @@ func (t *logicTest) maybeBackupRestore(
 	if rng.Float64() > config.BackupRestoreProbability {
 		return nil
 	}
+
+	numBR += 1
+	fmt.Printf("num backup restore run %d\n\n\n", numBR)
 
 	// Check if any users have open transactions in the logictest. If they do, we
 	// do not want to teardown the cluster and create a new one as it might
