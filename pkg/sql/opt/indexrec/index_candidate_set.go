@@ -373,7 +373,14 @@ func addIndexToCandidates(
 		return
 	}
 
+	// Do not add indexes to PARTITION ALL BY tables.
+	// TODO(rytaft): Support these tables by adding implicit partitioning columns.
+	if currTable.IsPartitionAllBy() {
+		return
+	}
+
 	// Do not add indexes on spatial columns.
+	// TODO(rytaft): Support spatial predicates like st_contains() etc.
 	for _, indexCol := range newIndex {
 		colFamily := indexCol.Column.DatumType().Family()
 		if colFamily == types.GeometryFamily || colFamily == types.GeographyFamily {
