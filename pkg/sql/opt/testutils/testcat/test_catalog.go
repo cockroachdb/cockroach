@@ -755,6 +755,11 @@ func (tt *Table) Zone() cat.Zone {
 	return cat.AsZone(&zone)
 }
 
+// IsPartitionAllBy is part of the cat.Table interface.
+func (tt *Table) IsPartitionAllBy() bool {
+	return false
+}
+
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {
