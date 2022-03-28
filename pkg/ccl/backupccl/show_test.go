@@ -37,6 +37,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO (msbutler): when refactoring these tests to data driven tests, keep the
+// original go test on 22.1 and only use new backup syntax in data driven test
+
 func TestShowBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
