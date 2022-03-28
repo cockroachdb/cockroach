@@ -201,7 +201,7 @@ var schemas = []string{
 	(
 		a INT PRIMARY KEY,
 		b INT,
-		INDEX (b)
+		INDEX b_idx (b)
 	)
 	`,
 }
@@ -304,7 +304,10 @@ func init() {
 	// Add a table with many columns and many indexes.
 	var indexes strings.Builder
 	for i := 0; i < 250; i++ {
-		indexes.WriteString(",\nINDEX (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w)")
+		indexes.WriteString(fmt.Sprintf(
+			",\nINDEX idx%d (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w)",
+			i,
+		))
 	}
 	tableK := fmt.Sprintf(`CREATE TABLE k (
 		id INT PRIMARY KEY,
