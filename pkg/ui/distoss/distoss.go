@@ -21,6 +21,7 @@ import (
 	_ "embed"
 
 	"github.com/cockroachdb/cockroach/pkg/ui"
+	"github.com/cockroachdb/cockroach/pkg/ui/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/targz"
 )
 
