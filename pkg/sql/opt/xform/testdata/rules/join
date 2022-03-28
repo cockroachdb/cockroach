@@ -2834,8 +2834,8 @@ exec-ddl
 DROP INDEX shard_b_null_idx
 ----
 
-# Regression test for #59615. Ensure that invalid lookup joins are not created
-# for left and anti joins.
+# Regression test for #59615 and #78681. Ensure that invalid lookup joins are
+# not created for left, semi, and anti joins.
 exec-ddl
 CREATE TABLE t59615 (
   x INT NOT NULL CHECK (x in (1, 3)),
@@ -2856,6 +2856,26 @@ left-join (lookup t59615 [as=t])
  │         └── x:2 IN (1, 3) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3]; tight)]
  ├── cardinality: [2 - ]
  ├── fd: (2,3)-->(4)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1,)
+ │    └── (2,)
+ └── filters (true)
+
+# Regression test for #78681.
+opt expect=GenerateLookupJoins
+SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE EXISTS (
+  SELECT * FROM t59615 t WHERE u.y = t.y
+)
+----
+semi-join (lookup t59615 [as=t])
+ ├── columns: y:1!null
+ ├── lookup expression
+ │    └── filters
+ │         ├── column1:1 = y:3 [outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ │         └── x:2 IN (1, 3) [outer=(2), constraints=(/2: [/1 - /1] [/3 - /3]; tight)]
+ ├── cardinality: [0 - 2]
  ├── values
  │    ├── columns: column1:1!null
  │    ├── cardinality: [2 - 2]
@@ -5095,20 +5115,13 @@ SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE m = virt.v1)
 ----
 semi-join (lookup virt@j_v1)
  ├── columns: m:1
- ├── key columns: [16 1] = [8 9]
+ ├── lookup expression
+ │    └── filters
+ │         ├── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │         └── j:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
  ├── immutable
- ├── inner-join (cross)
- │    ├── columns: m:1 "lookup_join_const_col_@8":16!null
- │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
- │    ├── scan small
- │    │    └── columns: m:1
- │    ├── values
- │    │    ├── columns: "lookup_join_const_col_@8":16!null
- │    │    ├── cardinality: [3 - 3]
- │    │    ├── (10,)
- │    │    ├── (20,)
- │    │    └── (30,)
- │    └── filters (true)
+ ├── scan small
+ │    └── columns: m:1
  └── filters (true)
 
 # Anti-join with multiple constant values based on optional filters.
@@ -5737,20 +5750,13 @@ SELECT m FROM small WHERE EXISTS (SELECT * FROM virt WHERE virt.l IN (1, 2, 3) A
 ----
 semi-join (lookup virt@l_v1)
  ├── columns: m:1
- ├── key columns: [16 1] = [13 9]
+ ├── lookup expression
+ │    └── filters
+ │         ├── m:1 = v1:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │         └── l:13 IN (1, 2, 3) [outer=(13), constraints=(/13: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
  ├── immutable
- ├── inner-join (cross)
- │    ├── columns: m:1 "lookup_join_const_col_@13":16!null
- │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
- │    ├── scan small
- │    │    └── columns: m:1
- │    ├── values
- │    │    ├── columns: "lookup_join_const_col_@13":16!null
- │    │    ├── cardinality: [3 - 3]
- │    │    ├── (1,)
- │    │    ├── (2,)
- │    │    └── (3,)
- │    └── filters (true)
+ ├── scan small
+ │    └── columns: m:1
  └── filters (true)
 
 # Semi-join with multiple constant values for the leading lookup column and a
