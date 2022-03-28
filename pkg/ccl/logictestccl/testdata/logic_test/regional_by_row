@@ -1025,20 +1025,23 @@ vectorized: true
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: child@primary
-│           │ equality: (lookup_join_const_col_@12, column1) = (crdb_region,c_id)
-│           │ equality cols are key
-│           │ pred: column8 != crdb_region
+│       └── • limit
+│           │ count: 1
 │           │
-│           └── • cross join
-│               │ estimated row count: 3
+│           └── • lookup join
+│               │ table: child@primary
+│               │ equality: (lookup_join_const_col_@12, column1) = (crdb_region,c_id)
+│               │ equality cols are key
+│               │ pred: column8 != crdb_region
 │               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • scan buffer
-│                     label: buffer 1
+│               └── • cross join
+│                   │ estimated row count: 3
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 └── • constraint-check
     │
@@ -1143,15 +1146,10 @@ vectorized: true
         │
         └── • lookup join (semi)
             │ table: child@child_c_p_id_idx
-            │ equality: (lookup_join_const_col_@12, p_id) = (crdb_region,c_p_id)
+            │ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
             │
-            └── • cross join
-                │
-                ├── • values
-                │     size: 1 column, 3 rows
-                │
-                └── • scan buffer
-                      label: buffer 1
+            └── • scan buffer
+                  label: buffer 1
 
 # Tests creating a index and a unique constraint on a REGIONAL BY ROW table.
 statement ok
@@ -1183,39 +1181,45 @@ vectorized: true
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table@primary
-│           │ equality: (lookup_join_const_col_@23, column1) = (crdb_region,pk)
-│           │ equality cols are key
-│           │ pred: column15 != crdb_region
+│       └── • limit
+│           │ count: 1
 │           │
-│           └── • cross join
-│               │ estimated row count: 3
+│           └── • lookup join
+│               │ table: regional_by_row_table@primary
+│               │ equality: (lookup_join_const_col_@23, column1) = (crdb_region,pk)
+│               │ equality cols are key
+│               │ pred: column15 != crdb_region
 │               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • scan buffer
-│                     label: buffer 1
+│               └── • cross join
+│                   │ estimated row count: 3
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@38, column4) = (crdb_region,b)
-│           │ equality cols are key
-│           │ pred: (column1 != pk) OR (column15 != crdb_region)
+│       └── • limit
+│           │ count: 1
 │           │
-│           └── • cross join
-│               │ estimated row count: 3
+│           └── • lookup join
+│               │ table: regional_by_row_table@regional_by_row_table_b_key
+│               │ equality: (lookup_join_const_col_@38, column4) = (crdb_region,b)
+│               │ equality cols are key
+│               │ pred: (column1 != pk) OR (column15 != crdb_region)
 │               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • scan buffer
-│                     label: buffer 1
+│               └── • cross join
+│                   │ estimated row count: 3
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 ├── • constraint-check
 │   │
@@ -1223,40 +1227,37 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@uniq_idx (partial index)
-│           │ equality: (lookup_join_const_col_@53, column3) = (crdb_region,a)
+│           │ lookup condition: (column3 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: (column1 != pk) OR (column15 != crdb_region)
 │           │
-│           └── • cross join
-│               │ estimated row count: 3
+│           └── • filter
+│               │ estimated row count: 1
+│               │ filter: column4 > 0
 │               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • filter
-│                   │ estimated row count: 1
-│                   │ filter: column4 > 0
-│                   │
-│                   └── • scan buffer
-│                         label: buffer 1
+│               └── • scan buffer
+│                     label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@68, column3, column4) = (crdb_region,a,b)
-            │ equality cols are key
-            │ pred: (column1 != pk) OR (column15 != crdb_region)
+        └── • limit
+            │ count: 1
             │
-            └── • cross join
-                │ estimated row count: 3
+            └── • lookup join
+                │ table: regional_by_row_table@new_idx
+                │ equality: (lookup_join_const_col_@68, column3, column4) = (crdb_region,a,b)
+                │ equality cols are key
+                │ pred: (column1 != pk) OR (column15 != crdb_region)
                 │
-                ├── • values
-                │     size: 1 column, 3 rows
-                │
-                └── • scan buffer
-                      label: buffer 1
+                └── • cross join
+                    │ estimated row count: 3
+                    │
+                    ├── • values
+                    │     size: 1 column, 3 rows
+                    │
+                    └── • scan buffer
+                          label: buffer 1
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_b_key"\nDETAIL: Key \(b\)=\(3\) already exists\.
 INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)
@@ -1302,19 +1303,22 @@ vectorized: true
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@35, column5) = (crdb_region,b)
-│           │ equality cols are key
-│           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+│       └── • limit
+│           │ count: 1
 │           │
-│           └── • cross join
+│           └── • lookup join
+│               │ table: regional_by_row_table@regional_by_row_table_b_key
+│               │ equality: (lookup_join_const_col_@35, column5) = (crdb_region,b)
+│               │ equality cols are key
+│               │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • scan buffer
-│                     label: buffer 1
+│               └── • cross join
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 ├── • constraint-check
 │   │
@@ -1322,37 +1326,35 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@uniq_idx (partial index)
-│           │ equality: (lookup_join_const_col_@50, column4) = (crdb_region,a)
+│           │ lookup condition: (column4 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
-│           └── • cross join
+│           └── • filter
+│               │ filter: column5 > 0
 │               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • filter
-│                   │ filter: column5 > 0
-│                   │
-│                   └── • scan buffer
-│                         label: buffer 1
+│               └── • scan buffer
+│                     label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@65, column4, column5) = (crdb_region,a,b)
-            │ equality cols are key
-            │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+        └── • limit
+            │ count: 1
             │
-            └── • cross join
+            └── • lookup join
+                │ table: regional_by_row_table@new_idx
+                │ equality: (lookup_join_const_col_@65, column4, column5) = (crdb_region,a,b)
+                │ equality cols are key
+                │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
                 │
-                ├── • values
-                │     size: 1 column, 3 rows
-                │
-                └── • scan buffer
-                      label: buffer 1
+                └── • cross join
+                    │
+                    ├── • values
+                    │     size: 1 column, 3 rows
+                    │
+                    └── • scan buffer
+                          label: buffer 1
 
 query T
 EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
@@ -1388,19 +1390,24 @@ vectorized: true
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@35, column5) = (crdb_region,b)
-│           │ equality cols are key
-│           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+│       └── • distinct
+│           │ distinct on: rownum
 │           │
-│           └── • cross join
+│           └── • lookup join
+│               │ table: regional_by_row_table@regional_by_row_table_b_key
+│               │ equality: (lookup_join_const_col_@35, column5) = (crdb_region,b)
+│               │ equality cols are key
+│               │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • scan buffer
-│                     label: buffer 1
+│               └── • cross join
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • ordinality
+│                       │
+│                       └── • scan buffer
+│                             label: buffer 1
 │
 ├── • constraint-check
 │   │
@@ -1408,37 +1415,37 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@uniq_idx (partial index)
-│           │ equality: (lookup_join_const_col_@50, column4) = (crdb_region,a)
+│           │ lookup condition: (column4 = a) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
-│           └── • cross join
+│           └── • filter
+│               │ filter: column5 > 0
 │               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • filter
-│                   │ filter: column5 > 0
-│                   │
-│                   └── • scan buffer
-│                         label: buffer 1
+│               └── • scan buffer
+│                     label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@65, column4, column5) = (crdb_region,a,b)
-            │ equality cols are key
-            │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+        └── • distinct
+            │ distinct on: rownum
             │
-            └── • cross join
+            └── • lookup join
+                │ table: regional_by_row_table@new_idx
+                │ equality: (lookup_join_const_col_@65, column4, column5) = (crdb_region,a,b)
+                │ equality cols are key
+                │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
                 │
-                ├── • values
-                │     size: 1 column, 3 rows
-                │
-                └── • scan buffer
-                      label: buffer 1
+                └── • cross join
+                    │
+                    ├── • values
+                    │     size: 1 column, 3 rows
+                    │
+                    └── • ordinality
+                        │
+                        └── • scan buffer
+                              label: buffer 1
 
 query TIIIIIIIIT colnames
 SELECT * FROM (VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)) AS v(crdb_region, pk, pk2, a, b)
@@ -1738,20 +1745,23 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: regional_by_row_table_as@regional_by_row_table_as_b_key
-            │ equality: (lookup_join_const_col_@21, column3) = (crdb_region_col,b)
-            │ equality cols are key
-            │ pred: (column1 != pk) OR (column10 != crdb_region_col)
+        └── • limit
+            │ count: 1
             │
-            └── • cross join
-                │ estimated row count: 3
+            └── • lookup join
+                │ table: regional_by_row_table_as@regional_by_row_table_as_b_key
+                │ equality: (lookup_join_const_col_@21, column3) = (crdb_region_col,b)
+                │ equality cols are key
+                │ pred: (column1 != pk) OR (column10 != crdb_region_col)
                 │
-                ├── • values
-                │     size: 1 column, 3 rows
-                │
-                └── • scan buffer
-                      label: buffer 1
+                └── • cross join
+                    │ estimated row count: 3
+                    │
+                    ├── • values
+                    │     size: 1 column, 3 rows
+                    │
+                    └── • scan buffer
+                          label: buffer 1
 
 statement error pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(pk\)=\(1\) already exists\.
 INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)
@@ -2694,20 +2704,23 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table_virt@primary
-│           │ equality: (lookup_join_const_col_@21, column1) = (crdb_region,pk)
-│           │ equality cols are key
-│           │ pred: column12 != crdb_region
+│       └── • limit
+│           │ count: 1
 │           │
-│           └── • cross join
-│               │ estimated row count: 3
+│           └── • lookup join
+│               │ table: regional_by_row_table_virt@primary
+│               │ equality: (lookup_join_const_col_@21, column1) = (crdb_region,pk)
+│               │ equality cols are key
+│               │ pred: column12 != crdb_region
 │               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • scan buffer
-│                     label: buffer 1
+│               └── • cross join
+│                   │ estimated row count: 3
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 ├── • constraint-check
 │   │
@@ -2880,20 +2893,23 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (semi)
-│           │ table: regional_by_row_table_virt_partial@primary
-│           │ equality: (lookup_join_const_col_@23, column1) = (crdb_region,pk)
-│           │ equality cols are key
-│           │ pred: column12 != crdb_region
+│       └── • limit
+│           │ count: 1
 │           │
-│           └── • cross join
-│               │ estimated row count: 3
+│           └── • lookup join
+│               │ table: regional_by_row_table_virt_partial@primary
+│               │ equality: (lookup_join_const_col_@23, column1) = (crdb_region,pk)
+│               │ equality cols are key
+│               │ pred: column12 != crdb_region
 │               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • scan buffer
-│                     label: buffer 1
+│               └── • cross join
+│                   │ estimated row count: 3
+│                   │
+│                   ├── • values
+│                   │     size: 1 column, 3 rows
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
 │
 ├── • constraint-check
 │   │
