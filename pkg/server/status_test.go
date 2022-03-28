@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -3251,6 +3252,118 @@ func TestStatusAPIListSessions(t *testing.T) {
 	session = getSessionWithTestAppName(&resp)
 	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
 	require.Equal(t, "SELECT 2", session.LastActiveQuery)
+}
+
+func TestListClosedSessions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	serverParams, _ := tests.CreateTestServerParams()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: serverParams,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	server := testCluster.Server(0)
+
+	doSessionsRequest := func(username string) serverpb.ListSessionsResponse {
+		var resp serverpb.ListSessionsResponse
+		path := "/_status/sessions?username=" + username
+		err := serverutils.GetJSONProto(server, path, &resp)
+		require.NoError(t, err)
+		return resp
+	}
+
+	getUserConn := func(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(username, "hunter2"),
+			Host:   server.ServingSQLAddr(),
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return db
+	}
+
+	// Create a test user.
+	user := "test_user_a"
+	conn := testCluster.ServerConn(0)
+	_, err := conn.Exec(fmt.Sprintf(`
+CREATE USER %s with password 'hunter2';
+`, user))
+	require.NoError(t, err)
+
+	var dbs []*gosql.DB
+
+	// Open 10 sessions for the user and then close them.
+	for i := 0; i < 10; i++ {
+		targetDB := getUserConn(t, user, testCluster.Server(0))
+		dbs = append(dbs, targetDB)
+		sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT version()`)
+	}
+
+	for _, db := range dbs {
+		err := db.Close()
+		require.NoError(t, err)
+	}
+
+	var wg sync.WaitGroup
+
+	// Open 5 sessions for the user and leave them open by running pg_sleep(30).
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(user string) {
+			// Open a session for the target user.
+			targetDB := getUserConn(t, user, testCluster.Server(0))
+			defer targetDB.Close()
+			defer wg.Done()
+			sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT pg_sleep(30)`)
+		}(user)
+	}
+
+	// Open 3 sessions for the user and leave them idle by running version().
+	for i := 0; i < 3; i++ {
+		targetDB := getUserConn(t, user, testCluster.Server(0))
+		defer targetDB.Close()
+		sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT version()`)
+	}
+
+	countSessionStatus := func(allSessions []serverpb.Session) (int, int, int) {
+		var active, idle, closed int
+		for _, s := range allSessions {
+			if s.Status.String() == "ACTIVE" {
+				active++
+			}
+			// IDLE sessions are open sessions with no active queries.
+			if s.Status.String() == "IDLE" {
+				idle++
+			}
+			if s.Status.String() == "CLOSED" {
+				closed++
+			}
+			fmt.Printf("Status: %s\n", s.Status.String())
+		}
+		return active, idle, closed
+	}
+
+	// Make sure that each client has 10 closed sessions, 5 open sessions, and 3 idle sessions.
+	sessionsResponse := doSessionsRequest(user)
+	allSessions := sessionsResponse.Sessions
+	sort.Slice(allSessions, func(i, j int) bool {
+		return allSessions[i].Start.Before(allSessions[j].Start)
+	})
+
+	fmt.Printf("USER: %s\n------------------\n", user)
+	active, idle, closed := countSessionStatus(allSessions)
+
+	require.Equal(t, 3, idle)
+	require.Equal(t, 5, active)
+	require.Equal(t, 10, closed)
+
+	// Wait for the goroutines from the pg_sleep() command to finish, so we can
+	// safely close their connections.
+	wg.Wait()
 }
 
 func TestTransactionContentionEvents(t *testing.T) {
