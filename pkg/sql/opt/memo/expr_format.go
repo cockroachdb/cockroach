@@ -1425,7 +1425,7 @@ func (f *ExprFmtCtx) formatLockingWithPrefix(
 	wait := ""
 	switch locking.WaitPolicy {
 	case tree.LockWaitBlock:
-	case tree.LockWaitSkip:
+	case tree.LockWaitSkipLocked:
 		wait = ",skip-locked"
 	case tree.LockWaitError:
 		wait = ",nowait"
