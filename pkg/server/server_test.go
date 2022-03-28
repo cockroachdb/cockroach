@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -962,6 +963,26 @@ Binary built without web UI.
 	t.Run("Client-side caching", func(t *testing.T) {
 		linkInFakeUI()
 		defer unlinkFakeUI()
+
+		// Set up fake asset FS with hashes
+		mapfs := fstest.MapFS{
+			"bundle.js": &fstest.MapFile{
+				Data: []byte("console.log('hello world');"),
+			},
+		}
+		fsys, err := mapfs.Sub(".")
+		require.NoError(t, err)
+		ui.Assets = fsys
+		ui.AssetHashes = map[string]string{
+			"/bundle.js": "ad43b0d7fb055db16583c156c5507ed58c157e9d",
+		}
+
+		// Clear fake asset FS and hashes when we're done
+		defer func() {
+			ui.Assets = nil
+			ui.AssetHashes = nil
+		}()
+
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
 		tsrv := s.(*TestServer)
