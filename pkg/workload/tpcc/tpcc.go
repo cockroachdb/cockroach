@@ -66,7 +66,8 @@ type tpcc struct {
 
 	auditor *auditor
 
-	reg *histogram.Registry
+	reg        *histogram.Registry
+	txCounters txCounters
 
 	split   bool
 	scatter bool
@@ -738,7 +739,12 @@ func (w *tpcc) Ops(
 		}
 	}
 
-	counters := setupTPCCMetrics(reg.Registerer())
+	// Need idempotency - Ops might be invoked multiple times with the same
+	// Registry.
+	if w.reg == nil {
+		w.reg = reg
+		w.txCounters = setupTPCCMetrics(reg.Registerer())
+	}
 
 	sqlDatabase, err := workload.SanitizeUrls(w, w.dbOverride, urls)
 	if err != nil {
@@ -749,7 +755,6 @@ func (w *tpcc) Ops(
 		return workload.QueryLoad{}, err
 	}
 
-	w.reg = reg
 	w.usePostgres = parsedURL.Port() == "5432"
 
 	// We can't use a single MultiConnPool because we want to implement partition
@@ -871,7 +876,7 @@ func (w *tpcc) Ops(
 		idx := len(ql.WorkerFns) - 1
 		sem <- struct{}{}
 		group.Go(func() error {
-			worker, err := newWorker(ctx, w, db, reg.GetHandle(), counters, warehouse)
+			worker, err := newWorker(ctx, w, db, reg.GetHandle(), w.txCounters, warehouse)
 			if err == nil {
 				ql.WorkerFns[idx] = worker.run
 			}
