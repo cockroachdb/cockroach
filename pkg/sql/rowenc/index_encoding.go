@@ -705,7 +705,7 @@ func encodeContainingArrayInvertedIndexSpans(
 		return &inverted.SpanExpression{Tight: true, Unique: true}, nil
 	}
 
-	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.PrimaryIndexWithStoredColumnsVersion, false /* excludeNulls */)
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.LatestIndexDescriptorVersion, false /* excludeNulls */)
 	if err != nil {
 		return nil, err
 	}
@@ -748,7 +748,7 @@ func encodeContainedArrayInvertedIndexSpans(
 	// We always exclude nulls from the list of keys when evaluating <@.
 	// This is because an expression like ARRAY[NULL] <@ ARRAY[NULL] is false,
 	// since NULL in SQL represents an unknown value.
-	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.PrimaryIndexWithStoredColumnsVersion, true /* excludeNulls */)
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.LatestIndexDescriptorVersion, true /* excludeNulls */)
 	if err != nil {
 		return nil, err
 	}
