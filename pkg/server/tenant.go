@@ -143,6 +143,9 @@ func startTenantInternal(
 		histogramWindowInterval: args.HistogramWindowInterval(),
 		settings:                args.Settings,
 	})
+	closedSessionCache := sql.NewClosedSessionCache(
+		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
+	args.closedSessionCache = closedSessionCache
 
 	// Initialize gRPC server for use on shared port with pg
 	grpcMain := newGRPCServer(args.rpcContext)
@@ -208,7 +211,7 @@ func startTenantInternal(
 	// the SQL server object.
 	tenantStatusServer := newTenantStatusServer(
 		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
-		args.sessionRegistry, args.flowScheduler, baseCfg.Settings, nil,
+		args.sessionRegistry, args.closedSessionCache, args.flowScheduler, baseCfg.Settings, nil,
 		args.rpcContext, args.stopper,
 	)
 
