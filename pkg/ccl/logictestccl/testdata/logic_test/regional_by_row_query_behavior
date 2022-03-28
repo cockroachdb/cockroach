@@ -2809,3 +2809,52 @@ SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as1 LIMIT 3] OFFSET 2
           table: regional_by_row_table_as1@regional_by_row_table_as1_pkey
           spans: [/'ca-central-1' - /'us-east-1']
           limit: 3
+
+subtest index_recommendations
+
+statement ok
+SET index_recommendations_enabled = true;
+SET vectorize=on
+
+statement ok
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name STRING NOT NULL,
+  email STRING NOT NULL UNIQUE,
+  INDEX (name)
+) LOCALITY REGIONAL BY ROW
+
+# Check that we don't recommend indexes that already exist.
+query T
+EXPLAIN INSERT INTO users (name, email)
+VALUES ('Craig Roacher', 'craig@cockroachlabs.com')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: users(id, name, email, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 5 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: users@users_email_key
+            │ lookup condition: (column2 = email) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+            │ pred: (id_default != id) OR (crdb_region_default != crdb_region)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+SET index_recommendations_enabled = false;
+RESET vectorize
