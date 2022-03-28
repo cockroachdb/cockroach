@@ -142,13 +142,14 @@ type baseStatusServer struct {
 	serverpb.UnimplementedStatusServer
 
 	log.AmbientContext
-	privilegeChecker *adminPrivilegeChecker
-	sessionRegistry  *sql.SessionRegistry
-	flowScheduler    *flowinfra.FlowScheduler
-	st               *cluster.Settings
-	sqlServer        *SQLServer
-	rpcCtx           *rpc.Context
-	stopper          *stop.Stopper
+	privilegeChecker   *adminPrivilegeChecker
+	sessionRegistry    *sql.SessionRegistry
+	closedSessionCache *sql.ClosedSessionCache
+	flowScheduler      *flowinfra.FlowScheduler
+	st                 *cluster.Settings
+	sqlServer          *SQLServer
+	rpcCtx             *rpc.Context
+	stopper            *stop.Stopper
 }
 
 // getLocalSessions returns a list of local sessions on this node. Note that the
@@ -198,9 +199,22 @@ func (b *baseStatusServer) getLocalSessions(
 	// The empty username means "all sessions".
 	showAll := reqUsername.Undefined()
 
-	registry := b.sessionRegistry
-	sessions := registry.SerializeAll()
-	userSessions := make([]serverpb.Session, 0, len(sessions))
+	sessions := b.sessionRegistry.SerializeAll()
+	var closedSessions []serverpb.Session
+
+	if !req.ExcludeClosedSessions {
+		// Before retrieving all the closed sessions, prevent any changes to the
+		// session registry by locking the session registry. Without this, a session
+		// may be deregistered from the session registry and subsequently added to
+		// the closed sessions cache, resulting in a duplicate entry of that session
+		// as both open and closed.
+		b.sessionRegistry.Lock()
+		closedSessions = b.closedSessionCache.GetSerializedSessions()
+		b.sessionRegistry.Unlock()
+	}
+
+	userSessions := make([]serverpb.Session, 0, len(sessions)+len(closedSessions))
+	sessions = append(sessions, closedSessions...)
 
 	for _, session := range sessions {
 		if reqUsername.Normalized() != session.Username && !showAll {
@@ -219,6 +233,11 @@ func (b *baseStatusServer) getLocalSessions(
 
 		userSessions = append(userSessions, session)
 	}
+
+	sort.Slice(userSessions, func(i, j int) bool {
+		return userSessions[i].Start.Before(userSessions[j].Start)
+	})
+
 	return userSessions, nil
 }
 
@@ -500,19 +519,21 @@ func newStatusServer(
 	stores *kvserver.Stores,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
+	closedSessionCache *sql.ClosedSessionCache,
 	flowScheduler *flowinfra.FlowScheduler,
 	internalExecutor *sql.InternalExecutor,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
 		baseStatusServer: &baseStatusServer{
-			AmbientContext:   ambient,
-			privilegeChecker: adminAuthzCheck,
-			sessionRegistry:  sessionRegistry,
-			flowScheduler:    flowScheduler,
-			st:               st,
-			rpcCtx:           rpcCtx,
-			stopper:          stopper,
+			AmbientContext:     ambient,
+			privilegeChecker:   adminAuthzCheck,
+			sessionRegistry:    sessionRegistry,
+			closedSessionCache: closedSessionCache,
+			flowScheduler:      flowScheduler,
+			st:                 st,
+			rpcCtx:             rpcCtx,
+			stopper:            stopper,
 		},
 		cfg:              cfg,
 		admin:            adminServer,
@@ -2733,7 +2754,13 @@ func (s *statusServer) listSessionsHelper(
 			return
 		}
 		sessions := nodeResp.([]serverpb.Session)
+		sort.Slice(sessions, func(i, j int) bool {
+			return sessions[i].Start.Before(sessions[j].Start)
+		})
 		response.Sessions = append(response.Sessions, sessions...)
+		sort.Slice(response.Sessions, func(i, j int) bool {
+			return response.Sessions[i].Start.Before(response.Sessions[j].Start)
+		})
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		errResponse := serverpb.ListSessionsError{NodeID: nodeID, Message: err.Error()}

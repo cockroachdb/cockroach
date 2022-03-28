@@ -688,6 +688,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sHTTP := newHTTPServer(cfg.BaseConfig, rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
 
 	sessionRegistry := sql.NewSessionRegistry()
+	closedSessionCache := sql.NewClosedSessionCache(cfg.Settings, sqlMonitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
 
 	sStatus := newStatusServer(
@@ -705,6 +706,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		node.stores,
 		stopper,
 		sessionRegistry,
+		closedSessionCache,
 		flowScheduler,
 		internalExecutor,
 	)
@@ -755,6 +757,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry:                 registry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
+		closedSessionCache:       closedSessionCache,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: internalExecutor,
 		circularJobRegistry:      jobRegistry,

@@ -15,9 +15,11 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -3251,6 +3253,130 @@ func TestStatusAPIListSessions(t *testing.T) {
 	session = getSessionWithTestAppName(&resp)
 	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
 	require.Equal(t, "SELECT 2", session.LastActiveQuery)
+}
+
+func TestListClosedSessions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Insecure: true,
+		},
+	})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts1 := testCluster.Server(0)
+
+	doSessionsRequest := func(client http.Client, username string) listSessionsResponse {
+		req, err := http.NewRequest("GET", ts1.AdminURL()+"/_status/sessions", nil)
+		require.NoError(t, err)
+		query := req.URL.Query()
+		query.Add("username", username)
+
+		req.URL.RawQuery = query.Encode()
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		bytesResponse, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		var sessionsResponse listSessionsResponse
+		if resp.StatusCode != 200 {
+			t.Fatal(string(bytesResponse))
+		}
+		require.NoError(t, json.Unmarshal(bytesResponse, &sessionsResponse))
+		return sessionsResponse
+	}
+
+	getUserConn := func(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
+		pgURL := url.URL{
+			Scheme:   "postgres",
+			User:     url.User(username),
+			Host:     server.ServingSQLAddr(),
+			RawQuery: "sslmode=disable",
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return db
+	}
+
+	// Create three users.
+	users := [3]string{"test_user_a", "test_user_b", "test_user_c"}
+	conn, err := testCluster.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.ExecContext(ctx, fmt.Sprintf(`
+CREATE USER %s;
+CREATE USER %s;
+CREATE USER %s;
+CREATE USER test_user_admin;
+GRANT admin TO test_user_admin;
+`, users[0], users[1], users[2]))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var dbs []*gosql.DB
+
+	// Open 5 sessions for each user.
+	for _, user := range users {
+		for i := 0; i < 5; i++ {
+			targetDB := getUserConn(t, user, testCluster.Server(0))
+			dbs = append(dbs, targetDB)
+			sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT version()`)
+		}
+	}
+
+	// Close all the open sessions.
+	for _, db := range dbs {
+		err := db.Close()
+		require.NoError(t, err)
+	}
+
+	// Open 5 sessions for each user and leave them open.
+	for _, user := range users {
+		for i := 0; i < 5; i++ {
+			// Open a session for the target user.
+			targetDB := getUserConn(t, user, testCluster.Server(0))
+			defer targetDB.Close()
+			sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT version()`)
+		}
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	adminClient, err := ts1.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	// Make sure that each client has 5 open sessions and 5 closed sessions
+	for _, user := range users {
+		sessionsResponse := doSessionsRequest(adminClient, user)
+		allSessions := sessionsResponse.Sessions
+		sort.Slice(allSessions, func(i, j int) bool {
+			return allSessions[i].Start.Before(allSessions[j].Start)
+		})
+
+		open := 0
+		closed := 0
+		for _, s := range allSessions {
+			// IDLE sessions are open sessions with no active queries.
+			if s.Status.String() == "OPEN" || s.Status.String() == "IDLE" {
+				open++
+			}
+			if s.Status.String() == "CLOSED" {
+				closed++
+			}
+		}
+
+		require.Equal(t, 5, open)
+		require.Equal(t, 5, closed)
+	}
 }
 
 func TestTransactionContentionEvents(t *testing.T) {
