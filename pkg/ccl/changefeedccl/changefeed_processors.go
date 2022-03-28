@@ -100,6 +100,7 @@ type changeAggregator struct {
 	metrics    *Metrics
 	sliMetrics *sliMetrics
 	knobs      TestingKnobs
+	topicNamer *TopicNamer
 }
 
 type timestampLowerBoundOracle interface {
@@ -169,6 +170,13 @@ func newChangeAggregatorProcessor(
 	var err error
 	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts, AllTargets(ca.spec.Feed)); err != nil {
 		return nil, err
+	}
+
+	if _, needTopics := ca.spec.Feed.Opts[changefeedbase.OptTopicInValue]; needTopics {
+		ca.topicNamer, err = MakeTopicNamer(ca.spec.Feed.TargetSpecifications, '.', "" /*prefix*/, "" /*singleName*/, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// MinCheckpointFrequency controls how frequently the changeAggregator flushes the sink
@@ -296,7 +304,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	} else {
 		ca.eventConsumer = newKVEventToRowConsumer(
 			ctx, ca.flowCtx.Cfg, ca.frontier.SpanFrontier(), initialHighWater,
-			ca.sink, ca.encoder, ca.spec.Feed, ca.knobs)
+			ca.sink, ca.encoder, ca.spec.Feed, ca.knobs, ca.topicNamer)
 	}
 }
 
@@ -671,15 +679,17 @@ type kvEventConsumer interface {
 }
 
 type kvEventToRowConsumer struct {
-	frontier  *span.Frontier
-	encoder   Encoder
-	scratch   bufalloc.ByteAllocator
-	sink      Sink
-	cursor    hlc.Timestamp
-	knobs     TestingKnobs
-	rfCache   *rowFetcherCache
-	details   jobspb.ChangefeedDetails
-	kvFetcher row.SpanKVFetcher
+	frontier             *span.Frontier
+	encoder              Encoder
+	scratch              bufalloc.ByteAllocator
+	sink                 Sink
+	cursor               hlc.Timestamp
+	knobs                TestingKnobs
+	rfCache              *rowFetcherCache
+	details              jobspb.ChangefeedDetails
+	kvFetcher            row.SpanKVFetcher
+	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
+	topicNamer           *TopicNamer
 }
 
 var _ kvEventConsumer = &kvEventToRowConsumer{}
@@ -693,6 +703,7 @@ func newKVEventToRowConsumer(
 	encoder Encoder,
 	details jobspb.ChangefeedDetails,
 	knobs TestingKnobs,
+	topicNamer *TopicNamer,
 ) kvEventConsumer {
 	rfCache := newRowFetcherCache(
 		ctx,
@@ -704,21 +715,163 @@ func newKVEventToRowConsumer(
 	)
 
 	return &kvEventToRowConsumer{
-		frontier: frontier,
-		encoder:  encoder,
-		sink:     sink,
-		cursor:   cursor,
-		rfCache:  rfCache,
-		details:  details,
-		knobs:    knobs,
+		frontier:             frontier,
+		encoder:              encoder,
+		sink:                 sink,
+		cursor:               cursor,
+		rfCache:              rfCache,
+		details:              details,
+		knobs:                knobs,
+		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
+		topicNamer:           topicNamer,
 	}
 }
 
 type tableDescriptorTopic struct {
-	catalog.TableDescriptor
+	tableDesc           catalog.TableDescriptor
+	spec                jobspb.ChangefeedTargetSpecification
+	nameComponentsCache []string
+	identifierCache     TopicIdentifier
+}
+
+// GetNameComponents implements the TopicDescriptor interface
+func (tdt *tableDescriptorTopic) GetNameComponents() []string {
+	if len(tdt.nameComponentsCache) == 0 {
+		tdt.nameComponentsCache = []string{tdt.spec.StatementTimeName}
+	}
+	return tdt.nameComponentsCache
+}
+
+// GetTopicIdentifier implements the TopicDescriptor interface
+func (tdt *tableDescriptorTopic) GetTopicIdentifier() TopicIdentifier {
+	if tdt.identifierCache.TableID == 0 {
+		tdt.identifierCache = TopicIdentifier{
+			TableID: tdt.tableDesc.GetID(),
+		}
+	}
+	return tdt.identifierCache
+}
+
+// GetVersion implements the TopicDescriptor interface
+func (tdt *tableDescriptorTopic) GetVersion() descpb.DescriptorVersion {
+	return tdt.tableDesc.GetVersion()
+}
+
+// GetTargetSpecification implements the TopicDescriptor interface
+func (tdt *tableDescriptorTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
+	return tdt.spec
 }
 
 var _ TopicDescriptor = &tableDescriptorTopic{}
+
+type columnFamilyTopic struct {
+	tableDesc           catalog.TableDescriptor
+	familyDesc          descpb.ColumnFamilyDescriptor
+	spec                jobspb.ChangefeedTargetSpecification
+	nameComponentsCache []string
+	identifierCache     TopicIdentifier
+}
+
+// GetNameComponents implements the TopicDescriptor interface
+func (cft *columnFamilyTopic) GetNameComponents() []string {
+	if len(cft.nameComponentsCache) == 0 {
+		cft.nameComponentsCache = []string{
+			cft.spec.StatementTimeName,
+			cft.familyDesc.Name,
+		}
+	}
+	return cft.nameComponentsCache
+}
+
+// GetTopicIdentifier implements the TopicDescriptor interface
+func (cft *columnFamilyTopic) GetTopicIdentifier() TopicIdentifier {
+	if cft.identifierCache.TableID == 0 {
+		cft.identifierCache = TopicIdentifier{
+			TableID:  cft.tableDesc.GetID(),
+			FamilyID: cft.familyDesc.ID,
+		}
+	}
+	return cft.identifierCache
+}
+
+// GetVersion implements the TopicDescriptor interface
+func (cft *columnFamilyTopic) GetVersion() descpb.DescriptorVersion {
+	return cft.tableDesc.GetVersion()
+}
+
+// GetTargetSpecification implements the TopicDescriptor interface
+func (cft *columnFamilyTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
+	return cft.spec
+}
+
+var _ TopicDescriptor = &columnFamilyTopic{}
+
+type noTopic struct{}
+
+func (n noTopic) GetNameComponents() []string {
+	return []string{}
+}
+
+func (n noTopic) GetTopicIdentifier() TopicIdentifier {
+	return TopicIdentifier{}
+}
+
+func (n noTopic) GetVersion() descpb.DescriptorVersion {
+	return 0
+}
+
+func (n noTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
+	return jobspb.ChangefeedTargetSpecification{}
+}
+
+var _ TopicDescriptor = &noTopic{}
+
+func makeTopicDescriptorFromSpecForRow(
+	s jobspb.ChangefeedTargetSpecification, r encodeRow,
+) (TopicDescriptor, error) {
+	switch s.Type {
+	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+		return &tableDescriptorTopic{
+			tableDesc: r.tableDesc,
+			spec:      s,
+		}, nil
+	case jobspb.ChangefeedTargetSpecification_EACH_FAMILY, jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+		familyDesc, err := r.tableDesc.FindFamilyByID(r.familyID)
+		if err != nil {
+			return noTopic{}, err
+		}
+		return &columnFamilyTopic{
+			tableDesc:  r.tableDesc,
+			spec:       s,
+			familyDesc: *familyDesc,
+		}, nil
+	default:
+		return noTopic{}, errors.AssertionFailedf("Unsupported target type %s", s.Type)
+	}
+}
+
+func (c *kvEventToRowConsumer) topicForRow(r encodeRow) (TopicDescriptor, error) {
+	if topic, ok := c.topicDescriptorCache[TopicIdentifier{TableID: r.tableDesc.GetID(), FamilyID: r.familyID}]; ok {
+		if topic.GetVersion() == r.tableDesc.GetVersion() {
+			return topic, nil
+		}
+	}
+	family, err := r.tableDesc.FindFamilyByID(r.familyID)
+	if err != nil {
+		return noTopic{}, err
+	}
+	for _, s := range c.details.TargetSpecifications {
+		if s.TableID == r.tableDesc.GetID() && (s.FamilyName == "" || s.FamilyName == family.Name) {
+			topic, err := makeTopicDescriptorFromSpecForRow(s, r)
+			if err != nil {
+				return noTopic{}, err
+			}
+			c.topicDescriptorCache[topic.GetTopicIdentifier()] = topic
+			return topic, nil
+		}
+	}
+	return noTopic{}, errors.AssertionFailedf("no TargetSpecification for row %v", r)
+}
 
 // ConsumeEvent implements kvEventConsumer interface
 func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
@@ -734,6 +887,17 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 			return nil
 		}
 		return err
+	}
+
+	topic, err := c.topicForRow(r)
+	if err != nil {
+		return err
+	}
+	if c.topicNamer != nil {
+		r.topic, err = c.topicNamer.Name(topic)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Ensure that r updates are strictly newer than the least resolved timestamp
@@ -765,7 +929,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		}
 	}
 	if err := c.sink.EmitRow(
-		ctx, tableDescriptorTopic{r.tableDesc},
+		ctx, topic,
 		keyCopy, valueCopy, r.updated, r.mvccTimestamp, ev.DetachAlloc(),
 	); err != nil {
 		return err
@@ -903,22 +1067,6 @@ var _ kvEventConsumer = &nativeKVConsumer{}
 
 func newNativeKVConsumer(sink Sink) kvEventConsumer {
 	return &nativeKVConsumer{sink: sink}
-}
-
-type noTopic struct{}
-
-var _ TopicDescriptor = &noTopic{}
-
-func (n noTopic) GetName() string {
-	return ""
-}
-
-func (n noTopic) GetID() descpb.ID {
-	return 0
-}
-
-func (n noTopic) GetVersion() descpb.DescriptorVersion {
-	return 0
 }
 
 // ConsumeEvent implements kvEventConsumer interface.

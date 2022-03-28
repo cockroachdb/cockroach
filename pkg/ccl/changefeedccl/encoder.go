@@ -66,6 +66,8 @@ type encodeRow struct {
 	prevTableDesc catalog.TableDescriptor
 	// prevFamilyID indicates which column family is populated in prevDatums.
 	prevFamilyID descpb.FamilyID
+	// topic is set to the string to be included if TopicInValue is true
+	topic string
 }
 
 // Encoder turns a row into a serialized changefeed key, value, or resolved
@@ -201,41 +203,6 @@ func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 	return jsonEntries, nil
 }
 
-// TODO (zinger): Cache this, but with eviction in the EACH_FAMILY case.
-func (e *jsonEncoder) encodeTopicRaw(row encodeRow) (interface{}, error) {
-	descID := row.tableDesc.GetID()
-	// use the target list since row.tableDesc.GetName() will not have fully qualified names
-	for _, target := range e.targets {
-		if target.TableID == descID {
-			switch target.Type {
-			case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
-				return target.StatementTimeName, nil
-			case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
-				family, err := row.tableDesc.FindFamilyByID(row.familyID)
-				if err != nil {
-					return nil, err
-				}
-				return fmt.Sprintf("%s.%s", target.StatementTimeName, family.Name), nil
-			case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
-				family, err := row.tableDesc.FindFamilyByID(row.familyID)
-				if err != nil {
-					return nil, err
-				}
-				if family.Name != target.FamilyName {
-					// Not the right target specification for this family
-					continue
-				}
-				return fmt.Sprintf("%s.%s", target.StatementTimeName, target.FamilyName), nil
-			default:
-				// fall through to error
-			}
-			return nil, errors.AssertionFailedf("Found a matching target with unimplemented type %s", target.Type)
-		}
-	}
-	return nil, fmt.Errorf("table with name %s and descriptor ID %d not found in changefeed target list",
-		row.tableDesc.GetName(), descID)
-}
-
 // EncodeValue implements the Encoder interface.
 func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, error) {
 	if e.keyOnly || (!e.wrapped && row.deleted) {
@@ -328,11 +295,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 			jsonEntries[`key`] = keyEntries
 		}
 		if e.topicInValue {
-			topicEntry, err := e.encodeTopicRaw(row)
-			if err != nil {
-				return nil, err
-			}
-			jsonEntries[`topic`] = topicEntry
+			jsonEntries[`topic`] = row.topic
 		}
 	} else {
 		jsonEntries = after

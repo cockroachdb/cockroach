@@ -768,7 +768,7 @@ func tableToAvroSchema(
 	}
 	var name string
 	if tableDesc.NumFamilies() > 1 {
-		name = SQLNameToAvroName(tableDesc.GetName() + family.Name)
+		name = SQLNameToAvroName(tableDesc.GetName() + "." + family.Name)
 	} else {
 		name = SQLNameToAvroName(tableDesc.GetName())
 	}
