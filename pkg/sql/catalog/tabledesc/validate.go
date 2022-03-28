@@ -1088,12 +1088,6 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {
 			continue
 		}
-		if !idx.Primary() && idx.Public() {
-			if idx.GetVersion() == descpb.PrimaryIndexWithStoredColumnsVersion {
-				return errors.AssertionFailedf("secondary index %q has invalid version %d which is for primary indexes",
-					idx.GetName(), idx.GetVersion())
-			}
-		}
 		slices := []struct {
 			name  string
 			slice []descpb.ColumnID
