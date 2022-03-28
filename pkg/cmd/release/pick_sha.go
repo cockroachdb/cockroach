@@ -139,7 +139,7 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 	}
 	opts := sendOpts{
 		templatesDir: pickSHAFlags.templatesDir,
-		from:         fmt.Sprintf("Justin Beaver <%s>", pickSHAFlags.smtpUser),
+		from:         fmt.Sprintf(fromEmailFormat, pickSHAFlags.smtpUser),
 		host:         pickSHAFlags.smtpHost,
 		port:         pickSHAFlags.smtpPort,
 		user:         pickSHAFlags.smtpUser,
