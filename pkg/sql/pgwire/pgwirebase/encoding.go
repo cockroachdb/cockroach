@@ -507,7 +507,7 @@ func DecodeDatum(
 	case FormatBinary:
 		switch id {
 		case oid.T_record:
-			return decodeBinaryTuple(evalCtx, t, b)
+			return decodeBinaryTuple(evalCtx, b)
 		case oid.T_bool:
 			if len(b) > 0 {
 				switch b[0] {
@@ -840,7 +840,7 @@ func validateStringBytes(b []byte) error {
 	return nil
 }
 
-//PGNumericSign indicates the sign of a numeric.
+// PGNumericSign indicates the sign of a numeric.
 //go:generate stringer -type=PGNumericSign
 type PGNumericSign uint16
 
@@ -983,7 +983,7 @@ func decodeBinaryArray(
 	return arr, nil
 }
 
-func decodeBinaryTuple(evalCtx *tree.EvalContext, t *types.T, b []byte) (tree.Datum, error) {
+func decodeBinaryTuple(evalCtx *tree.EvalContext, b []byte) (tree.Datum, error) {
 	if len(b) < 4 {
 		return nil, pgerror.Newf(pgcode.Syntax, "tuple requires a 4 byte header for binary format")
 	}
@@ -995,38 +995,60 @@ func decodeBinaryTuple(evalCtx *tree.EvalContext, t *types.T, b []byte) (tree.Da
 	curByte := int32(4)
 	curIdx := int32(0)
 
+	var elementLength, nextByte int32
+	// getStateString is used to output current state in error messages
+	getSyntaxError := func(message string) error {
+		return pgerror.Newf(
+			pgcode.Syntax,
+			"%s curByte=%d nextByte=%d elementLength=%d totalLength=%d curIdx=%d numberOfElements=%d",
+			message, curByte, nextByte, elementLength, totalLength, curIdx, numberOfElements)
+	}
+
 	for curIdx < numberOfElements {
 
-		if totalLength < curByte+4 {
-			return nil, pgerror.Newf(pgcode.Syntax, "tuple requires 4 bytes for each element OID for binary format")
+		elementLength = int32(4)
+		nextByte = curByte + elementLength
+		if nextByte < curByte {
+			return nil, getSyntaxError("decode tuple - integer overflow reading element OID for binary format - ")
+		}
+		if totalLength < nextByte {
+			return nil, getSyntaxError("decode tuple - insufficient bytes reading element OID for binary format - ")
 		}
 
-		elementOID := int32(binary.BigEndian.Uint32(b[curByte : curByte+4]))
+		elementOID := int32(binary.BigEndian.Uint32(b[curByte:nextByte]))
 		elementType := types.OidToType[oid.Oid(elementOID)]
 		typs[curIdx] = elementType
-		curByte = curByte + 4
+		curByte = nextByte
 
-		if totalLength < curByte+4 {
-			return nil, pgerror.Newf(pgcode.Syntax, "tuple requires 4 bytes for the size of each element for binary format")
+		nextByte = curByte + elementLength
+		if nextByte < curByte {
+			return nil, getSyntaxError("decode tuple - integer overflow reading element size for binary format - ")
+		}
+		if totalLength < nextByte {
+			return nil, getSyntaxError("decode tuple - insufficient bytes reading element size for binary format - ")
 		}
 
-		elementLength := int32(binary.BigEndian.Uint32(b[curByte : curByte+4]))
-		curByte = curByte + 4
+		elementLength = int32(binary.BigEndian.Uint32(b[curByte:nextByte]))
+		curByte = nextByte
 
 		if elementLength == -1 {
 			datums[curIdx] = tree.DNull
 		} else {
-			if totalLength < curByte+elementLength {
-				return nil, pgerror.Newf(pgcode.Syntax, "tuple requires %d bytes for element %d for binary format", elementLength, curIdx)
+			nextByte = curByte + elementLength
+			if nextByte < curByte {
+				return nil, getSyntaxError("decode tuple - integer overflow reading element for binary format - ")
+			}
+			if totalLength < nextByte {
+				return nil, getSyntaxError("decode tuple - insufficient bytes reading element for binary format - ")
 			}
 
-			colDatum, err := DecodeDatum(evalCtx, elementType, FormatBinary, b[curByte:curByte+elementLength])
+			colDatum, err := DecodeDatum(evalCtx, elementType, FormatBinary, b[curByte:nextByte])
 
 			if err != nil {
 				return nil, err
 			}
 
-			curByte = curByte + elementLength
+			curByte = nextByte
 			datums[curIdx] = colDatum
 		}
 		curIdx++
