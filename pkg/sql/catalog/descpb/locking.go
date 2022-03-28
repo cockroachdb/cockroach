@@ -57,7 +57,7 @@ func (wp ScanLockingWaitPolicy) PrettyString() string {
 	switch wp {
 	case ScanLockingWaitPolicy_BLOCK:
 		return "block"
-	case ScanLockingWaitPolicy_SKIP:
+	case ScanLockingWaitPolicy_SKIP_LOCKED:
 		return "skip locked"
 	case ScanLockingWaitPolicy_ERROR:
 		return "nowait"
@@ -72,8 +72,8 @@ func ToScanLockingWaitPolicy(wp tree.LockingWaitPolicy) ScanLockingWaitPolicy {
 	switch wp {
 	case tree.LockWaitBlock:
 		return ScanLockingWaitPolicy_BLOCK
-	case tree.LockWaitSkip:
-		return ScanLockingWaitPolicy_SKIP
+	case tree.LockWaitSkipLocked:
+		return ScanLockingWaitPolicy_SKIP_LOCKED
 	case tree.LockWaitError:
 		return ScanLockingWaitPolicy_ERROR
 	default:
