@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -202,7 +203,17 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 
 	n.run.rowsAffected += rowsAffected
 
-	return nil
+	sqlUsernameToStrings := func(sqlUsernames []security.SQLUsername) []string {
+		strings := make([]string, len(sqlUsernames))
+		for i, sqlUsername := range sqlUsernames {
+			strings[i] = sqlUsername.Normalized()
+		}
+		return strings
+	}
+
+	return params.p.logEvent(params.ctx,
+		0, /* no target */
+		&eventpb.GrantRole{GranteeRoles: sqlUsernameToStrings(n.roles), Members: sqlUsernameToStrings(n.members)})
 }
 
 // Next implements the planNode interface.
