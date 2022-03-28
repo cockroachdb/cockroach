@@ -1245,7 +1245,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
-%type <str> schema_name
+%type <str> schema_name opt_in_schema
 %type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name
 %type <tree.ObjectNamePrefixList> schema_name_list
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
@@ -5887,14 +5887,16 @@ show_databases_stmt:
 // %Category: DDL
 // %Text: SHOW DEFAULT PRIVILEGES
 show_default_privileges_stmt:
-  SHOW DEFAULT PRIVILEGES opt_for_roles {
+  SHOW DEFAULT PRIVILEGES opt_for_roles opt_in_schema {
     $$.val = &tree.ShowDefaultPrivileges{
       Roles: $4.roleSpecList(),
+      Schema: tree.Name($5),
     }
   }
-| SHOW DEFAULT PRIVILEGES FOR ALL ROLES {
+| SHOW DEFAULT PRIVILEGES FOR ALL ROLES opt_in_schema {
     $$.val = &tree.ShowDefaultPrivileges{
       ForAllRoles: true,
+      Schema: tree.Name($7),
     }
   }
 | SHOW DEFAULT PRIVILEGES error // SHOW HELP: SHOW DEFAULT PRIVILEGES
@@ -9135,6 +9137,17 @@ opt_for_roles:
 | /* EMPTY */ {
    $$.val = tree.RoleSpecList(nil)
 }
+
+opt_in_schema:
+ IN SCHEMA schema_name
+ {
+   $$ = $3
+ }
+| /* EMPTY */
+ {
+   $$ = ""
+ }
+
 
 opt_in_schemas:
  IN SCHEMA schema_name_list
