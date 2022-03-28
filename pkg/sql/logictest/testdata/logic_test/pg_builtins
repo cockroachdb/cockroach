@@ -610,3 +610,137 @@ a            NULL
 b            c
 ·            d
 e            f=g
+
+
+statement ok
+CREATE TYPE test_type AS ENUM ('open', 'closed', 'inactive');
+
+statement ok
+CREATE ROLE test_role LOGIN;
+
+statement ok
+CREATE TABLE t1 (a int);
+
+query T
+SELECT to_regclass('pg_roles')
+----
+pg_roles
+
+query T
+SELECT to_regclass('4294967230')
+----
+NULL
+
+query T
+SELECT to_regclass('pg_policy')
+----
+pg_policy
+
+query T
+SELECT to_regclass('t1')
+----
+t1
+
+
+query T
+SELECT to_regnamespace('crdb_internal')
+----
+crdb_internal
+
+query T
+SELECT to_regnamespace('public')
+----
+public
+
+query T
+SELECT to_regnamespace('1330834471')
+----
+NULL
+
+# Should return null, but leading space leads to it returning an oid
+# Not sure if leading spaces should be removed.
+query T
+SELECT to_regnamespace(' 1330834471')
+----
+1330834471
+
+query T
+SELECT to_regproc('_st_contains')
+----
+_st_contains
+
+query T
+SELECT to_regproc('version')
+----
+version
+
+query T
+SELECT to_regproc('bit_in')
+----
+bit_in
+
+query T
+SELECT to_regprocedure('bit_in')
+----
+bit_in
+
+query T
+SELECT to_regprocedure('version')
+----
+version
+
+query T
+SELECT to_regprocedure('961893967')
+----
+NULL
+
+query T
+SELECT to_regrole('admin')
+----
+admin
+
+query T
+SELECT to_regrole('test_role')
+----
+test_role
+
+query T
+SELECT to_regrole('foo')
+----
+NULL
+
+query T
+SELECT to_regrole('1546506610')
+----
+NULL
+
+query T
+SELECT to_regtype('interval')
+----
+interval
+
+query T
+SELECT to_regtype('integer')
+----
+bigint
+
+query T
+SELECT to_regtype('int_4')
+----
+NULL
+
+query T
+SELECT to_regtype('string')
+----
+text
+
+query T
+SELECT to_regtype('1186')
+----
+NULL
+
+
+query T
+SELECT to_regtype('test_type')
+----
+test_type

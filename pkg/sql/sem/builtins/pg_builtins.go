@@ -12,6 +12,7 @@ package builtins
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -146,8 +147,17 @@ func initPGBuiltins() {
 		builtins[name] = builtin
 	}
 
-	// Make crdb_internal.create_regfoo builtins.
-	for _, typ := range []*types.T{
+	toRegHelpText := []string{
+		"Translates a textual relation name to its OID",
+		"Translates a textual schema name to its OID",
+		"Translates a textual function or procedure name to its OID",
+		"Translates a textual function or procedure name(with argument types) to its OID",
+		"Translates a textual role name to its OID",
+		"Translates a textual type name to its OID",
+	}
+
+	// Make crdb_internal.create_regfoo and to_regfoo builtins.
+	for i, typ := range []*types.T{
 		types.RegClass,
 		types.RegNamespace,
 		types.RegProc,
@@ -157,6 +167,7 @@ func initPGBuiltins() {
 	} {
 		typName := typ.SQLStandardName()
 		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(typ)
+		builtins["to_"+typName] = makeToRegOverload(typ, toRegHelpText[i])
 	}
 }
 
@@ -516,6 +527,34 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 			},
 			Info:       notUsableInfo,
 			Volatility: tree.VolatilityImmutable,
+		},
+	)
+}
+
+func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
+	return makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"text", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.RegType),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typName := tree.MustBeDString(args[0])
+
+				int, _ := strconv.Atoi(string(typName))
+				if int > 0 {
+					return tree.DNull, nil
+				}
+				typOid, err := tree.ParseDOid(ctx, string(typName), typ)
+				if err != nil {
+					//nolint:returnerrcheck
+					return tree.DNull, nil
+				}
+
+				return typOid, nil
+			},
+			Info:       helpText,
+			Volatility: tree.VolatilityStable,
 		},
 	)
 }
