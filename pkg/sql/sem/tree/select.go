@@ -1108,17 +1108,17 @@ const (
 	// LockWaitBlock represents the default - wait for the lock to become
 	// available.
 	LockWaitBlock LockingWaitPolicy = iota
-	// LockWaitSkip represents SKIP LOCKED - skip rows that can't be locked.
-	LockWaitSkip
+	// LockWaitSkipLocked represents SKIP LOCKED - skip rows that can't be locked.
+	LockWaitSkipLocked
 	// LockWaitError represents NOWAIT - raise an error if a row cannot be
 	// locked.
 	LockWaitError
 )
 
 var lockingWaitPolicyName = [...]string{
-	LockWaitBlock: "",
-	LockWaitSkip:  "SKIP LOCKED",
-	LockWaitError: "NOWAIT",
+	LockWaitBlock:      "",
+	LockWaitSkipLocked: "SKIP LOCKED",
+	LockWaitError:      "NOWAIT",
 }
 
 func (p LockingWaitPolicy) String() string {
