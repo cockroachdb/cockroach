@@ -298,10 +298,10 @@ func checkNumTotalEntriesAndNumIndexEntries(
 		if strings.Contains(e.Message, `"IndexName":"‹test_table_letter_idx›"`) {
 			numEntriesForTestTableLetterIndex++
 		}
-		if strings.Contains(e.Message, `"TableName":"‹test2_table_pkey›"`) {
+		if strings.Contains(e.Message, `"IndexName":"‹test2_table_pkey›"`) {
 			numEntriesForTest2TablePrimaryKeyIndex++
 		}
-		if strings.Contains(e.Message, `"TableName":"‹test2_table_letter_idx›"`) {
+		if strings.Contains(e.Message, `"IndexName":"‹test2_table_letter_idx›"`) {
 			numEntriesForTest2TableLetterIndex++
 		}
 		// Check that the entry has a tag for a node ID of 1.
@@ -315,13 +315,13 @@ func checkNumTotalEntriesAndNumIndexEntries(
 	if expectedIndividualIndexEntries != numEntriesForTestTablePrimaryKeyIndex {
 		return errors.Newf("expected %d test_table primary key index entries, got %d", expectedIndividualIndexEntries, numEntriesForTestTablePrimaryKeyIndex)
 	}
-	if expectedIndividualIndexEntries != numEntriesForTestTablePrimaryKeyIndex {
+	if expectedIndividualIndexEntries != numEntriesForTestTableLetterIndex {
 		return errors.Newf("expected %d test_table letter index entries, got %d", expectedIndividualIndexEntries, numEntriesForTestTableLetterIndex)
 	}
-	if expectedIndividualIndexEntries != numEntriesForTestTablePrimaryKeyIndex {
+	if expectedIndividualIndexEntries != numEntriesForTest2TablePrimaryKeyIndex {
 		return errors.Newf("expected %d test2_table primary key index entries, got %d", expectedIndividualIndexEntries, numEntriesForTest2TablePrimaryKeyIndex)
 	}
-	if expectedIndividualIndexEntries != numEntriesForTestTablePrimaryKeyIndex {
+	if expectedIndividualIndexEntries != numEntriesForTest2TableLetterIndex {
 		return errors.Newf("expected %d test2_table letter index entries, got %d", expectedIndividualIndexEntries, numEntriesForTest2TableLetterIndex)
 	}
 	return nil
