@@ -62,6 +62,7 @@ func TestAlterSystemStmtDiagReqs(t *testing.T) {
 		validationSchemas = []migrations.Schema{
 			{Name: "min_execution_latency", ValidationFn: migrations.HasColumn},
 			{Name: "expires_at", ValidationFn: migrations.HasColumn},
+			{Name: "primary", ValidationFn: migrations.HasColumnFamily},
 		}
 	)
 
