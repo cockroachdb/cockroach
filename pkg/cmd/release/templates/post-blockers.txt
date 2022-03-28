@@ -13,28 +13,6 @@ This is a reminder to merge any outstanding backports that need to be included i
 With the Restrictive Backport Policy in effect, backports for {{ .Args.ReleaseBranch }} will be reviewed at Monday's triage meeting. Backport policy: https://go.crdb.dev/backport-policy-branch-cut.
 {{
   end
-}}{{
-  if (eq .Args.TotalBlockers 0)
-}}
-There are currently 0 open release blockers \o/ (https://{{ .Args.BlockersURL }}). We are clear to proceed with preparation and qualification.
-{{
-  else
-}}{{
-    if (eq .Args.TotalBlockers 1)
-}}
-There is currently 1 open release blocker (https://{{ .Args.BlockersURL }}), which must be resolved before a candidate is chosen:{{
-    else
-}}
-There are currently {{ .Args.TotalBlockers }} open release blockers (https://{{ .Args.BlockersURL }}), which must be resolved before a candidate is chosen:{{
-    end
-}}
-{{
-    range .Args.BlockerList
-}}  - {{ .ProjectName }}: {{ .NumBlockers }}
-{{
-    end
-}}{{
-  end
-}}
+}}{{template "blockers" .}}
 Thanks,
 Release Engineering

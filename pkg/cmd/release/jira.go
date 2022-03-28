@@ -160,7 +160,7 @@ func createTrackingIssue(
 		SHA:      release.buildInfo.SHA,
 		SREIssue: sreIssue.Key,
 	}
-	description, err := templateToText(trackingIssueTemplate, templateArgs)
+	description, err := templateToText(templateArgs, trackingIssueTemplate)
 	if err != nil {
 		return jiraIssue{}, fmt.Errorf("cannot parse tracking issue template: %w", err)
 	}
@@ -194,7 +194,7 @@ func createSREIssue(client *jiraClient, release releaseInfo, dryRun bool) (jiraI
 		Version: release.nextReleaseVersion,
 		Tag:     release.buildInfo.Tag,
 	}
-	description, err := templateToHTML(sreIssueTemplate, templateArgs)
+	description, err := templateToText(templateArgs, sreIssueTemplate)
 	if err != nil {
 		return jiraIssue{}, fmt.Errorf("cannot parse SRE issue template: %w", err)
 	}

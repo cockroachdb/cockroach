@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -57,10 +58,35 @@ func TestPickSHA(t *testing.T) {
 	verifyMessageValues(t, expectedMessage, templatePrefixPickSHA)
 }
 
+func TestCancelReleaseSeries(t *testing.T) {
+	var expectedMessage *message
+	defer hookGlobal(
+		&sendmail,
+		func(content *message, smtpOpts sendOpts) error {
+			expectedMessage = content
+			return nil
+		})()
+
+	args := messageDataCancelReleaseDate{
+		Version:         "v21.1.13",
+		ReleaseSeries:   "21.1",
+		ReleaseDate:     "Feb 15, 2022",
+		NextReleaseDate: "Mar 3, 2022",
+	}
+	require.NoError(t, sendMailCancelReleaseDate(
+		args, sendOpts{templatesDir: "templates"},
+	))
+	verifyMessageValues(t, expectedMessage, templatePrefixPostBlockersPastPrep)
+}
+
 func TestPostBlockers(t *testing.T) {
+	prepDate := time.Date(2022, 4, 2, 0, 0, 0, 0, time.UTC)
+	releaseDate := time.Date(2022, 4, 11, 0, 0, 0, 0, time.UTC)
+
 	tests := []struct {
 		testCase            string
 		version             string
+		daysBeforePrep      daysBeforePrep
 		blockersPerProject  []int
 		goldenFilePrefix    string
 		expectedContains    []string
@@ -69,6 +95,7 @@ func TestPostBlockers(t *testing.T) {
 		{
 			testCase:           "alpha: zero-blockers",
 			version:            "v19.1.0-alpha.3",
+			daysBeforePrep:     daysBeforePrepManyDays,
 			blockersPerProject: []int{},
 			goldenFilePrefix:   templatePrefixPostBlockersAlpha + ".zero-blockers",
 			expectedContains: []string{
@@ -78,6 +105,7 @@ func TestPostBlockers(t *testing.T) {
 		{
 			testCase:           "alpha: 1-blocker",
 			version:            "v19.1.0-alpha.3",
+			daysBeforePrep:     daysBeforePrepManyDays,
 			blockersPerProject: []int{1},
 			goldenFilePrefix:   templatePrefixPostBlockersAlpha + ".1-blocker",
 			expectedNotContains: []string{
@@ -87,6 +115,7 @@ func TestPostBlockers(t *testing.T) {
 		{
 			testCase:           "alpha: many-blockers",
 			version:            "v19.1.0-alpha.3",
+			daysBeforePrep:     daysBeforePrepManyDays,
 			blockersPerProject: []int{4, 2, 3},
 			goldenFilePrefix:   templatePrefixPostBlockersAlpha + ".many-blockers",
 			expectedNotContains: []string{
@@ -98,6 +127,7 @@ func TestPostBlockers(t *testing.T) {
 		{
 			testCase:           "non-alpha: zero-blockers. stable/production: refer to backboard",
 			version:            "v19.1.11",
+			daysBeforePrep:     daysBeforePrepManyDays,
 			blockersPerProject: []int{},
 			goldenFilePrefix:   templatePrefixPostBlockers + ".zero-blockers",
 			expectedContains: []string{
@@ -111,6 +141,7 @@ func TestPostBlockers(t *testing.T) {
 		{
 			testCase:           "non-alpha: 1-blocker. beta/rc's are reviewed in triage meeting",
 			version:            "v19.1.0-beta.2",
+			daysBeforePrep:     daysBeforePrepManyDays,
 			blockersPerProject: []int{1},
 			goldenFilePrefix:   templatePrefixPostBlockers + ".1-blocker",
 			expectedContains: []string{
@@ -124,6 +155,7 @@ func TestPostBlockers(t *testing.T) {
 		{
 			testCase:           "non-alpha: many-blockers. beta/rc's are reviewed in triage meeting",
 			version:            "v19.1.0-rc.3",
+			daysBeforePrep:     daysBeforePrepManyDays,
 			blockersPerProject: []int{4, 2, 3},
 			goldenFilePrefix:   templatePrefixPostBlockers + ".many-blockers",
 			expectedContains: []string{
@@ -132,6 +164,30 @@ func TestPostBlockers(t *testing.T) {
 			},
 			expectedNotContains: []string{
 				"backboard.crdb.dev",
+			},
+		},
+		{
+			testCase:           "stable/production, day before prep date",
+			version:            "v19.1.11",
+			daysBeforePrep:     daysBeforePrepDayBefore,
+			blockersPerProject: []int{4, 2, 3},
+			goldenFilePrefix:   templatePrefixPostBlockers + ".stable.day-before-prep-date",
+			expectedContains: []string{
+				"tonight's nightly build",
+				"Friendly reminder to merge any outstanding backports",
+				"which must be resolved before a candidate is chosen",
+			},
+		},
+		{
+			testCase:           "stable/production, day of prep date",
+			version:            "v19.1.11",
+			daysBeforePrep:     daysBeforePrepDayOf,
+			blockersPerProject: []int{4, 2, 3},
+			goldenFilePrefix:   templatePrefixPostBlockers + ".stable.day-of-prep-date",
+			expectedContains: []string{
+				"will be cancelled tomorrow",
+				"if the following release blockers are not resolved before tonight's nightly build",
+				"which must be resolved before a candidate is chosen",
 			},
 		},
 	}
@@ -157,13 +213,15 @@ func TestPostBlockers(t *testing.T) {
 				totalBlockers += numBlockers
 			}
 			args := messageDataPostBlockers{
-				Version:       test.version,
-				PrepDate:      "Saturday, April 1",
-				ReleaseDate:   "Saturday, April 11",
-				TotalBlockers: totalBlockers,
-				BlockersURL:   "go.crdb.dev/blockers",
-				ReleaseBranch: "master",
-				BlockerList:   blockerList,
+				Version:           test.version,
+				DaysBeforePrep:    test.daysBeforePrep,
+				DayBeforePrepDate: prepDate.AddDate(0, 0, -1).Format(dateFormatEmail),
+				PrepDate:          prepDate.Format(dateFormatEmail),
+				ReleaseDate:       releaseDate.Format(dateFormatEmail),
+				TotalBlockers:     totalBlockers,
+				BlockersURL:       "go.crdb.dev/blockers",
+				ReleaseBranch:     "master",
+				BlockerList:       blockerList,
 			}
 			require.NoError(t, sendMailPostBlockers(
 				args, sendOpts{templatesDir: "templates"},
