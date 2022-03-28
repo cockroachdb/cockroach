@@ -803,7 +803,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	// If there are super regions defined on the database, we may have to update
 	// the zone config for regional tables.
 	if updatedRegionConfig.IsPlacementRestricted() || isNewPrimaryRegionMemberOfASuperRegion || isOldPrimaryRegionMemberOfASuperRegion {
-		if err := params.p.updateZoneConfigsForTables(
+		if err := params.p.refreshZoneConfigsForTables(
 			params.ctx,
 			n.desc,
 			opts,
@@ -1131,7 +1131,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 
 	// Update all REGIONAL BY TABLE tables' zone configurations. This is required as replica
 	// placement for REGIONAL BY TABLE tables is dependant on the survival goal.
-	if err := params.p.updateZoneConfigsForTables(params.ctx, n.desc); err != nil {
+	if err := params.p.refreshZoneConfigsForTables(params.ctx, n.desc); err != nil {
 		return err
 	}
 
@@ -1267,7 +1267,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 	// -> DEFAULT), we need to refresh the zone configuration of all GLOBAL
 	// table's inside the database to either carry a bespoke configuration or go
 	// back to inheriting it from the database.
-	if err := params.p.updateZoneConfigsForTables(
+	if err := params.p.refreshZoneConfigsForTables(
 		params.ctx,
 		n.desc,
 		WithOnlyGlobalTables,
@@ -1438,7 +1438,7 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 	}
 
 	// Update all regional and regional by row tables.
-	if err := params.p.updateZoneConfigsForTables(
+	if err := params.p.refreshZoneConfigsForTables(
 		params.ctx,
 		n.desc,
 	); err != nil {
@@ -1634,7 +1634,7 @@ func (p *planner) addSuperRegion(
 	}
 
 	// Update all regional and regional by row tables.
-	return p.updateZoneConfigsForTables(
+	return p.refreshZoneConfigsForTables(
 		ctx,
 		desc,
 	)
