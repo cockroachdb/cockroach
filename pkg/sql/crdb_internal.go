@@ -2662,15 +2662,16 @@ var crdbInternalTableIndexesTable = virtualSchemaTable{
 	comment: "indexes accessible by current user in current database (KV scan)",
 	schema: `
 CREATE TABLE crdb_internal.table_indexes (
-  descriptor_id    INT,
-  descriptor_name  STRING NOT NULL,
-  index_id         INT NOT NULL,
-  index_name       STRING NOT NULL,
-  index_type       STRING NOT NULL,
-  is_unique        BOOL NOT NULL,
-  is_inverted      BOOL NOT NULL,
-  is_sharded       BOOL NOT NULL,
-  created_at       TIMESTAMP
+  descriptor_id       INT,
+  descriptor_name     STRING NOT NULL,
+  index_id            INT NOT NULL,
+  index_name          STRING NOT NULL,
+  index_type          STRING NOT NULL,
+  is_unique           BOOL NOT NULL,
+  is_inverted         BOOL NOT NULL,
+  is_sharded          BOOL NOT NULL,
+  shard_bucket_count  INT,
+  created_at          TIMESTAMP
 )
 `,
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -2701,6 +2702,10 @@ CREATE TABLE crdb_internal.table_indexes (
 								createdAt = tsDatum
 							}
 						}
+						shardBucketCnt := tree.DNull
+						if idx.IsSharded() {
+							shardBucketCnt = tree.NewDInt(tree.DInt(idx.GetSharded().ShardBuckets))
+						}
 						row = append(row,
 							tableID,
 							tableName,
@@ -2710,6 +2715,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.MakeDBool(tree.DBool(idx.IsUnique())),
 							tree.MakeDBool(idx.GetType() == descpb.IndexDescriptor_INVERTED),
 							tree.MakeDBool(tree.DBool(idx.IsSharded())),
+							shardBucketCnt,
 							createdAt,
 						)
 						return pusher.pushRow(row...)
