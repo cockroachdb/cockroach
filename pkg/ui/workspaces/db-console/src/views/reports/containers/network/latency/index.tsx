@@ -126,7 +126,7 @@ const renderMultipleHeaders = (
     const row: any[] = [];
     displayIdentities.forEach(identityB => {
       const a = nodesSummary.nodeStatusByID[identityA.nodeID].activity;
-      const nano = FixLong(a[identityB.nodeID].latency);
+      const nano = FixLong(a[identityB.nodeID]?.latency || 0);
       if (identityA.nodeID === identityB.nodeID) {
         row.push({ latency: 0, identityB });
       } else if (

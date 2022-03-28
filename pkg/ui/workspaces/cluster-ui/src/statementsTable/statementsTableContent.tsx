@@ -161,7 +161,6 @@ type StatementLinkTargetProps = {
   aggregatedTs?: number;
   appNames?: string[];
   implicitTxn: boolean;
-  statementNoConstants?: string;
 };
 
 // StatementLinkTarget returns the link to the relevant statement page, given
@@ -190,7 +189,7 @@ interface StatementLinkProps {
   statement: string;
   statementSummary: string;
   search: string;
-  statementNoConstants?: string;
+  statementQuery?: string;
   onClick?: (statement: string) => void;
 }
 
@@ -202,7 +201,6 @@ export const StatementLink = ({
   statement,
   statementSummary,
   search,
-  statementNoConstants,
   onClick,
 }: StatementLinkProps): React.ReactElement => {
   const onStatementClick = React.useCallback(() => {
@@ -216,8 +214,6 @@ export const StatementLink = ({
     aggregationInterval,
     appNames,
     implicitTxn,
-    statement,
-    statementNoConstants,
   };
 
   const summary = computeOrUseStmtSummary(statement, statementSummary);
