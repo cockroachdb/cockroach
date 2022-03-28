@@ -159,6 +159,12 @@ func TestTypeCheck(t *testing.T) {
 		{`(1:::INT8, 2:::INT8)`, `(1:::INT8, 2:::INT8)`},
 		{`(ROW (1,2))`, `(1:::INT8, 2:::INT8)`},
 		{`ROW(1:::INT8, 2:::INT8)`, `(1:::INT8, 2:::INT8)`},
+		// Regression test #74729. Correctly handle NULLs annotated as a tuple
+		// type.
+		{
+			`CASE WHEN true THEN ('a', 2) ELSE NULL:::RECORD END`,
+			`CASE WHEN true THEN ('a':::STRING, 2:::INT8) ELSE NULL END`,
+		},
 
 		{`((ROW (1) AS a)).a`, `1:::INT8`},
 		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
