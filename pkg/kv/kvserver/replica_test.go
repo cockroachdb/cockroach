@@ -8646,7 +8646,6 @@ func TestRefreshFromBelowGCThreshold(t *testing.T) {
 func TestGCThresholdRacesWithRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 55293)
 
 	testutils.RunTrueAndFalse(t, "followerRead", func(t *testing.T, followerRead bool) {
 		testutils.RunTrueAndFalse(t, "thresholdFirst", func(t *testing.T, thresholdFirst bool) {
