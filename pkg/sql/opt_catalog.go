@@ -1158,6 +1158,11 @@ func (ot *optTable) Zone() cat.Zone {
 	return ot.zone
 }
 
+// IsPartitionAllBy is part of the cat.Table interface.
+func (ot *optTable) IsPartitionAllBy() bool {
+	return ot.desc.IsPartitionAllBy()
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
@@ -2071,6 +2076,11 @@ func (ot *optVirtualTable) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 // Zone is part of the cat.Table interface.
 func (ot *optVirtualTable) Zone() cat.Zone {
 	panic(errors.AssertionFailedf("no zone"))
+}
+
+// IsPartitionAllBy is part of the cat.Table interface.
+func (ot *optVirtualTable) IsPartitionAllBy() bool {
+	return false
 }
 
 // CollectTypes is part of the cat.DataSource interface.
