@@ -553,14 +553,7 @@ func (tt *Table) addUniqueConstraint(
 	}
 	sort.Ints(cols)
 
-	// Don't add duplicate constraints.
-	for _, c := range tt.uniqueConstraints {
-		if reflect.DeepEqual(c.columnOrdinals, cols) && c.withoutIndex == withoutIndex {
-			return
-		}
-	}
-
-	// We didn't find an existing constraint, so add a new one.
+	// Create the constraint.
 	u := UniqueConstraint{
 		name:           tt.makeUniqueConstraintName(name, columns),
 		tabID:          tt.TabID,
@@ -572,6 +565,16 @@ func (tt *Table) addUniqueConstraint(
 	if predicate != nil {
 		u.predicate = tree.Serialize(predicate)
 	}
+
+	// Don't add duplicate constraints.
+	for _, c := range tt.uniqueConstraints {
+		if reflect.DeepEqual(c.columnOrdinals, u.columnOrdinals) &&
+			c.predicate == u.predicate &&
+			c.withoutIndex == u.withoutIndex {
+			return
+		}
+	}
+
 	tt.uniqueConstraints = append(tt.uniqueConstraints, u)
 }
 

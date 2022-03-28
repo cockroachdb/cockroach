@@ -869,21 +869,21 @@ func applyZoneConfigForMultiRegionDatabase(
 	return nil
 }
 
-type updateZoneConfigOptions struct {
+type refreshZoneConfigOptions struct {
 	filterFunc func(tb *tabledesc.Mutable) bool
 }
 
-type updateZoneConfigOption func(options *updateZoneConfigOptions)
+type refreshZoneConfigOption func(options *refreshZoneConfigOptions)
 
-// updateZoneConfigsForTables loops through all of the tables in the
+// refreshZoneConfigsForTables loops through all of the tables in the
 // specified database and refreshes the zone configs for all tables.
-func (p *planner) updateZoneConfigsForTables(
-	ctx context.Context, desc catalog.DatabaseDescriptor, updateOpts ...updateZoneConfigOption,
+func (p *planner) refreshZoneConfigsForTables(
+	ctx context.Context, desc catalog.DatabaseDescriptor, refreshOpts ...refreshZoneConfigOption,
 ) error {
-	opts := updateZoneConfigOptions{
+	opts := refreshZoneConfigOptions{
 		filterFunc: func(_ *tabledesc.Mutable) bool { return true },
 	}
-	for _, f := range updateOpts {
+	for _, f := range refreshOpts {
 		f(&opts)
 	}
 
@@ -911,17 +911,17 @@ func (p *planner) updateZoneConfigsForTables(
 	)
 }
 
-// WithOnlyGlobalTables modifies an updateZoneConfigOptions to only apply to
+// WithOnlyGlobalTables modifies an refreshZoneConfigOptions to only apply to
 // global tables.
-func WithOnlyGlobalTables(opts *updateZoneConfigOptions) {
+func WithOnlyGlobalTables(opts *refreshZoneConfigOptions) {
 	opts.filterFunc = func(tb *tabledesc.Mutable) bool {
 		return tb.IsLocalityGlobal()
 	}
 }
 
-// WithOnlyRegionalTablesAndGlobalTables modifies an updateZoneConfigOptions to
+// WithOnlyRegionalTablesAndGlobalTables modifies an refreshZoneConfigOptions to
 // only apply to global tables and regional tables.
-func WithOnlyRegionalTablesAndGlobalTables(opts *updateZoneConfigOptions) {
+func WithOnlyRegionalTablesAndGlobalTables(opts *refreshZoneConfigOptions) {
 	opts.filterFunc = func(tb *tabledesc.Mutable) bool {
 		return tb.IsLocalityGlobal() || tb.IsLocalityRegionalByTable()
 	}
