@@ -1170,6 +1170,7 @@ type ExecutorConfig struct {
 	RegionsServer      serverpb.RegionsServer
 	MetricsRecorder    nodeStatusGenerator
 	SessionRegistry    *SessionRegistry
+	ClosedSessionCache *ClosedSessionCache
 	SQLLiveness        sqlliveness.Liveness
 	JobRegistry        *jobs.Registry
 	VirtualSchemas     *VirtualSchemaHolder
