@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -963,6 +962,9 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 	}
 	topic = subs[5]
 
+	// cloud storage uses a different delimiter. Let tests be agnostic.
+	topic = strings.Replace(topic, `+`, `.`, -1)
+
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -1314,6 +1316,9 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
+	// required value
+	createStmt.Options = append(createStmt.Options, tree.KVOption{Key: changefeedbase.OptTopicInValue})
+
 	var sinkDest *cdctest.MockWebhookSink
 
 	cert, _, err := cdctest.NewCACertBase64Encoded()
@@ -1524,7 +1529,7 @@ type fakePubsubClient struct {
 
 var _ pubsubClient = (*fakePubsubClient)(nil)
 
-func (p *fakePubsubClient) openTopics() error {
+func (p *fakePubsubClient) init() error {
 	return nil
 }
 
@@ -1532,7 +1537,7 @@ func (p *fakePubsubClient) closeTopics() {
 }
 
 // sendMessage sends a message to the topic
-func (p *fakePubsubClient) sendMessage(m []byte, _ descpb.ID, _ string) error {
+func (p *fakePubsubClient) sendMessage(m []byte, _ string, _ string) error {
 	message := mockPubsubMessage{data: string(m)}
 	p.buffer.push(message)
 	return nil
@@ -1542,10 +1547,6 @@ func (p *fakePubsubClient) sendMessageToAllTopics(m []byte) error {
 	message := mockPubsubMessage{data: string(m)}
 	p.buffer.push(message)
 	return nil
-}
-
-func (p *fakePubsubClient) getTopicName(_ descpb.ID) string {
-	return ""
 }
 
 func (p *fakePubsubClient) flushTopics() {

@@ -145,8 +145,14 @@ func (p *asyncProducerMock) outstanding() int {
 	return len(p.mu.outstanding)
 }
 
-func topic(name string) tableDescriptorTopic {
-	return tableDescriptorTopic{tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()}
+func topic(name string) *tableDescriptorTopic {
+	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()
+	spec := jobspb.ChangefeedTargetSpecification{
+		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		TableID:           tableDesc.GetID(),
+		StatementTimeName: name,
+	}
+	return &tableDescriptorTopic{tableDesc: tableDesc, spec: spec}
 }
 
 const noTopicPrefix = ""
@@ -190,10 +196,13 @@ func makeTestKafkaSink(
 	targetNames ...string,
 ) (s *kafkaSink, cleanup func()) {
 	targets := makeChangefeedTargets(targetNames...)
+	topics, err := MakeTopicNamer(targets,
+		WithPrefix(topicPrefix), WithSingleName(topicNameOverride), WithSanitizeFn(SQLNameToKafkaName))
+	require.NoError(t, err)
 
 	s = &kafkaSink{
 		ctx:      context.Background(),
-		topics:   makeTopicsMap(topicPrefix, topicNameOverride, targets),
+		topics:   topics,
 		producer: p,
 	}
 	s.start()
@@ -387,10 +396,15 @@ func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	overrideTopic := func(name string) tableDescriptorTopic {
+	overrideTopic := func(name string) *tableDescriptorTopic {
 		id, _ := strconv.ParseUint(name, 36, 64)
-		return tableDescriptorTopic{
-			tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()}
+		td := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()
+		spec := jobspb.ChangefeedTargetSpecification{
+			Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+			TableID:           td.GetID(),
+			StatementTimeName: name,
+		}
+		return &tableDescriptorTopic{tableDesc: td, spec: spec}
 	}
 
 	ctx := context.Background()
@@ -406,8 +420,8 @@ func TestSQLSink(t *testing.T) {
 	fooTopic := overrideTopic(`foo`)
 	barTopic := overrideTopic(`bar`)
 	targets := []jobspb.ChangefeedTargetSpecification{
-		{TableID: fooTopic.GetID(), StatementTimeName: `foo`},
-		{TableID: barTopic.GetID(), StatementTimeName: `bar`},
+		fooTopic.GetTargetSpecification(),
+		barTopic.GetTargetSpecification(),
 	}
 	const testTableName = `sink`
 	sink, err := makeSQLSink(sinkURL{URL: &pgURL}, testTableName, targets, nil)
@@ -417,11 +431,6 @@ func TestSQLSink(t *testing.T) {
 
 	// Empty
 	require.NoError(t, sink.Flush(ctx))
-
-	// Undeclared topic
-	require.EqualError(t,
-		sink.EmitRow(ctx, overrideTopic(`nope`), nil, nil, zeroTS, zeroTS, zeroAlloc),
-		`cannot emit to undeclared topic: `)
 
 	// With one row, nothing flushes until Flush is called.
 	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`k1`), []byte(`v0`), zeroTS, zeroTS, zeroAlloc))

@@ -244,7 +244,7 @@ func createBenchmarkChangefeed(
 	}
 	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 	eventConsumer := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
-		sink, encoder, details, TestingKnobs{})
+		sink, encoder, details, TestingKnobs{}, nil)
 	tickFn := func(ctx context.Context) (*jobspb.ResolvedSpan, error) {
 		event, err := buf.Get(ctx)
 		if err != nil {
