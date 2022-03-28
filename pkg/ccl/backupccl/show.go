@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -301,8 +302,17 @@ func showBackupPlanHook(
 			if err != nil {
 				return err
 			}
+		} else {
+			// Deprecation notice for old `SHOW BACKUP` syntax. Remove this once the syntax is
+			// deleted in 22.2.
+			p.BufferClientNotice(ctx,
+				pgnotice.Newf("The `SHOW BACKUP` syntax without the `IN` keyword will be removed in a"+
+					" future release. Please switch over to using `SHOW BACKUP FROM <backup> IN"+
+					" <collection>` to view metadata on a backup collection: %s."+
+					" Also note that backups created using the `BACKUP TO` syntax may not be showable or"+
+					" restoreable in the next major version release.",
+					"https://www.cockroachlabs.com/docs/stable/show-backup.html"))
 		}
-
 		if err := checkShowBackupURIPrivileges(ctx, p, dest); err != nil {
 			return err
 		}

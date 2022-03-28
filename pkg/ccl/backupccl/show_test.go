@@ -37,6 +37,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO (msbutler): when refactoring this to data driven test, keep the
+// original go test on 22.1 and only use new backup syntax in data driven test
 func TestShowBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -573,34 +575,34 @@ func TestShowBackupTenants(t *testing.T) {
 	tenant10.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`)
 	beforeTS := systemDB.QueryStr(t, `SELECT now()::timestamp::string`)[0][0]
 
-	systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 TO 'nodelocal://1/t10' AS OF SYSTEM TIME '%s'`, beforeTS))
+	systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO 'nodelocal://1/t10' AS OF SYSTEM TIME '%s'`, beforeTS))
 
-	res := systemDB.QueryStr(t, `SELECT object_name, object_type, start_time::string, end_time::string, rows FROM [SHOW BACKUP 'nodelocal://1/t10']`)
+	res := systemDB.QueryStr(t, `SELECT object_name, object_type, start_time::string, end_time::string, rows FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/t10']`)
 	require.Equal(t, [][]string{
 		{"10", "TENANT", "NULL", beforeTS, "NULL"},
 	}, res)
 
-	res = systemDB.QueryStr(t, `SELECT object_name, object_type, privileges FROM [SHOW BACKUP 'nodelocal://1/t10' WITH privileges]`)
+	res = systemDB.QueryStr(t, `SELECT object_name, object_type, privileges FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/t10' WITH privileges]`)
 	require.Equal(t, [][]string{
 		{"10", "TENANT", "NULL"},
 	}, res)
 
-	res = systemDB.QueryStr(t, `SELECT object_name, object_type, create_statement FROM [SHOW BACKUP SCHEMAS 'nodelocal://1/t10']`)
+	res = systemDB.QueryStr(t, `SELECT object_name, object_type, create_statement FROM [SHOW BACKUP SCHEMAS FROM LATEST IN 'nodelocal://1/t10']`)
 	require.Equal(t, [][]string{
 		{"10", "TENANT", "NULL"},
 	}, res)
 
-	res = systemDB.QueryStr(t, `SELECT start_pretty, end_pretty FROM [SHOW BACKUP RANGES 'nodelocal://1/t10']`)
+	res = systemDB.QueryStr(t, `SELECT start_pretty, end_pretty FROM [SHOW BACKUP RANGES FROM LATEST IN 'nodelocal://1/t10']`)
 	require.Equal(t, [][]string{
 		{"/Tenant/10", "/Tenant/11"},
 	}, res)
 
-	res = systemDB.QueryStr(t, `SELECT start_pretty, end_pretty FROM [SHOW BACKUP FILES 'nodelocal://1/t10']`)
+	res = systemDB.QueryStr(t, `SELECT start_pretty, end_pretty FROM [SHOW BACKUP FILES FROM LATEST IN 'nodelocal://1/t10']`)
 	require.Equal(t, [][]string{
 		{"/Tenant/10", "/Tenant/11"},
 	}, res)
 
-	res = systemDB.QueryStr(t, `SELECT database_id, parent_schema_id, object_id FROM [SHOW BACKUP 'nodelocal://1/t10' WITH debug_ids]`)
+	res = systemDB.QueryStr(t, `SELECT database_id, parent_schema_id, object_id FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/t10' WITH debug_ids]`)
 	require.Equal(t, [][]string{
 		{"NULL", "NULL", "10"},
 	}, res)
@@ -633,6 +635,7 @@ func TestShowBackupPrivileges(t *testing.T) {
 	// Add an incremental backup to it.
 	sqlDB.Exec(t, `BACKUP privs INTO LATEST IN $1`, full)
 	// Make a second full backup using non into syntax.
+	// TODO (msbutler): remove non collection test case
 	sqlDB.Exec(t, `BACKUP TO $1;`, full)
 
 	_, err = testuser.Exec(`SHOW BACKUPS IN $1`, full)
@@ -647,7 +650,7 @@ func TestShowBackupPrivileges(t *testing.T) {
 	_, err = testuser.Exec(`SHOW BACKUPS IN $1`, full)
 	require.NoError(t, err)
 
-	_, err = testuser.Exec(`SHOW BACKUP $1`, full)
+	_, err = testuser.Exec(`SHOW BACKUP FROM LATEST IN $1`, full)
 	require.NoError(t, err)
 }
 
@@ -733,12 +736,12 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 	const full = localFoo + "/full"
 
 	beforeTS := sqlDB.QueryStr(t, `SELECT now()::timestamp::string`)[0][0]
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
 
 	// extract the object IDs for the database and public schema
 	databaseRow := sqlDB.QueryStr(t, `
 		SELECT database_name, database_id, parent_schema_name, parent_schema_id, object_name, object_id, object_type
-		FROM [SHOW BACKUP $1 WITH debug_ids]
+		FROM [SHOW BACKUP FROM LATEST IN $1 WITH debug_ids]
 		WHERE object_name = 'bank'`, full)
 	require.NotEmpty(t, databaseRow)
 	dbID, err := strconv.Atoi(databaseRow[0][1])
@@ -751,7 +754,7 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 
 	res := sqlDB.QueryStr(t, `
 		SELECT database_name, database_id, parent_schema_name, parent_schema_id, object_name, object_id, object_type
-		FROM [SHOW BACKUP $1 WITH debug_ids]
+		FROM [SHOW BACKUP FROM LATEST IN $1 WITH debug_ids]
 		ORDER BY object_id`, full)
 
 	dbIDStr := strconv.Itoa(dbID)

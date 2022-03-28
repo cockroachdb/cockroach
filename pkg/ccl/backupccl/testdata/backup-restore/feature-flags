@@ -63,6 +63,11 @@ BACKUP TO 'nodelocal://1/deprecated';
 NOTICE: The `BACKUP TO` syntax will be removed in a future release, please switch over to using `BACKUP INTO` to create a backup collection: https://www.cockroachlabs.com/docs/stable/backup.html#considerations. Backups created using the `BACKUP TO` syntax may not be restoreable in the next major version release.
 
 exec-sql
+SHOW BACKUP 'nodelocal://1/deprecated';
+----
+NOTICE: The `SHOW BACKUP` syntax without the `IN` keyword will be removed in a future release. Please switch over to using `SHOW BACKUP FROM <backup> IN <collection>` to view metadata on a backup collection: https://www.cockroachlabs.com/docs/stable/show-backup.html. Also note that backups created using the `BACKUP TO` syntax may not be showable or restoreable in the next major version release.
+
+exec-sql
 BACKUP TO 'nodelocal://1/deprecated/incfrom' INCREMENTAL FROM 'nodelocal://1/deprecated';
 ----
 NOTICE: The `BACKUP TO` syntax will be removed in a future release, please switch over to using `BACKUP INTO` to create a backup collection: https://www.cockroachlabs.com/docs/stable/backup.html#considerations. Backups created using the `BACKUP TO` syntax may not be restoreable in the next major version release.
