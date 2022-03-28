@@ -12,6 +12,7 @@ package builtins
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -2127,6 +2128,156 @@ SELECT description
 			},
 			Info:       "Returns the scale of the given type with type modifier",
 			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"to_regclass": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"text", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.RegClass),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typName := tree.MustBeDString(args[0])
+
+				int, _ := strconv.Atoi(string(typName))
+				if int > 0 {
+					return tree.DNull, nil
+				}
+				typOid, err := tree.ParseDOid(ctx, string(typName), types.RegClass)
+				if err != nil {
+					//nolint:returnerrcheck
+					return tree.DNull, nil
+				}
+
+				return typOid, nil
+			},
+			Info:       "Translates a textual relation name to its OID",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+	"to_regnamespace": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"text", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.RegNamespace),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typName := tree.MustBeDString(args[0])
+
+				int, _ := strconv.Atoi(string(typName))
+				if int > 0 {
+					return tree.DNull, nil
+				}
+				typOid, err := tree.ParseDOid(ctx, string(typName), types.RegNamespace)
+				if err != nil {
+					//nolint:returnerrcheck
+					return tree.DNull, nil
+				}
+
+				return typOid, nil
+			},
+			Info:       "Translates a textual schema name to its OID",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+	"to_regproc": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"text", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.RegProc),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typName := tree.MustBeDString(args[0])
+
+				int, _ := strconv.Atoi(string(typName))
+				if int > 0 {
+					return tree.DNull, nil
+				}
+				typOid, err := tree.ParseDOid(ctx, string(typName), types.RegProc)
+				if err != nil {
+					//nolint:returnerrcheck
+					return tree.DNull, nil
+				}
+
+				return typOid, nil
+			},
+			Info:       "Translates a textual function or procedure name to its OID",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+	"to_regprocedure": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"text", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.RegProcedure),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typName := tree.MustBeDString(args[0])
+
+				int, _ := strconv.Atoi(string(typName))
+				if int > 0 {
+					return tree.DNull, nil
+				}
+				typOid, err := tree.ParseDOid(ctx, string(typName), types.RegProcedure)
+				if err != nil {
+					//nolint:returnerrcheck
+					return tree.DNull, nil
+				}
+
+				return typOid, nil
+			},
+			Info:       "Translates a textual function or procedure name(with argument types) to its OID",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+	"to_regrole": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"text", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.RegRole),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typName := tree.MustBeDString(args[0])
+
+				int, _ := strconv.Atoi(string(typName))
+				if int > 0 {
+					return tree.DNull, nil
+				}
+				typOid, err := tree.ParseDOid(ctx, string(typName), types.RegRole)
+				if err != nil {
+					//nolint:returnerrcheck
+					return tree.DNull, nil
+				}
+
+				return typOid, nil
+			},
+			Info:       "Translates a textual role name to its OID",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+	"to_regtype": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"text", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.RegType),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				typName := tree.MustBeDString(args[0])
+
+				int, _ := strconv.Atoi(string(typName))
+				if int > 0 {
+					return tree.DNull, nil
+				}
+				typOid, err := tree.ParseDOid(ctx, string(typName), types.RegType)
+				if err != nil {
+					//nolint:returnerrcheck
+					return tree.DNull, nil
+				}
+
+				return typOid, nil
+			},
+			Info:       "Translates a textual type name to its OID",
+			Volatility: tree.VolatilityStable,
 		},
 	),
 }
