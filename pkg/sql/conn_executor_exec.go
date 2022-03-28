@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -61,6 +62,15 @@ import (
 	"github.com/lib/pq/oid"
 	"go.opentelemetry.io/otel/attribute"
 )
+
+// LogSQLErrors is a bool session variable which logs any ExecStmt errors
+// to the SQL_ERRORS sink.
+var LogSQLErrors = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	`sql.log.sql_errors.enabled`,
+	`whether any SQL related errors should be logged`,
+	false,
+).WithPublic()
 
 // execStmt executes one statement by dispatching according to the current
 // state. Returns an Event to be passed to the state machine, or nil if no
@@ -278,6 +288,16 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
 		ev, payload := ex.makeErrEvent(err, ast)
+
+		if LogSQLErrors.Get(ex.server.cfg.SV()) {
+			logEvent := &eventpb.QueryError{
+				QueryErrorDetails: eventpb.QueryErrorDetails{
+					Query: parserStmt.SQL,
+					Error: fmt.Sprintf("%+v", err),
+				},
+			}
+			log.StructuredEvent(ctx, logEvent)
+		}
 		return ev, payload, nil
 	}
 

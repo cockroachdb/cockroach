@@ -5561,3 +5561,293 @@ func (loggerTelemetry) Shout(ctx context.Context, sev Severity, msg string) {
 func (loggerTelemetry) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.TELEMETRY, format, args...)
 }
+
+// loggerSqlErrors is the logger type for the SQL_ERRORS channel.
+type loggerSqlErrors struct{}
+
+// SqlErrors is a logger that logs to the SQL_ERRORS channel.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+var SqlErrors loggerSqlErrors
+
+// SqlErrors and loggerSqlErrors implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = SqlErrors
+
+// Infof logs to the SQL_ERRORS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerSqlErrors) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_ERRORS, format, args...)
+}
+
+// VInfof logs to the SQL_ERRORS channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerSqlErrors) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.SQL_ERRORS, format, args...)
+	}
+}
+
+// Info logs to the SQL_ERRORS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerSqlErrors) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_ERRORS, msg)
+}
+
+// InfofDepth logs to the SQL_ERRORS channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerSqlErrors) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_ERRORS, format, args...)
+}
+
+// Warningf logs to the SQL_ERRORS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerSqlErrors) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_ERRORS, format, args...)
+}
+
+// VWarningf logs to the SQL_ERRORS channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerSqlErrors) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.SQL_ERRORS, format, args...)
+	}
+}
+
+// Warning logs to the SQL_ERRORS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerSqlErrors) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_ERRORS, msg)
+}
+
+// WarningfDepth logs to the SQL_ERRORS channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerSqlErrors) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_ERRORS, format, args...)
+}
+
+// Errorf logs to the SQL_ERRORS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlErrors) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_ERRORS, format, args...)
+}
+
+// VErrorf logs to the SQL_ERRORS channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlErrors) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.SQL_ERRORS, format, args...)
+	}
+}
+
+// Error logs to the SQL_ERRORS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlErrors) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_ERRORS, msg)
+}
+
+// ErrorfDepth logs to the SQL_ERRORS channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlErrors) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_ERRORS, format, args...)
+}
+
+// Fatalf logs to the SQL_ERRORS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlErrors) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_ERRORS, format, args...)
+}
+
+// VFatalf logs to the SQL_ERRORS channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlErrors) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.SQL_ERRORS, format, args...)
+	}
+}
+
+// Fatal logs to the SQL_ERRORS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlErrors) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_ERRORS, msg)
+}
+
+// FatalfDepth logs to the SQL_ERRORS channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlErrors) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.SQL_ERRORS, format, args...)
+}
+
+// Shout logs to channel SQL_ERRORS, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+func (loggerSqlErrors) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_ERRORS, msg)
+}
+
+// Shoutf logs to channel SQL_ERRORS, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+func (loggerSqlErrors) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_ERRORS, format, args...)
+}

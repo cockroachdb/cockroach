@@ -50,6 +50,12 @@ func (m *AdminQuery) LoggingChannel() logpb.Channel { return logpb.Channel_SENSI
 func (m *SensitiveTableAccess) LoggingChannel() logpb.Channel { return logpb.Channel_SENSITIVE_ACCESS }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *QueryError) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_ERRORS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *QueryErrorDetails) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_ERRORS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *QueryExecute) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
 
 // LoggingChannel implements the EventPayload interface.

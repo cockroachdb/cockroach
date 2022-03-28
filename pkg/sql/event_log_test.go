@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStructuredEventLogging(t *testing.T) {
@@ -741,5 +742,77 @@ func TestPerfLogging(t *testing.T) {
 			t.Log(tc.cleanup)
 			db.Exec(t, tc.cleanup)
 		}
+	}
+}
+
+func TestSQLErrorLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		sql     string
+		errorRe string
+		logRe   string
+	}{
+		{
+			sql:     "SELECT invalid query",
+			errorRe: `at or near "query": syntax error`,
+			logRe:   `"EventType":"query_error","Query":"‹SELECT invalid query›","Error":".*syntax error`,
+		},
+		{
+			sql:     "SELECT * FROM t AS OF SYSTEM TIME '-30s'",
+			errorRe: `database.*does not exist`,
+			logRe:   `"EventType":"query_error","Query":"‹SELECT \* FROM t AS OF SYSTEM TIME '-30s'›","Error":".*database.*does not exist`,
+		},
+	}
+
+	// Make file sinks for the SQL perf logs.
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+	log.TestingResetActive()
+	cfg := logconfig.DefaultConfig()
+	auditable := true
+	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"sql-errors": {
+			FileDefaults: logconfig.FileDefaults{
+				CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &auditable},
+			},
+			Channels: logconfig.SelectChannels(channel.SQL_ERRORS),
+		},
+	}
+	dir := sc.GetDirectory()
+	if err := cfg.Validate(&dir); err != nil {
+		t.Fatal(err)
+	}
+	cleanup, err := log.ApplyConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	// Start a SQL server.
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING sql.log.sql_errors.enabled = true`)
+	db.Exec(t, `CREATE TABLE t ()`)
+
+	for _, tc := range testCases {
+		t.Run(tc.sql, func(t *testing.T) {
+			start := timeutil.Now().UnixNano()
+			db.ExpectErr(t, tc.errorRe, tc.sql)
+			end := timeutil.Now().UnixNano()
+
+			var logRe = regexp.MustCompile(tc.logRe)
+			log.Flush()
+			entries, err := log.FetchEntriesFromFiles(
+				start, end, 1000, logRe, log.WithMarkedSensitiveData,
+			)
+			require.NoError(t, err)
+			t.Logf("entries: %#v\n", entries)
+			require.Equal(t, 1, len(entries))
+			entry := entries[0]
+			t.Log(entry.Message)
+			require.Equal(t, channel.SQL_ERRORS, entry.Channel)
+		})
 	}
 }

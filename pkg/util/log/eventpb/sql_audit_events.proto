@@ -223,3 +223,20 @@ message QueryExecute {
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
+
+// Category: SQL Errors
+// Channel: SQL_ERRORS
+//
+// Events in this category report executed  queries which have resulted in an error.
+
+message QueryErrorDetails {
+  // Query is the query causing any issue.
+  string query = 1 [(gogoproto.jsontag) = ",omitempty"];
+  // Error is the full error details.
+  string error = 2 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+message QueryError {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  QueryErrorDetails sql_error = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}

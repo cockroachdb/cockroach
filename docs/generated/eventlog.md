@@ -432,6 +432,39 @@ a table marked as audited.
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
 
+## SQL Errors
+
+Events in this category report executed  queries which have resulted in an error.
+
+Events in this category are logged to the `SQL_ERRORS` channel.
+
+
+### `query_error`
+
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Query` | Query is the query causing any issue. | yes |
+| `Error` | Error is the full error details. | yes |
+
+### `query_error_details`
+
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Query` | Query is the query causing any issue. | yes |
+| `Error` | Error is the full error details. | yes |
+
+
+
 ## SQL Execution Log
 
 Events in this category report executed queries.

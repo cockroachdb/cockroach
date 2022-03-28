@@ -169,3 +169,9 @@ The `TELEMETRY` channel reports telemetry events. Telemetry events describe
 feature usage within CockroachDB and anonymizes any application-
 specific data.
 
+### `SQL_ERRORS`
+
+The `SQL_ERRORS` channel reports all errors that appear through the connection executor.
+It is useful for quickly directing any problematic queries to
+CockroachDB that may be hard to detect through the client.
+

@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -2005,6 +2006,15 @@ func (ex *connExecutor) execCmd() error {
 		var err error
 		ev, payload, err = ex.execCopyIn(ctx, tcmd)
 		if err != nil {
+			if LogSQLErrors.Get(ex.planner.execCfg.SV()) {
+				logEvent := &eventpb.QueryError{
+					QueryErrorDetails: eventpb.QueryErrorDetails{
+						Query: tcmd.Stmt.String(),
+						Error: fmt.Sprintf("%+v", err),
+					},
+				}
+				log.StructuredEvent(ctx, logEvent)
+			}
 			return err
 		}
 	case DrainRequest:

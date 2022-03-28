@@ -134,3 +134,8 @@ const SQL_INTERNAL_PERF = logpb.Channel_SQL_INTERNAL_PERF
 // feature usage within CockroachDB and anonymizes any application-
 // specific data.
 const TELEMETRY = logpb.Channel_TELEMETRY
+
+// SQL_ERRORS reports all errors that appear through the connection executor.
+// It is useful for quickly directing any problematic queries to
+// CockroachDB that may be hard to detect through the client.
+const SQL_ERRORS = logpb.Channel_SQL_ERRORS
