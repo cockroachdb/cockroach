@@ -27,7 +27,7 @@ import (
 // - contentHashes is a map of URL path (including a leading "/") to the ETag
 //	 value to use for that file
 // - next is the next handler in the http.Handler chain, used
-func EtagHandler(contentHashes *map[string]string, next http.Handler) http.Handler {
+func EtagHandler(contentHashes map[string]string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if contentHashes == nil {
 			// If the hashed content map is erased, turn this into a no-op handler.
@@ -36,7 +36,7 @@ func EtagHandler(contentHashes *map[string]string, next http.Handler) http.Handl
 		}
 
 		ifNoneMatch := r.Header.Get("If-None-Match")
-		checksum, checksumFound := (*contentHashes)[r.URL.Path]
+		checksum, checksumFound := contentHashes[r.URL.Path]
 		// ETag header values are always wrapped in double-quotes
 		wrappedChecksum := `"` + checksum + `"`
 

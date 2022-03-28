@@ -120,7 +120,7 @@ type Config struct {
 // templated into it, as well as static assets.
 func Handler(cfg Config) http.Handler {
 	handlerChain := httputil.EtagHandler(
-		&AssetHashes,
+		AssetHashes,
 		http.FileServer(
 			http.FS(Assets),
 		),

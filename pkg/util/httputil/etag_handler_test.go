@@ -53,7 +53,7 @@ func TestEtagHandler(t *testing.T) {
 		"/README.md":             "789afff",
 	}
 
-	handler := EtagHandler(&hashedFiles, okHandler)
+	handler := EtagHandler(hashedFiles, okHandler)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	client := server.Client()
@@ -85,7 +85,7 @@ func TestEtagHandler(t *testing.T) {
 		{
 			desc:               "unhashed file",
 			path:               "/this/file/isnt/hashed.css",
-			ifNoneMatch:        `"5a1eab1e"`,
+			ifNoneMatch:        `"5ca1eab1e"`,
 			expectedStatusCode: 200,
 		},
 	}
@@ -106,12 +106,12 @@ func TestEtagHandler(t *testing.T) {
 			defer resp.Body.Close()
 			require.Equal(t, tc.expectedStatusCode, resp.StatusCode)
 
-			checksum, checksumExists := hashedFiles["/"+tc.path]
+			checksum, checksumExists := hashedFiles[tc.path]
 			// Requests for files with ETags must always include the ETag in the response
 			if checksumExists {
 				require.Equal(
 					t,
-					checksum,
+					`"`+checksum+`"`,
 					resp.Header.Get("ETag"),
 					"Requests for hashed files must always include an ETag response header",
 				)
