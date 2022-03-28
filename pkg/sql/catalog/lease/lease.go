@@ -722,6 +722,9 @@ func NameMatchesDescriptor(
 // findNewest returns the newest descriptor version state for the ID.
 func (m *Manager) findNewest(id descpb.ID) *descriptorVersionState {
 	t := m.findDescriptorState(id, false /* create */)
+	if t == nil {
+		return nil
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.mu.active.findNewest()
