@@ -196,7 +196,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         style="tableTitle"
         content={<p>ID of the coordinating node.</p>}
       >
-        {"Coordinator ID"}
+        {"Coordinator Node"}
       </Tooltip>
     ),
     // If the coordinator ID is unset, we don't want to display anything, but
