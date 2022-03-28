@@ -142,6 +142,13 @@ type granter interface {
 	// 5x and shifted ~2s of latency (at p99) from the scheduler into admission
 	// control (which is desirable since the latter is where we can
 	// differentiate between work).
+	//
+	// TODO(sumeer): the "grant chain" concept is subtle and under-documented.
+	// It's easy to go through most of this package thinking it has something to
+	// do with dependent requests (e.g. intent resolution chains on an end txn).
+	// It would help for a top-level comment on grantChainID or continueGrantChain
+	// to spell out what grant chains are, their purpose, and how they work with
+	// an example.
 	continueGrantChain(grantChainID grantChainID)
 }
 
@@ -877,7 +884,7 @@ func appendMetricStructsForQueues(ms []metric.Struct, coord *GrantCoordinator) [
 // pebbleMetricsTick is called every adjustmentInterval seconds and passes
 // through to the ioLoadListener, so that it can adjust the plan for future IO
 // token allocations.
-func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m pebble.Metrics) {
+func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m *pebble.Metrics) {
 	coord.ioLoadListener.pebbleMetricsTick(ctx, m)
 }
 
@@ -1226,7 +1233,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	for _, m := range metrics {
 		gc := sgc.initGrantCoordinator(m.StoreID)
 		sgc.gcMap[m.StoreID] = gc
-		gc.pebbleMetricsTick(startupCtx, *m.Metrics)
+		gc.pebbleMetricsTick(startupCtx, m.Metrics)
 		gc.allocateIOTokensTick()
 	}
 
@@ -1249,7 +1256,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					}
 					for _, m := range metrics {
 						if gc, ok := sgc.gcMap[m.StoreID]; ok {
-							gc.pebbleMetricsTick(ctx, *m.Metrics)
+							gc.pebbleMetricsTick(ctx, m.Metrics)
 						} else {
 							log.Warningf(ctx,
 								"seeing metrics for unknown storeID %d", m.StoreID)
@@ -1546,7 +1553,7 @@ const adjustmentInterval = 15
 
 // pebbleMetricsTicks is called every adjustmentInterval seconds, and decides
 // the token allocations until the next call.
-func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, m pebble.Metrics) {
+func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, m *pebble.Metrics) {
 	if !io.statsInitialized {
 		io.statsInitialized = true
 		// Initialize cumulative stats.
@@ -1595,7 +1602,7 @@ func (io *ioLoadListener) allocateTokensTick() {
 // many bytes are being moved out of L0 via compactions with the average
 // number of bytes being added to L0 per KV work. We want the former to be
 // (significantly) larger so that L0 returns to a healthy state.
-func (io *ioLoadListener) adjustTokens(ctx context.Context, m pebble.Metrics) {
+func (io *ioLoadListener) adjustTokens(ctx context.Context, m *pebble.Metrics) {
 	io.tokensAllocated = 0
 	// Grab the cumulative stats.
 	admittedCount := io.kvRequester.getAdmittedCount()
