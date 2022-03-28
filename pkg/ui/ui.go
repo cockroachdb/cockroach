@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -37,6 +38,10 @@ var Assets fs.FS
 
 // HaveUI tells whether the admin UI has been linked into the binary.
 var HaveUI = false
+
+// AssetHashes is used to provide a unique per-file checksum for each served file,
+// which enables client-side caching using Cache-Control and ETag headers.
+var AssetHashes map[string]string
 
 // indexTemplate takes arguments about the current session and returns HTML
 // which includes the UI JavaScript bundles, plus a script tag which sets the
@@ -112,7 +117,12 @@ type Config struct {
 // including index.html, which has some login-related variables
 // templated into it, as well as static assets.
 func Handler(cfg Config) http.Handler {
-	fileServer := http.FileServer(http.FS(Assets))
+	handlerChain := httputil.EtagHandler(
+		AssetHashes,
+		http.FileServer(
+			http.FS(Assets),
+		),
+	)
 	buildInfo := build.GetInfo()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +132,7 @@ func Handler(cfg Config) http.Handler {
 		}
 
 		if r.URL.Path != "/" {
-			fileServer.ServeHTTP(w, r)
+			handlerChain.ServeHTTP(w, r)
 			return
 		}
 

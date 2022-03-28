@@ -21,6 +21,7 @@ import (
 	"io/fs"
 
 	"github.com/cockroachdb/cockroach/pkg/ui"
+	"github.com/cockroachdb/cockroach/pkg/ui/buildutil"
 )
 
 //go:embed assets/*
@@ -28,9 +29,16 @@ var assets embed.FS
 
 func init() {
 	var err error
+	ui.HaveUI = true
 	ui.Assets, err = fs.Sub(assets, "assets")
 	if err != nil {
 		panic(err)
 	}
-	ui.HaveUI = true
+
+	assetHashes := make(map[string]string)
+	err = buildutil.HashFilesInDir(&assetHashes, ui.Assets)
+	if err != nil {
+		panic(err)
+	}
+	ui.AssetHashes = assetHashes
 }
