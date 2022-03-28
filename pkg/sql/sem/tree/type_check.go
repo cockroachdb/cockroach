@@ -2445,10 +2445,11 @@ func typeCheckSameTypedTupleExprs(
 		sameTypeExprs = sameTypeExprs[:0]
 		sameTypeExprsIndices = sameTypeExprsIndices[:0]
 		for exprIdx, expr := range exprs {
-			if expr == DNull {
+			tup, ok := expr.(*Tuple)
+			if !ok {
 				continue
 			}
-			sameTypeExprs = append(sameTypeExprs, expr.(*Tuple).Exprs[elemIdx])
+			sameTypeExprs = append(sameTypeExprs, tup.Exprs[elemIdx])
 			sameTypeExprsIndices = append(sameTypeExprsIndices, exprIdx)
 		}
 		desiredElem := types.Any
@@ -2466,8 +2467,15 @@ func typeCheckSameTypedTupleExprs(
 		resTypes.TupleContents()[elemIdx] = resType
 	}
 	for tupleIdx, expr := range exprs {
-		if expr != DNull {
-			expr.(*Tuple).typ = resTypes
+		if tup, ok := expr.(*Tuple); ok {
+			tup.typ = resTypes
+		}
+		if annotate, ok := expr.(*AnnotateTypeExpr); ok {
+			// The expression could be a NULL annotated with a tuple type, like
+			// NULL:::RECORD. At this point the checks above have already
+			// validated that the type annotation is a tuple and the inner
+			// expression is NULL.
+			expr = annotate.Expr
 		}
 		typedExprs[tupleIdx] = expr.(TypedExpr)
 	}
@@ -2479,7 +2487,10 @@ func typeCheckSameTypedTupleExprs(
 func checkAllExprsAreTuplesOrNulls(ctx context.Context, semaCtx *SemaContext, exprs []Expr) error {
 	for _, expr := range exprs {
 		_, isTuple := expr.(*Tuple)
-		isNull := expr == DNull
+		isNull, err := isNullOrAnnotatedNullTuple(ctx, semaCtx, expr)
+		if err != nil {
+			return err
+		}
 		if !(isTuple || isNull) {
 			typedExpr, err := expr.TypeCheck(ctx, semaCtx, types.Any)
 			if err != nil {
@@ -2495,10 +2506,11 @@ func checkAllExprsAreTuplesOrNulls(ctx context.Context, semaCtx *SemaContext, ex
 // length. Note that all nulls are skipped in this check.
 func checkAllTuplesHaveLength(exprs []Expr, expectedLen int) error {
 	for _, expr := range exprs {
-		if expr == DNull {
+		tup, ok := expr.(*Tuple)
+		if !ok {
 			continue
 		}
-		if err := checkTupleHasLength(expr.(*Tuple), expectedLen); err != nil {
+		if err := checkTupleHasLength(tup, expectedLen); err != nil {
 			return err
 		}
 	}
@@ -2510,6 +2522,28 @@ func checkTupleHasLength(t *Tuple, expectedLen int) error {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected tuple %v to have a length of %d", t, expectedLen)
 	}
 	return nil
+}
+
+// isNullOrAnnotatedNullTuple returns true if the given expression is a DNull or
+// a DNull that is wrapped by an AnnotateTypeExpr with a type identical to
+// AnyTuple (e.g., NULL:::RECORD). An AnnotateTypeExpr should never have a tuple
+// type not identical to AnyTuple, because other tuple types could only be
+// expressed as composite types, and these are not yet supported. If the
+// AnnotateTypeExpr has a non-tuple type, the function returns false.
+func isNullOrAnnotatedNullTuple(
+	ctx context.Context, semaCtx *SemaContext, expr Expr,
+) (bool, error) {
+	if expr == DNull {
+		return true, nil
+	}
+	if annotate, ok := expr.(*AnnotateTypeExpr); ok && annotate.Expr == DNull {
+		annotateType, err := ResolveType(ctx, annotate.Type, semaCtx.GetTypeResolver())
+		if err != nil {
+			return false, err
+		}
+		return annotateType.Identical(types.AnyTuple), nil
+	}
+	return false, nil
 }
 
 type placeholderAnnotationVisitor struct {
