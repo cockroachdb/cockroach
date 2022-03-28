@@ -36,6 +36,8 @@ type Balancer struct {
 
 // NewBalancer constructs a new Balancer instance that is responsible for
 // load balancing SQL connections within the proxy.
+//
+// TODO(jaylim-crl): Update Balancer to take in a ConnTracker object.
 func NewBalancer() *Balancer {
 	b := &Balancer{}
 	b.mu.rng, _ = randutil.NewPseudoRand()
