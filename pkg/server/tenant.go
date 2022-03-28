@@ -208,7 +208,7 @@ func startTenantInternal(
 	// the SQL server object.
 	tenantStatusServer := newTenantStatusServer(
 		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
-		args.sessionRegistry, args.flowScheduler, baseCfg.Settings, nil,
+		args.sessionRegistry, args.closedSessionCache, args.flowScheduler, baseCfg.Settings, nil,
 		args.rpcContext, args.stopper,
 	)
 
@@ -525,6 +525,7 @@ func makeTenantSQLServerArgs(
 	grpcServer.setMode(modeOperational)
 
 	sessionRegistry := sql.NewSessionRegistry()
+	closedSessionCache := sql.NewClosedSessionCache(st, time.Now)
 	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
@@ -560,6 +561,7 @@ func makeTenantSQLServerArgs(
 		registry:                 registry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
+		closedSessionCache:       closedSessionCache,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: circularInternalExecutor,
 		circularJobRegistry:      circularJobRegistry,

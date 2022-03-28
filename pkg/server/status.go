@@ -140,13 +140,14 @@ type baseStatusServer struct {
 	serverpb.UnimplementedStatusServer
 
 	log.AmbientContext
-	privilegeChecker *adminPrivilegeChecker
-	sessionRegistry  *sql.SessionRegistry
-	flowScheduler    *flowinfra.FlowScheduler
-	st               *cluster.Settings
-	sqlServer        *SQLServer
-	rpcCtx           *rpc.Context
-	stopper          *stop.Stopper
+	privilegeChecker   *adminPrivilegeChecker
+	sessionRegistry    *sql.SessionRegistry
+	closedSessionCache *sql.ClosedSessionCache
+	flowScheduler      *flowinfra.FlowScheduler
+	st                 *cluster.Settings
+	sqlServer          *SQLServer
+	rpcCtx             *rpc.Context
+	stopper            *stop.Stopper
 }
 
 // getLocalSessions returns a list of local sessions on this node. Note that the
@@ -198,7 +199,10 @@ func (b *baseStatusServer) getLocalSessions(
 
 	registry := b.sessionRegistry
 	sessions := registry.SerializeAll()
-	userSessions := make([]serverpb.Session, 0, len(sessions))
+	closedSessions := b.closedSessionCache.GetSerializedSessions()
+
+	userSessions := make([]serverpb.Session, 0, len(sessions)+len(closedSessions))
+	sessions = append(sessions, closedSessions...)
 
 	for _, session := range sessions {
 		if reqUsername.Normalized() != session.Username && !showAll {
@@ -498,19 +502,21 @@ func newStatusServer(
 	stores *kvserver.Stores,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
+	closedSessionCache *sql.ClosedSessionCache,
 	flowScheduler *flowinfra.FlowScheduler,
 	internalExecutor *sql.InternalExecutor,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
 		baseStatusServer: &baseStatusServer{
-			AmbientContext:   ambient,
-			privilegeChecker: adminAuthzCheck,
-			sessionRegistry:  sessionRegistry,
-			flowScheduler:    flowScheduler,
-			st:               st,
-			rpcCtx:           rpcCtx,
-			stopper:          stopper,
+			AmbientContext:     ambient,
+			privilegeChecker:   adminAuthzCheck,
+			sessionRegistry:    sessionRegistry,
+			closedSessionCache: closedSessionCache,
+			flowScheduler:      flowScheduler,
+			st:                 st,
+			rpcCtx:             rpcCtx,
+			stopper:            stopper,
 		},
 		cfg:              cfg,
 		admin:            adminServer,

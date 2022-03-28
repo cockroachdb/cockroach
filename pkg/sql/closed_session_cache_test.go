@@ -62,7 +62,7 @@ func TestSessionCacheBasic(t *testing.T) {
 
 				session := serverpb.Session{}
 				sessionID := ClusterWideID{id}
-				cache.Add(sessionID, session)
+				cache.add(sessionID, session)
 
 				return fmt.Sprintf("cache_size: %d", cache.size())
 			case "addSessionBatch":
@@ -79,7 +79,7 @@ func TestSessionCacheBasic(t *testing.T) {
 					cache.timeSrc = addSeconds(cache.timeSrc, seconds)
 					session := serverpb.Session{}
 					sessionID := ClusterWideID{id}
-					cache.Add(sessionID, session)
+					cache.add(sessionID, session)
 					id = id.Add(1)
 				}
 

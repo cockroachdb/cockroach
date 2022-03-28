@@ -288,7 +288,8 @@ func startConnExecutor(
 		SystemConfig: config.NewConstantSystemConfigProvider(
 			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
 		),
-		SessionRegistry: NewSessionRegistry(),
+		SessionRegistry:    NewSessionRegistry(),
+		ClosedSessionCache: NewClosedSessionCache(st, time.Now),
 		NodeInfo: NodeInfo{
 			NodeID:    nodeID,
 			ClusterID: func() uuid.UUID { return uuid.UUID{} },

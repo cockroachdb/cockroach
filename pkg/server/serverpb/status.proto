@@ -932,6 +932,16 @@ message Session {
   // The SQL statement fingerprint of the last query executed on this session,
   // compatible with StatementStatisticsKey.
   string last_active_query_no_constants = 13;
+  // Enum for sessions status.
+  enum Status {
+    OPEN = 0;
+    CLOSED = 1;
+  }
+  // The sessions status.
+  Status status = 14;
+  // Timestamp of session's end.
+  google.protobuf.Timestamp end = 15
+      [ (gogoproto.nullable) = true, (gogoproto.stdtime) = true ];
 }
 
 // An error wrapper object for ListSessionsResponse.
