@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -48,6 +49,25 @@ var maxFeedFraction = envutil.EnvOrDefaultFloat64("COCKROACH_RANGEFEED_TOTAL_MEM
 // ranges to have such objects, but we'll have a multiple of those just in case.
 var systemRangeFeedBudget = envutil.EnvOrDefaultInt64("COCKROACH_RANGEFEED_SYSTEM_BUDGET",
 	2*64*1024*1024 /* 128MB */)
+
+// RangefeedBudgetsEnabled is a cluster setting that enables rangefeed memory
+// budgets. This is meant to be an escape hatch to disable budgets if they cause
+// feeds to fail unexpectedly despite nodes have plenty of memory or if bugs in
+// budgeting are discovered and mitigation is required.
+// With budgets disabled, rangefeeds will behave as they did prior to 22.1.
+// Note that disabling this feature will not disable budgets on already running
+// rangefeeds, but will affect feeds that are created after the option was
+// changed. You need to restart all feeds to ensure that the budget is fully
+// disabled.
+// This feature is also globally controlled by useBudgets environment option
+// defined above. If budgets are disabled by environment variable, cluster
+// setting has no effect.
+var RangefeedBudgetsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.memory_budgets.enabled",
+	"if set, rangefeed memory budgets are enabled",
+	true,
+)
 
 var budgetAllocationSyncPool = sync.Pool{
 	New: func() interface{} {
@@ -288,8 +308,11 @@ func (f *BudgetFactory) Stop(ctx context.Context) {
 // CreateBudget creates feed budget using memory pools configured in the
 // factory. It is safe to call on nil factory as it will produce nil budget
 // which in turn disables memory accounting on range feed.
-func (f *BudgetFactory) CreateBudget(key roachpb.RKey) *FeedBudget {
+func (f *BudgetFactory) CreateBudget(key roachpb.RKey, settings *settings.Values) *FeedBudget {
 	if f == nil {
+		return nil
+	}
+	if !RangefeedBudgetsEnabled.Get(settings) {
 		return nil
 	}
 	// We use any table with reserved ID in system tenant as system case.
