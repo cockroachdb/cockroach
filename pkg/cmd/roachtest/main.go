@@ -40,6 +40,11 @@ import (
 // test failed.
 const ExitCodeTestsFailed = 10
 
+// ExitCodeClusterProvisioningFailed is the exit code that results
+// from a run of roachtest in which some clusters could not be
+// created due to errors during cloud hardware allocation.
+const ExitCodeClusterProvisioningFailed = 11
+
 // runnerLogsDir is the dir under the artifacts root where the test runner log
 // and other runner-related logs (i.e. cluster creation logs) will be written.
 const runnerLogsDir = "_runner-logs"
@@ -328,6 +333,9 @@ runner itself.
 		code := 1
 		if errors.Is(err, errTestsFailed) {
 			code = ExitCodeTestsFailed
+		}
+		if errors.Is(err, errClusterProvisioningFailed) {
+			code = ExitCodeClusterProvisioningFailed
 		}
 		// Cobra has already printed the error message.
 		os.Exit(code)
