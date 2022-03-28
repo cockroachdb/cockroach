@@ -37,7 +37,7 @@ func init() {
 	ui.HaveUI = true
 
 	assetHashes := make(map[string]string)
-	err = buildutil.HashFilesInDir(&assetHashes, assets)
+	err = buildutil.HashFilesInDir(&assetHashes, ui.Assets)
 	if err != nil {
 		panic(err)
 	}
