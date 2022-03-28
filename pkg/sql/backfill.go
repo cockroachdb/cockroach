@@ -2006,6 +2006,9 @@ func (sc *SchemaChanger) backfillIndexes(
 	if err := sc.distIndexBackfill(
 		ctx, version, addingSpans, addedIndexes, writeAtRequestTimestamp, backfill.IndexMutationFilter,
 	); err != nil {
+		if errors.HasType(err, &roachpb.InsufficientSpaceError{}) {
+			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+		}
 		return err
 	}
 
