@@ -70,39 +70,102 @@ func (m *SampledQuery) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SampledQuery proto.InternalMessageInfo
 
+// CapturedIndexUsageStats
+type CapturedIndexUsageStats struct {
+	CommonEventDetails `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	// TotalReadCount is the number of times this index has been read from.
+	TotalReadCount uint64 `protobuf:"varint,2,opt,name=total_read_count,json=totalReadCount,proto3" json:"total_read_count,omitempty"`
+	// LastRead is the timestamp that this index was last being read from.
+	LastRead string `protobuf:"bytes,3,opt,name=last_read,json=lastRead,proto3" json:",omitempty"`
+	// TableID is the ID of the table this index is created on. This is same as
+	// descpb.TableID and is unique within the cluster.
+	TableID uint32 `protobuf:"varint,4,opt,name=table_id,json=tableId,proto3" json:"table_id,omitempty"`
+	// IndexID is the ID of the index within the scope of the given table.
+	IndexID      uint32 `protobuf:"varint,5,opt,name=index_id,json=indexId,proto3" json:"index_id,omitempty"`
+	DatabaseName string `protobuf:"bytes,6,opt,name=database_name,json=databaseName,proto3" json:",omitempty"`
+	TableName    string `protobuf:"bytes,7,opt,name=table_name,json=tableName,proto3" json:",omitempty"`
+	IndexName    string `protobuf:"bytes,8,opt,name=index_name,json=indexName,proto3" json:",omitempty"`
+	IndexType    string `protobuf:"bytes,9,opt,name=index_type,json=indexType,proto3" json:",omitempty"`
+	IsUnique     bool   `protobuf:"varint,10,opt,name=is_unique,json=isUnique,proto3" json:",omitempty"`
+	IsInverted   bool   `protobuf:"varint,11,opt,name=is_inverted,json=isInverted,proto3" json:",omitempty"`
+}
+
+func (m *CapturedIndexUsageStats) Reset()         { *m = CapturedIndexUsageStats{} }
+func (m *CapturedIndexUsageStats) String() string { return proto.CompactTextString(m) }
+func (*CapturedIndexUsageStats) ProtoMessage()    {}
+func (*CapturedIndexUsageStats) Descriptor() ([]byte, []int) {
+	return fileDescriptor_3d317b4ad74be4f7, []int{1}
+}
+func (m *CapturedIndexUsageStats) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *CapturedIndexUsageStats) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *CapturedIndexUsageStats) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CapturedIndexUsageStats.Merge(m, src)
+}
+func (m *CapturedIndexUsageStats) XXX_Size() int {
+	return m.Size()
+}
+func (m *CapturedIndexUsageStats) XXX_DiscardUnknown() {
+	xxx_messageInfo_CapturedIndexUsageStats.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CapturedIndexUsageStats proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*SampledQuery)(nil), "cockroach.util.log.eventpb.SampledQuery")
+	proto.RegisterType((*CapturedIndexUsageStats)(nil), "cockroach.util.log.eventpb.CapturedIndexUsageStats")
 }
 
 func init() { proto.RegisterFile("util/log/eventpb/telemetry.proto", fileDescriptor_3d317b4ad74be4f7) }
 
 var fileDescriptor_3d317b4ad74be4f7 = []byte{
-	// 391 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x91, 0x3d, 0x8f, 0xd3, 0x30,
-	0x18, 0x80, 0x63, 0x5a, 0x8a, 0x30, 0xe1, 0x90, 0x22, 0x90, 0xa2, 0x4a, 0x38, 0x51, 0x97, 0x0b,
-	0x12, 0x4a, 0x80, 0x1b, 0x90, 0x18, 0x03, 0x37, 0xc1, 0x92, 0x1c, 0x13, 0x4b, 0x94, 0x3a, 0xaf,
-	0x82, 0x75, 0x4e, 0x9c, 0xc6, 0x6f, 0x4e, 0xd7, 0x7f, 0xc1, 0xaf, 0x42, 0x1d, 0x3b, 0xde, 0x14,
-	0x41, 0xba, 0xdd, 0xc8, 0x2f, 0x40, 0x49, 0x33, 0x50, 0x95, 0xaf, 0xc9, 0xb6, 0xde, 0xe7, 0x79,
-	0x64, 0xd9, 0xd4, 0x6d, 0x50, 0xc8, 0x40, 0xaa, 0x3c, 0x80, 0x2b, 0x28, 0xb1, 0x5a, 0x06, 0x08,
-	0x12, 0x0a, 0xc0, 0x7a, 0xed, 0x57, 0xb5, 0x42, 0x65, 0xcd, 0xb9, 0xe2, 0x97, 0xb5, 0x4a, 0xf9,
-	0x67, 0xbf, 0x67, 0x7d, 0xa9, 0x72, 0x7f, 0x64, 0xe7, 0x8f, 0x73, 0x95, 0xab, 0x01, 0x0b, 0xfa,
-	0xdd, 0xde, 0x98, 0x3f, 0x3d, 0x6a, 0x0e, 0xab, 0x1e, 0xc7, 0xa7, 0x47, 0x63, 0xbd, 0x92, 0x49,
-	0xda, 0x64, 0x02, 0x93, 0x5f, 0xc1, 0xc5, 0xd7, 0x09, 0x35, 0x2f, 0xd2, 0xa2, 0x92, 0x90, 0x45,
-	0x0d, 0xd4, 0x6b, 0xeb, 0x23, 0x9d, 0x71, 0x55, 0x14, 0xaa, 0xb4, 0x89, 0x4b, 0xbc, 0x07, 0xaf,
-	0x7c, 0xff, 0xcf, 0x77, 0xf3, 0xdf, 0x0e, 0xe4, 0x79, 0x7f, 0x7a, 0x07, 0x98, 0x0a, 0xa9, 0x43,
-	0x73, 0xd3, 0x3a, 0xc6, 0xb6, 0x75, 0xc8, 0x6d, 0xeb, 0x18, 0xf1, 0xd8, 0xb2, 0x22, 0x3a, 0xd1,
-	0x2b, 0x69, 0xdf, 0x19, 0x92, 0x2f, 0xff, 0x9d, 0xbc, 0x88, 0x3e, 0xfc, 0xa5, 0xda, 0xb7, 0xac,
-	0x98, 0x4e, 0xe1, 0x1a, 0xb8, 0x3d, 0x19, 0x9a, 0x2f, 0xfe, 0xaf, 0x79, 0x0d, 0xfc, 0xf7, 0xc9,
-	0xa1, 0x65, 0xbd, 0xa6, 0x8f, 0xf4, 0xa5, 0xa8, 0x2a, 0xc8, 0x92, 0x55, 0x03, 0xb5, 0x00, 0x6d,
-	0x4f, 0x5d, 0xe2, 0x4d, 0xc3, 0x93, 0xdb, 0xd6, 0xa1, 0xcf, 0x55, 0x21, 0x10, 0x8a, 0x0a, 0xd7,
-	0xf1, 0xc9, 0x88, 0x45, 0x7b, 0xca, 0x3a, 0xa3, 0x0f, 0xb9, 0xd2, 0x98, 0x80, 0x46, 0x51, 0xa4,
-	0x08, 0xf6, 0x5d, 0x97, 0x78, 0xe4, 0x48, 0x33, 0x7b, 0xe8, 0x7c, 0x64, 0xac, 0xf7, 0xd4, 0xcc,
-	0x84, 0xc6, 0x5a, 0x2c, 0x1b, 0x14, 0xaa, 0xb4, 0x67, 0x2e, 0xf1, 0xee, 0x87, 0xa7, 0x87, 0xce,
-	0x8f, 0xd6, 0x79, 0x52, 0x43, 0x96, 0x72, 0x7c, 0xb3, 0x28, 0x55, 0xa9, 0xa1, 0xd4, 0x02, 0xc5,
-	0x15, 0x2c, 0xe2, 0x03, 0x39, 0x7c, 0xb6, 0xf9, 0xce, 0x8c, 0x4d, 0xc7, 0xc8, 0xb6, 0x63, 0xe4,
-	0xa6, 0x63, 0xe4, 0x5b, 0xc7, 0xc8, 0x97, 0x1d, 0x33, 0xb6, 0x3b, 0x66, 0xdc, 0xec, 0x98, 0xf1,
-	0xe9, 0xde, 0xf8, 0x1c, 0xcb, 0xd9, 0xf0, 0xf5, 0x67, 0x3f, 0x03, 0x00, 0x00, 0xff, 0xff, 0xfd,
-	0xec, 0x21, 0x49, 0x98, 0x02, 0x00, 0x00,
+	// 601 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0xd4, 0xc1, 0x6e, 0xd3, 0x4c,
+	0x10, 0x07, 0xf0, 0xec, 0xd7, 0xb4, 0x49, 0x36, 0x69, 0x3f, 0x64, 0x81, 0xb0, 0x2a, 0xe1, 0x44,
+	0x39, 0x50, 0x23, 0xc0, 0x01, 0x7a, 0x40, 0xe2, 0x98, 0xb6, 0x87, 0x08, 0x84, 0x14, 0xb7, 0xbd,
+	0x70, 0xb1, 0x36, 0xde, 0x51, 0x58, 0xd5, 0xf6, 0x3a, 0xde, 0x71, 0xd5, 0xbc, 0x05, 0x4f, 0xc3,
+	0x23, 0xa0, 0x1e, 0x7b, 0xec, 0xc9, 0x82, 0xf4, 0xd6, 0x23, 0x4f, 0x80, 0x76, 0xe3, 0x0a, 0x2a,
+	0x87, 0xc2, 0x85, 0x53, 0x92, 0x9d, 0xdf, 0xfc, 0xb5, 0x9e, 0x89, 0x4c, 0x7b, 0x39, 0x8a, 0x68,
+	0x10, 0xc9, 0xe9, 0x00, 0x4e, 0x21, 0xc1, 0x74, 0x32, 0x40, 0x88, 0x20, 0x06, 0xcc, 0xe6, 0x5e,
+	0x9a, 0x49, 0x94, 0xd6, 0x76, 0x28, 0xc3, 0x93, 0x4c, 0xb2, 0xf0, 0xa3, 0xa7, 0xad, 0x17, 0xc9,
+	0xa9, 0x57, 0xda, 0xed, 0xfb, 0x53, 0x39, 0x95, 0x86, 0x0d, 0xf4, 0xb7, 0x65, 0xc7, 0xf6, 0xa3,
+	0x4a, 0xa6, 0xf9, 0x54, 0x65, 0x79, 0xa7, 0x52, 0x56, 0xb3, 0x28, 0x60, 0x39, 0x17, 0x18, 0xfc,
+	0x0a, 0xfb, 0x5f, 0xd6, 0x68, 0xe7, 0x90, 0xc5, 0x69, 0x04, 0x7c, 0x9c, 0x43, 0x36, 0xb7, 0x8e,
+	0xe8, 0x46, 0x28, 0xe3, 0x58, 0x26, 0x36, 0xe9, 0x11, 0xb7, 0xfd, 0xca, 0xf3, 0x7e, 0x7f, 0x37,
+	0x6f, 0xcf, 0xc8, 0x03, 0xfd, 0x6b, 0x1f, 0x90, 0x89, 0x48, 0x0d, 0x3b, 0xe7, 0x45, 0xb7, 0x76,
+	0x51, 0x74, 0xc9, 0x75, 0xd1, 0xad, 0xf9, 0x65, 0x96, 0x35, 0xa6, 0x6b, 0x6a, 0x16, 0xd9, 0xff,
+	0x99, 0xc8, 0x97, 0x7f, 0x8e, 0x3c, 0x1c, 0xbf, 0xbb, 0x23, 0x55, 0x67, 0x59, 0x3e, 0xad, 0xc3,
+	0x19, 0x84, 0xf6, 0x9a, 0xc9, 0x7c, 0xf1, 0x77, 0x99, 0x67, 0x10, 0xae, 0x8e, 0x34, 0x59, 0xd6,
+	0x6b, 0xfa, 0xbf, 0x3a, 0x11, 0x69, 0x0a, 0x3c, 0x98, 0xe5, 0x90, 0x09, 0x50, 0x76, 0xbd, 0x47,
+	0xdc, 0xfa, 0x70, 0xeb, 0xba, 0xe8, 0xd2, 0x67, 0x32, 0x16, 0x08, 0x71, 0x8a, 0x73, 0x7f, 0xab,
+	0x64, 0xe3, 0xa5, 0xb2, 0x76, 0xe9, 0x66, 0x28, 0x15, 0x06, 0xa0, 0x50, 0xc4, 0x0c, 0xc1, 0x5e,
+	0xef, 0x11, 0x97, 0x54, 0xda, 0x3a, 0x1a, 0x1d, 0x94, 0xc6, 0x7a, 0x4b, 0x3b, 0x5c, 0x28, 0xcc,
+	0xc4, 0x24, 0x47, 0x21, 0x13, 0x7b, 0xa3, 0x47, 0xdc, 0xd6, 0x70, 0xe7, 0x76, 0xcf, 0xf7, 0xa2,
+	0xfb, 0x20, 0x03, 0xce, 0x42, 0x7c, 0xd3, 0x4f, 0x64, 0xa2, 0x20, 0x51, 0x02, 0xc5, 0x29, 0xf4,
+	0xfd, 0x5b, 0xcd, 0xfd, 0xcf, 0x75, 0xfa, 0x70, 0x8f, 0xa5, 0x98, 0x67, 0xc0, 0x47, 0x09, 0x87,
+	0xb3, 0x63, 0xc5, 0xa6, 0x70, 0x88, 0x0c, 0xd5, 0x3f, 0xda, 0xa9, 0x4b, 0xef, 0xa1, 0x44, 0x16,
+	0x05, 0x19, 0x30, 0x1e, 0x84, 0x32, 0x4f, 0xd0, 0x2c, 0xb8, 0xee, 0x6f, 0x99, 0x73, 0x1f, 0x18,
+	0xdf, 0xd3, 0xa7, 0xd6, 0x53, 0xda, 0x8a, 0x98, 0x42, 0x03, 0xcd, 0xbe, 0x5a, 0x95, 0xc9, 0x34,
+	0x35, 0xd0, 0x1d, 0xd6, 0x63, 0xda, 0x44, 0x36, 0x89, 0x20, 0x10, 0xdc, 0x0c, 0x7f, 0x73, 0xd8,
+	0x5e, 0x14, 0xdd, 0xc6, 0x91, 0x3e, 0x1b, 0xed, 0xfb, 0x0d, 0x53, 0x1c, 0x19, 0x27, 0xf4, 0x73,
+	0x6a, 0xb7, 0xfe, 0xd3, 0x99, 0x67, 0xd7, 0xce, 0x14, 0x47, 0x5c, 0xaf, 0x86, 0x33, 0x64, 0x13,
+	0xa6, 0x20, 0x48, 0x58, 0x0c, 0xe5, 0x98, 0x2b, 0xab, 0xb9, 0x41, 0xef, 0x59, 0x0c, 0xd6, 0x73,
+	0x4a, 0x97, 0x97, 0x30, 0x1d, 0x8d, 0x95, 0x1d, 0x2d, 0x23, 0x6e, 0xf8, 0xf2, 0x2e, 0x86, 0x37,
+	0x57, 0x73, 0x23, 0x6e, 0x73, 0x9c, 0xa7, 0x60, 0xb7, 0xee, 0xe0, 0x47, 0xf3, 0x14, 0xf4, 0xf8,
+	0x84, 0x0a, 0xf2, 0x44, 0xcc, 0x72, 0xb0, 0x69, 0x8f, 0xb8, 0xcd, 0xea, 0xf8, 0x84, 0x3a, 0x36,
+	0x75, 0x6b, 0x40, 0xdb, 0x42, 0x05, 0x22, 0x39, 0x85, 0x0c, 0x81, 0xdb, 0xed, 0x95, 0x9c, 0x0a,
+	0x35, 0x2a, 0xc5, 0xf0, 0xc9, 0xf9, 0x37, 0xa7, 0x76, 0xbe, 0x70, 0xc8, 0xc5, 0xc2, 0x21, 0x97,
+	0x0b, 0x87, 0x7c, 0x5d, 0x38, 0xe4, 0xd3, 0x95, 0x53, 0xbb, 0xb8, 0x72, 0x6a, 0x97, 0x57, 0x4e,
+	0xed, 0x43, 0xa3, 0xfc, 0x6b, 0x4c, 0x36, 0xcc, 0x3b, 0x63, 0xf7, 0x47, 0x00, 0x00, 0x00, 0xff,
+	0xff, 0xdc, 0x91, 0x07, 0x85, 0xd1, 0x04, 0x00, 0x00,
 }
 
 func (m *SampledQuery) Marshal() (dAtA []byte, err error) {
@@ -176,6 +239,109 @@ func (m *SampledQuery) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *CapturedIndexUsageStats) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CapturedIndexUsageStats) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CapturedIndexUsageStats) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.IsInverted {
+		i--
+		if m.IsInverted {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x58
+	}
+	if m.IsUnique {
+		i--
+		if m.IsUnique {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x50
+	}
+	if len(m.IndexType) > 0 {
+		i -= len(m.IndexType)
+		copy(dAtA[i:], m.IndexType)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.IndexType)))
+		i--
+		dAtA[i] = 0x4a
+	}
+	if len(m.IndexName) > 0 {
+		i -= len(m.IndexName)
+		copy(dAtA[i:], m.IndexName)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.IndexName)))
+		i--
+		dAtA[i] = 0x42
+	}
+	if len(m.TableName) > 0 {
+		i -= len(m.TableName)
+		copy(dAtA[i:], m.TableName)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.TableName)))
+		i--
+		dAtA[i] = 0x3a
+	}
+	if len(m.DatabaseName) > 0 {
+		i -= len(m.DatabaseName)
+		copy(dAtA[i:], m.DatabaseName)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.DatabaseName)))
+		i--
+		dAtA[i] = 0x32
+	}
+	if m.IndexID != 0 {
+		i = encodeVarintTelemetry(dAtA, i, uint64(m.IndexID))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.TableID != 0 {
+		i = encodeVarintTelemetry(dAtA, i, uint64(m.TableID))
+		i--
+		dAtA[i] = 0x20
+	}
+	if len(m.LastRead) > 0 {
+		i -= len(m.LastRead)
+		copy(dAtA[i:], m.LastRead)
+		i = encodeVarintTelemetry(dAtA, i, uint64(len(m.LastRead)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.TotalReadCount != 0 {
+		i = encodeVarintTelemetry(dAtA, i, uint64(m.TotalReadCount))
+		i--
+		dAtA[i] = 0x10
+	}
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintTelemetry(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintTelemetry(dAtA []byte, offset int, v uint64) int {
 	offset -= sovTelemetry(v)
 	base := offset
@@ -208,6 +374,52 @@ func (m *SampledQuery) Size() (n int) {
 	l = len(m.Distribution)
 	if l > 0 {
 		n += 1 + l + sovTelemetry(uint64(l))
+	}
+	return n
+}
+
+func (m *CapturedIndexUsageStats) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovTelemetry(uint64(l))
+	if m.TotalReadCount != 0 {
+		n += 1 + sovTelemetry(uint64(m.TotalReadCount))
+	}
+	l = len(m.LastRead)
+	if l > 0 {
+		n += 1 + l + sovTelemetry(uint64(l))
+	}
+	if m.TableID != 0 {
+		n += 1 + sovTelemetry(uint64(m.TableID))
+	}
+	if m.IndexID != 0 {
+		n += 1 + sovTelemetry(uint64(m.IndexID))
+	}
+	l = len(m.DatabaseName)
+	if l > 0 {
+		n += 1 + l + sovTelemetry(uint64(l))
+	}
+	l = len(m.TableName)
+	if l > 0 {
+		n += 1 + l + sovTelemetry(uint64(l))
+	}
+	l = len(m.IndexName)
+	if l > 0 {
+		n += 1 + l + sovTelemetry(uint64(l))
+	}
+	l = len(m.IndexType)
+	if l > 0 {
+		n += 1 + l + sovTelemetry(uint64(l))
+	}
+	if m.IsUnique {
+		n += 2
+	}
+	if m.IsInverted {
+		n += 2
 	}
 	return n
 }
@@ -408,6 +620,346 @@ func (m *SampledQuery) Unmarshal(dAtA []byte) error {
 			}
 			m.Distribution = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTelemetry(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CapturedIndexUsageStats) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTelemetry
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CapturedIndexUsageStats: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CapturedIndexUsageStats: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TotalReadCount", wireType)
+			}
+			m.TotalReadCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TotalReadCount |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LastRead", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.LastRead = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableID", wireType)
+			}
+			m.TableID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TableID |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IndexID", wireType)
+			}
+			m.IndexID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.IndexID |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DatabaseName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DatabaseName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TableName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IndexName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IndexName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IndexType", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTelemetry
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IndexType = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 10:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsUnique", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsUnique = bool(v != 0)
+		case 11:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsInverted", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTelemetry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsInverted = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTelemetry(dAtA[iNdEx:])
