@@ -249,6 +249,17 @@ func hasIndex(storedTable, expectedTable catalog.TableDescriptor, indexName stri
 	return true, nil
 }
 
+// doesNotHaveIndex returns true if storedTable does not have an index named indexName.
+func doesNotHaveIndex(
+	storedTable, expectedTable catalog.TableDescriptor, indexName string,
+) (bool, error) {
+	if _, err := storedTable.FindIndexWithName(indexName); err != nil {
+		return true, nil
+	} else {
+		return false, nil
+	}
+}
+
 // hasColumnFamily returns true if storedTable already has the given column
 // family, comparing with expectedTable. storedTable descriptor must be read
 // from system storage as compared to reading from the systemschema package. On
