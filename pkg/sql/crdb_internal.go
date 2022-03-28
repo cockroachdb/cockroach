@@ -4995,13 +4995,14 @@ CREATE TABLE crdb_internal.default_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(descriptor catalog.DatabaseDescriptor) error {
-				addRowHelper := func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
+				addRowHelper := func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole, schema tree.Datum) error {
 					role := tree.DNull
 					forAllRoles := tree.DBoolTrue
 					if defaultPrivilegesForRole.IsExplicitRole() {
 						role = tree.NewDString(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized())
 						forAllRoles = tree.DBoolFalse
 					}
+
 					for objectType, privs := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
 						privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 						for _, userPrivs := range privs.Users {
@@ -5011,7 +5012,7 @@ CREATE TABLE crdb_internal.default_privileges (
 									tree.NewDString(descriptor.GetName()),
 									// When the schema_name is NULL, that means the default
 									// privileges are defined at the database level.
-									tree.DNull, /* schema is currently always nil. See: #67376 */
+									schema,
 									role,
 									forAllRoles,
 									tree.NewDString(objectType.String()),
@@ -5023,42 +5024,41 @@ CREATE TABLE crdb_internal.default_privileges (
 							}
 						}
 					}
-					for _, objectType := range tree.GetAlterDefaultPrivilegesTargetObjects() {
-						if catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, objectType) {
+
+					if schema == tree.DNull {
+						for _, objectType := range tree.GetAlterDefaultPrivilegesTargetObjects() {
+							if catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, objectType) {
+								if err := addRow(
+									tree.NewDString(descriptor.GetName()),
+									tree.DNull,
+									role,
+									forAllRoles,
+									tree.NewDString(objectType.String()),
+									tree.NewDString(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized()),
+									tree.NewDString(privilege.ALL.String()),
+								); err != nil {
+									return err
+								}
+							}
+						}
+						if catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
 							if err := addRow(
 								tree.NewDString(descriptor.GetName()),
-								// When the schema_name is NULL, that means the default
-								// privileges are defined at the database level.
-								tree.DNull, /* schema is currently always nil. See: #67376 */
+								tree.DNull,
 								role,
 								forAllRoles,
-								tree.NewDString(objectType.String()),
-								tree.NewDString(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized()),
-								tree.NewDString(privilege.ALL.String()),
+								tree.NewDString(tree.Types.String()),
+								tree.NewDString(security.PublicRoleName().Normalized()),
+								tree.NewDString(privilege.USAGE.String()),
 							); err != nil {
 								return err
 							}
 						}
 					}
-					if catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
-						if err := addRow(
-							tree.NewDString(descriptor.GetName()),
-							// When the schema_name is NULL, that means the default
-							// privileges are defined at the database level.
-							tree.DNull, /* schema is currently always nil. See: #67376 */
-							role,
-							forAllRoles,
-							tree.NewDString(tree.Types.String()),
-							tree.NewDString(security.PublicRoleName().Normalized()),
-							tree.NewDString(privilege.USAGE.String()),
-						); err != nil {
-							return err
-						}
-					}
 					return nil
 				}
-				addRowForRole := func(role catpb.DefaultPrivilegesRole) error {
-					defaultPrivilegeDescriptor := descriptor.GetDefaultPrivilegeDescriptor()
+
+				addRowForRole := func(role catpb.DefaultPrivilegesRole, defaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor, schema tree.Datum) error {
 					defaultPrivilegesForRole, found := defaultPrivilegeDescriptor.GetDefaultPrivilegesForRole(role)
 					if !found {
 						// If an entry is not found for the role, the role still has
@@ -5066,16 +5066,17 @@ CREATE TABLE crdb_internal.default_privileges (
 						newDefaultPrivilegesForRole := catpb.InitDefaultPrivilegesForRole(role, defaultPrivilegeDescriptor.GetDefaultPrivilegeDescriptorType())
 						defaultPrivilegesForRole = &newDefaultPrivilegesForRole
 					}
-					if err := addRowHelper(*defaultPrivilegesForRole); err != nil {
+					if err := addRowHelper(*defaultPrivilegesForRole, schema); err != nil {
 						return err
 					}
 					return nil
 				}
+
 				if err := forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 					role := catpb.DefaultPrivilegesRole{
 						Role: username,
 					}
-					return addRowForRole(role)
+					return addRowForRole(role, descriptor.GetDefaultPrivilegeDescriptor(), tree.DNull)
 				}); err != nil {
 					return err
 				}
@@ -5084,7 +5085,29 @@ CREATE TABLE crdb_internal.default_privileges (
 				role := catpb.DefaultPrivilegesRole{
 					ForAllRoles: true,
 				}
-				return addRowForRole(role)
+				if err := addRowForRole(role, descriptor.GetDefaultPrivilegeDescriptor(), tree.DNull); err != nil {
+					return err
+				}
+
+				if err := forEachSchema(ctx, p, descriptor, func(schema catalog.SchemaDescriptor) error {
+					if err := forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+						role := catpb.DefaultPrivilegesRole{
+							Role: username,
+						}
+						return addRowForRole(role, schema.GetDefaultPrivilegeDescriptor(), tree.NewDString(schema.GetName()))
+					}); err != nil {
+						return err
+					}
+
+					// Handle ForAllRoles outside of forEachRole since it is a pseudo role.
+					role := catpb.DefaultPrivilegesRole{
+						ForAllRoles: true,
+					}
+					return addRowForRole(role, schema.GetDefaultPrivilegeDescriptor(), tree.NewDString(schema.GetName()))
+				}); err != nil {
+					return err
+				}
+				return nil
 			})
 	},
 }

@@ -26,9 +26,16 @@ func (d *delegator) delegateShowDefaultPrivileges(
 	if err != nil {
 		return nil, err
 	}
+
+	schemaClause := " AND schema_name IS NULL"
+	if n.Schema != "" {
+		schemaClause = fmt.Sprintf(" AND schema_name = '%s'", n.Schema.String())
+	}
+
 	query := fmt.Sprintf(
-		"SELECT role, for_all_roles, object_type, grantee, privilege_type FROM crdb_internal.default_privileges WHERE database_name = '%s'",
+		"SELECT role, for_all_roles, object_type, grantee, privilege_type FROM crdb_internal.default_privileges WHERE database_name = '%s'%s",
 		currentDatabase.Normalize(),
+		schemaClause,
 	)
 
 	if n.ForAllRoles {
