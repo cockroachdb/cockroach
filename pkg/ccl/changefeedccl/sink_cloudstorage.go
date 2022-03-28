@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -283,6 +284,7 @@ type cloudStorageSink struct {
 	targetMaxFileSize int64
 	settings          *cluster.Settings
 	partitionFormat   string
+	topicNamer        *TopicNamer
 
 	ext          string
 	rowDelimiter []byte
@@ -347,6 +349,12 @@ func makeCloudStorageSink(
 	if err != nil {
 		return nil, err
 	}
+
+	tn, err := MakeTopicNamer([]jobspb.ChangefeedTargetSpecification{}, WithJoinByte('+'))
+	if err != nil {
+		return nil, err
+	}
+
 	s := &cloudStorageSink{
 		srcID:             srcID,
 		sinkID:            sinkID,
@@ -358,6 +366,7 @@ func makeCloudStorageSink(
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
 		jobSessionID: sessID,
 		metrics:      m,
+		topicNamer:   tn,
 	}
 
 	if partitionFormat := u.consumeParam(changefeedbase.SinkParamPartitionFormat); partitionFormat != "" {
@@ -415,7 +424,8 @@ func makeCloudStorageSink(
 func (s *cloudStorageSink) getOrCreateFile(
 	topic TopicDescriptor, eventMVCC hlc.Timestamp,
 ) *cloudStorageSinkFile {
-	key := cloudStorageSinkKey{topic.GetName(), int64(topic.GetVersion())}
+	name, _ := s.topicNamer.Name(topic)
+	key := cloudStorageSinkKey{name, int64(topic.GetVersion())}
 	if item := s.files.Get(key); item != nil {
 		f := item.(*cloudStorageSinkFile)
 		if eventMVCC.Less(f.oldestMVCC) {
