@@ -21,9 +21,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type daysBeforePrep string
+
 const (
 	// dateFormatCommandLine is the expected date format for prepDate and publishDate input values.
-	dateFormatCommandLine = "2006-01-02"
+	dateFormatCommandLine = "Jan 2, 2006"
 	// dateFormatEmail is the expected date format for prepDate and publishDate input values.
 	dateFormatEmail = "Monday, January 2"
 
@@ -31,9 +33,18 @@ const (
 	prepDate = "prep-date"
 	// publishDate is the date when we expect to publish the release candidate.
 	publishDate = "publish-date"
+	// nextPublishDate is the new publish date for the release candidate.
+	nextPublishDate = "next-publish-date"
 
 	// nextVersion can be left out for stable/patch releases, but needs to be passed in for pre-releases (alpha/beta/rc).
 	nextVersion = "next-version"
+
+	// daysBeforePrepDate should be one of "many-days", "day-before", "day-of".
+	daysBeforePrepDate = "days-before-prep-date"
+
+	daysBeforePrepManyDays  = daysBeforePrep("many-days")
+	daysBeforePrepDayBefore = daysBeforePrep("day-before")
+	daysBeforePrepDayOf     = daysBeforePrep("day-of")
 
 	// NoProjectName is the project value for issues without a project.
 	NoProjectName = "No Project"
@@ -42,16 +53,20 @@ const (
 	eventAddedProject   = "added_to_project"
 )
 
+var daysBeforePrepOptions []daysBeforePrep
+
 var blockersFlags = struct {
-	releaseSeries  string
-	templatesDir   string
-	prepDate       string
-	publishDate    string
-	nextVersion    string
-	smtpUser       string
-	smtpHost       string
-	smtpPort       int
-	emailAddresses []string
+	releaseSeries      string
+	templatesDir       string
+	prepDate           string
+	publishDate        string
+	nextPublishDate    string
+	nextVersion        string
+	daysBeforePrepDate string
+	smtpUser           string
+	smtpHost           string
+	smtpPort           int
+	emailAddresses     []string
 }{}
 
 var postReleaseSeriesBlockersCmd = &cobra.Command{
@@ -61,12 +76,22 @@ var postReleaseSeriesBlockersCmd = &cobra.Command{
 	RunE:  fetchReleaseSeriesBlockers,
 }
 
+var cancelReleaseSeriesDateCmd = &cobra.Command{
+	Use:   "cancel-release-date",
+	Short: "Cancel next release series date",
+	Long:  "Cancel this release date for the series and push release to next scheduled date",
+	RunE:  cancelReleaseSeriesPublishDate,
+}
+
 func init() {
+	daysBeforePrepOptions = []daysBeforePrep{daysBeforePrepManyDays, daysBeforePrepDayBefore, daysBeforePrepDayOf}
+
 	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.releaseSeries, releaseSeries, "", "major release series")
 	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.templatesDir, templatesDir, "", "templates directory")
 	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.prepDate, prepDate, "", "date to select candidate")
 	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.publishDate, publishDate, "", "date to publish candidate")
 	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.nextVersion, nextVersion, "", "next release version")
+	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.daysBeforePrepDate, daysBeforePrepDate, "", "days before prep date")
 	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.smtpUser, smtpUser, os.Getenv(envSMTPUser), "SMTP user name")
 	postReleaseSeriesBlockersCmd.Flags().StringVar(&blockersFlags.smtpHost, smtpHost, "", "SMTP host")
 	postReleaseSeriesBlockersCmd.Flags().IntVar(&blockersFlags.smtpPort, smtpPort, 0, "SMTP port")
@@ -76,9 +101,81 @@ func init() {
 	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(templatesDir)
 	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(prepDate)
 	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(publishDate)
+	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(daysBeforePrepDate)
 	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(smtpHost)
 	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(smtpPort)
 	_ = postReleaseSeriesBlockersCmd.MarkFlagRequired(emailAddresses)
+
+	cancelReleaseSeriesDateCmd.Flags().StringVar(&blockersFlags.releaseSeries, releaseSeries, "", "major release series")
+	cancelReleaseSeriesDateCmd.Flags().StringVar(&blockersFlags.templatesDir, templatesDir, "", "templates directory")
+	cancelReleaseSeriesDateCmd.Flags().StringVar(&blockersFlags.publishDate, publishDate, "", "date that will be cancelled")
+	cancelReleaseSeriesDateCmd.Flags().StringVar(&blockersFlags.nextPublishDate, nextPublishDate, "", "new publish date for release series")
+	cancelReleaseSeriesDateCmd.Flags().StringVar(&blockersFlags.smtpUser, smtpUser, os.Getenv(envSMTPUser), "SMTP user name")
+	cancelReleaseSeriesDateCmd.Flags().StringVar(&blockersFlags.smtpHost, smtpHost, "", "SMTP host")
+	cancelReleaseSeriesDateCmd.Flags().IntVar(&blockersFlags.smtpPort, smtpPort, 0, "SMTP port")
+	cancelReleaseSeriesDateCmd.Flags().StringArrayVar(&blockersFlags.emailAddresses, emailAddresses, []string{}, "email addresses")
+
+	_ = cancelReleaseSeriesDateCmd.MarkFlagRequired(releaseSeries)
+	_ = cancelReleaseSeriesDateCmd.MarkFlagRequired(templatesDir)
+	_ = cancelReleaseSeriesDateCmd.MarkFlagRequired(prepDate)
+	_ = cancelReleaseSeriesDateCmd.MarkFlagRequired(publishDate)
+	_ = cancelReleaseSeriesDateCmd.MarkFlagRequired(smtpHost)
+	_ = cancelReleaseSeriesDateCmd.MarkFlagRequired(smtpPort)
+	_ = cancelReleaseSeriesDateCmd.MarkFlagRequired(emailAddresses)
+}
+
+func cancelReleaseSeriesPublishDate(_ *cobra.Command, _ []string) error {
+	smtpPassword := os.Getenv(envSMTPPassword)
+	if smtpPassword == "" {
+		return fmt.Errorf("%s environment variable should be set", envSMTPPassword)
+	}
+	if blockersFlags.smtpUser == "" {
+		return fmt.Errorf("either %s environment variable or %s flag should be set", envSMTPUser, smtpUser)
+	}
+	releasePublishDate, err := time.Parse(dateFormatCommandLine, blockersFlags.publishDate)
+	if err != nil {
+		return fmt.Errorf("%s is not parseable into %s date layout", blockersFlags.publishDate, dateFormatCommandLine)
+	}
+	nextReleasePublishDate, err := time.Parse(dateFormatCommandLine, blockersFlags.nextPublishDate)
+	if err != nil {
+		return fmt.Errorf("%s is not parseable into %s date layout", blockersFlags.nextPublishDate, dateFormatCommandLine)
+	}
+	nextVersion, err := findNextVersion(blockersFlags.releaseSeries)
+	if err != nil {
+		return fmt.Errorf("cannot find next release version: %w", err)
+	}
+
+	args := messageDataCancelReleaseDate{
+		Version:         nextVersion,
+		ReleaseSeries:   blockersFlags.releaseSeries,
+		ReleaseDate:     releasePublishDate.Format(dateFormatEmail),
+		NextReleaseDate: nextReleasePublishDate.Format(dateFormatEmail),
+	}
+	opts := sendOpts{
+		templatesDir: blockersFlags.templatesDir,
+		from:         fmt.Sprintf(fromEmailFormat, blockersFlags.smtpUser),
+		host:         blockersFlags.smtpHost,
+		port:         blockersFlags.smtpPort,
+		user:         blockersFlags.smtpUser,
+		password:     smtpPassword,
+		to:           blockersFlags.emailAddresses,
+	}
+
+	fmt.Println("Sending email")
+	if err := sendMailCancelReleaseDate(args, opts); err != nil {
+		return fmt.Errorf("cannot send email: %w", err)
+	}
+	return nil
+}
+
+func newDaysBeforePrep(daysBefore string) (option daysBeforePrep, ok bool) {
+	for _, v := range daysBeforePrepOptions {
+		d := daysBeforePrep(daysBefore)
+		if d == v {
+			return d, true
+		}
+	}
+	return "", false
 }
 
 func fetchReleaseSeriesBlockers(_ *cobra.Command, _ []string) error {
@@ -92,6 +189,10 @@ func fetchReleaseSeriesBlockers(_ *cobra.Command, _ []string) error {
 	}
 	if blockersFlags.smtpUser == "" {
 		return fmt.Errorf("either %s environment variable or %s flag should be set", envSMTPUser, smtpUser)
+	}
+	daysBefore, ok := newDaysBeforePrep(blockersFlags.daysBeforePrepDate)
+	if !ok {
+		return fmt.Errorf("%s must be one of: %s", daysBeforePrepDate, daysBeforePrepOptions)
 	}
 	releasePrepDate, err := time.Parse(dateFormatCommandLine, blockersFlags.prepDate)
 	if err != nil {
@@ -135,17 +236,19 @@ func fetchReleaseSeriesBlockers(_ *cobra.Command, _ []string) error {
 	}
 
 	args := messageDataPostBlockers{
-		Version:       blockersFlags.nextVersion,
-		PrepDate:      releasePrepDate.Format(dateFormatEmail),
-		ReleaseDate:   releasePublishDate.Format(dateFormatEmail),
-		TotalBlockers: blockers.TotalBlockers,
-		BlockersURL:   blockersURL,
-		ReleaseBranch: releaseBranch,
-		BlockerList:   blockers.BlockerList,
+		Version:           blockersFlags.nextVersion,
+		DaysBeforePrep:    daysBefore,
+		DayBeforePrepDate: releasePrepDate.AddDate(0, 0, -1).Format(dateFormatEmail),
+		PrepDate:          releasePrepDate.Format(dateFormatEmail),
+		ReleaseDate:       releasePublishDate.Format(dateFormatEmail),
+		TotalBlockers:     blockers.TotalBlockers,
+		BlockersURL:       blockersURL,
+		ReleaseBranch:     releaseBranch,
+		BlockerList:       blockers.BlockerList,
 	}
 	opts := sendOpts{
 		templatesDir: blockersFlags.templatesDir,
-		from:         fmt.Sprintf("Justin Beaver <%s>", blockersFlags.smtpUser),
+		from:         fmt.Sprintf(fromEmailFormat, blockersFlags.smtpUser),
 		host:         blockersFlags.smtpHost,
 		port:         blockersFlags.smtpPort,
 		user:         blockersFlags.smtpUser,

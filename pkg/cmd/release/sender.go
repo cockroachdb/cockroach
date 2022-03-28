@@ -15,7 +15,6 @@ import (
 	htmltemplate "html/template"
 	"net/smtp"
 	"net/textproto"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -26,6 +25,12 @@ const (
 	templatePrefixPickSHA           = "pick-sha"
 	templatePrefixPostBlockers      = "post-blockers"
 	templatePrefixPostBlockersAlpha = "post-blockers.alpha"
+
+	templatePrefixPostBlockersDayBeforePrep = "post-blockers.day-before-prep"
+	templatePrefixPostBlockersDayOfPrep     = "post-blockers.day-of-prep"
+	templatePrefixPostBlockersPastPrep      = "post-blockers.past-prep"
+
+	templatePrefixTemplateBlockers = "template-blockers"
 )
 
 type messageDataPickSHA struct {
@@ -44,13 +49,26 @@ type ProjectBlocker struct {
 }
 
 type messageDataPostBlockers struct {
-	Version       string
-	PrepDate      string
-	ReleaseDate   string
-	TotalBlockers int
-	BlockersURL   string
-	ReleaseBranch string
-	BlockerList   []ProjectBlocker
+	Version           string
+	PrepDate          string
+	ReleaseDate       string
+	TotalBlockers     int
+	BlockersURL       string
+	ReleaseBranch     string
+	ReleaseSeries     string
+	DayBeforePrepDate string
+	NextReleaseDate   string
+	BlockerList       []ProjectBlocker
+
+	// DaysBeforePrep is used to determine which post-blockers email to send.
+	DaysBeforePrep daysBeforePrep
+}
+
+type messageDataCancelReleaseDate struct {
+	Version         string
+	ReleaseSeries   string
+	ReleaseDate     string
+	NextReleaseDate string
 }
 
 type postBlockerTemplateArgs struct {
@@ -64,45 +82,34 @@ type message struct {
 	HTMLBody string
 }
 
-func loadTemplate(templatesDir, template string) (string, error) {
-	file, err := os.ReadFile(filepath.Join(templatesDir, template))
-	if err != nil {
-		return "", fmt.Errorf("loadTemplate %s: %w", template, err)
-	}
-	return string(file), nil
+type messageTemplates struct {
+	SubjectPrefix string
+	BodyPrefixes  []string
 }
 
 // newMessage generates new message parts, based on:
 // - templatePrefix - the filename prefix for subject/txt/html templates in the ./templates/ folder
 // - data - the data object applied to the html/text/subject templates
-func newMessage(templatesDir string, templatePrefix string, data interface{}) (*message, error) {
-	subjectTemplate, err := loadTemplate(templatesDir, templatePrefix+".subject")
+func newMessage(
+	templatesDir string, templates messageTemplates, data interface{},
+) (*message, error) {
+	subject, err := templateFilesToText(data, filepath.Join(templatesDir, templates.SubjectPrefix+".subject"))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("templateToText %s: %w", templates.SubjectPrefix+".subject", err)
 	}
-	subject, err := templateToText(subjectTemplate, data)
+	var textTemplateFiles, htmlTemplateFiles []string
+	for _, prefix := range templates.BodyPrefixes {
+		textTemplateFiles = append(textTemplateFiles, filepath.Join(templatesDir, prefix+".txt"))
+		htmlTemplateFiles = append(htmlTemplateFiles, filepath.Join(templatesDir, prefix+".gohtml"))
+	}
+	text, err := templateFilesToText(data, textTemplateFiles...)
 	if err != nil {
-		return nil, fmt.Errorf("templateToText %s: %w", templatePrefix+".subject", err)
+		return nil, fmt.Errorf("templateToText %s: %w", templates.BodyPrefixes, err)
 	}
-
-	textTemplate, err := loadTemplate(templatesDir, templatePrefix+".txt")
+	html, err := templateFilesToHTML(data, htmlTemplateFiles...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("templateToHTML %s: %w", templates.BodyPrefixes, err)
 	}
-	text, err := templateToText(textTemplate, data)
-	if err != nil {
-		return nil, fmt.Errorf("templateToText %s: %w", templatePrefix+".txt", err)
-	}
-
-	htmlTemplate, err := loadTemplate(templatesDir, templatePrefix+".gohtml")
-	if err != nil {
-		return nil, err
-	}
-	html, err := templateToHTML(htmlTemplate, data)
-	if err != nil {
-		return nil, fmt.Errorf("templateToHTML %s: %w", templatePrefix+".gohtml", err)
-	}
-
 	return &message{
 		Subject:  subject,
 		TextBody: text,
@@ -120,9 +127,19 @@ type sendOpts struct {
 	to           []string
 }
 
-func sendMailPostBlockers(args messageDataPostBlockers, opts sendOpts) error {
-	templatePrefix := templatePrefixPostBlockers
+func getPostBlockersTemplate(daysBeforePrep daysBeforePrep) string {
+	if daysBeforePrep == daysBeforePrepDayBefore {
+		return templatePrefixPostBlockersDayBeforePrep
+	}
+	if daysBeforePrep == daysBeforePrepDayOf {
+		return templatePrefixPostBlockersDayOfPrep
+	}
+	// default daysBeforePrepManyDays
+	return templatePrefixPostBlockers
+}
 
+func sendMailPostBlockers(args messageDataPostBlockers, opts sendOpts) error {
+	templatePrefix := getPostBlockersTemplate(args.DaysBeforePrep)
 	// Backport policy:
 	// - stable/production: refer to backboard
 	// - alpha: no need to mention backports
@@ -152,7 +169,28 @@ func sendMailPostBlockers(args messageDataPostBlockers, opts sendOpts) error {
 			BackportsWeeklyTriageReview: backportsWeeklyTriageReview,
 		},
 	}
-	msg, err := newMessage(opts.templatesDir, templatePrefix, data)
+	template := messageTemplates{
+		SubjectPrefix: templatePrefixPostBlockers,
+		BodyPrefixes:  []string{templatePrefix, templatePrefixTemplateBlockers},
+	}
+	msg, err := newMessage(opts.templatesDir, template, data)
+	if err != nil {
+		return fmt.Errorf("newMessage: %w", err)
+	}
+	return sendmail(msg, opts)
+}
+
+func sendMailCancelReleaseDate(args messageDataCancelReleaseDate, opts sendOpts) error {
+	data := struct {
+		Args messageDataCancelReleaseDate
+	}{
+		Args: args,
+	}
+	template := messageTemplates{
+		SubjectPrefix: templatePrefixPostBlockers,
+		BodyPrefixes:  []string{templatePrefixPostBlockersPastPrep},
+	}
+	msg, err := newMessage(opts.templatesDir, template, data)
 	if err != nil {
 		return fmt.Errorf("newMessage: %w", err)
 	}
@@ -160,7 +198,11 @@ func sendMailPostBlockers(args messageDataPostBlockers, opts sendOpts) error {
 }
 
 func sendMailPickSHA(args messageDataPickSHA, opts sendOpts) error {
-	msg, err := newMessage(opts.templatesDir, templatePrefixPickSHA, args)
+	template := messageTemplates{
+		SubjectPrefix: templatePrefixPickSHA,
+		BodyPrefixes:  []string{templatePrefixPickSHA},
+	}
+	msg, err := newMessage(opts.templatesDir, template, args)
 	if err != nil {
 		return fmt.Errorf("newMessage: %w", err)
 	}
