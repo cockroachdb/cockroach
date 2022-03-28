@@ -34,6 +34,7 @@ func TestEventJSON(t *testing.T) {
 		{&ReverseSchemaChange{SQLSTATE: "XXUUU"}, `"SQLSTATE":"XXUUU"`},
 		{&SetClusterSetting{SettingName: "my.setting"}, `"SettingName":"my.setting"`},
 		{&AlterRole{Options: []string{"NOLOGIN", "PASSWORD"}}, `"Options":["NOLOGIN","PASSWORD"]`},
+		{&GrantRole{GranteeRoles: []string{"role1", "role2"}, Members: []string{"role3", " role4"}}, `"RoleNames":"‹role1›",‹role2›","Members":"‹role3›",‹ role4›"`},
 		{&ChangeDatabasePrivilege{CommonSQLPrivilegeEventDetails: CommonSQLPrivilegeEventDetails{
 			GrantedPrivileges: []string{"INSERT", "CREATE"},
 		}}, `"GrantedPrivileges":["INSERT","CREATE"]`},
