@@ -31,7 +31,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlstats",
-        "//pkg/sql/stats",
         "//pkg/testutils",
         "//pkg/testutils/floatcmp",
         "//pkg/testutils/physicalplanutils",

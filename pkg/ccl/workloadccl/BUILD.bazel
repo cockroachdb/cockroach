@@ -42,7 +42,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql/stats",
+        "//pkg/sql/sqlstats",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

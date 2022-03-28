@@ -807,13 +807,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if capturedIndexUsageStatsKnobs := cfg.TestingKnobs.CapturedIndexUsageStatsKnobs; capturedIndexUsageStatsKnobs != nil {
 		execCfg.CaptureIndexUsageStatsKnobs = capturedIndexUsageStatsKnobs.(*scheduledlogging.CaptureIndexUsageStatsTestingKnobs)
 	}
+	defaultAsOfTime := stats.DefaultAsOfTime
+	if sqlStatsKnobs := cfg.TestingKnobs.SQLStatsKnobs; sqlStatsKnobs != nil {
+		if sqlstatsTestingKnobs := sqlStatsKnobs.(*sqlstats.TestingKnobs); sqlstatsTestingKnobs != nil {
+			if sqlstatsTestingKnobs.DefaultAsOfTimeOverride > 0 {
+				defaultAsOfTime = sqlstatsTestingKnobs.DefaultAsOfTimeOverride
+			}
+		}
+	}
 
 	statsRefresher := stats.MakeRefresher(
 		cfg.AmbientCtx,
 		cfg.Settings,
 		cfg.circularInternalExecutor,
 		execCfg.TableStatsCache,
-		stats.DefaultAsOfTime,
+		defaultAsOfTime,
 	)
 	execCfg.StatsRefresher = statsRefresher
 
@@ -1137,7 +1145,16 @@ func (s *SQLServer) preStart(
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)
-	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
+
+	defaultRefreshInterval := stats.DefaultRefreshInterval
+	if sqlStatsKnobs := knobs.SQLStatsKnobs; sqlStatsKnobs != nil {
+		if sqlstatsTestingKnobs := sqlStatsKnobs.(*sqlstats.TestingKnobs); sqlstatsTestingKnobs != nil {
+			if sqlstatsTestingKnobs.DefaultRefreshIntervalOverride > 0 {
+				defaultRefreshInterval = sqlstatsTestingKnobs.DefaultRefreshIntervalOverride
+			}
+		}
+	}
+	if err := s.statsRefresher.Start(ctx, stopper, defaultRefreshInterval); err != nil {
 		return err
 	}
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)

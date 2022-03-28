@@ -54,7 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -6215,17 +6215,14 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldRefreshInterval, oldAsOf time.Duration) {
-		stats.DefaultRefreshInterval = oldRefreshInterval
-		stats.DefaultAsOfTime = oldAsOf
-	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
-	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = time.Microsecond
-
 	const nodes = 1
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t)
-	args := base.TestServerArgs{ExternalIODir: baseDir}
+	args := base.TestServerArgs{ExternalIODir: baseDir, Knobs: base.TestingKnobs{
+		SQLStatsKnobs: &sqlstats.TestingKnobs{
+			DefaultRefreshIntervalOverride: time.Millisecond,
+			DefaultAsOfTimeOverride:        time.Microsecond,
+		}}}
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)

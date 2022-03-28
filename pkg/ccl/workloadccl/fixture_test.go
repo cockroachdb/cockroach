@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -167,14 +167,13 @@ func TestImportFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	defer func(oldRefreshInterval, oldAsOf time.Duration) {
-		stats.DefaultRefreshInterval = oldRefreshInterval
-		stats.DefaultAsOfTime = oldAsOf
-	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
-	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = 10 * time.Millisecond
+	tsa := base.TestServerArgs{Knobs: base.TestingKnobs{
+		SQLStatsKnobs: &sqlstats.TestingKnobs{
+			DefaultRefreshIntervalOverride: time.Millisecond,
+			DefaultAsOfTimeOverride:        10 * time.Millisecond,
+		}}}
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, tsa)
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 

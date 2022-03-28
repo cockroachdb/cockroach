@@ -29,6 +29,14 @@ type TestingKnobs struct {
 	// AOSTClause overrides the AS OF SYSTEM TIME clause in queries used in
 	// persistedsqlstats.
 	AOSTClause string
+
+	// DefaultRefreshIntervalOverride, if greater than 0, overrides the autostats
+	// refresh interval as defined by DefaultRefreshInterval.
+	DefaultRefreshIntervalOverride time.Duration
+
+	// DefaultAsOfTimeOverride, if greater than 0, overrides the AS OF time for
+	// automatic runs of CREATE STATISTICS as defined by DefaultAsOfTime.
+	DefaultAsOfTimeOverride time.Duration
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.

@@ -196,7 +196,7 @@ go_test(
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/stats",
+        "//pkg/sql/sqlstats",
         "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/testutils",

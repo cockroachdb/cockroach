@@ -46,8 +46,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -5390,14 +5390,13 @@ func TestCreateStatsAfterSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldRefreshInterval, oldAsOf time.Duration) {
-		stats.DefaultRefreshInterval = oldRefreshInterval
-		stats.DefaultAsOfTime = oldAsOf
-	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
-	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = time.Microsecond
+	tsa := base.TestServerArgs{Knobs: base.TestingKnobs{
+		SQLStatsKnobs: &sqlstats.TestingKnobs{
+			DefaultRefreshIntervalOverride: time.Millisecond,
+			DefaultAsOfTimeOverride:        time.Microsecond,
+		}}}
 
-	server, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	server, sqlDB, _ := serverutils.StartServer(t, tsa)
 	defer server.Stopper().Stop(context.Background())
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 
