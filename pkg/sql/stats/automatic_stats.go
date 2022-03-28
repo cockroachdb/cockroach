@@ -106,7 +106,7 @@ var AutomaticStatisticsMinStaleRows = func() *settings.IntSetting {
 // the stats for each table should be refreshed. It is mutable for testing.
 // NB: Updates to this value after Refresher.Start has been called will not
 // have any effect.
-var DefaultRefreshInterval = time.Minute
+const DefaultRefreshInterval = time.Minute
 
 // MinRefreshInterval is the minimum auto stats refresh interval allowed.
 // If a shorter interval is requested, MinRefreshInterval is used instead.
@@ -116,7 +116,7 @@ const MinRefreshInterval = time.Microsecond
 // automatic runs of CREATE STATISTICS. It is mutable for testing.
 // NB: Updates to this value after MakeRefresher has been called will not have
 // any effect.
-var DefaultAsOfTime = 30 * time.Second
+const DefaultAsOfTime = 30 * time.Second
 
 // bufferedChanFullLogLimiter is used to minimize spamming the log with
 // "buffered channel is full" errors.

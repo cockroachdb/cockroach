@@ -5390,14 +5390,13 @@ func TestCreateStatsAfterSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer func(oldRefreshInterval, oldAsOf time.Duration) {
-		stats.DefaultRefreshInterval = oldRefreshInterval
-		stats.DefaultAsOfTime = oldAsOf
-	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
-	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = time.Microsecond
+	tsa := base.TestServerArgs{Knobs: base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			DefaultRefreshIntervalOverride: time.Millisecond
+			DefaultAsOfTimeOverride: time.Microsecond,
+		}}}
 
-	server, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	server, sqlDB, _ := serverutils.StartServer(t, tsa)
 	defer server.Stopper().Stop(context.Background())
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 
