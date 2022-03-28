@@ -570,7 +570,9 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		var err error
 		response, err = c.statusServer.ListSessions(
 			ctx,
-			&serverpb.ListSessionsRequest{},
+			&serverpb.ListSessionsRequest{
+				ExcludeClosedSessions: true,
+			},
 		)
 		if response != nil && len(response.Errors) > 0 &&
 			err == nil {
