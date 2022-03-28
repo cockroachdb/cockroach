@@ -4,6 +4,7 @@ load("//build:STRINGER.bzl", "stringer")
 go_library(
     name = "execinfra",
     srcs = [
+        "aggregatorbase.go",
         "base.go",
         "flow_context.go",
         "metadata_test_receiver.go",
@@ -48,6 +49,7 @@ go_library(
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
+        "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlliveness",

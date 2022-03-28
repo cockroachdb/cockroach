@@ -64,7 +64,7 @@
 //   consisting of (multi-tenant) KV nodes and (single-tenant) SQL nodes.
 //
 // The interfaces involved:
-// -  requester: handles all requests for a particular WorkKind. Implemented by
+// - requester: handles all requests for a particular WorkKind. Implemented by
 //   WorkQueue. The requester implementation is responsible for controlling
 //   the admission order within a WorkKind based on tenant fairness,
 //   importance of work etc.

@@ -586,23 +586,16 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	}
 	// Check for cancellation.
 	startTime := q.timeNow()
-	doneCh := ctx.Done()
-	if doneCh != nil {
-		select {
-		case _, ok := <-doneCh:
-			if !ok {
-				// Already canceled. More likely to happen if cpu starvation is
-				// causing entering into the work queue to be delayed.
-				q.mu.Unlock()
-				q.admitMu.Unlock()
-				q.metrics.Errored.Inc(1)
-				deadline, _ := ctx.Deadline()
-				return true,
-					errors.Newf("work %s deadline already expired: deadline: %v, now: %v",
-						workKindString(q.workKind), deadline, startTime)
-			}
-		default:
-		}
+	if ctx.Err() != nil {
+		// Already canceled. More likely to happen if cpu starvation is
+		// causing entering into the work queue to be delayed.
+		q.mu.Unlock()
+		q.admitMu.Unlock()
+		q.metrics.Errored.Inc(1)
+		deadline, _ := ctx.Deadline()
+		return true,
+			errors.Newf("work %s deadline already expired: deadline: %v, now: %v",
+				workKindString(q.workKind), deadline, startTime)
 	}
 	// Push onto heap(s).
 	ordering := fifoWorkOrdering
@@ -628,7 +621,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	q.metrics.WaitQueueLength.Inc(1)
 	defer releaseWaitingWork(work)
 	select {
-	case <-doneCh:
+	case <-ctx.Done():
 		waitDur := q.timeNow().Sub(startTime)
 		q.mu.Lock()
 		// The work was cancelled, so waitDur is less than the wait time this work
@@ -838,12 +831,9 @@ const defaultTenantWeight = 1
 const tenantWeightCap = 20
 
 func (q *WorkQueue) getTenantWeightLocked(tenantID uint64) uint32 {
-	weight := uint32(defaultTenantWeight)
-	if q.mu.tenantWeights.active != nil {
-		w, ok := q.mu.tenantWeights.active[tenantID]
-		if ok {
-			weight = w
-		}
+	weight, ok := q.mu.tenantWeights.active[tenantID]
+	if !ok {
+		weight = defaultTenantWeight
 	}
 	return weight
 }
