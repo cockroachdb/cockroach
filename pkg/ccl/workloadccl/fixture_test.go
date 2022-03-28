@@ -11,6 +11,7 @@ package workloadccl_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"net/http/httptest"
 	"strconv"
 	"testing"
@@ -167,14 +168,13 @@ func TestImportFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	defer func(oldRefreshInterval, oldAsOf time.Duration) {
-		stats.DefaultRefreshInterval = oldRefreshInterval
-		stats.DefaultAsOfTime = oldAsOf
-	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
-	stats.DefaultRefreshInterval = time.Millisecond
-	stats.DefaultAsOfTime = 10 * time.Millisecond
+	tsa := base.TestServerArgs{Knobs: base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			DefaultRefreshIntervalOverride: time.Millisecond
+			DefaultAsOfTimeOverride: 10 * time.Millisecond,
+		}}}
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, tsa)
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
