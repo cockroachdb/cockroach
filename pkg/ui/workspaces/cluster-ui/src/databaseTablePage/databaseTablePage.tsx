@@ -92,7 +92,7 @@ export interface DatabaseTablePageData {
   stats: DatabaseTablePageDataStats;
   indexStats: DatabaseTablePageIndexStats;
   showNodeRegionsSection?: boolean;
-  automaticStatsCollectionEnabled: boolean;
+  automaticStatsCollectionEnabled?: boolean;
 }
 
 export interface DatabaseTablePageDataDetails {
@@ -383,27 +383,29 @@ export class DatabaseTablePage extends React.Component<
                         )}
                       />
                     )}
-                    <SummaryCardItemBoolSetting
-                      label="Auto Stats Collection"
-                      value={this.props.automaticStatsCollectionEnabled}
-                      toolTipText={
-                        <span>
-                          {" "}
-                          Automatic statistics can help improve query
-                          performance. Learn how to{" "}
-                          <Anchor
-                            href={tableStatsClusterSetting}
-                            target="_blank"
-                            className={booleanSettingCx(
-                              "crl-hover-text__link-text",
-                            )}
-                          >
-                            manage statistics collection
-                          </Anchor>
-                          .
-                        </span>
-                      }
-                    />
+                    {this.props.automaticStatsCollectionEnabled != null && (
+                      <SummaryCardItemBoolSetting
+                        label="Auto Stats Collection"
+                        value={this.props.automaticStatsCollectionEnabled}
+                        toolTipText={
+                          <span>
+                            {" "}
+                            Automatic statistics can help improve query
+                            performance. Learn how to{" "}
+                            <Anchor
+                              href={tableStatsClusterSetting}
+                              target="_blank"
+                              className={booleanSettingCx(
+                                "crl-hover-text__link-text",
+                              )}
+                            >
+                              manage statistics collection
+                            </Anchor>
+                            .
+                          </span>
+                        }
+                      />
+                    )}
                   </SummaryCard>
                 </Col>
 
