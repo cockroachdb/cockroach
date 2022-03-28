@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/stretchr/testify/require"
 )
 
 func registerDiskFull(r registry.Registry) {
@@ -40,13 +39,12 @@ func registerDiskFull(r registry.Registry) {
 
 			// Node 1 will soon be killed, when the ballast file fills up its disk. To
 			// ensure that the ranges containing system tables are available on other
-			// nodes, we wait here for at least two replicas of each range. Without
-			// this, it's possible that we end up deadlocked on a system query that
-			// requires a range on node 1, but node 1 will not restart until the query
+			// nodes, we wait here for 3x replication of each range. Without this,
+			// it's possible that we end up deadlocked on a system query that requires
+			// a range on node 1, but node 1 will not restart until the query
 			// completes.
-			db := c.Conn(ctx, t.L(), 1)
-			err := WaitForReplication(ctx, t, db, 2)
-			require.NoError(t, err)
+			db := c.Conn(ctx, 1)
+			WaitFor3XReplication(t, db)
 			_ = db.Close()
 
 			t.Status("running workload")
