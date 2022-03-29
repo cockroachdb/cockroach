@@ -648,11 +648,18 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, "BACKUP TO ($1, $2, $3)", backups...)
+	sqlDB.Exec(t, "BACKUP TO ($1,$2,$3) INCREMENTAL FROM $4", append(incrementals, backups[0])...)
 	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
 	sqlDB.Exec(t, "BACKUP INTO LATEST IN $4 WITH incremental_location = ($1, $2, $3)",
 		append(incrementals, collections[0])...)
+
+	{
+		// Ensure old style show backup runs properly with locality aware uri
+		sqlDB.Exec(t, "SHOW BACKUP $1", backups[0])
+		sqlDB.Exec(t, "SHOW BACKUP $1", incrementals[0])
+	}
 
 	// Find the subdirectory created by the full BACKUP INTO statement.
 	matches, err := filepath.Glob(path.Join(tmpDir, "full/*/*/*/"+backupManifestName))
@@ -667,6 +674,8 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 		[][]string{
 			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s')", backups[0].(string), backups[1].(string),
 				backups[2].(string))},
+			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s') INCREMENTAL FROM '%s'", incrementals[0],
+				incrementals[1], incrementals[2], backups[0])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", full1, collections[0],
 				collections[1], collections[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", full1,
@@ -9470,6 +9479,7 @@ func TestBackupRestoreOldIncrementalDefault(t *testing.T) {
 
 		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location = %s", dest, inc)
 		sqlDB.Exec(t, sib)
+
 		sir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb'", dest)
 		sqlDB.Exec(t, sir)
 
@@ -9579,6 +9589,31 @@ func TestBackupRestoreSeparateExplicitIsDefault(t *testing.T) {
 
 		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location = %s", dest, inc)
 		sqlDB.Exec(t, sib)
+		{
+			// Locality Aware Show Backup validation
+			// TODO (msbutler): move to data driven test after 22.1 backport
+
+			// assert the localities field populates correctly (not null if backup is locality aware)
+			localities := sqlDB.QueryStr(t,
+				fmt.Sprintf("SELECT locality FROM [SHOW BACKUP FILES FROM LATEST IN %s]", dest))
+			for _, locality := range localities {
+				if len(br.dest) > 1 {
+					require.NotEqual(t, "NULL", locality[0])
+				} else {
+					require.Equal(t, "NULL", locality[0])
+				}
+			}
+			// assert show backup still works
+			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s", dest))
+			//sqlDB.Exec(t,fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH incremental_location = %s",
+			//	dest, inc))
+
+			// locality aware show backups will eventually fail if not all localities are provided,
+			// but for now, they're ok
+			if len(br.dest) > 1 {
+				sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s", br.dest[1]))
+			}
+		}
 		sir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb', incremental_location = %s", dest, inc)
 		sqlDB.Exec(t, sir)
 

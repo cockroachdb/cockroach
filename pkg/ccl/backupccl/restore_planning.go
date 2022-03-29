@@ -1472,6 +1472,9 @@ func doRestorePlan(
 	var mainBackupManifests []BackupManifest
 	var localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
 	var memReserved int64
+	defer func() {
+		mem.Shrink(ctx, memReserved)
+	}()
 	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 	if len(from) <= 1 {
 		// Incremental layers are not specified explicitly. They will be searched for automatically.
@@ -1490,9 +1493,6 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	defer func() {
-		mem.Shrink(ctx, memReserved)
-	}()
 
 	currentVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
 	for i := range mainBackupManifests {
