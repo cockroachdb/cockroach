@@ -34,8 +34,27 @@ import (
 	"github.com/lib/pq"
 )
 
-// WaitForJob waits for the specified job ID to terminate.
-func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+// WaitForJobToSucceed waits for the specified job ID to succeed.
+func WaitForJobToSucceed(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusSucceeded)
+}
+
+// WaitForJobToPause waits for the specified job ID to be paused.
+func WaitForJobToPause(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusPaused)
+}
+
+// WaitForJobToCancel waits for the specified job ID to be canceled.
+func WaitForJobToCancel(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusCanceled)
+}
+
+func waitForJobToHaveStatus(
+	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
+) {
 	t.Helper()
 	if err := retry.ForDuration(time.Minute*2, func() error {
 		var status string
@@ -50,7 +69,7 @@ func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 			}
 			t.Fatalf("job failed")
 		}
-		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+		if e, a := expectedStatus, jobs.Status(status); e != a {
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil

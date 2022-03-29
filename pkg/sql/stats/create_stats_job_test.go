@@ -113,7 +113,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		jobutils.WaitForJob(t, sqlDB, jobID)
+		jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 
 		// Now the job should have succeeded in producing stats.
 		sqlDB.CheckQueryResults(t,
@@ -230,7 +230,7 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 
 	// Verify that the first job completed successfully.
 	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", jobID))
-	jobutils.WaitForJob(t, sqlDB, jobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 	<-errCh
 }
 

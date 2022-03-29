@@ -5057,7 +5057,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	}
 
 	// But the job should be restarted and succeed eventually.
-	jobutils.WaitForJob(t, sqlDB, jobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 	sqlDB.CheckQueryResults(t,
 		`SELECT * FROM t ORDER BY i`,
 		sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),

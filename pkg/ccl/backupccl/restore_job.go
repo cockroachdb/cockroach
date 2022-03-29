@@ -1890,6 +1890,7 @@ func emitRestoreJobEvent(
 // change stuff to delete the keys in the background.
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
+	r.execCfg = p.ExecCfg()
 	// Emit to the event log that the job has started reverting.
 	emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
 
