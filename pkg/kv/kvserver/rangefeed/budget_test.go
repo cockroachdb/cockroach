@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
 )
@@ -173,21 +174,30 @@ func TestFeedBudget(t *testing.T) {
 }
 
 func TestBudgetFactory(t *testing.T) {
-	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	s := cluster.MakeTestingClusterSettings()
+
+	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, s)
 	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
 	bf := NewBudgetFactory(context.Background(), rootMon, 10000, time.Second*5)
 
 	// Verify system ranges use own budget.
-	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix))
+	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix), &s.SV)
 	_, e := bSys.TryGet(context.Background(), 199)
 	require.NoError(t, e, "failed to obtain system range budget")
 	require.Equal(t, int64(0), rootMon.AllocBytes(), "System feeds should borrow from own budget")
 	require.Equal(t, int64(199), bf.Metrics().SystemBytesCount.Value(), "Metric was not updated")
 
 	// Verify user feeds use shared root budget.
-	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)))
+	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID+1)),
+		&s.SV)
 	_, e = bUsr.TryGet(context.Background(), 99)
 	require.NoError(t, e, "failed to obtain non-system budget")
 	require.Equal(t, int64(99), rootMon.AllocBytes(), "Non-system feeds should borrow from shared budget")
 	require.Equal(t, int64(99), bf.Metrics().SharedBytesCount.Value(), "Metric was not updated")
+
+	// Verify is budget is disabled in settings, nil budget is created.
+	RangefeedBudgetsEnabled.Override(context.Background(), &s.SV, false)
+	bUsr = bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID+1)),
+		&s.SV)
+	require.Nil(t, bUsr, "Range budget when budgets are disabled.")
 }
