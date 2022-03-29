@@ -104,7 +104,7 @@ func streamKVs(
 	telemetry.Count(`replication.create.ok`)
 	var checkpoint jobspb.ChangefeedProgress_Checkpoint
 	if err := changefeeddist.StartDistChangefeed(
-		ctx, p, 0, details, spans, startTS, checkpoint, resultsCh,
+		ctx, p, 0, details, spans, startTS, checkpoint, resultsCh, changefeeddist.TestingKnobs{},
 	); err != nil {
 		telemetry.Count("replication.done.fail")
 		return err
