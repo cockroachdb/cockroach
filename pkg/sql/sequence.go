@@ -555,15 +555,10 @@ func assignSequenceOptions(
 		case tree.SeqOptStart:
 			opts.Start = *option.IntVal
 		case tree.SeqOptRestart:
-			fmt.Println("Run at right after case tree.SeqOptResta")
 			if !option.OptionalVal {
-				fmt.Print("when OptionVal is false:")
 				opts.Restart = &opts.Start
-				fmt.Println("Success")
 			} else {
-				fmt.Print("when OptionVal is true:")
 				opts.Restart = option.IntVal
-				fmt.Println("Success")
 			}
 		case tree.SeqOptVirtual:
 			opts.Virtual = true
@@ -676,7 +671,24 @@ func assignSequenceOptions(
 			opts.MinValue,
 		)
 	}
-
+	if opts.Restart != nil {
+		if int64(*opts.Restart) > opts.MaxValue {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"RESTART value (%d) cannot be greater than MAXVALUE (%d)",
+				*opts.Restart,
+				opts.MaxValue,
+			)
+		}
+		if int64(*opts.Restart) < opts.MinValue {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"RESTART value (%d) cannot be less than MINVALUE (%d)",
+				*opts.Restart,
+				opts.MinValue,
+			)
+		}
+	}
 	return nil
 }
 
