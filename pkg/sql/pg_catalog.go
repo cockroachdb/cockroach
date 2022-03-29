@@ -1065,9 +1065,6 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					addRow func(...tree.Datum) error) (bool, error) {
 					var id descpb.ID
 					d := tree.UnwrapDatum(p.EvalContext(), constraint)
-					if d == tree.DNull {
-						return false, nil
-					}
 					switch t := d.(type) {
 					case *tree.DOid:
 						id = descpb.ID(t.DInt)

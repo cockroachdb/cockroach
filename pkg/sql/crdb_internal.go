@@ -1352,9 +1352,6 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
 		db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 		var traceID tracingpb.TraceID
 		d := tree.UnwrapDatum(p.EvalContext(), constraint)
-		if d == tree.DNull {
-			return false, nil
-		}
 		switch t := d.(type) {
 		case *tree.DInt:
 			traceID = tracingpb.TraceID(*t)
@@ -2392,9 +2389,6 @@ CREATE TABLE crdb_internal.create_type_statements (
 				addRow func(...tree.Datum) error,
 			) (matched bool, err error) {
 				d := tree.UnwrapDatum(p.EvalContext(), constraint)
-				if d == tree.DNull {
-					return false, nil
-				}
 				id := descpb.ID(tree.MustBeDInt(d))
 				scName, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id)
 				if err != nil || typDesc == nil {

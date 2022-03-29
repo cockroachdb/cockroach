@@ -627,6 +627,12 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 			}
 			constraintDatum := span.StartKey().Value(0)
 			virtualIndex := def.getIndex(index.GetID())
+			if constraintDatum == tree.DNull {
+				if virtualIndex.partial {
+					break
+				}
+				continue
+			}
 
 			// For each span, run the index's populate method, constrained to the
 			// constraint span's value.
