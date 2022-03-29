@@ -50,6 +50,7 @@ func uploadAndInitSchemaChangeWorkload() versionStep {
 func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep {
 	var numFeatureRuns int
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		t.Skip("disabled due to flaky nature of schema change workload")
 		numFeatureRuns++
 		t.l.Printf("Workload step run: %d", numFeatureRuns)
 		runCmd := []string{
