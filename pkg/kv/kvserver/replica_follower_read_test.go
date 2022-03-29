@@ -174,7 +174,7 @@ func TestCheckExecutionCanProceedAllowsFollowerReadWithInvalidLease(t *testing.T
 	}
 	ba.Add(&gArgs)
 
-	ls, err := r.checkExecutionCanProceed(ctx, ba, nil /* g */)
+	ls, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, nil /* g */)
 	require.NoError(t, err)
 	require.Empty(t, ls)
 
