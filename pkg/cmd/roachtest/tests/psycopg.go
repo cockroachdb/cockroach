@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -23,7 +24,7 @@ import (
 )
 
 var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d+)(?:_(?P<point>\d+)(?:_(?P<subpoint>\d+))?)?)?$`)
-var supportedPsycopgTag = "2_8_6"
+var supportedPsycopgTag = "3c58e96e1000ef60060fb8139687028cb274838d"
 
 // This test runs psycopg full test suite against a single cockroach node.
 func registerPsycopg(r registry.Registry) {
@@ -64,12 +65,9 @@ func registerPsycopg(r registry.Registry) {
 		}
 
 		if err := repeatRunE(
-			ctx,
-			t,
-			c,
-			node,
+			ctx, t, c, node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3 libpq-dev python-dev gcc python3-setuptools python-setuptools`,
+			`sudo apt-get -qq install make python3 libpq-dev python3-dev gcc python3-setuptools python-setuptools`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -80,21 +78,27 @@ func registerPsycopg(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatGitCloneE(
-			ctx,
-			t,
-			c,
-			"https://github.com/psycopg/psycopg2.git",
-			"/mnt/data1/psycopg",
-			supportedPsycopgTag,
-			node,
-		); err != nil {
+		// TODO(rafi): When psycopg 2.9.4 is released and tagged,
+		//    use the tag version instead of the commit.
+		//if err := repeatGitCloneE(
+		//	ctx, t, c,
+		//	"https://github.com/psycopg/psycopg2.git",
+		//	"/mnt/data1/psycopg",
+		//	supportedPsycopgTag,
+		//	node,
+		//); err != nil {
+		//	t.Fatal(err)
+		//}
+		if err = c.RunE(ctx, node, "git clone https://github.com/psycopg/psycopg2.git /mnt/data1/psycopg"); err != nil {
+			t.Fatal(err)
+		}
+		if err = c.RunE(ctx, node, fmt.Sprintf("cd /mnt/data1/psycopg/ && git checkout %s", supportedPsycopgTag)); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("building Psycopg")
 		if err := repeatRunE(
-			ctx, t, c, node, "building Psycopg", `cd /mnt/data1/psycopg/ && make`,
+			ctx, t, c, node, "building Psycopg", `cd /mnt/data1/psycopg/ && make PYTHON_VERSION=3`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +121,7 @@ func registerPsycopg(r registry.Registry) {
 			export PSYCOPG2_TESTDB_USER=root &&
 			export PSYCOPG2_TESTDB_PORT=26257 &&
 			export PSYCOPG2_TESTDB_HOST=localhost &&
-			make check`,
+			make check PYTHON_VERSION=3`,
 		)
 
 		// Expected to fail but we should still scan the error to check if
