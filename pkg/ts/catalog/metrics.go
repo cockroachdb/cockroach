@@ -91,6 +91,7 @@ var histogramMetricsNames = map[string]struct{}{
 	"txnwaitqueue.query.wait_time":              {},
 	"raft.process.applycommitted.latency":       {},
 	"sql.stats.txn_stats_collection.duration":   {},
+	"rebalancing.l0_sublevels_histogram":        {},
 }
 
 func allInternalTSMetricsNames() []string {
