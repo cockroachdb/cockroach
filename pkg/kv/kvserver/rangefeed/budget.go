@@ -121,8 +121,13 @@ type FeedBudget struct {
 	limit int64
 	// Channel to notify that memory was returned to the budget.
 	replenishC chan interface{}
-	// Budget cancellation request
+	// Budget cancellation request.
 	stopC chan interface{}
+	// Cluster settings to be able to check RangefeedBudgetsEnabled on the fly.
+	// When budgets are disabled, all new messages should pass through, all
+	// previous allocations should still be returned as memory pool is shared with
+	// SQL.
+	settings *settings.Values
 
 	closed sync.Once
 }
@@ -130,7 +135,7 @@ type FeedBudget struct {
 // NewFeedBudget creates a FeedBudget to be used with RangeFeed. If nil account
 // is passed, function will return nil which is safe to use with RangeFeed as
 // it effectively disables memory accounting for that feed.
-func NewFeedBudget(budget *mon.BoundAccount, limit int64) *FeedBudget {
+func NewFeedBudget(budget *mon.BoundAccount, limit int64, settings *settings.Values) *FeedBudget {
 	if budget == nil {
 		return nil
 	}
@@ -142,6 +147,7 @@ func NewFeedBudget(budget *mon.BoundAccount, limit int64) *FeedBudget {
 		replenishC: make(chan interface{}, 1),
 		stopC:      make(chan interface{}),
 		limit:      limit,
+		settings:   settings,
 	}
 	f.mu.memBudget = budget
 	return f
@@ -151,6 +157,9 @@ func NewFeedBudget(budget *mon.BoundAccount, limit int64) *FeedBudget {
 // returns error immediately.
 // Returned allocation has its use counter set to 1.
 func (f *FeedBudget) TryGet(ctx context.Context, amount int64) (*SharedBudgetAllocation, error) {
+	if !RangefeedBudgetsEnabled.Get(f.settings) {
+		return nil, nil
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.mu.closed {
@@ -262,6 +271,8 @@ type BudgetFactory struct {
 	feedBytesMon       *mon.BytesMonitor
 	systemFeedBytesMon *mon.BytesMonitor
 
+	settings *settings.Values
+
 	metrics *FeedBudgetPoolMetrics
 }
 
@@ -274,6 +285,7 @@ type BudgetFactoryConfig struct {
 	adjustLimit             func(int64) int64
 	totalRangeReedBudget    int64
 	histogramWindowInterval time.Duration
+	settings                *settings.Values
 }
 
 func (b BudgetFactoryConfig) empty() bool {
@@ -288,6 +300,7 @@ func CreateBudgetFactoryConfig(
 	memoryPoolSize int64,
 	histogramWindowInterval time.Duration,
 	adjustLimit func(int64) int64,
+	settings *settings.Values,
 ) BudgetFactoryConfig {
 	if rootMon == nil || !useBudgets {
 		return BudgetFactoryConfig{}
@@ -300,6 +313,7 @@ func CreateBudgetFactoryConfig(
 		adjustLimit:             adjustLimit,
 		totalRangeReedBudget:    totalRangeReedBudget,
 		histogramWindowInterval: histogramWindowInterval,
+		settings:                settings,
 	}
 }
 
@@ -328,6 +342,7 @@ func NewBudgetFactory(ctx context.Context, config BudgetFactoryConfig) *BudgetFa
 		adjustLimit:        config.adjustLimit,
 		feedBytesMon:       rangeFeedPoolMonitor,
 		systemFeedBytesMon: systemRangeMonitor,
+		settings:           config.settings,
 		metrics:            metrics,
 	}
 }
@@ -356,10 +371,10 @@ func (f *BudgetFactory) CreateBudget(key roachpb.RKey) *FeedBudget {
 	// We use any table with reserved ID in system tenant as system case.
 	if key.Less(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1))) {
 		acc := f.systemFeedBytesMon.MakeBoundAccount()
-		return NewFeedBudget(&acc, 0)
+		return NewFeedBudget(&acc, 0, f.settings)
 	}
 	acc := f.feedBytesMon.MakeBoundAccount()
-	return NewFeedBudget(&acc, rangeLimit)
+	return NewFeedBudget(&acc, rangeLimit, f.settings)
 }
 
 // Metrics exposes Metrics for BudgetFactory so that they could be registered
