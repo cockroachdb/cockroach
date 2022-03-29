@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
@@ -181,7 +182,7 @@ func TestBudgetFactory(t *testing.T) {
 	bf := NewBudgetFactory(context.Background(), rootMon, 10000, time.Second*5)
 
 	// Verify system ranges use own budget.
-	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix), &s.SV)
+	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix), 10000, &s.SV)
 	_, e := bSys.TryGet(context.Background(), 199)
 	require.NoError(t, e, "failed to obtain system range budget")
 	require.Equal(t, int64(0), rootMon.AllocBytes(), "System feeds should borrow from own budget")
@@ -189,15 +190,42 @@ func TestBudgetFactory(t *testing.T) {
 
 	// Verify user feeds use shared root budget.
 	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID+1)),
-		&s.SV)
+		10000, &s.SV)
 	_, e = bUsr.TryGet(context.Background(), 99)
 	require.NoError(t, e, "failed to obtain non-system budget")
-	require.Equal(t, int64(99), rootMon.AllocBytes(), "Non-system feeds should borrow from shared budget")
+	require.Equal(t, int64(99), rootMon.AllocBytes(),
+		"Non-system feeds should borrow from shared budget")
 	require.Equal(t, int64(99), bf.Metrics().SharedBytesCount.Value(), "Metric was not updated")
 
 	// Verify is budget is disabled in settings, nil budget is created.
 	RangefeedBudgetsEnabled.Override(context.Background(), &s.SV, false)
 	bUsr = bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID+1)),
-		&s.SV)
+		10000, &s.SV)
 	require.Nil(t, bUsr, "Range budget when budgets are disabled.")
+}
+
+func TestBudgetLimits(t *testing.T) {
+	s := cluster.MakeTestingClusterSettings()
+
+	poolSize := int64(10000)
+	raftMsgSize := int64(1000)
+
+	newBudget := func(poolSize int64) *BudgetFactory {
+		rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+		rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
+		return NewBudgetFactory(context.Background(), rootMon, poolSize, time.Second*5)
+	}
+
+	userKey := roachpb.RKey(keys.ScratchRangeMin)
+	// Verify that range limit is a fraction of pool size.
+	bf := newBudget(poolSize)
+	b := bf.CreateBudget(userKey, 0, &s.SV)
+	require.Less(t, b.limit, poolSize, "individual rangefeed limit is above memory pool limit")
+
+	// Verify that range limit is always above raft message size and takes precedence over pool size
+	// constraint.
+	bf = newBudget(100)
+	b = bf.CreateBudget(userKey, raftMsgSize, &s.SV)
+	require.GreaterOrEqual(t, b.limit, raftMsgSize,
+		"individual rangefeed limit is below raft msg size")
 }

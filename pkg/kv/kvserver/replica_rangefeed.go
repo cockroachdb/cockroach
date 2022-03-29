@@ -365,7 +365,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	r.rangefeedMu.Unlock()
 
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey,
-		&r.store.cfg.Settings.SV)
+		MaxCommandSize.Get(&r.store.cfg.Settings.SV), &r.store.cfg.Settings.SV)
 
 	// Create a new rangefeed.
 	desc := r.Desc()

@@ -308,7 +308,9 @@ func (f *BudgetFactory) Stop(ctx context.Context) {
 // CreateBudget creates feed budget using memory pools configured in the
 // factory. It is safe to call on nil factory as it will produce nil budget
 // which in turn disables memory accounting on range feed.
-func (f *BudgetFactory) CreateBudget(key roachpb.RKey, settings *settings.Values) *FeedBudget {
+func (f *BudgetFactory) CreateBudget(
+	key roachpb.RKey, maxRaftCmdSize int64, settings *settings.Values,
+) *FeedBudget {
 	if f == nil {
 		return nil
 	}
@@ -320,8 +322,12 @@ func (f *BudgetFactory) CreateBudget(key roachpb.RKey, settings *settings.Values
 		acc := f.systemFeedBytesMon.MakeBoundAccount()
 		return NewFeedBudget(&acc, 0)
 	}
+	rangeLimit := f.limit
+	if rangeLimit < maxRaftCmdSize {
+		rangeLimit = maxRaftCmdSize
+	}
 	acc := f.feedBytesMon.MakeBoundAccount()
-	return NewFeedBudget(&acc, f.limit)
+	return NewFeedBudget(&acc, rangeLimit)
 }
 
 // Metrics exposes Metrics for BudgetFactory so that they could be registered
