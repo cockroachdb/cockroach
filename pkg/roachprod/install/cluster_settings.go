@@ -100,11 +100,8 @@ func MakeClusterSettings(opts ...ClusterSettingOption) ClusterSettings {
 		PGUrlCertsDir: "./certs",
 		Secure:        false,
 		UseTreeDist:   true,
-		Env: []string{
-			"COCKROACH_ENABLE_RPC_COMPRESSION=false",
-			"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
-		},
-		NumRacks: 0,
+		Env:           config.DefaultEnvVars(),
+		NumRacks:      0,
 	}
 	// Override default values using the passed options (if any).
 	for _, opt := range opts {
