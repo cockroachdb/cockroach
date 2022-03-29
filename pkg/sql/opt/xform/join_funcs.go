@@ -456,12 +456,13 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			}
 
 			if len(foundVals) > 1 {
-				if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp {
-					// We cannot use the method constructJoinWithConstants to create a cross
-					// join for left or anti joins, because constructing a cross join with
-					// foundVals will increase the size of the input. As a result,
-					// non-matching input rows will show up more than once in the output,
-					// which is incorrect (see #59615).
+				if joinType == opt.LeftJoinOp || joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
+					// We cannot use the method constructJoinWithConstants to
+					// create a cross join for left, semi, or anti joins,
+					// because constructing a cross join with foundVals will
+					// increase the size of the input. As a result, non-matching
+					// input rows will show up more than once in the output,
+					// which is incorrect (see #59615 and #78685).
 					shouldBuildMultiSpanLookupJoin = true
 					break
 				}
