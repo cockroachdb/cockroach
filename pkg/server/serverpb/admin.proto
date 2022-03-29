@@ -657,6 +657,10 @@ message JobResponse {
   // guaranteed to contain all execution failures and some execution failures
   // may not contain an error or end.
   repeated ExecutionFailure execution_failures = 20;
+
+  // coordinator_id identifies the node coordinating the job. This value will
+  // only be present for jobs that are currently running or recently ran.
+  int64 coordinator_id = 21 [(gogoproto.customname) = "CoordinatorID"];
 }
 
 // LocationsRequest requests system locality location information.
