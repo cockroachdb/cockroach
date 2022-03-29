@@ -1486,13 +1486,13 @@ func doRestorePlan(
 		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifestsExplicitIncrementals(
 			ctx, &mem, mkStore, from, endTime, encryption, p.User())
 	}
+	defer func() {
+		mem.Shrink(ctx, memReserved)
+	}()
 
 	if err != nil {
 		return err
 	}
-	defer func() {
-		mem.Shrink(ctx, memReserved)
-	}()
 
 	currentVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
 	for i := range mainBackupManifests {
