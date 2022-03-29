@@ -336,6 +336,10 @@ const (
 	// SuperRegions enables the usage on super regions.
 	SuperRegions
 
+	// GossipL0Sublevels is the version where L0 sublevels are gossiped
+	// in a store descriptor's capacity and can be used for allocation
+	// decisions.
+	GossipL0Sublevels
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -570,7 +574,10 @@ var versionsSingleton = keyedVersions{
 		Key:     SuperRegions,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 104},
 	},
-
+	{
+		Key:     GossipL0Sublevels,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
