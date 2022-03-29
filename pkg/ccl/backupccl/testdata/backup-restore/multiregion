@@ -124,9 +124,9 @@ system node <nil> {} <nil>
 
 query-sql
 USE no_region_db;
-SHOW TABLES;
+SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES];
 ----
-public t table root <nil> REGIONAL BY TABLE IN PRIMARY REGION
+public t table root REGIONAL BY TABLE IN PRIMARY REGION
 
 exec-sql
 CREATE DATABASE eu_central_db;
@@ -170,9 +170,9 @@ system node <nil> {} <nil>
 
 query-sql
 USE no_region_db;
-SHOW TABLES;
+SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES];
 ----
-public t table root <nil> REGIONAL BY TABLE IN PRIMARY REGION
+public t table root REGIONAL BY TABLE IN PRIMARY REGION
 
 # Check we can restore without triggering the default primary region.
 exec-sql
