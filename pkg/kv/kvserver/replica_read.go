@@ -41,7 +41,7 @@ func (r *Replica) executeReadOnlyBatch(
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Verify that the batch can be executed.
-	st, err := r.checkExecutionCanProceed(ctx, ba, g)
+	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
 	if err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
@@ -74,6 +74,9 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 	defer rw.Close()
 
+	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ba, st); err != nil {
+		return nil, g, roachpb.NewError(err)
+	}
 	// TODO(nvanbenschoten): once all replicated intents are pulled into the
 	// concurrency manager's lock-table, we can be sure that if we reached this
 	// point, we will not conflict with any of them during evaluation. This in
