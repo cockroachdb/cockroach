@@ -233,6 +233,99 @@ var (
 			},
 		},
 	}
+
+	// noLocalityAscendingReadAmpStores specifies a set of stores identical to
+	// noLocalityStores, however they have ascending read
+	// amplification. Where store 1, store 2 and store 3 are below the
+	// threshold, whilst store 4 and store 5 are above.
+	noLocalityAscendingReadAmpStores = []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node:    roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1500,
+				L0Sublevels:      maxL0SublevelThreshold - 3,
+			},
+		},
+		{
+			StoreID: 2,
+			Node:    roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1300,
+				L0Sublevels:      maxL0SublevelThreshold - 2,
+			},
+		},
+		{
+			StoreID: 3,
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1000,
+				L0Sublevels:      maxL0SublevelThreshold - 1,
+			},
+		},
+		{
+			StoreID: 4,
+			Node:    roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 900,
+				L0Sublevels:      maxL0SublevelThreshold + 1,
+			},
+		},
+		{
+			StoreID: 5,
+			Node:    roachpb.NodeDescriptor{NodeID: 5},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 500,
+				L0Sublevels:      maxL0SublevelThreshold + 2,
+			},
+		},
+	}
+
+	// noLocalityHighReadAmpStores specifies a set of stores identical to
+	// noLocalityStores, however they all have read amplification that exceeds
+	// the threshold.
+	noLocalityHighReadAmpStores = []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node:    roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1500,
+				L0Sublevels:      maxL0SublevelThreshold + 1,
+			},
+		},
+		{
+			StoreID: 2,
+			Node:    roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1300,
+				L0Sublevels:      maxL0SublevelThreshold + 2,
+			},
+		},
+		{
+			StoreID: 3,
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 1000,
+				L0Sublevels:      maxL0SublevelThreshold + 3,
+			},
+		},
+		{
+			StoreID: 4,
+			Node:    roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 900,
+				L0Sublevels:      maxL0SublevelThreshold + 4,
+			},
+		},
+		{
+			StoreID: 5,
+			Node:    roachpb.NodeDescriptor{NodeID: 5},
+			Capacity: roachpb.StoreCapacity{
+				QueriesPerSecond: 500,
+				L0Sublevels:      maxL0SublevelThreshold + 5,
+			},
+		},
+	}
 )
 
 type testRange struct {
@@ -632,8 +725,9 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 				&localDesc,
 				storeList,
 				&qpsScorerOptions{
-					deterministic:         false,
-					qpsRebalanceThreshold: qpsRebalanceThreshold,
+					diskHealthScorerOptions: &diskHealthScorerOptions{enforcementLevel: storeHealthNoAction},
+					deterministic:           false,
+					qpsRebalanceThreshold:   qpsRebalanceThreshold,
 				},
 			)
 			var rebalancedVoterStores, rebalancedNonVoterStores []roachpb.StoreID
@@ -883,7 +977,11 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 				&hottestRanges,
 				&localDesc,
 				storeList,
-				&qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: 0.05},
+				&qpsScorerOptions{
+					diskHealthScorerOptions: &diskHealthScorerOptions{enforcementLevel: storeHealthNoAction},
+					deterministic:           true,
+					qpsRebalanceThreshold:   0.05,
+				},
 			)
 
 			require.Len(t, voterTargets, len(tc.expRebalancedVoters))
@@ -955,7 +1053,10 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{localDesc.StoreID}, qps: 100}})
 	hottestRanges := rr.topQPS()
 	sr.chooseRangeToRebalance(
-		ctx, &hottestRanges, &localDesc, storeList, &qpsScorerOptions{qpsRebalanceThreshold: 0.05},
+		ctx, &hottestRanges, &localDesc, storeList, &qpsScorerOptions{
+			diskHealthScorerOptions: &diskHealthScorerOptions{enforcementLevel: storeHealthNoAction},
+			qpsRebalanceThreshold:   0.05,
+		},
 	)
 	trace := finishAndGetRecording()
 	require.Regexpf(
@@ -1117,7 +1218,11 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 				&hottestRanges,
 				&localDesc,
 				storeList,
-				&qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: tc.rebalanceThreshold},
+				&qpsScorerOptions{
+					diskHealthScorerOptions: &diskHealthScorerOptions{enforcementLevel: storeHealthNoAction},
+					deterministic:           true,
+					qpsRebalanceThreshold:   tc.rebalanceThreshold,
+				},
 			)
 			require.Len(t, voterTargets, len(tc.expRebalancedVoters))
 
@@ -1210,7 +1315,11 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		&hottestRanges,
 		&localDesc,
 		storeList,
-		&qpsScorerOptions{deterministic: true, qpsRebalanceThreshold: 0.05},
+		&qpsScorerOptions{
+			diskHealthScorerOptions: &diskHealthScorerOptions{enforcementLevel: storeHealthNoAction},
+			deterministic:           true,
+			qpsRebalanceThreshold:   0.05,
+		},
 	)
 	expectTargets := []roachpb.ReplicationTarget{
 		{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
@@ -1218,5 +1327,126 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	if !reflect.DeepEqual(targets, expectTargets) {
 		t.Errorf("got targets %v for range with RaftStatus %v; want %v",
 			targets, sr.getRaftStatusFn(repl), expectTargets)
+	}
+}
+
+// TestStoreRebalancerReadAmpCheck checks that:
+//  - Under (1) disabled and (2) log that rebalancing decisions are unaffected
+//    by high read amplification.
+//  - Under (3) rebalanceOnly and (4) allocate that rebalance decisions exclude
+//    stores with high readamplification as candidate targets.
+func TestStoreRebalancerReadAmpCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	type testCase struct {
+		name            string
+		stores          []*roachpb.StoreDescriptor
+		conf            roachpb.SpanConfig
+		expectNoAction  bool
+		expectedTargets []roachpb.ReplicationTarget
+		enforcement     storeHealthEnforcement
+	}
+	tests := []testCase{
+		{
+			name: "ignore read amp on allocation when storeHealthNoAction enforcement",
+			// NB: All stores have high read amp, this should be ignored.
+			stores: noLocalityHighReadAmpStores,
+			conf:   emptySpanConfig(),
+			expectedTargets: []roachpb.ReplicationTarget{
+				{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
+			},
+			enforcement: storeHealthNoAction,
+		},
+		{
+			name: "ignore read amp on allocation when storeHealthLogOnly enforcement",
+			// NB: All stores have high read amp, this should be ignored.
+			stores: noLocalityHighReadAmpStores,
+			conf:   emptySpanConfig(),
+			expectedTargets: []roachpb.ReplicationTarget{
+				{NodeID: 4, StoreID: 4}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
+			},
+			enforcement: storeHealthLogOnly,
+		},
+		{
+			name: "don't rebalance to stores when storeHealthBlockRebalanceTo enforcement",
+			// NB: All stores have high read amp, no rebalancing can occur.
+			stores:         noLocalityHighReadAmpStores,
+			conf:           emptySpanConfig(),
+			expectNoAction: true,
+			enforcement:    storeHealthBlockRebalanceTo,
+		},
+		{
+			name: "do not rebalance to stores when storeHealthBlockAll enforcement",
+			// NB: All stores have high read amp, no rebalancing can be occur.
+			stores:         noLocalityHighReadAmpStores,
+			conf:           emptySpanConfig(),
+			expectNoAction: true,
+			enforcement:    storeHealthBlockAll,
+		},
+		{
+			name: "rebalance should ignore stores with high read amp when storeHealthRebalanceOnly enforcement",
+			// NB: Store 4, 5 have high read amp, they should not be rebalance
+			// targets. Only 1,2,3 are valid targets, yet only 2 is not already
+			// a voter. 1 should transfer it's lease to 2. 5 could also have
+			// transferred its lease to 2, However, high read amp does not
+			// affect removing replicas from stores, only in blocking new
+			// replicas.
+			stores: noLocalityAscendingReadAmpStores,
+			conf:   emptySpanConfig(),
+			expectedTargets: []roachpb.ReplicationTarget{
+				{NodeID: 2, StoreID: 2}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
+			},
+			enforcement: storeHealthBlockRebalanceTo,
+		},
+		{
+			name: "rebalance should ignore stores with high read amp when storeHealthBlockAll enforcement",
+			// NB: This scenario and result should be identical to storeHealthBlockRebalanceTo.
+			stores: noLocalityAscendingReadAmpStores,
+			conf:   emptySpanConfig(),
+			expectedTargets: []roachpb.ReplicationTarget{
+				{NodeID: 2, StoreID: 2}, {NodeID: 3, StoreID: 3}, {NodeID: 5, StoreID: 5},
+			},
+			enforcement: storeHealthBlockAll,
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d_%s", i+1, test.name), func(t *testing.T) {
+			stopper, g, _, a, _ := createTestAllocator(ctx, 10, false /* deterministic */)
+			defer stopper.Stop(ctx)
+			storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
+
+			localDesc := *noLocalityStores[0]
+			cfg := TestStoreConfig(nil)
+			cfg.Gossip = g
+			cfg.StorePool = a.storePool
+			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+			gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(test.stores, t)
+			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
+			rq := newReplicateQueue(s, a)
+			rr := newReplicaRankings()
+
+			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+
+			// Load in a range with replicas on an overfull node, a slightly underfull
+			// node, and a very underfull node.
+			loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100}})
+			hottestRanges := rr.topQPS()
+
+			_, targetVoters, _ := sr.chooseRangeToRebalance(
+				ctx,
+				&hottestRanges,
+				&localDesc,
+				storeList,
+				&qpsScorerOptions{
+					diskHealthScorerOptions: &diskHealthScorerOptions{enforcementLevel: test.enforcement, l0SublevelThreshold: maxL0SublevelThreshold},
+					deterministic:           true,
+					qpsRebalanceThreshold:   0.05,
+				},
+			)
+			require.Equal(t, test.expectedTargets, targetVoters)
+		})
 	}
 }
