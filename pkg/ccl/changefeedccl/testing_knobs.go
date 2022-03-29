@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -33,7 +34,8 @@ type TestingKnobs struct {
 	// be skipped.
 	ShouldSkipResolved func(resolved *jobspb.ResolvedSpan) bool
 	// FeedKnobs are kvfeed testing knobs.
-	FeedKnobs kvfeed.TestingKnobs
+	FeedKnobs     kvfeed.TestingKnobs
+	DistflowKnobs changefeeddist.TestingKnobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
