@@ -21,7 +21,6 @@ import (
 	_ "embed"
 
 	"github.com/cockroachdb/cockroach/pkg/ui"
-	"github.com/cockroachdb/cockroach/pkg/ui/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/targz"
 )
 
@@ -35,11 +34,4 @@ func init() {
 	}
 	ui.Assets = fs
 	ui.HaveUI = true
-
-	assetHashes := make(map[string]string)
-	err = buildutil.HashFilesInDir(&assetHashes, ui.Assets)
-	if err != nil {
-		panic(err)
-	}
-	ui.AssetHashes = assetHashes
 }
