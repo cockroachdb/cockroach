@@ -2072,3 +2072,25 @@ CREATE SEQUENCE seqas_error
   INCREMENT BY 1
   MAXVALUE 123456
   CACHE 1
+
+statement ok
+CREATE SEQUENCE restart_seqas RESTART 5
+
+query I
+SELECT nextval('public.restart_seqas')
+----
+5
+
+statement ok
+ALTER SEQUENCE restart_seqas RESTART;
+
+query I
+SELECT nextval('public.restart_seqas')
+----
+1
+
+statement error RESTART value \(-1\) cannot be less than MINVALUE \(1\)
+CREATE SEQUENCE restart_seqas_error MINVALUE 1 RESTART -1
+
+statement error RESTART value \(1000\) cannot be greater than MAXVALUE \(100\)
+CREATE SEQUENCE restart_seqas_error MAXVALUE 100 RESTART 1000
