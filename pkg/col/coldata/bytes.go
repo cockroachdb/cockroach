@@ -241,26 +241,49 @@ func (b *Bytes) copyElements(srcElementsToCopy []element, src *Bytes, destIdx in
 			panic(errors.AssertionFailedf("unexpectedly not enough destination elements"))
 		}
 	}
-	// Optimize copying of the elements by copying all of them directly into the
-	// destination. This way all inlined values become correctly set, and we
-	// only need to set the non-inlined values separately.
-	copy(destElements, srcElementsToCopy)
+
+	// Determine whether there is an old non-inlined value with non-zero
+	// capacity among the destination elements.
+	foundOldNonInlined := false
+	for i := 0; i < len(destElements) && !foundOldNonInlined; i++ {
+		foundOldNonInlined = !destElements[i].inlined && destElements[i].header.cap > 0
+	}
 	// Early bounds checks.
 	_ = destElements[len(srcElementsToCopy)-1]
-	for i := 0; i < len(srcElementsToCopy); i++ {
-		//gcassert:bce
-		if e := &destElements[i]; !e.inlined {
-			// This value is non-inlined, so at the moment it is pointing
-			// into the buffer of the source - we have to explicitly set it
-			// in order to copy the actual value's data into the buffer of
-			// b.
-			//
-			// First, unset the element so that we don't try to reuse the old
-			// non-inlined value to write the new value into - we do want to
-			// append the new value to b.buffer.
-			*e = element{}
+	if foundOldNonInlined {
+		// There is at least one old non-inlined value, so in order to try to
+		// reuse the underlying byte value, we'll iterate over values one at a
+		// time.
+		for i := 0; i < len(srcElementsToCopy); i++ {
+			if srcElementsToCopy[i].inlined {
+				//gcassert:bce
+				destElements[i] = srcElementsToCopy[i]
+			} else {
+				//gcassert:bce
+				destElements[i].setNonInlined(srcElementsToCopy[i].getNonInlined(src), b)
+			}
+		}
+	} else {
+		// All values are either uninitialized or fully-inlined, so we can
+		// optimize copying of the elements by copying all of them directly into
+		// the destination. This way all inlined values become correctly set,
+		// and we only need to set the non-inlined values separately.
+		copy(destElements, srcElementsToCopy)
+		for i := 0; i < len(srcElementsToCopy); i++ {
 			//gcassert:bce
-			e.setNonInlined(srcElementsToCopy[i].getNonInlined(src), b)
+			if e := &destElements[i]; !e.inlined {
+				// This value is non-inlined, so at the moment it is pointing
+				// into the buffer of the source - we have to explicitly set it
+				// in order to copy the actual value's data into the buffer of
+				// b.
+				//
+				// First, unset the element so that we don't try to reuse the
+				// old non-inlined value to write the new value into - we do
+				// want to append the new value to b.buffer.
+				*e = element{}
+				//gcassert:bce
+				e.setNonInlined(srcElementsToCopy[i].getNonInlined(src), b)
+			}
 		}
 	}
 }

@@ -568,3 +568,26 @@ func TestToArrowSerializationFormat(t *testing.T) {
 		require.Equal(t, wind.Get(i), element)
 	}
 }
+
+// TestBytesCopySlice verifies that Bytes.CopySlice doesn't wastefully allocate
+// new memory for non-inlined values when the old non-inlined values have enough
+// capacity.
+func TestBytesCopySlice(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numElements = 10
+	dest, src := NewBytes(numElements), NewBytes(numElements)
+
+	v := make([]byte, 2*BytesMaxInlineLength)
+	for i := 0; i < numElements; i++ {
+		src.Set(i, v)
+	}
+
+	// Copy into the destination twice without resetting in-between. Bytes
+	// vector must be smart enough to reuse the space of the old non-inlined
+	// values.
+	dest.CopySlice(src, 0, 0, numElements)
+	dest.CopySlice(src, 0, 0, numElements)
+
+	require.Equal(t, len(src.buffer), len(dest.buffer))
+}
