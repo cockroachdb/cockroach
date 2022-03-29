@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
@@ -800,20 +801,10 @@ func TestConnectionMigration(t *testing.T) {
 	// difficult to work with, and there isn't a way to easily stub out fake
 	// loads. For this test, we will stub out lookupAddr in the connector. We
 	// will alternate between tenant1 and tenant2, starting with tenant1.
-	forwarderCh := make(chan *forwarder)
 	opts := &ProxyOptions{SkipVerify: true, RoutingRule: tenant1.SQLAddr()}
-	opts.testingKnobs.afterForward = func(f *forwarder) error {
-		select {
-		case forwarderCh <- f:
-		case <-time.After(10 * time.Second):
-			return errors.New("no receivers for forwarder")
-		}
-		return nil
-	}
 	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
 
-	// The tenant ID does not matter here since we stubbed RoutingRule.
-	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-28", addr)
+	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addr, tenantID)
 
 	type queryer interface {
 		QueryRowContext(context.Context, string, ...interface{}) *gosql.Row
@@ -864,12 +855,12 @@ func TestConnectionMigration(t *testing.T) {
 			_ = db.PingContext(tCtx)
 		}()
 
-		var f *forwarder
-		select {
-		case f = <-forwarderCh:
-		case <-time.After(10 * time.Second):
-			t.Fatal("no connection")
-		}
+		var conns []*balancer.Conn
+		require.Eventually(t, func() bool {
+			conns = proxy.handler.connTracker.GetConns(tenantID)
+			return len(conns) != 0
+		}, 10*time.Second, 100*time.Millisecond)
+		f := conns[0].ConnectionHandle.(*forwarder)
 
 		// Set up forwarder hooks.
 		prevTenant1 := true
@@ -1069,12 +1060,12 @@ func TestConnectionMigration(t *testing.T) {
 			_ = conn.PingContext(tCtx)
 		}()
 
-		var f *forwarder
-		select {
-		case f = <-forwarderCh:
-		case <-time.After(10 * time.Second):
-			t.Fatal("no connection")
-		}
+		var conns []*balancer.Conn
+		require.Eventually(t, func() bool {
+			conns = proxy.handler.connTracker.GetConns(tenantID)
+			return len(conns) != 0
+		}, 10*time.Second, 100*time.Millisecond)
+		f := conns[0].ConnectionHandle.(*forwarder)
 
 		initSuccessCount := f.metrics.ConnMigrationSuccessCount.Count()
 		initErrorRecoverableCount := f.metrics.ConnMigrationErrorRecoverableCount.Count()
@@ -1146,6 +1137,12 @@ func TestConnectionMigration(t *testing.T) {
 		require.Equal(t, totalAttempts-1,
 			f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
 	})
+
+	// All connections should eventually be terminated.
+	require.Eventually(t, func() bool {
+		conns := proxy.handler.connTracker.GetConns(tenantID)
+		return len(conns) == 0
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func TestClusterNameAndTenantFromParams(t *testing.T) {
