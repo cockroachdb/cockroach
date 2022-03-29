@@ -2025,6 +2025,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`pg_catalog_hide_hidden_columns`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`pg_catalog_hide_hidden_columns`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("pg_catalog_hide_hidden_columns", s)
+			if err != nil {
+				return err
+			}
+			m.SetPGCatalogHideHiddenColumns(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().PGCatalogHideHiddenColumns), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

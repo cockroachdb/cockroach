@@ -3176,6 +3176,10 @@ func (m *sessionDataMutator) SetEnableImplicitTransactionForBatchStatements(val 
 	m.data.EnableImplicitTransactionForBatchStatements = val
 }
 
+func (m *sessionDataMutator) SetPGCatalogHideHiddenColumns(val bool) {
+	m.data.PGCatalogHideHiddenColumns = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

@@ -358,6 +358,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 				// pg_attrdef only expects rows for columns with default values.
 				continue
 			}
+			if column.IsHidden() && p.SessionData().PGCatalogHideHiddenColumns {
+				continue
+			}
 			displayExpr, err := schemaexpr.FormatExprForDisplay(
 				ctx, table, column.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtPGCatalog,
 			)
@@ -387,8 +390,11 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		table catalog.TableDescriptor,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
-		// addColumn adds adds either a table or a index column to the pg_attribute table.
+		// addColumn adds either a table or a index column to the pg_attribute table.
 		addColumn := func(column catalog.Column, attRelID tree.Datum, attNum uint32) error {
+			if column.IsHidden() && p.SessionData().PGCatalogHideHiddenColumns {
+				return nil
+			}
 			colTyp := column.GetType()
 			// Sets the attgenerated column to 's' if the column is generated/
 			// computed stored, "v" if virtual, zero byte otherwise.

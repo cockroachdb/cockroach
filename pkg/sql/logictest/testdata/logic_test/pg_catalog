@@ -4129,6 +4129,7 @@ optimizer_use_multicol_stats                          on                  NULL  
 override_multi_region_zone_config                     off                 NULL      NULL        NULL        string
 parallelize_multi_key_lookup_joins_enabled            off                 NULL      NULL        NULL        string
 password_encryption                                   scram-sha-256       NULL      NULL        NULL        string
+pg_catalog_hide_hidden_columns                        off                 NULL      NULL        NULL        string
 prefer_lookup_joins_for_fks                           off                 NULL      NULL        NULL        string
 propagate_input_ordering                              off                 NULL      NULL        NULL        string
 reorder_joins_limit                                   8                   NULL      NULL        NULL        string
@@ -4248,6 +4249,7 @@ optimizer_use_multicol_stats                          on                  NULL  
 override_multi_region_zone_config                     off                 NULL  user     NULL      off                 off
 parallelize_multi_key_lookup_joins_enabled            off                 NULL  user     NULL      false               false
 password_encryption                                   scram-sha-256       NULL  user     NULL      scram-sha-256       scram-sha-256
+pg_catalog_hide_hidden_columns                        off                 NULL  user     NULL      off                 off
 prefer_lookup_joins_for_fks                           off                 NULL  user     NULL      off                 off
 propagate_input_ordering                              off                 NULL  user     NULL      off                 off
 reorder_joins_limit                                   8                   NULL  user     NULL      8                   8
@@ -4363,6 +4365,7 @@ optimizer_use_multicol_stats                          NULL    NULL     NULL     
 override_multi_region_zone_config                     NULL    NULL     NULL     NULL        NULL
 parallelize_multi_key_lookup_joins_enabled            NULL    NULL     NULL     NULL        NULL
 password_encryption                                   NULL    NULL     NULL     NULL        NULL
+pg_catalog_hide_hidden_columns                        NULL    NULL     NULL     NULL        NULL
 prefer_lookup_joins_for_fks                           NULL    NULL     NULL     NULL        NULL
 propagate_input_ordering                              NULL    NULL     NULL     NULL        NULL
 reorder_joins_limit                                   NULL    NULL     NULL     NULL        NULL
@@ -5619,3 +5622,50 @@ JOIN pg_authid ON usesysid = oid
 ----
 passed
 true
+
+# Test hiding hidden columns.
+statement ok
+CREATE TABLE hidden_tbl (id INT, hidden INT NOT VISIBLE)
+
+query OTOITTT colnames
+SELECT ad.oid, c.relname, adrelid, adnum, adbin, adsrc, pg_get_expr(ad.adbin, ad.adrelid)
+FROM pg_catalog.pg_attrdef ad
+JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
+WHERE c.relname = 'hidden_tbl'
+----
+oid         relname     adrelid  adnum  adbin           adsrc           pg_get_expr
+3679639651  hidden_tbl  188      3      unique_rowid()  unique_rowid()  unique_rowid()
+
+query OTTOIIIII colnames
+SELECT attrelid, c.relname, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff
+FROM pg_catalog.pg_attribute a
+JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
+WHERE c.relname = 'hidden_tbl'
+----
+attrelid  relname     attname  atttypid  attstattarget  attlen  attnum  attndims  attcacheoff
+188       hidden_tbl  id       20        0              8       1       0         -1
+188       hidden_tbl  hidden   20        0              8       2       0         -1
+188       hidden_tbl  rowid    20        0              8       3       0         -1
+
+statement ok
+SET pg_catalog_hide_hidden_columns = true
+
+query OTOITTT colnames
+SELECT ad.oid, c.relname, adrelid, adnum, adbin, adsrc, pg_get_expr(ad.adbin, ad.adrelid)
+FROM pg_catalog.pg_attrdef ad
+JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
+WHERE c.relname = 'hidden_tbl'
+----
+oid  relname  adrelid  adnum  adbin  adsrc  pg_get_expr
+
+query OTTOIIIII colnames
+SELECT attrelid, c.relname, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff
+FROM pg_catalog.pg_attribute a
+JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
+WHERE c.relname = 'hidden_tbl'
+----
+attrelid  relname     attname  atttypid  attstattarget  attlen  attnum  attndims  attcacheoff
+188       hidden_tbl  id       20        0              8       1       0         -1
+
+statement ok
+SET pg_catalog_hide_hidden_columns = false
