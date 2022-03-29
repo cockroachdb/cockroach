@@ -455,14 +455,15 @@ func BenchmarkSortLimit(b *testing.B) {
 	const numRows = 1 << 16
 	b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 		input := execinfra.NewRepeatableRowSource(types.TwoIntCols, randgen.MakeRandIntRows(rng, numRows, numCols))
-		for _, limit := range []uint64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-			post := execinfrapb.PostProcessSpec{Limit: limit}
+		for _, limit := range []int64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+			spec.Limit = limit
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
 				b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					s, err := newSorter(
-						context.Background(), &flowCtx, 0 /* processorID */, &spec, input, &post, &rowDisposer{},
+						context.Background(), &flowCtx, 0, /* processorID */
+						&spec, input, &execinfrapb.PostProcessSpec{Limit: 0}, &rowDisposer{},
 					)
 					if err != nil {
 						b.Fatal(err)
