@@ -28,11 +28,19 @@ func TestAsFS(t *testing.T) {
 	require.NoError(t, err)
 	_, err = tarWriter.Write([]byte(aContents))
 	require.NoError(t, err)
+
 	bContents := "foobar"
 	err = tarWriter.WriteHeader(&tar.Header{Name: "b", Size: int64(len(bContents))})
 	require.NoError(t, err)
 	_, err = tarWriter.Write([]byte(bContents))
 	require.NoError(t, err)
+
+	cdTxtContents := "lorem ipsum"
+	err = tarWriter.WriteHeader(&tar.Header{Name: "c/d.txt", Size: int64(len(cdTxtContents))})
+	require.NoError(t, err)
+	_, err = tarWriter.Write([]byte(cdTxtContents))
+	require.NoError(t, err)
+
 	require.NoError(t, tarWriter.Close())
 	var tarGzContents bytes.Buffer
 	gzipWriter := gzip.NewWriter(&tarGzContents)
@@ -62,4 +70,14 @@ func TestAsFS(t *testing.T) {
 	_, err = io.Copy(&bFileContents, bFile)
 	require.NoError(t, err)
 	require.Equal(t, bFileContents.String(), bContents)
+
+	cdTxtFile, err := fs.Open("c/d.txt")
+	require.NoError(t, err)
+	cdTxtStat, err := cdTxtFile.Stat()
+	require.NoError(t, err)
+	require.Equal(t, cdTxtStat.Size(), int64(len(cdTxtContents)))
+	var cdTxtFileContents bytes.Buffer
+	_, err = io.Copy(&cdTxtFileContents, cdTxtFile)
+	require.NoError(t, err)
+	require.Equal(t, cdTxtFileContents.String(), cdTxtContents)
 }
