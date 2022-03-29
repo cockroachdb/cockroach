@@ -1419,6 +1419,17 @@ CREATE VIEW crdb_internal.statement_statistics (
     plan_hash,
     app_name,
     aggregation_interval  {}  {}
+CREATE TABLE crdb_internal.super_regions (
+   id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   super_region_name STRING NOT NULL,
+   regions STRING[] NULL
+)  CREATE TABLE crdb_internal.super_regions (
+   id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   super_region_name STRING NOT NULL,
+   regions STRING[] NULL
+)  {}  {}
 CREATE TABLE crdb_internal.table_columns (
    descriptor_id INT8 NULL,
    descriptor_name STRING NOT NULL,

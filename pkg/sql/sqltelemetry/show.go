@@ -58,6 +58,8 @@ const (
 	Schedules
 	// FullTableScans represents the SHOW FULL TABLE SCANS command.
 	FullTableScans
+	// SuperRegions represents the SHOW SUPER REGIONS command.
+	SuperRegions
 )
 
 var showTelemetryNameMap = map[ShowTelemetryType]string{
@@ -79,6 +81,7 @@ var showTelemetryNameMap = map[ShowTelemetryType]string{
 	Roles:                   "roles",
 	Schedules:               "schedules",
 	FullTableScans:          "full_table_scans",
+	SuperRegions:            "super_regions",
 }
 
 func (s ShowTelemetryType) String() string {
