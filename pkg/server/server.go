@@ -481,8 +481,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
 	kvMemoryMonitor.Start(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor, mon.BoundAccount{})
-	rangeReedBudgetFactory := serverrangefeed.NewBudgetFactory(ctx, kvMemoryMonitor, cfg.MemoryPoolSize,
-		cfg.HistogramWindowInterval())
+	rangeReedBudgetFactory := serverrangefeed.NewBudgetFactory(
+		ctx,
+		serverrangefeed.CreateBudgetFactoryConfig(
+			kvMemoryMonitor,
+			cfg.MemoryPoolSize,
+			cfg.HistogramWindowInterval(),
+			func(limit int64) int64 {
+				if !serverrangefeed.RangefeedBudgetsEnabled.Get(&st.SV) {
+					return 0
+				}
+				if raftCmdLimit := kvserver.MaxCommandSize.Get(&st.SV); raftCmdLimit > limit {
+					return raftCmdLimit
+				}
+				return limit
+			}))
 	if rangeReedBudgetFactory != nil {
 		registry.AddMetricStruct(rangeReedBudgetFactory.Metrics())
 	}
