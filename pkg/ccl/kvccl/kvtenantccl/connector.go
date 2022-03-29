@@ -521,6 +521,30 @@ func (c *Connector) UpdateSpanConfigRecords(
 	})
 }
 
+// GetAllSystemSpanConfigsThatApply implements the spanconfig.KVAccessor
+// interface.
+func (c *Connector) GetAllSystemSpanConfigsThatApply(
+	ctx context.Context, id roachpb.TenantID,
+) ([]roachpb.SpanConfig, error) {
+	var spanConfigs []roachpb.SpanConfig
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err := c.GetAllSystemSpanConfigsThatApply(
+			ctx, &roachpb.GetAllSystemSpanConfigsThatApplyRequest{
+				TenantID: id,
+			})
+		if err != nil {
+			return err
+		}
+
+		spanConfigs = resp.SpanConfigs
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return spanConfigs, nil
+}
+
 // WithTxn implements the spanconfig.KVAccessor interface.
 func (c *Connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("not applicable")

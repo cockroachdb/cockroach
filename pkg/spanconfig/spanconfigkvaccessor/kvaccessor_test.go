@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -52,6 +53,9 @@ import (
 // 		delete {source=1,target=1}
 // 		upsert {source=1,target=1}:A
 // 		upsert {cluster}:F
+//      ----
+//
+// 		kvaccessor-get-all-system-span-configs-that-apply tenant-id=<tenantID>
 //      ----
 //
 // They tie into GetSpanConfigRecords and UpdateSpanConfigRecords
@@ -101,6 +105,21 @@ func TestDataDriven(t *testing.T) {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
 				return "ok"
+			case "kvaccessor-get-all-system-span-configs-that-apply":
+				var tenID uint64
+				d.ScanArgs(t, "tenant-id", &tenID)
+				spanConfigs, err := accessor.GetAllSystemSpanConfigsThatApply(ctx, roachpb.MakeTenantID(tenID))
+				if err != nil {
+					return fmt.Sprintf("err: %s", err.Error())
+				}
+				var output strings.Builder
+				for _, config := range spanConfigs {
+					output.WriteString(fmt.Sprintf(
+						"%s\n", spanconfigtestutils.PrintSpanConfig(config),
+					))
+				}
+				return output.String()
+
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
