@@ -5702,28 +5702,28 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder
+  SHOW BACKUPS IN string_or_placeholder_opt_list
  {
     $$.val = &tree.ShowBackup{
-      InCollection:    $4.expr(),
+      InCollection:    $4.stringOrPlaceholderOptList(),
     }
   }
-| SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder opt_with_options
+| SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_options
 	{
 		$$.val = &tree.ShowBackup{
 			From:    true,
 			Details:    $3.showBackupDetails(),
 			Path:    $5.expr(),
-			InCollection: $7.expr(),
+			InCollection: $7.stringOrPlaceholderOptList(),
 			Options: $8.kvOptions(),
 		}
 	}
-| SHOW BACKUP string_or_placeholder IN string_or_placeholder opt_with_options
+| SHOW BACKUP string_or_placeholder IN string_or_placeholder_opt_list opt_with_options
 	{
 		$$.val = &tree.ShowBackup{
 			Details:  tree.BackupDefaultDetails,
 			Path:    $3.expr(),
-			InCollection: $5.expr(),
+			InCollection: $5.stringOrPlaceholderOptList(),
 			Options: $6.kvOptions(),
 		}
 	}
