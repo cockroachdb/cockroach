@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	// Imported to allow multi-tenant tests
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
@@ -61,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -5926,4 +5928,66 @@ func TestChangefeedFlushesSinkToReleaseMemory(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 123)`)
 	<-allEmitted
 	require.Greater(t, sink.numFlushes(), 0)
+}
+
+func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "may time out due to multiple servers")
+
+	ctx := context.Background()
+
+	// Record the number of aggregators in planning
+	aggregatorCount := 0
+	distflowKnobs := changefeeddist.TestingKnobs{
+		OnDistflowSpec: func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, _ *execinfrapb.ChangeFrontierSpec) {
+			aggregatorCount = len(aggregatorSpecs)
+		},
+	}
+
+	// Create 2 connections of the same tenant on a cluster to have 2 pods
+	tc, _, cleanupDB := startTestCluster(t)
+	defer cleanupDB()
+
+	tenantKnobs := base.TestingKnobs{
+		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{DistflowKnobs: distflowKnobs}},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		Server:           &server.TestingKnobs{},
+	}
+	tenant1Args := base.TestTenantArgs{
+		TenantID:     serverutils.TestTenantID(),
+		TestingKnobs: tenantKnobs,
+		Existing:     false,
+	}
+	server1, db1 := serverutils.StartTenant(t, tc.Server(0), tenant1Args)
+	_, err := db1.ExecContext(ctx, serverSetupStatements)
+	testTenant := &testServerShim{server1, tc.Server(0)}
+	require.NoError(t, err)
+	sql1 := sqlutils.MakeSQLRunner(db1)
+	defer db1.Close()
+
+	tenant2Args := tenant1Args
+	tenant2Args.Existing = true
+	_, db2 := serverutils.StartTenant(t, tc.Server(1), tenant2Args)
+	defer db2.Close()
+
+	feedFactory := makeKafkaFeedFactory(testTenant, db1)
+
+	// Run a changefeed across two tables to guarantee multiple spans that can be spread across the aggregators
+	sql1.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+	sql1.Exec(t, "INSERT INTO foo VALUES (1), (2)")
+	sql1.Exec(t, "CREATE TABLE bar (b INT PRIMARY KEY)")
+	sql1.Exec(t, "INSERT INTO bar VALUES (1), (2)")
+
+	foo := feed(t, feedFactory, "CREATE CHANGEFEED FOR foo, bar")
+	defer closeFeed(t, foo)
+
+	assertPayloads(t, foo, []string{
+		`foo: [1]->{"after": {"a": 1}}`,
+		`foo: [2]->{"after": {"a": 2}}`,
+		`bar: [1]->{"after": {"b": 1}}`,
+		`bar: [2]->{"after": {"b": 2}}`,
+	})
+
+	require.Equal(t, aggregatorCount, 2)
 }
