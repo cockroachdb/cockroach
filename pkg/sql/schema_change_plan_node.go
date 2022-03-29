@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
 )
 
@@ -87,9 +89,13 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	return &schemaChangePlanNode{plannedState: state}, true, nil
 }
 
-// WaitForDescriptorSchemaChanges polls the specified descriptor (in separate
+// waitForDescriptorSchemaChanges polls the specified descriptor (in separate
 // transactions) until all its ongoing schema changes have completed.
-func (p *planner) WaitForDescriptorSchemaChanges(
+// Internally, this call will restart the planner's underlying transaction and
+// clean up any locks it might currently be holding. If it did not, deadlocks
+// involving the current transaction might occur. The caller is expected to
+// make any attempt at retrying a timestamp after the call returns.
+func (p *planner) waitForDescriptorSchemaChanges(
 	ctx context.Context, descID descpb.ID, scs SchemaChangerState,
 ) error {
 
@@ -98,11 +104,23 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 		knobs.BeforeWaitingForConcurrentSchemaChanges(scs.stmts)
 	}
 
-	everySecond := log.Every(time.Second)
+	// Drop all leases and locks due to the current transaction, and, in the
+	// process, abort the transaction.
+	retryErr := p.txn.PrepareRetryableError(ctx,
+		fmt.Sprintf("schema change waiting for concurrent schema changes on descriptor %d", descID))
+	p.txn.CleanupOnError(ctx, retryErr)
+	p.Descriptors().ReleaseAll(ctx)
+
+	// Wait for the descriptor to no longer be claimed by a schema change.
+	start := timeutil.Now()
+	logEvery := log.Every(30 * time.Second)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		now := p.ExecCfg().Clock.Now()
-		if everySecond.ShouldLog() {
-			log.Infof(ctx, "schema change waiting for concurrent schema changes on descriptor %d", descID)
+		if logEvery.ShouldLog() {
+			log.Infof(ctx,
+				"schema change waiting for concurrent schema changes on descriptor %d,"+
+					" waited %v so far", descID, timeutil.Since(start),
+			)
 		}
 		blocked := false
 		if err := p.ExecCfg().CollectionFactory.Txn(
@@ -128,7 +146,11 @@ func (p *planner) WaitForDescriptorSchemaChanges(
 			break
 		}
 	}
-	log.Infof(ctx, "done waiting for concurrent schema changes on descriptor %d", descID)
+	log.Infof(
+		ctx,
+		"done waiting for concurrent schema changes on descriptor %d after %v",
+		descID, timeutil.Since(start),
+	)
 	return nil
 }
 

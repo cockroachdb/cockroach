@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -42,17 +43,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -3139,4 +3143,88 @@ INSERT INTO t1 select a from generate_series(1, 100) g(a);
 		}
 		require.NoError(t, <-resultChan)
 	})
+}
+
+// TestAmbiguousResultIsRetried ensures that when acquiring a lease gets an
+// ambiguous result, that the code checks to see if the row was written, and
+// removes it before proceeding to create a new lease.
+//
+// This is important to avoid leaking leases when nodes are being shut down.
+func TestAmbiguousResultIsRetried(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type filter = kvserverbase.ReplicaResponseFilter
+	var f atomic.Value
+	noop := filter(func(context.Context, roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error {
+		return nil
+	})
+	f.Store(noop)
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingResponseFilter: func(ctx context.Context, request roachpb.BatchRequest, response *roachpb.BatchResponse) *roachpb.Error {
+					return f.Load().(filter)(ctx, request, response)
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlutils.MakeSQLRunner(sqlDB).Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+	sqlutils.MakeSQLRunner(sqlDB).Exec(t, "CREATE TABLE foo ()")
+
+	tableID := sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "foo")
+
+	indexPrefix := keys.SystemSQLCodec.IndexPrefix(keys.LeaseTableID, 1)
+	var txnID atomic.Value
+	txnID.Store(uuid.UUID{})
+
+	testCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errorsAfterEndTxn := make(chan chan *roachpb.Error)
+	f.Store(filter(func(ctx context.Context, request roachpb.BatchRequest, response *roachpb.BatchResponse) *roachpb.Error {
+		switch r := request.Requests[0].GetInner().(type) {
+		case *roachpb.ConditionalPutRequest:
+			if !bytes.HasPrefix(r.Key, indexPrefix) {
+				return nil
+			}
+			var a tree.DatumAlloc
+			id, _, err := keyside.Decode(
+				&a, types.Int, bytes.TrimPrefix(r.Key, indexPrefix), encoding.Ascending,
+			)
+			assert.NoError(t, err)
+			if tree.MustBeDInt(id) == tree.DInt(tableID) {
+				txnID.Store(request.Txn.ID)
+			}
+		case *roachpb.EndTxnRequest:
+			if request.Txn.ID != txnID.Load().(uuid.UUID) {
+				return nil
+			}
+			errCh := make(chan *roachpb.Error)
+			select {
+			case errorsAfterEndTxn <- errCh:
+			case <-testCtx.Done():
+				return nil
+			}
+			return <-errCh
+		}
+		return nil
+	}))
+
+	// Make sure that the lease gets acquired and then, upon an ambiguous
+	// failure, the retry happens, and there is just one lease.
+	selectErr := make(chan error)
+	go func() {
+		_, err := sqlDB.Exec("SELECT * FROM foo")
+		selectErr <- err
+	}()
+	unblock := <-errorsAfterEndTxn
+	unblock <- roachpb.NewError(roachpb.NewAmbiguousResultError(errors.New("boom")))
+	// Make sure we see a retry, then let it succeed.
+	close(<-errorsAfterEndTxn)
+	// Allow anything further to proceed.
+	cancel()
+	// Ensure that the query completed successfully.
+	require.NoError(t, <-selectErr)
 }
