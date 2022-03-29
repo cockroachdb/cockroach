@@ -115,8 +115,14 @@ func distChangefeedFlow(
 	if cf := progress.GetChangefeed(); cf != nil && cf.Checkpoint != nil {
 		checkpoint = *cf.Checkpoint
 	}
+
+	var distflowKnobs changefeeddist.TestingKnobs
+	if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs != nil {
+		distflowKnobs = knobs.DistflowKnobs
+	}
+
 	return changefeeddist.StartDistChangefeed(
-		ctx, execCtx, jobID, details, trackedSpans, initialHighWater, checkpoint, resultsCh)
+		ctx, execCtx, jobID, details, trackedSpans, initialHighWater, checkpoint, resultsCh, distflowKnobs)
 }
 
 func fetchSpansForTargets(
