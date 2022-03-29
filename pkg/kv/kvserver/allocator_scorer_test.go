@@ -44,22 +44,24 @@ func (s storeScores) Less(i, j int) bool {
 }
 func (s storeScores) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
-func TestOnlyValidAndNotFull(t *testing.T) {
+func TestOnlyValidAndHealthyDisk(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
-		valid, invalid int
+		valid, invalid, full, readAmpHigh int
 	}{
-		{0, 0},
-		{1, 0},
-		{0, 1},
-		{1, 1},
-		{2, 0},
-		{2, 1},
-		{2, 2},
-		{1, 2},
-		{0, 2},
+		{0, 0, 0, 0},
+		{1, 0, 0, 0},
+		{0, 1, 0, 0},
+		{0, 0, 1, 0},
+		{0, 0, 0, 1},
+		{1, 1, 1, 1},
+		{2, 0, 0, 0},
+		{2, 1, 1, 1},
+		{2, 2, 2, 2},
+		{1, 2, 3, 4},
+		{0, 2, 4, 6},
 	}
 
 	for _, tc := range testCases {
@@ -72,13 +74,19 @@ func TestOnlyValidAndNotFull(t *testing.T) {
 			for i := 0; i < tc.valid; i++ {
 				cl = append(cl, candidate{valid: true})
 			}
+			for i := 0; i < tc.full; i++ {
+				cl = append(cl, candidate{fullDisk: true})
+			}
+			for i := 0; i < tc.readAmpHigh; i++ {
+				cl = append(cl, candidate{highReadAmp: true})
+			}
 			sort.Sort(sort.Reverse(byScore(cl)))
 
-			valid := cl.onlyValidAndNotFull()
+			valid := cl.onlyValidAndHealthyDisk()
 			if a, e := len(valid), tc.valid; a != e {
 				t.Errorf("expected %d valid, actual %d", e, a)
 			}
-			if a, e := len(cl)-len(valid), tc.invalid; a != e {
+			if a, e := len(cl)-len(valid), tc.invalid+tc.full+tc.readAmpHigh; a != e {
 				t.Errorf("expected %d invalid, actual %d", e, a)
 			}
 		})
@@ -1046,13 +1054,14 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 			}
 		})
 	}
+
 }
 
 func TestShouldRebalanceDiversity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	options := &rangeCountScorerOptions{}
+	options := &rangeCountScorerOptions{storeHealthOptions: storeHealthOptions{enforcementLevel: storeHealthNoAction}}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
 		return roachpb.StoreDescriptor{
 			StoreID: roachpb.StoreID(id),
