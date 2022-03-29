@@ -17,13 +17,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFeedBudget(t *testing.T) {
-	makeBudgetWithSize := func(poolSize, budgetSize int64) (*FeedBudget, *mon.BytesMonitor, *mon.BoundAccount) {
+	makeBudgetWithSize := func(poolSize, budgetSize int64) (
+		*FeedBudget, *mon.BytesMonitor, *mon.BoundAccount,
+	) {
 		m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
 		m.Start(context.Background(), nil, mon.MakeStandaloneBudget(poolSize))
 		b := m.MakeBoundAccount()
@@ -173,31 +176,103 @@ func TestFeedBudget(t *testing.T) {
 	})
 }
 
+func budgetLowThresholdFn(minSize int64) func(int64) int64 {
+	return func(size int64) int64 {
+		if minSize > size {
+			return minSize
+		}
+		return size
+	}
+}
+
 func TestBudgetFactory(t *testing.T) {
 	s := cluster.MakeTestingClusterSettings()
 
 	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, s)
 	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
-	bf := NewBudgetFactory(context.Background(), rootMon, 10000, time.Second*5)
+	bf := NewBudgetFactory(context.Background(),
+		CreateBudgetFactoryConfig(rootMon, 10000, time.Second*5, budgetLowThresholdFn(10000)))
 
 	// Verify system ranges use own budget.
-	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix), &s.SV)
+	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix))
 	_, e := bSys.TryGet(context.Background(), 199)
 	require.NoError(t, e, "failed to obtain system range budget")
 	require.Equal(t, int64(0), rootMon.AllocBytes(), "System feeds should borrow from own budget")
 	require.Equal(t, int64(199), bf.Metrics().SystemBytesCount.Value(), "Metric was not updated")
 
 	// Verify user feeds use shared root budget.
-	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID+1)),
-		&s.SV)
+	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)))
 	_, e = bUsr.TryGet(context.Background(), 99)
 	require.NoError(t, e, "failed to obtain non-system budget")
-	require.Equal(t, int64(99), rootMon.AllocBytes(), "Non-system feeds should borrow from shared budget")
+	require.Equal(t, int64(99), rootMon.AllocBytes(),
+		"Non-system feeds should borrow from shared budget")
 	require.Equal(t, int64(99), bf.Metrics().SharedBytesCount.Value(), "Metric was not updated")
+}
 
-	// Verify is budget is disabled in settings, nil budget is created.
-	RangefeedBudgetsEnabled.Override(context.Background(), &s.SV, false)
-	bUsr = bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID+1)),
-		&s.SV)
+func TestDisableBudget(t *testing.T) {
+	s := cluster.MakeTestingClusterSettings()
+
+	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, s)
+	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
+	bf := NewBudgetFactory(context.Background(),
+		CreateBudgetFactoryConfig(rootMon, 10000, time.Second*5, func(_ int64) int64 {
+			return 0
+		}))
+
+	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)))
 	require.Nil(t, bUsr, "Range budget when budgets are disabled.")
+}
+
+func TestConfigFactory(t *testing.T) {
+	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
+
+	// Check provisionalFeedLimit is computed.
+	config := CreateBudgetFactoryConfig(rootMon, 100000, time.Second*5, budgetLowThresholdFn(10000))
+	require.Less(t, config.provisionalFeedLimit, int64(100000),
+		"provisional range limit should be lower than whole memory pool")
+	require.NotZerof(t, config.provisionalFeedLimit, "provisional range feed limit must not be zero")
+
+	// Check if global disable switch works.
+	useBudgets = false
+	defer func() { useBudgets = true }()
+	config = CreateBudgetFactoryConfig(rootMon, 100000, time.Second*5, budgetLowThresholdFn(10000))
+	require.True(t, config.empty(), "config not empty despite disabled factory")
+}
+
+func TestBudgetLimits(t *testing.T) {
+	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
+
+	provisionalSize := int64(10000)
+	adjustedSize := int64(1000)
+
+	bf := NewBudgetFactory(context.Background(), BudgetFactoryConfig{
+		rootMon:              rootMon,
+		provisionalFeedLimit: provisionalSize,
+		adjustLimit: func(size int64) int64 {
+			require.Equal(t, provisionalSize, size)
+			return adjustedSize
+		},
+		totalRangeReedBudget:    100000,
+		histogramWindowInterval: time.Second * 5,
+	})
+
+	userKey := roachpb.RKey(keys.ScratchRangeMin)
+	b := bf.CreateBudget(userKey)
+	require.NotNil(t, b, "budget is disabled")
+	require.Equal(t, b.limit, adjustedSize, "budget limit is not adjusted")
+
+	// Verify that zero limit is disabling feed budget for range.
+	bf = NewBudgetFactory(context.Background(), BudgetFactoryConfig{
+		rootMon:              rootMon,
+		provisionalFeedLimit: provisionalSize,
+		adjustLimit: func(int64) int64 {
+			return 0
+		},
+		totalRangeReedBudget:    100000,
+		histogramWindowInterval: time.Second * 5,
+	})
+	b = bf.CreateBudget(userKey)
+	require.Nil(t, b, "budget is disabled")
 }
