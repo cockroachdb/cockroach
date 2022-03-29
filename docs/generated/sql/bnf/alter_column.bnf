@@ -3,8 +3,8 @@ alter_onetable_stmt ::=
 	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'DEFAULT'
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'SET' 'DEFAULT' a_expr
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'DROP' 'DEFAULT'
-	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name alter_column_visible
-	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name alter_column_visible
+	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'SET' ('NOT' | ) 'VISIBLE'
+	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'SET' ('NOT' | ) 'VISIBLE'
 	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'STORED'
@@ -31,8 +31,8 @@ alter_onetable_stmt ::=
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'DEFAULT'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'SET' 'DEFAULT' a_expr
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'DROP' 'DEFAULT'
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name alter_column_visible
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name alter_column_visible
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'SET' ('NOT' | ) 'VISIBLE'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'SET' ('NOT' | ) 'VISIBLE'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'STORED'
