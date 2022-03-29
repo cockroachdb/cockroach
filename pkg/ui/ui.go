@@ -39,10 +39,6 @@ var Assets fs.FS
 // HaveUI tells whether the admin UI has been linked into the binary.
 var HaveUI = false
 
-// AssetHashes is used to provide a unique per-file checksum for each served file,
-// which enables client-side caching using Cache-Control and ETag headers.
-var AssetHashes map[string]string
-
 // indexTemplate takes arguments about the current session and returns HTML
 // which includes the UI JavaScript bundles, plus a script tag which sets the
 // currently logged in user so that the UI JavaScript can decide whether to show
