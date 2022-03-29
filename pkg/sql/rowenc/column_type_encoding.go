@@ -687,7 +687,7 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
 	case types.ArrayFamily:
-		return decodeArray(a, t.ArrayContents(), buf)
+		return decodeArray(a, t, buf)
 	case types.TupleFamily:
 		return decodeTuple(a, t, buf)
 	case types.EnumFamily:
@@ -1021,7 +1021,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		datum, _, err := decodeArrayNoMarshalColumnValue(a, typ.ArrayContents(), v)
+		datum, _, err := decodeArrayNoMarshalColumnValue(a, typ, v)
 		// TODO(yuzefovich): do we want to create a new object via DatumAlloc?
 		return datum, err
 	case types.JsonFamily:
@@ -1121,6 +1121,9 @@ func decodeArrayKey(
 	}
 
 	result := tree.NewDArray(t.ArrayContents())
+	if err = result.MaybeSetCustomOid(t); err != nil {
+		return nil, nil, err
+	}
 
 	for {
 		if len(buf) == 0 {
@@ -1192,26 +1195,30 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 }
 
 // decodeArray decodes the value encoding for an array.
-func decodeArray(a *DatumAlloc, elementType *types.T, b []byte) (tree.Datum, []byte, error) {
+func decodeArray(a *DatumAlloc, arrayType *types.T, b []byte) (tree.Datum, []byte, error) {
 	b, _, _, err := encoding.DecodeNonsortingUvarint(b)
 	if err != nil {
 		return nil, b, err
 	}
-	return decodeArrayNoMarshalColumnValue(a, elementType, b)
+	return decodeArrayNoMarshalColumnValue(a, arrayType, b)
 }
 
 // decodeArrayNoMarshalColumnValue skips the step where the MarshalColumnValue
 // is stripped from the bytes. This is required for single-column family arrays.
 func decodeArrayNoMarshalColumnValue(
-	a *DatumAlloc, elementType *types.T, b []byte,
+	a *DatumAlloc, arrayType *types.T, b []byte,
 ) (tree.Datum, []byte, error) {
 	header, b, err := decodeArrayHeader(b)
 	if err != nil {
 		return nil, b, err
 	}
+	elementType := arrayType.ArrayContents()
 	result := tree.DArray{
 		Array:    make(tree.Datums, header.length),
 		ParamTyp: elementType,
+	}
+	if err = result.MaybeSetCustomOid(arrayType); err != nil {
+		return nil, b, err
 	}
 	var val tree.Datum
 	for i := uint64(0); i < header.length; i++ {
