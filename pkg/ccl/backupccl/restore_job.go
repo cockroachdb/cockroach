@@ -1230,6 +1230,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_load_descriptors_from_backup"); err != nil {
+		return err
+	}
+
 	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
 		ctx, &mem, p, details, details.Encryption,
 	)
@@ -1936,6 +1940,7 @@ func emitRestoreJobEvent(
 // change stuff to delete the keys in the background.
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
+	r.execCfg = p.ExecCfg()
 	// Emit to the event log that the job has started reverting.
 	emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
 
