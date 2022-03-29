@@ -367,7 +367,8 @@ var specs = []stmtSpec{
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' ")},
 		replace: map[string]string{
-			"relation_expr": "table_name",
+			"relation_expr":        "table_name",
+			"alter_column_visible": "'SET' ('NOT' | ) 'VISIBLE'",
 		},
 		exclude: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' 'PRIMARY' 'KEY' ")},
 		unlink:  []string{"table_name"},
@@ -431,7 +432,9 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"'VALIDATE' 'CONSTRAINT' name": "",
 			"opt_validate_behavior":        "",
-			"relation_expr":                "table_name"},
+			"relation_expr":                "table_name",
+			"alter_column_visible":         "'SET' ('NOT' | ) 'VISIBLE'",
+		},
 		unlink:  []string{"table_name"},
 		nosplit: true,
 	},
