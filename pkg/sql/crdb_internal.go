@@ -111,6 +111,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalCreateStmtsTableID:                 crdbInternalCreateStmtsTable,
 		catconstants.CrdbInternalCreateTypeStmtsTableID:             crdbInternalCreateTypeStmtsTable,
 		catconstants.CrdbInternalDatabasesTableID:                   crdbInternalDatabasesTable,
+		catconstants.CrdbInternalSuperRegions:                       crdbInternalSuperRegions,
 		catconstants.CrdbInternalFeatureUsageID:                     crdbInternalFeatureUsage,
 		catconstants.CrdbInternalForwardDependenciesTableID:         crdbInternalForwardDependenciesTable,
 		catconstants.CrdbInternalGossipNodesTableID:                 crdbInternalGossipNodesTable,
@@ -335,6 +336,58 @@ CREATE TABLE crdb_internal.databases (
 					placement,                            // data_placement
 					tree.NewDString(createNode.String()), // create_statement
 				)
+			})
+	},
+}
+
+var crdbInternalSuperRegions = virtualSchemaTable{
+	comment: `list super regions of databases visible to the current user`,
+	schema: `
+CREATE TABLE crdb_internal.super_regions (
+	id INT NOT NULL,
+	database_name STRING NOT NULL,
+  super_region_name STRING NOT NULL,
+	regions STRING[]
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
+			func(db catalog.DatabaseDescriptor) error {
+				if !db.IsMultiRegion() {
+					return nil
+				}
+
+				typeID, err := db.MultiRegionEnumID()
+				if err != nil {
+					return err
+				}
+				typeDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, typeID,
+					tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
+						Required: true,
+					}},
+				)
+
+				superRegions, err := typeDesc.SuperRegions()
+				if err != nil {
+					return err
+				}
+				for _, superRegion := range superRegions {
+					regionList := tree.NewDArray(types.String)
+					for _, region := range superRegion.Regions {
+						if err := regionList.Append(tree.NewDString(region.String())); err != nil {
+							return err
+						}
+					}
+
+					if err := addRow(
+						tree.NewDInt(tree.DInt(db.GetID())),          // id
+						tree.NewDString(db.GetName()),                // database_name
+						tree.NewDString(superRegion.SuperRegionName), // super_region_name
+						regionList, // regions
+					); err != nil {
+						return err
+					}
+				}
+				return nil
 			})
 	},
 }
