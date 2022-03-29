@@ -116,7 +116,7 @@ func TestEvaluatedMemoryIsChecked(t *testing.T) {
 				statement,
 			)
 			if pqErr := (*pq.Error)(nil); !errors.As(err, &pqErr) || pgcode.MakeCode(string(pqErr.Code)) != pgcode.ProgramLimitExceeded {
-				t.Errorf("Expected \"%s\" to OOM, but it didn't", statement)
+				t.Errorf(`expected %q to encounter "requested length too large" error, but it didn't`, statement)
 			}
 		})
 	}
