@@ -2990,7 +2990,7 @@ func (r *Replica) relocateOne(
 			conf,
 			existingVoters,
 			existingNonVoters,
-			r.store.allocator.scorerOptions(),
+			r.store.allocator.scorerOptions(ctx),
 			// NB: Allow the allocator to return target stores that might be on the
 			// same node as an existing replica. This is to ensure that relocations
 			// that require "lateral" movement of replicas within a node can succeed.
@@ -3060,7 +3060,7 @@ func (r *Replica) relocateOne(
 			existingVoters,
 			existingNonVoters,
 			args.targetType,
-			r.store.allocator.scorerOptions(),
+			r.store.allocator.scorerOptions(ctx),
 		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(

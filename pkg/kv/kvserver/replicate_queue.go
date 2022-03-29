@@ -431,7 +431,7 @@ func (rq *replicateQueue) shouldQueue(
 			nonVoterReplicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			rq.allocator.scorerOptions(),
+			rq.allocator.scorerOptions(ctx),
 		)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found for voter, enqueuing")
@@ -445,7 +445,7 @@ func (rq *replicateQueue) shouldQueue(
 			nonVoterReplicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			rq.allocator.scorerOptions(),
+			rq.allocator.scorerOptions(ctx),
 		)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found for non-voter, enqueuing")
@@ -1004,7 +1004,7 @@ func (rq *replicateQueue) findRemoveVoter(
 		candidates,
 		existingVoters,
 		existingNonVoters,
-		rq.allocator.scorerOptions(),
+		rq.allocator.scorerOptions(ctx),
 	)
 }
 
@@ -1119,7 +1119,7 @@ func (rq *replicateQueue) removeNonVoter(
 		existingNonVoters,
 		existingVoters,
 		existingNonVoters,
-		rq.allocator.scorerOptions(),
+		rq.allocator.scorerOptions(ctx),
 	)
 	if err != nil {
 		return false, err
@@ -1301,9 +1301,9 @@ func (rq *replicateQueue) considerRebalance(
 	desc, conf := repl.DescAndSpanConfig()
 	rebalanceTargetType := voterTarget
 
-	scorerOpts := scorerOptions(rq.allocator.scorerOptions())
+	scorerOpts := scorerOptions(rq.allocator.scorerOptions(ctx))
 	if scatter {
-		scorerOpts = rq.allocator.scorerOptionsForScatter()
+		scorerOpts = rq.allocator.scorerOptionsForScatter(ctx)
 	}
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 		rangeUsageInfo := rangeUsageInfoForRepl(repl)

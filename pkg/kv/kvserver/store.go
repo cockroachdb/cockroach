@@ -2966,7 +2966,11 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.LogicalBytes = logicalBytes
 	capacity.QueriesPerSecond = totalQueriesPerSecond
 	capacity.WritesPerSecond = totalWritesPerSecond
-	capacity.L0Sublevels = s.metrics.RdbL0Sublevels.Value()
+	// We gossip the maximum number of L0 sub-levels that have been seen in
+	// past 2 windows. The recording length may vary between 5 and 10 minutes
+	// accordingly.
+	windowedL0Sublevels, _ := s.metrics.L0SubLevelsHistogram.Windowed()
+	capacity.L0Sublevels = windowedL0Sublevels.Max()
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)
