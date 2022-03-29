@@ -98,13 +98,14 @@ func (r *Replica) executeWriteBatch(
 	}()
 
 	// Verify that the batch can be executed.
-	st, err := r.checkExecutionCanProceed(ctx, ba, g)
+	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
 	if err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
 
-	// Check the breaker. Note that we do this after checkExecutionCanProceed,
-	// so that NotLeaseholderError has precedence.
+	// Check the breaker. Note that we do this after
+	// checkExecutionCanProceedBeforeStorageSnapshot, so that NotLeaseholderError
+	// has precedence.
 	if err := r.signallerForBatch(ba).Err(); err != nil {
 		return nil, g, roachpb.NewError(err)
 	}

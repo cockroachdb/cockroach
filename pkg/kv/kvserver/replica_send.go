@@ -891,7 +891,7 @@ func (r *Replica) executeAdminBatch(
 			return nil, roachpb.NewError(err)
 		}
 
-		_, err := r.checkExecutionCanProceed(ctx, ba, nil /* g */)
+		_, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, nil /* g */)
 		if err == nil {
 			err = r.signallerForBatch(ba).Err()
 		}
