@@ -408,9 +408,18 @@ func (s *s3Storage) ReadFileAt(
 		}
 	} else {
 		if stream.ContentLength == nil {
-			return nil, 0, errors.New("expected content length")
+			log.Warningf(ctx, "Content length missing from S3 GetObject (is this actually s3?); attempting to lookup size with separate call...")
+			// Some not-actually-s3 services may not set it, or set it in a way the
+			// official SDK finds it (e.g. if they don't use the expected checksummer)
+			// so try a Size() request.
+			x, err := s.Size(ctx, basename)
+			if err != nil {
+				return nil, 0, errors.Wrap(err, "content-length missing from GetObject and Size() failed")
+			}
+			size = x
+		} else {
+			size = *stream.ContentLength
 		}
-		size = *stream.ContentLength
 	}
 
 	return &resumingReader{
