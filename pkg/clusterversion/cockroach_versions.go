@@ -328,6 +328,10 @@ const (
 	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
 	ClusterLocksVirtualTable
 
+	// AutoStatsTableSettings is the version where we allow auto stats related
+	// table settings.
+	AutoStatsTableSettings
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -550,7 +554,10 @@ var versionsSingleton = keyedVersions{
 		Key:     ClusterLocksVirtualTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 98},
 	},
-
+	{
+		Key:     AutoStatsTableSettings,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 100},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

@@ -131,6 +131,9 @@ var validationMap = []struct {
 			"ExcludeDataFromBackup":         {status: thisFieldReferencesNoObjects},
 			"NextConstraintID":              {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: iSolemnlySwearThisFieldIsValidated},
+			"AutoStatsSettings": {
+				status: todoIAmKnowinglyAddingTechDebt,
+				reason: "initial import: TODO(msirek): add validation"},
 		},
 	},
 	{
@@ -287,6 +290,16 @@ var validationMap = []struct {
 			"Privileges":                    {status: iSolemnlySwearThisFieldIsValidated},
 			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
+		},
+	},
+	{
+		// TODO(msirek): These fields can't be set until #78110 merges. That PR
+		//               will add validation.
+		obj: catpb.AutoStatsSettings{},
+		fieldMap: map[string]validationStatusInfo{
+			"Enabled":           {status: thisFieldReferencesNoObjects},
+			"MinStaleRows":      {status: thisFieldReferencesNoObjects},
+			"FractionStaleRows": {status: thisFieldReferencesNoObjects},
 		},
 	},
 }
