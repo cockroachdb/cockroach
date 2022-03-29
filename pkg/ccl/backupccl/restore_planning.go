@@ -1232,14 +1232,41 @@ func restorePlanHook(
 			}
 		}
 
-		return doRestorePlan(ctx, restoreStmt, p, from, incFrom, passphrase, kms, intoDB,
-			newDBName, newTenantID, endTime, resultsCh, subdir)
+		params := restoreStatementParams{
+			restoreStmt: restoreStmt,
+			from:        from,
+			incFrom:     incFrom,
+			subdir:      subdir,
+			passphrase:  passphrase,
+			kms:         kms,
+			intoDB:      intoDB,
+			newDBName:   newDBName,
+			newTenantID: newTenantID,
+		}
+
+		return doRestorePlan(ctx, p, params, endTime, resultsCh)
 	}
 
 	if restoreStmt.Options.Detached {
 		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil
+}
+
+type restoreStatementParams struct {
+	restoreStmt *tree.Restore
+
+	from    [][]string
+	incFrom []string
+	subdir  string
+
+	passphrase string
+	kms        []string
+
+	intoDB    string
+	newDBName string
+
+	newTenantID *roachpb.TenantID
 }
 
 func checkPrivilegesForRestore(
@@ -1349,41 +1376,33 @@ func checkClusterRegions(
 
 func doRestorePlan(
 	ctx context.Context,
-	restoreStmt *tree.Restore,
 	p sql.PlanHookState,
-	from [][]string,
-	incFrom []string,
-	passphrase string,
-	kms []string,
-	intoDB string,
-	newDBName string,
-	newTenantID *roachpb.TenantID,
+	params restoreStatementParams,
 	endTime hlc.Timestamp,
 	resultsCh chan<- tree.Datums,
-	subdir string,
 ) error {
-	if len(from) == 0 || len(from[0]) == 0 {
+	if len(params.from) == 0 || len(params.from[0]) == 0 {
 		return errors.New("invalid base backup specified")
 	}
 
-	if subdir != "" && len(from) != 1 {
+	if params.subdir != "" && len(params.from) != 1 {
 		return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
 	}
 
 	var fullyResolvedSubdir string
 
-	if strings.EqualFold(subdir, latestFileName) {
+	if strings.EqualFold(params.subdir, latestFileName) {
 		// set subdir to content of latest file
-		latest, err := readLatestFile(ctx, from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+		latest, err := readLatestFile(ctx, params.from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
 		if err != nil {
 			return err
 		}
 		fullyResolvedSubdir = latest
 	} else {
-		fullyResolvedSubdir = subdir
+		fullyResolvedSubdir = params.subdir
 	}
 
-	fullyResolvedBaseDirectory, err := appendPaths(from[0][:], fullyResolvedSubdir)
+	fullyResolvedBaseDirectory, err := appendPaths(params.from[0][:], fullyResolvedSubdir)
 	if err != nil {
 		return err
 	}
@@ -1392,13 +1411,13 @@ func doRestorePlan(
 		ctx,
 		p.User(),
 		p.ExecCfg(),
-		incFrom,
-		from[0],
+		params.incFrom,
+		params.from[0],
 		fullyResolvedSubdir,
 	)
 	if err != nil {
 		if errors.Is(err, cloud.ErrListingUnsupported) {
-			log.Warningf(ctx, "storage sink %v does not support listing, only resolving the base backup", incFrom)
+			log.Warningf(ctx, "storage sink %v does not support listing, only resolving the base backup", params.incFrom)
 		} else {
 			return err
 		}
@@ -1421,17 +1440,17 @@ func doRestorePlan(
 	}
 
 	var encryption *jobspb.BackupEncryptionOptions
-	if restoreStmt.Options.EncryptionPassphrase != nil {
+	if params.restoreStmt.Options.EncryptionPassphrase != nil {
 		opts, err := readEncryptionOptions(ctx, baseStores[0])
 		if err != nil {
 			return err
 		}
-		encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts[0].Salt)
+		encryptionKey := storageccl.GenerateKey([]byte(params.passphrase), opts[0].Salt)
 		encryption = &jobspb.BackupEncryptionOptions{
 			Mode: jobspb.EncryptionMode_Passphrase,
 			Key:  encryptionKey,
 		}
-	} else if restoreStmt.Options.DecryptionKMSURI != nil {
+	} else if params.restoreStmt.Options.DecryptionKMSURI != nil {
 		opts, err := readEncryptionOptions(ctx, baseStores[0])
 		if err != nil {
 			return err
@@ -1444,7 +1463,7 @@ func doRestorePlan(
 		// restore has been used to encrypt the backup at least once.
 		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 		for _, encFile := range opts {
-			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(kms,
+			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(params.kms,
 				newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
 					baseStores[0].Settings(),
 					&ioConf,
@@ -1473,7 +1492,7 @@ func doRestorePlan(
 	var localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
 	var memReserved int64
 	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
-	if len(from) <= 1 {
+	if len(params.from) <= 1 {
 		// Incremental layers are not specified explicitly. They will be searched for automatically.
 		// This could be either INTO-syntax, OR TO-syntax.
 		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifests(
@@ -1484,7 +1503,7 @@ func doRestorePlan(
 		// Incremental layers are specified explicitly.
 		// This implies the old, deprecated TO-syntax.
 		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifestsExplicitIncrementals(
-			ctx, &mem, mkStore, from, endTime, encryption, p.User())
+			ctx, &mem, mkStore, params.from, endTime, encryption, p.User())
 	}
 
 	if err != nil {
@@ -1509,12 +1528,13 @@ func doRestorePlan(
 	// Validate that the table coverage of the backup matches that of the restore.
 	// This prevents FULL CLUSTER backups to be restored as anything but full
 	// cluster restores and vice-versa.
-	if restoreStmt.DescriptorCoverage == tree.AllDescriptors && mainBackupManifests[0].DescriptorCoverage == tree.RequestedDescriptors {
+	if params.restoreStmt.DescriptorCoverage == tree.AllDescriptors &&
+		mainBackupManifests[0].DescriptorCoverage == tree.RequestedDescriptors {
 		return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
 	}
 
 	// Ensure that no user descriptors exist for a full cluster restore.
-	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+	if params.restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 		var allDescs []catalog.Descriptor
 		if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
 			txn.SetDebugName("count-user-descs")
@@ -1575,7 +1595,8 @@ func doRestorePlan(
 	}
 
 	sqlDescs, restoreDBs, tenants, err := selectTargets(
-		ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime, restoreStmt.SystemUsers,
+		ctx, p, mainBackupManifests, params.restoreStmt.Targets, params.restoreStmt.DescriptorCoverage,
+		endTime, params.restoreStmt.SystemUsers,
 	)
 	if err != nil {
 		return errors.Wrap(err,
@@ -1605,12 +1626,12 @@ func doRestorePlan(
 
 	sqlDescs = append(sqlDescs, newTypeDescs...)
 
-	if err := maybeUpgradeDescriptors(sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
+	if err := maybeUpgradeDescriptors(sqlDescs, params.restoreStmt.Options.SkipMissingFKs); err != nil {
 		return err
 	}
 
-	if restoreStmt.Options.NewDBName != nil {
-		if err := renameTargetDatabaseDescriptor(sqlDescs, restoreDBs, newDBName); err != nil {
+	if params.restoreStmt.Options.NewDBName != nil {
+		if err := renameTargetDatabaseDescriptor(sqlDescs, restoreDBs, params.newDBName); err != nil {
 			return err
 		}
 	}
@@ -1620,22 +1641,22 @@ func doRestorePlan(
 		if !p.ExecCfg().Codec.ForSystemTenant() {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can restore other tenants")
 		}
-		if newTenantID != nil {
+		if params.newTenantID != nil {
 			if len(tenants) != 1 {
 				return errors.Errorf("%q option can only be used when restoring a single tenant", restoreOptAsTenant)
 			}
 			res, err := p.ExecCfg().InternalExecutor.QueryRow(
 				ctx, "restore-lookup-tenant", p.ExtendedEvalContext().Txn,
-				`SELECT active FROM system.tenants WHERE id = $1`, newTenantID.ToUint64(),
+				`SELECT active FROM system.tenants WHERE id = $1`, params.newTenantID.ToUint64(),
 			)
 			if err != nil {
 				return err
 			}
 			if res != nil {
-				return errors.Errorf("tenant %s already exists", newTenantID)
+				return errors.Errorf("tenant %s already exists", params.newTenantID)
 			}
 			old := roachpb.MakeTenantID(tenants[0].ID)
-			tenants[0].ID = newTenantID.ToUint64()
+			tenants[0].ID = params.newTenantID.ToUint64()
 			oldTenantID = &old
 		} else {
 			for _, i := range tenants {
@@ -1671,15 +1692,15 @@ func doRestorePlan(
 		}
 	}
 
-	if !restoreStmt.Options.SkipLocalitiesCheck {
+	if !params.restoreStmt.Options.SkipLocalitiesCheck {
 		if err := checkClusterRegions(ctx, p, typesByID); err != nil {
 			return err
 		}
 	}
 
 	var debugPauseOn string
-	if restoreStmt.Options.DebugPauseOn != nil {
-		pauseOnFn, err := p.TypeAsString(ctx, restoreStmt.Options.DebugPauseOn, "RESTORE")
+	if params.restoreStmt.Options.DebugPauseOn != nil {
+		pauseOnFn, err := p.TypeAsString(ctx, params.restoreStmt.Options.DebugPauseOn, "RESTORE")
 		if err != nil {
 			return err
 		}
@@ -1697,7 +1718,7 @@ func doRestorePlan(
 	filteredTablesByID, err := maybeFilterMissingViews(
 		tablesByID,
 		typesByID,
-		restoreStmt.Options.SkipMissingViews)
+		params.restoreStmt.Options.SkipMissingViews)
 	if err != nil {
 		return err
 	}
@@ -1706,7 +1727,7 @@ func doRestorePlan(
 	// databases that are present in a new cluster.
 	// This is done so that they can be restored the same way any other user
 	// defined database would be restored from the backup.
-	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+	if params.restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 		if err := dropDefaultUserDBs(ctx, p.ExecCfg()); err != nil {
 			return err
 		}
@@ -1720,29 +1741,29 @@ func doRestorePlan(
 		filteredTablesByID,
 		typesByID,
 		restoreDBs,
-		restoreStmt.DescriptorCoverage,
-		restoreStmt.Options,
-		intoDB,
-		newDBName,
-		restoreStmt.SystemUsers)
+		params.restoreStmt.DescriptorCoverage,
+		params.restoreStmt.Options,
+		params.intoDB,
+		params.newDBName,
+		params.restoreStmt.SystemUsers)
 	if err != nil {
 		return err
 	}
 	var fromDescription [][]string
-	if len(from) == 1 {
+	if len(params.from) == 1 {
 		fromDescription = [][]string{fullyResolvedBaseDirectory}
 	} else {
-		fromDescription = from
+		fromDescription = params.from
 	}
 	description, err := restoreJobDescription(
 		p,
-		restoreStmt,
+		params.restoreStmt,
 		fromDescription,
 		fullyResolvedIncrementalsDirectory,
-		restoreStmt.Options,
-		intoDB,
-		newDBName,
-		kms)
+		params.restoreStmt.Options,
+		params.intoDB,
+		params.newDBName,
+		params.kms)
 	if err != nil {
 		return err
 	}
@@ -1768,7 +1789,7 @@ func doRestorePlan(
 
 	// We attempt to rewrite ID's in the collected type and table descriptors
 	// to catch errors during this process here, rather than in the job itself.
-	if err := rewrite.TableDescs(tables, descriptorRewrites, intoDB); err != nil {
+	if err := rewrite.TableDescs(tables, descriptorRewrites, params.intoDB); err != nil {
 		return err
 	}
 	if err := rewrite.DatabaseDescs(databases, descriptorRewrites); err != nil {
@@ -1787,7 +1808,7 @@ func doRestorePlan(
 	// Collect telemetry.
 	collectTelemetry := func() {
 		telemetry.Count("restore.total.started")
-		if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		if params.restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 			telemetry.Count("restore.full-cluster")
 		}
 	}
@@ -1813,20 +1834,20 @@ func doRestorePlan(
 			BackupLocalityInfo: localityInfo,
 			TableDescs:         encodedTables,
 			Tenants:            tenants,
-			OverrideDB:         intoDB,
-			DescriptorCoverage: restoreStmt.DescriptorCoverage,
+			OverrideDB:         params.intoDB,
+			DescriptorCoverage: params.restoreStmt.DescriptorCoverage,
 			Encryption:         encryption,
 			RevalidateIndexes:  revalidateIndexes,
 			DatabaseModifiers:  databaseModifiers,
 			DebugPauseOn:       debugPauseOn,
-			RestoreSystemUsers: restoreStmt.SystemUsers,
+			RestoreSystemUsers: params.restoreStmt.SystemUsers,
 			PreRewriteTenantId: oldTenantID,
 			Validation:         jobspb.RestoreValidation_DefaultRestore,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}
 
-	if restoreStmt.Options.Detached {
+	if params.restoreStmt.Options.Detached {
 		// When running in detached mode, we simply create the job record.
 		// We do not wait for the job to finish.
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
