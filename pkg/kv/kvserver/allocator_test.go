@@ -342,6 +342,93 @@ var oneStoreWithFullDisk = []*roachpb.StoreDescriptor{
 	},
 }
 
+var oneStoreHighReadAmp = []*roachpb.StoreDescriptor{
+	{
+		StoreID:  1,
+		Node:     roachpb.NodeDescriptor{NodeID: 1},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, L0Sublevels: maxL0SublevelThreshold - 5},
+	},
+	{
+		StoreID:  2,
+		Node:     roachpb.NodeDescriptor{NodeID: 2},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1800, L0Sublevels: maxL0SublevelThreshold - 5},
+	},
+	{
+		StoreID:  3,
+		Node:     roachpb.NodeDescriptor{NodeID: 3},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, L0Sublevels: maxL0SublevelThreshold + 5},
+	},
+	{
+		StoreID:  4,
+		Node:     roachpb.NodeDescriptor{NodeID: 4},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, L0Sublevels: maxL0SublevelThreshold - 5},
+	},
+}
+
+var allStoresHighReadAmp = []*roachpb.StoreDescriptor{
+	{
+		StoreID:  1,
+		Node:     roachpb.NodeDescriptor{NodeID: 1},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, L0Sublevels: maxL0SublevelThreshold + 1},
+	},
+	{
+		StoreID:  2,
+		Node:     roachpb.NodeDescriptor{NodeID: 2},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, L0Sublevels: maxL0SublevelThreshold + 1},
+	},
+	{
+		StoreID:  3,
+		Node:     roachpb.NodeDescriptor{NodeID: 3},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, L0Sublevels: maxL0SublevelThreshold + 1},
+	},
+}
+
+var allStoresHighReadAmpSkewed = []*roachpb.StoreDescriptor{
+	{
+		StoreID:  1,
+		Node:     roachpb.NodeDescriptor{NodeID: 1},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1200, L0Sublevels: maxL0SublevelThreshold + 5},
+	},
+	{
+		StoreID:  2,
+		Node:     roachpb.NodeDescriptor{NodeID: 2},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 800, L0Sublevels: maxL0SublevelThreshold + 30},
+	},
+	{
+		StoreID:  3,
+		Node:     roachpb.NodeDescriptor{NodeID: 3},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 600, L0Sublevels: maxL0SublevelThreshold + 50},
+	},
+}
+
+var threeStoresHighReadAmpAscRangeCount = []*roachpb.StoreDescriptor{
+	{
+		StoreID:  1,
+		Node:     roachpb.NodeDescriptor{NodeID: 1},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 100, L0Sublevels: maxL0SublevelThreshold + 1},
+	},
+	{
+		StoreID:  2,
+		Node:     roachpb.NodeDescriptor{NodeID: 2},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 400, L0Sublevels: maxL0SublevelThreshold + 1},
+	},
+	{
+		StoreID:  3,
+		Node:     roachpb.NodeDescriptor{NodeID: 3},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 1600, L0Sublevels: maxL0SublevelThreshold + 1},
+	},
+	{
+		StoreID:  4,
+		Node:     roachpb.NodeDescriptor{NodeID: 4},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 6400, L0Sublevels: maxL0SublevelThreshold - 1},
+	},
+	{
+		StoreID:  5,
+		Node:     roachpb.NodeDescriptor{NodeID: 5},
+		Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 200, RangeCount: 25000, L0Sublevels: maxL0SublevelThreshold - 1},
+	},
+}
+
 var oneStoreWithTooManyRanges = []*roachpb.StoreDescriptor{
 	{
 		StoreID:  1,
@@ -524,6 +611,107 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	}
 	if err == nil {
 		t.Errorf("allocation succeeded despite there being no available disks: %v", result)
+	}
+}
+
+func TestAllocatorReadAmpCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	type testCase struct {
+		name              string
+		stores            []*roachpb.StoreDescriptor
+		conf              roachpb.SpanConfig
+		expectNoAction    bool
+		expectedAddTarget roachpb.StoreID
+		enforcement       storeHealthEnforcement
+	}
+	tests := []testCase{
+		{
+			name: "ignore read amp on allocation when storeHealthNoAction enforcement",
+			// NB: All stores have high read amp, this should be ignored and
+			// allocate to the store with the lowest range count.
+			stores:            allStoresHighReadAmp,
+			conf:              emptySpanConfig(),
+			expectedAddTarget: roachpb.StoreID(3),
+			enforcement:       storeHealthNoAction,
+		},
+		{
+			name: "ignore read amp on allocation when storeHealthLogOnly enforcement",
+			// NB: All stores have high read amp, this should be ignored and
+			// allocate to the store with the lowest range count.
+			stores:            allStoresHighReadAmp,
+			conf:              emptySpanConfig(),
+			expectedAddTarget: roachpb.StoreID(3),
+			enforcement:       storeHealthBlockRebalanceTo,
+		},
+		{
+			name: "ignore read amp on allocation when storeHealthBlockRebalanceTo enforcement",
+			// NB: All stores have high read amp, this should be ignored and
+			// allocate to the store with the lowest range count.
+			stores:            allStoresHighReadAmp,
+			conf:              emptySpanConfig(),
+			expectedAddTarget: roachpb.StoreID(3),
+			enforcement:       storeHealthBlockRebalanceTo,
+		},
+		{
+			name: "don't allocate to stores when all have high read amp and storeHealthBlockAll",
+			// NB: All stores have high read amp, no non-voter can be allocated.
+			stores:         allStoresHighReadAmp,
+			conf:           emptySpanConfig(),
+			expectNoAction: true,
+			enforcement:    storeHealthBlockAll,
+		},
+		{
+			name: "allocate to store below the mean when all have high read amp and storeHealthBlockAll",
+			// NB: All stores have high read amp, however store 1 is below the mean read amp.
+			stores:            allStoresHighReadAmpSkewed,
+			conf:              emptySpanConfig(),
+			expectedAddTarget: roachpb.StoreID(1),
+			enforcement:       storeHealthBlockAll,
+		},
+		{
+			name: "allocate to lowest range count store without high read amp when storeHealthBlockAll enforcement",
+			// NB: Store 1, 2 and 3 have high read amp, the lowest range count (4)
+			// should be selected.
+			stores:            threeStoresHighReadAmpAscRangeCount,
+			conf:              emptySpanConfig(),
+			expectedAddTarget: roachpb.StoreID(4),
+			enforcement:       storeHealthBlockAll,
+		},
+	}
+
+	chk := func(target roachpb.ReplicationTarget, expectedTarget roachpb.StoreID) bool {
+		return target.StoreID == expectedTarget
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d_%s", i+1, test.name), func(t *testing.T) {
+			stopper, g, _, a, _ := createTestAllocator(ctx, 10, false /* deterministic */)
+			defer stopper.Stop(ctx)
+			sg := gossiputil.NewStoreGossiper(g)
+			sg.GossipStores(test.stores, t)
+
+			// Enable read disk health checking in candidate exclusion.
+			l0SublevelsThresholdEnforce.Override(ctx, &a.storePool.st.SV, int64(test.enforcement))
+			add, _, err := a.AllocateVoter(
+				ctx,
+				test.conf,
+				nil,
+				nil,
+			)
+			if test.expectNoAction {
+				require.Error(t, &allocatorError{}, err)
+				require.Equal(t, roachpb.ReplicationTarget{}, add)
+			} else {
+				require.NoError(t, err)
+				require.Truef(t,
+					chk(add, test.expectedAddTarget),
+					"the addition target %+v from AllocateVoter doesn't match expectation",
+					add)
+			}
+		})
 	}
 }
 
@@ -728,7 +916,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 				nil,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 			if e, a := tc.expectTargetRebalance, ok; e != a {
 				t.Errorf(
@@ -802,7 +990,7 @@ func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if ok {
 			// Update the descriptor.
@@ -843,7 +1031,7 @@ func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		require.False(t, ok)
 	}
@@ -915,7 +1103,7 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if !ok {
 			i-- // loop until we find 10 candidates
@@ -939,7 +1127,7 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		eqClass.existing = desc
-		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(
+		result := a.scorerOptions(ctx).shouldRebalanceBasedOnThresholds(
 			ctx,
 			eqClass,
 			a.metrics,
@@ -1077,7 +1265,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if ok {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
@@ -1102,7 +1290,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if ok {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", target.StoreID, details)
@@ -1121,7 +1309,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		expTo := stores[1].StoreID
 		expFrom := stores[0].StoreID
@@ -1200,7 +1388,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 				nil,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 			if c.expected > 0 {
 				if !ok {
@@ -1347,7 +1535,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 					t.Fatalf("[store %d]: unable to get store %d descriptor", j, store.StoreID)
 				}
 				eqClass.existing = desc
-				if a, e := a.scorerOptions().shouldRebalanceBasedOnThresholds(
+				if a, e := a.scorerOptions(ctx).shouldRebalanceBasedOnThresholds(
 					context.Background(),
 					eqClass,
 					a.metrics,
@@ -1471,8 +1659,9 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 		var rangeUsageInfo RangeUsageInfo
 		options := &qpsScorerOptions{
-			qpsPerReplica:         100,
-			qpsRebalanceThreshold: 0.2,
+			diskHealthScorerOptions: &diskHealthScorerOptions{enforcementLevel: storeHealthNoAction},
+			qpsPerReplica:           100,
+			qpsRebalanceThreshold:   0.2,
 		}
 		add, remove, _, ok := a.RebalanceVoter(
 			ctx,
@@ -1584,7 +1773,8 @@ func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
 		defer stopper.Stop(ctx)
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 		options := &qpsScorerOptions{
-			qpsRebalanceThreshold: 0.1,
+			diskHealthScorerOptions: &diskHealthScorerOptions{enforcementLevel: storeHealthNoAction},
+			qpsRebalanceThreshold:   0.1,
 		}
 		remove, _, err := a.RemoveVoter(
 			ctx,
@@ -1647,7 +1837,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if ok && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
@@ -1665,7 +1855,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			existing:    desc,
 			candidateSL: sl,
 		}
-		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(
+		result := a.scorerOptions(ctx).shouldRebalanceBasedOnThresholds(
 			ctx,
 			eqClass,
 			a.metrics,
@@ -2222,7 +2412,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		var resultID roachpb.StoreID
 		if ok {
@@ -2294,7 +2484,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		var gotExpected bool
 		if !ok {
@@ -2826,7 +3016,7 @@ func TestAllocatorRemoveBasedOnDiversity(t *testing.T) {
 			c.existingVoters, /* voterCandidates */
 			c.existingVoters,
 			c.existingNonVoters,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		require.NoError(t, err)
 
@@ -2845,7 +3035,7 @@ func TestAllocatorRemoveBasedOnDiversity(t *testing.T) {
 			c.existingVoters,
 			c.existingVoters,
 			nil,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		require.NoError(t, err)
 		require.Truef(t, checkReplExists(targetVoter, c.expVoterRemovals),
@@ -2858,7 +3048,7 @@ func TestAllocatorRemoveBasedOnDiversity(t *testing.T) {
 			c.existingNonVoters, /* nonVoterCandidates */
 			c.existingVoters,
 			c.existingNonVoters,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		require.NoError(t, err)
 		require.True(t, checkReplExists(targetNonVoter, c.expNonVoterRemovals))
@@ -3134,7 +3324,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if !ok {
 			t.Fatalf("%d: RebalanceVoter(%v) returned no target store; details: %s", i, c.existing, details)
@@ -3366,7 +3556,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				a.storePool.getLocalitiesByStore(existingRepls),
 				a.storePool.isStoreReadyForRoutineReplicaTransfer,
 				false, /* allowMultipleReplsPerNode */
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 
 			if !expectedStoreIDsMatch(tc.expected, candidates) {
@@ -3385,7 +3575,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				nil,
 				a.storePool.getLocalitiesByStore(existingRepls),
 				a.storePool.isStoreReadyForRoutineReplicaTransfer,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 				a.metrics,
 			)
 			if len(tc.expected) > 0 {
@@ -3708,7 +3898,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			a.storePool.getLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.StoreID) bool { return true },
 			false, /* allowMultipleReplsPerNode */
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		best := candidates.best()
 		match := true
@@ -3930,10 +4120,11 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 
 		// Check behavior in a span config where `voter_constraints` are empty.
 		checkFn := voterConstraintsCheckerForRemoval(analyzed, constraint.EmptyAnalyzedConstraints)
-		candidates := candidateListForRemoval(sl,
+		candidates := candidateListForRemoval(ctx,
+			sl,
 			checkFn,
 			a.storePool.getLocalitiesByStore(existingRepls),
-			a.scorerOptions())
+			a.scorerOptions(ctx))
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
 			t.Errorf("%d (with `constraints`): expected candidateListForRemoval(%v)"+
 				" = %v, but got %v\n for candidates %v", testIdx, tc.existing, tc.expected,
@@ -3943,10 +4134,11 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 		// Check that we'd see the same result if the same constraints were
 		// specified as `voter_constraints`.
 		checkFn = voterConstraintsCheckerForRemoval(constraint.EmptyAnalyzedConstraints, analyzed)
-		candidates = candidateListForRemoval(sl,
+		candidates = candidateListForRemoval(ctx,
+			sl,
 			checkFn,
 			a.storePool.getLocalitiesByStore(existingRepls),
-			a.scorerOptions())
+			a.scorerOptions(ctx))
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
 			t.Errorf("%d (with `voter_constraints`): expected candidateListForRemoval(%v)"+
 				" = %v, but got %v\n for candidates %v", testIdx, tc.existing, tc.expected,
@@ -4090,6 +4282,7 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 			defer stopper.Stop(ctx)
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(test.stores, t)
+			// Enable read disk health checking in candidate exclusion.
 			add, remove, _, ok := a.RebalanceNonVoter(
 				ctx,
 				test.conf,
@@ -4098,7 +4291,128 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 				test.existingNonVoters,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
+			)
+			if test.expectNoAction {
+				require.True(t, !ok)
+			} else {
+				require.Truef(t, ok, "no action taken on range")
+				require.Truef(t,
+					chk(add, test.expectedAddTargets),
+					"the addition target %+v from RebalanceNonVoter doesn't match expectation",
+					add)
+				require.Truef(t,
+					chk(remove, test.expectedRemoveTargets),
+					"the removal target %+v from RebalanceNonVoter doesn't match expectation",
+					remove)
+			}
+		})
+	}
+}
+
+// TestAllocatorRebalanceReadAmpCheck ensures that rebalancing  non-voters:
+// (1) Respects storeHealthEnforcement setting, by ignoring L0 Sublevels in
+// 	   rebalancing decisions when disabled or set to log only.
+// (2) Considers L0 sublevels when set to rebalanceOnly or allocate in
+// 	   conjunction with the mean.
+// (3) Does not attempt to rebalance off of the store when read amplification
+//     is high, as this setting is only used for filtering candidates.
+func TestAllocatorRebalanceReadAmpCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	type testCase struct {
+		name                                      string
+		stores                                    []*roachpb.StoreDescriptor
+		conf                                      roachpb.SpanConfig
+		existingVoters, existingNonVoters         []roachpb.ReplicaDescriptor
+		expectNoAction                            bool
+		expectedRemoveTargets, expectedAddTargets []roachpb.StoreID
+		enforcement                               storeHealthEnforcement
+	}
+	tests := []testCase{
+		{
+			name: "don't move off of nodes with high read amp",
+			// NB: Store 1,2, 4 have okay read amp. Store 3 has high read amp.
+			// We expect high read amplifaction to only be considered for
+			// exlcuding targets, not for triggering rebalancing.
+			stores:            threeStoresHighReadAmpAscRangeCount,
+			conf:              emptySpanConfig(),
+			existingVoters:    replicas(3),
+			existingNonVoters: replicas(1),
+			expectNoAction:    true,
+			enforcement:       storeHealthBlockRebalanceTo,
+		},
+		{
+			name: "don't take action when enforcement is not storeHealthNoAction",
+			// NB: Store 3 has L0Sublevels > threshold. Store 2 has 3 x higher
+			// ranges as other stores. Should move to candidate to 4, however
+			// enforcement for rebalancing is not enabled so will pick
+			// candidate 3 which has a lower range count.
+			stores:                oneStoreHighReadAmp,
+			conf:                  emptySpanConfig(),
+			existingVoters:        replicas(1),
+			existingNonVoters:     replicas(2),
+			expectedRemoveTargets: []roachpb.StoreID{2},
+			expectedAddTargets:    []roachpb.StoreID{3},
+			enforcement:           storeHealthNoAction,
+		},
+		{
+			name: "don't rebalance to nodes with high read amp when storeHealthBlockRebalanceTo enforcement",
+			// NB: Store 3 has L0Sublevels > threshold. Store 2 has 3 x higher
+			// ranges as other stores. Should move to candidate to 4, which
+			// doesn't have high read amp.
+			stores:                oneStoreHighReadAmp,
+			conf:                  emptySpanConfig(),
+			existingVoters:        replicas(1),
+			existingNonVoters:     replicas(2),
+			expectedRemoveTargets: []roachpb.StoreID{2},
+			expectedAddTargets:    []roachpb.StoreID{4},
+			enforcement:           storeHealthBlockRebalanceTo,
+		},
+		{
+			name: "don't rebalance to nodes with high read amp when storeHealthBlockAll enforcement",
+			// NB: Store 3 has L0Sublevels > threshold. Store 2 has 3 x higher
+			// ranges as other stores. Should move to candidate to 4, which
+			// doesn't have high read amp.
+			stores:                oneStoreHighReadAmp,
+			conf:                  emptySpanConfig(),
+			existingVoters:        replicas(1),
+			existingNonVoters:     replicas(2),
+			expectedRemoveTargets: []roachpb.StoreID{2},
+			expectedAddTargets:    []roachpb.StoreID{4},
+			enforcement:           storeHealthBlockAll,
+		},
+	}
+
+	var rangeUsageInfo RangeUsageInfo
+	chk := func(target roachpb.ReplicationTarget, expectedCandidates []roachpb.StoreID) bool {
+		for _, candidate := range expectedCandidates {
+			if target.StoreID == candidate {
+				return true
+			}
+		}
+		return false
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d_%s", i+1, test.name), func(t *testing.T) {
+			stopper, g, _, a, _ := createTestAllocator(ctx, 10, true /* deterministic */)
+			defer stopper.Stop(ctx)
+			sg := gossiputil.NewStoreGossiper(g)
+			sg.GossipStores(test.stores, t)
+			// Enable read disk health checking in candidate exclusion.
+			options := a.scorerOptions(ctx)
+			options.diskHealthScorerOptions = &diskHealthScorerOptions{enforcementLevel: test.enforcement, l0SublevelThreshold: 20}
+			add, remove, _, ok := a.RebalanceNonVoter(
+				ctx,
+				test.conf,
+				nil,
+				test.existingVoters,
+				test.existingNonVoters,
+				rangeUsageInfo,
+				storeFilterThrottled,
+				options,
 			)
 			if test.expectNoAction {
 				require.True(t, !ok)
@@ -4155,7 +4469,7 @@ func TestVotersCanRebalanceToNonVoterStores(t *testing.T) {
 		existingNonVoters,
 		rangeUsageInfo,
 		storeFilterThrottled,
-		a.scorerOptions(),
+		a.scorerOptions(ctx),
 	)
 
 	require.Truef(t, ok, "no action taken")
@@ -4214,7 +4528,7 @@ func TestNonVotersCannotRebalanceToVoterStores(t *testing.T) {
 		existingNonVoters,
 		rangeUsageInfo,
 		storeFilterThrottled,
-		a.scorerOptions(),
+		a.scorerOptions(ctx),
 	)
 
 	require.Falsef(
@@ -5017,7 +5331,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			nil,
 			a.storePool.getLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.StoreID) bool { return true },
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 			a.metrics,
 		)
 		match := true
@@ -5049,7 +5363,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 				nil,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 			var found bool
 			if !ok && len(tc.validTargets) == 0 {
@@ -5438,7 +5752,7 @@ func TestAllocatorRemoveTargetBasedOnCapacity(t *testing.T) {
 			replicas,
 			replicas,
 			nil,
-			a.scorerOptions(),
+			a.scorerOptions(ctx),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -7278,7 +7592,7 @@ func TestAllocatorRebalanceWithScatter(t *testing.T) {
 		nil,
 		rangeUsageInfo,
 		storeFilterThrottled,
-		a.scorerOptions(),
+		a.scorerOptions(ctx),
 	)
 	require.False(t, ok)
 
@@ -7291,7 +7605,7 @@ func TestAllocatorRebalanceWithScatter(t *testing.T) {
 		nil,
 		rangeUsageInfo,
 		storeFilterThrottled,
-		a.scorerOptionsForScatter(),
+		a.scorerOptionsForScatter(ctx),
 	)
 	require.True(t, ok)
 }
@@ -7405,7 +7719,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				nil,
 				rangeUsageInfo,
 				storeFilterThrottled,
-				a.scorerOptions(),
+				a.scorerOptions(ctx),
 			)
 
 			if tc.expected == nil && ok {
@@ -7583,7 +7897,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 						nil,
 						rangeUsageInfo,
 						storeFilterThrottled,
-						alloc.scorerOptions(),
+						alloc.scorerOptions(ctx),
 					)
 					if ok {
 						if log.V(1) {
@@ -7629,7 +7943,7 @@ func Example_rangeCountRebalancing() {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			alloc.scorerOptions(),
+			alloc.scorerOptions(ctx),
 		)
 		if ok {
 			log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
@@ -7723,8 +8037,9 @@ func qpsBasedRebalanceFn(
 	avgQPS := candidate.Capacity.QueriesPerSecond / float64(candidate.Capacity.RangeCount)
 	jitteredQPS := avgQPS * (1 + alloc.randGen.Float64())
 	opts := &qpsScorerOptions{
-		qpsPerReplica:         jitteredQPS,
-		qpsRebalanceThreshold: 0.2,
+		diskHealthScorerOptions: &diskHealthScorerOptions{enforcementLevel: storeHealthNoAction},
+		qpsPerReplica:           jitteredQPS,
+		qpsRebalanceThreshold:   0.2,
 	}
 	var rangeUsageInfo RangeUsageInfo
 	add, remove, details, ok := alloc.RebalanceVoter(
