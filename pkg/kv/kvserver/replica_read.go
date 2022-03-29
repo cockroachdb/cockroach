@@ -50,6 +50,7 @@ func (r *Replica) executeReadOnlyBatch(
 
 	// Evaluate read-only batch command.
 	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
+	defer rec.Release()
 
 	// TODO(irfansharif): It's unfortunate that in this read-only code path,
 	// we're stuck with a ReadWriter because of the way evaluateBatch is

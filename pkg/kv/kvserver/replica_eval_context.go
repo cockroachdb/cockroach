@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -29,6 +30,12 @@ import (
 // Do not introduce new uses of this.
 var todoSpanSet = &spanset.SpanSet{}
 
+var evalContextPool = sync.Pool{
+	New: func() interface{} {
+		return &evalContextImpl{}
+	},
+}
+
 // evalContextImpl implements the batcheval.EvalContext interface.
 type evalContextImpl struct {
 	*Replica
@@ -41,7 +48,7 @@ type evalContextImpl struct {
 
 func newEvalContextImpl(
 	ctx context.Context, r *Replica, requiresClosedTSOlderThanStorageSnap bool,
-) *evalContextImpl {
+) (ec *evalContextImpl) {
 	var closedTS hlc.Timestamp
 	if requiresClosedTSOlderThanStorageSnap {
 		// We elide this call to get the replica's current closed timestamp unless
@@ -49,11 +56,13 @@ func newEvalContextImpl(
 		closedTS = r.GetCurrentClosedTimestamp(ctx)
 	}
 
-	return &evalContextImpl{
+	ec = evalContextPool.Get().(*evalContextImpl)
+	*ec = evalContextImpl{
 		Replica:        r,
 		closedTSElided: !requiresClosedTSOlderThanStorageSnap,
 		closedTS:       closedTS,
 	}
+	return ec
 }
 
 // GetClosedTimestampOlderThanStorageSnapshot implements the EvalContext
@@ -66,25 +75,32 @@ func (ec *evalContextImpl) GetClosedTimestampOlderThanStorageSnapshot() hlc.Time
 	return ec.closedTS
 }
 
+// Release implements the EvalContext interface.
+func (ec *evalContextImpl) Release() {
+	evalContextPool.Put(ec)
+}
+
 var _ batcheval.EvalContext = &evalContextImpl{}
 
 // NewReplicaEvalContext returns a batcheval.EvalContext to use for command
 // evaluation. The supplied SpanSet will be ignored except for race builds, in
 // which case state access is asserted against it. A SpanSet must always be
 // passed.
+// The caller must call rec.Release() once done with the evaluation context in
+// order to return its memory back to a sync.Pool.
 func NewReplicaEvalContext(
 	ctx context.Context, r *Replica, ss *spanset.SpanSet, requiresClosedTSOlderThanStorageSnap bool,
-) batcheval.EvalContext {
+) (rec batcheval.EvalContext) {
 	if ss == nil {
 		log.Fatalf(r.AnnotateCtx(context.Background()), "can't create a ReplicaEvalContext with assertions but no SpanSet")
 	}
 
-	ec := newEvalContextImpl(ctx, r, requiresClosedTSOlderThanStorageSnap)
+	rec = newEvalContextImpl(ctx, r, requiresClosedTSOlderThanStorageSnap)
 	if util.RaceEnabled {
 		return &SpanSetReplicaEvalContext{
-			i:  ec,
+			i:  rec,
 			ss: *ss,
 		}
 	}
-	return ec
+	return rec
 }
