@@ -415,6 +415,14 @@ func (j *Job) unpaused(ctx context.Context, txn *kv.Txn) error {
 			ju.UpdateStatus(StatusReverting)
 		}
 		ju.UpdatePayload(md.Payload)
+
+		// md.RunStats will be nil if clusterversion.RetryJobsWithExponentialBackoff
+		// was not active when Update was called above. In this case, we skip updating
+		// the runStats, treating this job run as if backoff is not active.
+		if md.RunStats != nil {
+			// Reset numRuns to 0 to prevent exponential backoff upon resumption.
+			ju.UpdateRunStats(0, j.registry.clock.Now().GoTime())
+		}
 		return nil
 	})
 }
