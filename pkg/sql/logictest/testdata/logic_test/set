@@ -815,3 +815,17 @@ query T
 SHOW opt_split_scan_limit
 ----
 2048
+
+statement error cannot set copy_num_trailing_fields to a negative value
+SET copy_num_trailing_fields = -1
+
+statement error cannot set copy_num_trailing_fields to a value greater than 2147483647
+SET copy_num_trailing_fields = 8000000000
+
+statement ok
+SET copy_num_trailing_fields = 12
+
+query T
+SHOW copy_num_trailing_fields
+----
+12

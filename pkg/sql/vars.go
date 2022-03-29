@@ -2025,6 +2025,33 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`copy_num_trailing_fields`: {
+		GetStringVal: makeIntGetStringValFn(`copy_num_trailing_fields`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set copy_num_trailing_fields to a negative value")
+			}
+			if b > math.MaxInt32 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set copy_num_trailing_fields to a value greater than %d", math.MaxInt32)
+			}
+			m.SetCopyNumTrailingFields(int32(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return strconv.FormatInt(int64(evalCtx.SessionData().CopyNumTrailingFields), 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(0, 10)
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

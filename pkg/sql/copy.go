@@ -268,7 +268,7 @@ func (c *copyMachine) run(ctx context.Context) error {
 		c.csvReader = csv.NewReader(&c.csvInput)
 		c.csvReader.Comma = rune(c.delimiter)
 		c.csvReader.ReuseRecord = true
-		c.csvReader.FieldsPerRecord = len(c.resultColumns)
+		c.csvReader.FieldsPerRecord = len(c.resultColumns) + int(c.p.SessionData().CopyNumTrailingFields)
 		if c.csvEscape != 0 {
 			c.csvReader.Escape = c.csvEscape
 		}
@@ -475,10 +475,12 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 }
 
 func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
-	if len(record) != len(c.resultColumns) {
+	if expectedLen := len(c.resultColumns) + int(c.p.SessionData().CopyNumTrailingFields); len(record) != expectedLen {
 		return pgerror.Newf(pgcode.BadCopyFileFormat,
-			"expected %d values, got %d", len(c.resultColumns), len(record))
+			"expected %d values, got %d", expectedLen, len(record))
 	}
+	record = record[:len(c.resultColumns)]
+
 	exprs := make(tree.Exprs, len(record))
 	for i, s := range record {
 		if s == c.null {
@@ -720,10 +722,11 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 
 func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 	parts := bytes.Split(line, c.textDelim)
-	if len(parts) != len(c.resultColumns) {
+	if expectedLen := len(c.resultColumns) + int(c.p.SessionData().CopyNumTrailingFields); len(parts) != expectedLen {
 		return pgerror.Newf(pgcode.BadCopyFileFormat,
-			"expected %d values, got %d", len(c.resultColumns), len(parts))
+			"expected %d values, got %d", expectedLen, len(parts))
 	}
+	parts = parts[:len(c.resultColumns)]
 	exprs := make(tree.Exprs, len(parts))
 	for i, part := range parts {
 		s := string(part)

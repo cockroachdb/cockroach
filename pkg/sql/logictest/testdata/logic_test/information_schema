@@ -4686,6 +4686,7 @@ bytea_output                                          hex
 check_function_bodies                                 on
 client_encoding                                       UTF8
 client_min_messages                                   notice
+copy_num_trailing_fields                              0
 cost_scans_with_default_col_size                      off
 database                                              test
 datestyle                                             ISO, MDY
