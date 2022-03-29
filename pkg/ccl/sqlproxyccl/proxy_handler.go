@@ -104,13 +104,6 @@ type ProxyOptions struct {
 
 	// testingKnobs are knobs used for testing.
 	testingKnobs struct {
-		// afterForward gets invoked after a connection was being forwarded.
-		//
-		// TODO(jaylim-crl): Once the connection manager is in, we can consider
-		// retrieving the forwarder from there, and get rid of this variable
-		// entirely.
-		afterForward func(*forwarder) error
-
 		// dirOpts is used to customize the directory cache created by the
 		// proxy.
 		dirOpts []tenant.DirOption
@@ -150,6 +143,11 @@ type proxyHandler struct {
 	// balancer is used to load balance incoming connections.
 	balancer *balancer.Balancer
 
+	// connTracker is used to track all forwarder instances. The proxy handler
+	// uses this to register/unregister forwarders, whereas the balancer uses
+	// this to rebalance connections.
+	connTracker *balancer.ConnTracker
+
 	// certManager keeps up to date the certificates used.
 	certManager *certmgr.CertManager
 }
@@ -173,6 +171,7 @@ func newProxyHandler(
 		ProxyOptions: options,
 		certManager:  certmgr.NewCertManager(ctx),
 		balancer:     balancer.NewBalancer(),
+		connTracker:  balancer.NewConnTracker(),
 	}
 
 	err := handler.setupIncomingCert()
@@ -394,14 +393,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 	defer f.Close()
 
-	if handler.testingKnobs.afterForward != nil {
-		if err := handler.testingKnobs.afterForward(f); err != nil {
-			select {
-			case errConnection <- err: /* error reported */
-			default: /* the channel already contains an error */
-			}
-		}
-	}
+	// Register the forwarder with the connection tracker.
+	handler.connTracker.OnConnect(tenID, f)
+	defer handler.connTracker.OnDisconnect(tenID, f)
 
 	// Block until an error is received, or when the stopper starts quiescing,
 	// whichever that happens first.
