@@ -13,6 +13,7 @@ package sql
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/hintdetail"
+	"github.com/cockroachdb/redact"
 )
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
@@ -454,7 +456,7 @@ func setVersionSetting(
 	}
 
 	// Updates the version inside the system.settings table.
-	// If we are already at the target version, then this
+	// If we are already at or above the target version, then this
 	// function is idempotent.
 	updateVersionSystemSetting := func(ctx context.Context, version clusterversion.ClusterVersion) error {
 		rawValue, err := protoutil.Marshal(&version)
@@ -468,24 +470,35 @@ func setVersionSetting(
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				"SELECT value FROM system.settings WHERE name = $1", name,
 			)
-			versionIsDifferent := true
+			if err != nil {
+				return err
+			}
 			if len(datums) > 0 {
 				dStr, ok := datums[0].(*tree.DString)
 				if !ok {
-					return errors.Errorf("existing version value is not a string, got %T", datums[0])
+					return errors.AssertionFailedf("existing version value is not a string, got %T", datums[0])
 				}
 				oldRawValue := []byte(string(*dStr))
-				versionIsDifferent = !bytes.Equal(oldRawValue, rawValue)
+				if bytes.Equal(oldRawValue, rawValue) {
+					return nil
+				}
+				var oldValue clusterversion.ClusterVersion
+				// If there is a pre-existing value, we ought to be able to decode it.
+				if err := protoutil.Unmarshal(oldRawValue, &oldValue); err != nil {
+					return errors.NewAssertionErrorWithWrappedErrf(err, "decoding previous version %s",
+						redact.SafeString(base64.StdEncoding.EncodeToString(oldRawValue)))
+				}
+				if !oldValue.Less(version.Version) {
+					return nil
+				}
 			}
-			// Only if the version has changed alter the setting.
-			if versionIsDifferent {
-				_, err = execCfg.InternalExecutor.ExecEx(
-					ctx, "update-setting", txn,
-					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-					`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
-					name, string(rawValue), setting.Typ(),
-				)
-			}
+			// Only if the version has increased, alter the setting.
+			_, err = execCfg.InternalExecutor.ExecEx(
+				ctx, "update-setting", txn,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+				name, string(rawValue), setting.Typ(),
+			)
 			return err
 		})
 	}
