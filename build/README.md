@@ -144,7 +144,7 @@ The `bazelbuilder` image is used exclusively for performing builds using Bazel. 
     docker manifest push cockroachdb/bazel:$TAG
 ```
 - Then, update `build/teamcity-bazel-support.sh` with the new tag and commit all your changes.
-- Ensure the "GitHub CI (Optional)" job passes on your PR before merging.
+- Ensure the "Bazel CI" job passes on your PR before merging.
 
 #  Dependencies
 
