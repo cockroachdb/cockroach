@@ -57,6 +57,11 @@ func (d *defaultCmp_KINDProjOp) Next() coldata.Batch {
 	}
 	sel := batch.Selection()
 	output := batch.ColVec(d.outputIdx)
+	if output.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		output.Nulls().UnsetNulls()
+	}
 	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		// {{if .IsRightConst}}
