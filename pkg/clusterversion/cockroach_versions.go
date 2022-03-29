@@ -317,6 +317,10 @@ const (
 	// IncrementalBackupSubdir enables backing up new incremental backups to a
 	// dedicated subdirectory, to make it easier to apply a different ttl.
 	IncrementalBackupSubdir
+	// GossipL0Sublevels is the version where L0 sublevels are gossipped
+	// in a store descriptor's capacity and can be used for allocation
+	// decisions.
+	GossipL0Sublevels
 
 	// DateStyleIntervalStyleCastRewrite rewrites cast that cause inconsistencies
 	// when DateStyle/IntervalStyle is enabled.
@@ -551,6 +555,10 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 98},
 	},
 
+	{
+		Key:     GossipL0Sublevels,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 100},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

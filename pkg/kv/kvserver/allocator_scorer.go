@@ -70,6 +70,30 @@ const (
 	// consider a store full/empty if it's at least minRebalanceThreshold
 	// away from the mean.
 	minRangeRebalanceThreshold = 2
+
+	// maxL0SublevelThreshold: if the number of l0 sublevels of a store descriptor
+	// is greater than this value, it will never be used as a rebalance target.
+	maxL0SublevelThreshold = 20
+)
+
+// storeHealthEnforcement represents the level of action that may be taken or
+// excluded when a candidate disk is considered unhealthy.
+type storeHealthEnforcement int64
+
+const (
+	// storeHealthDisabled excludes all actioms, not logging an event when the threshold
+	// is exceeded.
+	storeHealthDisabled storeHealthEnforcement = iota
+	// storeHealthLog indicates exludes all actions, only logging an event when the
+	// threshold is exceeded.
+	storeHealthLog
+	// rebalanceOnly includes taking action to filter unhealthy stores when
+	// considering rebalance targets.
+	storeHealthRebalanceOnly
+	// storeHealthAllocate includes taking action to filter unhealthy stores when
+	// considering rebalance targets and allocating voting and non-voting
+	// replicas to stores.
+	storeHealthAllocate
 )
 
 // rangeRebalanceThreshold is the minimum ratio of a store's range count to
@@ -86,6 +110,31 @@ var rangeRebalanceThreshold = func() *settings.FloatSetting {
 	s.SetVisibility(settings.Public)
 	return s
 }()
+
+var l0SublevelThreshold = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.allocator.l0_sublevels_threshold",
+	"the maximum count of l0 sublevels within a store that may exist"+
+		"before it becomes inelligible as an allocation target",
+	maxL0SublevelThreshold,
+)
+
+var l0SublevelsThresholdEnforce = settings.RegisterEnumSetting(
+	settings.SystemOnly,
+	"kv.allocator.l0_sublevels_threshold_enforce",
+	"the level of enforcement when a candidate disk has read amplification exceeding"+
+		"`kv.allocator.l0_sublevels_threshold`; disabled will take no log will take no action,"+
+		"log will log the event and take no action rebalance will"+
+		"exclude stores only during rebalance decisions and allocate will exclude stores during"+
+		"rebalance and voter/non-voter allocation",
+	"log",
+	map[int64]string{
+		int64(storeHealthDisabled):      "disabled",
+		int64(storeHealthLog):           "log",
+		int64(storeHealthRebalanceOnly): "rebalance",
+		int64(storeHealthAllocate):      "allocate",
+	},
+)
 
 // CockroachDB has two heuristics that trigger replica rebalancing: range count
 // convergence and QPS convergence. scorerOptions defines the interface that
@@ -140,6 +189,9 @@ type scorerOptions interface {
 	// with the same QPS) that would converge the range's existing stores' QPS the
 	// most.
 	removalMaximallyConvergesScore(removalCandStoreList StoreList, existing roachpb.StoreDescriptor) int
+	// getDiskHealthOptions returns the scorer options for disk health. It is
+	// used to inform scoring based on the health of a disk.
+	getDiskHealthScorerOptions() *diskHealthScorerOptions
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -181,6 +233,7 @@ func (o *scatterScorerOptions) maybeJitterStoreStats(
 // This means that the resulting rebalancing decisions will further the goal of
 // converging range counts across stores in the cluster.
 type rangeCountScorerOptions struct {
+	*diskHealthScorerOptions
 	deterministic           bool
 	rangeRebalanceThreshold float64
 }
@@ -295,6 +348,7 @@ func (o *rangeCountScorerOptions) removalMaximallyConvergesScore(
 // queries-per-second. This means that the resulting rebalancing decisions will
 // further the goal of converging QPS across stores in the cluster.
 type qpsScorerOptions struct {
+	*diskHealthScorerOptions
 	deterministic                             bool
 	qpsRebalanceThreshold, minRequiredQPSDiff float64
 
@@ -448,6 +502,8 @@ type candidate struct {
 	store          roachpb.StoreDescriptor
 	valid          bool
 	fullDisk       bool
+	highReadAmp    bool
+	l0SubLevels    int
 	necessary      bool
 	diversityScore float64
 	convergesScore int
@@ -457,9 +513,9 @@ type candidate struct {
 }
 
 func (c candidate) String() string {
-	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, converges:%d, "+
+	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, highReadAmp: %t, l0SubLevels: %d necessary:%t, diversity:%.2f, converges:%d, "+
 		"balance:%d, rangeCount:%d, queriesPerSecond:%.2f",
-		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.diversityScore, c.convergesScore,
+		c.store.StoreID, c.valid, c.fullDisk, c.highReadAmp, c.l0SubLevels, c.necessary, c.diversityScore, c.convergesScore,
 		c.balanceScore, c.rangeCount, c.store.Capacity.QueriesPerSecond)
 	if c.details != "" {
 		return fmt.Sprintf("%s, details:(%s)", str, c.details)
@@ -475,6 +531,9 @@ func (c candidate) compactString() string {
 	}
 	if c.fullDisk {
 		fmt.Fprintf(&buf, ", fullDisk:%t", c.fullDisk)
+	}
+	if c.highReadAmp {
+		fmt.Fprintf(&buf, ", highReadAmp:%t", c.highReadAmp)
 	}
 	if c.necessary {
 		fmt.Fprintf(&buf, ", necessary:%t", c.necessary)
@@ -517,6 +576,19 @@ func (c candidate) compare(o candidate) float64 {
 		if c.necessary {
 			return 4
 		}
+		return -4
+	}
+	// If both o and c have high read amplification, then we prefer the
+	// canidate with lower read amp.
+	if o.highReadAmp && c.highReadAmp {
+		if o.l0SubLevels > c.l0SubLevels {
+			return 4
+		}
+	}
+	if o.highReadAmp {
+		return 4
+	}
+	if c.highReadAmp {
 		return -4
 	}
 	if !scoresAlmostEqual(c.diversityScore, o.diversityScore) {
@@ -587,6 +659,7 @@ func (c byScoreAndID) Less(i, j int) bool {
 		c[i].rangeCount == c[j].rangeCount &&
 		c[i].necessary == c[j].necessary &&
 		c[i].fullDisk == c[j].fullDisk &&
+		c[i].highReadAmp == c[j].highReadAmp &&
 		c[i].valid == c[j].valid {
 		return c[i].store.StoreID < c[j].store.StoreID
 	}
@@ -594,11 +667,12 @@ func (c byScoreAndID) Less(i, j int) bool {
 }
 func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
-// onlyValidAndNotFull returns all the elements in a sorted (by score reversed)
-// candidate list that are valid and not nearly full.
-func (cl candidateList) onlyValidAndNotFull() candidateList {
+// onlyValidAndHealthyDisk returns all the elements in a sorted (by score
+// reversed) candidate list that are valid and not nearly full or with high
+// read amplification.
+func (cl candidateList) onlyValidAndHealthyDisk() candidateList {
 	for i := len(cl) - 1; i >= 0; i-- {
-		if cl[i].valid && !cl[i].fullDisk {
+		if cl[i].valid && !cl[i].fullDisk && !cl[i].highReadAmp {
 			return cl[:i+1]
 		}
 	}
@@ -608,7 +682,7 @@ func (cl candidateList) onlyValidAndNotFull() candidateList {
 // best returns all the elements in a sorted (by score reversed) candidate list
 // that share the highest constraint score and are valid.
 func (cl candidateList) best() candidateList {
-	cl = cl.onlyValidAndNotFull()
+	cl = cl.onlyValidAndHealthyDisk()
 	if len(cl) <= 1 {
 		return cl
 	}
@@ -646,6 +720,14 @@ func (cl candidateList) worst() candidateList {
 	if cl[len(cl)-1].fullDisk {
 		for i := len(cl) - 2; i >= 0; i-- {
 			if !cl[i].fullDisk {
+				return cl[i+1:]
+			}
+		}
+	}
+	// Are there candidates with high read amlification? If so, pick those.
+	if cl[len(cl)-1].highReadAmp {
+		for i := len(cl) - 2; i >= 0; i-- {
+			if !cl[i].highReadAmp {
 				return cl[i+1:]
 			}
 		}
@@ -774,7 +856,7 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		if !maxCapacityCheck(s) {
+		if !maxCapacityCheck(s) || !readAmpCheck(ctx, options.diskHealthScorerOptions, s) {
 			continue
 		}
 		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
@@ -808,6 +890,7 @@ func rankedCandidateListForAllocation(
 //
 // Stores that are marked as not valid, are in violation of a required criteria.
 func candidateListForRemoval(
+	ctx context.Context,
 	existingReplsStoreList StoreList,
 	constraintsCheck constraintsCheckFn,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
@@ -831,6 +914,7 @@ func candidateListForRemoval(
 			valid:          constraintsOK,
 			necessary:      necessary,
 			fullDisk:       !maxCapacityCheck(s),
+			highReadAmp:    !readAmpCheck(ctx, options.getDiskHealthScorerOptions(), s),
 			diversityScore: diversityScore,
 		})
 	}
@@ -984,6 +1068,7 @@ func bestStoreToMinimizeQPSDelta(
 	existing roachpb.StoreID,
 	candidates []roachpb.StoreID,
 	storeDescMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
+	options *qpsScorerOptions,
 ) (bestCandidate roachpb.StoreID, reason declineReason) {
 	storeQPSMap := make(map[roachpb.StoreID]float64, len(candidates)+1)
 	for _, store := range candidates {
@@ -1035,7 +1120,7 @@ func bestStoreToMinimizeQPSDelta(
 	// the equivalence class.
 	mean := domainStoreList.candidateQueriesPerSecond.mean
 	overfullThreshold := overfullQPSThreshold(
-		&qpsScorerOptions{qpsRebalanceThreshold: rebalanceThreshold},
+		options,
 		mean,
 	)
 	if existingQPS < overfullThreshold {
@@ -1098,6 +1183,7 @@ func (o *qpsScorerOptions) getRebalanceTargetToMinimizeDelta(
 		eqClass.existing.StoreID,
 		candidates,
 		storeListToMap(domainStoreList),
+		o,
 	)
 }
 
@@ -1127,6 +1213,7 @@ func rankedCandidateListForRebalancing(
 			}
 			valid, necessary := removalConstraintsChecker(store)
 			fullDisk := !maxCapacityCheck(store)
+			highReadAmp := !readAmpCheck(ctx, options.getDiskHealthScorerOptions(), store)
 			if !valid {
 				if !needRebalanceFrom {
 					log.VEventf(ctx, 2, "s%d: should-rebalance(invalid): locality:%q",
@@ -1146,6 +1233,7 @@ func rankedCandidateListForRebalancing(
 				valid:          valid,
 				necessary:      necessary,
 				fullDisk:       fullDisk,
+				highReadAmp:    highReadAmp,
 				diversityScore: curDiversityScore,
 			}
 		}
@@ -1217,6 +1305,7 @@ func rankedCandidateListForRebalancing(
 
 			constraintsOK, necessary := rebalanceConstraintsChecker(store, existing.store)
 			maxCapacityOK := maxCapacityCheck(store)
+			readAmpOK := readAmpCheck(ctx, options.getDiskHealthScorerOptions(), store)
 			diversityScore := diversityRebalanceFromScore(
 				store, existing.store.StoreID, existingStoreLocalities)
 			cand := candidate{
@@ -1224,6 +1313,7 @@ func rankedCandidateListForRebalancing(
 				valid:          constraintsOK,
 				necessary:      necessary,
 				fullDisk:       !maxCapacityOK,
+				highReadAmp:    !readAmpOK,
 				diversityScore: diversityScore,
 			}
 			if !cand.less(existing) {
@@ -1322,6 +1412,7 @@ func rankedCandidateListForRebalancing(
 			// rebalance candidates.
 			s := cand.store
 			cand.fullDisk = !rebalanceToMaxCapacityCheck(s)
+			cand.highReadAmp = !rebalanceToReadAmpCheck(ctx, options.getDiskHealthScorerOptions(), s)
 			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
 			cand.convergesScore = options.rebalanceToConvergesScore(comparable, s)
 			cand.rangeCount = int(s.Capacity.RangeCount)
@@ -1854,6 +1945,53 @@ func rebalanceConvergesRangeCountOnMean(
 
 func convergesOnMean(oldVal, newVal, mean float64) bool {
 	return math.Abs(newVal-mean) < math.Abs(oldVal-mean)
+}
+
+type diskHealthScorerOptions struct {
+	enforcementLevel    storeHealthEnforcement
+	l0SublevelThreshold int64
+}
+
+func (o *diskHealthScorerOptions) getDiskHealthScorerOptions() *diskHealthScorerOptions {
+	return o
+}
+
+// readAmpCheck returns true if the store read amplification does not exceed
+// the cluster threshold or the actioning on the threshold is not enabled for allocate.
+func readAmpCheck(
+	ctx context.Context, options *diskHealthScorerOptions, store roachpb.StoreDescriptor,
+) bool {
+	// Return early on disabled or capacity less than threshold.
+	if options.enforcementLevel == storeHealthDisabled ||
+		store.Capacity.L0Sublevels < int64(options.l0SublevelThreshold) {
+		return true
+	}
+
+	log.Eventf(ctx, "s%d, allocate check l0 sublevels %d exceeds threshold %d, action enabled %t",
+		store.StoreID, store.Capacity.L0Sublevels,
+		options.l0SublevelThreshold, options.enforcementLevel)
+
+	// Only fail the check when the enforcement level is set to storeHealthAllocate.
+	return options.enforcementLevel != storeHealthAllocate
+}
+
+// rebalanceToReadAmpCheck returns true if the store read amplification does not exceed
+// the cluster threshold or the actioning on the threshold is disabled for rebalancing.
+func rebalanceToReadAmpCheck(
+	ctx context.Context, options *diskHealthScorerOptions, store roachpb.StoreDescriptor,
+) bool {
+	// Return early on disabled or capacity less than threshold.
+	if options.enforcementLevel == storeHealthDisabled ||
+		store.Capacity.L0Sublevels < int64(options.l0SublevelThreshold) {
+		return true
+	}
+
+	log.Eventf(ctx, "s%d, rebalance check l0 sublevels %d exceeds threshold %d, action enabled %t",
+		store.StoreID, store.Capacity.L0Sublevels,
+		options.l0SublevelThreshold, options.enforcementLevel)
+
+	// Fail the check when the enforcement level is not log only.
+	return options.enforcementLevel == storeHealthLog
 }
 
 // maxCapacityCheck returns true if the store has room for a new replica.
