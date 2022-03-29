@@ -1490,10 +1490,10 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+
 	defer func() {
 		mem.Shrink(ctx, memReserved)
 	}()
-
 	currentVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
 	for i := range mainBackupManifests {
 		if v := mainBackupManifests[i].ClusterVersion; v.Major != 0 {
