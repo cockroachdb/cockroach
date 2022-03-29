@@ -13,7 +13,7 @@ yarn-error.log
 .cache-loader
 dist*/**
 !distccl/distccl.go
-!distoss/distoss.go
+!distbsl/distbsl.go
 *manifest.json
 
 cypress/screenshots/*

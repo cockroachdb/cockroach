@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 genrule(
     name = "genassets",
     srcs = select({
-        "//pkg/ui:cockroach_with_ui": ["//pkg/ui/workspaces/db-console:db-console-oss"],
+        "//pkg/ui:cockroach_with_ui": ["//pkg/ui/workspaces/db-console:db-console-bsl"],
         "//conditions:default": ["//pkg/ui:gen-empty-index.html"],
     }),
     outs = ["assets.tar.gz"],
@@ -19,10 +19,10 @@ fi
 )
 
 go_library(
-    name = "distoss",
-    srcs = ["distoss.go"],
+    name = "distbsl",
+    srcs = ["distbsl.go"],
     embedsrcs = [":genassets"],  # keep
-    importpath = "github.com/cockroachdb/cockroach/pkg/ui/distoss",
+    importpath = "github.com/cockroachdb/cockroach/pkg/ui/distbsl",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ui",

@@ -68,7 +68,7 @@ func (p *planner) RunParams(ctx context.Context) runParams {
 // interface as we find we need them, to avoid churn in the planHookFn sig and
 // the hooks that implement it.
 //
-// The PlanHookState is used by modules that are under the CCL. Since the OSS
+// The PlanHookState is used by modules that are under the CCL. Since the BSL
 // modules cannot depend on the CCL modules, the CCL modules need to inform the
 // planner when they should be invoked (via plan hooks). The only way for the
 // CCL statements to get access to a "planner" is through this PlanHookState
@@ -90,7 +90,7 @@ type PlanHookState interface {
 	) (func() (map[string]string, error), error)
 	User() security.SQLUsername
 	AuthorizationAccessor
-	// The role create/drop call into OSS code to reuse plan nodes.
+	// The role create/drop call into BSL code to reuse plan nodes.
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
 	GetAllRoles(ctx context.Context) (map[security.SQLUsername]bool, error)
 	BumpRoleMembershipTableVersion(ctx context.Context) error

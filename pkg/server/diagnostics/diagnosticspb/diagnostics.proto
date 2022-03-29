@@ -101,7 +101,7 @@ message Environment {
   OSInfo os = 3 [(gogoproto.nullable) = false];
   // Build describes the running CockroachDB binary.
   build.Info build = 4 [(gogoproto.nullable) = false];
-  // LicenseType describes the license that is in effect (OSS, Enterprise, etc).
+  // LicenseType describes the license that is in effect (BSL, Enterprise, etc).
   string license_type = 5;
   // Topology provides the cloud provider and region name that is hosting CRDB.
   TopologyInfo topology = 6 [(gogoproto.nullable) = false];

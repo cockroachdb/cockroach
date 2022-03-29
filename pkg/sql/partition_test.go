@@ -131,10 +131,10 @@ func TestRemovePartitioningOSS(t *testing.T) {
 
 	// Some things don't work.
 	sqlDB.ExpectErr(t,
-		"OSS binaries do not include enterprise features",
+		"BSL binaries do not include enterprise features",
 		`ALTER PARTITION p1 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
 	sqlDB.ExpectErr(t,
-		"OSS binaries do not include enterprise features",
+		"BSL binaries do not include enterprise features",
 		`ALTER PARTITION p2 OF INDEX t.kv@foo CONFIGURE ZONE USING DEFAULT`)
 
 	// But removing partitioning works.

@@ -45,7 +45,7 @@ module.exports = (env, argv) => {
 
   let localRoots = [path.resolve(__dirname)];
   if (env.dist === "ccl") {
-    // CCL modules shadow OSS modules.
+    // CCL modules shadow BSL modules.
     localRoots.unshift(path.resolve(__dirname, "ccl"));
   }
 
@@ -95,7 +95,7 @@ module.exports = (env, argv) => {
       }),
       new webpack.DllReferencePlugin({
         context: path.resolve(__dirname, `dist${env.dist}`),
-        manifest: require(env.vendor_manifest || "./vendor.oss.manifest.json"),
+        manifest: require(env.vendor_manifest || "./vendor.bsl.manifest.json"),
       }),
     ]);
   }
@@ -114,7 +114,7 @@ module.exports = (env, argv) => {
       extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
       modules: modules,
       alias: {
-        oss: path.resolve(__dirname),
+        bsl: path.resolve(__dirname),
         "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
       },
     },

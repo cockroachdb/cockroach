@@ -30,7 +30,7 @@ message Info {
   optional string cgo_target_triple = 10 [(gogoproto.nullable) = false];
   // platform is the platform identifiers that identifies the cross-compilation target for Go code.
   optional string platform = 6 [(gogoproto.nullable) = false];
-  // distribution indicates which licensing conditions apply (OSS: full open source; CCL: includes CCL code).
+  // distribution indicates which licensing conditions apply (BSL: BSL licensed; CCL: includes CCL code).
   optional string distribution = 7 [(gogoproto.nullable) = false];
   // type indicates whether this is a development or release build.
   optional string type = 8 [(gogoproto.nullable) = false];

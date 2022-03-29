@@ -1707,7 +1707,7 @@ func TestLint(t *testing.T) {
 				// NOTE(ricky): No idea what's wrong with mirror.go. See #72521
 				stream.GrepNot(`pkg/cmd/mirror/mirror.go`),
 				// Skip generated file.
-				stream.GrepNot(`pkg/ui/distoss/bindata.go`),
+				stream.GrepNot(`pkg/ui/distbsl/bindata.go`),
 				stream.GrepNot(`pkg/ui/distccl/bindata.go`),
 				// sql.go is the generated parser, which sets sqlDollar in all cases,
 				// even if it might not be used again.

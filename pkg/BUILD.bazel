@@ -79,7 +79,7 @@ ALL_TESTS = [
     "//pkg/clusterversion:clusterversion_test",
     "//pkg/cmd/bazci:bazci_test",
     "//pkg/cmd/cmpconn:cmpconn_test",
-    "//pkg/cmd/cockroach-oss:cockroach-oss_test",
+    "//pkg/cmd/cockroach-bsl:cockroach-bsl_test",
     "//pkg/cmd/dev:dev_test",
     "//pkg/cmd/docgen/extract:extract_test",
     "//pkg/cmd/github-post:github-post_test",

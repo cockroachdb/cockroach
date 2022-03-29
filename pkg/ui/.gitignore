@@ -9,7 +9,7 @@ yarn.cluster-ui.installed
 yarn.protobuf.installed
 yarn-error.log
 assets.ccl.installed
-assets.oss.installed
+assets.bsl.installed
 
 # Generated intermediates
 .cache-loader
@@ -21,8 +21,8 @@ dist_vendor/**
 !distccl/distccl.go
 !distccl/distccl_no_bazel.go
 !distccl/BUILD.bazel
-!distoss/assets/.gitkeep
-!distoss/distoss.go
-!distoss/distoss_no_bazel.go
-!distoss/BUILD.bazel
+!distbsl/assets/.gitkeep
+!distbsl/distbsl.go
+!distbsl/distbsl_no_bazel.go
+!distbsl/BUILD.bazel
 *manifest.json

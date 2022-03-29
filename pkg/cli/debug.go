@@ -68,7 +68,7 @@ import (
 	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/ttycolor"
-	humanize "github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
@@ -96,7 +96,7 @@ Create a ballast file to fill the store directory up to a given amount
 
 // PopulateStorageConfigHook is a callback set by CCL code.
 // It populates any needed fields in the StorageConfig.
-// It must do nothing in OSS code.
+// It must do nothing in BSL code.
 var PopulateStorageConfigHook func(*base.StorageConfig) error
 
 func parsePositiveInt(arg string) (int64, error) {

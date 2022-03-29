@@ -116,12 +116,12 @@ Still, the tradeoff seems well worth it.
 In CCL builds, code in `pkg/ui/ccl/src` overrides code in `pkg/ui/src` at build
 time, via a Webpack import resolution rule. E.g. if a file imports
 `src/views/shared/components/licenseType`, it'll resolve to
-`pkg/ui/src/views/shared/components/licenseType` in an OSS build, and
+`pkg/ui/src/views/shared/components/licenseType` in an BSL build, and
 `pkg/ui/ccl/src/views/shared/components/licenseType` in a CCL build.
 
-CCL code can import OSS code by prefixing paths with `oss/`, e.g.
-`import "oss/src/myComponent"`. By convention, this is only done by a CCL file
-importing the OSS version of itself, e.g. to render the OSS version of itself
+CCL code can import BSL code by prefixing paths with `bsl/`, e.g.
+`import "bsl/src/myComponent"`. By convention, this is only done by a CCL file
+importing the BSL version of itself, e.g. to render the BSL version of itself
 when the trial period has expired.
 
 ## Running tests
@@ -142,11 +142,11 @@ $ make build
 $ open pkg/ui/dist/stats.ccl.html
 ```
 
-Or, to view the OSS bundle:
+Or, to view the BSL bundle:
 
 ```shell
-$ make buildoss
-$ open pkg/ui/dist/stats.oss.html
+$ make buildbsl
+$ open pkg/ui/dist/stats.bsl.html
 ```
 
 ## Bundling fonts

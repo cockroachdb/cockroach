@@ -34,8 +34,8 @@ var (
 	cgoCompiler     = cgoVersion()
 	cgoTargetTriple string
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
-	// Distribution is changed by the CCL init-time hook in non-APL builds.
-	Distribution  = "OSS"
+	// Distribution is changed by the CCL init-time hook in non-BSL builds.
+	Distribution  = "BSL"
 	typ           string // Type of this build: <empty>, "development", or "release"
 	channel       = "unknown"
 	envChannel    = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")

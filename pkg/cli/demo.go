@@ -276,7 +276,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 		if demoCtx.DisableTelemetry {
 			cliCtx.PrintlnUnlessEmbedded("#\n# Telemetry and automatic license acquisition disabled by configuration.")
 		} else if demoCtx.DisableLicenseAcquisition {
-			cliCtx.PrintlnUnlessEmbedded("#\n# Enterprise features disabled by OSS-only build.")
+			cliCtx.PrintlnUnlessEmbedded("#\n# Enterprise features disabled by BSL-only build.")
 		} else {
 			cliCtx.PrintlnUnlessEmbedded("#\n# This demo session will attempt to enable enterprise features\n" +
 				"# by acquiring a temporary license from Cockroach Labs in the background.\n" +

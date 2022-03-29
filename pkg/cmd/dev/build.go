@@ -49,7 +49,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 		// TODO(irfansharif): Flesh out the example usage patterns.
 		Example: `
 	dev build cockroach
-	dev build cockroach-{short,oss}
+	dev build cockroach-{short,bsl}
 	dev build {opt,exec}gen`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
@@ -76,7 +76,7 @@ var buildTargetMapping = map[string]string{
 	"buildozer":        "@com_github_bazelbuild_buildtools//buildozer:buildozer",
 	"cockroach":        "//pkg/cmd/cockroach:cockroach",
 	"cockroach-sql":    "//pkg/cmd/cockroach-sql:cockroach-sql",
-	"cockroach-oss":    "//pkg/cmd/cockroach-oss:cockroach-oss",
+	"cockroach-bsl":    "//pkg/cmd/cockroach-bsl:cockroach-bsl",
 	"cockroach-short":  "//pkg/cmd/cockroach-short:cockroach-short",
 	"crlfmt":           "@com_github_cockroachdb_crlfmt//:crlfmt",
 	"dev":              "//pkg/cmd/dev:dev",
@@ -87,7 +87,7 @@ var buildTargetMapping = map[string]string{
 	"label-merged-pr":  "//pkg/cmd/label-merged-pr:label-merged-pr",
 	"optgen":           "//pkg/sql/opt/optgen/cmd/optgen:optgen",
 	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
-	"oss":              "//pkg/cmd/cockroach-oss:cockroach-oss",
+	"bsl":              "//pkg/cmd/cockroach-bsl:cockroach-bsl",
 	"langgen":          "//pkg/sql/opt/optgen/cmd/langgen:langgen",
 	"roachprod":        "//pkg/cmd/roachprod:roachprod",
 	"roachprod-stress": "//pkg/cmd/roachprod-stress:roachprod-stress",
@@ -339,7 +339,7 @@ func (d *dev) getBasicBuildArgs(
 
 	// Add --config=with_ui iff we're building a target that needs it.
 	for _, target := range buildTargets {
-		if target.fullName == buildTargetMapping["cockroach"] || target.fullName == buildTargetMapping["cockroach-oss"] {
+		if target.fullName == buildTargetMapping["cockroach"] || target.fullName == buildTargetMapping["cockroach-bsl"] {
 			args = append(args, "--config=with_ui")
 			break
 		}

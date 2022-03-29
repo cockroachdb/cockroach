@@ -1314,7 +1314,7 @@ func (c *transientCluster) AcquireDemoLicense(ctx context.Context) (chan error, 
 		close(licenseDone)
 	} else {
 		// If we allow telemetry, then also try and get an enterprise license for the demo.
-		// GetAndApplyLicense will be nil in the pure OSS/BSL build of cockroach.
+		// GetAndApplyLicense will be nil in the pure BSL build of cockroach.
 		db, err := gosql.Open("postgres", c.connURL)
 		if err != nil {
 			return nil, err

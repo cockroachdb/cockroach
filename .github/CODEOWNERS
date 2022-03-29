@@ -156,7 +156,7 @@
 /pkg/cmd/cmp-sql/            @cockroachdb/sql-experience
 /pkg/cmd/cmpconn/            @cockroachdb/sql-experience
 /pkg/cmd/cockroach/          @cockroachdb/cli-prs
-/pkg/cmd/cockroach-oss/      @cockroachdb/cli-prs
+/pkg/cmd/cockroach-bsl/      @cockroachdb/cli-prs
 /pkg/cmd/cockroach-short/    @cockroachdb/cli-prs
 /pkg/cmd/compile-build/      @cockroachdb/dev-inf
 /pkg/cmd/cr2pg/              @cockroachdb/sql-experience

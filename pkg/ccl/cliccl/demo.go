@@ -78,6 +78,6 @@ func getAndApplyLicense(db *gosql.DB, clusterID uuid.UUID, org string) (bool, er
 
 func init() {
 	// Set the GetAndApplyLicense function within cockroach demo.
-	// This separation is done to avoid using enterprise features in an OSS/BSL build.
+	// This separation is done to avoid using enterprise features in an BSL build.
 	democluster.GetAndApplyLicense = getAndApplyLicense
 }

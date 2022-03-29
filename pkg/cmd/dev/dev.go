@@ -86,7 +86,7 @@ Typical usage:
         Run all opt exec builder logic tests.
 
     dev testlogic base
-        Run all OSS logic tests.
+        Run all BSL logic tests.
 
     dev testlogic --files='prepare|fk'
         Run the logic tests in the files named prepare and fk (the full path is not required).

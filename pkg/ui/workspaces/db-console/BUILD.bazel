@@ -191,12 +191,12 @@ webpack(
 )
 
 webpack(
-    name = "db-console-oss",
+    name = "db-console-bsl",
     args = [
         "--config $(execpath webpack.app.js)",
-        "--env.dist=oss",
+        "--env.dist=bsl",
         "--mode production",
-        "--env.output=$(RULEDIR)/db-console-oss",
+        "--env.output=$(RULEDIR)/db-console-bsl",
     ],
     data = WEBPACK_DATA_OSS + [":node_modules"],
     output_dir = True,

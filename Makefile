@@ -202,7 +202,7 @@ help: ## Print help for targets with comments.
 		"make testlogic" "Run all base, opt exec builder, and CCL logic tests." \
 		"make testccllogic" "Run all CCL SQL logic tests." \
 		"make testoptlogic" "Run all opt exec builder SQL logic tests." \
-		"make testbaselogic" "Run all the OSS SQL logic tests." \
+		"make testbaselogic" "Run all the BSL SQL logic tests." \
 		"make testlogic FILES='prepare|fk'" "Run the logic tests in the files named prepare and fk (the full path is not required)." \
 		"make testlogic FILES=fk SUBTESTS='20042|20045'" "Run the logic tests within subtests 20042 and 20045 in the file named fk." \
 		"make testlogic TESTCONFIG=local" "Run the logic tests for the cluster configuration 'local'." \
@@ -514,7 +514,7 @@ C_LIBS_COMMON = \
 	$(if $(target-is-windows),,$(LIBEDIT)) \
 	$(LIBPROJ)
 C_LIBS_SHORT = $(C_LIBS_COMMON)
-C_LIBS_OSS = $(C_LIBS_COMMON)
+C_LIBS_BSL = $(C_LIBS_COMMON)
 C_LIBS_CCL = $(C_LIBS_COMMON)
 C_LIBS_DYNAMIC = $(LIBGEOS)
 
@@ -761,7 +761,7 @@ build/defs.mk.sig: .ALWAYS_REBUILD
 	@echo '$(sig)' | cmp -s - $@ || echo '$(sig)' > $@
 
 COCKROACH      := ./cockroach$(SUFFIX)
-COCKROACHOSS   := ./cockroachoss$(SUFFIX)
+COCKROACHBSL   := ./cockroachbsl$(SUFFIX)
 COCKROACHSHORT := ./cockroachshort$(SUFFIX)
 COCKROACHSQL   := ./cockroach-sql$(SUFFIX)
 
@@ -932,7 +932,7 @@ go-targets-ccl := \
 	generate \
 	lint lintshort
 
-go-targets := $(go-targets-ccl) $(COCKROACHOSS) $(COCKROACHSHORT) $(COCKROACHSQL)
+go-targets := $(go-targets-ccl) $(COCKROACHBSL) $(COCKROACHSHORT) $(COCKROACHSQL)
 
 .DEFAULT_GOAL := all
 all: build
@@ -946,8 +946,8 @@ go-install: build-mode = install
 
 $(COCKROACH) go-install generate: pkg/ui/assets.ccl.installed
 
-$(COCKROACHOSS): BUILDTARGET = ./pkg/cmd/cockroach-oss
-$(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/assets.oss.installed | $(C_LIBS_DYNAMIC)
+$(COCKROACHBSL): BUILDTARGET = ./pkg/cmd/cockroach-bsl
+$(COCKROACHBSL): $(C_LIBS_BSL) pkg/ui/assets.bsl.installed | $(C_LIBS_DYNAMIC)
 
 $(COCKROACHSHORT): BUILDTARGET = ./pkg/cmd/cockroach-short
 $(COCKROACHSHORT): TAGS += short
@@ -979,7 +979,7 @@ $(go-targets): override LINKFLAGS += \
 # The build.utcTime format must remain in sync with TimeFormat in
 # pkg/build/info.go. It is not installed in tests or in `buildshort` to avoid
 # busting the cache on every rebuild.
-$(COCKROACH) $(COCKROACHOSS) go-install: override LINKFLAGS += \
+$(COCKROACH) $(COCKROACHBSL) go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
 settings-doc-gen = $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
@@ -997,7 +997,7 @@ SETTINGS_DOC_PAGES := docs/generated/settings/settings.html docs/generated/setti
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
 .PHONY: go-install
-$(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) $(COCKROACHSQL) go-install:
+$(COCKROACH) $(COCKROACHBSL) $(COCKROACHSHORT) $(COCKROACHSQL) go-install:
 	 $(xgo) $(build-mode) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 # The build targets, in addition to producing a Cockroach binary, silently
@@ -1013,14 +1013,14 @@ $(COCKROACH) $(COCKROACHOSS) $(COCKROACHSHORT) $(COCKROACHSQL) go-install:
 # diagrams. When the generated files are not checked in, the breakage goes
 # unnoticed until the docs team comes along, potentially months later. Much
 # better to make the developer who introduces the breakage fix the breakage.
-.PHONY: build buildoss buildshort
+.PHONY: build buildbsl buildshort
 build: ## Build the CockroachDB binary.
-buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
+buildbsl: ## Build the CockroachDB binary without any CCL-licensed code.
 buildshort: ## Build the CockroachDB binary without the admin UI and RocksDB.
 build: $(COCKROACH)
-buildoss: $(COCKROACHOSS)
+buildbsl: $(COCKROACHBSL)
 buildshort: $(COCKROACHSHORT)
-build buildoss buildshort: $(if $(is-cross-compile),,$(DOCGEN_TARGETS))
+build buildbsl buildshort: $(if $(is-cross-compile),,$(DOCGEN_TARGETS))
 build buildshort: $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGES))
 
 # For historical reasons, symlink cockroach to cockroachshort.
@@ -1206,7 +1206,7 @@ ARCHIVE_EXTRAS = \
 	$(BUILDINFO) \
 	$(SQLPARSER_TARGETS) \
 	$(OPTGEN_TARGETS) \
-	pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
+	pkg/ui/assets.ccl.installed pkg/ui/assets.bsl.installed
 
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
@@ -1282,9 +1282,9 @@ UI_JS_CCL := pkg/ui/workspaces/db-console/ccl/src/js/protos.js
 UI_TS_CCL := pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
 UI_PROTOS_CCL := $(UI_JS_CCL) $(UI_TS_CCL)
 
-UI_JS_OSS := pkg/ui/workspaces/db-console/src/js/protos.js
-UI_TS_OSS := pkg/ui/workspaces/db-console/src/js/protos.d.ts
-UI_PROTOS_OSS := $(UI_JS_OSS) $(UI_TS_OSS)
+UI_JS_BSL := pkg/ui/workspaces/db-console/src/js/protos.js
+UI_TS_BSL := pkg/ui/workspaces/db-console/src/js/protos.d.ts
+UI_PROTOS_BSL := $(UI_JS_BSL) $(UI_TS_BSL)
 
 $(GOGOPROTO_PROTO): bin/.submodules-initialized
 $(ERRORS_PROTO): bin/.submodules-initialized
@@ -1317,18 +1317,18 @@ $(UI_JS_CCL): $(GW_PROTOS) $(GO_PROTOS) $(JS_PROTOS_CCL) pkg/ui/yarn.installed |
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(PROMETHEUS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS) $(JS_PROTOS_CCL)) >> $@
 
-.SECONDARY: $(UI_JS_OSS)
-$(UI_JS_OSS): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/yarn.installed | bin/.submodules-initialized
+.SECONDARY: $(UI_JS_BSL)
+$(UI_JS_BSL): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/yarn.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(PROMETHEUS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS)) >> $@
 
 # End of PBJS-generated files.
 
-.SECONDARY: $(UI_TS_CCL) $(UI_TS_OSS)
+.SECONDARY: $(UI_TS_CCL) $(UI_TS_BSL)
 $(UI_TS_CCL): $(UI_JS_CCL) pkg/ui/yarn.installed
-$(UI_TS_OSS): $(UI_JS_OSS) pkg/ui/yarn.installed
-$(UI_TS_CCL) $(UI_TS_OSS):
+$(UI_TS_BSL): $(UI_JS_BSL) pkg/ui/yarn.installed
+$(UI_TS_CCL) $(UI_TS_BSL):
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBTS) $< >> $@
@@ -1352,7 +1352,7 @@ ui-topo: pkg/ui/yarn.installed
 	pkg/ui/workspaces/db-console/scripts/topo.js
 
 .PHONY: ui-lint
-ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
+ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_BSL) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(STYLINT) -c .stylintrc styl
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(TSC)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console yarn lint
@@ -1361,10 +1361,10 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
-UI_CCL_DLLS := pkg/ui/workspaces/db-console/dist/protos.ccl.dll.js pkg/ui/workspaces/db-console/dist/vendor.oss.dll.js
-UI_CCL_MANIFESTS := pkg/ui/workspaces/db-console/protos.ccl.manifest.json pkg/ui/workspaces/db-console/vendor.oss.manifest.json
-UI_OSS_DLLS := $(subst .ccl,.oss,$(UI_CCL_DLLS))
-UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
+UI_CCL_DLLS := pkg/ui/workspaces/db-console/dist/protos.ccl.dll.js pkg/ui/workspaces/db-console/dist/vendor.bsl.dll.js
+UI_CCL_MANIFESTS := pkg/ui/workspaces/db-console/protos.ccl.manifest.json pkg/ui/workspaces/db-console/vendor.bsl.manifest.json
+UI_BSL_DLLS := $(subst .ccl,.bsl,$(UI_CCL_DLLS))
+UI_BSL_MANIFESTS := $(subst .ccl,.bsl,$(UI_CCL_MANIFESTS))
 
 # (Ab)use pattern rules to teach Make that this one Webpack command produces two
 # files. Normally, Make would run the recipe twice if dist/FOO.js and
@@ -1380,10 +1380,10 @@ UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 #
 # [0]: https://stackoverflow.com/a/3077254/1122351
 # [1]: http://savannah.gnu.org/bugs/?19108
-.SECONDARY: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS)
+.SECONDARY: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_BSL_DLLS) $(UI_BSL_MANIFESTS)
 
-pkg/ui/workspaces/db-console/dist/%.oss.dll.js pkg/ui/workspaces/db-console/%.oss.manifest.json: pkg/ui/workspaces/db-console/webpack.%.js pkg/ui/yarn.installed $(CLUSTER_UI_JS) $(UI_PROTOS_OSS)
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) -p --config webpack.$*.js --env.dist=oss
+pkg/ui/workspaces/db-console/dist/%.bsl.dll.js pkg/ui/workspaces/db-console/%.bsl.manifest.json: pkg/ui/workspaces/db-console/webpack.%.js pkg/ui/yarn.installed $(CLUSTER_UI_JS) $(UI_PROTOS_BSL)
+	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) -p --config webpack.$*.js --env.dist=bsl
 
 pkg/ui/workspaces/db-console/dist/%.ccl.dll.js pkg/ui/workspaces/db-console/%.ccl.manifest.json: pkg/ui/workspaces/db-console/webpack.%.js pkg/ui/yarn.installed $(CLUSTER_UI_JS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) -p --config webpack.$*.js --env.dist=ccl
@@ -1404,9 +1404,9 @@ ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
 
-.SECONDARY: pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
+.SECONDARY: pkg/ui/assets.ccl.installed pkg/ui/assets.bsl.installed
 pkg/ui/assets.ccl.installed: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/workspaces/db-console/ccl -type f)
-pkg/ui/assets.oss.installed: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
+pkg/ui/assets.bsl.installed: $(UI_BSL_DLLS) $(UI_BSL_MANIFESTS) $(UI_JS_BSL)
 pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.app.js $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
 	find pkg/ui/dist$*/assets -mindepth 1 -not -name .gitkeep -delete
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) --config webpack.app.js --env.dist=$*
@@ -1436,10 +1436,10 @@ ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
 	$(info $(yellow)NOTE: consider using `./dev ui clean` instead of `make ui-clean`$(term-reset))
-	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name .gitkeep -delete
-	rm -rf pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
+	find pkg/ui/distccl/assets pkg/ui/distbsl/assets -mindepth 1 -not -name .gitkeep -delete
+	rm -rf pkg/ui/assets.ccl.installed pkg/ui/assets.bsl.installed
 	rm -rf pkg/ui/dist_vendor/*
-	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)
+	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_BSL)
 	rm -f pkg/ui/workspaces/db-console/*manifest.json
 	rm -rf pkg/ui/workspaces/cluster-ui/dist
 
@@ -1705,7 +1705,7 @@ clean: cleanshort clean-c-deps
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated SQL parser, optgen, and UI protos code.
 maintainer-clean: clean ui-maintainer-clean
-	rm -f $(SQLPARSER_TARGETS) $(LOG_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
+	rm -f $(SQLPARSER_TARGETS) $(LOG_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS_BSL) $(UI_PROTOS_CCL)
 
 .PHONY: unsafe-clean
 unsafe-clean: ## Like maintainer-clean, but also remove all untracked/ignored files.
@@ -1720,7 +1720,7 @@ unsafe-clean: maintainer-clean unsafe-clean-c-deps
 bins = \
   bin/allocsim \
   bin/benchmark \
-  bin/cockroach-oss \
+  bin/cockroach-bsl \
   bin/cockroach-short \
   bin/cockroach-sql \
   bin/docgen \

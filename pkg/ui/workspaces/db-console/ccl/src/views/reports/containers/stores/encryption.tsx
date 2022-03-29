@@ -12,7 +12,7 @@ import Long from "long";
 import moment from "moment";
 
 import * as protos from "src/js/protos";
-import { EncryptionStatusProps } from "oss/src/views/reports/containers/stores/encryption";
+import { EncryptionStatusProps } from "bsl/src/views/reports/containers/stores/encryption";
 import { Bytes } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 

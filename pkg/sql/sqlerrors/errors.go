@@ -108,7 +108,7 @@ func NewUndefinedSchemaError(name string) error {
 	return pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", name)
 }
 
-// NewCCLRequiredError creates an error for when a CCL feature is used in an OSS
+// NewCCLRequiredError creates an error for when a CCL feature is used in an BSL
 // binary.
 func NewCCLRequiredError(err error) error {
 	return pgerror.WithCandidateCode(err, pgcode.CCLRequired)

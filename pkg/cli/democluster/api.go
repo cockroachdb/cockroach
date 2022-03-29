@@ -55,6 +55,6 @@ type DemoCluster interface {
 	SetupWorkload(ctx context.Context, licenseDone <-chan error) error
 }
 
-// GetAndApplyLicense is not implemented in order to keep OSS/BSL builds successful.
+// GetAndApplyLicense is not implemented in order to keep BSL builds successful.
 // The cliccl package sets this function if enterprise features are available to demo.
 var GetAndApplyLicense func(dbConn *gosql.DB, clusterID uuid.UUID, org string) (bool, error)

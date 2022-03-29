@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	// ossFlag is the name of the boolean long (GNU-style) flag that builds only
-	// the open-source parts of the UI.
-	ossFlag = "oss"
+	// bslFlag is the name of the boolean long (GNU-style) flag that builds only
+	// the BSL licensed parts of the UI.
+	bslFlag = "bsl"
 )
 
 // makeUICmd initializes the top-level 'ui' subcommand.
@@ -92,7 +92,7 @@ Replaces 'make ui-watch'.`,
 			ctx, stop := signal.NotifyContext(d.cli.Context(), os.Interrupt, os.Kill)
 			defer stop()
 
-			isOss, err := cmd.Flags().GetBool(ossFlag)
+			isBSL, err := cmd.Flags().GetBool(bslFlag)
 			if err != nil {
 				return err
 			}
@@ -102,7 +102,7 @@ Replaces 'make ui-watch'.`,
 				"build",
 				"//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
 			}
-			if !isOss {
+			if !isBSL {
 				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl")
 			}
 			logCommand("bazel", args...)
@@ -150,8 +150,8 @@ Replaces 'make ui-watch'.`,
 			}
 
 			var webpackDist string
-			if isOss {
-				webpackDist = "oss"
+			if isBSL {
+				webpackDist = "bsl"
 			} else {
 				webpackDist = "ccl"
 			}
@@ -194,7 +194,7 @@ Replaces 'make ui-watch'.`,
 	watchCmd.Flags().Int16P(portFlag, "p", 3000, "port to serve UI on")
 	watchCmd.Flags().String(dbTargetFlag, "http://localhost:8080", "url to proxy DB requests to")
 	watchCmd.Flags().Bool(secureFlag, false, "serve via HTTPS")
-	watchCmd.Flags().Bool(ossFlag, false, "build only the open-source parts of the UI")
+	watchCmd.Flags().Bool(bslFlag, false, "build only the open-source parts of the UI")
 
 	return watchCmd
 }

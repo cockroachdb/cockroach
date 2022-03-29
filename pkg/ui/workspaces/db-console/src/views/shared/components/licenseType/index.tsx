@@ -17,6 +17,6 @@ import DebugAnnotation from "src/views/shared/components/debugAnnotation";
  */
 export default class LicenseType extends React.Component<{}, {}> {
   render() {
-    return <DebugAnnotation label="License type" value="OSS" />;
+    return <DebugAnnotation label="License type" value="BSL" />;
   }
 }
