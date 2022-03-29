@@ -549,15 +549,15 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					sorterSpec := &execinfrapb.SorterSpec{
 						OutputOrdering: execinfrapb.Ordering{Columns: orderingCols},
 					}
-					var limit, offset uint64
+					var offset uint64
 					if topK > 0 {
 						offset = uint64(rng.Intn(int(topK)))
-						limit = topK - offset
+						sorterSpec.Limit = int64(topK - offset)
 					}
 					pspec := &execinfrapb.ProcessorSpec{
 						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 						Core:        execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
-						Post:        execinfrapb.PostProcessSpec{Limit: limit, Offset: offset},
+						Post:        execinfrapb.PostProcessSpec{Offset: offset},
 						ResultTypes: inputTypes,
 					}
 					args := verifyColOperatorArgs{
