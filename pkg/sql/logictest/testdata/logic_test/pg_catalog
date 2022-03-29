@@ -5628,3 +5628,11 @@ JOIN pg_authid ON usesysid = oid
 ----
 passed
 true
+
+# Regression test for crashing when performing a lookup join of NULL into
+# pg_type.oid virtual table (#76768).
+query T
+SELECT pg_type.oid
+FROM (SELECT null::OID AS b) AS a
+INNER LOOKUP JOIN pg_type ON pg_type.oid=a.b
+----

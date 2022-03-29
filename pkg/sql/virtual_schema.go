@@ -78,7 +78,12 @@ type virtualSchemaDef interface {
 type virtualIndex struct {
 	// populate populates the table given the constraint. matched is true if any
 	// rows were generated.
-	populate func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
+	// unwrappedConstraint is unwrapped and never tree.DNull.
+	populate func(
+		ctx context.Context,
+		unwrappedConstraint tree.Datum,
+		p *planner,
+		db catalog.DatabaseDescriptor,
 		addRow func(...tree.Datum) error,
 	) (matched bool, err error)
 
@@ -626,17 +631,22 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 				break
 			}
 			constraintDatum := span.StartKey().Value(0)
+			unwrappedConstraint := tree.UnwrapDatum(p.EvalContext(), constraintDatum)
 			virtualIndex := def.getIndex(index.GetID())
-
-			// For each span, run the index's populate method, constrained to the
-			// constraint span's value.
-			found, err := virtualIndex.populate(ctx, constraintDatum, p, dbDesc,
-				addRowIfPassesFilter(idxConstraint))
-			if err != nil {
-				return err
+			// NULL constraint will not match any row
+			matched := unwrappedConstraint != tree.DNull
+			if matched {
+				// For each span, run the index's populate method, constrained to the
+				// constraint span's value.
+				var err error
+				matched, err = virtualIndex.populate(ctx, unwrappedConstraint, p, dbDesc,
+					addRowIfPassesFilter(idxConstraint))
+				if err != nil {
+					return err
+				}
 			}
-			if !found && virtualIndex.partial {
-				// If we found nothing, and the index was partial, we have no choice
+			if !matched && virtualIndex.partial {
+				// If no row was matched, and the index was partial, we have no choice
 				// but to populate the entire table and search through it.
 				break
 			}
