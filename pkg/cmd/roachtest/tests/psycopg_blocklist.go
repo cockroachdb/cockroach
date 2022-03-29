@@ -28,10 +28,7 @@ var psycopgBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var psycopgBlockList22_1 = blocklist{
-	// The following item can be removed once there is a new psycopg2 release.
-	"tests.test_module.ExceptionsTestCase.test_9_6_diagnostics": "58035",
-}
+var psycopgBlockList22_1 = blocklist{}
 
 var psycopgBlockList21_2 = blocklist{
 	"tests.test_async_keyword.CancelTests.test_async_cancel": "41335",
