@@ -28,7 +28,8 @@ func TestFeedBudget(t *testing.T) {
 		m.Start(context.Background(), nil, mon.MakeStandaloneBudget(poolSize))
 		b := m.MakeBoundAccount()
 
-		f := NewFeedBudget(&b, budgetSize)
+		enabled := int32(1)
+		f := NewFeedBudget(&b, budgetSize, &enabled)
 		return f, m, &b
 	}
 	ctx := context.Background()
@@ -173,23 +174,52 @@ func TestFeedBudget(t *testing.T) {
 	})
 }
 
+func TestDisableBudget(t *testing.T) {
+	s := cluster.MakeTestingClusterSettings()
+
+	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(100000))
+	bf := NewBudgetFactory(context.Background(), m, 100000000, time.Second*5, &s.SV)
+
+	f := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)))
+
+	objectSize := int64(1000)
+	alloc, err := f.TryGet(context.Background(), objectSize)
+	require.NoError(t, err)
+	require.NotNil(t, alloc, "can't get budget")
+	// Disable budget using settings and verify that budget will stop creating new
+	// allocations.
+	RangefeedBudgetsEnabled.Override(context.Background(), &s.SV, false)
+	alloc2, err := f.TryGet(context.Background(), 1000)
+	require.NoError(t, err)
+	require.Nil(t, alloc2, "budget was not disabled")
+
+	// Release should not crash or cause any anomalies after budget is disabled.
+	alloc.Release(context.Background())
+	// When budget is released it keeps as much as budget increment amount
+	// allocated for caching purposes which we can't release until the factory
+	// is destroyed, but we can check that it is less than object size (because
+	// allocation increment is low).
+	require.Less(t, bf.Metrics().SharedBytesCount.Value(), objectSize,
+		"budget was not released")
+}
+
 func TestBudgetFactory(t *testing.T) {
 	s := cluster.MakeTestingClusterSettings()
 
 	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, s)
 	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
-	bf := NewBudgetFactory(context.Background(), rootMon, 10000, time.Second*5)
+	bf := NewBudgetFactory(context.Background(), rootMon, 10000, time.Second*5, &s.SV)
 
 	// Verify system ranges use own budget.
-	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix), &s.SV)
+	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix))
 	_, e := bSys.TryGet(context.Background(), 199)
 	require.NoError(t, e, "failed to obtain system range budget")
 	require.Equal(t, int64(0), rootMon.AllocBytes(), "System feeds should borrow from own budget")
 	require.Equal(t, int64(199), bf.Metrics().SystemBytesCount.Value(), "Metric was not updated")
 
 	// Verify user feeds use shared root budget.
-	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID+1)),
-		&s.SV)
+	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)))
 	_, e = bUsr.TryGet(context.Background(), 99)
 	require.NoError(t, e, "failed to obtain non-system budget")
 	require.Equal(t, int64(99), rootMon.AllocBytes(), "Non-system feeds should borrow from shared budget")
@@ -197,7 +227,6 @@ func TestBudgetFactory(t *testing.T) {
 
 	// Verify is budget is disabled in settings, nil budget is created.
 	RangefeedBudgetsEnabled.Override(context.Background(), &s.SV, false)
-	bUsr = bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID+1)),
-		&s.SV)
+	bUsr = bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)))
 	require.Nil(t, bUsr, "Range budget when budgets are disabled.")
 }

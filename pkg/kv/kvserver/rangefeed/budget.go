@@ -118,8 +118,12 @@ type FeedBudget struct {
 	limit int64
 	// Channel to notify that memory was returned to the budget.
 	replenishC chan interface{}
-	// Budget cancellation request
+	// Budget cancellation request.
 	stopC chan interface{}
+	// Atomic value reflecting RangefeedBudgetsEnabled cluster setting. When
+	// budgets are disabled, all new messages should pass through, all previous
+	// allocations should still be returned as memory pool is shared with SQL.
+	budgetsEnabled *int32
 
 	closed sync.Once
 }
@@ -127,7 +131,7 @@ type FeedBudget struct {
 // NewFeedBudget creates a FeedBudget to be used with RangeFeed. If nil account
 // is passed, function will return nil which is safe to use with RangeFeed as
 // it effectively disables memory accounting for that feed.
-func NewFeedBudget(budget *mon.BoundAccount, limit int64) *FeedBudget {
+func NewFeedBudget(budget *mon.BoundAccount, limit int64, disableBudget *int32) *FeedBudget {
 	if budget == nil {
 		return nil
 	}
@@ -136,9 +140,10 @@ func NewFeedBudget(budget *mon.BoundAccount, limit int64) *FeedBudget {
 		limit = (1 << 63) - 1
 	}
 	f := &FeedBudget{
-		replenishC: make(chan interface{}, 1),
-		stopC:      make(chan interface{}),
-		limit:      limit,
+		replenishC:     make(chan interface{}, 1),
+		stopC:          make(chan interface{}),
+		limit:          limit,
+		budgetsEnabled: disableBudget,
 	}
 	f.mu.memBudget = budget
 	return f
@@ -148,6 +153,9 @@ func NewFeedBudget(budget *mon.BoundAccount, limit int64) *FeedBudget {
 // returns error immediately.
 // Returned allocation has its use counter set to 1.
 func (f *FeedBudget) TryGet(ctx context.Context, amount int64) (*SharedBudgetAllocation, error) {
+	if atomic.LoadInt32(f.budgetsEnabled) == 0 {
+		return nil, nil
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.mu.closed {
@@ -258,6 +266,12 @@ type BudgetFactory struct {
 	feedBytesMon       *mon.BytesMonitor
 	systemFeedBytesMon *mon.BytesMonitor
 
+	settings *settings.Values
+	// budgetsEnabled is an atomic "bool" that allows disabling all budgets
+	// created by this factory on the fly. This value is updated from settings
+	// OnChange callback.
+	budgetsEnabled int32
+
 	metrics *FeedBudgetPoolMetrics
 }
 
@@ -268,6 +282,7 @@ func NewBudgetFactory(
 	rootMon *mon.BytesMonitor,
 	memoryPoolSize int64,
 	histogramWindowInterval time.Duration,
+	settings *settings.Values,
 ) *BudgetFactory {
 	if !useBudgets || rootMon == nil {
 		return nil
@@ -287,12 +302,26 @@ func NewBudgetFactory(
 	rangeFeedPoolMonitor.SetMetrics(metrics.SharedBytesCount, nil /* maxHist */)
 	rangeFeedPoolMonitor.Start(ctx, rootMon, mon.BoundAccount{})
 
-	return &BudgetFactory{
+	bf := BudgetFactory{
 		limit:              feedSizeLimit,
 		feedBytesMon:       rangeFeedPoolMonitor,
 		systemFeedBytesMon: systemRangeMonitor,
+		settings:           settings,
 		metrics:            metrics,
 	}
+	RangefeedBudgetsEnabled.SetOnChange(settings, bf.killSwitchUpdated)
+	if RangefeedBudgetsEnabled.Get(settings) {
+		bf.budgetsEnabled = 1
+	}
+	return &bf
+}
+
+func (f *BudgetFactory) killSwitchUpdated(_ context.Context) {
+	enabled := int32(0)
+	if RangefeedBudgetsEnabled.Get(f.settings) {
+		enabled = 1
+	}
+	atomic.StoreInt32(&f.budgetsEnabled, enabled)
 }
 
 // Stop stops underlying memory monitors used by factory.
@@ -308,20 +337,20 @@ func (f *BudgetFactory) Stop(ctx context.Context) {
 // CreateBudget creates feed budget using memory pools configured in the
 // factory. It is safe to call on nil factory as it will produce nil budget
 // which in turn disables memory accounting on range feed.
-func (f *BudgetFactory) CreateBudget(key roachpb.RKey, settings *settings.Values) *FeedBudget {
+func (f *BudgetFactory) CreateBudget(key roachpb.RKey) *FeedBudget {
 	if f == nil {
 		return nil
 	}
-	if !RangefeedBudgetsEnabled.Get(settings) {
+	if atomic.LoadInt32(&f.budgetsEnabled) == 0 {
 		return nil
 	}
 	// We use any table with reserved ID in system tenant as system case.
 	if key.Less(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1))) {
 		acc := f.systemFeedBytesMon.MakeBoundAccount()
-		return NewFeedBudget(&acc, 0)
+		return NewFeedBudget(&acc, 0, &f.budgetsEnabled)
 	}
 	acc := f.feedBytesMon.MakeBoundAccount()
-	return NewFeedBudget(&acc, f.limit)
+	return NewFeedBudget(&acc, f.limit, &f.budgetsEnabled)
 }
 
 // Metrics exposes Metrics for BudgetFactory so that they could be registered

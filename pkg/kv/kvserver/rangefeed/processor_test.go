@@ -537,10 +537,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(40))
-	b := m.MakeBoundAccount()
-	fb := NewFeedBudget(&b, 0)
+	fb := newTestBudget(40)
 
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
@@ -608,10 +605,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 func TestProcessorMemoryBudgetReleased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(40))
-	b := m.MakeBoundAccount()
-	fb := NewFeedBudget(&b, 0)
+	fb := newTestBudget(40)
 
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
@@ -1088,8 +1082,9 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 
 	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
 	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	budgetEnabled := int32(1)
 	b := m.MakeBoundAccount()
-	fb := NewFeedBudget(&b, 0)
+	fb := NewFeedBudget(&b, 0, &budgetEnabled)
 
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
@@ -1177,10 +1172,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 	// objects. Ideally it would be nice to have
 	const channelCapacity = totalEvents + 5
 
-	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	b := m.MakeBoundAccount()
-	fb := NewFeedBudget(&b, 0)
+	fb := newTestBudget(math.MaxInt64)
 
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
@@ -1234,6 +1226,15 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 	requireBudgetDrainedSoon(t, p, rStream)
 }
 
+func newTestBudget(limit int64) *FeedBudget {
+	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(limit))
+	budgetEnabled := int32(1)
+	b := m.MakeBoundAccount()
+	fb := NewFeedBudget(&b, 0, &budgetEnabled)
+	return fb
+}
+
 // TestBudgetReleaseOnOneStreamError verifies that if one stream fails while
 // other keeps running, accounting correctly releases memory budget for shared
 // events.
@@ -1248,10 +1249,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	// as sync events used to flush queues.
 	const channelCapacity = totalEvents/2 + 10
 
-	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	b := m.MakeBoundAccount()
-	fb := NewFeedBudget(&b, 0)
+	fb := newTestBudget(math.MaxInt64)
 
 	stopper := stop.NewStopper()
 	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
@@ -1417,10 +1415,7 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 
 	var budget *FeedBudget
 	if false {
-		m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-		m.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
-		acc := m.MakeBoundAccount()
-		budget = NewFeedBudget(&acc, 0)
+		budget = newTestBudget(math.MaxInt64)
 	}
 
 	stopper := stop.NewStopper()
