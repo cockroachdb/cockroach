@@ -48,6 +48,9 @@ func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri 
 	if conf.AccessIsWithExplicitAuth() {
 		return nil
 	}
+	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
+		return nil
+	}
 	hasAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return err
