@@ -143,6 +143,10 @@ type EvalContext interface {
 	// calling RevokeLease or WatchForMerge) to freeze further progression of the
 	// closed timestamp before calling this method.
 	GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp
+
+	// Release returns the memory allocated by the EvalContext implementation to a
+	// sync.Pool.
+	Release()
 }
 
 // ImmutableEvalContext is like EvalContext, but it encapsulates state that
@@ -300,3 +304,4 @@ func (m *mockEvalCtxImpl) GetMaxBytes() int64 {
 func (m *mockEvalCtxImpl) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 	return roachpb.StoreCapacity{Available: 1, Capacity: 1}, nil
 }
+func (m *mockEvalCtxImpl) Release() {}
