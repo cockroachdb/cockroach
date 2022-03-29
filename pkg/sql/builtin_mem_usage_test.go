@@ -29,7 +29,7 @@ import (
 // initial database connection, but small enough to overflow easily. It's set
 // to be comfortably large enough that the server can start up with a bit of
 // extra space to overflow.
-const lowMemoryBudget = 800000
+const lowMemoryBudget = 1 << 20 /* 1MiB */
 
 // rowSize is the length of the string present in each row of the table created
 // by createTableWithLongStrings.
