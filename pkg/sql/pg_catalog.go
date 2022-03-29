@@ -2994,7 +2994,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				h := makeOidHasher()
 				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
-				coid := tree.MustBeDOid(constraint)
+				d := tree.UnwrapDatum(p.EvalContext(), constraint)
+				if d == tree.DNull || constraint == tree.DNull {
+					return false, nil
+				}
+				coid := tree.MustBeDOid(d)
 				ooid := oid.Oid(int(coid.DInt))
 
 				// Check if it is a predefined type.
