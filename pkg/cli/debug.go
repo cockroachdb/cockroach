@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -810,6 +811,10 @@ Output environment variables that influence configuration.
 	},
 }
 
+var debugCompactOpts = struct {
+	maxConcurrency int
+}{maxConcurrency: runtime.GOMAXPROCS(0)}
+
 var debugCompactCmd = &cobra.Command{
 	Use:   "compact <directory>",
 	Short: "compact the sstables in a store",
@@ -824,7 +829,10 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenEngine(args[0], stopper, storage.MustExist, storage.DisableAutomaticCompactions)
+	db, err := OpenEngine(args[0], stopper,
+		storage.MustExist,
+		storage.DisableAutomaticCompactions,
+		storage.MaxConcurrentCompactions(debugCompactOpts.maxConcurrency))
 	if err != nil {
 		return err
 	}
@@ -1676,6 +1684,10 @@ func init() {
 		"duration to run the test for")
 	f.BoolVarP(&syncBenchOpts.LogOnly, "log-only", "l", syncBenchOpts.LogOnly,
 		"only write to the WAL, not to sstables")
+
+	f = debugCompactCmd.Flags()
+	f.IntVarP(&debugCompactOpts.maxConcurrency, "max-concurrency", "c", debugCompactOpts.maxConcurrency,
+		"maximum number of concurrent compactions")
 
 	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
 	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
