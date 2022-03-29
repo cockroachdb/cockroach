@@ -146,7 +146,7 @@ func checkStoreRangeStats(
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	eng, err := OpenExistingStore(dir, stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
+	eng, err := OpenEngine(dir, stopper, storage.MustExist, storage.ReadOnly)
 	if err != nil {
 		return err
 	}
@@ -220,7 +220,7 @@ func checkStoreRaftState(
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	db, err := OpenExistingStore(dir, stopper, true /* readOnly */, false /* disableAutomaticCompactions */)
+	db, err := OpenEngine(dir, stopper, storage.MustExist, storage.ReadOnly)
 	if err != nil {
 		return err
 	}
