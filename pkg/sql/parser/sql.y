@@ -6621,6 +6621,13 @@ show_regions_stmt:
       ShowRegionsFrom: tree.ShowRegionsFromDefault,
     }
   }
+| SHOW SUPER REGIONS FROM DATABASE database_name
+  {
+    $$.val = &tree.ShowRegions{
+      ShowRegionsFrom: tree.ShowSuperRegionsFromDatabase,
+      DatabaseName: tree.Name($6),
+    }
+  }
 | SHOW REGIONS error // SHOW HELP: SHOW REGIONS
 
 show_locality_stmt:

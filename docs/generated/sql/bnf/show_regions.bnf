@@ -4,3 +4,4 @@ show_regions_stmt ::=
 	| 'SHOW' 'REGIONS' 'FROM' 'ALL' 'DATABASES'
 	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE' database_name
 	| 'SHOW' 'REGIONS'
+	| 'SHOW' 'SUPER' 'REGIONS' 'FROM' 'DATABASE' database_name
