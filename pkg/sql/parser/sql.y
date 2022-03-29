@@ -1303,8 +1303,8 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <empty> opt_using_clause
 %type <tree.RefreshDataOption> opt_clear_data
 
-%type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list alter_sequence_option_list
-%type <tree.SequenceOption> sequence_option_elem alter_sequence_option_elem
+%type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list
+%type <tree.SequenceOption> sequence_option_elem
 
 %type <bool> all_or_distinct
 %type <bool> with_comment
@@ -1737,28 +1737,14 @@ alter_sequence_stmt:
 | ALTER SEQUENCE error // SHOW HELP: ALTER SEQUENCE
 
 alter_sequence_options_stmt:
-  ALTER SEQUENCE sequence_name alter_sequence_option_list
+  ALTER SEQUENCE sequence_name sequence_option_list
   {
     $$.val = &tree.AlterSequence{Name: $3.unresolvedObjectName(), Options: $4.seqOpts(), IfExists: false}
   }
-| ALTER SEQUENCE IF EXISTS sequence_name alter_sequence_option_list
+| ALTER SEQUENCE IF EXISTS sequence_name sequence_option_list
   {
     $$.val = &tree.AlterSequence{Name: $5.unresolvedObjectName(), Options: $6.seqOpts(), IfExists: true}
   }
-
-
-alter_sequence_option_list:
-  alter_sequence_option_elem                       { $$.val = []tree.SequenceOption{$1.seqOpt()} }
-| alter_sequence_option_list alter_sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
-
-alter_sequence_option_elem:
-  sequence_option_elem
-| RESTART                      { $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, OptionalVal: false} }
-| RESTART signed_iconst64      { x := $2.int64()
-                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalVal: true} }
-| RESTART WITH signed_iconst64 { x := $3.int64()
-                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalVal: true, OptionalWord: true} }
-
 
 // %Help: ALTER DATABASE - change the definition of a database
 // %Category: DDL
@@ -8128,6 +8114,11 @@ sequence_option_elem:
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
 | START WITH signed_iconst64   { x := $3.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
+| RESTART                      { $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, OptionalVal: false} }
+| RESTART signed_iconst64      { x := $2.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalVal: true} }
+| RESTART WITH signed_iconst64 { x := $3.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalVal: true, OptionalWord: true} }
 | VIRTUAL                      { $$.val = tree.SequenceOption{Name: tree.SeqOptVirtual} }
 
 // %Help: TRUNCATE - empty one or more tables
