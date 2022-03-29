@@ -249,8 +249,9 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 // `scorerOptions` here, which sets the range count rebalance threshold.
 // Instead, we use our own implementation of `scorerOptions` that promotes QPS
 // balance.
-func (sr *StoreRebalancer) scorerOptions() *qpsScorerOptions {
+func (sr *StoreRebalancer) scorerOptions(ctx context.Context) *qpsScorerOptions {
 	return &qpsScorerOptions{
+		storeHealthOptions:    sr.rq.allocator.storeHealthOptions(ctx),
 		deterministic:         sr.rq.allocator.storePool.deterministic,
 		qpsRebalanceThreshold: qpsRebalanceThreshold.Get(&sr.st.SV),
 		minRequiredQPSDiff:    minQPSDifferenceForTransfers.Get(&sr.st.SV),
@@ -270,7 +271,7 @@ func (sr *StoreRebalancer) scorerOptions() *qpsScorerOptions {
 func (sr *StoreRebalancer) rebalanceStore(
 	ctx context.Context, mode LBRebalancingMode, allStoresList StoreList,
 ) {
-	options := sr.scorerOptions()
+	options := sr.scorerOptions(ctx)
 	var localDesc *roachpb.StoreDescriptor
 	for i := range allStoresList.stores {
 		if allStoresList.stores[i].StoreID == sr.rq.store.StoreID() {
@@ -360,7 +361,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 			&replicasToMaybeRebalance,
 			localDesc,
 			allStoresList,
-			sr.scorerOptions(),
+			sr.scorerOptions(ctx),
 		)
 		if replWithStats.repl == nil {
 			log.Infof(ctx,
