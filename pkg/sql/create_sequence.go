@@ -158,7 +158,7 @@ func doCreateSequence(
 	// Initialize the sequence value.
 	var startVal int64
 	if desc.SequenceOpts.Restart != nil {
-		startVal = int64(*desc.SequenceOpts.Restart)
+		startVal = *desc.SequenceOpts.Restart
 	} else {
 		startVal = desc.SequenceOpts.Start
 	}

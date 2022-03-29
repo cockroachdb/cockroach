@@ -672,7 +672,7 @@ func assignSequenceOptions(
 		)
 	}
 	if opts.Restart != nil {
-		if int64(*opts.Restart) > opts.MaxValue {
+		if *opts.Restart > opts.MaxValue {
 			return pgerror.Newf(
 				pgcode.InvalidParameterValue,
 				"RESTART value (%d) cannot be greater than MAXVALUE (%d)",
@@ -680,7 +680,7 @@ func assignSequenceOptions(
 				opts.MaxValue,
 			)
 		}
-		if int64(*opts.Restart) < opts.MinValue {
+		if *opts.Restart < opts.MinValue {
 			return pgerror.Newf(
 				pgcode.InvalidParameterValue,
 				"RESTART value (%d) cannot be less than MINVALUE (%d)",
