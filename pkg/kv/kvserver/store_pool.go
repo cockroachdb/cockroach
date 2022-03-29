@@ -755,10 +755,6 @@ type StoreList struct {
 	// candidateWritesPerSecond tracks writes-per-second stats for stores that are
 	// eligible to be rebalance targets.
 	candidateWritesPerSecond stat
-
-	// candidateReadAmplification tracks the read amplification stats for stores that are
-	// eligible to be rebalance targets.
-	candidateReadAmplification stat
 }
 
 // Generates a new store list based on the passed in descriptors. It will
@@ -773,7 +769,6 @@ func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 		sl.candidateLogicalBytes.update(float64(desc.Capacity.LogicalBytes))
 		sl.candidateQueriesPerSecond.update(desc.Capacity.QueriesPerSecond)
 		sl.candidateWritesPerSecond.update(desc.Capacity.WritesPerSecond)
-		sl.candidateReadAmplification.update(float64(desc.Capacity.ReadAmplification))
 	}
 	return sl
 }
@@ -781,12 +776,11 @@ func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 func (sl StoreList) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf,
-		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-queries-per-second=%v read-amplification=%v",
+		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-queries-per-second=%v",
 		sl.candidateRanges.mean,
 		sl.candidateLeases.mean,
 		humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
 		sl.candidateQueriesPerSecond.mean,
-		sl.candidateReadAmplification.mean,
 	)
 	if len(sl.stores) > 0 {
 		fmt.Fprintf(&buf, "\n")
@@ -794,11 +788,11 @@ func (sl StoreList) String() string {
 		fmt.Fprintf(&buf, " <no candidates>")
 	}
 	for _, desc := range sl.stores {
-		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f read-amplification=%d\n",
+		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f l0-sublevels=%d\n",
 			desc.StoreID, desc.Capacity.RangeCount,
 			desc.Capacity.LeaseCount, humanizeutil.IBytes(desc.Capacity.LogicalBytes),
 			desc.Capacity.QueriesPerSecond,
-			desc.Capacity.ReadAmplification,
+			desc.Capacity.L0Sublevels,
 		)
 	}
 	return buf.String()
