@@ -341,6 +341,10 @@ const (
 	// to 'yes|no|only'
 	EnableNewChangefeedOptions
 
+	// GossipL0Sublevels is the version where L0 sublevels are gossiped
+	// in a store descriptor's capacity and can be used for allocation
+	// decisions.
+	GossipL0Sublevels
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -580,6 +584,10 @@ var versionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
 	},
 
+	{
+		Key:     GossipL0Sublevels,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 108},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
