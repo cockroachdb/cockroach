@@ -244,6 +244,14 @@ func (b *Bytes) copyElements(srcElementsToCopy []element, src *Bytes, destIdx in
 	// Optimize copying of the elements by copying all of them directly into the
 	// destination. This way all inlined values become correctly set, and we
 	// only need to set the non-inlined values separately.
+	//
+	// Note that this behavior results in losing the references to the old
+	// non-inlined values, even if they could be reused. If Bytes is not Reset,
+	// then that unused space in Bytes.buffer can accumulate. However, checking
+	// whether there are old non-inlined values with non-zero capacity leads to
+	// performance regressions, and in the production code we do reset the Bytes
+	// in all cases, so we accept this poor behavior in such a hypothetical /
+	// test-only scenario. See #78703 for more details.
 	copy(destElements, srcElementsToCopy)
 	// Early bounds checks.
 	_ = destElements[len(srcElementsToCopy)-1]
