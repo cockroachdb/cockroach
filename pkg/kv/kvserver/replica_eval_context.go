@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -29,6 +30,12 @@ import (
 // Do not introduce new uses of this.
 var todoSpanSet = &spanset.SpanSet{}
 
+var evalContextPool = sync.Pool{
+	New: func() interface{} {
+		return &evalContextImpl{}
+	},
+}
+
 // evalContextImpl implements the batcheval.EvalContext interface.
 type evalContextImpl struct {
 	*Replica
@@ -39,7 +46,9 @@ type evalContextImpl struct {
 	closedTS       hlc.Timestamp
 }
 
-func newEvalContextImpl(ctx context.Context, r *Replica, requireClosedTS bool) *evalContextImpl {
+func newEvalContextImpl(
+	ctx context.Context, r *Replica, requireClosedTS bool,
+) (ec *evalContextImpl, release func()) {
 	var closedTS hlc.Timestamp
 	if requireClosedTS {
 		// We elide this call to get the replica's current closed timestamp unless
@@ -47,10 +56,14 @@ func newEvalContextImpl(ctx context.Context, r *Replica, requireClosedTS bool) *
 		closedTS = r.GetCurrentClosedTimestamp(ctx)
 	}
 
-	return &evalContextImpl{
+	ec = evalContextPool.Get().(*evalContextImpl)
+	*ec = evalContextImpl{
 		Replica:        r,
 		closedTSElided: !requireClosedTS,
 		closedTS:       closedTS,
+	}
+	return ec, func() {
+		evalContextPool.Put(ec)
 	}
 }
 
@@ -71,17 +84,17 @@ var _ batcheval.EvalContext = &evalContextImpl{}
 // passed.
 func NewReplicaEvalContext(
 	ctx context.Context, r *Replica, ss *spanset.SpanSet, requireClosedTS bool,
-) batcheval.EvalContext {
+) (rec batcheval.EvalContext, release func()) {
 	if ss == nil {
 		log.Fatalf(r.AnnotateCtx(context.Background()), "can't create a ReplicaEvalContext with assertions but no SpanSet")
 	}
 
-	ec := newEvalContextImpl(ctx, r, requireClosedTS)
+	rec, release = newEvalContextImpl(ctx, r, requireClosedTS)
 	if util.RaceEnabled {
 		return &SpanSetReplicaEvalContext{
-			i:  ec,
+			i:  rec,
 			ss: *ss,
-		}
+		}, release
 	}
-	return ec
+	return rec, release
 }

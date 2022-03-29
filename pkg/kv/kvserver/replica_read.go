@@ -49,7 +49,8 @@ func (r *Replica) executeReadOnlyBatch(
 	ui := uncertainty.ComputeInterval(&ba.Header, st, r.Clock().MaxOffset())
 
 	// Evaluate read-only batch command.
-	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTS())
+	rec, release := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTS())
+	defer release()
 
 	// TODO(irfansharif): It's unfortunate that in this read-only code path,
 	// we're stuck with a ReadWriter because of the way evaluateBatch is
