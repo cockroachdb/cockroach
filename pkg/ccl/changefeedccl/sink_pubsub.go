@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"hash/crc32"
 	"net/url"
 
@@ -182,7 +183,7 @@ func MakePubsubSink(
 			topics:        p.getTopicsMap(targets, pubsubTopicName),
 			ctx:           ctx,
 			projectID:     projectID,
-			region:        region,
+			region:        gcpEndpointForRegion(region),
 			url:           pubsubURL,
 			withTopicName: pubsubTopicName,
 		}
@@ -533,4 +534,11 @@ func (p *gcpPubsubClient) forEachTopic(f func(descpb.ID, *topicStruct) error) er
 		}
 	}
 	return nil
+}
+
+// Generate the cloud endpoint that's specific to a region (e.g. us-east1).
+// Ideally this would be discoverable via API but doesn't seem to be.
+// A hardcoded approach looks to be correct right now.
+func gcpEndpointForRegion(region string) string {
+	return fmt.Sprintf("%s-pubsub.googleapis.com:443", region)
 }
