@@ -119,6 +119,15 @@ func CacheSize(size int64) ConfigOption {
 	}
 }
 
+// MaxConcurrentCompactions configures the maximum number of concurrent
+// compactions an Engine will execute.
+func MaxConcurrentCompactions(n int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.Opts.MaxConcurrentCompactions = n
+		return nil
+	}
+}
+
 // EncryptionAtRest configures an engine to use encryption-at-rest. It is used
 // for configuring in-memory engines, which are used in tests. It is not safe
 // to modify the given slice afterwards as it is captured by reference.
