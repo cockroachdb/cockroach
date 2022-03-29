@@ -1198,7 +1198,10 @@ message TableDescriptor {
   optional uint32 next_constraint_id = 49 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "NextConstraintID", (gogoproto.casttype) = "ConstraintID"];
 
-  // Next ID: 51
+  // AutoStatsSettings are table settings related to auto stats collection.
+  optional cockroach.sql.catalog.catpb.AutoStatsSettings auto_stats_settings = 51 [(gogoproto.customname)="AutoStatsSettings"];
+
+  // Next ID: 52
 }
 
 // SurvivalGoal is the survival goal for a database.
