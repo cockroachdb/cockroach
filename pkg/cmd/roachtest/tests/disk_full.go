@@ -37,6 +37,16 @@ func registerDiskFull(r registry.Registry) {
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, c.Spec().NodeCount))
 			c.Start(ctx, c.Range(1, nodes))
 
+			// Node 1 will soon be killed, when the ballast file fills up its disk. To
+			// ensure that the ranges containing system tables are available on other
+			// nodes, we wait here for 3x replication of each range. Without this,
+			// it's possible that we end up deadlocked on a system query that requires
+			// a range on node 1, but node 1 will not restart until the query
+			// completes.
+			db := c.Conn(ctx, 1)
+			WaitFor3XReplication(t, db)
+			_ = db.Close()
+
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
