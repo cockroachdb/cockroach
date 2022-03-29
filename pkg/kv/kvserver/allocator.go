@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -899,7 +900,7 @@ func (a *Allocator) allocateTarget(
 		conf,
 		existingVoters,
 		existingNonVoters,
-		a.scorerOptions(),
+		a.scorerOptions(ctx),
 		// When allocating a *new* replica, we explicitly disregard nodes with any
 		// existing replicas. This is important for multi-store scenarios as
 		// otherwise, stores on the nodes that have existing replicas are simply
@@ -1122,6 +1123,7 @@ func (a Allocator) removeTarget(
 
 	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
 	rankedCandidates := candidateListForRemoval(
+		ctx,
 		candidateStoreList,
 		constraintsChecker,
 		a.storePool.getLocalitiesByStore(replicaSetForDiversityCalc),
@@ -1451,16 +1453,18 @@ func (a Allocator) RebalanceNonVoter(
 	)
 }
 
-func (a *Allocator) scorerOptions() *rangeCountScorerOptions {
+func (a *Allocator) scorerOptions(ctx context.Context) *rangeCountScorerOptions {
 	return &rangeCountScorerOptions{
+		diskHealthScorerOptions: a.scorerOptionsForDiskHealth(ctx),
 		deterministic:           a.storePool.deterministic,
 		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
 	}
 }
 
-func (a *Allocator) scorerOptionsForScatter() *scatterScorerOptions {
+func (a *Allocator) scorerOptionsForScatter(ctx context.Context) *scatterScorerOptions {
 	return &scatterScorerOptions{
 		rangeCountScorerOptions: rangeCountScorerOptions{
+			diskHealthScorerOptions: a.scorerOptionsForDiskHealth(ctx),
 			deterministic:           a.storePool.deterministic,
 			rangeRebalanceThreshold: 0,
 		},
@@ -1471,6 +1475,23 @@ func (a *Allocator) scorerOptionsForScatter() *scatterScorerOptions {
 		// words, we don't want stores that are too far away from the mean to be
 		// affected by the jitter.
 		jitter: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
+	}
+}
+
+// scorerOptionsForDiskHealth returns the disk health options, currently only
+// considering the threshold for l0Sublevels. This threshold is not considered
+// in allocation decision: ranking or excluding candidate stores when enabled
+// is false, due to mixed version clusters or the cluster setting being
+// disabled.
+func (a *Allocator) scorerOptionsForDiskHealth(ctx context.Context) *diskHealthScorerOptions {
+	enforcementLevel := storeHealthDisabled
+	if a.storePool.st.Version.IsActive(ctx, clusterversion.GossipL0Sublevels) {
+		enforcementLevel = storeHealthEnforcement(l0SublevelsThresholdEnforce.Get(&a.storePool.st.SV))
+	}
+
+	return &diskHealthScorerOptions{
+		enforcementLevel:    enforcementLevel,
+		l0SublevelThreshold: l0SublevelThreshold.Get(&a.storePool.st.SV),
 	}
 }
 
@@ -1666,6 +1687,7 @@ func (a *Allocator) TransferLeaseTarget(
 		// be true in all cases (some percentage of the leaseholder's traffic could
 		// be follower read traffic). See
 		// https://github.com/cockroachdb/cockroach/issues/75630.
+		rebalanceThreshold := qpsRebalanceThreshold.Get(&a.storePool.st.SV)
 		bestStore, noRebalanceReason := bestStoreToMinimizeQPSDelta(
 			leaseReplQPS,
 			qpsRebalanceThreshold.Get(&a.storePool.st.SV),
@@ -1673,6 +1695,10 @@ func (a *Allocator) TransferLeaseTarget(
 			leaseRepl.StoreID(),
 			candidates,
 			storeDescMap,
+			&qpsScorerOptions{
+				diskHealthScorerOptions: a.scorerOptionsForDiskHealth(ctx),
+				qpsRebalanceThreshold:   rebalanceThreshold,
+			},
 		)
 
 		switch noRebalanceReason {
