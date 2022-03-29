@@ -273,3 +273,6 @@ func (rec *SpanSetReplicaEvalContext) GetMaxBytes() int64 {
 func (rec *SpanSetReplicaEvalContext) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 	return rec.i.GetEngineCapacity()
 }
+
+// Release implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) Release() { rec.i.Release() }
