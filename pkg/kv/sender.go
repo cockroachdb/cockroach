@@ -336,6 +336,12 @@ type TxnSender interface {
 
 	// ClearTxnRetryableErr clears the retryable error, if any.
 	ClearTxnRetryableErr(ctx context.Context)
+
+	// HasPerformedReads returns true if a read has been performed.
+	HasPerformedReads() bool
+
+	// HasPerformedWrites returns true if a write has been performed.
+	HasPerformedWrites() bool
 }
 
 // SteppingMode is the argument type to ConfigureStepping.
