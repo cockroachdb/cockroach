@@ -1609,18 +1609,16 @@ CREATE TABLE t (id INT PRIMARY KEY)
 query TTTTTB colnames
 SHOW GRANTS ON t
 ----
-database_name  schema_name  table_name  grantee    privilege_type  is_grantable
-a              public       t           admin      ALL             true
-a              public       t           readwrite  ALL             true
-a              public       t           root       ALL             true
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+a              public       t           admin    ALL             true
+a              public       t           root     ALL             true
 
 query TTTTTB colnames
 SHOW GRANTS ON a.t
 ----
-database_name  schema_name  table_name  grantee    privilege_type  is_grantable
-a              public       t           admin      ALL             true
-a              public       t           readwrite  ALL             true
-a              public       t           root       ALL             true
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+a              public       t           admin    ALL             true
+a              public       t           root     ALL             true
 
 statement ok
 INSERT INTO system.users VALUES('test-user','');
@@ -1735,18 +1733,16 @@ CREATE VIEW v as SELECT id FROM t
 query TTTTTB colnames
 SHOW GRANTS ON v
 ----
-database_name  schema_name  table_name  grantee    privilege_type  is_grantable
-a              public       v           admin      ALL             true
-a              public       v           readwrite  ALL             true
-a              public       v           root       ALL             true
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+a              public       v           admin    ALL             true
+a              public       v           root     ALL             true
 
 query TTTTTB colnames
 SHOW GRANTS ON a.v
 ----
-database_name  schema_name  table_name  grantee    privilege_type  is_grantable
-a              public       v           admin      ALL             true
-a              public       v           readwrite  ALL             true
-a              public       v           root       ALL             true
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+a              public       v           admin    ALL             true
+a              public       v           root     ALL             true
 
 statement ok
 GRANT ALL ON v TO readwrite, "test-user"
