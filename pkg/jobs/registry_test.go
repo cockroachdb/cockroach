@@ -1038,22 +1038,26 @@ func TestJobIdleness(t *testing.T) {
 		job2 := createJob()
 
 		require.False(t, r.TestingIsJobIdle(job1.ID()))
-
+		require.EqualValues(t, 2, r.metrics.RunningNonIdleJobs.Value())
 		r.MarkIdle(job1, true)
 		r.MarkIdle(job2, true)
 		require.True(t, r.TestingIsJobIdle(job1.ID()))
 		require.Equal(t, int64(2), currentlyIdle.Value())
+		require.EqualValues(t, 0, r.metrics.RunningNonIdleJobs.Value())
 
 		// Repeated calls should not increase metric
 		r.MarkIdle(job1, true)
 		r.MarkIdle(job1, true)
 		require.Equal(t, int64(2), currentlyIdle.Value())
+		require.EqualValues(t, 0, r.metrics.RunningNonIdleJobs.Value())
 
 		r.MarkIdle(job1, false)
 		require.Equal(t, int64(1), currentlyIdle.Value())
 		require.False(t, r.TestingIsJobIdle(job1.ID()))
+		require.EqualValues(t, 1, r.metrics.RunningNonIdleJobs.Value())
 		r.MarkIdle(job2, false)
 		require.Equal(t, int64(0), currentlyIdle.Value())
+		require.EqualValues(t, 2, r.metrics.RunningNonIdleJobs.Value())
 
 		// Let the jobs complete
 		resumeErrChan <- nil
