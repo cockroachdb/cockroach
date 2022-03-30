@@ -32,7 +32,7 @@ const (
 	// doctorStatusVersion is the current "version" of the status checks performed
 	// by `dev doctor``. Increasing it will force doctor to be re-run before other
 	// dev commands can be run.
-	doctorStatusVersion = 2
+	doctorStatusVersion = 3
 
 	noCacheFlag = "no-cache"
 )
@@ -218,6 +218,23 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 			failedStampTestMsg = failedStampTestMsg + "    build --config=dev"
 		}
 		failures = append(failures, failedStampTestMsg)
+	}
+
+	// Check whether linting during builds (nogo) is explicitly configured
+	// before we get started.
+	stdout, err = d.exec.CommandContextSilent(ctx, "bazel", "build", "//build/bazelutil:test_nogo_configured")
+	if err != nil {
+		failedNogoTestMsg := "Failed to run `bazel build //build/bazelutil:test_nogo_configured. " + `
+This may be because you haven't configured whether to run lints during builds.
+Put EXACTLY ONE of the following lines in your .bazelrc.user:
+    build --config lintonbuild
+        OR
+    build --config nolintonbuild
+The former will run lint checks while you build. This will make incremental builds
+slightly slower and introduce a noticeable delay in first-time build setup.`
+		failures = append(failures, failedNogoTestMsg)
+		log.Println(failedNogoTestMsg)
+		printStdoutAndErr(string(stdout), err)
 	}
 
 	// We want to make sure there are no other failures before trying to

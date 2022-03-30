@@ -76,5 +76,14 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		env = append(env, envvar)
 		return d.exec.CommandContextWithEnv(ctx, env, "bazel", args...)
 	}
-	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	if err != nil {
+		return err
+	}
+	if !short {
+		args := []string{"build", "//pkg/cmd/cockroach-short", "--//build/toolchains:nogo_flag"}
+		logCommand("bazel", args...)
+		return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	}
+	return nil
 }
