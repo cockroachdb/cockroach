@@ -1473,6 +1473,14 @@ Can be set to 1 to ensure only one node is polled for data at a time.
 `,
 	}
 
+	ZipTenant = FlagInfo{
+		Name: "tenant-id",
+		Description: `
+Specify the tenant ID of the server. This is required to be set while
+running debug zip against a SQL only server for a tenant.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,

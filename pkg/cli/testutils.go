@@ -328,18 +328,30 @@ func isSQLCommand(args []string) (bool, error) {
 	return false, nil
 }
 
-func (c TestCLI) getRPCAddr() string {
-	if c.tenant != nil {
-		return c.tenant.RPCAddr()
+func (c TestCLI) getRPCAddr(tenantID roachpb.TenantID) (string, error) {
+	if tenantID == roachpb.SystemTenantID {
+		return c.ServingRPCAddr(), nil
 	}
-	return c.ServingRPCAddr()
+	if c.tenant == nil {
+		return "", errors.Errorf("cannot run CLI for tenant %d on system tenant", tenantID)
+	}
+	if c.tenant.RPCContext().TenantID != tenantID {
+		return "", errors.Errorf("cannot run CLI for tenant %d on tenant %d", tenantID, c.tenant.RPCContext().TenantID)
+	}
+	return c.tenant.RPCAddr(), nil
 }
 
-func (c TestCLI) getSQLAddr() string {
-	if c.tenant != nil {
-		return c.tenant.SQLAddr()
+func (c TestCLI) getSQLAddr(tenantID roachpb.TenantID) (string, error) {
+	if tenantID == roachpb.SystemTenantID {
+		return c.ServingSQLAddr(), nil
 	}
-	return c.ServingSQLAddr()
+	if c.tenant == nil {
+		return "", errors.Errorf("cannot run CLI for tenant %d on system tenant", tenantID)
+	}
+	if c.tenant.RPCContext().TenantID != tenantID {
+		return "", errors.Errorf("cannot run CLI for tenant %d on tenant %d", tenantID, c.tenant.RPCContext().TenantID)
+	}
+	return c.tenant.SQLAddr(), nil
 }
 
 // RunWithArgs add args according to TestCLI cfg.
@@ -349,11 +361,21 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)
 		if c.TestServer != nil {
-			addr := c.getRPCAddr()
+			tenantID, err := getTenantID(origArgs)
+			if err != nil {
+				return err
+			}
+			addr, err := c.getRPCAddr(tenantID)
+			if err != nil {
+				return err
+			}
 			if isSQL, err := isSQLCommand(origArgs); err != nil {
 				return err
 			} else if isSQL {
-				addr = c.getSQLAddr()
+				addr, err = c.getSQLAddr(tenantID)
+				if err != nil {
+					return err
+				}
 			}
 			h, p, err := net.SplitHostPort(addr)
 			if err != nil {
@@ -525,4 +547,21 @@ func MatchCSV(csvStr string, matchColRow [][]string) (err error) {
 		}
 	}
 	return err
+}
+
+func getTenantID(args []string) (roachpb.TenantID, error) {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--tenant-id") {
+			parts := strings.Split(arg, "=")
+			if len(parts) != 2 {
+				return roachpb.TenantID{}, errors.Errorf("invalid tenant-id argument %s", arg)
+			}
+			tenantID, err := roachpb.ParseTenantID(parts[1])
+			if err != nil {
+				return roachpb.TenantID{}, nil
+			}
+			return tenantID, nil
+		}
+	}
+	return roachpb.SystemTenantID, nil
 }

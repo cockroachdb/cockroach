@@ -356,6 +356,10 @@ type zipContext struct {
 
 	// The log/heap/etc files to include.
 	files fileSelection
+
+	// tenantID of the server being connected to. This flag should
+	// be set while running debug zip against a tenant SQL server.
+	tenantID roachpb.TenantID
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -375,6 +379,7 @@ func setZipContextDefaults() {
 	now := timeutil.Now()
 	zipCtx.files.startTimestamp = timestampValue(now.Add(-48 * time.Hour))
 	zipCtx.files.endTimestamp = timestampValue(now.Add(24 * time.Hour))
+	zipCtx.tenantID = roachpb.SystemTenantID
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.

@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -34,8 +35,9 @@ func TestTenantZip(t *testing.T) {
 	skip.UnderRace(t, "test too slow under race")
 	tenantDir, tenantDirCleanupFn := testutils.TempDir(t)
 	defer tenantDirCleanupFn()
+	tenantID := serverutils.TestTenantID()
 	tenantArgs := base.TestTenantArgs{
-		TenantID:             serverutils.TestTenantID(),
+		TenantID:             tenantID,
 		HeapProfileDirName:   tenantDir,
 		GoroutineDumpDirName: tenantDir,
 	}
@@ -53,7 +55,8 @@ func TestTenantZip(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
+	zipCmd := fmt.Sprintf("debug zip --concurrency=1 --cpu-profile-duration=1s --tenant-id=%d %s", tenantID.ToUint64(), os.DevNull)
+	out, err := c.RunWithCapture(zipCmd)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -271,6 +271,33 @@ func (f *keyTypeFilter) Set(v string) error {
 	return nil
 }
 
+// tenantIDSetter wraps the tenantID variable within zipContext
+// and verifies its value during execution.
+type tenantIDSetter struct {
+	tenantID *roachpb.TenantID
+}
+
+// String implements the pflag.Value interface.
+func (t tenantIDSetter) String() string { return t.tenantID.String() }
+
+// Type implements the pflag.Value interface.
+func (t tenantIDSetter) Type() string { return "<uint>" }
+
+// Set implements the pflag.Value interface.
+func (t tenantIDSetter) Set(v string) error {
+	if v == "" {
+		*t.tenantID = roachpb.SystemTenantID
+		return nil
+	}
+
+	tID, err := roachpb.ParseTenantID(v)
+	if err != nil {
+		return err
+	}
+	*t.tenantID = tID
+	return nil
+}
+
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
 // flagSetForCmd is a replacement for cmd.Flag() that properly merges
@@ -685,6 +712,7 @@ func init() {
 		boolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs)
 		durationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 		intFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
+		varFlag(f, tenantIDSetter{&zipCtx.tenantID}, cliflags.ZipTenant)
 	}
 	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {

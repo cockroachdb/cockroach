@@ -1,6 +1,6 @@
 zip
 ----
-debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
+debug zip --concurrency=1 --cpu-profile-duration=1s --tenant-id=10 /dev/null
 [cluster] establishing RPC connection to ...
 [cluster] retrieving the node status to get the SQL address... done
 [cluster] using SQL address: ...

@@ -166,6 +166,7 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	zr := zipCtx.newZipReporter("cluster")
 
 	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
+	serverCfg.TenantID = zipCtx.tenantID
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return s.fail(err)
@@ -192,6 +193,7 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	s = zr.start("using SQL address: %s", sqlAddr.AddressField)
 
 	cliCtx.clientConnHost, cliCtx.clientConnPort, err = net.SplitHostPort(sqlAddr.AddressField)
+	cliCtx.tenantID = zipCtx.tenantID
 	if err != nil {
 		return s.fail(err)
 	}
