@@ -12,9 +12,7 @@ package scexec
 
 import (
 	"context"
-	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -28,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,37 +50,60 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	// liveness benefit because their entries are non-deterministic. The jobs
 	// writes are particularly bad because that table is constantly being
 	// scanned.
-	if err := performBatchedCatalogWrites(ctx, mvs, deps.Catalog()); err != nil {
+	dbZoneConfigsToDelete, gcJobRecords := mvs.gcJobs.makeRecords(
+		deps.TransactionalJobRegistry().MakeJobID,
+	)
+	if err := performBatchedCatalogWrites(
+		ctx,
+		mvs.descriptorsToDelete,
+		dbZoneConfigsToDelete,
+		mvs.checkedOutDescriptors,
+		mvs.drainedNames,
+		deps.Catalog(),
+	); err != nil {
 		return err
 	}
 	if err := logEvents(ctx, mvs, deps.EventLogger()); err != nil {
 		return err
 	}
-	if err := updateDescriptorMetadata(ctx, mvs, deps.DescriptorMetadataUpdater(ctx)); err != nil {
+	if err := updateDescriptorMetadata(
+		ctx, mvs, deps.DescriptorMetadataUpdater(ctx),
+	); err != nil {
 		return err
 	}
-	return updateOrDeleteJobs(ctx, deps.TransactionalJobRegistry(), mvs)
+	return manageJobs(
+		ctx,
+		gcJobRecords,
+		mvs.schemaChangerJob,
+		mvs.schemaChangerJobUpdates,
+		deps.TransactionalJobRegistry(),
+	)
 }
 
 func performBatchedCatalogWrites(
-	ctx context.Context, mvs *mutationVisitorState, cat Catalog,
+	ctx context.Context,
+	descriptorsToDelete catalog.DescriptorIDSet,
+	dbZoneConfigsToDelete catalog.DescriptorIDSet,
+	checkedOutDescriptors nstree.Map,
+	drainedNames map[descpb.ID][]descpb.NameInfo,
+	cat Catalog,
 ) error {
 	b := cat.NewCatalogChangeBatcher()
-	mvs.descriptorsToDelete.ForEach(func(id descpb.ID) {
-		mvs.checkedOutDescriptors.Remove(id)
+	descriptorsToDelete.ForEach(func(id descpb.ID) {
+		checkedOutDescriptors.Remove(id)
 	})
-	err := mvs.checkedOutDescriptors.IterateByID(func(entry catalog.NameEntry) error {
+	err := checkedOutDescriptors.IterateByID(func(entry catalog.NameEntry) error {
 		return b.CreateOrUpdateDescriptor(ctx, entry.(catalog.MutableDescriptor))
 	})
 	if err != nil {
 		return err
 	}
-	for _, id := range mvs.descriptorsToDelete.Ordered() {
+	for _, id := range descriptorsToDelete.Ordered() {
 		if err := b.DeleteDescriptor(ctx, id); err != nil {
 			return err
 		}
 	}
-	for id, drainedNames := range mvs.drainedNames {
+	for id, drainedNames := range drainedNames {
 		for _, name := range drainedNames {
 			if err := b.DeleteName(ctx, name, id); err != nil {
 				return err
@@ -92,14 +112,18 @@ func performBatchedCatalogWrites(
 	}
 	// Any databases being GCed should have an entry even if none of its tables
 	// are being dropped. This entry will be used to generate the GC jobs below.
-	for _, dbID := range mvs.dbGCJobs.Ordered() {
-		if _, ok := mvs.descriptorGCJobs[dbID]; !ok {
-			// Zone config should now be safe to remove versus waiting for the GC job.
-			if err := b.DeleteZoneConfig(ctx, dbID); err != nil {
-				return err
+	{
+		var err error
+		dbZoneConfigsToDelete.ForEach(func(id descpb.ID) {
+			if err == nil {
+				err = b.DeleteZoneConfig(ctx, id)
 			}
+		})
+		if err != nil {
+			return err
 		}
 	}
+
 	return b.ValidateAndRun(ctx)
 }
 
@@ -255,76 +279,26 @@ func updateDescriptorMetadata(
 	return nil
 }
 
-func updateOrDeleteJobs(
-	ctx context.Context, jr TransactionalJobRegistry, mvs *mutationVisitorState,
+func manageJobs(
+	ctx context.Context,
+	gcJobs []jobs.Record,
+	scJob *jobs.Record,
+	scJobUpdates map[jobspb.JobID]schemaChangerJobUpdate,
+	jr TransactionalJobRegistry,
 ) error {
-	var dbIDs catalog.DescriptorIDSet
-	for dbID := range mvs.descriptorGCJobs {
-		dbIDs.Add(dbID)
-	}
-	for _, dbID := range dbIDs.Ordered() {
-		job := jobspb.SchemaChangeGCDetails{
-			Tables: mvs.descriptorGCJobs[dbID],
-		}
-		// Check if the database is also being cleaned up at the same time.
-		if mvs.dbGCJobs.Contains(dbID) {
-			job.ParentID = dbID
-		}
-		jobName := func() string {
-			var ids catalog.DescriptorIDSet
-			if job.ParentID != descpb.InvalidID {
-				ids.Add(job.ParentID)
-			}
-			for _, table := range mvs.descriptorGCJobs[dbID] {
-				ids.Add(table.ID)
-			}
-			var sb strings.Builder
-			if ids.Len() == 1 {
-				sb.WriteString("dropping descriptor")
-			} else {
-				sb.WriteString("dropping descriptors")
-			}
-			ids.ForEach(func(id descpb.ID) {
-				sb.WriteString(fmt.Sprintf(" %d", id))
-			})
-			return sb.String()
-		}
-
-		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-		record.JobID = jr.MakeJobID()
-		if err := jr.CreateJob(ctx, record); err != nil {
+	// TODO(ajwerner): Batch job creation. Should be easy, the registry has
+	// the needed API.
+	for _, j := range gcJobs {
+		if err := jr.CreateJob(ctx, j); err != nil {
 			return err
 		}
 	}
-	for tableID, indexes := range mvs.indexGCJobs {
-		job := jobspb.SchemaChangeGCDetails{
-			ParentID: tableID,
-			Indexes:  indexes,
-		}
-		jobName := func() string {
-			if len(indexes) == 1 {
-				return fmt.Sprintf("dropping table %d index %d", tableID, indexes[0].IndexID)
-			}
-			var sb strings.Builder
-			sb.WriteString(fmt.Sprintf("dropping table %d indexes", tableID))
-			for _, index := range indexes {
-				sb.WriteString(fmt.Sprintf(" %d", index.IndexID))
-			}
-			return sb.String()
-		}
-
-		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-		record.JobID = jr.MakeJobID()
-		if err := jr.CreateJob(ctx, record); err != nil {
+	if scJob != nil {
+		if err := jr.CreateJob(ctx, *scJob); err != nil {
 			return err
 		}
 	}
-	if mvs.schemaChangerJob != nil {
-		if err := jr.CreateJob(ctx, *mvs.schemaChangerJob); err != nil {
-			return err
-		}
-	}
-	for id, update := range mvs.schemaChangerJobUpdates {
+	for id, update := range scJobUpdates {
 		if err := jr.UpdateSchemaChangeJob(ctx, id, func(
 			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), setNonCancelable func(),
 		) error {
@@ -350,13 +324,12 @@ type mutationVisitorState struct {
 	tableCommentsToDelete        catalog.DescriptorIDSet
 	constraintCommentsToUpdate   []constraintCommentToUpdate
 	databaseRoleSettingsToDelete []databaseRoleSettingToDelete
-	dbGCJobs                     catalog.DescriptorIDSet
-	descriptorGCJobs             map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID
-	indexGCJobs                  map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex
 	schemaChangerJob             *jobs.Record
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
 	eventsByStatement            map[uint32][]eventPayload
 	scheduleIDsToDelete          []int64
+
+	gcJobs
 }
 
 type constraintCommentToUpdate struct {
@@ -406,8 +379,6 @@ func newMutationVisitorState(c Catalog) *mutationVisitorState {
 	return &mutationVisitorState{
 		c:                 c,
 		drainedNames:      make(map[descpb.ID][]descpb.NameInfo),
-		indexGCJobs:       make(map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedIndex),
-		descriptorGCJobs:  make(map[descpb.ID][]jobspb.SchemaChangeGCDetails_DroppedID),
 		eventsByStatement: make(map[uint32][]eventPayload),
 	}
 }
@@ -499,29 +470,6 @@ func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.Na
 	mvs.drainedNames[id] = append(mvs.drainedNames[id], nameInfo)
 }
 
-func (mvs *mutationVisitorState) AddNewGCJobForTable(table catalog.TableDescriptor) {
-	mvs.descriptorGCJobs[table.GetParentID()] = append(mvs.descriptorGCJobs[table.GetParentID()],
-		jobspb.SchemaChangeGCDetails_DroppedID{
-			ID:       table.GetID(),
-			DropTime: timeutil.Now().UnixNano(),
-		})
-}
-
-func (mvs *mutationVisitorState) AddNewGCJobForDatabase(db catalog.DatabaseDescriptor) {
-	mvs.dbGCJobs.Add(db.GetID())
-}
-
-func (mvs *mutationVisitorState) AddNewGCJobForIndex(
-	tbl catalog.TableDescriptor, index catalog.Index,
-) {
-	mvs.indexGCJobs[tbl.GetID()] = append(
-		mvs.indexGCJobs[tbl.GetID()],
-		jobspb.SchemaChangeGCDetails_DroppedIndex{
-			IndexID:  index.GetID(),
-			DropTime: timeutil.Now().UnixNano(),
-		})
-}
-
 func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
 	jobID jobspb.JobID,
 	stmts []scpb.Statement,
@@ -576,32 +524,6 @@ func MakeDeclarativeSchemaChangeJobRecord(
 		NonCancelable: isNonCancelable,
 	}
 	return rec
-}
-
-// createGCJobRecord creates the job record for a GC job, setting some
-// properties which are common for all GC jobs.
-func createGCJobRecord(
-	originalDescription string, username security.SQLUsername, details jobspb.SchemaChangeGCDetails,
-) jobs.Record {
-	descriptorIDs := make([]descpb.ID, 0)
-	if len(details.Indexes) > 0 {
-		if len(descriptorIDs) == 0 {
-			descriptorIDs = []descpb.ID{details.ParentID}
-		}
-	} else {
-		for _, table := range details.Tables {
-			descriptorIDs = append(descriptorIDs, table.ID)
-		}
-	}
-	return jobs.Record{
-		Description:   fmt.Sprintf("GC for %s", originalDescription),
-		Username:      username,
-		DescriptorIDs: descriptorIDs,
-		Details:       details,
-		Progress:      jobspb.SchemaChangeGCProgress{},
-		RunningStatus: "waiting for GC TTL",
-		NonCancelable: true,
-	}
 }
 
 // EnqueueEvent implements the scmutationexec.MutationVisitorStateUpdater
