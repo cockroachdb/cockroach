@@ -73,9 +73,10 @@ func init() {
 				emit(func(this *scpb.View, md targetsWithElementMap) scop.Op {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.View) scop.Op {
+				emit(func(this *scpb.View, md targetsWithElementMap) scop.Op {
 					return &scop.CreateGcJobForTable{
-						TableID: this.ViewID,
+						TableID:             this.ViewID,
+						StatementForDropJob: statementForDropJob(this, md),
 					}
 				}),
 			),

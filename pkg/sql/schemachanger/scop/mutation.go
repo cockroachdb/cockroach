@@ -87,12 +87,14 @@ type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
 type CreateGcJobForTable struct {
 	mutationOp
 	TableID descpb.ID
+	StatementForDropJob
 }
 
 // CreateGcJobForDatabase creates a GC job for a given database.
 type CreateGcJobForDatabase struct {
 	mutationOp
 	DatabaseID descpb.ID
+	StatementForDropJob
 }
 
 // CreateGcJobForIndex creates a GC job for a given table index.
@@ -100,6 +102,7 @@ type CreateGcJobForIndex struct {
 	mutationOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
+	StatementForDropJob
 }
 
 // MarkDescriptorAsDroppedSynthetically marks a descriptor as dropped within

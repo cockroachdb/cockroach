@@ -710,7 +710,7 @@ upsert descriptor #108
   -  version: "2"
   +  version: "3"
 write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
-create job #2 (non-cancelable: true): "GC for dropping descriptor 108"
+create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [108]
 update progress of schema change job #1
 commit transaction #3
@@ -1208,7 +1208,7 @@ upsert descriptor #109
   -  version: "2"
   +  version: "3"
 write *eventpb.DropTable to event log for descriptor #109: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
-create job #2 (non-cancelable: true): "GC for dropping descriptor 109"
+create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
   descriptor IDs: [109]
 update progress of schema change job #1
 commit transaction #3

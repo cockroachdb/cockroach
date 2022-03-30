@@ -830,7 +830,7 @@ upsert descriptor #108
   -  version: "2"
   +  version: "3"
 write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹db›.‹sc›.‹t›
-create job #2 (non-cancelable: true): "GC for dropping descriptor 108"
+create job #2 (non-cancelable: true): "GC for DROP TABLE db.sc.t"
   descriptor IDs: [108]
 update progress of schema change job #1
 commit transaction #3
@@ -6416,8 +6416,8 @@ delete descriptor #123
 delete descriptor #124
 write *eventpb.DropDatabase to event log for descriptor #111: DROP DATABASE ‹db1› CASCADE
 delete scheduleId: <redacted>
-create job #2 (non-cancelable: true): "GC for dropping descriptors 111 114 115 116 117 118 119 120 121 122 125"
-  descriptor IDs: [114 115 119 120 121 122 125 117 118 116]
+create job #2 (non-cancelable: true): "GC for DROP DATABASE db1 CASCADE"
+  descriptor IDs: [114 115 116 117 118 119 120 121 122 125 111]
 update progress of schema change job #1
 commit transaction #3
 # end PostCommitPhase

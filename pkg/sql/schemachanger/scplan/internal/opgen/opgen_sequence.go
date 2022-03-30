@@ -55,9 +55,10 @@ func init() {
 				emit(func(this *scpb.Sequence, md targetsWithElementMap) scop.Op {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Sequence) scop.Op {
+				emit(func(this *scpb.Sequence, md targetsWithElementMap) scop.Op {
 					return &scop.CreateGcJobForTable{
-						TableID: this.SequenceID,
+						TableID:             this.SequenceID,
+						StatementForDropJob: statementForDropJob(this, md),
 					}
 				}),
 			),

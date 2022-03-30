@@ -179,6 +179,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j defaultdb.footyp
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -348,6 +350,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -567,6 +571,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -726,6 +732,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -993,12 +1001,17 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 104
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
+        StatementID: 1
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 1

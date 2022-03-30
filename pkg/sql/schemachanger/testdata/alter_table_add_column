@@ -556,7 +556,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
-create job #2 (non-cancelable: true): "GC for dropping table 106 index 1"
+create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
   descriptor IDs: [106]
 update progress of schema change job #1
 commit transaction #8
