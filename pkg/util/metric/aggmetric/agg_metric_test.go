@@ -33,8 +33,10 @@ func TestAggMetric(t *testing.T) {
 	writePrometheusMetrics := func(t *testing.T) string {
 		var in bytes.Buffer
 		ex := metric.MakePrometheusExporter()
-		ex.ScrapeRegistry(r, true /* includeChildMetrics */)
-		require.NoError(t, ex.PrintAsText(&in))
+		scrape := func(ex *metric.PrometheusExporter) {
+			ex.ScrapeRegistry(r, true /* includeChildMetrics */)
+		}
+		require.NoError(t, ex.ScrapeAndPrintAsText(&in, scrape))
 		var lines []string
 		for sc := bufio.NewScanner(&in); sc.Scan(); {
 			if !bytes.HasPrefix(sc.Bytes(), []byte{'#'}) {
