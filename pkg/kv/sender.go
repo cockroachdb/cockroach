@@ -429,8 +429,23 @@ func (f NonTransactionalFactoryFunc) NonTransactionalSender() Sender {
 func SendWrappedWith(
 	ctx context.Context, sender Sender, h roachpb.Header, args roachpb.Request,
 ) (roachpb.Response, *roachpb.Error) {
+	return SendWrappedWithAdmission(ctx, sender, h, roachpb.AdmissionHeader{}, args)
+}
+
+// SendWrappedWithAdmission is a convenience function which wraps the request
+// in a batch and sends it via the provided Sender and headers. It returns the
+// unwrapped response or an error. It's valid to pass a `nil` context; an
+// empty one is used in that case.
+func SendWrappedWithAdmission(
+	ctx context.Context,
+	sender Sender,
+	h roachpb.Header,
+	ah roachpb.AdmissionHeader,
+	args roachpb.Request,
+) (roachpb.Response, *roachpb.Error) {
 	ba := roachpb.BatchRequest{}
 	ba.Header = h
+	ba.AdmissionHeader = ah
 	ba.Add(args)
 
 	br, pErr := sender.Send(ctx, ba)

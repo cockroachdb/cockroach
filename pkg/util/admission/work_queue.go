@@ -68,6 +68,9 @@ type WorkPriority int8
 const (
 	// LowPri is low priority work.
 	LowPri WorkPriority = math.MinInt8
+	// BulkNormalPri is bulk priority work from bulk jobs, which could be run due
+	// to user submissions or be automatic.
+	BulkNormalPri WorkPriority = -30
 	// NormalPri is normal priority work.
 	NormalPri WorkPriority = 0
 	// HighPri is high priority work.
