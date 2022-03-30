@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
+	"golang.org/x/term"
 )
 
 const (
@@ -65,6 +66,8 @@ Connection
   \c, \connect {[DB] [USER] [HOST] [PORT] | [URL]}
                     connect to a server or print the current connection URL.
                     (Omitted values reuse previous parameters. Use '-' to skip a field.)
+  \password [USERNAME]   
+                    securely change the password for a user
 
 Input/Output
   \echo [STRING]    write the provided string to standard output.
@@ -1158,6 +1161,40 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			}
 		}
 
+	case `\password`:
+		fmt.Fprintf(c.iCtx.stdout, "Enter new password: \n")
+
+		password1, err := term.ReadPassword(int(c.ins.Stdin().Fd()))
+		if err != nil {
+			fmt.Fprintf(c.iCtx.stderr, "Error reading password\n:%v", err)
+		}
+
+		fmt.Fprintf(c.iCtx.stdout, "Enter it again: \n")
+		password2, err := term.ReadPassword(int(c.ins.Stdin().Fd()))
+		if err != nil {
+			fmt.Fprintf(c.iCtx.stderr, "Error reading password\n:%v", err)
+		}
+		if !bytes.Equal(password1, password2) {
+			fmt.Fprintf(c.iCtx.stderr, "Passwords didn't match\n")
+		} else {
+			var userName string
+
+			if len(cmd) > 1 {
+				userName = cmd[1]
+				for _, extraArg := range cmd[2:] {
+					fmt.Fprintf(c.iCtx.stdout, "\\password: extra argument \"%s\" ignored\n", extraArg)
+				}
+			} else {
+				userName = "current_user"
+			}
+
+			c.concatLines = fmt.Sprintf(
+				`ALTER USER %s WITH LOGIN PASSWORD '%s'`,
+				userName,
+				stripANSIFromString(string(password1)))
+			return cliRunStatement
+		}
+
 	case `\|`:
 		return c.pipeSyscmd(c.lastInputLine, nextState, errState)
 
@@ -2090,4 +2127,10 @@ func (c *cliState) runWithInterruptableCtx(fn func(ctx context.Context) error) e
 	// Now run the query.
 	err := fn(ctx)
 	return err
+}
+
+// stripANSIFromString returns str with all ANSI escape sequences removed.
+func stripANSIFromString(str string) string {
+	var EscapeSequencePattern = regexp.MustCompile(`(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]`)
+	return EscapeSequencePattern.ReplaceAllString(str, "")
 }
