@@ -76,6 +76,12 @@ func Scan(
 		panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
 	}
 
+	// TODO: if this method returns with an error, it doesn't return ReadBytes,
+	// but the reads still happened. So worth thinking about that and perhaps
+	// passing the stats as a separate return value which always needs to be
+	// populated on all return paths.
+	res.ReadBytes = scanRes.ReadBytes
+
 	reply.NumKeys = scanRes.NumKeys
 	reply.NumBytes = scanRes.NumBytes
 

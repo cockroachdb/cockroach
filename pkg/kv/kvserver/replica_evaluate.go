@@ -227,6 +227,12 @@ func evaluateBatch(
 		cantDeferWTOE bool
 	}
 
+	writeBatchSize := func() int { return 0 }
+	if b, ok := readWriter.(storage.Batch); ok {
+		writeBatchSize = b.Len
+	}
+	curWriteSize := writeBatchSize()
+
 	// TODO(tbg): if we introduced an "executor" helper here that could carry state
 	// across the slots in the batch while we execute them, this code could come
 	// out a lot less ad-hoc.
@@ -269,6 +275,47 @@ func evaluateBatch(
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
 			ctx, readWriter, rec, ms, baHeader, args, reply, ui)
+		{
+			newWriteSize := writeBatchSize()
+			delta := newWriteSize - curWriteSize
+			curWriteSize = newWriteSize
+			if delta > 0 {
+				// TODO: populate per-Method counters following the approach used here:
+				// https://github.com/cockroachdb/cockroach/blob/f7719998f4dab1d603b84ad2b0e7fe83d521af11/pkg/kv/kvclient/kvcoord/dist_sender.go#L260-L266
+				// TODO: decide whether we need to "defer" the metrics recording. For
+				// reads, this likely makes no sense (if a request evaluates, it does
+				// the reads right then, so they already happened). But evaluating a
+				// write just means we're making a WriteBatch. Its writes may never be
+				// seen to the engine, for example if a later entry in the BatchRequest
+				// causes an error. The "write" really only happens when we append to
+				// the log (and even then it may not end up getting applied to the state
+				// machine, but distinguishing this is diminishing returns imo). So we
+				// could send the information along with the `result.Result` method and
+				// only record it upon log submission. I think this is best avoided for
+				// the first pass, we can just document that we're tracking "potential"
+				// writes.
+				// TODO: we also have `Replica.writeStats` which counts the number of
+				// mutations (sort of... it's complicated). There may be a chance to
+				// either replace it or we need to at least document better what it
+				// does.
+				// TODO: do we want to track write count (on top of write bytes) by
+				// request type?
+				// TODO: do we want to expose an EWMA of these per-req breakdowns on the
+				// (*Replica).State method? This could power a richer "hot ranges"
+				// dashboard, where you could for example find ranges that are "hot for
+				// AddSSTable in terms of bytes/sec ingested". Even if we don't break
+				// it down per request type we should at least expose write bytes/sec
+				// on that method as in past escalations we really would've wanted the
+				// hot writing ranges and had no way of getting that.
+				// TODO: the AddSSTable method will need special casing, as it does not
+				// create a large write batch but populates curResult.Replicated.AddSSTable.Data.
+				log.Infof(ctx, "XXX evaluated %s, wrote %d bytes", args.Method(), delta)
+			}
+		}
+		if curResult.ReadBytes > 0 {
+			// TODO: many of the TODOs for the write path apply here too.
+			log.Infof(ctx, "XXX evaluated %s, read %d bytes", args.Method(), curResult.ReadBytes)
+		}
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{

@@ -240,7 +240,7 @@ type Replica struct {
 	// purpose.
 	//
 	// [1]: https://github.com/cockroachdb/cockroach/pull/16664
-	writeStats *replicaStats
+	writeStats *replicaStats // TODO pinging for diff visibility
 
 	// creatingReplica is set when a replica is created as uninitialized
 	// via a raft message.
@@ -1226,6 +1226,10 @@ func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
 
 // State returns a copy of the internal state of the Replica, along with some
 // auxiliary information.
+//
+// TODO: rename this to RangeInfo, State is misleading
+// TODO: include helpful per-replica write/read load information here, derived
+// from the new metrics we're adding.
 func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	var ri kvserverpb.RangeInfo
 

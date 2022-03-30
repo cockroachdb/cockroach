@@ -161,6 +161,7 @@ type Result struct {
 	Replicated   kvserverpb.ReplicatedEvalResult
 	WriteBatch   *kvserverpb.WriteBatch
 	LogicalOpLog *kvserverpb.LogicalOpLog
+	ReadBytes    int64 // TODO
 }
 
 // IsZero reports whether p is the zero value.

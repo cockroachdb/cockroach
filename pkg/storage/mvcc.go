@@ -2439,6 +2439,8 @@ type MVCCScanResult struct {
 	// used for encoding the uncompressed kv pairs contained in the result.
 	NumBytes int64
 
+	ReadBytes int64 // TODO
+
 	ResumeSpan      *roachpb.Span
 	ResumeReason    roachpb.ResumeReason
 	ResumeNextBytes int64 // populated if TargetBytes != 0, size of next resume kv
@@ -2500,8 +2502,20 @@ func MVCCScanToBytes(
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
 	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
+	// TODO: is this better than KeyBytes+ValBytes?
+	// TODO: force all callers to newMVCCIterator to reckon with the stats
+	// requirement, to make sure all code paths pass them up. There are other
+	// ways to do the plumbing that we consider. Think about it and pick a good
+	// one. For example, newMVCCIterator could take a pebble stats struct that
+	// pebble would then associate to the iterator and record into directly. Then
+	// we'd have to plumb a value down, but not pass a value back up in return.
+	// Notably this sidesteps the question of whether stats are reliably recorded
+	// on error return paths.
 	defer iter.Close()
-	return mvccScanToBytes(ctx, iter, key, endKey, timestamp, opts)
+	res, err := mvccScanToBytes(ctx, iter, key, endKey, timestamp, opts)
+	res.ReadBytes = int64(iter.Stats().Stats.InternalStats.BlockBytes)
+	res.ReadBytes++ // HACK: BlockBytes seems to always be zero at least in unit tests, maybe something about the in-mem engine?
+	return res, err
 }
 
 // MVCCScanAsTxn constructs a temporary transaction from the given transaction
