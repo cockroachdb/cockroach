@@ -465,6 +465,7 @@ go_test(
         "alter_column_type_test.go",
         "ambiguous_commit_test.go",
         "as_of_test.go",
+        "authorization_test.go",
         "backfill_num_ranges_in_span_test.go",
         "backfill_test.go",
         "builtin_mem_usage_test.go",
