@@ -1082,11 +1082,11 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	defer tc.mu.Unlock()
 	// The transaction must not have already been used in this epoch.
 	if !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty() {
-		return errors.WithContextTags(errors.AssertionFailedf(
+		return errors.WithContextTags(errors.Newf(
 			"cannot set fixed timestamp, txn %s already performed reads", tc.mu.txn), ctx)
 	}
 	if tc.mu.txn.Sequence != 0 {
-		return errors.WithContextTags(errors.AssertionFailedf(
+		return errors.WithContextTags(errors.Newf(
 			"cannot set fixed timestamp, txn %s already performed writes", tc.mu.txn), ctx)
 	}
 
