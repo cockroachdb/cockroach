@@ -13,6 +13,7 @@ package ingesting
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -42,6 +43,7 @@ func GetIngestingDescriptorPrivileges(
 	desc catalog.Descriptor,
 	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
+	wroteSchemas map[descpb.ID]catalog.SchemaDescriptor,
 	descCoverage tree.DescriptorCoverage,
 ) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
 	switch desc := desc.(type) {
@@ -53,6 +55,7 @@ func GetIngestingDescriptorPrivileges(
 			desc,
 			user,
 			wroteDBs,
+			wroteSchemas,
 			descCoverage,
 			privilege.Table,
 		)
@@ -64,6 +67,7 @@ func GetIngestingDescriptorPrivileges(
 			desc,
 			user,
 			wroteDBs,
+			wroteSchemas,
 			descCoverage,
 			privilege.Schema,
 		)
@@ -92,6 +96,7 @@ func getIngestingPrivilegesForTableOrSchema(
 	desc catalog.Descriptor,
 	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
+	wroteSchemas map[descpb.ID]catalog.SchemaDescriptor,
 	descCoverage tree.DescriptorCoverage,
 	privilegeType privilege.ObjectType,
 ) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
@@ -102,24 +107,48 @@ func getIngestingPrivilegesForTableOrSchema(
 		// Leave the privileges of the temp system tables as the default too.
 		updatedPrivileges = wrote.GetPrivileges()
 		for i, u := range updatedPrivileges.Users {
-			privObjectType := privilege.Table
-			if _, ok := desc.(catalog.SchemaDescriptor); ok {
-				privObjectType = privilege.Schema
-			}
 			updatedPrivileges.Users[i].Privileges =
-				privilege.ListFromBitField(u.Privileges, privObjectType).ToBitField()
+				privilege.ListFromBitField(u.Privileges, privilegeType).ToBitField()
 		}
 	} else if descCoverage == tree.RequestedDescriptors {
 		parentDB, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
 		}
+		dbDefaultPrivileges := parentDB.GetDefaultPrivilegeDescriptor()
 
-		immutableDefaultPrivileges := parentDB.GetDefaultPrivilegeDescriptor()
+		var schemaDefaultPrivileges catalog.DefaultPrivilegeDescriptor
+		targetObject := tree.Schemas
+		if privilegeType == privilege.Table {
+			targetObject = tree.Tables
+			schemaID := desc.GetParentSchemaID()
+
+			// TODO(adityamaru): Remove in 22.2 once we are sure not to see synthentic public schema descriptors
+			// in a mixed version state.
+			if schemaID == keys.PublicSchemaID {
+				schemaDefaultPrivileges = nil
+			} else if schema, ok := wroteSchemas[schemaID]; ok {
+				// Check if the schema is part of the objects being restored. If it is,
+				// the schema's privileges have already been processed before we would
+				// process any of the table's being restored. So, it is correct to use the
+				// schema's default privileges.
+				schemaDefaultPrivileges = schema.GetDefaultPrivilegeDescriptor()
+			} else {
+				// If we are restoring into an existing schema, resolve it, and fetch
+				// its default privileges.
+				parentSchema, err := descsCol.Direct().MustGetSchemaDescByID(ctx, txn,
+					desc.GetParentSchemaID())
+				if err != nil {
+					return nil,
+						errors.Wrapf(err, "failed to lookup parent schema %d", errors.Safe(desc.GetParentSchemaID()))
+				}
+				schemaDefaultPrivileges = parentSchema.GetDefaultPrivilegeDescriptor()
+			}
+		}
+
 		updatedPrivileges = catprivilege.CreatePrivilegesFromDefaultPrivileges(
-			immutableDefaultPrivileges,
-			nil, /* schemaDefaultPrivilegeDescriptor */
-			parentDB.GetID(), user, tree.Tables, parentDB.GetPrivileges())
+			dbDefaultPrivileges, schemaDefaultPrivileges,
+			parentDB.GetID(), user, targetObject, parentDB.GetPrivileges())
 	}
 	return updatedPrivileges, nil
 }
