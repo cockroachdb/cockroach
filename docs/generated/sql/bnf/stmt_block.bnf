@@ -58,7 +58,7 @@ copy_from_stmt ::=
 
 comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
-	| 'COMMENT' 'ON' 'SCHEMA' schema_name 'IS' comment_text
+	| 'COMMENT' 'ON' 'SCHEMA' qualifiable_schema_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'TABLE' table_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'COLUMN' column_path 'IS' comment_text
 	| 'COMMENT' 'ON' 'INDEX' table_index_name 'IS' comment_text
@@ -298,8 +298,9 @@ comment_text ::=
 	'SCONST'
 	| 'NULL'
 
-schema_name ::=
+qualifiable_schema_name ::=
 	name
+	| name '.' name
 
 column_path ::=
 	name
@@ -1376,10 +1377,6 @@ privilege ::=
 type_name_list ::=
 	( type_name ) ( ( ',' type_name ) )*
 
-qualifiable_schema_name ::=
-	name
-	| name '.' name
-
 type_list ::=
 	( typename ) ( ( ',' typename ) )*
 
@@ -2023,6 +2020,9 @@ alter_zone_partition_stmt ::=
 	'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_name '@' '*' set_zone_config
+
+schema_name ::=
+	name
 
 opt_add_val_placement ::=
 	'BEFORE' 'SCONST'

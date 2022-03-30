@@ -854,10 +854,18 @@ statement ok
 CREATE DATABASE comment_db
 
 statement ok
-USE comment_db
+CREATE SCHEMA comment_db.foo
 
 statement ok
-CREATE SCHEMA foo
+COMMENT ON SCHEMA comment_db.foo IS 'foo'
+
+query T
+SELECT comment FROM system.comments LIMIT 1
+----
+foo
+
+statement ok
+USE comment_db
 
 statement ok
 COMMENT ON SCHEMA foo IS 'bar'
