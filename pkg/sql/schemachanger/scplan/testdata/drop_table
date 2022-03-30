@@ -55,7 +55,6 @@ PreCommitPhase stage 1 of 1 with 33 MutationType ops
     [[Namespace:{DescID: 107, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 107}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -96,7 +95,6 @@ PreCommitPhase stage 1 of 1 with 33 MutationType ops
     [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 108, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -104,7 +102,6 @@ PreCommitPhase stage 1 of 1 with 33 MutationType ops
     [[Namespace:{DescID: 109, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 109}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -728,10 +725,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Table:{DescID: 107}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 107, Name: public}, ABSENT]
-  to:   [Table:{DescID: 107}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
   to:   [Table:{DescID: 107}, DROPPED]
   kind: Precedence
@@ -740,19 +733,11 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Sequence:{DescID: 108}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 108, Name: public}, ABSENT]
-  to:   [Sequence:{DescID: 108}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
   to:   [Sequence:{DescID: 108}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 109, Name: admin}, ABSENT]
-  to:   [View:{DescID: 109}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 109, Name: public}, ABSENT]
   to:   [View:{DescID: 109}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -800,7 +785,6 @@ PreCommitPhase stage 1 of 1 with 18 MutationType ops
     [[Namespace:{DescID: 112, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 112}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 112, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
