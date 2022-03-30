@@ -316,6 +316,11 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 	}
 
 	if b.sstWriter.DataSize >= ingestFileSize(b.settings) {
+		prevRow, prevErr := keys.EnsureSafeSplitKey(b.batchEndKey)
+		nextRow, nextErr := keys.EnsureSafeSplitKey(nextKey)
+		if prevErr == nil && nextErr == nil && bytes.Equal(prevRow, nextRow) {
+			return nil // keep going to row boundary.
+		}
 		if err := b.doFlush(ctx, sizeFlush); err != nil {
 			return err
 		}
