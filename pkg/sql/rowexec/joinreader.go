@@ -420,12 +420,16 @@ func newJoinReader(
 		}
 	}
 
-	// We will create a memory monitor with at least 100KiB of memory limit
-	// since the join reader doesn't know how to spill its in-memory state to
-	// disk (separate from the buffered rows). It is most likely that if the
-	// target limit is below 100KiB, then we're in a test scenario and we don't
-	// want to error out.
-	const minMemoryLimit = 100 << 10
+	// We will create a memory monitor with a hard memory limit since the join
+	// reader doesn't know how to spill its in-memory state to disk (separate
+	// from the buffered rows). It is most likely that if the target limit is
+	// really low then we're in a test scenario and we don't want to error out.
+	minMemoryLimit := int64(8 << 20)
+	// Streamer can handle lower memory limit and doing so makes testing at
+	// the limits more efficient.
+	if jr.usesStreamer {
+		minMemoryLimit = 100 << 10
+	}
 	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
 	if memoryLimit < minMemoryLimit {
 		memoryLimit = minMemoryLimit
