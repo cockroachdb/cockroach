@@ -192,14 +192,32 @@ config_setting(
 )
 
 bool_flag(
-    name = "nonogo_flag",
+    name = "nogo_flag",
     build_setting_default = False,
     visibility = ["//visibility:public"],
 )
 
 config_setting(
-    name = "nonogo",
+    name = "nogo",
     flag_values = {
-        ":nonogo_flag": "true",
+        ":nogo_flag": "true",
     },
+)
+
+# Note: the flag nonogo_flag and config_setting nonogo_explicit aren't meant
+# to be directly used in select()'s. Not using nogo is the default behavior.
+# The flag and config_setting are here solely so that they can be used by `dev`
+# to check whether an option is configured.
+bool_flag(
+    name = "nonogo_explicit_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "nonogo_explicit",
+    flag_values = {
+        ":nonogo_explicit_flag": "true",
+    },
+    visibility = ["//build/bazelutil:__pkg__"],
 )
