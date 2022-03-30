@@ -1601,6 +1601,7 @@ system              public             630200280_42_8_not_null                  
 system              public             630200280_42_9_not_null                                                                                         system         public        statement_statistics             CHECK            NO             NO
 system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  system         public        statement_statistics             CHECK            NO             NO
 system              public             primary                                                                                                         system         public        statement_statistics             PRIMARY KEY      NO             NO
+system              public             630200280_20_10_not_null                                                                                        system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_1_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_2_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_4_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
@@ -1608,7 +1609,6 @@ system              public             630200280_20_5_not_null                  
 system              public             630200280_20_6_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_7_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_8_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
-system              public             630200280_20_9_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             primary                                                                                                         system         public        table_statistics                 PRIMARY KEY      NO             NO
 system              public             630200280_50_1_not_null                                                                                         system         public        tenant_settings                  CHECK            NO             NO
 system              public             630200280_50_2_not_null                                                                                         system         public        tenant_settings                  CHECK            NO             NO
@@ -1693,6 +1693,7 @@ system              public             630200280_19_3_not_null                  
 system              public             630200280_19_4_not_null                                                                                         createdAt IS NOT NULL
 system              public             630200280_19_5_not_null                                                                                         expiresAt IS NOT NULL
 system              public             630200280_19_7_not_null                                                                                         lastUsedAt IS NOT NULL
+system              public             630200280_20_10_not_null                                                                                        avgSize IS NOT NULL
 system              public             630200280_20_1_not_null                                                                                         tableID IS NOT NULL
 system              public             630200280_20_2_not_null                                                                                         statisticID IS NOT NULL
 system              public             630200280_20_4_not_null                                                                                         columnIDs IS NOT NULL
@@ -1700,7 +1701,6 @@ system              public             630200280_20_5_not_null                  
 system              public             630200280_20_6_not_null                                                                                         rowCount IS NOT NULL
 system              public             630200280_20_7_not_null                                                                                         distinctCount IS NOT NULL
 system              public             630200280_20_8_not_null                                                                                         nullCount IS NOT NULL
-system              public             630200280_20_9_not_null                                                                                         avgSize IS NOT NULL
 system              public             630200280_21_1_not_null                                                                                         localityKey IS NOT NULL
 system              public             630200280_21_2_not_null                                                                                         localityValue IS NOT NULL
 system              public             630200280_21_3_not_null                                                                                         latitude IS NOT NULL
@@ -2150,11 +2150,11 @@ system         public        statement_statistics             plan              
 system         public        statement_statistics             plan_hash                                                                                                 4
 system         public        statement_statistics             statistics                                                                                                9
 system         public        statement_statistics             transaction_fingerprint_id                                                                                3
-system         public        table_statistics                 avgSize                                                                                                   9
+system         public        table_statistics                 avgSize                                                                                                   10
 system         public        table_statistics                 columnIDs                                                                                                 4
 system         public        table_statistics                 createdAt                                                                                                 5
 system         public        table_statistics                 distinctCount                                                                                             7
-system         public        table_statistics                 histogram                                                                                                 10
+system         public        table_statistics                 histogram                                                                                                 9
 system         public        table_statistics                 name                                                                                                      3
 system         public        table_statistics                 nullCount                                                                                                 8
 system         public        table_statistics                 rowCount                                                                                                  6
