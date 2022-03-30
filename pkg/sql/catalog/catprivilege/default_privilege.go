@@ -236,29 +236,6 @@ func CreatePrivilegesFromDefaultPrivileges(
 	}
 
 	newPrivs.Version = catpb.Version21_2
-
-	// TODO(richardjcai): Remove this depending on how we handle the migration.
-	//   For backwards compatibility, also "inherit" privileges from the dbDesc.
-	//   Issue #67378.
-	if targetObject == tree.Tables || targetObject == tree.Sequences {
-		for _, u := range databasePrivileges.Users {
-			applyDefaultPrivileges(
-				newPrivs,
-				u.UserProto.Decode(),
-				privilege.ListFromBitField(u.Privileges, privilege.Table),
-				privilege.ListFromBitField(u.WithGrantOption, privilege.Table),
-			)
-		}
-	} else if targetObject == tree.Schemas {
-		for _, u := range databasePrivileges.Users {
-			applyDefaultPrivileges(
-				newPrivs,
-				u.UserProto.Decode(),
-				privilege.ListFromBitField(u.Privileges, privilege.Schema),
-				privilege.ListFromBitField(u.WithGrantOption, privilege.Schema),
-			)
-		}
-	}
 	return newPrivs
 }
 
