@@ -2851,6 +2851,12 @@ var charts = []sectionDescription{
 		Organization: [][]string{{Jobs, "Execution"}},
 		Charts: []chartDescription{
 			{
+				Title: "Active",
+				Metrics: []string{
+					"jobs.running_non_idle",
+				},
+			},
+			{
 				Title: "Currently Running",
 				Metrics: []string{
 					"jobs.auto_create_stats.currently_running",
