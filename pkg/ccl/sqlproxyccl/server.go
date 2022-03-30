@@ -40,7 +40,6 @@ type Server struct {
 	metrics         *metrics
 	metricsRegistry *metric.Registry
 
-	promMu             syncutil.Mutex
 	prometheusExporter metric.PrometheusExporter
 }
 
@@ -105,12 +104,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleVars(w http.ResponseWriter, r *http.Request) {
-	s.promMu.Lock()
-	defer s.promMu.Unlock()
-
 	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
-	s.prometheusExporter.ScrapeRegistry(s.metricsRegistry, true /* includeChildMetrics*/)
-	if err := s.prometheusExporter.PrintAsText(w); err != nil {
+	scrape := func(pm *metric.PrometheusExporter) {
+		pm.ScrapeRegistry(s.metricsRegistry, true /* includeChildMetrics*/)
+	}
+	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, scrape); err != nil {
 		log.Errorf(r.Context(), "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

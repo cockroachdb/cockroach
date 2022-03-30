@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -120,6 +121,7 @@ var (
 type metricMarshaler interface {
 	json.Marshaler
 	PrintAsText(io.Writer) error
+	ScrapeIntoPrometheus(pm *metric.PrometheusExporter)
 }
 
 func propagateGatewayMetadata(ctx context.Context) context.Context {
