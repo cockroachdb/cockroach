@@ -165,7 +165,17 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 
 	zr := zipCtx.newZipReporter("cluster")
 
+	if zipCtx.tenantID < 0 {
+		return errors.Errorf("invalid tenant ID %d, tenant ID must be greater than 0", zipCtx.tenantID)
+	}
 	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
+	var tenantID roachpb.TenantID
+	if zipCtx.tenantID == 0 {
+		tenantID = roachpb.SystemTenantID
+	} else {
+		tenantID = roachpb.MakeTenantID(uint64(zipCtx.tenantID))
+	}
+	serverCfg.TenantID = tenantID
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return s.fail(err)
@@ -192,6 +202,7 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	s = zr.start("using SQL address: %s", sqlAddr.AddressField)
 
 	cliCtx.clientConnHost, cliCtx.clientConnPort, err = net.SplitHostPort(sqlAddr.AddressField)
+	cliCtx.tenantID = tenantID
 	if err != nil {
 		return s.fail(err)
 	}

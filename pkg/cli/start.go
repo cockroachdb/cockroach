@@ -1256,7 +1256,7 @@ func getClientGRPCConn(
 	stopper := stop.NewStopper(stop.WithTracer(tracer))
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
+			TenantID: cfg.TenantID,
 			Config:   cfg.Config,
 			Clock:    clock,
 			Stopper:  stopper,

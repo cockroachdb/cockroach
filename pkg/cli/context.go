@@ -351,6 +351,10 @@ type zipContext struct {
 
 	// The log/heap/etc files to include.
 	files fileSelection
+
+	// tenantID of the server being connected to. This flag should
+	// be set while running debug zip against a tenant SQL server.
+	tenantID int
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
