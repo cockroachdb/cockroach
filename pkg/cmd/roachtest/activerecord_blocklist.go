@@ -42,9 +42,13 @@ var activeRecordIgnoreList21_2 = blocklist{
 
 var activeRecordIgnoreList21_1 = blocklist{
 	"ActiveRecord::CockroachDB::UnloggedTablesTest#test_gracefully_handles_temporary_tables": "modified to pass on 20.2",
-	"FixturesTest#test_create_fixtures":                "flaky - FK constraint violated sometimes when loading all fixture data",
-	"IgnoreFixturesTest#test_ignores_books_fixtures":   "flaky - FK constraint violated sometimes when loading all fixture data",
-	"IgnoreFixturesTest#test_ignores_parrots_fixtures": "flaky - FK constraint violated sometimes when loading all fixture data",
+	"FixturesTest#test_create_fixtures":                            "flaky - FK constraint violated sometimes when loading all fixture data",
+	"IgnoreFixturesTest#test_ignores_books_fixtures":               "flaky - FK constraint violated sometimes when loading all fixture data",
+	"IgnoreFixturesTest#test_ignores_parrots_fixtures":             "flaky - FK constraint violated sometimes when loading all fixture data",
+	"PostgresqlUUIDTest#test_uniqueness_validation_ignores_uuid":   "could not parse string as uuid",
+	"PostgresqlUUIDTest#test_uuid_change_case_does_not_mark_dirty": "could not parse string as uuid",
+	"PostgresqlUUIDTest#test_uuid_formats":                         "could not parse string as uuid",
+	"PostgresqlIntervalTest#test_interval_type":                    "interval format is different from expected",
 }
 
 var activeRecordIgnoreList20_2 = blocklist{
