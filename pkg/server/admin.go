@@ -2325,7 +2325,7 @@ func (s *adminServer) decommissionStatusHelper(
 	// numReplicaReport is the number of replicas reported for each node.
 	var replicasToReport map[roachpb.NodeID][]*serverpb.DecommissionStatusResponse_Replica
 	if numReplicaReport > 0 {
-		log.Ops.Warning(ctx, "possible decommission stall detected; reporting decommissioning replicas")
+		log.Ops.Warning(ctx, "possible decommission stall detected")
 		replicasToReport = make(map[roachpb.NodeID][]*serverpb.DecommissionStatusResponse_Replica)
 	}
 
