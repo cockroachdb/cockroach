@@ -207,7 +207,6 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testAggCounter", "aggcounter", 7},
 
 		// Stats needed for store summaries.
-		{"ranges", "counter", 1},
 		{"replicas.leaders", "gauge", 1},
 		{"replicas.leaseholders", "gauge", 1},
 		{"ranges", "gauge", 1},
