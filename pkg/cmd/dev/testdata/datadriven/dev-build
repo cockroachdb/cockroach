@@ -6,9 +6,9 @@ bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
 rm crdb-checkout/cockroach-short
-ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
 rm crdb-checkout/cockroach
-ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
 
 exec
 dev build cockroach-short --cpus=12
@@ -18,9 +18,9 @@ bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
 rm crdb-checkout/cockroach-short
-ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
 rm crdb-checkout/cockroach
-ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
 
 exec
 dev build --debug short
@@ -30,9 +30,9 @@ bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
 rm crdb-checkout/cockroach-short
-ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
 rm crdb-checkout/cockroach
-ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
 
 exec
 dev build short -- -s
@@ -42,9 +42,9 @@ bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
 rm crdb-checkout/cockroach-short
-ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
 rm crdb-checkout/cockroach
-ln -s sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
 
 exec
 dev build -- --verbose_failures --sandbox_debug
@@ -55,7 +55,7 @@ bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
 rm crdb-checkout/cockroach
-ln -s sandbox/pkg/cmd/cockroach/cockroach_/cockroach crdb-checkout/cockroach
+cp sandbox/pkg/cmd/cockroach/cockroach_/cockroach crdb-checkout/cockroach
 
 exec
 dev build stress
@@ -65,4 +65,4 @@ bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
 rm crdb-checkout/bin/stress
-ln -s sandbox/external/com_github_cockroachdb_stress/stress_/stress crdb-checkout/bin/stress
+cp sandbox/external/com_github_cockroachdb_stress/stress_/stress crdb-checkout/bin/stress

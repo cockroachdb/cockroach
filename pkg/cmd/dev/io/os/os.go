@@ -155,20 +155,6 @@ func (o *OS) RemoveAll(path string) error {
 	return err
 }
 
-// Symlink wraps around os.Symlink, creating a symbolic link to and from the
-// named paths.
-func (o *OS) Symlink(to, from string) error {
-	command := fmt.Sprintf("ln -s %s %s", to, from)
-	if !o.knobs.silent {
-		o.logger.Print(command)
-	}
-
-	_, err := o.Next(command, func() (output string, err error) {
-		return "", os.Symlink(to, from)
-	})
-	return err
-}
-
 // Getenv wraps around os.Getenv, retrieving the value of the environment
 // variable named by the key.
 func (o OS) Getenv(key string) string {
@@ -280,6 +266,8 @@ func (o *OS) WriteFile(filename, contents string) error {
 // implementation would wipe `dst` (and `src` accordingly).
 // Unlike a simple io.Copy, this function checks for that case and is a
 // no-op if `src` is already a symlink to `dst`.
+// The destination file will be readable and writable by everyone and will be
+// executable if the source file is as well.
 func (o *OS) CopyFile(src, dst string) error {
 	command := fmt.Sprintf("cp %s %s", src, dst)
 	if !o.knobs.silent {
@@ -292,15 +280,15 @@ func (o *OS) CopyFile(src, dst string) error {
 			return "", err
 		}
 		defer func() { _ = srcFile.Close() }()
+		srcInfo, err := srcFile.Stat()
+		if err != nil {
+			return "", err
+		}
 		originalDstFile, err := os.Open(dst)
 		if err != nil && !os.IsNotExist(err) {
 			return "", err
 		} else if err == nil {
 			defer func() { _ = originalDstFile.Close() }()
-			srcInfo, err := srcFile.Stat()
-			if err != nil {
-				return "", err
-			}
 			dstInfo, err := originalDstFile.Stat()
 			if err != nil {
 				return "", err
@@ -311,7 +299,12 @@ func (o *OS) CopyFile(src, dst string) error {
 				return "", nil
 			}
 		}
-		dstFile, err := os.Create(dst)
+		isExecutable := srcInfo.Mode().Perm()&0111 != 0
+		dstPerm := fs.FileMode(0666)
+		if isExecutable {
+			dstPerm = fs.FileMode(0777)
+		}
+		dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, dstPerm)
 		if err != nil {
 			return "", err
 		}
