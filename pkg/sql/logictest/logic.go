@@ -152,6 +152,27 @@ import (
 // NOTE: metamorphic directive takes precedence over all other directives.
 //
 //
+// ###########################################################
+//           TENANT CLUSTER SETTING OVERRIDE OPTION DIRECTIVES
+// ###########################################################
+//
+// Test files can also contain tenant cluster setting override directives around
+// the beginning of the file. These directives can be used to configure tenant
+// cluster setting overrides during setup. This can be useful for altering
+// tenant read-only settings for configurations that run their tests as
+// secondary tenants (eg. 3node-tenant). While these directives apply to all
+// configurations under which the test will be run, it's only really meaningful
+// when the test runs as a secondary tenant; the configuration has no effect if
+// the test is run as the system tenant.
+//
+// The directives line looks like:
+// # tenant-cluster-setting-override-opt: opt1 opt2
+//
+// The options are:
+// - allow-zone-configs-for-secondary-tenants: If specified, secondary tenants
+// are allowed to alter their zone configurations.
+//
+//
 // ###########################################
 //           CLUSTER OPTION DIRECTIVES
 // ###########################################
@@ -1319,6 +1340,11 @@ type logicTest struct {
 	// lifetime of the test and we should create all clusters with the same
 	// arguments.
 	clusterOpts []clusterOpt
+	// tenantClusterSettingOverrideOpts are the options used by the host cluster
+	// to configure tenant setting overrides  during setup. They're persisted here
+	// because a cluster can be recreated throughout the lifetime of a test, and
+	// we should override tenant settings each time this happens.
+	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt
 	// cluster is the test cluster against which we are testing. This cluster
 	// may be reset during the lifetime of the test.
 	cluster serverutils.TestClusterInterface
@@ -1539,7 +1565,11 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 // server args are configured. That is, either during setup() when creating the
 // initial cluster to be used in a test, or when creating additional test
 // clusters, after logicTest.setup() has been called.
-func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
+func (t *logicTest) newCluster(
+	serverArgs TestServerArgs,
+	clusterOpts []clusterOpt,
+	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
+) {
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
@@ -1611,7 +1641,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 		}
 		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = make(chan struct{})
 	}
-	for _, opt := range opts {
+	for _, opt := range clusterOpts {
 		opt.apply(&params.ServerArgs)
 	}
 
@@ -1679,6 +1709,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
+	clusterSettingOverrideArgs := &tenantClusterSettingOverrideArgs{}
 	if cfg.useTenant {
 		t.tenantAddrs = make([]string, cfg.numNodes)
 		for i := 0; i < cfg.numNodes; i++ {
@@ -1725,6 +1756,37 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 		conn := t.cluster.ServerConn(0)
 		if _, err := conn.Exec("SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = 100000"); err != nil {
 			t.Fatal(err)
+		}
+
+		for _, opt := range tenantClusterSettingOverrideOpts {
+			opt.apply(clusterSettingOverrideArgs)
+		}
+
+		if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+			conn := t.cluster.ServerConn(0)
+
+			// We reduce the closed timestamp duration on the host tenant so that the
+			// setting override can propagate to the tenant faster.
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			// Allow secondary tenants to set zone configurations if the configuration
+			// indicates as such. As this is a tenant read-only cluster setting, only
+			// the operator is allowed to set it.
+			if _, err := conn.Exec(
+				"ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
+				serverutils.TestTenantID().ToUint64(),
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -1822,6 +1884,38 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 		})
 	}
 
+	if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+		// Wait until all tenant servers are aware of the setting override.
+		testutils.SucceedsSoon(t.rootT, func() error {
+			for i := 0; i < len(t.tenantAddrs); i++ {
+				pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(security.RootUser))
+				defer cleanup()
+				if params.ServerArgs.Insecure {
+					pgURL.RawQuery = "sslmode=disable"
+				}
+				db, err := gosql.Open("postgres", pgURL.String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer db.Close()
+
+				var val string
+				err = db.QueryRow(
+					"SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled",
+				).Scan(&val)
+				if err != nil {
+					t.Fatal(errors.Wrapf(err, "%d", i))
+				}
+				if val == "false" {
+					return errors.Errorf("tenant server %d is still waiting zone config cluster setting update",
+						i,
+					)
+				}
+			}
+			return nil
+		})
+	}
+
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(security.RootUser, 0 /* nodeIdxOverride */))
@@ -1857,24 +1951,30 @@ func (t *logicTest) resetCluster() {
 		t.Fatal("resetting the cluster before server args were set")
 	}
 	serverArgs := *t.serverArgs
-	t.newCluster(serverArgs, t.clusterOpts)
+	t.newCluster(serverArgs, t.clusterOpts, t.tenantClusterSettingOverrideOpts)
 }
 
 // setup creates the initial cluster for the logic test and populates the
 // relevant fields on logicTest. It is expected to be called only once (per test
 // file), and before processing any test files - unless a mock logicTest is
 // created (see parallelTest.processTestFile).
-func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs, opts []clusterOpt) {
+func (t *logicTest) setup(
+	cfg testClusterConfig,
+	serverArgs TestServerArgs,
+	clusterOpts []clusterOpt,
+	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
+) {
 	t.cfg = cfg
 	t.serverArgs = &serverArgs
-	t.clusterOpts = opts[:]
+	t.clusterOpts = clusterOpts[:]
+	t.tenantClusterSettingOverrideOpts = tenantClusterSettingOverrideOpts[:]
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	tempExternalIODir, tempExternalIODirCleanup := testutils.TempDir(t.rootT)
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
-	t.newCluster(serverArgs, t.clusterOpts)
+	t.newCluster(serverArgs, t.clusterOpts, t.tenantClusterSettingOverrideOpts)
 
 	// Only create the test database on the initial cluster, since cluster restore
 	// expects an empty cluster.
@@ -2030,6 +2130,32 @@ func readTestFileConfigs(
 	return defaults, false
 }
 
+type tenantClusterSettingOverrideArgs struct {
+	// if set, the sql.zone_configs.allow_for_secondary_tenant.enabled defaults
+	// is set to true by the host. This is allows logic tests that run on
+	// secondary tenants to use zone configurations.
+	overrideMultiTenantZoneConfigsAllowed bool
+}
+
+// tenantClusterSettingOverrideOpt is implemented by options for configuring
+// tenant setting overrides during setup. For tests that run on the system
+// tenant, these options have no effect.
+type tenantClusterSettingOverrideOpt interface {
+	apply(*tenantClusterSettingOverrideArgs)
+}
+
+// tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed corresponds to
+// the allow-zone-configs-for-secondary-tenants directive.
+type tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed struct{}
+
+var _ tenantClusterSettingOverrideOpt = tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{}
+
+func (t tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed) apply(
+	args *tenantClusterSettingOverrideArgs,
+) {
+	args.overrideMultiTenantZoneConfigsAllowed = true
+}
+
 // clusterOpt is implemented by options for configuring the test cluster under
 // which a test will run.
 type clusterOpt interface {
@@ -2072,21 +2198,26 @@ func (c clusterOptIgnoreStrictGCForTenants) apply(args *base.TestServerArgs) {
 	args.Knobs.Store.(*kvserver.StoreTestingKnobs).IgnoreStrictGCEnforcement = true
 }
 
-// readClusterOptions looks around the beginning of the file for a line looking like:
-// # cluster-opt: opt1 opt2 ...
-// and parses that line into a set of clusterOpts that need to be applied to the
-// TestServerArgs before the cluster is started for the respective test file.
-func readClusterOptions(t *testing.T, path string) []clusterOpt {
+// parseDirectiveOptions looks around the beginning of the file for a line
+// looking like:
+// # <directiveName>: opt1 opt2 ...
+// and parses the options associated with the directive. The given callback is
+// invoked with each option.
+func parseDirectiveOptions(t *testing.T, path string, directiveName string, f func(opt string)) {
+	switch directiveName {
+	case "cluster-opt", "tenant-cluster-setting-override-opt":
+		// Fallthrough.
+	default:
+		t.Fatalf("cannot parse unknown directive %s", directiveName)
+	}
 	file, err := os.Open(path)
 	require.NoError(t, err)
 	defer file.Close()
 
-	var res []clusterOpt
-
 	beginningOfFile := true
 	directiveFound := false
-
 	s := newLineScanner(file)
+
 	for s.Scan() {
 		fields := strings.Fields(s.Text())
 		if len(fields) == 0 {
@@ -2099,27 +2230,73 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 		}
 		// Cluster config directive lines are of the form:
 		// # cluster-opt: opt1 opt2 ...
-		if len(fields) > 1 && cmd == "#" && fields[1] == "cluster-opt:" {
-			require.True(t, beginningOfFile, "cluster-opt directive needs to be at the beginning of file")
-			require.False(t, directiveFound, "only one cluster-opt directive allowed per file; second one found: %s", s.Text())
+		if len(fields) > 1 && cmd == "#" && fields[1] == fmt.Sprintf("%s:", directiveName) {
+			require.True(
+				t,
+				beginningOfFile,
+				"%s directive needs to be at the beginning of file",
+				directiveName,
+			)
+			require.False(
+				t,
+				directiveFound,
+				"only one %s directive allowed per file; second one found: %s",
+				directiveName,
+				s.Text(),
+			)
 			directiveFound = true
 			if len(fields) == 2 {
 				t.Fatalf("%s: empty LogicTest directive", path)
 			}
 			for _, opt := range fields[2:] {
-				switch opt {
-				case "disable-span-configs":
-					res = append(res, clusterOptDisableSpanConfigs{})
-				case "tracing-off":
-					res = append(res, clusterOptTracingOff{})
-				case "ignore-tenant-strict-gc-enforcement":
-					res = append(res, clusterOptIgnoreStrictGCForTenants{})
-				default:
-					t.Fatalf("unrecognized cluster option: %s", opt)
-				}
+				f(opt)
 			}
 		}
 	}
+}
+
+// readTenantClusterSettingOverrideArgs looks around the beginning of the file
+// for a line looking like:
+// # tenant-cluster-setting-override-opt: opt1 opt2 ...
+// and parses that line into a set of tenantClusterSettingOverrideArgs that need
+// to be overriden by the host cluster before the test begins.
+func readTenantClusterSettingOverrideArgs(
+	t *testing.T, path string,
+) []tenantClusterSettingOverrideOpt {
+	file, err := os.Open(path)
+	require.NoError(t, err)
+	defer file.Close()
+
+	var res []tenantClusterSettingOverrideOpt
+	parseDirectiveOptions(t, path, "tenant-cluster-setting-override-opt", func(opt string) {
+		switch opt {
+		case "allow-zone-configs-for-secondary-tenants":
+			res = append(res, tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{})
+		default:
+			t.Fatalf("unrecognized cluster option: %s", opt)
+		}
+	})
+	return res
+}
+
+// readClusterOptions looks around the beginning of the file for a line looking like:
+// # cluster-opt: opt1 opt2 ...
+// and parses that line into a set of clusterOpts that need to be applied to the
+// TestServerArgs before the cluster is started for the respective test file.
+func readClusterOptions(t *testing.T, path string) []clusterOpt {
+	var res []clusterOpt
+	parseDirectiveOptions(t, path, "cluster-opt", func(opt string) {
+		switch opt {
+		case "disable-span-configs":
+			res = append(res, clusterOptDisableSpanConfigs{})
+		case "tracing-off":
+			res = append(res, clusterOptTracingOff{})
+		case "ignore-tenant-strict-gc-enforcement":
+			res = append(res, clusterOptIgnoreStrictGCForTenants{})
+		default:
+			t.Fatalf("unrecognized cluster option: %s", opt)
+		}
+	})
 	return res
 }
 
@@ -3925,7 +4102,9 @@ func RunLogicTestWithDefaultConfig(
 					// Each test needs a copy because of Parallel
 					serverArgsCopy := serverArgs
 					serverArgsCopy.forceProductionBatchSizes = onlyNonMetamorphic
-					lt.setup(cfg, serverArgsCopy, readClusterOptions(t, path))
+					lt.setup(
+						cfg, serverArgsCopy, readClusterOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
+					)
 					lt.runFile(path, cfg)
 
 					progress.Lock()
