@@ -27,7 +27,7 @@ func (m *visitor) CreateGcJobForTable(ctx context.Context, op scop.CreateGcJobFo
 	if err != nil {
 		return err
 	}
-	m.s.AddNewGCJobForTable(desc)
+	m.s.AddNewGCJobForTable(op.StatementForDropJob, desc)
 	return nil
 }
 
@@ -38,7 +38,7 @@ func (m *visitor) CreateGcJobForDatabase(
 	if err != nil {
 		return err
 	}
-	m.s.AddNewGCJobForDatabase(desc)
+	m.s.AddNewGCJobForDatabase(op.StatementForDropJob, desc)
 	return nil
 }
 
@@ -55,7 +55,7 @@ func (m *visitor) CreateGcJobForIndex(ctx context.Context, op scop.CreateGcJobFo
 	if err != nil {
 		return errors.AssertionFailedf("table %q (%d): could not find index %d", tbl.GetName(), tbl.GetID(), op.IndexID)
 	}
-	m.s.AddNewGCJobForIndex(tbl, idx)
+	m.s.AddNewGCJobForIndex(op.StatementForDropJob, tbl, idx)
 	return nil
 }
 
