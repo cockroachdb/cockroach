@@ -225,13 +225,13 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 		}
 		binaryPath := filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(target.fullName, runtime.GOOS == "windows"))
 		base := targetToBinBasename(target.fullName)
-		var symlinkPaths []string
+		var copyPaths []string
 		// Binaries beginning with the string "cockroach" go right at
 		// the top of the workspace; others go in the `bin` directory.
 		if strings.HasPrefix(base, "cockroach") {
-			symlinkPaths = append(symlinkPaths, filepath.Join(workspace, base))
+			copyPaths = append(copyPaths, filepath.Join(workspace, base))
 			if strings.HasPrefix(base, "cockroach-short") {
-				symlinkPaths = append(symlinkPaths, filepath.Join(workspace, "cockroach"))
+				copyPaths = append(copyPaths, filepath.Join(workspace, "cockroach"))
 			}
 		} else if base == "dev" {
 			buf, err := d.os.ReadFile(filepath.Join(workspace, "dev"))
@@ -248,23 +248,23 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 				return errors.New("could not find DEV_VERSION in top-level `dev` script")
 			}
 
-			symlinkPaths = append(symlinkPaths,
+			copyPaths = append(copyPaths,
 				filepath.Join(workspace, "bin", "dev-versions", fmt.Sprintf("dev.%s", devVersion)))
 		} else {
-			symlinkPaths = append(symlinkPaths, filepath.Join(workspace, "bin", base))
+			copyPaths = append(copyPaths, filepath.Join(workspace, "bin", base))
 		}
 
-		// Symlink from binaryPath -> symlinkPath, clear out detritus, if any.
-		for _, symlinkPath := range symlinkPaths {
-			if err := d.os.Remove(symlinkPath); err != nil && !os.IsNotExist(err) {
+		// Copy from binaryPath -> copyPath, clear out detritus, if any.
+		for _, copyPath := range copyPaths {
+			if err := d.os.Remove(copyPath); err != nil && !os.IsNotExist(err) {
 				return err
 			}
-			if err := d.os.Symlink(binaryPath, symlinkPath); err != nil {
+			if err := d.os.CopyFile(binaryPath, copyPath); err != nil {
 				return err
 			}
-			rel, err := filepath.Rel(workspace, symlinkPath)
+			rel, err := filepath.Rel(workspace, copyPath)
 			if err != nil {
-				rel = symlinkPath
+				rel = copyPath
 			}
 			log.Printf("Successfully built binary for target %s at %s", target.fullName, rel)
 		}
