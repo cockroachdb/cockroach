@@ -225,6 +225,12 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 	}
 
 	user := p.SessionData().User()
+
+	if user.IsNodeUser() {
+		// User "node" has all privileges.
+		return nil
+	}
+
 	privs := descriptor.GetPrivileges()
 
 	// Check if 'user' itself has privileges.
