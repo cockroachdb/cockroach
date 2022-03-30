@@ -1,0 +1,46 @@
+# LogicTest: !3node-tenant
+
+# Create a table, write a row, lock it, then switch users.
+statement ok
+CREATE TABLE t (k STRING PRIMARY KEY, v STRING)
+
+statement ok
+GRANT ALL ON t TO testuser
+
+statement ok
+INSERT INTO t VALUES ('a', 'val1'), ('b', 'val2'), ('c', 'val3'), ('l', 'val4'), ('m', 'val5'), ('p', 'val6'), ('s', 'val7'), ('t', 'val8'), ('z', 'val9')
+
+query TTT colnames
+ALTER TABLE t SPLIT AT VALUES ('d'), ('r')
+----
+key                   pretty  split_enforced_until
+[242 137 18 100 0 1]  /"d"    2262-04-11 23:47:16.854776 +0000 +0000
+[242 137 18 114 0 1]  /"r"    2262-04-11 23:47:16.854776 +0000 +0000
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /"d"     {1}       1
+/"d"       /"r"     {1}       1
+/"r"       NULL     {1}       1
+
+statement count 7
+BEGIN; UPDATE t SET v = concat(v, '_updated') WHERE k >= 'b' and k < 'z'
+
+user testuser
+
+statement ok
+BEGIN
+
+statement hangs readReq ok
+select * from t for update
+
+user root
+
+statement ok
+ROLLBACK
+
+user testuser
+
+finishstatement readReq

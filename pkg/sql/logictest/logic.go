@@ -199,6 +199,17 @@ import (
 //    Runs the statement that follows and expects an
 //    error that matches the given regexp.
 //
+//  - statement hangs <name> <options>
+//    Runs a statement that is expected to hang, marking it as a pending
+//    statement with a unique name, to be completed and validated later with
+//    "finishstatement". Other statement options described above are supported,
+//    though the statement may not be in a "repeat". Pending statements that
+//    are not completed will result in an error at completion of the test.
+//
+//  - finishstatement <name>
+//    Completes a pending statement with the provided name, validating its
+//    results as expected per the given options to "statement hangs <name>...".
+//
 //  - query <typestring> <options> <label>
 //    Runs the query that follows and verifies the results (specified after the
 //    query and a ---- separator). Example:
@@ -978,6 +989,28 @@ type logicStatement struct {
 	expectErrCode string
 	// expected rows affected count. -1 to avoid testing this.
 	expectCount int64
+	// if we expect this statement to hang, and become a pendingStatement
+	expectHang bool
+	// the name key to use for the pendingStatement
+	statementName string
+}
+
+// pendingExecResult represents a final SQL query string run and the resulting
+// output and error from running it against the DB.
+type pendingExecResult struct {
+	execSQL string
+	res     gosql.Result
+	err     error
+}
+
+// pendingStatement encapsulates a logicStatement that is expected to hang and
+// as such is run in a separate goroutine, as well as the channel on which to
+// receive the results of the statement execution.
+type pendingStatement struct {
+	logicStatement
+
+	// the channel on which to receive the execution results, when completed.
+	resultChan chan pendingExecResult
 }
 
 // readSQL reads the lines of a SQL statement or query until the first blank
@@ -1350,6 +1383,9 @@ type logicTest struct {
 
 	// varMap remembers the variables set with "let".
 	varMap map[string]string
+
+	// pendingStatements tracks any hung statements by name key
+	pendingStatements map[string]pendingStatement
 
 	// noticeBuffer retains the notices from the past query.
 	noticeBuffer []string
@@ -1861,6 +1897,7 @@ CREATE DATABASE test; USE test;
 
 	t.labelMap = make(map[string]string)
 	t.varMap = make(map[string]string)
+	t.pendingStatements = make(map[string]pendingStatement)
 
 	t.progress = 0
 	t.failures = 0
@@ -2431,6 +2468,31 @@ func (t *logicTest) processSubtest(
 			}
 			time.Sleep(duration)
 
+		case "finishstatement":
+			if len(fields) != 2 {
+				return errors.New("invalid line format")
+			}
+
+			name := fields[1]
+
+			if pending, ok := t.pendingStatements[name]; ok {
+				execRes := <-pending.resultChan
+				cont, err := t.finishExecStatement(pending.logicStatement, execRes.execSQL, execRes.res, execRes.err)
+
+				if err != nil {
+					if !cont {
+						return err
+					}
+					t.Error(err)
+				}
+			} else {
+				return errors.Newf("pending statement with name \"%s\" unknown", name)
+			}
+
+			delete(t.pendingStatements, name)
+
+			t.success(path)
+
 		case "statement":
 			stmt := logicStatement{
 				pos:         fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
@@ -2442,6 +2504,12 @@ func (t *logicTest) processSubtest(
 			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErrCode = m[1]
 				stmt.expectErr = m[2]
+			}
+			if len(fields) >= 3 && fields[1] == "hangs" {
+				stmt.expectHang = true
+				stmt.statementName = fields[2]
+				copy(fields[1:], fields[3:])
+				fields = fields[:len(fields)-2]
 			}
 			if len(fields) >= 3 && fields[1] == "count" {
 				n, err := strconv.ParseInt(fields[2], 10, 64)
@@ -3055,7 +3123,33 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 			t.outf("rewrote:\n%s\n", execSQL)
 		}
 	}
+
+	if stmt.expectHang {
+		if _, ok := t.pendingStatements[stmt.statementName]; ok {
+			return false, errors.Newf("pending statement with name \"%s\" already exists", stmt.statementName)
+		}
+
+		pending := pendingStatement{
+			logicStatement: stmt,
+			resultChan:     make(chan pendingExecResult),
+		}
+		t.pendingStatements[stmt.statementName] = pending
+
+		go func() {
+			res, err := t.db.Exec(execSQL)
+			pending.resultChan <- pendingExecResult{execSQL, res, err}
+		}()
+
+		return true, nil
+	}
+
 	res, err := t.db.Exec(execSQL)
+	return t.finishExecStatement(stmt, execSQL, res, err)
+}
+
+func (t *logicTest) finishExecStatement(
+	stmt logicStatement, execSQL string, res gosql.Result, err error,
+) (bool, error) {
 	if err == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
 	}
@@ -3539,6 +3633,27 @@ func (t *logicTest) success(file string) {
 }
 
 func (t *logicTest) validateAfterTestCompletion() error {
+	// Check any remaining pending statements
+	if len(t.pendingStatements) > 0 {
+		log.Warningf(context.Background(), "%d remaining pending statements", len(t.pendingStatements))
+	}
+	for name, pending := range t.pendingStatements {
+		select {
+		case execRes := <-pending.resultChan:
+			// check if execRes shows that statement completed successfully
+			cont, err := t.finishExecStatement(pending.logicStatement, execRes.execSQL, execRes.res, execRes.err)
+
+			if err != nil {
+				if !cont {
+					return errors.Wrapf(execRes.err, "pending statement \"%s\" resulted in error", name)
+				}
+				t.Errorf("pending statement \"%s\" resulted in error: %v", name, execRes.err)
+			}
+		default:
+			t.Fatalf("pending statement \"%s\" did not finish", name)
+		}
+	}
+
 	// Close all clients other than "root"
 	for username, c := range t.clients {
 		if username == "root" {
