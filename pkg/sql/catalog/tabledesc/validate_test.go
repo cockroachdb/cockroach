@@ -134,6 +134,7 @@ var validationMap = []struct {
 			"AutoStatsSettings": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(msirek): add validation"},
+			"ForecastStats": {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
