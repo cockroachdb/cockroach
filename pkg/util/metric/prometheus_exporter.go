@@ -13,6 +13,7 @@ package metric
 import (
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -32,12 +33,21 @@ import (
 //  pe.AddMetricsFromRegistry(storeNRegistry)
 //  pe.Export(w)
 type PrometheusExporter struct {
-	families map[string]*prometheusgo.MetricFamily
+	muScrapeAndPrint syncutil.Mutex
+	families         map[string]*prometheusgo.MetricFamily
+	selection        map[string]struct{}
 }
 
 // MakePrometheusExporter returns an initialized prometheus exporter.
 func MakePrometheusExporter() PrometheusExporter {
 	return PrometheusExporter{families: map[string]*prometheusgo.MetricFamily{}}
+}
+
+// MakePrometheusExporterForSelectedMetrics returns an initialized prometheus
+// exporter. It would only consider selected metrics when scraping. The caller
+// should not modify the map after the call.
+func MakePrometheusExporterForSelectedMetrics(selection map[string]struct{}) PrometheusExporter {
+	return PrometheusExporter{families: map[string]*prometheusgo.MetricFamily{}, selection: selection}
 }
 
 // find the family for the passed-in metric, or create and return it if not found.
@@ -65,7 +75,7 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 // call. It creates new families as needed.
 func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMetrics bool) {
 	labels := registry.getLabels()
-	registry.Each(func(_ string, v interface{}) {
+	f := func(name string, v interface{}) {
 		prom, ok := v.(PrometheusExportable)
 		if !ok {
 			return
@@ -86,7 +96,12 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMet
 		promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
 			family.Metric = append(family.Metric, metric)
 		})
-	})
+	}
+	if pm.selection == nil {
+		registry.Each(f)
+	} else {
+		registry.Select(pm.selection, f)
+	}
 }
 
 // PrintAsText writes all metrics in the families map to the io.Writer in
@@ -100,6 +115,20 @@ func (pm *PrometheusExporter) PrintAsText(w io.Writer) error {
 	}
 	pm.clearMetrics()
 	return nil
+}
+
+// ScrapeAndPrintAsText scrapes metrics first by calling the provided scrape func
+// and then writes all metrics in the families map to the io.Writer in
+// prometheus' text format. It removes individual metrics from the families
+// as it goes, readying the families for another found of registry additions.
+// It does this under lock so it is thread safe and can be called concurrently.
+func (pm *PrometheusExporter) ScrapeAndPrintAsText(
+	w io.Writer, scrapeFunc func(*PrometheusExporter),
+) error {
+	pm.muScrapeAndPrint.Lock()
+	defer pm.muScrapeAndPrint.Unlock()
+	scrapeFunc(pm)
+	return pm.PrintAsText(w)
 }
 
 // Verify GraphiteExporter implements Gatherer interface.
