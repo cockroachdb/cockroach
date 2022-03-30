@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/andygrunwald/go-jira"
@@ -90,13 +91,17 @@ func newJiraClient(baseURL string, username string, password string) (*jiraClien
 
 // getIssueDetails stores a subset of details from jira.Issue into jiraIssue.
 func (j *jiraClient) getIssueDetails(issueID string) (jiraIssue, error) {
-	issue, _, err := j.client.Issue.Get(issueID, nil)
+	issue, resp, err := j.client.Issue.Get(issueID, nil)
 	if err != nil {
-		return jiraIssue{}, err
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return jiraIssue{}, fmt.Errorf("failed to get issue: %w. Response: %s", err, string(body))
 	}
-	customFields, _, err := j.client.Issue.GetCustomFields(issueID)
+	customFields, resp, err := j.client.Issue.GetCustomFields(issueID)
 	if err != nil {
-		return jiraIssue{}, err
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return jiraIssue{}, fmt.Errorf("failed to get custom fields: %w. Response: %s", err, string(body))
 	}
 	return jiraIssue{
 		ID:           issue.ID,
@@ -136,9 +141,11 @@ func (d jiraIssue) url() string {
 
 // createJiraIssue creates a **real** JIRA issue.
 func createJiraIssue(client *jiraClient, issue *jira.Issue) (jiraIssue, error) {
-	newIssue, _, err := client.client.Issue.Create(issue)
+	newIssue, resp, err := client.client.Issue.Create(issue)
 	if err != nil {
-		return jiraIssue{}, err
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return jiraIssue{}, fmt.Errorf("failed to create issue: %w. Response: %s", err, string(body))
 	}
 	details, err := client.getIssueDetails(newIssue.ID)
 	if err != nil {
