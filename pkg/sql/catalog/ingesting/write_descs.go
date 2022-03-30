@@ -12,7 +12,6 @@ package ingesting
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -64,10 +63,20 @@ func WriteDescriptors(
 	}()
 
 	b := txn.NewBatch()
+	// wroteDBs contains the database descriptors that are being published as part
+	// of this restore.
+	//
+	// In the case of a cluster restore, this only includes the temporary system
+	// database being restored.
 	wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
+
+	// wroteSchemas contains the schema descriptors that are being published as
+	// part of this restore.
+	wroteSchemas := make(map[descpb.ID]catalog.SchemaDescriptor)
 	for i := range databases {
 		desc := databases[i]
-		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, desc, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, desc, user,
+			wroteDBs, wroteSchemas, descCoverage)
 		if err != nil {
 			return err
 		}
@@ -101,7 +110,8 @@ func WriteDescriptors(
 	// Write namespace and descriptor entries for each schema.
 	for i := range schemas {
 		sc := schemas[i]
-		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, sc, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, sc, user,
+			wroteDBs, wroteSchemas, descCoverage)
 		if err != nil {
 			return err
 		}
@@ -113,6 +123,9 @@ func WriteDescriptors(
 					sc.GetID(), sc)
 			}
 		}
+		if descCoverage == tree.RequestedDescriptors {
+			wroteSchemas[sc.GetID()] = sc
+		}
 		if err := descsCol.WriteDescToBatch(
 			ctx, false /* kvTrace */, sc.(catalog.MutableDescriptor), b,
 		); err != nil {
@@ -123,7 +136,8 @@ func WriteDescriptors(
 
 	for i := range tables {
 		table := tables[i]
-		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, table, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, table, user,
+			wroteDBs, wroteSchemas, descCoverage)
 		if err != nil {
 			return err
 		}
@@ -154,7 +168,8 @@ func WriteDescriptors(
 	// the system.descriptor table.
 	for i := range types {
 		typ := types[i]
-		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, typ, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, typ, user,
+			wroteDBs, wroteSchemas, descCoverage)
 		if err != nil {
 			return err
 		}
