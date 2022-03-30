@@ -13,7 +13,7 @@ This has been a [feature commonly asked for](#20239).
 
 This RFC proposes a CockroachDB level mechanism to support row-level TTL, where
 rows will be deleted after a certain period of time. As a further extension in a
-later release, rows rows will be automatically hidden after they've expired
+later release, rows will be automatically hidden after they've expired
 their TTL and before they've been physically deleted.
 
 The following declarative syntaxes will initialize a table with row-level TTL:
@@ -378,8 +378,8 @@ a few problems:
   process. This adds further complexity to CDC.
 
 As row-level TTL is a "SQL level" feature, it makes sense that something in the
-SQL layer would be most appropriate to handle it. See [comparison
-doc](comparison doc) for other observations.
+SQL layer would be most appropriate to handle it. See [comparison doc](comparison doc)
+for other observations.
 
 ### Alternative TTL columns
 Another proposal for TTL columns was to have two columns:
@@ -465,7 +465,7 @@ has two benefits, both of which are very significant:
 This is predicated on filtering out expired rows working as otherwise users
 could miss entries when querying the secondary index as opposed to the primary.
 
-### Improve the deletion loopl
+### Improve the deletion loop
 We can speed up the deletion by using indexes if one was created on the TTL
 column for the table.
 

@@ -18,6 +18,7 @@ go_library(
         "system_database_namespace_cache.go",
         "system_table.go",
         "table.go",
+        "table_name.go",
         "temporary_descriptors.go",
         "txn.go",
         "type.go",

@@ -44,6 +44,15 @@ CREATE TABLE public.tbl (
                                                                                             FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
+statement ok
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
+
+statement ok
+SELECT crdb_internal.repair_ttl_table_scheduled_job('tbl'::regclass::oid)
+
+statement ok
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
+
 statement error resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl\)` to remove TTL from the table
 ALTER TABLE tbl RESET (ttl_expire_after)
 
@@ -66,6 +75,12 @@ SELECT count(1) FROM [SHOW SCHEDULES]
 WHERE label LIKE 'row-level-ttl-%'
 ----
 1
+
+let $schedule_id
+SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'
+
+statement error cannot drop a row level TTL schedule\nHINT: use ALTER TABLE test\.public\.tbl RESET \(ttl\) instead
+DROP SCHEDULE $schedule_id
 
 statement ok
 ALTER TABLE tbl SET (ttl_expire_after = '10 days')
@@ -113,6 +128,9 @@ CREATE TABLE public.tbl (
    CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
    FAMILY fam_0_id_text_crdb_internal_expiration (id, text)
 )
+
+statement ok
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
