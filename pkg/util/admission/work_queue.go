@@ -152,6 +152,9 @@ const (
 	TTLLowPri WorkPriority = -100
 	// UserLowPri is low priority work from user submissions (SQL).
 	UserLowPri WorkPriority = -50
+	// BulkNormalPri is bulk priority work from bulk jobs, which could be run due
+	// to user submissions or be automatic.
+	BulkNormalPri WorkPriority = -30
 	// NormalPri is normal priority work.
 	NormalPri WorkPriority = 0
 	// UserHighPri is high priority work from user submissions (SQL).
