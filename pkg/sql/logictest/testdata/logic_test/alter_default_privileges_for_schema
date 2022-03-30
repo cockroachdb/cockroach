@@ -43,10 +43,9 @@ CREATE SCHEMA testuser_s2;
 query TTTTB colnames
 SHOW GRANTS ON SCHEMA testuser_s2
 ----
-database_name  schema_name  grantee   privilege_type  is_grantable
-d              testuser_s2  admin     ALL             true
-d              testuser_s2  root      ALL             true
-d              testuser_s2  testuser  CREATE          false
+database_name  schema_name  grantee  privilege_type  is_grantable
+d              testuser_s2  admin    ALL             true
+d              testuser_s2  root     ALL             true
 
 user root
 
@@ -118,10 +117,9 @@ CREATE SCHEMA s4
 query TTTTB colnames
 SHOW GRANTS ON SCHEMA s4
 ----
-database_name  schema_name  grantee   privilege_type  is_grantable
-d              s4           admin     ALL             true
-d              s4           root      ALL             true
-d              s4           testuser  CREATE          false
+database_name  schema_name  grantee  privilege_type  is_grantable
+d              s4           admin    ALL             true
+d              s4           root     ALL             true
 
 user root
 statement ok
@@ -145,10 +143,9 @@ CREATE SCHEMA s5
 query TTTTB colnames
 SHOW GRANTS ON SCHEMA s5
 ----
-database_name  schema_name  grantee   privilege_type  is_grantable
-d              s5           admin     ALL             true
-d              s5           root      ALL             true
-d              s5           testuser  CREATE          false
+database_name  schema_name  grantee  privilege_type  is_grantable
+d              s5           admin    ALL             true
+d              s5           root     ALL             true
 
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO testuser, testuser2
@@ -162,7 +159,6 @@ CREATE SCHEMA s_72322
 query TTTTB colnames
 SHOW GRANTS ON SCHEMA s_72322
 ----
-database_name  schema_name  grantee   privilege_type  is_grantable
-d              s_72322      admin     ALL             true
-d              s_72322      root      ALL             true
-d              s_72322      testuser  CREATE          false
+database_name  schema_name  grantee  privilege_type  is_grantable
+d              s_72322      admin    ALL             true
+d              s_72322      root     ALL             true
