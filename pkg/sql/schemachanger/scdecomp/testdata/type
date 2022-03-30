@@ -302,10 +302,6 @@ ElementState:
     privileges: 2
     userName: root
   Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 108
-    userName: public
-  Status: PUBLIC
 - ObjectParent:
     objectId: 108
     parentSchemaId: 101

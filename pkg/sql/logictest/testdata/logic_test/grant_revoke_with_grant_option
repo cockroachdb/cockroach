@@ -1,3 +1,4 @@
+
 # TODO(jack.wu): Replace these tests once the GRANT privilege is removed in 22.2
 # (look in the file history to the version before this for inspiration)
 # Currently, this file has been rewritten to accommodate giving grant options to
@@ -619,11 +620,10 @@ CREATE TABLE t1()
 query TTTTTB colnames
 SHOW GRANTS ON TABLE t1;
 ----
-database_name  schema_name  table_name  grantee    privilege_type  is_grantable
-test           public       t1          admin      ALL             true
-test           public       t1          root       ALL             true
-test           public       t1          testuser   ALL             false
-test           public       t1          testuser2  CREATE          false
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           public       t1          admin     ALL             true
+test           public       t1          root      ALL             true
+test           public       t1          testuser  ALL             false
 
 statement ok
 GRANT SELECT ON TABLE t1 TO testuser2
@@ -637,7 +637,6 @@ SHOW GRANTS ON TABLE t1;
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t1          admin      ALL             true
 test           public       t1          root       ALL             true
-test           public       t1          testuser2  CREATE          false
 test           public       t1          testuser2  SELECT          false
 
 # even though testuser doesn't have privileges on table t1, it can still grant

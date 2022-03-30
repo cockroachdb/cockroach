@@ -58,10 +58,6 @@ DROP VIEW defaultdb.v1
     descriptorId: 105
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 105
-    userName: public
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 105
@@ -449,10 +445,6 @@ DROP VIEW defaultdb.v1 CASCADE
     descriptorId: 105
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 105
-    userName: public
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 105
@@ -463,10 +455,6 @@ DROP VIEW defaultdb.v1 CASCADE
     descriptorId: 106
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 106
-    userName: public
 - [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 106
@@ -477,10 +465,6 @@ DROP VIEW defaultdb.v1 CASCADE
     descriptorId: 107
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 107
-    userName: public
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 107
@@ -491,10 +475,6 @@ DROP VIEW defaultdb.v1 CASCADE
     descriptorId: 108
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 108, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 108
-    userName: public
 - [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 108
@@ -505,10 +485,6 @@ DROP VIEW defaultdb.v1 CASCADE
     descriptorId: 111
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 111
-    userName: public
 - [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 111
