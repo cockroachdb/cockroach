@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -117,7 +117,7 @@ func (a *default_AGGKINDAgg) Reset() {
 
 func newDefault_AGGKINDAggAlloc(
 	allocator *colmem.Allocator,
-	constructor execinfrapb.AggregateConstructor,
+	constructor execinfra.AggregateConstructor,
 	evalCtx *tree.EvalContext,
 	inputArgsConverter *colconv.VecToDatumConverter,
 	numArguments int,
@@ -147,7 +147,7 @@ type default_AGGKINDAggAlloc struct {
 	aggAllocBase
 	aggFuncs []default_AGGKINDAgg
 
-	constructor execinfrapb.AggregateConstructor
+	constructor execinfra.AggregateConstructor
 	evalCtx     *tree.EvalContext
 	// inputArgsConverter is a converter from coldata.Vecs to tree.Datums that
 	// is shared among all aggregate functions and is managed by the aggregator
