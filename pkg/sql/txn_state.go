@@ -12,6 +12,8 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -287,6 +289,21 @@ func (ts *txnState) setHistoricalTimestamp(
 ) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
+
+	if ts.mu.txn.Sender().HasPerformedReads() {
+		return pgerror.Newf(
+			pgcode.InvalidTransactionState,
+			"cannot set fixed timestamp, txn %s already performed reads",
+			ts.mu.txn)
+	}
+
+	if ts.mu.txn.Sender().HasPerformedWrites() {
+		return pgerror.Newf(
+			pgcode.InvalidTransactionState,
+			"cannot set fixed timestamp, txn %s already performed writes",
+			ts.mu.txn)
+	}
+
 	if err := ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp); err != nil {
 		return err
 	}
