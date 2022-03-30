@@ -868,6 +868,9 @@ CREATE INDEX x ON auth.t3 (x) PARTITION BY LIST (x) (
   PARTITION p VALUES IN (1)
 );
 
+statement ok
+GRANT ZONECONFIG ON TABLE auth.t3 TO testuser;
+
 user testuser
 
 statement ok

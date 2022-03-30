@@ -31,10 +31,6 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
     descriptorId: 104
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 104
-    userName: public
 - [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
@@ -113,10 +109,6 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
     descriptorId: 104
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 104
-    userName: public
 - [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
@@ -165,10 +157,6 @@ DROP SEQUENCE defaultdb.ownedseq CASCADE
     descriptorId: 111
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 111
-    userName: public
 - [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 111
