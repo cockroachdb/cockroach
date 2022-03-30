@@ -144,6 +144,12 @@ type TxnCoordSender struct {
 		// caller of DeferCommitWait has assumed responsibility for performing
 		// the commit-wait.
 		commitWaitDeferred bool
+
+		// hasPerformedReads is set true when a read has been performed.
+		hasPerformedReads bool
+
+		// hasPerformedWrites is set true when a write has been performed.
+		hasPerformedWrites bool
 	}
 
 	// A pointer member to the creating factory provides access to
@@ -1402,4 +1408,20 @@ func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
 		tc.mu.storedRetryableErr = nil
 		tc.mu.txnState = txnPending
 	}
+}
+
+// HasPerformedReads is part of the TxnSender interface.
+func (tc *TxnCoordSender) HasPerformedReads() bool {
+	if !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty() {
+		return true
+	}
+	return false
+}
+
+// HasPerformedWrites is part of the TxnSender interface.
+func (tc *TxnCoordSender) HasPerformedWrites() bool {
+	if tc.mu.txn.Sequence != 0 {
+		return true
+	}
+	return false
 }
