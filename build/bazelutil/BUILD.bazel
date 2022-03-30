@@ -10,6 +10,19 @@ genrule(
     stamp = True,
 )
 
+NOGO_FAILED_TEST_OUTPUT = "echo 'must use exactly one of `--config nogo` or `--config nonogo` explicitly'; exit 1"
+
+genrule(
+    name = "test_nogo_configured",
+    outs = ["empty.txt"],
+    cmd = select({
+        "//build/toolchains:both_nogo_and_nonogo": NOGO_FAILED_TEST_OUTPUT,
+        "//build/toolchains:nogo": "touch $@",
+        "//build/toolchains:nonogo_explicit": "touch $@",
+        "//conditions:default": NOGO_FAILED_TEST_OUTPUT,
+    }),
+)
+
 lint_binary(
     name = "lint",
     test = "//pkg/testutils/lint:lint_test",
