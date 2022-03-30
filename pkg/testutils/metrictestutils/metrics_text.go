@@ -24,9 +24,11 @@ import (
 // to the given regexp, sorts them, and returns them in a multi-line string.
 func GetMetricsText(registry *metric.Registry, re *regexp.Regexp) (string, error) {
 	ex := metric.MakePrometheusExporter()
-	ex.ScrapeRegistry(registry, true /* includeChildMetrics */)
+	scrape := func(ex *metric.PrometheusExporter) {
+		ex.ScrapeRegistry(registry, true /* includeChildMetrics */)
+	}
 	var in bytes.Buffer
-	if err := ex.PrintAsText(&in); err != nil {
+	if err := ex.ScrapeAndPrintAsText(&in, scrape); err != nil {
 		return "", err
 	}
 	sc := bufio.NewScanner(&in)

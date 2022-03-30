@@ -34,6 +34,12 @@ func makeStatusLoadHandler(
 	registry.AddMetric(cpuSysNanos)
 	registry.AddMetric(cpuNowNanos)
 
+	// Exporter for the CPU metrics that are provided only by the load handler.
+	exporter := metric.MakePrometheusExporter()
+	regScrape := func(pm *metric.PrometheusExporter) {
+		pm.ScrapeRegistry(registry, true)
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
 		if err != nil {
@@ -48,9 +54,7 @@ func makeStatusLoadHandler(
 		cpuSysNanos.Update(stime)
 		cpuNowNanos.Update(timeutil.Now().UnixNano())
 
-		exporter := metric.MakePrometheusExporter()
-		exporter.ScrapeRegistry(registry, true)
-		if err := exporter.PrintAsText(w); err != nil {
+		if err := exporter.ScrapeAndPrintAsText(w, regScrape); err != nil {
 			log.Errorf(r.Context(), "%v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
