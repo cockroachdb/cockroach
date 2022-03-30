@@ -1403,3 +1403,20 @@ func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
 		tc.mu.txnState = txnPending
 	}
 }
+
+// HasPerformedReads is part of the TxnSender interface.
+func (tc *TxnCoordSender) HasPerformedReads() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty() {
+		return true
+	}
+	return false
+}
+
+// HasPerformedWrites is part of the TxnSender interface.
+func (tc *TxnCoordSender) HasPerformedWrites() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.Sequence != 0
+}
