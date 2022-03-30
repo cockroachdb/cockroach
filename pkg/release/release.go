@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
@@ -69,6 +70,9 @@ const (
 	// PlatformWindows is the Windows (mingw) x86_64 target.
 	PlatformWindows
 )
+
+// ChecksumSuffix is a suffix of release tarball checksums
+const ChecksumSuffix = ".sha256sum"
 
 // ExecFn is a mockable wrapper for executing commands. The zero value
 // ExecFn executes the command normally, but a mock function can be substituted
@@ -477,7 +481,7 @@ type PutReleaseOptions struct {
 }
 
 // PutRelease uploads a compressed archive containing the release
-// files to S3.
+// files and a checksum file of the archive to S3.
 func PutRelease(svc S3Putter, o PutReleaseOptions) {
 	targetArchiveBase, targetArchive := S3KeyRelease(o.Platform, o.VersionStr)
 	var body bytes.Buffer
@@ -553,6 +557,7 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 		}
 	}
 
+	log.Printf("Uploading to s3://%s/%s", o.BucketName, targetArchive)
 	putObjectInput := s3.PutObjectInput{
 		Bucket: &o.BucketName,
 		Key:    &targetArchive,
@@ -563,6 +568,22 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 	}
 	if _, err := svc.PutObject(&putObjectInput); err != nil {
 		log.Fatalf("s3 upload %s: %s", targetArchive, err)
+	}
+	// Generate a SHA256 checksum file with a single entry.
+	checksumContents := fmt.Sprintf("%x %s\n", sha256.Sum256(body.Bytes()),
+		filepath.Base(targetArchive))
+	targetChecksum := targetArchive + ChecksumSuffix
+	log.Printf("Uploading to s3://%s/%s", o.BucketName, targetChecksum)
+	putObjectInputChecksum := s3.PutObjectInput{
+		Bucket: &o.BucketName,
+		Key:    &targetChecksum,
+		Body:   strings.NewReader(checksumContents),
+	}
+	if o.NoCache {
+		putObjectInputChecksum.CacheControl = &NoCache
+	}
+	if _, err := svc.PutObject(&putObjectInputChecksum); err != nil {
+		log.Fatalf("s3 upload %s: %s", targetChecksum, err)
 	}
 }
 
