@@ -1120,7 +1120,11 @@ func (r *Registry) stepThroughStateMachine(
 		var err error
 		func() {
 			jm.CurrentlyRunning.Inc(1)
-			defer jm.CurrentlyRunning.Dec(1)
+			r.metrics.RunningNonIdleJobs.Inc(1)
+			defer func() {
+				jm.CurrentlyRunning.Dec(1)
+				r.metrics.RunningNonIdleJobs.Dec(1)
+			}()
 			err = resumer.Resume(resumeCtx, execCtx)
 		}()
 
@@ -1214,7 +1218,11 @@ func (r *Registry) stepThroughStateMachine(
 		var err error
 		func() {
 			jm.CurrentlyRunning.Inc(1)
-			defer jm.CurrentlyRunning.Dec(1)
+			r.metrics.RunningNonIdleJobs.Inc(1)
+			defer func() {
+				jm.CurrentlyRunning.Dec(1)
+				r.metrics.RunningNonIdleJobs.Dec(1)
+			}()
 			err = resumer.OnFailOrCancel(onFailOrCancelCtx, execCtx)
 		}()
 		if successOnFailOrCancel := err == nil; successOnFailOrCancel {
@@ -1302,8 +1310,10 @@ func (r *Registry) MarkIdle(job *Job, isIdle bool) {
 		if aj.isIdle != isIdle {
 			log.Infof(r.serverCtx, "%s job %d: toggling idleness to %+v", jobType, job.ID(), isIdle)
 			if isIdle {
+				r.metrics.RunningNonIdleJobs.Dec(1)
 				jm.CurrentlyIdle.Inc(1)
 			} else {
+				r.metrics.RunningNonIdleJobs.Inc(1)
 				jm.CurrentlyIdle.Dec(1)
 			}
 			aj.isIdle = isIdle
