@@ -63,6 +63,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP SEQUENCE defaultdb.sq1
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
@@ -166,6 +168,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP SEQUENCE defaultdb.sq1 CASCADE
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104

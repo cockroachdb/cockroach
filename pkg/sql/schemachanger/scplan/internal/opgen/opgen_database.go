@@ -50,9 +50,10 @@ func init() {
 				emit(func(this *scpb.Database, md targetsWithElementMap) scop.Op {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Database) scop.Op {
+				emit(func(this *scpb.Database, md targetsWithElementMap) scop.Op {
 					return &scop.CreateGcJobForDatabase{
-						DatabaseID: this.DatabaseID,
+						DatabaseID:          this.DatabaseID,
+						StatementForDropJob: statementForDropJob(this, md),
 					}
 				}),
 				emit(func(this *scpb.Database) scop.Op {
