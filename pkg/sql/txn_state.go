@@ -287,6 +287,7 @@ func (ts *txnState) setHistoricalTimestamp(
 ) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
+
 	if err := ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp); err != nil {
 		return err
 	}

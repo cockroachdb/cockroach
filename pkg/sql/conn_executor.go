@@ -2580,6 +2580,19 @@ func (ex *connExecutor) setTransactionModes(
 		return errors.AssertionFailedf("expected an evaluated AS OF timestamp")
 	}
 	if !asOfTs.IsEmpty() {
+		if !ex.state.mu.txn.Sender().HasPerformedReads() {
+			return pgerror.Newf(
+				pgcode.InvalidTransactionState,
+				"cannot set fixed timestamp, txn %s already performed reads",
+				ex.state.mu.txn)
+		}
+
+		if ex.state.mu.txn.Sender().HasPerformedWrites() {
+			return pgerror.Newf(
+				pgcode.InvalidTransactionState,
+				"cannot set fixed timestamp, txn %s already performed writes",
+				ex.state.mu.txn)
+		}
 		if err := ex.state.setHistoricalTimestamp(ctx, asOfTs); err != nil {
 			return err
 		}
