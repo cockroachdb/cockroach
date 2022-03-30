@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -45,7 +47,7 @@ import (
 // inherited privileges during a cluster restore.
 func WriteDescriptors(
 	ctx context.Context,
-	codec keys.SQLCodec,
+	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	user security.SQLUsername,
 	descsCol *descs.Collection,
@@ -54,6 +56,7 @@ func WriteDescriptors(
 	tables []catalog.TableDescriptor,
 	types []catalog.TypeDescriptor,
 	descCoverage tree.DescriptorCoverage,
+	preserveGrantsFor []string,
 	extra []roachpb.KeyValue,
 	inheritParentName string,
 ) (err error) {
@@ -63,11 +66,39 @@ func WriteDescriptors(
 		err = errors.Wrapf(err, "restoring table desc and namespace entries")
 	}()
 
+	// Aggregate the users for which we expect to preserve the grants on the
+	// backed up schema objects.
+	preserveGrantsForUsers := make(map[security.SQLUsername]struct{})
+	for _, user := range preserveGrantsFor {
+		preNormalizedUsername, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(user)
+		if err != nil {
+			return errors.Wrapf(err, "prenormalized check failed for username %s", user)
+		}
+		preserveGrantsForUsers[preNormalizedUsername] = struct{}{}
+	}
+
+	// Now, check that the ingesting cluster has all the users for which we want
+	// to preserve grants. We do this in the same txn as the one in which we will
+	// publish the descriptors.
+	if err := checkUsersInIngestingCluster(ctx, txn, execCfg, preserveGrantsForUsers); err != nil {
+		return err
+	}
+
 	b := txn.NewBatch()
+	// wroteDBs contains the database descriptors that are being published as part
+	// of this restore.
+	//
+	// In the case of a cluster restore, this only includes the temporary system
+	// database being restored.
 	wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
+
+	// wroteSchemas contains the schema descriptors that are being published as
+	// part of this restore.
+	wroteSchemas := make(map[descpb.ID]catalog.SchemaDescriptor)
 	for i := range databases {
 		desc := databases[i]
-		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, desc, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, desc, user,
+			wroteDBs, wroteSchemas, descCoverage)
 		if err != nil {
 			return err
 		}
@@ -89,19 +120,20 @@ func WriteDescriptors(
 		); err != nil {
 			return err
 		}
-		b.CPut(catalogkeys.EncodeNameKey(codec, desc), desc.GetID(), nil)
+		b.CPut(catalogkeys.EncodeNameKey(execCfg.Codec, desc), desc.GetID(), nil)
 
 		// We also have to put a system.namespace entry for the public schema
 		// if the database does not have a public schema backed by a descriptor.
 		if !desc.HasPublicSchemaWithDescriptor() {
-			b.CPut(catalogkeys.MakeSchemaNameKey(codec, desc.GetID(), tree.PublicSchema), keys.PublicSchemaID, nil)
+			b.CPut(catalogkeys.MakeSchemaNameKey(execCfg.Codec, desc.GetID(), tree.PublicSchema), keys.PublicSchemaID, nil)
 		}
 	}
 
 	// Write namespace and descriptor entries for each schema.
 	for i := range schemas {
 		sc := schemas[i]
-		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, sc, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, sc, user,
+			wroteDBs, wroteSchemas, descCoverage, preserveGrantsForUsers)
 		if err != nil {
 			return err
 		}
@@ -113,17 +145,21 @@ func WriteDescriptors(
 					sc.GetID(), sc)
 			}
 		}
+		if descCoverage == tree.RequestedDescriptors {
+			wroteSchemas[sc.GetID()] = sc
+		}
 		if err := descsCol.WriteDescToBatch(
 			ctx, false /* kvTrace */, sc.(catalog.MutableDescriptor), b,
 		); err != nil {
 			return err
 		}
-		b.CPut(catalogkeys.EncodeNameKey(codec, sc), sc.GetID(), nil)
+		b.CPut(catalogkeys.EncodeNameKey(execCfg.Codec, sc), sc.GetID(), nil)
 	}
 
 	for i := range tables {
 		table := tables[i]
-		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, table, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, table, user,
+			wroteDBs, wroteSchemas, descCoverage, preserveGrantsForUsers)
 		if err != nil {
 			return err
 		}
@@ -147,14 +183,15 @@ func WriteDescriptors(
 		); err != nil {
 			return err
 		}
-		b.CPut(catalogkeys.EncodeNameKey(codec, table), table.GetID(), nil)
+		b.CPut(catalogkeys.EncodeNameKey(execCfg.Codec, table), table.GetID(), nil)
 	}
 
 	// Write all type descriptors -- create namespace entries and write to
 	// the system.descriptor table.
 	for i := range types {
 		typ := types[i]
-		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, typ, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, typ, user,
+			wroteDBs, wroteSchemas, descCoverage, preserveGrantsForUsers)
 		if err != nil {
 			return err
 		}
@@ -171,7 +208,7 @@ func WriteDescriptors(
 		); err != nil {
 			return err
 		}
-		b.CPut(catalogkeys.EncodeNameKey(codec, typ), typ.GetID(), nil)
+		b.CPut(catalogkeys.EncodeNameKey(execCfg.Codec, typ), typ.GetID(), nil)
 	}
 
 	for _, kv := range extra {
@@ -216,6 +253,45 @@ func processTableForMultiRegion(
 				dbDesc.GetName(),
 			)
 		}
+	}
+	return nil
+}
+
+// checkUsersInIngestingCluster checks that the ingesting cluster's
+// `system.users` table has entries for all keys in the `users` map.
+func checkUsersInIngestingCluster(
+	ctx context.Context,
+	txn *kv.Txn,
+	execCfg *sql.ExecutorConfig,
+	users map[security.SQLUsername]struct{},
+) error {
+	// TODO (during review): Is it okay for us to be querying the `system.users`
+	// table as the root user even if the restore is being run by a non-root user.
+	// Technically, the non-root user who does not have SELECT privileges on
+	// `system.users` could figure out if a user is present or not in the
+	// ingesting table this way.
+	rows, err := execCfg.InternalExecutor.QueryBufferedEx(ctx, "query-system-users", txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		`SELECT username FROM system.users`)
+	if err != nil {
+		return err
+	}
+
+	usersInRestoringCluster := make(map[security.SQLUsername]struct{})
+	for _, row := range rows {
+		existingUsername := security.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(row[0])))
+		usersInRestoringCluster[existingUsername] = struct{}{}
+	}
+
+	usersNotFound := make([]string, 0)
+	for user := range users {
+		if _, exists := usersInRestoringCluster[user]; !exists {
+			usersNotFound = append(usersNotFound, user.Normalized())
+		}
+	}
+	if len(usersNotFound) != 0 {
+		return errors.Errorf("ingesting cluster does not have users: %s to preserve grants for",
+			strings.Join(usersNotFound, ","))
 	}
 	return nil
 }
