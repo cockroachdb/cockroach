@@ -326,8 +326,12 @@ type CopyIn struct {
 // command implements the Command interface.
 func (CopyIn) command() string { return "copy" }
 
-func (CopyIn) String() string {
-	return "CopyIn"
+func (c CopyIn) String() string {
+	s := "(empty)"
+	if c.Stmt != nil {
+		s = c.Stmt.String()
+	}
+	return fmt.Sprintf("CopyIn: %s", s)
 }
 
 var _ Command = CopyIn{}
