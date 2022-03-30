@@ -22,13 +22,14 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -79,7 +80,10 @@ func TestSingleNodeDocker(t *testing.T) {
 		t.Fatal(errors.NewAssertionErrorWithWrappedErrf(err, "cannot get pwd"))
 	}
 
-	fsnotifyPath := filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(pwd)))))), "docker-fsnotify")
+	fsnotifyPath, foundBinary := bazel.FindBinary("pkg/testutils/docker/docker-fsnotify", "docker-fsnotify")
+	if !foundBinary {
+		t.Fatal(errors.New("binary not found in bazel sandbox: docker-fsnotify"))
+	}
 
 	var dockerTests = []singleNodeDockerTest{
 		{
@@ -92,8 +96,11 @@ func TestSingleNodeDocker(t *testing.T) {
 					"COCKROACH_PASSWORD=23333",
 				},
 				volSetting: []string{
-					fmt.Sprintf("%s/testdata/single-node-test/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d", pwd),
-					fmt.Sprintf("%s/docker-fsnotify-bin:/cockroach/docker-fsnotify", fsnotifyPath),
+					fmt.Sprintf(
+						"%s:/docker-entrypoint-initdb.d",
+						testutils.TestDataPath(t, "single-node-test/docker-entrypoint-initdb.d/"),
+					),
+					fmt.Sprintf("%s:/cockroach/docker-fsnotify", fsnotifyPath),
 				},
 				cmd: []string{"start-single-node", "--certs-dir=certs"},
 			},
@@ -120,8 +127,11 @@ func TestSingleNodeDocker(t *testing.T) {
 					"COCKROACH_DATABASE=mydb",
 				},
 				volSetting: []string{
-					fmt.Sprintf("%s/testdata/single-node-test/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d", pwd),
-					fmt.Sprintf("%s/docker-fsnotify-bin:/cockroach/docker-fsnotify", fsnotifyPath),
+					fmt.Sprintf(
+						"%s:/docker-entrypoint-initdb.d",
+						testutils.TestDataPath(t, "single-node-test/docker-entrypoint-initdb.d/"),
+					),
+					fmt.Sprintf("%s:/cockroach/docker-fsnotify", fsnotifyPath),
 				},
 				cmd: []string{"start-single-node", "--insecure"},
 			},
