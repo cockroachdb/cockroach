@@ -4,15 +4,20 @@ go_library(
     name = "balancer",
     srcs = [
         "balancer.go",
+        "conn.go",
+        "conn_tracker.go",
         "pod.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/roachpb",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
 
@@ -20,11 +25,13 @@ go_test(
     name = "balancer_test",
     srcs = [
         "balancer_test.go",
+        "conn_tracker_test.go",
         "pod_test.go",
     ],
     embed = [":balancer"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
+        "//pkg/roachpb",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
     ],
