@@ -3,11 +3,16 @@
 build --flag_alias=crdb_test=//build/toolchains:crdb_test_flag
 build --flag_alias=cross=//build/toolchains:cross_flag
 build --flag_alias=dev=//build/toolchains:dev_flag
+build --flag_alias=lintonbuild=//build/toolchains:nogo_flag
+build --flag_alias=nolintonbuild=//build/toolchains:nonogo_explicit_flag
 build --flag_alias=with_ui=//pkg/ui:with_ui_flag
 
 build:cross --cross
 build:dev --dev
-build:nonogo --//build/toolchains:nonogo_flag
+build:lintonbuild --lintonbuild
+build:nolintonbuild --nolintonbuild
+# Note: nonogo is classically the name of the nolintonbuild configuration.
+build:nonogo --nolintonbuild
 build:test --crdb_test
 build:with_ui --with_ui
 
@@ -28,6 +33,7 @@ test:race --test_timeout=1200,6000,18000,72000
 
 # CI should always run with `--config=ci`.
 build:ci --experimental_convenience_symlinks=ignore
+build:ci --nogo
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
 test:ci --test_env=GO_TEST_WRAP_TESTV=1
