@@ -24,8 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,6 +108,39 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 
 	h.ts[tenID] = tenantState
 	return tenantState
+}
+
+// AllowSecondaryTenantToSetZoneConfigurations enables zone configuration
+// support for the given tenant. Given the cluster setting involved is tenant
+// read-only, the SQL statement is run as the system tenant.
+func (h *Handle) AllowSecondaryTenantToSetZoneConfigurations(t *testing.T, tenID roachpb.TenantID) {
+	_, found := h.LookupTenant(tenID)
+	require.True(t, found)
+	sqlDB := sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
+	sqlDB.Exec(
+		t,
+		"ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
+		tenID.ToUint64(),
+	)
+}
+
+// EnsureTenantCanSetZoneConfigurationsOrFatal ensures that the tenant observes
+// a 'true' value for sql.zone_configs.allow_for_secondary_tenants.enabled. It
+// fatals if this condition doesn't evaluate within SucceedsSoonDuration.
+func (h *Handle) EnsureTenantCanSetZoneConfigurationsOrFatal(t *testing.T, tenant *Tenant) {
+	testutils.SucceedsSoon(t, func() error {
+		var val string
+		tenant.QueryRow(
+			"SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled",
+		).Scan(&val)
+
+		if val == "false" {
+			return errors.New(
+				"waiting for sql.zone_configs.allow_for_secondary_tenant.enabled to be updated",
+			)
+		}
+		return nil
+	})
 }
 
 // LookupTenant returns the relevant tenant state, if any.

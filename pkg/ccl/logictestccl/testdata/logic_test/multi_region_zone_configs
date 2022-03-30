@@ -1,7 +1,5 @@
+# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
-
-statement ok
-SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true
 
 query TTTT
 SHOW REGIONS
