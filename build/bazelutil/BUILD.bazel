@@ -10,6 +10,15 @@ genrule(
     stamp = True,
 )
 
+genrule(
+    name = "test_nogo_configured",
+    outs = ["empty.txt"],
+    cmd = select({
+        "//build/toolchains:nogo": "touch $@",
+        "//build/toolchains:nonogo_explicit": "touch $@",
+    }, no_match_error = "must use exactly one of `--config nogo` or `--config nonogo` explicitly"),
+)
+
 lint_binary(
     name = "lint",
     test = "//pkg/testutils/lint:lint_test",
