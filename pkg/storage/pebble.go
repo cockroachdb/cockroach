@@ -554,18 +554,48 @@ func DefaultPebbleOptions() *pebble.Options {
 	}
 	// Instantiate a file system with disk health checking enabled. This FS wraps
 	// vfs.Default, and can be wrapped for encryption-at-rest.
-	opts.FS = vfs.WithDiskHealthChecks(vfs.Default, diskHealthCheckInterval,
+	opts.FS = &delayFS{vfs.WithDiskHealthChecks(vfs.Default, diskHealthCheckInterval,
 		func(name string, duration time.Duration) {
 			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
 				Path:     name,
 				Duration: duration,
 			})
-		})
+		})}
 	// If we encounter ENOSPC, exit with an informative exit code.
 	opts.FS = vfs.OnDiskFull(opts.FS, func() {
 		exit.WithCode(exit.DiskFull())
 	})
 	return opts
+}
+
+type delayFS struct {
+	vfs.FS
+}
+
+type delayFile struct {
+	vfs.File
+}
+
+var fileWriteDelay = envutil.EnvOrDefaultDuration("COCKROACH_DEBUG_PEBBLE_FILE_WRITE_DELAY", 0)
+
+func (f *delayFile) Write(p []byte) (n int, err error) {
+	time.Sleep(fileWriteDelay)
+	return f.File.Write(p)
+}
+
+func (f *delayFile) Sync() error {
+	time.Sleep(fileWriteDelay)
+	return f.File.Sync()
+}
+
+func (fs *delayFS) Create(name string) (vfs.File, error) {
+	f, err := fs.FS.Create(name)
+	return &delayFile{f}, err
+}
+
+func (fs *delayFS) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+	f, err := fs.FS.ReuseForWrite(oldname, newname)
+	return &delayFile{f}, err
 }
 
 type pebbleLogger struct {
