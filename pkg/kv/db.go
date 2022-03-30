@@ -679,6 +679,8 @@ func (db *DB) AdminRelocateRange(
 
 // AddSSTable links a file into the Pebble log-structured merge-tree.
 //
+// Requests are sent with the BulkNormalPri admission header priority.
+//
 // The disallowConflicts, disallowShadowingBelow parameters
 // require the MVCCAddSSTable version gate, as they are new in 22.1.
 func (db *DB) AddSSTable(
@@ -693,6 +695,7 @@ func (db *DB) AddSSTable(
 	batchTs hlc.Timestamp,
 ) (roachpb.Span, int64, error) {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
+	b.AdmissionHeader.Priority = int32(admission.BulkNormalPri)
 	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
 		stats, ingestAsWrites, hlc.Timestamp{} /* sstTimestampToRequestTimestamp */)
 	err := getOneErr(db.Run(ctx, b), b)
@@ -711,6 +714,8 @@ func (db *DB) AddSSTable(
 // batch timestamp at which the sst is actually ingested -- and that those keys
 // end up with after it is ingested -- may be updated if the request is pushed.
 //
+// Requests are sent with the BulkNormalPri admission header priority.
+//
 // Should only be called after checking the MVCCAddSSTable version gate.
 func (db *DB) AddSSTableAtBatchTimestamp(
 	ctx context.Context,
@@ -724,6 +729,7 @@ func (db *DB) AddSSTableAtBatchTimestamp(
 	batchTs hlc.Timestamp,
 ) (hlc.Timestamp, roachpb.Span, int64, error) {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
+	b.AdmissionHeader.Priority = int32(admission.BulkNormalPri)
 	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
 		stats, ingestAsWrites, batchTs)
 	err := getOneErr(db.Run(ctx, b), b)
