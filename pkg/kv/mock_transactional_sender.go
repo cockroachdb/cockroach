@@ -217,6 +217,27 @@ func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(cont
 	panic("unimplemented")
 }
 
+// GetTxnRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetTxnRetryableErr(
+	ctx context.Context,
+) *roachpb.TransactionRetryWithProtoRefreshError {
+	return nil
+}
+
+// ClearTxnRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) ClearTxnRetryableErr(ctx context.Context) {
+}
+
+// HasPerformedReads is part of TxnSenderFactory.
+func (m *MockTransactionalSender) HasPerformedReads() bool {
+	panic("unimplemented")
+}
+
+// HasPerformedWrites is part of TxnSenderFactory.
+func (m *MockTransactionalSender) HasPerformedWrites() bool {
+	panic("unimplemented")
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (

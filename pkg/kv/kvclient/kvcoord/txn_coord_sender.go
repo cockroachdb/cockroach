@@ -1043,11 +1043,11 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	// The transaction must not have already been used in this epoch.
-	if !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty() {
+	if tc.hasPerformedReadsLocked() {
 		return errors.WithContextTags(errors.AssertionFailedf(
 			"cannot set fixed timestamp, txn %s already performed reads", tc.mu.txn), ctx)
 	}
-	if tc.mu.txn.Sequence != 0 {
+	if tc.hasPerformedWritesLocked() {
 		return errors.WithContextTags(errors.AssertionFailedf(
 			"cannot set fixed timestamp, txn %s already performed writes", tc.mu.txn), ctx)
 	}
@@ -1331,4 +1331,48 @@ func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Cont
 		}
 		return tc.maybeCommitWait(ctx, true /* deferred */)
 	}
+}
+
+// GetTxnRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) GetTxnRetryableErr(
+	ctx context.Context,
+) *roachpb.TransactionRetryWithProtoRefreshError {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		return tc.mu.storedRetryableErr
+	}
+	return nil
+}
+
+// ClearTxnRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		tc.mu.storedRetryableErr = nil
+		tc.mu.txnState = txnPending
+	}
+}
+
+// HasPerformedReads is part of the TxnSender interface.
+func (tc *TxnCoordSender) HasPerformedReads() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.hasPerformedReadsLocked()
+}
+
+// HasPerformedWrites is part of the TxnSender interface.
+func (tc *TxnCoordSender) HasPerformedWrites() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.hasPerformedWritesLocked()
+}
+
+func (tc *TxnCoordSender) hasPerformedReadsLocked() bool {
+	return !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty()
+}
+
+func (tc *TxnCoordSender) hasPerformedWritesLocked() bool {
+	return tc.mu.txn.Sequence != 0
 }
