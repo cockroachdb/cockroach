@@ -534,6 +534,9 @@ type testClusterConfig struct {
 	// backupRestoreProbability will periodically backup the cluster and restore
 	// it's state to a new cluster at random points during a logic test.
 	backupRestoreProbability float64
+	// If set, then sql.distsql.temp_storage.workmem cluster setting is
+	// randomized in [10KiB, 100KiB) range.
+	randomizeWorkmem bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -721,6 +724,12 @@ var logicTestConfigs = []testClusterConfig{
 		overrideExperimentalDistSQLPlanning: "on",
 	},
 	{
+		name:                "local-workmem",
+		numNodes:            1,
+		overrideDistSQLMode: "off",
+		randomizeWorkmem:    true,
+	},
+	{
 		name:                "fakedist",
 		numNodes:            3,
 		useFakeSpanResolver: true,
@@ -755,6 +764,13 @@ var logicTestConfigs = []testClusterConfig{
 		useFakeSpanResolver:                 true,
 		overrideDistSQLMode:                 "on",
 		overrideExperimentalDistSQLPlanning: "on",
+	},
+	{
+		name:                "fakedist-workmem",
+		numNodes:            3,
+		useFakeSpanResolver: true,
+		overrideDistSQLMode: "on",
+		randomizeWorkmem:    true,
 	},
 	{
 		name:                "5node",
@@ -916,11 +932,13 @@ var (
 		"local",
 		"local-vec-off",
 		"local-spec-planning",
+		"local-workmem",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-metadata",
 		"fakedist-disk",
 		"fakedist-spec-planning",
+		"fakedist-workmem",
 	}
 	// fiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	fiveNodeDefaultConfigName  = "5node-default-configs"
@@ -1827,6 +1845,15 @@ func (t *logicTest) newCluster(
 			"SET CLUSTER SETTING sql.crdb_internal.table_row_statistics.as_of_time = '-1µs'",
 		); err != nil {
 			t.Fatal(err)
+		}
+
+		if cfg.randomizeWorkmem {
+			workmem := t.rng.Intn(90<<10) + 10<<10
+			if _, err := conn.Exec(
+				fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem = '%dB'", workmem),
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
