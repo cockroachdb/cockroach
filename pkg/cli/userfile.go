@@ -256,7 +256,7 @@ func runUserFileGet(cmd *cobra.Command, args []string) (resErr error) {
 		}
 		files = append(files, s)
 		return nil
-	}); err != nil {
+	}, 0 /*limit*/); err != nil {
 		return err
 	}
 
@@ -451,7 +451,7 @@ func listUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]s
 		}
 		res = append(res, displayPrefix+s)
 		return nil
-	}); err != nil {
+	}, 0 /*limit*/); err != nil {
 		return nil, err
 	}
 	return res, nil
@@ -532,7 +532,7 @@ func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([
 		}
 		deleted = append(deleted, displayRoot+s)
 		return nil
-	}); err != nil {
+	}, 0 /*limit*/); err != nil {
 		return nil, err
 	}
 

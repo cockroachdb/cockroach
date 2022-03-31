@@ -72,6 +72,7 @@ ORDER BY "primary" DESC, "region"`,
 			zonesClause,
 			lexbase.EscapeSQLString(dbName),
 		)
+
 		return parse(query)
 
 	case tree.ShowRegionsFromCluster:

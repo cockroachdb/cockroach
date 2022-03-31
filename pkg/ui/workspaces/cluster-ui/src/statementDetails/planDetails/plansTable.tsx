@@ -134,6 +134,7 @@ export function makeExplainPlanColumns(
   handleDetails: (plan: PlanHashStats) => void,
 ): ColumnDescriptor<PlanHashStats>[] {
   const duration = (v: number) => Duration(v * 1e9);
+  const count = (v: number) => v.toFixed(1);
   return [
     {
       name: "planID",
@@ -170,8 +171,10 @@ export function makeExplainPlanColumns(
     {
       name: "avgRowsRead",
       title: planDetailsTableTitles.avgRowsRead(),
-      cell: (item: PlanHashStats) => longToInt(item.stats.rows_read.mean),
-      sort: (item: PlanHashStats) => longToInt(item.stats.rows_read.mean),
+      cell: (item: PlanHashStats) =>
+        formatNumberForDisplay(item.stats.rows_read.mean, count),
+      sort: (item: PlanHashStats) =>
+        formatNumberForDisplay(item.stats.rows_read.mean, count),
     },
     {
       name: "fullScan",

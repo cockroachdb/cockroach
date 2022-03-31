@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -26,9 +27,16 @@ func (d *delegator) delegateShowDefaultPrivileges(
 	if err != nil {
 		return nil, err
 	}
+
+	schemaClause := " AND schema_name IS NULL"
+	if n.Schema != "" {
+		schemaClause = fmt.Sprintf(" AND schema_name = %s", lexbase.EscapeSQLString(n.Schema.String()))
+	}
+
 	query := fmt.Sprintf(
-		"SELECT role, for_all_roles, object_type, grantee, privilege_type FROM crdb_internal.default_privileges WHERE database_name = '%s'",
-		currentDatabase.Normalize(),
+		"SELECT role, for_all_roles, object_type, grantee, privilege_type FROM crdb_internal.default_privileges WHERE database_name = %s%s",
+		lexbase.EscapeSQLString(currentDatabase.Normalize()),
+		schemaClause,
 	)
 
 	if n.ForAllRoles {

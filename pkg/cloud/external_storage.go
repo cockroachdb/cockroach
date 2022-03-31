@@ -78,11 +78,12 @@ type ExternalStorage interface {
 	// List enumerates files within the supplied prefix, calling the passed
 	// function with the name of each file found, relative to the external storage
 	// destination's configured prefix. If the passed function returns a non-nil
-	// error, iteration is stopped it is returned. If delimiter is non-empty names
-	// which have the same prefix, prior to the delimiter, are grouped into a
-	// single result which is that prefix. The order that results are passed to
-	// the callback is undefined.
-	List(ctx context.Context, prefix, delimiter string, fn ListingFn) error
+	// error, iteration is stopped it is returned. Iteration is also stopped
+	// if the number of filenames reaches the limit, 0 is no limit.
+	// If delimiter is non-empty names which have the same prefix, prior
+	// to the delimiter, are grouped into a single result which is that
+	// prefix. The order that results are passed to the callback is undefined.
+	List(ctx context.Context, prefix, delimiter string, fn ListingFn, limit int) error
 
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error
