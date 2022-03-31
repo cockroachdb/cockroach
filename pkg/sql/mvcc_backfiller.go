@@ -135,25 +135,52 @@ func (mp *MergeProgress) Copy() *MergeProgress {
 	return newp
 }
 
+// FlatSpans returns all of the TodoSpans being tracked by this merger
+// as a flat slice.
+func (mp *MergeProgress) FlatSpans() []roachpb.Span {
+	spans := []roachpb.Span{}
+	for _, s := range mp.TodoSpans {
+		spans = append(spans, s...)
+	}
+	return spans
+}
+
 // IndexMergeTracker abstracts the infrastructure to read and write merge
 // progress to job state.
 type IndexMergeTracker struct {
 	mu struct {
 		syncutil.Mutex
 		progress *MergeProgress
+
+		hasOrigNRanges bool
+		origNRanges    int
 	}
 
 	jobMu struct {
 		syncutil.Mutex
 		job *jobs.Job
 	}
+
+	rangeCounter   rangeCounter
+	fractionScaler *multiStageFractionScaler
 }
 
 var _ scexec.BackfillProgressFlusher = (*IndexMergeTracker)(nil)
 
+type rangeCounter func(ctx context.Context, spans []roachpb.Span) (int, error)
+
 // NewIndexMergeTracker creates a new IndexMergeTracker
-func NewIndexMergeTracker(progress *MergeProgress, job *jobs.Job) *IndexMergeTracker {
-	imt := IndexMergeTracker{}
+func NewIndexMergeTracker(
+	progress *MergeProgress,
+	job *jobs.Job,
+	rangeCounter rangeCounter,
+	scaler *multiStageFractionScaler,
+) *IndexMergeTracker {
+	imt := IndexMergeTracker{
+		rangeCounter:   rangeCounter,
+		fractionScaler: scaler,
+	}
+	imt.mu.hasOrigNRanges = false
 	imt.mu.progress = progress.Copy()
 	imt.jobMu.job = job
 	return &imt
@@ -185,14 +212,46 @@ func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context) error {
 	return imt.jobMu.job.SetDetails(ctx, nil, details)
 }
 
-// FlushFractionCompleted writes out the fraction completed.
+// FlushFractionCompleted writes out the fraction completed based on the number of total
+// ranges completed.
 func (imt *IndexMergeTracker) FlushFractionCompleted(ctx context.Context) error {
-	// TODO(#76365): The backfiller currently doesn't have a good way to report the
-	// total progress of mutations that occur in multiple stages that
-	// independently report progress. So fraction tracking of the merge will be
-	// unimplemented for now and the progress fraction will report only the
-	// progress of the backfilling stage.
+	imt.mu.Lock()
+	spans := imt.mu.progress.FlatSpans()
+	imt.mu.Unlock()
+
+	rangeCount, err := imt.rangeCounter(ctx, spans)
+	if err != nil {
+		return err
+	}
+
+	orig := imt.maybeSetOrigNRanges(rangeCount)
+	if orig >= rangeCount && orig != 0 {
+		fractionRangesFinished := float32(orig-rangeCount) / float32(orig)
+		frac, err := imt.fractionScaler.fractionCompleteFromStageFraction(stageMerge, fractionRangesFinished)
+		if err != nil {
+			return err
+		}
+
+		imt.jobMu.Lock()
+		defer imt.jobMu.Unlock()
+		if err := imt.jobMu.job.FractionProgressed(ctx, nil,
+			jobs.FractionUpdater(frac)); err != nil {
+			return jobs.SimplifyInvalidStatusError(err)
+		}
+	}
 	return nil
+}
+
+// maybeSetOrigNRanges sets the initial range count, if it wasn't
+// previously set. The updated value of the range count is returned.
+func (imt *IndexMergeTracker) maybeSetOrigNRanges(count int) int {
+	imt.mu.Lock()
+	defer imt.mu.Unlock()
+	if !imt.mu.hasOrigNRanges {
+		imt.mu.hasOrigNRanges = true
+		imt.mu.origNRanges = count
+	}
+	return imt.mu.origNRanges
 }
 
 // UpdateMergeProgress allow the caller to modify the current progress with updateFn.
