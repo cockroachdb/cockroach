@@ -11,7 +11,7 @@
 import moment from "moment";
 import { cockroach } from "src/js/protos";
 import { useDispatch, useSelector } from "react-redux";
-import React, { useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { refreshHotRanges } from "../../redux/apiReducers";
 import HotRangesTable from "./hotRangesTable";
@@ -29,9 +29,11 @@ import {
 import { InlineAlert } from "src/components";
 import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { selectNodeLocalities } from "src/redux/localities";
+import { HotRangesFilter } from "src/views/hotRanges/hotRangesFilter";
 
 const cx = classNames.bind(styles);
 const HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;
+type HotRange = cockroach.server.serverpb.HotRangesResponseV2.IHotRange;
 
 const HotRangesPage = () => {
   const dispatch = useDispatch();
@@ -66,7 +68,13 @@ const HotRangesPage = () => {
       " (UTC)"
     );
   };
-  // TODO(santamaura): add url to anchor once it's available
+
+  const [filteredHotRanges, setFilteredHotRanges] = useState<HotRange[]>(
+    hotRanges,
+  );
+
+  const clearButtonRef = useRef<HTMLSpanElement>();
+
   return (
     <div className="section">
       <Helmet title="Hot Ranges" />
@@ -85,15 +93,22 @@ const HotRangesPage = () => {
         }
         fullWidth
       />
+      <HotRangesFilter
+        hotRanges={hotRanges}
+        onChange={setFilteredHotRanges}
+        nodeIdToLocalityMap={nodeIdToLocalityMap}
+        clearButtonContainer={clearButtonRef.current}
+      />
       <ErrorBoundary>
         <Loading
           loading={isLoading}
           error={lastError}
           render={() => (
             <HotRangesTable
-              hotRangesList={hotRanges}
+              hotRangesList={filteredHotRanges}
               lastUpdate={lastSetAt && formatCurrentDateTime(lastSetAt?.utc())}
               nodeIdToLocalityMap={nodeIdToLocalityMap}
+              clearFilterContainer={<span ref={clearButtonRef} />}
             />
           )}
           page={undefined}
