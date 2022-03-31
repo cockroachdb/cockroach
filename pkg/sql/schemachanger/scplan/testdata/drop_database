@@ -749,10 +749,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SourceElementID: 8
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP DATABASE db1 CASCADE
-      TableID: 111
+    *scop.DeleteDescriptor
+      DescriptorID: 111
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 111
@@ -770,10 +768,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SourceElementID: 9
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP DATABASE db1 CASCADE
-      TableID: 112
+    *scop.DeleteDescriptor
+      DescriptorID: 112
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 112
@@ -795,10 +791,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SourceElementID: 10
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP DATABASE db1 CASCADE
-      TableID: 113
+    *scop.DeleteDescriptor
+      DescriptorID: 113
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 113
@@ -819,10 +813,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SourceElementID: 10
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP DATABASE db1 CASCADE
-      TableID: 114
+    *scop.DeleteDescriptor
+      DescriptorID: 114
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 114
@@ -846,10 +838,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SourceElementID: 12
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP DATABASE db1 CASCADE
-      TableID: 117
+    *scop.DeleteDescriptor
+      DescriptorID: 117
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 117

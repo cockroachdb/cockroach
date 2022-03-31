@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func newLogEventOp(e scpb.Element, md targetsWithElementMap) *scop.LogEvent {
@@ -41,7 +42,11 @@ func newLogEventOp(e scpb.Element, md targetsWithElementMap) *scop.LogEvent {
 func statementForDropJob(e scpb.Element, md targetsWithElementMap) scop.StatementForDropJob {
 	stmtID := md.Targets[md.elementToTarget[e]].Metadata.StatementID
 	return scop.StatementForDropJob{
-		Statement:   md.Statements[stmtID].Statement,
+		// Using the redactable string but with stripped markers gives us a
+		// normalized and fully-qualified string value for display use.
+		Statement: redact.RedactableString(
+			md.Statements[stmtID].RedactedStatement,
+		).StripMarkers(),
 		StatementID: stmtID,
 		Rollback:    md.InRollback,
 	}
