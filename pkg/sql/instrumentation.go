@@ -200,7 +200,7 @@ func (ih *instrumentationHelper) Setup(
 			// case we're collecting a bundle. We also capture the span in order
 			// to fetch the trace from it, but the span won't be finished.
 			ih.sp = sp
-			return ctx, ih.collectBundle
+			return ctx, true
 		}
 	} else {
 		if buildutil.CrdbTestBuild {
@@ -314,7 +314,7 @@ func (ih *instrumentationHelper) Finish(
 				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
 			}
 		}
-		if collectTxnExecStats || ih.implicitTxn {
+		if collectTxnExecStats {
 			txnStats.Accumulate(queryLevelStats)
 		}
 	}

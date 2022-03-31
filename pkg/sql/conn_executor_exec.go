@@ -470,7 +470,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				ex.server.cfg,
 				ex.statsCollector,
 				&ex.extraTxnState.accumulatedStats,
-				ex.extraTxnState.shouldCollectTxnExecutionStats,
+				ex.extraTxnState.shouldCollectTxnExecutionStats || ih.collectExecStats,
 				p,
 				ast,
 				sql,
@@ -2218,6 +2218,9 @@ func (ex *connExecutor) recordTransactionFinish(
 	txnRetryLat := ex.phaseTimes.GetTransactionRetryLatency()
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
+	collectedExecStats :=
+		ex.extraTxnState.shouldCollectTxnExecutionStats || ex.planner.instrumentation.collectExecStats
+
 	recordedTxnStats := sqlstats.RecordedTxnStats{
 		TransactionTimeSec:      txnTime.Seconds(),
 		Committed:               ev.eventType == txnCommit,
@@ -2228,7 +2231,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RetryLatency:            txnRetryLat,
 		CommitLatency:           commitLat,
 		RowsAffected:            ex.extraTxnState.numRows,
-		CollectedExecStats:      ex.extraTxnState.shouldCollectTxnExecutionStats,
+		CollectedExecStats:      collectedExecStats,
 		ExecStats:               ex.extraTxnState.accumulatedStats,
 		RowsRead:                ex.extraTxnState.rowsRead,
 		RowsWritten:             ex.extraTxnState.rowsWritten,
