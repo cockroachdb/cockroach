@@ -358,7 +358,7 @@ upsert descriptor #108
   -  version: "1"
   +  version: "2"
 delete all comments for table descriptors [108]
-create job #1 (non-cancelable: true): "schema change job"
+create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [105 107 108]
 # end PreCommitPhase
 commit transaction #1
@@ -943,7 +943,7 @@ upsert descriptor #109
   -  version: "1"
   +  version: "2"
 delete all comments for table descriptors [109]
-create job #1 (non-cancelable: true): "schema change job"
+create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
   descriptor IDs: [105 109]
 # end PreCommitPhase
 commit transaction #1
@@ -1620,7 +1620,7 @@ upsert descriptor #107
 delete comment for descriptor #104 of type DatabaseCommentType
 delete comment for descriptor #106 of type SchemaCommentType
 delete role settings for database on #104
-create job #1 (non-cancelable: true): "schema change job"
+create job #1 (non-cancelable: true): "DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [104 105 106 107]
 # end PreCommitPhase
 commit transaction #1
