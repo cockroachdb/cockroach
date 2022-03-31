@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -511,9 +512,8 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	defer c.metrics.ActiveCleaners.Dec(1)
 
 	log.Infof(ctx, "running temporary object cleanup background job")
-	// TODO(sumeer): this is not using NewTxnWithSteppingEnabled and so won't be
-	// classified as FROM_SQL for purposes of admission control. Fix.
-	txn := kv.NewTxn(ctx, c.db, 0)
+	txn := kv.NewTxnWithAdmissionControl(
+		ctx, c.db, 0, roachpb.AdmissionHeader_FROM_SQL, admission.NormalPri)
 	// Only see temporary schemas after some delay as safety
 	// mechanism.
 	waitTimeForCreation := TempObjectWaitInterval.Get(&c.settings.SV)
