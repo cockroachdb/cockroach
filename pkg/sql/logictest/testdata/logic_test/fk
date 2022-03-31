@@ -1001,12 +1001,11 @@ statement ok
 DROP TABLE a
 
 # Check proper GC job description formatting when removing FK back-references when dropping a table (#59221).
-query T
-SELECT job_type FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND
- (description LIKE 'GC for updating table "a"%' OR
-  description = 'GC for DROP TABLE a');
+query TT
+SELECT job_type, description FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND
+ description LIKE 'GC for DROP TABLE test.public.a';
 ----
-SCHEMA CHANGE GC
+SCHEMA CHANGE GC  GC for DROP TABLE test.public.a
 
 statement ok
 DROP TABLE b

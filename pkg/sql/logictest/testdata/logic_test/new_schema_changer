@@ -754,12 +754,12 @@ database_id  role_name      settings
 let $desc_count_post_drop
 select count(*) from system.descriptor
 
-# Excluding anything that needs GC, we should drop by 4 (2 types [array and
-# normal], 2 schema's)
+# Excluding anything that needs GC, we should drop by 10 (2 types [array and
+# normal], 3 schemas, and 5 views)
 query I
 select $desc_count_pre_drop-$desc_count_post_drop
 ----
-5
+10
 
 # Tests for computed column rewrites.
 statement ok

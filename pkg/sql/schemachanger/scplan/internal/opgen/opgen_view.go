@@ -74,10 +74,22 @@ func init() {
 					return newLogEventOp(this, md)
 				}),
 				emit(func(this *scpb.View, md targetsWithElementMap) scop.Op {
+					if !this.IsMaterialized {
+						return nil
+
+					}
 					return &scop.CreateGcJobForTable{
 						TableID:             this.ViewID,
 						StatementForDropJob: statementForDropJob(this, md),
 					}
+				}),
+				emit(func(this *scpb.View) scop.Op {
+					if !this.IsMaterialized {
+						return &scop.DeleteDescriptor{
+							DescriptorID: this.ViewID,
+						}
+					}
+					return nil
 				}),
 			),
 		),

@@ -13,6 +13,7 @@ package scexec
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // executeDescriptorMutationOps will visit each operation, accumulating
@@ -502,23 +504,24 @@ func MakeDeclarativeSchemaChangeJobRecord(
 ) *jobs.Record {
 	stmtStrs := make([]string, len(stmts))
 	for i, stmt := range stmts {
-		stmtStrs[i] = stmt.Statement
+		// Use the redactable string because it's been normalized and
+		// fully-qualified. The regular statement is exactly the user input
+		// but that's a possibly ambiguous value and not what the old
+		// schema changer used. It's probably that the right thing to use
+		// is the redactable string with the redaction markers.
+		stmtStrs[i] = redact.RedactableString(stmt.RedactedStatement).StripMarkers()
 	}
+	// The description being all the statements might seem a bit suspect, but
+	// it's what the old schema changer does, so it's what we'll do.
+	description := strings.Join(stmtStrs, "; ")
 	rec := &jobs.Record{
-		JobID:       jobID,
-		Description: "schema change job", // TODO(ajwerner): use const
-		Statements:  stmtStrs,
-		Username:    security.MakeSQLUsernameFromPreNormalizedString(auth.UserName),
-		// TODO(ajwerner): It may be better in the future to have the builder be
-		// responsible for determining this set of descriptorIDs. As of the time of
-		// writing, the descriptorIDs to be "locked," descriptorIDs that need schema
-		// change jobs, and descriptorIDs with schema change mutations all coincide.
-		// But there are future schema changes to be implemented in the new schema
-		// changer (e.g., RENAME TABLE) for which this may no longer be true.
+		JobID:         jobID,
+		Description:   description,
+		Statements:    stmtStrs,
+		Username:      security.MakeSQLUsernameFromPreNormalizedString(auth.UserName),
 		DescriptorIDs: descriptorIDs,
 		Details:       jobspb.NewSchemaChangeDetails{},
 		Progress:      jobspb.NewSchemaChangeProgress{},
-
 		// TODO(ajwerner): It'd be good to populate the RunningStatus at all times.
 		RunningStatus: "",
 		NonCancelable: isNonCancelable,
