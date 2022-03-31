@@ -243,13 +243,30 @@ message DelegateSnapshotRequest {
 
   // The truncated state of the Raft log on the coordinator replica.
   roachpb.RaftTruncatedState truncated_state = 8;
+
+  // The coordinator's updated range descriptor which includes the recipient descriptor.
+  roachpb.RangeDescriptor range_descriptor = 9;
 }
 
 message DelegateSnapshotResponse {
+  message DelegationResponse {
+    enum Status {
+      UNKNOWN = 0;
+      ACCEPTED = 1;
+      ERROR = 3;
+    }
+    Status status = 1;
+    string message = 2;
+  }
+
   SnapshotResponse snapResponse = 1;
   // collected_spans stores trace spans recorded during the execution of this
   // request.
   repeated util.tracing.tracingpb.RecordedSpan collected_spans = 2 [(gogoproto.nullable) = false];
+
+  // DelegationResponse holds the response of the sender to inform the coordinator whether the
+  // delegate request was accepted.
+  DelegationResponse delegationResponse = 3;
 }
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.

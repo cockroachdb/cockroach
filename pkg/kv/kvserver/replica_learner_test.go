@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -258,6 +259,13 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 	)
 
 	defer tc.Stopper().Stop(ctx)
+
+	// Disable delegating snapshots to different senders, which would otherwise
+	// fail this test as snapshots could queue on different stores.
+	settings := cluster.MakeTestingClusterSettings()
+	sv := &settings.SV
+	kvserver.FollowerSnapshotsEnabled.Override(ctx, sv, false)
+
 	scratch := tc.ScratchRange(t)
 	replicationChange := make(chan error, 2)
 	g := ctxgroup.WithContext(ctx)
@@ -323,6 +331,157 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 
 	// Wait for the goroutines to finish.
 	require.NoError(t, g.Wait())
+}
+
+// TestDelegateSnapshotFails is a test that ensure we fail fast when the
+// sender or receiver store crashes during delegated snapshot sending.
+func TestDelegateSnapshotFails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	blockIncomingSnapshots := make(chan struct{})
+	waitForRebalanceToBlockCh := make(chan struct{})
+	var senderID int64
+	var activateBlocking int64
+
+	setupFn := func(t *testing.T) (
+		*testcluster.TestCluster,
+		roachpb.Key,
+		func(),
+	) {
+		knobs, ltk := makeReplicationTestKnobs()
+		ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
+			if atomic.LoadInt64(&activateBlocking) > 0 {
+				// Signal waitForRebalanceToBlockCh to indicate the testing knob was hit.
+				close(waitForRebalanceToBlockCh)
+				blockIncomingSnapshots <- struct{}{}
+			}
+			return nil
+		}
+		ltk.storeKnobs.SelectDelegateSnapshotSender =
+			func(descriptor *roachpb.RangeDescriptor) *roachpb.ReplicaDescriptor {
+				store := roachpb.StoreID(atomic.LoadInt64(&senderID))
+				if store == 0 {
+					// testing knob not activated.
+					return nil
+				}
+				if repl, ok := descriptor.GetReplicaDescriptor(store); ok {
+					return &repl
+				}
+				t.Fatal("sender store not found")
+				return nil
+			}
+		ltk.storeKnobs.ThrottleEmptySnapshots = true
+
+		cleanup := func() {
+			blockIncomingSnapshots = make(chan struct{})
+			waitForRebalanceToBlockCh = make(chan struct{})
+			senderID = int64(0)
+			activateBlocking = int64(0)
+		}
+
+		tc := testcluster.StartTestCluster(
+			t, 3, base.TestClusterArgs{
+				ServerArgs:      base.TestServerArgs{Knobs: knobs},
+				ReplicationMode: base.ReplicationManual,
+			},
+		)
+		scratchKey := tc.ScratchRange(t)
+		return tc, scratchKey, cleanup
+	}
+
+	// Add a learner replica that will need a snapshot, kill the server
+	// the learner is on. Assert that the failure is detected and change replicas
+	// fails fast.
+	t.Run("receiver", func(t *testing.T) {
+		tc, scratchKey, cleanup := setupFn(t)
+		defer tc.Stopper().Stop(ctx)
+		defer cleanup()
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(
+			func(ctx context.Context) error {
+				activateBlocking = int64(1)
+				desc, err := tc.LookupRange(scratchKey)
+				if err != nil {
+					return err
+				}
+				_, err = tc.Servers[0].DB().AdminChangeReplicas(
+					ctx, scratchKey, desc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+				)
+				return err
+			},
+		)
+
+		select {
+		case <-waitForRebalanceToBlockCh:
+			// Wait for the testing knob to be reached, so the snapshot is in flight.
+			atomic.StoreInt64(&activateBlocking, 0)
+			<-blockIncomingSnapshots
+		case <-time.After(10 * time.Second):
+			t.Fatal("timed out waiting for snapshot to block")
+		}
+		// Stop the server the recipient is on, which should cause the snapshot to fail fast.
+		tc.StopServer(1)
+		const msgRE = `rpc error|EOF`
+		if err := g.Wait(); !testutils.IsError(err, msgRE) {
+			t.Fatalf(`expected %q error got: %+v`, msgRE, err)
+		}
+	})
+
+	// Add a follower replica to act as the snapshot sender, and kill the server
+	// the sender is on. Assert that the failure is detected and change replicas
+	// fails fast.
+	t.Run("sender", func(t *testing.T) {
+		tc, scratchKey, cleanup := setupFn(t)
+		defer tc.Stopper().Stop(ctx)
+		defer cleanup()
+		g := ctxgroup.WithContext(ctx)
+
+		// Add a replica that will be the delegated sender.
+		senderStore := int64(3)
+		desc, err := tc.AddVoters(scratchKey, tc.Target(2))
+		if err != nil {
+			return
+		}
+		// Check that the new replica is added to the expected store.
+		_, ok := desc.GetReplicaDescriptor(roachpb.StoreID(senderStore))
+		if !ok {
+			t.Fatalf("programming error")
+		}
+		// Save the store of the added voter to select as the delegated sender.
+		atomic.StoreInt64(&senderID, senderStore)
+
+		// Add a voter that is expected to be sent by the delegated sender.
+		g.GoCtx(
+			func(ctx context.Context) error {
+				activateBlocking = int64(1)
+				desc, err := tc.LookupRange(scratchKey)
+				if err != nil {
+					return err
+				}
+				_, err = tc.Servers[0].DB().AdminChangeReplicas(
+					ctx, scratchKey, desc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+				)
+				return err
+			},
+		)
+		select {
+		case <-waitForRebalanceToBlockCh:
+			// Wait for the testing knob to be reached, so the snapshot is in flight.
+			atomic.StoreInt64(&activateBlocking, 0)
+			<-blockIncomingSnapshots
+		case <-time.After(10 * time.Second):
+			t.Fatal("timed out waiting for snapshot to block")
+		}
+
+		// Stop the server the sender is on, which should cause the snapshot to fail fast.
+		tc.StopServer(2)
+		const msgRE = `rpc error|EOF|context canceled`
+		if err := g.Wait(); !testutils.IsError(err, msgRE) {
+			t.Fatalf(`expected %q error got: %+v`, msgRE, err)
+		}
+	})
 }
 
 func TestLearnerRaftConfState(t *testing.T) {

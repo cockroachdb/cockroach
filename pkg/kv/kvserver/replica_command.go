@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -2447,12 +2448,81 @@ func recordRangeEventsInLog(
 	return nil
 }
 
-// getSenderReplica returns a replica descriptor for a follower replica to act as
-// the sender for snapshots.
-// TODO(amy): select a follower based on locality matching.
-func (r *Replica) getSenderReplica(ctx context.Context) (roachpb.ReplicaDescriptor, error) {
-	log.Fatal(ctx, "follower snapshots not implemented")
-	return r.GetReplicaDescriptor()
+// getSenderReplica returns a replica descriptor for a voter replica to act as
+// the sender for delegated snapshots.
+func (r *Replica) getSenderReplica(
+	recipient roachpb.ReplicaDescriptor,
+) (roachpb.
+	ReplicaDescriptor, error) {
+
+	// Get range descriptor and store pool.
+	storePool := r.store.cfg.StorePool
+	rangeDesc := r.Desc()
+
+	if fn := r.store.cfg.TestingKnobs.SelectDelegateSnapshotSender; fn != nil {
+		sender := fn(rangeDesc)
+		if sender != nil {
+			return *sender, nil
+		}
+	}
+
+	// Include voter and non-voter replicas on healthy stores as candidates.
+	nonRecipientReplicas := rangeDesc.Replicas().Filter(
+		func(rDesc roachpb.ReplicaDescriptor) bool {
+			return rDesc.ReplicaID != recipient.ReplicaID
+		},
+	)
+	voterSet := nonRecipientReplicas.VoterAndNonVoterDescriptors()
+	candidates, _ := storePool.LiveAndDeadReplicas(voterSet, false)
+	if len(candidates) < 2 {
+		return r.GetReplicaDescriptor()
+	}
+
+	// Get the localities of the candidate replicas (including the original sender).
+	localities := storePool.GetLocalitiesPerReplica(candidates)
+	recipientLocality := storePool.GetLocalitiesPerReplica([]roachpb.
+		ReplicaDescriptor{recipient})[recipient.ReplicaID]
+
+	type replicaDistance struct {
+		Replica roachpb.ReplicaID
+		// Score is the diversity score comparing the replica's locality to the recipient's locality.
+		Score float64
+	}
+	// Construct a slice of replicaDistance structs that map replicaID to its diversity score
+	// compared to the recipient.
+	var pairs []replicaDistance
+
+	// Get the diversity score of all candidates compared to the recipient.
+	for replID, locality := range localities {
+		p := replicaDistance{replID, recipientLocality.DiversityScore(locality)}
+		pairs = append(pairs, p)
+	}
+	// Sort the replicas in ascending order of diversity compared to the recipient.
+	sort.Slice(
+		pairs, func(i, j int) bool {
+			return pairs[i].Score < pairs[j].Score
+		},
+	)
+
+	// Count the number of replicas that tie as the most optimal sender.
+	bestDiversityScore := pairs[0].Score
+	tiedReplicas := 0
+	for i := range pairs {
+		if pairs[i].Score == bestDiversityScore {
+			tiedReplicas++
+		}
+	}
+
+	// Randomly select the best replica if there is a tie.
+	pRand, _ := randutil.NewPseudoRand()
+	selectedSender := pairs[randutil.RandIntInRange(pRand, 0, tiedReplicas)]
+
+	// Return the replica desc of the selected sender.
+	desc, found := rangeDesc.GetReplicaDescriptorByID(selectedSender.Replica)
+	if !found {
+		return r.GetReplicaDescriptor()
+	}
+	return desc, nil
 }
 
 // TODO(amy): update description when patch for follower snapshots are completed.
@@ -2584,8 +2654,8 @@ func (r *Replica) sendSnapshot(
 		return err
 	}
 	// Check follower snapshots cluster setting.
-	if followerSnapshotsEnabled.Get(&r.ClusterSettings().SV) {
-		sender, err = r.getSenderReplica(ctx)
+	if FollowerSnapshotsEnabled.Get(&r.ClusterSettings().SV) {
+		sender, err = r.getSenderReplica(recipient)
 		if err != nil {
 			return err
 		}
@@ -2594,26 +2664,47 @@ func (r *Replica) sendSnapshot(
 	log.VEventf(
 		ctx, 2, "delegating snapshot transmission for %v to %v", recipient, sender,
 	)
-	desc, err := r.GetReplicaDescriptor()
+	replDesc, err := r.GetReplicaDescriptor()
 	if err != nil {
 		return err
 	}
+
 	status := r.RaftStatus()
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
 		// haven't woken up yet.
 		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
 	}
+	r.mu.RLock()
+	truncatedState, err := r.raftTruncatedStateLocked(ctx)
+	if err != nil {
+		return err
+	}
+	r.mu.RUnlock()
+
+	// Check that the snapshot we generated has a descriptor that includes the
+	// recipient. If it doesn't, the recipient will reject it, so it's better to
+	// not send it in the first place. It's possible to hit this case if we're not
+	// the leaseholder and we haven't yet applied the configuration change that's
+	// adding the recipient to the range.
+	if _, ok := r.Desc().GetReplicaDescriptorByID(recipient.ReplicaID); !ok {
+		return errors.Wrapf(
+			errMarkSnapshotError,
+			"programming error",
+		)
+	}
 
 	// Create new delegate snapshot request with only required metadata.
 	delegateRequest := &kvserverpb.DelegateSnapshotRequest{
 		RangeID:            r.RangeID,
-		CoordinatorReplica: desc,
+		CoordinatorReplica: replDesc,
 		RecipientReplica:   recipient,
 		Priority:           priority,
 		Type:               snapType,
 		Term:               status.Term,
 		DelegatedSender:    sender,
+		TruncatedState:     &truncatedState,
+		RangeDescriptor:    r.Desc(),
 	}
 	err = contextutil.RunWithTimeout(
 		ctx, "delegate-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
@@ -2625,18 +2716,42 @@ func (r *Replica) sendSnapshot(
 	)
 
 	if err != nil {
+		if errors.Is(err, errSenderRejectedDelegateSnapshotReq) {
+			// The sender rejected the request during the handshake, attempt to send
+			// the snapshot again.
+			delegateRequest := &kvserverpb.DelegateSnapshotRequest{
+				RangeID:            r.RangeID,
+				CoordinatorReplica: replDesc,
+				RecipientReplica:   recipient,
+				Priority:           priority,
+				Type:               snapType,
+				Term:               status.Term,
+				DelegatedSender:    replDesc,
+				TruncatedState:     &truncatedState,
+				RangeDescriptor:    r.Desc(),
+			}
+			err = contextutil.RunWithTimeout(
+				ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
+					return r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
+				},
+			)
+			if err != nil {
+				return errors.Mark(err, errMarkSnapshotError)
+			}
+		}
 		return errors.Mark(err, errMarkSnapshotError)
 	}
 	return nil
 }
 
-// followerSnapshotsEnabled is used to enable or disable follower snapshots.
-var followerSnapshotsEnabled = func() *settings.BoolSetting {
+// FollowerSnapshotsEnabled is used to enable or disable follower snapshots.
+// TODO(amy): turn the default value to false before merging.
+var FollowerSnapshotsEnabled = func() *settings.BoolSetting {
 	s := settings.RegisterBoolSetting(
 		settings.SystemOnly,
 		"kv.snapshot_delegation.enabled",
 		"set to true to allow snapshots from follower replicas",
-		false,
+		true,
 	)
 	s.SetVisibility(settings.Public)
 	return s
@@ -2653,26 +2768,93 @@ func (r *Replica) followerSendSnapshot(
 ) (retErr error) {
 	ctx = r.AnnotateCtx(ctx)
 
-	// TODO(amy): when delegating to different senders, check raft applied state
-	// to determine if this follower replica is fit to send.
-	// Acknowledge that the request has been accepted.
-	if err := stream.Send(
-		&kvserverpb.DelegateSnapshotResponse{
-			SnapResponse: &kvserverpb.SnapshotResponse{
-				Status: kvserverpb.SnapshotResponse_ACCEPTED,
-			},
-		},
-	); err != nil {
-		return err
+	// Check that the snapshot we generated has a descriptor that includes the
+	// recipient. If it doesn't, the recipient will reject it, so it's better to
+	// not send it in the first place. It's possible to hit this case if we're not
+	// the leaseholder, and we haven't yet applied the configuration change that's
+	// adding the recipient to the range.
+	coordinatorDesc := req.RangeDescriptor
+	desc := r.Desc()
+	if _, ok := desc.GetReplicaDescriptorByID(recipient.ReplicaID); !ok {
+		// Recipient replica not found in the current range descriptor.
+		if desc.Generation >= coordinatorDesc.Generation {
+			// If the recipient is not in the current descriptor and the current
+			// descriptor’s generation is past the coordinator's, immediately fail.
+			// This could be due to a replica being immediately removed.
+			return errors.Wrapf(
+				errSenderRejectedDelegateSnapshotReq,
+				"%s: couldn't find receiver replica %s in sender descriptor %s",
+				r, recipient, r.Desc(),
+			)
+		}
+		// The sender replica's descriptor is lagging behind the coordinator's.
+		// Wait for the replica to catch up to the coordinator.
+		log.VEventf(
+			ctx, 2, "stale descriptor detected; waiting to "+
+				"catch up to replication. want: %s,"+" have: %s",
+			coordinatorDesc, r.Desc(),
+		)
+		retryOpts := base.DefaultRetryOptions()
+		retryOpts.MaxRetries = 5
+		for try := retry.StartWithCtx(ctx, retryOpts); try.Next(); <-try.NextCh() {
+			// Check if the replica has heard about the newly added receiver.
+			_, ok := r.Desc().GetReplicaDescriptorByID(recipient.ReplicaID)
+			if ok {
+				break
+			}
+		}
+		if _, ok := r.Desc().GetReplicaDescriptorByID(recipient.ReplicaID); !ok {
+			return errors.Wrapf(
+				errSenderRejectedDelegateSnapshotReq,
+				"%s: couldn't find receiver replica %s in sender descriptor %s",
+				r, recipient, r.Desc(),
+			)
+		}
 	}
 
 	// Throttle snapshot sending.
 	rangeSize := r.GetMVCCStats().Total()
 	cleanup, err := r.store.reserveSendSnapshot(ctx, req, rangeSize)
 	if err != nil {
-		return err
+		return errors.NewAssertionErrorWithWrappedErrf(
+			errSenderRejectedDelegateSnapshotReq,
+			"%v", err.Error(),
+		)
 	}
 	defer cleanup()
+
+	// Check the raft applied state index and term to determine if this replica
+	// is not too far behind the leaseholder that it needs a snapshot.
+	r.mu.RLock()
+	replIdx := r.mu.state.RaftAppliedIndex
+	r.mu.RUnlock()
+
+	// Sender replica's will be rejected if the sender replica's raft applied index is lower than
+	// or equal to the truncated state on the leaseholder, as this replica's snapshot will be wasted.
+	// Note that its possible that we can enforce strictly lesser than if etcd does not require
+	// previous raft log entries for appending.
+	if replIdx <= req.TruncatedState.Index {
+		// Reject the delegate request and propagate the error to the coordinator.
+		log.Infof(
+			ctx, "sender: %v is not fit to send snapshot;"+" sender applied index: %v, "+
+				"coordinator applied index: %v", req.DelegatedSender, replIdx, req.TruncatedState.Index,
+		)
+		return errors.Wrapf(
+			errSenderRejectedDelegateSnapshotReq,
+			"sender: %v is not fit to send snapshot due to needing snapshot", req.DelegatedSender,
+		)
+	}
+
+	// Acknowledge that the request has been accepted.
+	if err := stream.Send(
+		&kvserverpb.DelegateSnapshotResponse{
+			DelegationResponse: &kvserverpb.DelegateSnapshotResponse_DelegationResponse{
+				Status: kvserverpb.DelegateSnapshotResponse_DelegationResponse_ACCEPTED,
+			},
+		},
+	); err != nil {
+		return err
+	}
 
 	snapType := req.Type
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
@@ -2682,19 +2864,6 @@ func (r *Replica) followerSendSnapshot(
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
-
-	// Check that the snapshot we generated has a descriptor that includes the
-	// recipient. If it doesn't, the recipient will reject it, so it's better to
-	// not send it in the first place. It's possible to hit this case if we're not
-	// the leaseholder and we haven't yet applied the configuration change that's
-	// adding the recipient to the range.
-	if _, ok := snap.State.Desc.GetReplicaDescriptor(recipient.StoreID); !ok {
-		return errors.Wrapf(
-			errMarkSnapshotError,
-			"attempting to send snapshot that does not contain the recipient as a replica; "+
-				"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc,
-		)
-	}
 
 	// We avoid shipping over the past Raft log in the snapshot by changing
 	// the truncated state (we're allowed to -- it's an unreplicated key and not

@@ -400,6 +400,8 @@ type StoreTestingKnobs struct {
 	// CountSendSnapshotsThrottling counts the number of snapshots currently
 	// waiting for the snapshot send semaphore.
 	CountSendSnapshotsThrottling func(int)
+	// SelectDelegateSnapshotSender returns a replica to send delegated snapshots.
+	SelectDelegateSnapshotSender func(*roachpb.RangeDescriptor) *roachpb.ReplicaDescriptor
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

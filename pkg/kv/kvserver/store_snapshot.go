@@ -1280,6 +1280,10 @@ func sendSnapshot(
 	}
 }
 
+// errSenderRejectedDelegateSnapshotReq
+var errSenderRejectedDelegateSnapshotReq = errors.New(
+	"sender couldn't accept delegated request due to error")
+
 // delegateSnapshot sends an outgoing delegated snapshot request via a
 // pre-opened GRPC stream. It sends the delegated snapshot request to the
 // sender and waits for confirmation that the snapshot has been applied.
@@ -1291,18 +1295,20 @@ func delegateSnapshot(
 	if err := stream.Send(req); err != nil {
 		return err
 	}
-	// Wait for a response from the sender.
+	// Wait for a delegation response from the sender.
 	resp, err := stream.Recv()
 	if err != nil {
 		return err
 	}
-	switch resp.SnapResponse.Status {
-	case kvserverpb.SnapshotResponse_ERROR:
-		return errors.Errorf(
-			"%s: sender couldn't accept %s with error: %s", delegatedSender,
-			req, resp.SnapResponse.Message,
+	switch resp.DelegationResponse.Status {
+	case kvserverpb.DelegateSnapshotResponse_DelegationResponse_ERROR:
+		log.Infof(
+			ctx, "%s: delegated sender couldn't accept request with error: %s", delegatedSender,
+			resp.DelegationResponse.Message,
 		)
-	case kvserverpb.SnapshotResponse_ACCEPTED:
+		return errSenderRejectedDelegateSnapshotReq
+
+	case kvserverpb.DelegateSnapshotResponse_DelegationResponse_ACCEPTED:
 		// The sender accepted the request, it will continue with sending.
 		log.VEventf(
 			ctx, 2, "sender %s accepted snapshot request %s", delegatedSender,
@@ -1311,7 +1317,7 @@ func delegateSnapshot(
 	default:
 		err := errors.Errorf(
 			"%s: server sent an invalid status while negotiating %s: %s",
-			delegatedSender, req, resp.SnapResponse.Status,
+			delegatedSender, req, resp.DelegationResponse.Status,
 		)
 		return err
 	}
@@ -1338,10 +1344,7 @@ func delegateSnapshot(
 	if len(resp.CollectedSpans) != 0 {
 		span := tracing.SpanFromContext(ctx)
 		if span == nil {
-			log.Warningf(
-				ctx,
-				"trying to ingest remote spans but there is no recording span set up",
-			)
+			log.Warningf(ctx, "trying to ingest remote spans but there is no recording span set up")
 		} else {
 			span.ImportRemoteSpans(resp.CollectedSpans)
 		}
