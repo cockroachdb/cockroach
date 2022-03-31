@@ -2255,3 +2255,275 @@ vectorized: true
       spans: /1/0
       locking strength: for update
       locking wait policy: nowait
+
+# ------------------------------------------------------------------------------
+# Tests with the SKIP LOCKED lock wait policy.
+# ------------------------------------------------------------------------------
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR NO KEY UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for no key update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for key share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for no key update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1,000 (missing stats)
+  table: t@t_pkey
+  spans: FULL SCAN
+  locking strength: for update
+  locking wait policy: skip locked
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t FOR UPDATE OF t2 SKIP LOCKED
+
+query T
+EXPLAIN (VERBOSE) SELECT 1 FROM t FOR UPDATE OF t SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ estimated row count: 1,000 (missing stats)
+│ render ?column?: 1
+│
+└── • scan
+      columns: ()
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+      locking strength: for update
+      locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for no key update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for key share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for share
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for no key update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+  locking wait policy: skip locked
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /1/0
+  locking strength: for update
+  locking wait policy: skip locked
+
+query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 1 FOR UPDATE OF t2 SKIP LOCKED
+
+query T
+EXPLAIN (VERBOSE) SELECT 1 FROM t WHERE a = 1 FOR UPDATE OF t SKIP LOCKED
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?")
+│ estimated row count: 1 (missing stats)
+│ render ?column?: 1
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /1/0
+      locking strength: for update
+      locking wait policy: skip locked
