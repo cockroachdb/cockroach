@@ -11,7 +11,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip } from "antd";
-import moment from "moment";
 import {
   ColumnDescriptor,
   SortedTable,
@@ -21,6 +20,7 @@ import {
   Anchor,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
+import { round } from "lodash";
 import styles from "./hotRanges.module.styl";
 import { cockroach } from "src/js/protos";
 import { readsAndWritesOverviewPage, uiDebugPages } from "src/util/docs";
@@ -37,24 +37,16 @@ interface HotRangesTableProps {
 const HotRangesTable = ({
   hotRangesList,
   nodeIdToLocalityMap,
+  lastUpdate,
 }: HotRangesTableProps) => {
   const [pagination, setPagination] = useState({
     pageSize: PAGE_SIZE,
     current: 1,
   });
-  const [sortSetting, setSortSetting] = useState({
-    ascending: true,
-    columnTitle: null,
+  const [sortSetting, setSortSetting] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "qps",
   });
-  const getCurrentDateTime = () => {
-    const nowUtc = moment.utc();
-    return (
-      nowUtc.format("MMM DD, YYYY") +
-      " at " +
-      nowUtc.format("h:mm A") +
-      " (UTC)"
-    );
-  };
 
   if (hotRangesList.length === 0) {
     return <div>No hot ranges</div>;
@@ -96,7 +88,7 @@ const HotRangesTable = ({
           QPS
         </Tooltip>
       ),
-      cell: val => <>{val.qps}</>,
+      cell: val => <>{round(val.qps, 2)}</>,
       sort: val => val.qps,
     },
     {
@@ -213,7 +205,7 @@ const HotRangesTable = ({
   ];
 
   return (
-    <div>
+    <div className="section">
       <div className={cx("hotranges-heading-container")}>
         <h4 className="cl-count-title">
           <ResultsPerPageLabel
@@ -224,7 +216,9 @@ const HotRangesTable = ({
             pageName="hot ranges"
           />
         </h4>
-        <h4 className="cl-count-title">Last update: {getCurrentDateTime()}</h4>
+        <h4 className="cl-count-title">
+          {lastUpdate && `Last update: ${lastUpdate}`}
+        </h4>
       </div>
       <SortedTable
         data={hotRangesList}
