@@ -526,7 +526,6 @@ func (b *SSTBatcher) addSSTable(
 			var err error
 			for i := 0; i < maxAddSSTableRetries; i++ {
 				log.VEventf(ctx, 4, "sending %s AddSSTable [%s,%s)", sz(len(item.sstBytes)), item.start, item.end)
-				before := timeutil.Now()
 				// If this SST is "too small", the fixed costs associated with adding an
 				// SST – in terms of triggering flushes, extra compactions, etc – would
 				// exceed the savings we get from skipping regular, key-by-key writes,
@@ -542,34 +541,43 @@ func (b *SSTBatcher) addSSTable(
 					log.VEventf(ctx, 3, "ingest data is too small (%d keys/%d bytes) for SSTable, adding via regular batch", item.stats.KeyCount, len(item.sstBytes))
 					ingestAsWriteBatch = true
 				}
-				var rangeSpan roachpb.Span
-				var rangeAvailable int64
 
-				if b.writeAtBatchTS {
-					var writeTs hlc.Timestamp
-					// This will fail if the range has split but we'll check for that below.
-					writeTs, rangeSpan, rangeAvailable, err = db.AddSSTableAtBatchTimestamp(ctx, item.start, item.end, item.sstBytes,
-						false /* disallowConflicts */, !b.disallowShadowingBelow.IsEmpty(),
-						b.disallowShadowingBelow, &item.stats, ingestAsWriteBatch, b.batchTS)
-					if err == nil {
-						b.maxWriteTS.Forward(writeTs)
-					}
-				} else {
-					// This will fail if the range has split but we'll check for that below.
-					rangeSpan, rangeAvailable, err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, false, /* disallowConflicts */
-						!b.disallowShadowingBelow.IsEmpty(), b.disallowShadowingBelow, &item.stats,
-						ingestAsWriteBatch, b.batchTS)
+				req := &roachpb.AddSSTableRequest{
+					RequestHeader:          roachpb.RequestHeader{Key: item.start, EndKey: item.end},
+					Data:                   item.sstBytes,
+					DisallowShadowing:      !b.disallowShadowingBelow.IsEmpty(),
+					DisallowShadowingBelow: b.disallowShadowingBelow,
+					MVCCStats:              &item.stats,
+					IngestAsWrites:         ingestAsWriteBatch,
 				}
-				if err == nil {
-					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
-					b.lastRange.span = rangeSpan
-					if rangeSpan.Valid() {
-						b.flushKey = rangeSpan.EndKey
-						b.lastRange.remaining = sz(rangeAvailable)
+				if b.writeAtBatchTS {
+					req.SSTTimestampToRequestTimestamp = b.batchTS
+				}
+
+				ba := roachpb.BatchRequest{Header: roachpb.Header{Timestamp: b.batchTS}}
+				ba.Add(req)
+
+				beforeSend := timeutil.Now()
+				br, pErr := b.db.NonTransactionalSender().Send(ctx, ba)
+				sendTime := timeutil.Since(beforeSend)
+				b.flushCounts.sendWait += sendTime
+
+				if pErr == nil {
+					resp := br.Responses[0].GetInner().(*roachpb.AddSSTableResponse)
+					if b.writeAtBatchTS {
+						b.maxWriteTS.Forward(br.Timestamp)
+					}
+					b.lastRange.span = resp.RangeSpan
+					if resp.RangeSpan.Valid() {
+						b.flushKey = resp.RangeSpan.EndKey
+						b.lastRange.remaining = sz(resp.AvailableBytes)
 					}
 					files++
+					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, sendTime)
 					return nil
 				}
+
+				err := pErr.GoError()
 				// Retry on AmbiguousResult.
 				if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
 					log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v", start, end, i, err)
