@@ -867,6 +867,15 @@ CREATE TABLE crdb_internal.node_distsql_flows (
    since TIMESTAMPTZ NOT NULL,
    status STRING NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.node_execution_outliers (
+   session_id STRING NOT NULL,
+   transaction_id UUID NOT NULL,
+   statement_id STRING NOT NULL
+)  CREATE TABLE crdb_internal.node_execution_outliers (
+   session_id STRING NOT NULL,
+   transaction_id UUID NOT NULL,
+   statement_id STRING NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.node_inflight_trace_spans (
    trace_id INT8 NOT NULL,
    parent_span_id INT8 NOT NULL,
