@@ -13,6 +13,7 @@ package sql
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/url"
@@ -63,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
@@ -138,6 +140,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalLocalTransactionsTableID:           crdbInternalLocalTxnsTable,
 		catconstants.CrdbInternalLocalSessionsTableID:               crdbInternalLocalSessionsTable,
 		catconstants.CrdbInternalLocalMetricsTableID:                crdbInternalLocalMetricsTable,
+		catconstants.CrdbInternalNodeExecutionOutliersTableID:       crdbInternalNodeExecutionOutliersTable,
 		catconstants.CrdbInternalNodeStmtStatsTableID:               crdbInternalNodeStmtStatsTable,
 		catconstants.CrdbInternalNodeTxnStatsTableID:                crdbInternalNodeTxnStatsTable,
 		catconstants.CrdbInternalPartitionsTableID:                  crdbInternalPartitionsTable,
@@ -6074,5 +6077,26 @@ CREATE TABLE crdb_internal.cluster_locks (
 			}, nil
 
 		}, nil, nil
+	},
+}
+
+var crdbInternalNodeExecutionOutliersTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.node_execution_outliers (
+	session_id     STRING NOT NULL,
+	transaction_id UUID NOT NULL,
+	statement_id   STRING NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+		p.extendedEvalCtx.statsProvider.IterateOutliers(ctx, func(
+			ctx context.Context, o *outliers.Outlier,
+		) {
+			err = errors.CombineErrors(err, addRow(
+				tree.NewDString(hex.EncodeToString(o.Session.ID)),
+				tree.NewDUuid(tree.DUuid{UUID: *o.Transaction.ID}),
+				tree.NewDString(hex.EncodeToString(o.Statement.ID)),
+			))
+		})
+		return err
 	},
 }

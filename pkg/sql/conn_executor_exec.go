@@ -2234,6 +2234,8 @@ func (ex *connExecutor) recordTransactionFinish(
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
 	recordedTxnStats := sqlstats.RecordedTxnStats{
+		SessionID:               ex.sessionID,
+		TransactionID:           ev.txnID,
 		TransactionTimeSec:      txnTime.Seconds(),
 		Committed:               ev.eventType == txnCommit,
 		ImplicitTxn:             implicit,
