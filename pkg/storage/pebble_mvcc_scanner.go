@@ -287,8 +287,11 @@ type pebbleMVCCScanner struct {
 	parent MVCCIterator
 	// memAccount is used to account for the size of the scan results.
 	memAccount *mon.BoundAccount
-	reverse    bool
-	peeked     bool
+	// lockTable is used to determine whether keys are locked in the in-memory
+	// lock table when scanning with the skipLocked option.
+	lockTable LockTableView
+	reverse   bool
+	peeked    bool
 	// Iteration bounds. Does not contain MVCC timestamp.
 	start, end roachpb.Key
 	// Timestamp with which MVCCScan/MVCCGet was called.
@@ -337,11 +340,13 @@ type pebbleMVCCScanner struct {
 	meta enginepb.MVCCMetadata
 	// Bools copied over from MVCC{Scan,Get}Options. See the comment on the
 	// package level MVCCScan for what these mean.
-	inconsistent, tombstones bool
-	failOnMoreRecent         bool
-	isGet                    bool
-	keyBuf                   []byte
-	savedBuf                 []byte
+	inconsistent     bool
+	skipLocked       bool
+	tombstones       bool
+	failOnMoreRecent bool
+	isGet            bool
+	keyBuf           []byte
+	savedBuf         []byte
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
@@ -570,9 +575,22 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 				// 2. Our txn's read timestamp is equal to the most recent
 				// version's timestamp and the scanner has been configured to
 				// throw a write too old error on equal or more recent versions.
-				// Merge the current timestamp with the maximum timestamp we've
-				// seen so we know to return an error, but then keep scanning so
-				// that we can return the largest possible time.
+
+				if p.skipLocked {
+					if locked, ok := p.isKeyLocked(ctx, p.curRawKey); !ok {
+						return false
+					} else if locked {
+						// 2a. the scanner was configured to skip locked keys, and
+						// this key was locked, so we can advance past it without
+						// raising the write too old error.
+						return p.advanceKey()
+					}
+				}
+
+				// 2b. We need to raise a write too old error. Merge the current
+				// timestamp with the maximum timestamp we've seen so we know to
+				// return an error, but then keep scanning so that we can return
+				// the largest possible time.
 				p.mostRecentTS.Forward(p.curUnsafeKey.Timestamp)
 				if len(p.mostRecentKey) == 0 {
 					p.mostRecentKey = append(p.mostRecentKey, p.curUnsafeKey.Key...)
@@ -590,9 +608,22 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// 4. Our txn's read timestamp is less than the most recent
 			// version's timestamp and the scanner has been configured to
 			// throw a write too old error on equal or more recent versions.
-			// Merge the current timestamp with the maximum timestamp we've
-			// seen so we know to return an error, but then keep scanning so
-			// that we can return the largest possible time.
+
+			if p.skipLocked {
+				if locked, ok := p.isKeyLocked(ctx, p.curRawKey); !ok {
+					return false
+				} else if locked {
+					// 4a. the scanner was configured to skip locked keys, and
+					// this key was locked, so we can advance past it without
+					// raising the write too old error.
+					return p.advanceKey()
+				}
+			}
+
+			// 4b. We need to raise a write too old error. Merge the current
+			// timestamp with the maximum timestamp we've seen so we know to
+			// return an error, but then keep scanning so that we can return
+			// the largest possible time.
 			p.mostRecentTS.Forward(p.curUnsafeKey.Timestamp)
 			if len(p.mostRecentKey) == 0 {
 				p.mostRecentKey = append(p.mostRecentKey, p.curUnsafeKey.Key...)
@@ -650,9 +681,22 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 
 	ownIntent := p.txn != nil && p.meta.Txn.ID.Equal(p.txn.ID)
 	if !ownIntent {
+		if p.skipLocked {
+			// 8. The scanner has been configured with the skipLocked option. Ignore
+			// intents written by other transactions and seek to the next key.
+			// However, we return the intent separately if we have room; the caller
+			// may want to resolve it.
+			if p.maxIntents == 0 || int64(p.intents.Count()) < p.maxIntents {
+				if !p.addCurIntent(ctx) {
+					return false
+				}
+			}
+			return p.advanceKey()
+		}
+
 		conflictingIntent := metaTS.LessEq(p.ts) || p.failOnMoreRecent
 		if !conflictingIntent {
-			// 8. The key contains an intent, but we're reading below the intent.
+			// 9. The key contains an intent, but we're reading below the intent.
 			// Seek to the desired version, checking for uncertainty if necessary.
 			//
 			// Note that if we own the intent (i.e. we're reading transactionally)
@@ -669,7 +713,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		}
 
 		if p.inconsistent {
-			// 9. The key contains an intent and we're doing an inconsistent
+			// 10. The key contains an intent and we're doing an inconsistent
 			// read at a timestamp newer than the intent. We ignore the
 			// intent by insisting that the timestamp we're reading at is a
 			// historical timestamp < the intent timestamp. However, we
@@ -679,19 +723,13 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// p.intents is a pebble.Batch which grows its byte slice capacity in
 			// chunks to amortize allocations. The memMonitor is under-counting here
 			// by only accounting for the key and value bytes.
-			if p.err = p.memAccount.Grow(ctx, int64(len(p.curRawKey)+len(p.curRawValue))); p.err != nil {
-				p.err = errors.Wrapf(p.err, "scan with start key %s", p.start)
+			if !p.addCurIntent(ctx) {
 				return false
 			}
-			p.err = p.intents.Set(p.curRawKey, p.curRawValue, nil)
-			if p.err != nil {
-				return false
-			}
-
 			return p.seekVersion(ctx, prevTS, false)
 		}
 
-		// 10. The key contains an intent which was not written by our
+		// 11. The key contains an intent which was not written by our
 		// transaction and either:
 		// - our read timestamp is equal to or newer than that of the
 		//   intent
@@ -702,16 +740,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		// Note that this will trigger an error higher up the stack. We
 		// continue scanning so that we can return all of the intents
 		// in the scan range.
-		//
-		// p.intents is a pebble.Batch which grows its byte slice capacity in
-		// chunks to amortize allocations. The memMonitor is under-counting here
-		// by only accounting for the key and value bytes.
-		if p.err = p.memAccount.Grow(ctx, int64(len(p.curRawKey)+len(p.curRawValue))); p.err != nil {
-			p.err = errors.Wrapf(p.err, "scan with start key %s", p.start)
-			return false
-		}
-		p.err = p.intents.Set(p.curRawKey, p.curRawValue, nil)
-		if p.err != nil {
+		if !p.addCurIntent(ctx) {
 			return false
 		}
 		// Limit number of intents returned in write intent error.
@@ -724,14 +753,14 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 
 	if p.txnEpoch == p.meta.Txn.Epoch {
 		if p.txnSequence >= p.meta.Txn.Sequence && !enginepb.TxnSeqIsIgnored(p.meta.Txn.Sequence, p.txnIgnoredSeqNums) {
-			// 11. We're reading our own txn's intent at an equal or higher sequence.
+			// 12. We're reading our own txn's intent at an equal or higher sequence.
 			// Note that we read at the intent timestamp, not at our read timestamp
 			// as the intent timestamp may have been pushed forward by another
 			// transaction. Txn's always need to read their own writes.
 			return p.seekVersion(ctx, metaTS, false)
 		}
 
-		// 12. We're reading our own txn's intent at a lower sequence than is
+		// 13. We're reading our own txn's intent at a lower sequence than is
 		// currently present in the intent. This means the intent we're seeing
 		// was written at a higher sequence than the read and that there may or
 		// may not be earlier versions of the intent (with lower sequence
@@ -756,7 +785,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			}
 			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.keyBuf, p.curUnsafeValue.Value.RawBytes)
 		}
-		// 13. If no value in the intent history has a sequence number equal to
+		// 14. If no value in the intent history has a sequence number equal to
 		// or less than the read, we must ignore the intents laid down by the
 		// transaction all together. We ignore the intent by insisting that the
 		// timestamp we're reading at is a historical timestamp < the intent
@@ -765,7 +794,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 	}
 
 	if p.txnEpoch < p.meta.Txn.Epoch {
-		// 14. We're reading our own txn's intent but the current txn has
+		// 15. We're reading our own txn's intent but the current txn has
 		// an earlier epoch than the intent. Return an error so that the
 		// earlier incarnation of our transaction aborts (presumably
 		// this is some operation that was retried).
@@ -774,7 +803,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 		return false
 	}
 
-	// 15. We're reading our own txn's intent but the current txn has a
+	// 16. We're reading our own txn's intent but the current txn has a
 	// later epoch than the intent. This can happen if the txn was
 	// restarted and an earlier iteration wrote the value we're now
 	// reading. In this case, we ignore the intent and read the
@@ -912,6 +941,19 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 	// to include tombstones in the results.
 	if len(rawValue) == 0 && !p.tombstones {
 		return p.advanceKey()
+	}
+
+	// If the scanner has been configured with the skipLocked option, don't
+	// include locked keys in the result set. Consult the in-memory lock table to
+	// determine whether this is locked with an unreplicated lock. Replicated
+	// locks will be represented as intents, which will be skipped over in
+	// getAndAdvance.
+	if p.skipLocked {
+		if locked, ok := p.isKeyLocked(ctx, rawKey); !ok {
+			return false
+		} else if locked {
+			return p.advanceKey()
+		}
 	}
 
 	// Check if adding the key would exceed a limit.
@@ -1225,6 +1267,64 @@ func (p *pebbleMVCCScanner) clearPeeked() {
 	if p.reverse {
 		p.peeked = false
 	}
+}
+
+// isKeyLocked consults the in-memory lock table to determine whether the
+// provided key is locked with an unreplicated lock. When p.skipLocked, this
+// method should be called before adding a key to the scan's result set or
+// throwing a write too old error on behalf of a key. If the key is locked,
+// skipLocked instructs the scan to skip over it instead.
+func (p *pebbleMVCCScanner) isKeyLocked(ctx context.Context, rawKey []byte) (locked, ok bool) {
+	key, _, err := enginepb.DecodeKey(rawKey)
+	if err != nil {
+		p.err = err
+		return false, false
+	}
+	if ok, txn := p.lockTable.IsKeyLocked(key); ok {
+		// The key is locked, so ignore it. However, we return the lock holder
+		// separately if we have room; the caller may want to resolve it.
+		if p.maxIntents == 0 || int64(p.intents.Count()) < p.maxIntents {
+			if !p.addKeyAndMetaAsIntent(ctx, key, txn) {
+				return false, false
+			}
+		}
+		return true, true
+	}
+	return false, true
+}
+
+// addCurIntent adds the key-value pair that the scanner is currently
+// pointing to as an intent to the intents set.
+func (p *pebbleMVCCScanner) addCurIntent(ctx context.Context) bool {
+	return p.addRawIntent(ctx, p.curRawKey, p.curRawValue)
+}
+
+// addKeyAndMetaAsIntent adds the key and transaction meta as an intent to
+// the intents set.
+func (p *pebbleMVCCScanner) addKeyAndMetaAsIntent(
+	ctx context.Context, key roachpb.Key, txn *enginepb.TxnMeta,
+) bool {
+	mvccKey := MakeMVCCMetadataKey(key)
+	mvccVal := enginepb.MVCCMetadata{Txn: txn}
+	encodedKey := EncodeMVCCKey(mvccKey)
+	encodedVal, err := protoutil.Marshal(&mvccVal)
+	if err != nil {
+		p.err = err
+		return false
+	}
+	return p.addRawIntent(ctx, encodedKey, encodedVal)
+}
+
+func (p *pebbleMVCCScanner) addRawIntent(ctx context.Context, key, value []byte) bool {
+	// p.intents is a pebble.Batch which grows its byte slice capacity in
+	// chunks to amortize allocations. The memMonitor is under-counting here
+	// by only accounting for the key and value bytes.
+	if p.err = p.memAccount.Grow(ctx, int64(len(key)+len(value))); p.err != nil {
+		p.err = errors.Wrapf(p.err, "scan with start key %s", p.start)
+		return false
+	}
+	p.err = p.intents.Set(key, value, nil)
+	return p.err == nil
 }
 
 func (p *pebbleMVCCScanner) intentsRepr() []byte {
