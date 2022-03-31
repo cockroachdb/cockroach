@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -35,6 +36,7 @@ func makeUICmd(d *dev) *cobra.Command {
 
 	uiCmd.AddCommand(makeUIWatchCmd(d))
 	uiCmd.AddCommand(makeUILintCmd(d))
+	uiCmd.AddCommand(makeUITestCmd(d))
 
 	return uiCmd
 }
@@ -124,12 +126,6 @@ Replaces 'make ui-watch'.`,
 			}
 			secure := mustGetFlagBool(cmd, secureFlag)
 
-			// `yarn` is required to be on a user's path, since it won't run via Bazel
-			err = d.ensureBinaryInPath("yarn")
-			if err != nil {
-				return err
-			}
-
 			dirs, err := getUIDirs(d)
 			if err != nil {
 				log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
@@ -138,7 +134,10 @@ Replaces 'make ui-watch'.`,
 
 			// Start the cluster-ui watch task
 			nbExec := d.exec.AsNonBlocking()
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", "--silent", "--cwd", dirs.clusterUI, "build:watch")
+			argv := buildBazelYarnArgv(
+				"--silent", "--cwd", dirs.clusterUI, "build:watch",
+			)
+			err = nbExec.CommandContextInheritingStdStreams(ctx, "bazel", argv...)
 			if err != nil {
 				log.Fatalf("Unable to watch cluster-ui for changes: %v", err)
 				return err
@@ -168,8 +167,10 @@ Replaces 'make ui-watch'.`,
 				args = append(args, "--https")
 			}
 
+			argv = buildBazelYarnArgv(args...)
+
 			// Start the db-console web server + watcher
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", args...)
+			err = nbExec.CommandContextInheritingStdStreams(ctx, "bazel", argv...)
 			if err != nil {
 				log.Fatalf("Unable to serve db-console: %v", err)
 				return err
@@ -235,4 +236,205 @@ Replaces 'make ui-lint'.`,
 	lintCmd.Flags().Bool(verboseFlag, false, "show all linter output")
 
 	return lintCmd
+}
+
+// arrangeFilesForTestWatchers moves files from Bazel's build output directory
+// into the locations they'd be found during a non-Bazel build, so that test
+// watchers can successfully operate outside of the Bazel sandbox.
+//
+// Unfortunately, Bazel's reliance on symlinks conflicts with Jest's refusal to
+// traverse symlinks during `--watch` mode. Ibazel is unable to keep `jest`
+// running between changes, since Jest won't find changes. But having ibazel
+// kill Jest when a file changes defeat the purpose of Jest's watch mode, and
+// makes devs pay the cost of node + jest startup times after every file change.
+// As a workaround, arrangeFilesForTestWatchers copies files out of the Bazel
+// sandbox and allows Jest (in watch mode) to be executed from directly within
+// a pkg/ui/workspaces/... directory.
+//
+// See https://github.com/bazelbuild/rules_nodejs/issues/2028
+func arrangeFilesForTestWatchers(d *dev) error {
+	bazelBin, err := d.getBazelBin(d.cli.Context())
+	if err != nil {
+		return err
+	}
+
+	ossProtobufSrc := filepath.Join(bazelBin, "pkg", "ui", "workspaces", "db-console")
+	cclProtobufSrc := filepath.Join(ossProtobufSrc, "ccl")
+
+	dstDirs, err := getUIDirs(d)
+	if err != nil {
+		return err
+	}
+	ossProtobufDst := dstDirs.dbConsole
+	cclProtobufDst := filepath.Join(ossProtobufDst, "ccl")
+
+	protoFiles := []string{
+		filepath.Join("src", "js", "protos.js"),
+		filepath.Join("src", "js", "protos.d.ts"),
+	}
+
+	// Recreate protobuf client files that were previously copied out of the sandbox
+	for _, relPath := range protoFiles {
+		ossDst := filepath.Join(ossProtobufDst, relPath)
+		cclDst := filepath.Join(cclProtobufDst, relPath)
+		if err := d.os.CopyFile(filepath.Join(ossProtobufSrc, relPath), ossDst); err != nil {
+			return err
+		}
+		if err := d.os.CopyFile(filepath.Join(cclProtobufSrc, relPath), cclDst); err != nil {
+			return err
+		}
+	}
+
+	// Delete cluster-ui output tree that was previously copied out of the sandbox
+	err = d.os.RemoveAll(filepath.Join(dstDirs.clusterUI, "dist"))
+	if err != nil {
+		return err
+	}
+
+	// Copy the cluster-ui output tree back out of the sandbox
+	err = d.os.CopyAll(
+		filepath.Join(bazelBin, "pkg", "ui", "workspaces", "cluster-ui", "dist"),
+		filepath.Join(dstDirs.clusterUI, "dist"),
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// makeUIWatchCmd initializes the 'ui test' subcommand, which runs unit tests for both db-console and cluster-ui.
+func makeUITestCmd(d *dev) *cobra.Command {
+	const (
+		// watchFlag is the name of the boolean long (GNU-style) flag that determines whether tests should be re-run when
+		// source files and test files change
+		watchFlag        = "watch"
+		verboseFlag      = "verbose"
+		streamOutputFlag = "stream-output"
+	)
+
+	testCmd := &cobra.Command{
+		Use:   "test",
+		Short: "Runs tests for UI subprojects",
+		Long: `Runs unit tests for db-console and cluster-ui, optionally setting up watchers to rerun those tests when files change.
+
+Replaces 'make ui-test' and 'make ui-test-watch'.`,
+		Args: cobra.MinimumNArgs(0),
+		RunE: func(cmd *cobra.Command, commandLine []string) error {
+			isDebug, _ := cmd.PersistentFlags().GetBool("debug")
+
+			// Create a context that cancels when OS signals come in
+			ctx, stop := signal.NotifyContext(d.cli.Context(), os.Interrupt, os.Kill)
+			defer stop()
+
+			isWatch := mustGetFlagBool(cmd, watchFlag)
+			isVerbose := mustGetFlagBool(cmd, verboseFlag)
+			isStreamOutput := mustGetFlagBool(cmd, streamOutputFlag)
+
+			if isWatch {
+				// Build prerequisites for watch-mode only. Non-watch tests are run through bazel, so it'll take care of this
+				// for us.
+				args := []string{
+					"build",
+					"//pkg/ui/workspaces/cluster-ui:cluster-ui",
+				}
+				logCommand("bazel", args...)
+				err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+
+				if err != nil {
+					log.Fatalf("failed to build UI test prerequisites: %v", err)
+					return err
+				}
+
+				err = arrangeFilesForTestWatchers(d)
+				if err != nil {
+					// nolint:errwrap
+					return fmt.Errorf("unable to arrange files properly for watch-mode testing: %+v", err)
+				}
+
+				dirs, err := getUIDirs(d)
+				if err != nil {
+					log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
+					return err
+				}
+
+				nbExec := d.exec.AsNonBlocking()
+
+				argv := buildBazelYarnArgv(
+					"--silent",
+					"--cwd",
+					dirs.dbConsole,
+					"karma:watch",
+				)
+
+				env := append(os.Environ(), "BAZEL_TARGET=fake")
+				logCommand("yarn", args...)
+				err = nbExec.CommandContextWithEnv(ctx, env, "bazel", argv...)
+				if err != nil {
+					// nolint:errwrap
+					return fmt.Errorf("unable to start db-console tests in watch mode: %+v", err)
+				}
+
+				argv = buildBazelYarnArgv(
+					"--silent",
+					"--cwd",
+					dirs.clusterUI,
+					"jest",
+					"--watch",
+				)
+				logCommand("yarn", args...)
+				env = append(os.Environ(), "BAZEL_TARGET=fake", "CI=1")
+				err = nbExec.CommandContextWithEnv(ctx, env, "bazel", argv...)
+				if err != nil {
+					// nolint:errwrap
+					return fmt.Errorf("unable to start cluster-ui tests in watch mode: %+v", err)
+				}
+
+				// Wait for OS signals to cancel if we're not in test-mode
+				if !d.exec.IsDryrun() {
+					<-ctx.Done()
+				}
+			} else {
+				testOutputArg := d.getTestOutputArgs(
+					isWatch || isStreamOutput,
+					isVerbose,
+					false, // showLogs
+				)
+				args := append([]string{
+					"test",
+					"//pkg/ui/workspaces/db-console:karma",
+					"//pkg/ui/workspaces/cluster-ui:jest",
+				}, testOutputArg...)
+
+				if isDebug {
+					args = append(args, "--subcommands")
+				}
+
+				logCommand("bazel", args...)
+				err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
+		},
+	}
+
+	testCmd.Flags().Bool(watchFlag, false, "watch source and test files for changes and rerun tests")
+	testCmd.Flags().BoolP(verboseFlag, "v", false, "show all test results when tests complete")
+	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run (default: true with --watch)")
+
+	return testCmd
+}
+
+// buildBazelYarnArgv returns the provided argv formatted so it can be run with
+// the bazel-provided version of yarn via `d.exec.CommandContextWithEnv`, e.g.:
+//
+//     argv := buildBazelYarnArgv("--cwd", "/path/to/dir", "run", "some-target")
+//     d.exec.CommandContextWithEnv(ctx, env, "bazel", argv)
+func buildBazelYarnArgv(argv ...string) []string {
+	return append([]string{
+		"run", "@nodejs//:yarn", "--",
+	}, argv...)
 }

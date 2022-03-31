@@ -33,6 +33,7 @@
     "**/@typescript-eslint/eslint-plugin": "^4.1.1",
     "**/@typescript-eslint/parser": "^4.1.1",
     "**/fbjs": "0.8.17",
-    "**/protobufjs": "6.8.6"
+    "**/protobufjs": "6.8.6",
+    "**/jest-environment-jsdom": "^27.5.1"
   }
 }

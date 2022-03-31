@@ -41,7 +41,7 @@ function shouldProxy(reqPath) {
 // tslint:disable:object-literal-sort-keys
 module.exports = (env, argv) => {
   env = env || {};
-  const isBazelBuild = env.is_bazel_build;
+  const isBazelBuild = !!process.env.BAZEL_TARGET;
 
   let localRoots = [path.resolve(__dirname)];
   if (env.dist === "ccl") {
