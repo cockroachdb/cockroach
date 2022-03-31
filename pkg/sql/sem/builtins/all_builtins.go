@@ -38,6 +38,7 @@ func init() {
 	initGeoBuiltins()
 	initPGBuiltins()
 	initMathBuiltins()
+	initOverlapsBuiltins()
 	initReplicationBuiltins()
 
 	AllBuiltinNames = make([]string, 0, len(builtins))
