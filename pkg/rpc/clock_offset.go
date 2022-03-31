@@ -211,7 +211,7 @@ func (r *RemoteClockMonitor) UpdateOffset(
 		// Don't report it again until it falls below 40% above the average.
 		// (Also requires latency > 1ms to avoid trigger on noise on low-latency connections and
 		// the running average to be non-zero to avoid triggering on startup.)
-		if newLatencyf > 1e6 && prevAvg > 0.0 &&
+		if false && newLatencyf > 1e6 && prevAvg > 0.0 && // these fire all the time
 			info.trigger.triggers(newLatencyf, prevAvg*1.4, prevAvg*1.5) {
 			log.Health.Warningf(ctx, "latency jump (prev avg %.2fms, current %.2fms)",
 				prevAvg/1e6, newLatencyf/1e6)

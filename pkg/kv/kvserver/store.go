@@ -130,7 +130,7 @@ var addSSTableRequestLimit = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"kv.bulk_io_write.concurrent_addsstable_requests",
 	"number of concurrent AddSSTable requests per store before queueing",
-	1,
+	10000,
 	settings.PositiveInt,
 )
 
@@ -143,7 +143,7 @@ var addSSTableAsWritesRequestLimit = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"kv.bulk_io_write.concurrent_addsstable_as_writes_requests",
 	"number of concurrent AddSSTable requests ingested as writes per store before queueing",
-	10,
+	10000,
 	settings.PositiveInt,
 )
 

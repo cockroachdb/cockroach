@@ -412,7 +412,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 
 	var extra string
-	if delayable {
+	if false && delayable {
 		extra += maybeDelaySplitToAvoidSnapshot(ctx, (*splitDelayHelper)(r))
 	}
 	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())

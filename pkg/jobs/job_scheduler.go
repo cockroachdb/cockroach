@@ -425,7 +425,9 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 						return s.executeSchedules(ctx, maxSchedules, txn)
 					})
 				}); err != nil {
-					log.Errorf(ctx, "error executing schedules: %+v", err)
+					// NB: when node is draining, getting "cannot acquire lease while draining"
+					// which is spammy.
+					log.Errorf(ctx, "error executing schedules: %v", err)
 				}
 			}
 		}
