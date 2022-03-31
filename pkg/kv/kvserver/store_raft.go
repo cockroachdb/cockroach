@@ -173,7 +173,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	q := (*raftRequestQueue)(value)
 	q.Lock()
 	defer q.Unlock()
-	if len(q.infos) >= replicaRequestQueueSize {
+	if false && len(q.infos) >= replicaRequestQueueSize { // ping
 		// TODO(peter): Return an error indicating the request was dropped. Note
 		// that dropping the request is safe. Raft will retry.
 		s.metrics.RaftRcvdMsgDropped.Inc(1)

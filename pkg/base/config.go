@@ -395,7 +395,7 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftProposalQuota == 0 {
 		// By default, set this to a fraction of RaftLogMaxSize. See the comment
 		// on the field for the tradeoffs of setting this higher or lower.
-		cfg.RaftProposalQuota = cfg.RaftLogTruncationThreshold / 2
+		cfg.RaftProposalQuota = 1000 * 1e6
 	}
 	if cfg.RaftMaxUncommittedEntriesSize == 0 {
 		// By default, set this to twice the RaftProposalQuota. The logic here

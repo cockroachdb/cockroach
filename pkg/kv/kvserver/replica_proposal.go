@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -426,6 +427,8 @@ var addSSTPreApplyWarn = struct {
 	log.EveryN
 }{30 * time.Second, log.Every(5 * time.Second)}
 
+var extraPreIngestDelay = envutil.EnvOrDefaultDuration("COCKROACH_DEBUG_EXTRA_PRE_INGEST_DELAY", 0)
+
 func addSSTablePreApply(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -462,6 +465,7 @@ func addSSTablePreApply(
 	}()
 
 	eng.PreIngestDelay(ctx)
+	time.Sleep(extraPreIngestDelay)
 	tEndDelayed = timeutil.Now()
 
 	copied := false

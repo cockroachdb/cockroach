@@ -52,6 +52,7 @@ func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, *
 }
 
 func (sdh *splitDelayHelper) Sleep(ctx context.Context, dur time.Duration) {
+	return // HACK
 	select {
 	case <-ctx.Done():
 	case <-time.After(dur):
