@@ -15,6 +15,9 @@ go_library(
         "//pkg/sql/execstats",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessionphase",
+        "//pkg/sql/sqlstats/outliers",
         "//pkg/util/stop",
+        "//pkg/util/uint128",
+        "//pkg/util/uuid",
     ],
 )

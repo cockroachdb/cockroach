@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -118,7 +119,8 @@ type Container struct {
 	txnCounts transactionCounts
 	mon       *mon.BytesMonitor
 
-	knobs *sqlstats.TestingKnobs
+	knobs            *sqlstats.TestingKnobs
+	outliersRegistry *outliers.Registry
 }
 
 var _ sqlstats.ApplicationStats = &Container{}
@@ -133,6 +135,7 @@ func New(
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
+	outliersRegistry *outliers.Registry,
 ) *Container {
 	s := &Container{
 		st:                         st,
@@ -141,6 +144,7 @@ func New(
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
 		mon:                        mon,
 		knobs:                      knobs,
+		outliersRegistry:           outliersRegistry,
 	}
 
 	if mon != nil {
@@ -245,6 +249,7 @@ func NewTempContainerFromExistingStmtStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
+		nil, /* outliersRegistry */
 	)
 
 	for i := range statistics {
@@ -317,6 +322,7 @@ func NewTempContainerFromExistingTxnStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
+		nil, /* outliersRegistry */
 	)
 
 	for i := range statistics {
@@ -357,6 +363,7 @@ func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.Applicati
 		s.mon,
 		s.appName,
 		s.knobs,
+		s.outliersRegistry,
 	)
 }
 

@@ -104,6 +104,7 @@ func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats
 		s.mu.mon,
 		appName,
 		s.knobs,
+		s.outliers,
 	)
 	s.mu.apps[appName] = a
 	return a

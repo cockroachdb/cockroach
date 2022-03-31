@@ -17,6 +17,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/execstats",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/outliers",
         "//pkg/util",
         "//pkg/util/log",
         "//pkg/util/mon",

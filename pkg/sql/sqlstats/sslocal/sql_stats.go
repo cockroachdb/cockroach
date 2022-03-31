@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -65,6 +66,8 @@ type SQLStats struct {
 	flushTarget Sink
 
 	knobs *sqlstats.TestingKnobs
+
+	outliers *outliers.Registry
 }
 
 func newSQLStats(
@@ -92,6 +95,7 @@ func newSQLStats(
 		uniqueTxnFingerprintLimit:  uniqueTxnFingerprintLimit,
 		flushTarget:                flushTarget,
 		knobs:                      knobs,
+		outliers:                   outliers.New(st),
 	}
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
@@ -129,6 +133,7 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		s.mu.mon,
 		appName,
 		s.knobs,
+		s.outliers,
 	)
 	s.mu.apps[appName] = a
 	return a
@@ -183,4 +188,12 @@ func (s *SQLStats) resetAndMaybeDumpStats(ctx context.Context, target Sink) (err
 	s.mu.Unlock()
 
 	return err
+}
+
+// IterateOutliers calls visitor with each of the currently retained set of
+// execution outliers.
+func (s *SQLStats) IterateOutliers(
+	ctx context.Context, visitor func(context.Context, *outliers.Outlier),
+) {
+	s.outliers.IterateOutliers(ctx, visitor)
 }
