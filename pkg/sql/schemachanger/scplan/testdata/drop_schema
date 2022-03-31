@@ -1348,6 +1348,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
       TableID: 105
     *scop.LogEvent
       Authorization:
@@ -1406,6 +1408,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
       TableID: 107
     *scop.MakeColumnAbsent
       ColumnID: 1
@@ -1425,6 +1429,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
       TableID: 108
     *scop.MakeColumnAbsent
       ColumnID: 1
@@ -1448,6 +1454,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
       TableID: 109
     *scop.MakeColumnAbsent
       ColumnID: 1
@@ -1470,6 +1478,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
       TableID: 110
     *scop.MakeColumnAbsent
       ColumnID: 1
@@ -1495,6 +1505,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
       TableID: 113
     *scop.MakeColumnAbsent
       ColumnID: 1
@@ -1518,6 +1530,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
       TableID: 106
     *scop.MakeColumnAbsent
       ColumnID: 1
