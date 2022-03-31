@@ -95,3 +95,8 @@ exec
 dev test pkg/spanconfig/spanconfigkvsubscriber -f=TestDecodeSpanTargets -v --stream-output
 ----
 bazel test pkg/spanconfig/spanconfigkvsubscriber:all --test_env=GOTRACEBACK=all --test_filter=TestDecodeSpanTargets --test_sharding_strategy=disabled --test_arg -test.v --test_output streamed
+
+exec
+dev test pkg/sql/schemachanger pkg/sql/schemachanger/scplan -- --test_sharding_strategy=disabled
+----
+bazel test pkg/sql/schemachanger:all pkg/sql/schemachanger/scplan:all --test_env=GOTRACEBACK=all --test_output errors --test_sharding_strategy=disabled

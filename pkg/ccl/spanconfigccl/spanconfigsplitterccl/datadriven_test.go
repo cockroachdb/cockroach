@@ -80,8 +80,10 @@ func TestDataDriven(t *testing.T) {
 
 		var tenant *spanconfigtestcluster.Tenant
 		if strings.Contains(path, "tenant") {
-			tenant = spanConfigTestCluster.InitializeTenant(ctx, roachpb.MakeTenantID(10))
-			tenant.Exec(`SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`)
+			tenantID := roachpb.MakeTenantID(10)
+			tenant = spanConfigTestCluster.InitializeTenant(ctx, tenantID)
+			spanConfigTestCluster.AllowSecondaryTenantToSetZoneConfigurations(t, tenantID)
+			spanConfigTestCluster.EnsureTenantCanSetZoneConfigurationsOrFatal(t, tenant)
 		} else {
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
 		}
