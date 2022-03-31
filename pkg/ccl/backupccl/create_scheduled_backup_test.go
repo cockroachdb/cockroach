@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -50,7 +49,7 @@ const allSchedules = 0
 // use jobstest.JobSchedulerTestEnv.
 // This helper also arranges for the manual override of scheduling logic
 // via executeSchedules callback.
-type execSchedulesFn = func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error
+type execSchedulesFn = func(ctx context.Context, maxSchedules int64) error
 type testHelper struct {
 	iodir            string
 	server           serverutils.TestServerInterface
@@ -76,12 +75,9 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 		TakeOverJobsScheduling: func(fn execSchedulesFn) {
 			th.executeSchedules = func() error {
 				defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-				return th.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-					return fn(ctx, allSchedules, txn)
-				})
+				return fn(context.Background(), allSchedules)
 			}
 		},
-
 		CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
 			th.cfg = config
 		},

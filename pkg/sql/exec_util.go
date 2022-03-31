@@ -1436,6 +1436,10 @@ type ExecutorTestingKnobs struct {
 		txnID uuid.UUID,
 		txnFingerprintID roachpb.TransactionFingerprintID,
 	)
+
+	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
+	// is written.
+	AfterBackupCheckpoint func()
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
