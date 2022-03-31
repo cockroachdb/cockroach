@@ -12,6 +12,7 @@ package ingesting
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -98,7 +99,7 @@ func WriteDescriptors(
 	for i := range databases {
 		desc := databases[i]
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, desc, user,
-			wroteDBs, wroteSchemas, descCoverage)
+			wroteDBs, wroteSchemas, descCoverage, preserveGrantsForUsers)
 		if err != nil {
 			return err
 		}

@@ -239,6 +239,7 @@ func (p *PrivilegeDescriptor) Grant(
 ) {
 	userPriv := p.FindOrCreateUser(user)
 	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) && privilege.ALL.IsSetIn(userPriv.Privileges) {
+		fmt.Printf("we are nooping for user %s\n\n", user.Normalized())
 		// User already has 'ALL' privilege: no-op.
 		// If userPriv.WithGrantOption has ALL, then userPriv.Privileges must also have ALL.
 		// It is possible however for userPriv.Privileges to have ALL but userPriv.WithGrantOption to not have ALL
@@ -246,6 +247,7 @@ func (p *PrivilegeDescriptor) Grant(
 	}
 
 	if privilege.ALL.IsSetIn(userPriv.Privileges) && !withGrantOption {
+		fmt.Printf("we are nooping two for user %s\n\n", user.Normalized())
 		// A user can hold all privileges but not all grant options.
 		// If a user holds all privileges but withGrantOption is False,
 		// there is nothing left to be done

@@ -334,7 +334,11 @@ message RestoreDetails {
   // job if its only purpose is to validate the user's restore command.
   RestoreValidation validation = 24;
 
-  // NEXT ID: 25.
+  // PreserveGrantsFor determines the users/roles for which grants will be
+  // restored during a database/table restore.
+  repeated string preserve_grants_for = 25;
+
+  // NEXT ID: 26.
 }
 
 enum RestoreValidation {

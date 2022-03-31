@@ -1,0 +1,377 @@
+# This test ensures that the `preserve_grants_for = <users>` option restores
+# schema objects with the correct privileges.
+
+# We allow implicit access to non-admin users so that we can test
+# with nodelocal.
+new-server name=s1 allow-implicit-access
+----
+
+# First, let's create some users, a database, a couple of types, some tables,
+# and a schema.
+exec-sql
+CREATE USER user1;
+CREATE USER testuser;
+----
+
+exec-sql
+CREATE DATABASE testdb;
+USE testdb;
+CREATE TYPE testdb.greeting_usage AS ENUM ('howdy');
+CREATE TABLE testdb.testtable_greeting_usage (a greeting_usage);
+CREATE SCHEMA sc;
+CREATE TABLE testdb.sc.othertable (a INT);
+----
+
+# Grant some privileges to user1.
+# testdb               -> ALL WITH GRANT OPTION
+# public               -> ALL WITH GRANT OPTION
+# sc                   -> USAGE
+# testdb.sc.othertable -> SELECT
+exec-sql
+GRANT ALL ON DATABASE testdb TO user1 WITH GRANT OPTION;
+GRANT ALL ON SCHEMA public TO user1 WITH GRANT OPTION;
+GRANT USAGE ON SCHEMA sc TO user1;
+GRANT SELECT ON testdb.sc.othertable TO user1;
+----
+
+# Grant some privileges to testuser.
+# testdb                          -> ALL WITH GRANT OPTION
+# public                          -> ALL WITH GRANT OPTION
+# testdb.greeting_usage           -> USAGE
+# testdb.testtable_greeting_usage -> UPDATE
+exec-sql
+GRANT ALL ON DATABASE testdb TO testuser WITH GRANT OPTION;
+GRANT ALL ON SCHEMA public TO testuser WITH GRANT OPTION;
+GRANT USAGE ON TYPE testdb.greeting_usage TO testuser;
+GRANT UPDATE ON testdb.testtable_greeting_usage TO testuser;
+----
+
+# Now, let's take a cluster backup.
+exec-sql
+BACKUP INTO 'nodelocal://1/foo'
+----
+
+subtest cluster-restore-preserve-grants-disallowed
+
+new-server name=s2 allow-implicit-access share-io-dir=s1
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/foo' WITH preserve_grants_for = ('testuser','user1');
+----
+pq: cannot specify `preserve_grants_for` option in a cluster restore. A cluster restore will restore all schema objects with the backed up privileges, since it also restores the backed up users.
+
+subtest end
+
+subtest table-restore-preserve-grants
+
+exec-sql
+CREATE DATABASE testdb;
+----
+
+exec-sql
+USE testdb;
+----
+
+# Expect an error since there is no `testuser` in the restoring cluster.
+exec-sql
+RESTORE TABLE testdb.testtable_greeting_usage FROM LATEST IN 'nodelocal://1/foo' WITH preserve_grants_for = ('testuser');
+----
+pq: restoring 1 TableDescriptors from 0 databases: restoring table desc and namespace entries: ingesting cluster does not have users: testuser to preserve grants for
+
+# So let's create the `testuser` in the restoring cluster.
+exec-sql
+CREATE USER testuser;
+----
+
+# Re-run the restore.
+exec-sql
+RESTORE TABLE testdb.testtable_greeting_usage FROM LATEST IN 'nodelocal://1/foo' WITH preserve_grants_for = ('testuser');
+----
+
+# See the grants on the type in the backed up cluster.
+query-sql server=s1
+SHOW GRANTS ON TYPE testdb.greeting_usage;
+----
+testdb public greeting_usage admin ALL true
+testdb public greeting_usage public USAGE false
+testdb public greeting_usage root ALL true
+testdb public greeting_usage testuser USAGE false
+
+# See the grants on this table in the backed up cluster.
+query-sql server=s1
+SHOW GRANTS ON testdb.testtable_greeting_usage;
+----
+testdb public testtable_greeting_usage admin ALL true
+testdb public testtable_greeting_usage root ALL true
+testdb public testtable_greeting_usage testuser UPDATE false
+
+# See the grants on this type in the restoring cluster.
+# TODO(during review): Do we expect to see user public with grant USAGE?
+query-sql server=s2
+SHOW GRANTS ON TYPE testdb.greeting_usage;
+----
+testdb public greeting_usage admin ALL true
+testdb public greeting_usage root ALL true
+testdb public greeting_usage testuser USAGE false
+
+# See the grants on this table in the restoring cluster.
+query-sql server=s2
+SHOW GRANTS ON testdb.testtable_greeting_usage;
+----
+testdb public testtable_greeting_usage admin ALL true
+testdb public testtable_greeting_usage root ALL true
+testdb public testtable_greeting_usage testuser UPDATE false
+
+# Restore another table that has backed up privileges for `user1` but don't preserve grants.
+exec-sql
+RESTORE TABLE testdb.sc.othertable FROM LATEST IN 'nodelocal://1/foo';
+----
+
+# See the grants on this table in the backed up cluster.
+query-sql server=s1
+SHOW GRANTS ON testdb.sc.othertable;
+----
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+testdb sc othertable user1 SELECT false
+
+# See the grants on this table in the restoring cluster. Note we don't see any
+# grants for `user1` because `user1` doesn't even exist in this cluster.
+query-sql server=s2
+SHOW GRANTS ON testdb.sc.othertable;
+----
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+
+# Drop the table, and re-restore it but with grants preserved for `testuser`.
+# This shouldn't change anything since `testuser` had no privileges on this
+# table.
+exec-sql
+DROP TABLE testdb.sc.othertable;
+DROP SCHEMA testdb.sc;
+----
+
+exec-sql
+RESTORE TABLE testdb.sc.othertable FROM LATEST IN 'nodelocal://1/foo' WITH preserve_grants_for='testuser';
+----
+
+query-sql server=s2
+SHOW GRANTS ON SCHEMA sc;
+----
+testdb sc admin ALL true
+testdb sc root ALL true
+
+query-sql server=s2
+SHOW GRANTS ON testdb.sc.othertable;
+----
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+
+# Drop the table, and re-restore it but with grants preserved for `testuser` and
+# `user1`.
+exec-sql
+DROP TABLE testdb.sc.othertable;
+DROP SCHEMA testdb.sc;
+----
+
+exec-sql
+CREATE USER user1;
+----
+
+# We should now see `user1`s privileges restored.
+exec-sql
+RESTORE TABLE testdb.sc.othertable FROM LATEST IN 'nodelocal://1/foo' WITH preserve_grants_for=('testuser','user1');
+----
+
+exec-sql
+USE testdb;
+----
+
+query-sql server=s2
+SHOW GRANTS ON SCHEMA sc;
+----
+testdb sc admin ALL true
+testdb sc root ALL true
+testdb sc user1 USAGE false
+
+query-sql server=s2
+SHOW GRANTS ON testdb.sc.othertable;
+----
+testdb sc othertable admin ALL true
+testdb sc othertable root ALL true
+testdb sc othertable user1 SELECT false
+
+subtest end
+
+subtest database-restore-preserve-grants
+
+# Restore the backed up database without preserving grants for any users. We should see no mention
+# of `testuser` or `user1` on any of the restored objects.
+exec-sql
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = 'testdb2';
+----
+
+exec-sql
+USE testdb2;
+----
+
+query-sql
+SHOW GRANTS ON DATABASE testdb2;
+----
+testdb2 admin ALL true
+testdb2 public CONNECT false
+testdb2 root ALL true
+
+query-sql
+SHOW GRANTS ON SCHEMA sc;
+----
+testdb2 sc admin ALL true
+testdb2 sc root ALL true
+
+query-sql
+SHOW GRANTS ON testdb2.sc.othertable;
+----
+testdb2 sc othertable admin ALL true
+testdb2 sc othertable root ALL true
+
+query-sql
+SHOW GRANTS ON TYPE testdb2.greeting_usage;
+----
+testdb2 public greeting_usage admin ALL true
+testdb2 public greeting_usage root ALL true
+
+query-sql
+SHOW GRANTS ON testdb2.testtable_greeting_usage;
+----
+testdb2 public testtable_greeting_usage admin ALL true
+testdb2 public testtable_greeting_usage root ALL true
+
+# Now restore the database preserving `testuser` privileges.
+exec-sql
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = 'testdb3', preserve_grants_for='testuser';
+----
+
+exec-sql
+USE testdb3;
+----
+
+# Note testuser has ALL WITH GRANT OPTION as was backed up.
+query-sql
+SHOW GRANTS ON DATABASE testdb3;
+----
+testdb3 admin ALL true
+testdb3 public CONNECT false
+testdb3 root ALL true
+testdb3 testuser ALL true
+
+# Note testuser did not have privileges on sc in the backed up cluster, and it
+# doesn't have any here either.
+query-sql
+SHOW GRANTS ON SCHEMA sc;
+----
+testdb3 sc admin ALL true
+testdb3 sc root ALL true
+
+# Note testuser did not have privileges on sc.othertable in the backed up
+# cluster, and it doesn't have any here either.
+query-sql
+SHOW GRANTS ON testdb3.sc.othertable;
+----
+testdb3 sc othertable admin ALL true
+testdb3 sc othertable root ALL true
+
+query-sql
+SHOW GRANTS ON TYPE testdb3.greeting_usage;
+----
+testdb3 public greeting_usage admin ALL true
+testdb3 public greeting_usage root ALL true
+testdb3 public greeting_usage testuser USAGE false
+
+query-sql
+SHOW GRANTS ON testdb3.testtable_greeting_usage;
+----
+testdb3 public testtable_greeting_usage admin ALL true
+testdb3 public testtable_greeting_usage root ALL true
+testdb3 public testtable_greeting_usage testuser UPDATE false
+
+# Finally restore the database preserving `user1` privileges.
+exec-sql
+RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = 'testdb4', preserve_grants_for='user1';
+----
+
+exec-sql
+USE testdb4;
+----
+
+# Note user1 has ALL WITH GRANT OPTION as was backed up.
+query-sql
+SHOW GRANTS ON DATABASE testdb4;
+----
+testdb4 admin ALL true
+testdb4 public CONNECT false
+testdb4 root ALL true
+testdb4 user1 ALL true
+
+# Note user1 has the backed up privileges on sc restored.
+query-sql
+SHOW GRANTS ON SCHEMA sc;
+----
+testdb4 sc admin ALL true
+testdb4 sc root ALL true
+testdb4 sc user1 USAGE false
+
+# Note user1 has the backed up privileges on the table restored.
+query-sql
+SHOW GRANTS ON testdb4.sc.othertable;
+----
+testdb4 sc othertable admin ALL true
+testdb4 sc othertable root ALL true
+testdb4 sc othertable user1 SELECT false
+
+# Note user1 has no privs on any of the types since they didn't have any in the
+# backed up cluster.
+query-sql
+SHOW GRANTS ON TYPE testdb4.greeting_usage;
+----
+testdb4 public greeting_usage admin ALL true
+testdb4 public greeting_usage root ALL true
+
+query-sql
+SHOW GRANTS ON testdb4.testtable_greeting_usage;
+----
+testdb4 public testtable_greeting_usage admin ALL true
+testdb4 public testtable_greeting_usage root ALL true
+
+subtest end
+
+subtest restore-preserve-owner-even-if-no-privilege
+
+exec-sql
+CREATE DATABASE testdb5;
+GRANT CREATE ON DATABASE testdb5 TO testuser;
+----
+
+exec-sql user=testuser
+RESTORE TABLE testdb.sc.othertable FROM LATEST IN 'nodelocal://1/foo' WITH into_db = 'testdb5', preserve_grants_for='testuser';
+----
+
+exec-sql
+USE testdb5;
+----
+
+# Note that testuser has no grants on this table, since testuser had no grants on the backed up
+# descriptor too.
+query-sql
+SHOW GRANTS ON TABLE testdb5.sc.othertable
+----
+testdb5 sc othertable admin ALL true
+testdb5 sc othertable root ALL true
+
+# But, we still expect testuser to be the owner of this table since they are running the restore.
+query-sql
+SELECT owner FROM [SHOW TABLES] WHERE table_name = 'othertable';
+----
+testuser
+
+subtest end

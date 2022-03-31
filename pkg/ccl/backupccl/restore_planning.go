@@ -1144,6 +1144,19 @@ func restorePlanHook(
 		}
 	}
 
+	var preserveGrantsForFn func() ([]string, error)
+	if restoreStmt.Options.PreserveGrantsFor != nil {
+		if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+			return nil, nil, nil, false, errors.New("cannot specify `preserve_grants_for` option in a " +
+				"cluster restore. A cluster restore will restore all schema objects with the backed up " +
+				"privileges, since it also restores the backed up users.")
+		}
+		preserveGrantsForFn, err = p.TypeAsStringArray(ctx, tree.Exprs(restoreStmt.Options.PreserveGrantsFor), "RESTORE")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -1232,16 +1245,25 @@ func restorePlanHook(
 			}
 		}
 
+		var preserveGrantsFor []string
+		if preserveGrantsForFn != nil {
+			preserveGrantsFor, err = preserveGrantsForFn()
+			if err != nil {
+				return err
+			}
+		}
+
 		params := restoreStatementParams{
-			restoreStmt: restoreStmt,
-			from:        from,
-			incFrom:     incFrom,
-			subdir:      subdir,
-			passphrase:  passphrase,
-			kms:         kms,
-			intoDB:      intoDB,
-			newDBName:   newDBName,
-			newTenantID: newTenantID,
+			restoreStmt:       restoreStmt,
+			from:              from,
+			incFrom:           incFrom,
+			subdir:            subdir,
+			passphrase:        passphrase,
+			kms:               kms,
+			intoDB:            intoDB,
+			newDBName:         newDBName,
+			newTenantID:       newTenantID,
+			preserveGrantsFor: preserveGrantsFor,
 		}
 
 		return doRestorePlan(ctx, p, params, endTime, resultsCh)
@@ -1266,7 +1288,8 @@ type restoreStatementParams struct {
 	intoDB    string
 	newDBName string
 
-	newTenantID *roachpb.TenantID
+	newTenantID       *roachpb.TenantID
+	preserveGrantsFor []string
 }
 
 func checkPrivilegesForRestore(
@@ -1843,6 +1866,7 @@ func doRestorePlan(
 			RestoreSystemUsers: params.restoreStmt.SystemUsers,
 			PreRewriteTenantId: oldTenantID,
 			Validation:         jobspb.RestoreValidation_DefaultRestore,
+			PreserveGrantsFor:  params.preserveGrantsFor,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}

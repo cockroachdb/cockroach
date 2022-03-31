@@ -133,6 +133,7 @@ type RestoreOptions struct {
 	NewDBName                 Expr
 	IncrementalStorage        StringOrPlaceholderOptList
 	AsTenant                  Expr
+	PreserveGrantsFor         StringOrPlaceholderOptList
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -404,6 +405,12 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("tenant = ")
 		ctx.FormatNode(o.AsTenant)
 	}
+
+	if o.PreserveGrantsFor != nil {
+		maybeAddSep()
+		ctx.WriteString("preserve_grants_for = ")
+		ctx.FormatNode(&o.PreserveGrantsFor)
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -499,6 +506,12 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("tenant option specified multiple times")
 	}
 
+	if o.PreserveGrantsFor == nil {
+		o.PreserveGrantsFor = other.PreserveGrantsFor
+	} else if other.PreserveGrantsFor != nil {
+		return errors.New("preserve_grants_for specified multiple times")
+	}
+
 	return nil
 }
 
@@ -517,5 +530,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.DebugPauseOn == options.DebugPauseOn &&
 		o.NewDBName == options.NewDBName &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
-		o.AsTenant == options.AsTenant
+		o.AsTenant == options.AsTenant &&
+		cmp.Equal(o.PreserveGrantsFor, options.PreserveGrantsFor)
 }

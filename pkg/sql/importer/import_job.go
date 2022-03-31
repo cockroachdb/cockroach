@@ -570,9 +570,10 @@ func prepareNewTablesForIngestion(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := ingesting.WriteDescriptors(ctx, p.ExecCfg().Codec, txn, p.User(), descsCol,
+	if err := ingesting.WriteDescriptors(ctx, p.ExecCfg(), txn, p.User(), descsCol,
 		nil /* databases */, nil, /* schemas */
-		tableDescs, nil, tree.RequestedDescriptors, seqValKVs, "" /* inheritParentName */); err != nil {
+		tableDescs, nil, tree.RequestedDescriptors, nil, /* preserveGrantsFor */
+		seqValKVs, "" /* inheritParentName */); err != nil {
 		return nil, errors.Wrapf(err, "creating importTables")
 	}
 

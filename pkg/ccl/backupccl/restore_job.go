@@ -914,8 +914,8 @@ func createImportingDescriptors(
 
 			// Write the new descriptors which are set in the OFFLINE state.
 			if err := ingesting.WriteDescriptors(
-				ctx, p.ExecCfg().Codec, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
-				details.DescriptorCoverage, nil /* extra */, restoreTempSystemDB,
+				ctx, p.ExecCfg(), txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
+				details.DescriptorCoverage, details.PreserveGrantsFor, nil /* extra */, restoreTempSystemDB,
 			); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
 			}

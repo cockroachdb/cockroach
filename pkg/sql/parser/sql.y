@@ -866,7 +866,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
-%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
+%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRESERVE_GRANTS_FOR PRIMARY PRIOR PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY QUOTE
@@ -3281,6 +3281,10 @@ restore_options:
 | TENANT '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{AsTenant: $3.expr()}
+  }
+| PRESERVE_GRANTS_FOR '=' string_or_placeholder_opt_list
+  {
+    $$.val = &tree.RestoreOptions{PreserveGrantsFor: $3.stringOrPlaceholderOptList()}
   }
 
 import_format:
@@ -14165,6 +14169,7 @@ unreserved_keyword:
 | PRECEDING
 | PREPARE
 | PRESERVE
+| PRESERVE_GRANTS_FOR
 | PRIOR
 | PRIORITY
 | PRIVILEGES
