@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -85,7 +86,7 @@ func seedTenantSpanConfigsMigration(
 				continue
 			}
 			if err := scKVAccessor.UpdateSpanConfigRecords(
-				ctx, nil /* toDelete */, toUpsert,
+				ctx, nil /* toDelete */, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 			); err != nil {
 				return errors.Wrapf(err, "failed to seed span config for tenant %d", tenantID)
 			}

@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
+import "errorspb/errors.proto";
 import "roachpb/data.proto";
 import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
@@ -316,6 +317,12 @@ message GetSpanConfigsResponse {
 // Targets are not allowed to overlap with other targets in the same list. They
 // are, however, allowed to overlap across lists. This is necessary to support
 // the delete+upsert semantics described above.
+//
+// All delete/upsert updates are performed atomically at a timestamp within the
+// [LeaseStartTime, LeaseExpirationTime) supplied. Typically, this corresponds
+// to the lease interval of the auto span config reconciliation job issuing the
+// request. If the updates can't be performed within the specified lease
+// interval, an encoded retryableLeaseExpiredError is returned in the response.
 message UpdateSpanConfigsRequest {
   reserved 1, 2;
 
@@ -325,9 +332,23 @@ message UpdateSpanConfigsRequest {
   // ToUpsert captures the targets we want to upsert and the configs we want
   // to upsert with.
   repeated SpanConfigEntry to_upsert = 4 [(gogoproto.nullable) = false];
+
+  // LeaseStartTime is the lease start timestamp of the request issuer.
+  // Typically, this is the lease start time of the auto span config
+  // reconciliation job.
+  util.hlc.Timestamp lease_start_time = 6 [(gogoproto.nullable) = false];
+
+  // LeaseExpirationTime is the lease expiration timestamp of the request
+  // issuer. Typically, this is the lease expiration time of the auto span
+  // config reconciliation job.
+  util.hlc.Timestamp lease_expiration_time = 5 [(gogoproto.nullable) = false];
 };
 
-message UpdateSpanConfigsResponse { };
+message UpdateSpanConfigsResponse {
+  // This field stores any error that occurs on the server, allowing us to
+  // differentiate between those and RPC errors.
+  errorspb.EncodedError error = 1 [(gogoproto.nullable) = false];
+};
 
 
 // GetAllSystemSpanConfigsThatApplyRequest is used to fetch all system span

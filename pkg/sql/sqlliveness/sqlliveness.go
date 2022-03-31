@@ -75,6 +75,9 @@ type Instance interface {
 type Session interface {
 	ID() SessionID
 
+	// StartTimestamp is the start time for this session.
+	StartTimestamp() hlc.Timestamp
+
 	// Expiration is the current expiration value for this Session. If the Session
 	// expires, this function will return a zero-value timestamp.
 	// Transactions run by this Instance which ensure that they commit before

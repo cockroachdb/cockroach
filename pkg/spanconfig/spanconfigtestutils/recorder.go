@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -57,9 +58,15 @@ func (r *KVAccessorRecorder) GetSpanConfigRecords(
 
 // UpdateSpanConfigRecords is part of the KVAccessor interface.
 func (r *KVAccessorRecorder) UpdateSpanConfigRecords(
-	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
+	ctx context.Context,
+	toDelete []spanconfig.Target,
+	toUpsert []spanconfig.Record,
+	leaseStartTime hlc.Timestamp,
+	leaseExpirationTime hlc.Timestamp,
 ) error {
-	if err := r.underlying.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
+	if err := r.underlying.UpdateSpanConfigRecords(
+		ctx, toDelete, toUpsert, leaseStartTime, leaseExpirationTime,
+	); err != nil {
 		return err
 	}
 

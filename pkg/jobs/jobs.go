@@ -49,7 +49,7 @@ const (
 	noDump jobDumpTraceMode = iota
 	// A Traceable job will dump a trace zip on failure.
 	dumpOnFail
-	// A Traceable job will dump a trace zip in any o8 paused, canceled, failed,
+	// A Traceable job will dump a trace zip in any of paused, canceled, failed,
 	// succeeded states.
 	dumpOnStop
 )

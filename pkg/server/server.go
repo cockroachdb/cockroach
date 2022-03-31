@@ -569,7 +569,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 
 		scKVAccessor := spanconfigkvaccessor.New(
-			db, internalExecutor, cfg.Settings,
+			db, internalExecutor, cfg.Settings, clock,
 			systemschema.SpanConfigurationsTableName.FQString(),
 			spanConfigKnobs,
 		)

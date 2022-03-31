@@ -65,6 +65,11 @@ type TestingKnobs struct {
 	// of internally.
 	KVAccessorBatchSizeOverrideFn func() int
 
+	// KVAccessorUpdateLeaseStartWaitInterceptor, if set, is invoked before an
+	// UpdateSpanConfigRecords request begins waiting for present time to be in
+	// advance of the lease start time.
+	KVAccessorUpdateLeaseStartWaitInterceptor func()
+
 	// SQLWatcherOnEventInterceptor, if set, is invoked when the SQLWatcher
 	// receives an event on one of its rangefeeds.
 	SQLWatcherOnEventInterceptor func() error
