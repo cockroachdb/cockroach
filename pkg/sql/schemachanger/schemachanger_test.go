@@ -179,7 +179,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 			[][]string{
 				{jobspb.TypeSchemaChange.String(), string(jobs.StatusSucceeded), `CREATE INDEX idx ON db.public.t (a)`},
 				{jobspb.TypeSchemaChange.String(), string(jobs.StatusSucceeded), `CREATE INDEX idx2 ON db.public.t (a)`},
-				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded), `schema change job`},
+				{jobspb.TypeNewSchemaChange.String(), string(jobs.StatusSucceeded), `ALTER TABLE db.public.t ADD COLUMN b INT8 DEFAULT 1`},
 			},
 		)
 	})
