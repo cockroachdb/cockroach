@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -104,34 +105,36 @@ func (cb *columnBackfiller) runChunk(
 ) (roachpb.Key, error) {
 	var key roachpb.Key
 	var commitWaitFn func(context.Context) error
-	err := cb.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk != nil {
-			if err := cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk(sp); err != nil {
-				return err
+	err := cb.flowCtx.Cfg.DB.TxnWithAdmissionControl(
+		ctx, roachpb.AdmissionHeader_FROM_SQL, admission.NormalPri,
+		func(ctx context.Context, txn *kv.Txn) error {
+			if cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk != nil {
+				if err := cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk(sp); err != nil {
+					return err
+				}
 			}
-		}
-		if cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk != nil {
-			defer cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk()
-		}
+			if cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk != nil {
+				defer cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk()
+			}
 
-		// Defer the commit-wait operation so that we can coalesce this wait
-		// across all batches. This dramatically reduces the total time we spend
-		// waiting for consistency when backfilling a column on GLOBAL tables.
-		commitWaitFn = txn.DeferCommitWait(ctx)
+			// Defer the commit-wait operation so that we can coalesce this wait
+			// across all batches. This dramatically reduces the total time we spend
+			// waiting for consistency when backfilling a column on GLOBAL tables.
+			commitWaitFn = txn.DeferCommitWait(ctx)
 
-		// TODO(knz): do KV tracing in DistSQL processors.
-		var err error
-		key, err = cb.RunColumnBackfillChunk(
-			ctx,
-			txn,
-			cb.desc,
-			sp,
-			chunkSize,
-			true,  /*alsoCommit*/
-			false, /*traceKV*/
-		)
-		return err
-	})
+			// TODO(knz): do KV tracing in DistSQL processors.
+			var err error
+			key, err = cb.RunColumnBackfillChunk(
+				ctx,
+				txn,
+				cb.desc,
+				sp,
+				chunkSize,
+				true,  /*alsoCommit*/
+				false, /*traceKV*/
+			)
+			return err
+		})
 	if err == nil {
 		cb.commitWaitFns = append(cb.commitWaitFns, commitWaitFn)
 		maxCommitWaitFns := int(backfillerMaxCommitWaitFns.Get(&cb.flowCtx.Cfg.Settings.SV))
