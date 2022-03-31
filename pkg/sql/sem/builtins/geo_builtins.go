@@ -6468,6 +6468,9 @@ The parent_only boolean is always ignored.`,
 	"st_minimumboundingcircle": makeBuiltin(defProps(),
 		geometryOverload1(
 			func(evalContext *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				if geomfn.CheckBoundingBoxInfiniteCoordinates(g.Geometry) {
+					return nil, errors.Newf("value out of range: overflow")
+				}
 				polygon, _, _, err := geomfn.MinimumBoundingCircle(g.Geometry)
 				if err != nil {
 					return nil, err
