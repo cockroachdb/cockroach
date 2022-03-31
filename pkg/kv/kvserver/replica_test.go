@@ -8138,7 +8138,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
 		st := r.CurrentLeaseStatus(ctx)
-		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), &ba, &st, uncertainty.Interval{}, allSpansGuard())
+		cmd, pErr := r.requestToProposal(ctx, kvserverbase.CmdIDKey(id), &ba, allSpansGuard(), &st, uncertainty.Interval{})
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -8261,7 +8261,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	incCmdID = makeIDKey()
 	atomic.StoreInt32(&filterActive, 1)
 	st := repl.CurrentLeaseStatus(ctx)
-	proposal, pErr := repl.requestToProposal(ctx, incCmdID, &ba, &st, uncertainty.Interval{}, allSpansGuard())
+	proposal, pErr := repl.requestToProposal(ctx, incCmdID, &ba, allSpansGuard(), &st, uncertainty.Interval{})
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -8966,7 +8966,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	assignSeqNumsForReqs(txn, &txnPut, &txnPut2)
 	origTxn := txn.Clone()
 
-	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), &ba, nil, uncertainty.Interval{}, allSpansGuard())
+	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), &ba, allSpansGuard(), nil, uncertainty.Interval{})
 	defer batch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -13444,7 +13444,7 @@ func TestContainsEstimatesClampProposal(t *testing.T) {
 		req := putArgs(roachpb.Key("some-key"), []byte("some-value"))
 		ba.Add(&req)
 		st := tc.repl.CurrentLeaseStatus(ctx)
-		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, &ba, &st, uncertainty.Interval{}, allSpansGuard())
+		proposal, err := tc.repl.requestToProposal(ctx, cmdIDKey, &ba, allSpansGuard(), &st, uncertainty.Interval{})
 		if err != nil {
 			t.Error(err)
 		}

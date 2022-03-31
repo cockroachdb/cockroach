@@ -44,6 +44,7 @@ func ReverseScan(
 		clusterversion.TargetBytesAvoidExcess)
 	opts := storage.MVCCScanOptions{
 		Inconsistent:           h.ReadConsistency != roachpb.CONSISTENT,
+		SkipLocked:             h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                    h.Txn,
 		MaxKeys:                h.MaxSpanRequestKeys,
 		MaxIntents:             storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
@@ -54,6 +55,7 @@ func ReverseScan(
 		FailOnMoreRecent:       args.KeyLocking != lock.None,
 		Reverse:                true,
 		MemoryAccount:          cArgs.EvalCtx.GetResponseMemoryAccount(),
+		LockTable:              cArgs.Concurrency,
 	}
 
 	switch args.ScanFormat {

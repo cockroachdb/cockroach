@@ -2297,6 +2297,11 @@ message Header {
   // If an Error wait policy is set and a conflicting lock held by an active
   // transaction is encountered, a WriteIntentError will be returned.
   //
+  // If a SkipLocked wait policy is set and a conflicting lock held by an active
+  // transaction is encountered, the corresponding key is not included in the
+  // response and the lock is ignored (i.e. the lock does not cause the request
+  // to block or throw an error).
+  //
   // If the desired behavior is to block on the conflicting lock up to some
   // maximum duration, use the Block wait policy and set a context timeout.
   kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;

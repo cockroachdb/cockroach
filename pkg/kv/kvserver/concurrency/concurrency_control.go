@@ -767,6 +767,14 @@ type lockTableGuard interface {
 	// so this checking is practically only going to find unreplicated locks
 	// that conflict.
 	CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool)
+
+	// IsKeyLockedByConflictingTxn returns whether the provided key is locked by a
+	// conflicting transaction in the lockTableGuard's snapshot of the lock table,
+	// given the caller's own desired locking strength. If so, the lock holder is
+	// returned. A transaction's own lock does not appear to be locked to itself.
+	// The method is used by requests in conjunction with the SkipLocked wait
+	// policy to determine which keys they should skip over during evaluation.
+	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
 }
 
 // lockTableWaiter is concerned with waiting in lock wait-queues for locks held

@@ -480,7 +480,7 @@ func (ba *BatchRequest) LockSpanIterate(br *BatchResponse, fn func(Span, lock.Du
 // ResumeSpan is subtracted from the request span to provide a more
 // minimal span of keys affected by the request. The supplied function
 // is called with each span.
-func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) {
+func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) error {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !NeedsRefresh(req) {
@@ -490,10 +490,32 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) {
 		if br != nil {
 			resp = br.Responses[i].GetInner()
 		}
-		if span, ok := ActualSpan(req, resp); ok {
-			fn(span)
+		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && CanSkipLocked(req) {
+			// If the request is using a SkipLocked wait policy, it behaves as if run
+			// at a lower isolation level for any keys that it skips over. For this
+			// reason, the request only adds point reads for the individual keys
+			// returned to the timestamp cache, as opposed to adding an entry across
+			// the entire read span. See Replica.updateTimestampCache.
+			//
+			// For the same reason, the request only records refresh spans for the
+			// individual keys returned, instead of recording a refresh span across
+			// the entire read span. Because the issuing transaction is not intending
+			// to enforce serializable isolation across keys that were skipped by this
+			// request, it does not need to validate that they have not changed if the
+			// transaction ever needs to refresh.
+			if err := ResponseKeyIterate(req, resp, func(k Key) {
+				fn(Span{Key: k})
+			}); err != nil {
+				return err
+			}
+		} else {
+			// Otherwise, call the function with the span which was operated on.
+			if span, ok := ActualSpan(req, resp); ok {
+				fn(span)
+			}
 		}
 	}
+	return nil
 }
 
 // ActualSpan returns the actual request span which was operated on,
@@ -517,6 +539,57 @@ func ActualSpan(req Request, resp Response) (Span, bool) {
 		}
 	}
 	return h.Span(), true
+}
+
+// ResponseKeyIterate calls the passed function with the keys returned
+// in the provided request's response. If no keys are being returned,
+// the function will not be called.
+func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
+	if resp == nil {
+		return nil
+	}
+	switch v := resp.(type) {
+	case *GetResponse:
+		if v.Value != nil {
+			fn(req.Header().Key)
+		}
+	case *ScanResponse:
+		// If ScanFormat == KEY_VALUES.
+		for _, kv := range v.Rows {
+			fn(kv.Key)
+		}
+		// If ScanFormat == BATCH_RESPONSE.
+		if err := enginepb.ScanDecodeKeyValues(v.BatchResponses, func(key []byte, _ hlc.Timestamp, _ []byte) error {
+			// Clone the key to avoid handing out slices that directly point into the
+			// BatchResponses buffer, which contains the response's keys and values.
+			// This guards against callers which store the response keys in a data
+			// structure accidentally retaining long-lasting references to this
+			// response's underlying result buffer and preventing it from being GCed.
+			//
+			// This is not a concern for other scan formats because keys and values
+			// are already separate heap allocations.
+			fn(Key(key).Clone())
+			return nil
+		}); err != nil {
+			return err
+		}
+	case *ReverseScanResponse:
+		// If ScanFormat == KEY_VALUES.
+		for _, kv := range v.Rows {
+			fn(kv.Key)
+		}
+		// If ScanFormat == BATCH_RESPONSE.
+		if err := enginepb.ScanDecodeKeyValues(v.BatchResponses, func(key []byte, _ hlc.Timestamp, _ []byte) error {
+			// Same explanation as above.
+			fn(Key(key).Clone())
+			return nil
+		}); err != nil {
+			return err
+		}
+	default:
+		return errors.Errorf("cannot iterate over response keys of %s request", req.Method())
+	}
+	return nil
 }
 
 // Combine combines each slot of the given request into the corresponding slot

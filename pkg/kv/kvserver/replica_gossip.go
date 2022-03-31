@@ -182,7 +182,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	defer rw.Close()
 
 	br, result, pErr :=
-		evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, nil /* st */, uncertainty.Interval{}, true /* readOnly */)
+		evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, nil /* g */, nil /* st */, uncertainty.Interval{}, true /* readOnly */)
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
@@ -228,7 +228,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	defer rw.Close()
 
 	br, result, pErr := evaluateBatch(
-		ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, nil /* st */, uncertainty.Interval{}, true, /* readOnly */
+		ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, nil /* g */, nil /* st */, uncertainty.Interval{}, true, /* readOnly */
 	)
 	if pErr != nil {
 		return nil, pErr.GoError()

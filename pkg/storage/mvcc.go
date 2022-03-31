@@ -1167,21 +1167,9 @@ func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byt
 // MVCCScan "batches" (this is not the RocksDB batch repr format). The provided
 // function is called for each key/value pair.
 func MVCCScanDecodeKeyValues(repr [][]byte, fn func(key MVCCKey, rawBytes []byte) error) error {
-	var k MVCCKey
-	var rawBytes []byte
-	var err error
-	for _, data := range repr {
-		for len(data) > 0 {
-			k, rawBytes, data, err = MVCCScanDecodeKeyValue(data)
-			if err != nil {
-				return err
-			}
-			if err = fn(k, rawBytes); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return enginepb.ScanDecodeKeyValues(repr, func(k []byte, ts hlc.Timestamp, rawBytes []byte) error {
+		return fn(MVCCKey{k, ts}, rawBytes)
+	})
 }
 
 // replayTransactionalWrite performs a transactional write under the assumption

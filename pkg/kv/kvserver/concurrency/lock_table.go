@@ -364,6 +364,7 @@ type lockTableGuardImpl struct {
 	txn                *enginepb.TxnMeta
 	ts                 hlc.Timestamp
 	spans              *spanset.SpanSet
+	waitPolicy         lock.WaitPolicy
 	maxWaitQueueLength int
 
 	// Snapshots of the trees for which this request has some spans. Note that
@@ -542,6 +543,11 @@ func (g *lockTableGuardImpl) updateStateLocked(newState waitingState) {
 }
 
 func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet) (ok bool) {
+	if g.waitPolicy == lock.WaitPolicy_SkipLocked {
+		// If the request is using a SkipLocked wait policy, lock conflicts are
+		// handled during evaluation.
+		return true
+	}
 	// Temporarily replace the SpanSet in the guard.
 	originalSpanSet := g.spans
 	g.spans = spanSet
@@ -566,6 +572,35 @@ func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet
 		span = stepToNextSpan(g)
 	}
 	return true
+}
+
+func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
+	key roachpb.Key, strength lock.Strength,
+) (bool, *enginepb.TxnMeta) {
+	ss := spanset.SpanGlobal
+	if keys.IsLocal(key) {
+		ss = spanset.SpanLocal
+	}
+	tree := g.tableSnapshot[ss]
+	iter := tree.MakeIter()
+	iter.SeekGE(&lockState{key: key})
+	if !iter.Valid() || !iter.Cur().key.Equal(key) {
+		// No lock on key.
+		return false, nil
+	}
+	l := iter.Cur()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	lockHolderTxn, lockHolderTS := l.getLockHolder()
+	if lockHolderTxn != nil && g.isSameTxn(lockHolderTxn) {
+		// Already locked by this txn.
+		return false, nil
+	}
+	if strength == lock.None && g.ts.Less(lockHolderTS) {
+		// Non-locking read below lock's timestamp.
+		return false, nil
+	}
+	return true, lockHolderTxn
 }
 
 func (g *lockTableGuardImpl) notify() {
@@ -2413,6 +2448,15 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		g.toResolve = g.toResolve[:0]
 	}
 	t.doSnapshotForGuard(g)
+
+	if g.waitPolicy == lock.WaitPolicy_SkipLocked {
+		// If the request is using a SkipLocked wait policy, it captures a lockTable
+		// snapshot but does not scan the lock table when sequencing. Instead, it
+		// calls into IsKeyLockedByConflictingTxn before adding keys to its result
+		// set to determine which keys it should skip.
+		return g
+	}
+
 	g.findNextLockAfter(true /* notify */)
 	if g.notRemovableLock != nil {
 		// Either waiting at the notRemovableLock, or elsewhere. Either way we are
@@ -2430,6 +2474,7 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g.txn = req.txnMeta()
 	g.ts = req.Timestamp
 	g.spans = req.LockSpans
+	g.waitPolicy = req.WaitPolicy
 	g.maxWaitQueueLength = req.MaxLockWaitQueueLength
 	g.sa = spanset.NumSpanAccess - 1
 	g.index = -1

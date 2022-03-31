@@ -149,6 +149,7 @@ func evaluateBatch(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
+	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	readOnly bool,
@@ -270,7 +271,7 @@ func evaluateBatch(
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
-			ctx, readWriter, rec, ms, baHeader, args, reply, st, ui)
+			ctx, readWriter, rec, ms, baHeader, args, reply, g, st, ui)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
@@ -477,6 +478,7 @@ func evaluateCommand(
 	h roachpb.Header,
 	args roachpb.Request,
 	reply roachpb.Response,
+	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 ) (result.Result, error) {
@@ -494,6 +496,7 @@ func evaluateCommand(
 			Args:        args,
 			Now:         now,
 			Stats:       ms,
+			Concurrency: g,
 			Uncertainty: ui,
 		}
 

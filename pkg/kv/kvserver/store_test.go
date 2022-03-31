@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -1996,6 +1997,80 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	require.Equal(t, makeTS(t3.Nanoseconds(), 0), rTS)
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
 	require.Equal(t, makeTS(t2.Nanoseconds(), 0), rTS)
+}
+
+// TestStoreSkipLockedTSCache verifies that the timestamp cache is properly
+// updated when get, scan, and reverse scan requests use the SkipLocked wait
+// policy.
+func TestStoreSkipLockedTSCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name string
+		reqs []roachpb.Request
+	}{
+		{"get", []roachpb.Request{getArgsString("a"), getArgsString("b"), getArgsString("c")}},
+		{"scan", []roachpb.Request{scanArgsString("a", "d")}},
+		{"revscan", []roachpb.Request{revScanArgsString("a", "d")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			store, manualClock := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
+
+			// Write three keys at time t0.
+			t0 := 1 * time.Second
+			manualClock.Set(t0.Nanoseconds())
+			h := roachpb.Header{Timestamp: makeTS(t0.Nanoseconds(), 0)}
+			for _, keyStr := range []string{"a", "b", "c"} {
+				putArgs := putArgs(roachpb.Key(keyStr), []byte("value"))
+				_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), h, &putArgs)
+				require.Nil(t, pErr)
+			}
+
+			// Lock the middle key at t1.
+			t1 := 2 * time.Second
+			manualClock.Set(t1.Nanoseconds())
+			lockedKey := roachpb.Key("b")
+			txn := roachpb.MakeTransaction("locker", lockedKey, 0, makeTS(t1.Nanoseconds(), 0), 0, 0)
+			txnH := roachpb.Header{Txn: &txn}
+			putArgs := putArgs(lockedKey, []byte("newval"))
+			_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), txnH, &putArgs)
+			require.Nil(t, pErr)
+
+			// Read the span at t2 using a SkipLocked wait policy.
+			t2 := 3 * time.Second
+			manualClock.Set(t2.Nanoseconds())
+			ba := roachpb.BatchRequest{}
+			ba.Timestamp = makeTS(t2.Nanoseconds(), 0)
+			ba.WaitPolicy = lock.WaitPolicy_SkipLocked
+			ba.Add(tc.reqs...)
+			br, pErr := store.TestSender().Send(ctx, ba)
+			require.Nil(t, pErr)
+
+			// Validate the response keys. The locked key should not be included.
+			var respKeys []string
+			for i, ru := range br.Responses {
+				req, resp := ba.Requests[i].GetInner(), ru.GetInner()
+				require.NoError(t, roachpb.ResponseKeyIterate(req, resp, func(k roachpb.Key) {
+					respKeys = append(respKeys, string(k))
+				}))
+			}
+			sort.Strings(respKeys) // normalize reverse scan
+			require.Equal(t, []string{"a", "c"}, respKeys)
+
+			// Verify the timestamp cache has been set for "a" and "c", but not for "b".
+			t2TS := makeTS(t2.Nanoseconds(), 0)
+			rTS, _ := store.tsCache.GetMax(roachpb.Key("a"), nil)
+			require.True(t, rTS.EqOrdering(t2TS))
+			rTS, _ = store.tsCache.GetMax(roachpb.Key("b"), nil)
+			require.True(t, rTS.Less(t2TS))
+			rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
+			require.True(t, rTS.EqOrdering(t2TS))
+		})
+	}
 }
 
 // TestStoreScanIntents verifies that a scan across 10 intents resolves
