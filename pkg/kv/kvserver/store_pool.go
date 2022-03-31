@@ -993,6 +993,22 @@ func (sp *StorePool) getLocalitiesByNode(
 	return localities
 }
 
+func (sp *StorePool) getLocalitiesPerReplica(
+	replicas []roachpb.ReplicaDescriptor,
+) map[roachpb.ReplicaID]roachpb.Locality {
+	sp.localitiesMu.RLock()
+	defer sp.localitiesMu.RUnlock()
+	localities := make(map[roachpb.ReplicaID]roachpb.Locality)
+	for _, replica := range replicas {
+		if locality, ok := sp.localitiesMu.nodeLocalities[replica.NodeID]; ok {
+			localities[replica.ReplicaID] = locality.locality
+		} else {
+			localities[replica.ReplicaID] = roachpb.Locality{}
+		}
+	}
+	return localities
+}
+
 // getNodeLocalityString returns the locality information for the given node
 // in its string format.
 func (sp *StorePool) getNodeLocalityString(nodeID roachpb.NodeID) string {
