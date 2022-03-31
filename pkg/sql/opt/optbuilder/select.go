@@ -1307,8 +1307,7 @@ func (b *Builder) validateLockingInFrom(
 		case tree.LockWaitBlock:
 			// Default. Block on conflicting locks.
 		case tree.LockWaitSkipLocked:
-			panic(unimplementedWithIssueDetailf(40476, "",
-				"SKIP LOCKED lock wait policy is not supported"))
+			// Skip rows that can't be locked.
 		case tree.LockWaitError:
 			// Raise an error on conflicting locks.
 		default:
