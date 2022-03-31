@@ -562,13 +562,12 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 func (sr *txnSpanRefresher) appendRefreshSpans(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) error {
-	ba.RefreshSpanIterate(br, func(span roachpb.Span) {
+	return ba.RefreshSpanIterate(br, func(span roachpb.Span) {
 		if log.ExpensiveLogEnabled(ctx, 3) {
 			log.VEventf(ctx, 3, "recording span to refresh: %s", span.String())
 		}
 		sr.refreshFootprint.insert(span)
 	})
-	return nil
 }
 
 // canForwardReadTimestampWithoutRefresh returns whether the transaction can

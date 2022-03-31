@@ -109,3 +109,33 @@ global: num=2
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
+
+# ---------------------------------------------------------------------------------
+# Test with a Skip wait policy. Even though the lock table has a conflicting lock,
+# it assumes that the request saw and handled this lock during evaluation, so it
+# does not trigger a conflict.
+# ---------------------------------------------------------------------------------
+
+new-request r=req4 txn=txn2 ts=11,1 spans=r@a,i skip-locked
+----
+
+scan-opt r=req4
+----
+start-waiting: false
+
+should-wait r=req4
+----
+false
+
+check-opt-no-conflicts r=req4 spans=r@a,i
+----
+no-conflicts: true
+
+dequeue r=req4
+----
+global: num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0

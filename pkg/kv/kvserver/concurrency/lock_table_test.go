@@ -63,7 +63,7 @@ new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
 
  Creates a TxnMeta.
 
-new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+... [max-lock-wait-queue-length=<int>]
+new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+... [skip-locked] [max-lock-wait-queue-length=<int>]
 ----
 
  Creates a Request.
@@ -116,6 +116,12 @@ check-opt-no-conflicts r=<name> spans=r|w@<start>[,<end>]+...
 no-conflicts: <bool>
 
  Checks whether the request, which previously called ScanOptimistic, has no lock conflicts.
+
+is-key-locked-by-conflicting-txn r=<name> k=<key> strength=<strength>
+----
+locked: <bool>
+
+ Checks whether the provided key is locked by a conflicting transaction.
 
 dequeue r=<name>
 ----
@@ -291,6 +297,10 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				ts := scanTimestamp(t, d)
+				waitPolicy := lock.WaitPolicy_Block
+				if d.HasArg("skip-locked") {
+					waitPolicy = lock.WaitPolicy_SkipLocked
+				}
 				var maxLockWaitQueueLength int
 				if d.HasArg("max-lock-wait-queue-length") {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
@@ -298,6 +308,7 @@ func TestLockTableBasic(t *testing.T) {
 				spans := scanSpans(t, d, ts)
 				req := Request{
 					Timestamp:              ts,
+					WaitPolicy:             waitPolicy,
 					MaxLockWaitQueueLength: maxLockWaitQueueLength,
 					LatchSpans:             spans,
 					LockSpans:              spans,
@@ -476,6 +487,21 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				spans := scanSpans(t, d, req.Timestamp)
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(spans))
+
+			case "is-key-locked-by-conflicting-txn":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				var key string
+				d.ScanArgs(t, "k", &key)
+				strength := scanLockStrength(t, d)
+				if ok, txn := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength); ok {
+					return fmt.Sprintf("locked: true, holder: %s", txn.ID)
+				}
+				return "locked: false"
 
 			case "dequeue":
 				var reqName string
@@ -682,6 +708,24 @@ func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.
 		spans.AddMVCC(sa, getSpan(t, d, p), ts)
 	}
 	return spans
+}
+
+func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
+	var strS string
+	d.ScanArgs(t, "strength", &strS)
+	switch strS {
+	case "none":
+		return lock.None
+	case "shared":
+		return lock.Shared
+	case "upgrade":
+		return lock.Upgrade
+	case "exclusive":
+		return lock.Exclusive
+	default:
+		d.Fatalf(t, "unknown lock strength: %s", strS)
+		return 0
+	}
 }
 
 func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) string {
