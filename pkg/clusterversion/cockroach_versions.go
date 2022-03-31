@@ -53,7 +53,7 @@ type Key int
 //     is as yet inactive. Consider the sender:
 //
 //      func invokeSomeRPC(req) {
-//	        if (specific-version is active) {
+//          if (specific-version is active) {
 //              // Like mentioned above, this implies that all nodes in the
 //              // cluster are running binaries that can handle this new
 //              // feature. We may have learned about this fact before the
@@ -63,9 +63,9 @@ type Key int
 //              // where that happens. Still, it's safe for us to enable the new
 //              // feature flags as we trust the recipient to know how to deal
 //              // with it.
-//		        req.NewFeatureFlag = true
-//	        }
-//	        send(req)
+//            req.NewFeatureFlag = true
+//          }
+//          send(req)
 //      }
 //
 //    And consider the recipient:
@@ -331,6 +331,8 @@ const (
 	// AutoStatsTableSettings is the version where we allow auto stats related
 	// table settings.
 	AutoStatsTableSettings
+	// ForecastStats enables statistics forecasting per table.
+	ForecastStats
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -558,6 +560,11 @@ var versionsSingleton = keyedVersions{
 		Key:     AutoStatsTableSettings,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 100},
 	},
+	{
+		Key:     ForecastStats,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 102},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

@@ -1,3 +1,5 @@
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+
 toolchain(
     name = "cross_linux_toolchain",
     exec_compatible_with = [
@@ -123,24 +125,42 @@ platform(
     ],
 )
 
+bool_flag(
+    name = "crdb_test_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
 config_setting(
     name = "crdb_test",
-    define_values = {
-        "crdb_test": "y",
+    flag_values = {
+        ":crdb_test_flag": "true",
     },
+)
+
+bool_flag(
+    name = "dev_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
 )
 
 config_setting(
     name = "dev",
-    define_values = {
-        "cockroach_bazel_dev": "y",
+    flag_values = {
+        ":dev_flag": "true",
     },
+)
+
+bool_flag(
+    name = "cross_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
 )
 
 config_setting(
     name = "cross",
-    define_values = {
-        "cockroach_cross": "y",
+    flag_values = {
+        ":cross_flag": "true",
     },
 )
 
@@ -149,8 +169,8 @@ config_setting(
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:darwin",
     ],
-    define_values = {
-        "cockroach_cross": "y",
+    flag_values = {
+        ":cross_flag": "true",
     },
 )
 
@@ -159,8 +179,8 @@ config_setting(
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:linux",
     ],
-    define_values = {
-        "cockroach_cross": "y",
+    flag_values = {
+        ":cross_flag": "true",
     },
 )
 
@@ -171,9 +191,33 @@ config_setting(
     },
 )
 
+bool_flag(
+    name = "nogo_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
 config_setting(
-    name = "nonogo",
-    define_values = {
-        "cockroach_nonogo": "y",
+    name = "nogo",
+    flag_values = {
+        ":nogo_flag": "true",
     },
+)
+
+# Note: the flag nonogo_flag and config_setting nonogo_explicit aren't meant
+# to be directly used in select()'s. Not using nogo is the default behavior.
+# The flag and config_setting are here solely so that they can be used by `dev`
+# to check whether an option is configured.
+bool_flag(
+    name = "nonogo_explicit_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "nonogo_explicit",
+    flag_values = {
+        ":nonogo_explicit_flag": "true",
+    },
+    visibility = ["//build/bazelutil:__pkg__"],
 )

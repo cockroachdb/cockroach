@@ -1,12 +1,13 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_binary")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "ui",
     srcs = ["ui.go"],
     # keep
     embedsrcs = select({
-        "//pkg/ui:cockroach_with_ui": [
+        "//pkg/ui:with_ui": [
             "dist_vendor/list.min.js",
             "dist_vendor/.gitkeep",
         ],
@@ -24,10 +25,16 @@ go_library(
     ],
 )
 
+bool_flag(
+    name = "with_ui_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
 config_setting(
-    name = "cockroach_with_ui",
-    define_values = {
-        "cockroach_with_ui": "y",
+    name = "with_ui",
+    flag_values = {
+        ":with_ui_flag": "true",
     },
     visibility = ["//visibility:public"],
 )

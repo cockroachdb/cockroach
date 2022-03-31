@@ -143,8 +143,7 @@ nogo(
     config = "//build/bazelutil:nogo_config.json",
     visibility = ["//visibility:public"],
     deps = select({
-        "//build/toolchains:nonogo": [],
-        "//conditions:default": [
+        "//build/toolchains:nogo": [
             "@org_golang_x_tools//go/analysis/passes/asmdecl:go_default_library",
             "@org_golang_x_tools//go/analysis/passes/assign:go_default_library",
             "@org_golang_x_tools//go/analysis/passes/atomic:go_default_library",
@@ -198,5 +197,6 @@ nogo(
             "//pkg/testutils/lint/passes/timer",
             "//pkg/testutils/lint/passes/unconvert",
         ] + STATICCHECK_CHECKS,
+        "//conditions:default": [],
     }),
 )
