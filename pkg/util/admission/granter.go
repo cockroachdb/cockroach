@@ -1417,8 +1417,9 @@ type ioLoadListener struct {
 	l0Bytes          int64
 	l0AddedBytes     uint64
 	// Exponentially smoothed per interval values.
-	smoothedBytesRemoved int64
-	smoothedNumAdmit     float64
+	smoothedBytesRemoved      int64
+	smoothedNumAdmit          float64
+	smoothedBytesAddedPerWork float64
 
 	// totalTokens represents the tokens to give out until the next call to
 	// adjustTokens. They are given out with smoothing -- tokensAllocated
@@ -1561,19 +1562,35 @@ func (io *ioLoadListener) adjustTokens(m pebble.Metrics) {
 		// situation.
 		doLog = false
 	}
+	// Attribute the bytesAdded equally to all the admitted work.
+	// INVARIANT: bytesAddedPerWork >= 0
+	bytesAddedPerWork := float64(bytesAdded) / float64(admitted)
+	if bytesAddedPerWork > 0 && admitted > 1 {
+		// Track an exponentially smoothed estimate of bytes added per work when
+		// there was some work actually admitted. Note we treat having admitted
+		// one item as the same as having admitted zero both because we clamp
+		// admitted to 1 and if we only admitted one thing, do we really want
+		// to use that for our estimate?
+		if io.smoothedBytesAddedPerWork == 0 {
+			io.smoothedBytesAddedPerWork = bytesAddedPerWork
+		} else {
+			io.smoothedBytesAddedPerWork = alpha*float64(bytesAddedPerWork) +
+				(1-alpha)*io.smoothedBytesAddedPerWork
+		}
+	}
+
 	// We constrain admission if the store if over the threshold.
 	if m.Levels[0].NumFiles > L0FileCountOverloadThreshold.Get(&io.settings.SV) ||
 		m.Levels[0].Sublevels > int32(L0SubLevelCountOverloadThreshold.Get(&io.settings.SV)) {
-		// Attribute the bytesAdded equally to all the admitted work.
-		// INVARIANT: bytesAddedPerWork >= 0
-		bytesAddedPerWork := float64(bytesAdded) / float64(admitted)
-		if bytesAddedPerWork == 0 {
-			// We are here because bytesAdded was 0. This will be very rare.
-			bytesAddedPerWork = 1
+
+		smoothedBytesAddedPerWork := io.smoothedBytesAddedPerWork
+		if io.smoothedBytesAddedPerWork == 0 {
+			// Rare case where we've never seen any work items, avoid overflow.
+			smoothedBytesAddedPerWork = 1
 		}
 		// Don't admit more work than we can remove via compactions. numAdmit
 		// tracks our goal for admission.
-		numAdmit := float64(io.smoothedBytesRemoved) / bytesAddedPerWork
+		numAdmit := float64(io.smoothedBytesRemoved) / smoothedBytesAddedPerWork
 		// Scale down since we want to get under the thresholds over time. This
 		// scaling could be adjusted based on how much above the threshold we are,
 		// but for now we just use a constant.

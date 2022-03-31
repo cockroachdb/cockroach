@@ -371,9 +371,10 @@ func TestIOLoadListener(t *testing.T) {
 				// Do the ticks until just before next adjustment.
 				var buf strings.Builder
 				fmt.Fprintf(&buf, "admitted: %d, bytes: %d, added-bytes: %d,\nsmoothed-removed: %d, "+
-					"smoothed-admit: %d,\ntokens: %s, tokens-allocated: %s\n", ioll.admittedCount,
+					"smoothed-admit: %d, smoothed-bytes-added-per-work: %d,\ntokens: %s, tokens-allocated: %s\n", ioll.admittedCount,
 					ioll.l0Bytes, ioll.l0AddedBytes, ioll.smoothedBytesRemoved,
-					int64(ioll.smoothedNumAdmit), tokensForIntervalToString(ioll.totalTokens),
+					int64(ioll.smoothedNumAdmit), int64(ioll.smoothedBytesAddedPerWork),
+					tokensForIntervalToString(ioll.totalTokens),
 					tokensFor1sToString(ioll.tokensAllocated))
 				for i := 0; i < adjustmentInterval; i++ {
 					ioll.allocateTokensTick()
