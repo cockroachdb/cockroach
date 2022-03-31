@@ -368,7 +368,8 @@ var specs = []stmtSpec{
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' ")},
 		replace: map[string]string{
-			"relation_expr": "table_name",
+			"relation_expr":        "table_name",
+			"alter_column_visible": "'SET' ( 'NOT' | ) 'VISIBLE'",
 		},
 		exclude: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' 'PRIMARY' 'KEY' ")},
 		unlink:  []string{"table_name"},
@@ -431,7 +432,9 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"'VALIDATE' 'CONSTRAINT' name": "",
 			"opt_validate_behavior":        "",
-			"relation_expr":                "table_name"},
+			"relation_expr":                "table_name",
+			"alter_column_visible":         "'SET' ( 'NOT' | ) 'VISIBLE'",
+		},
 		unlink:  []string{"table_name"},
 		nosplit: true,
 	},
@@ -813,10 +816,13 @@ var specs = []stmtSpec{
 		},
 	},
 	{
-		name:    "alter_table_partition_by",
-		stmt:    "alter_onetable_stmt",
-		inline:  []string{"alter_table_cmds", "alter_table_cmd", "partition_by_table"},
-		replace: map[string]string{"relation_expr": "table_name"},
+		name:   "alter_table_partition_by",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "partition_by_table"},
+		replace: map[string]string{
+			"relation_expr":        "table_name",
+			"alter_column_visible": "'SET' ( 'NOT' | ) 'VISIBLE'",
+		},
 		regreplace: map[string]string{
 			`'NOTHING' .*`:        `'NOTHING'`,
 			`_partitions '\)' .*`: `_partitions ')'`,
