@@ -44,6 +44,7 @@ func Scan(
 		clusterversion.TargetBytesAvoidExcess)
 	opts := storage.MVCCScanOptions{
 		Inconsistent:           h.ReadConsistency != roachpb.CONSISTENT,
+		SkipLocked:             h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                    h.Txn,
 		Uncertainty:            cArgs.Uncertainty,
 		MaxKeys:                h.MaxSpanRequestKeys,
@@ -55,6 +56,7 @@ func Scan(
 		FailOnMoreRecent:       args.KeyLocking != lock.None,
 		Reverse:                false,
 		MemoryAccount:          cArgs.EvalCtx.GetResponseMemoryAccount(),
+		LockTable:              cArgs.Concurrency,
 	}
 
 	switch args.ScanFormat {

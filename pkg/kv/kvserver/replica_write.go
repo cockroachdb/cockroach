@@ -382,8 +382,8 @@ func (r *Replica) evaluateWriteBatch(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
-	ui uncertainty.Interval,
 	g *concurrency.Guard,
+	ui uncertainty.Interval,
 ) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	log.Event(ctx, "executing read-write batch")
 
@@ -426,7 +426,7 @@ func (r *Replica) evaluateWriteBatch(
 	ms := new(enginepb.MVCCStats)
 	rec := NewReplicaEvalContext(r, g.LatchSpans())
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, ui, g, nil /* deadline */)
+		ctx, idKey, rec, ms, ba, g, ui, nil /* deadline */)
 	return batch, *ms, br, res, pErr
 }
 
@@ -501,10 +501,10 @@ func (r *Replica) evaluate1PC(
 	ms := new(enginepb.MVCCStats)
 	if ba.CanForwardReadTimestamp {
 		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
-			ctx, idKey, rec, ms, &strippedBa, ui, g, etArg.Deadline)
+			ctx, idKey, rec, ms, &strippedBa, g, ui, etArg.Deadline)
 	} else {
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
-			ctx, idKey, rec, ms, &strippedBa, ui, g)
+			ctx, idKey, rec, ms, &strippedBa, g, ui)
 	}
 
 	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
@@ -594,8 +594,8 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
-	ui uncertainty.Interval,
 	g *concurrency.Guard,
+	ui uncertainty.Interval,
 	deadline *hlc.Timestamp,
 ) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	goldenMS := *ms
@@ -609,7 +609,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, ui, g)
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, g, ui)
 
 		var success bool
 		if pErr == nil {
@@ -637,11 +637,11 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
-	ui uncertainty.Interval,
 	g *concurrency.Guard,
+	ui uncertainty.Interval,
 ) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	batch, opLogger := r.newBatchedEngine(ba, g)
-	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, ui, false /* readOnly */)
+	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, ui, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {
 			res.LogicalOpLog = &kvserverpb.LogicalOpLog{

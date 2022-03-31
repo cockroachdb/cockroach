@@ -771,6 +771,8 @@ func TestTxnWaitPolicies(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "highPriority", func(t *testing.T, highPriority bool) {
 		key := []byte("b")
+		require.NoError(t, s.DB.Put(ctx, key, "old value"))
+
 		txn := s.DB.NewTxn(ctx, "test txn")
 		require.NoError(t, txn.Put(ctx, key, "new value"))
 
@@ -818,6 +820,30 @@ func TestTxnWaitPolicies(t *testing.T) {
 		wiErr := new(roachpb.WriteIntentError)
 		require.True(t, errors.As(err, &wiErr))
 		require.Equal(t, roachpb.WriteIntentError_REASON_WAIT_POLICY, wiErr.Reason)
+
+		// SkipLocked wait policy.
+		type skipRes struct {
+			res []kv.Result
+			err error
+		}
+		skipC := make(chan skipRes)
+		go func() {
+			var b kv.Batch
+			b.Header.UserPriority = pri
+			b.Header.WaitPolicy = lock.WaitPolicy_SkipLocked
+			b.Get(key)
+			err := s.DB.Run(ctx, &b)
+			skipC <- skipRes{res: b.Results, err: err}
+		}()
+
+		// Should return successful but empty result immediately, without blocking.
+		// Priority does not matter.
+		res := <-skipC
+		require.Nil(t, res.err)
+		require.Len(t, res.res, 1)
+		getRes := res.res[0]
+		require.Len(t, getRes.Rows, 1)
+		require.False(t, getRes.Rows[0].Exists())
 
 		// Let blocked requests proceed.
 		require.NoError(t, txn.Commit(ctx))

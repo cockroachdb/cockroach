@@ -167,15 +167,21 @@ enum Durability {
 // until the conflicting lock is released, but other policies can make sense in
 // special situations.
 enum WaitPolicy {
-  // Block indicates that if a request encounters a conflicting locks held by
+  // Block indicates that if a request encounters a conflicting lock held by
   // another active transaction, it should wait for the conflicting lock to be
   // released before proceeding.
   Block = 0;
 
-  // Error indicates that if a request encounters a conflicting locks held by
+  // Error indicates that if a request encounters a conflicting lock held by
   // another active transaction, it should raise an error instead of blocking.
   // If the request encounters a conflicting lock that was abandoned by an
   // inactive transaction, which is likely due to a transaction coordinator
   // crash, the lock is removed and no error is raised.
   Error = 1;
+
+  // SkipLocked indicates that if a request encounters a conflicting lock held
+  // by another transaction while scanning, it should skip over the key that is
+  // locked instead of blocking and later acquiring a lock on that key. The
+  // locked key will not be included in the scan result.
+  SkipLocked = 2;
 }

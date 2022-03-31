@@ -70,6 +70,8 @@ func scanWaitPolicy(t *testing.T, d *datadriven.TestData, required bool) lock.Wa
 		return lock.WaitPolicy_Block
 	case "error":
 		return lock.WaitPolicy_Error
+	case "skip-locked":
+		return lock.WaitPolicy_SkipLocked
 	default:
 		d.Fatalf(t, "unknown wait policy: %s", policy)
 		return 0

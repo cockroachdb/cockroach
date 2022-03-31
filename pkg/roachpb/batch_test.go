@@ -310,7 +310,7 @@ func TestRefreshSpanIterate(t *testing.T) {
 	fn := func(span Span) {
 		readSpans = append(readSpans, span)
 	}
-	ba.RefreshSpanIterate(&br, fn)
+	require.NoError(t, ba.RefreshSpanIterate(&br, fn))
 	// The conditional put and init put are not considered read spans.
 	expReadSpans := []Span{testCases[4].span, testCases[5].span, testCases[6].span, testCases[7].span}
 	require.Equal(t, expReadSpans, readSpans)
@@ -329,12 +329,54 @@ func TestRefreshSpanIterate(t *testing.T) {
 	}
 
 	readSpans = []Span{}
-	ba.RefreshSpanIterate(&br, fn)
+	require.NoError(t, ba.RefreshSpanIterate(&br, fn))
 	expReadSpans = []Span{
 		sp("a", "b"),
 		sp("b", ""),
 		sp("e", "f"),
 		sp("g", "h"),
+	}
+	require.Equal(t, expReadSpans, readSpans)
+}
+
+func TestRefreshSpanIterateSkipLocked(t *testing.T) {
+	ba := BatchRequest{}
+	ba.Add(NewGet(Key("a"), false))
+	ba.Add(NewScan(Key("b"), Key("d"), false))
+	ba.Add(NewReverseScan(Key("e"), Key("g"), false))
+	br := ba.CreateReply()
+
+	// Without a SkipLocked wait policy.
+	var readSpans []Span
+	fn := func(span Span) { readSpans = append(readSpans, span) }
+	require.NoError(t, ba.RefreshSpanIterate(br, fn))
+	expReadSpans := []Span{
+		sp("a", ""),
+		sp("b", "d"),
+		sp("e", "g"),
+	}
+	require.Equal(t, expReadSpans, readSpans)
+
+	// With a SkipLocked wait policy and without any response keys.
+	ba.WaitPolicy = lock.WaitPolicy_SkipLocked
+
+	readSpans = nil
+	require.NoError(t, ba.RefreshSpanIterate(br, fn))
+	expReadSpans = []Span(nil)
+	require.Equal(t, expReadSpans, readSpans)
+
+	// With a SkipLocked wait policy and with some response keys.
+	br.Responses[0].GetGet().Value = &Value{}
+	br.Responses[1].GetScan().Rows = []KeyValue{{Key: Key("b")}, {Key: Key("c")}}
+	br.Responses[2].GetReverseScan().Rows = []KeyValue{{Key: Key("f")}}
+
+	readSpans = nil
+	require.NoError(t, ba.RefreshSpanIterate(br, fn))
+	expReadSpans = []Span{
+		sp("a", ""),
+		sp("b", ""),
+		sp("c", ""),
+		sp("f", ""),
 	}
 	require.Equal(t, expReadSpans, readSpans)
 }

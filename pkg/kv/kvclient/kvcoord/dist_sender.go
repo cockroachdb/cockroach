@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -689,9 +690,28 @@ func (ds *DistSender) initAndVerifyBatch(
 				// Accepted point requests that can be in batches with limit.
 
 			default:
-				return roachpb.NewErrorf("batch with limit contains %T request", inner)
+				return roachpb.NewErrorf("batch with limit contains %s request", inner.Method())
 			}
 		}
+	}
+
+	switch ba.WaitPolicy {
+	case lock.WaitPolicy_Block, lock.WaitPolicy_Error:
+		// Default. All request types supported.
+	case lock.WaitPolicy_SkipLocked:
+		for _, req := range ba.Requests {
+			inner := req.GetInner()
+			if !roachpb.CanSkipLocked(inner) {
+				switch inner.(type) {
+				case *roachpb.QueryIntentRequest, *roachpb.EndTxnRequest:
+					// Not directly supported, but can be part of the same batch.
+				default:
+					return roachpb.NewErrorf("batch with SkipLocked wait policy contains %s request", inner.Method())
+				}
+			}
+		}
+	default:
+		return roachpb.NewErrorf("unknown wait policy %s", ba.WaitPolicy)
 	}
 
 	return nil
