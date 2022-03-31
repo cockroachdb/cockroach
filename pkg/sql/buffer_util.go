@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/redact"
 )
 
 // rowContainerHelper is a wrapper around a disk-backed row container that
@@ -34,14 +34,14 @@ type rowContainerHelper struct {
 }
 
 func (c *rowContainerHelper) init(
-	typs []*types.T, evalContext *extendedEvalContext, opName string,
+	typs []*types.T, evalContext *extendedEvalContext, opName redact.RedactableString,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		evalContext.Context, evalContext.Mon, distSQLCfg, evalContext.SessionData(),
-		fmt.Sprintf("%s-limited", opName),
+		redact.Sprintf("%s-limited", opName),
 	)
-	c.diskMonitor = execinfra.NewMonitor(evalContext.Context, distSQLCfg.ParentDiskMonitor, fmt.Sprintf("%s-disk", opName))
+	c.diskMonitor = execinfra.NewMonitor(evalContext.Context, distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName))
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
 		colinfo.NoOrdering, typs, &evalContext.EvalContext,

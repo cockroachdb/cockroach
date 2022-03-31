@@ -12,7 +12,6 @@ package colbuilder
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"reflect"
 	"strings"
@@ -46,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func checkNumIn(inputs []colexecargs.OpWithMetaInfo, numIn int) error {
@@ -353,13 +353,13 @@ func (r opResult) createDiskBackedSort(
 	maxNumberPartitions int,
 	processorID int32,
 	post *execinfrapb.PostProcessSpec,
-	opNamePrefix string,
+	opNamePrefix redact.RedactableString,
 	factory coldata.ColumnFactory,
 ) (colexecop.Operator, error) {
 	streamingMemAccount := args.StreamingMemAccount
 	useStreamingMemAccountForBuffering := args.TestingKnobs.UseStreamingMemAccountForBuffering
 	var (
-		sorterMemMonitorName string
+		sorterMemMonitorName redact.RedactableString
 		inMemorySorter       colexecop.Operator
 		err                  error
 		topK                 uint64
@@ -489,7 +489,7 @@ func (r opResult) makeDiskBackedSorterConstructor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
-	opNamePrefix string,
+	opNamePrefix redact.RedactableString,
 	factory coldata.ColumnFactory,
 ) colexec.DiskBackedSorterConstructor {
 	return func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) colexecop.Operator {
@@ -873,7 +873,7 @@ func NewColOperator(
 			result.ColumnTypes = newAggArgs.OutputTypes
 
 			if needHash {
-				opName := "hash-aggregator"
+				opName := redact.RedactableString("hash-aggregator")
 				outputUnlimitedAllocator := colmem.NewAllocator(
 					ctx,
 					result.createUnlimitedMemAccount(ctx, flowCtx, opName+"-output", spec.ProcessorID),
@@ -943,7 +943,7 @@ func NewColOperator(
 					if err != nil {
 						return r, err
 					}
-					ehaOpName := "external-hash-aggregator"
+					ehaOpName := redact.RedactableString("external-hash-aggregator")
 					ehaMemAccount := result.createUnlimitedMemAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID)
 					// Note that we will use an unlimited memory account here
 					// even for the in-memory hash aggregator since it is easier
@@ -1018,7 +1018,7 @@ func NewColOperator(
 					allocator, inputs[0].Root, core.Distinct.DistinctColumns, result.ColumnTypes,
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
-				edOpName := "external-distinct"
+				edOpName := redact.RedactableString("external-distinct")
 				diskAccount := result.createDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
 				result.Root = colexec.NewOneInputDiskSpiller(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
@@ -1064,7 +1064,7 @@ func NewColOperator(
 			if len(core.HashJoiner.LeftEqColumns) == 0 {
 				// We are performing a cross-join, so we need to plan a
 				// specialized operator.
-				opName := "cross-joiner"
+				opName := redact.RedactableString("cross-joiner")
 				crossJoinerMemAccount := result.createUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID)
 				crossJoinerDiskAcc := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 				unlimitedAllocator := colmem.NewAllocator(ctx, crossJoinerMemAccount, factory)
@@ -1080,14 +1080,14 @@ func NewColOperator(
 				)
 				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 			} else {
-				var hashJoinerMemMonitorName string
+				var hashJoinerMemMonitorName redact.RedactableString
 				var hashJoinerMemAccount *mon.BoundAccount
 				var hashJoinerUnlimitedAllocator *colmem.Allocator
 				if useStreamingMemAccountForBuffering {
 					hashJoinerMemAccount = streamingMemAccount
 					hashJoinerUnlimitedAllocator = streamingAllocator
 				} else {
-					opName := "hash-joiner"
+					opName := redact.RedactableString("hash-joiner")
 					hashJoinerMemAccount, hashJoinerMemMonitorName = result.createMemAccountForSpillStrategy(
 						ctx, flowCtx, opName, spec.ProcessorID,
 					)
@@ -1115,7 +1115,7 @@ func NewColOperator(
 					// in-memory hash joiner.
 					result.Root = inMemoryHashJoiner
 				} else {
-					opName := "external-hash-joiner"
+					opName := redact.RedactableString("external-hash-joiner")
 					diskAccount := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 					result.Root = colexec.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
@@ -1173,7 +1173,7 @@ func NewColOperator(
 				onExpr = &core.MergeJoiner.OnExpr
 			}
 
-			opName := "merge-joiner"
+			opName := redact.RedactableString("merge-joiner")
 			// We are using an unlimited memory monitor here because merge
 			// joiner itself is responsible for making sure that we stay within
 			// the memory limit, and it will fall back to disk if necessary.
@@ -1223,7 +1223,7 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return r, err
 			}
-			opNamePrefix := "window-"
+			opNamePrefix := redact.RedactableString("window-")
 			input := inputs[0].Root
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
@@ -1392,7 +1392,7 @@ func NewColOperator(
 					}
 				} else if wf.Func.AggregateFunc != nil {
 					// This is an aggregate window function.
-					opName := opNamePrefix + strings.ToLower(wf.Func.AggregateFunc.String())
+					opName := opNamePrefix + redact.RedactableString(strings.ToLower(wf.Func.AggregateFunc.String()))
 					result.finishBufferedWindowerArgs(
 						ctx, flowCtx, windowArgs, opName, spec.ProcessorID, factory, true /* needsBuffer */)
 					aggType := *wf.Func.AggregateFunc
@@ -1689,8 +1689,10 @@ func (r *postProcessResult) planPostProcessSpec(
 }
 
 // getMemMonitorName returns a unique (for this opResult) memory monitor name.
-func (r opResult) getMemMonitorName(opName string, processorID int32, suffix string) string {
-	return fmt.Sprintf("%s-%d-%s-%d", opName, processorID, suffix, len(r.OpMonitors))
+func (r opResult) getMemMonitorName(
+	opName redact.RedactableString, processorID int32, suffix redact.RedactableString,
+) redact.RedactableString {
+	return redact.Sprintf("%s-%d-%s-%d", opName, processorID, suffix, len(r.OpMonitors))
 }
 
 // createMemAccountForSpillStrategy instantiates a memory monitor and a memory
@@ -1699,8 +1701,11 @@ func (r opResult) getMemMonitorName(opName string, processorID int32, suffix str
 // will be 1. The receiver is updated to have references to both objects. Memory
 // monitor name is also returned.
 func (r opResult) createMemAccountForSpillStrategy(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
-) (*mon.BoundAccount, string) {
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	opName redact.RedactableString,
+	processorID int32,
+) (*mon.BoundAccount, redact.RedactableString) {
 	monitorName := r.getMemMonitorName(opName, processorID, "limited" /* suffix */)
 	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
 		ctx, flowCtx.EvalCtx.Mon, flowCtx, monitorName,
@@ -1716,8 +1721,12 @@ func (r opResult) createMemAccountForSpillStrategy(
 // instead of using the number obtained via execinfra.GetWorkMemLimit. Memory
 // monitor name is also returned.
 func (r opResult) createMemAccountForSpillStrategyWithLimit(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, limit int64, opName string, processorID int32,
-) (*mon.BoundAccount, string) {
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	limit int64,
+	opName redact.RedactableString,
+	processorID int32,
+) (*mon.BoundAccount, redact.RedactableString) {
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 		limit = 1
 	}
@@ -1741,7 +1750,10 @@ func (r opResult) createMemAccountForSpillStrategyWithLimit(
 // Note that the memory monitor name is not returned (unlike above) because no
 // caller actually needs it.
 func (r opResult) createUnlimitedMemAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	opName redact.RedactableString,
+	processorID int32,
 ) *mon.BoundAccount {
 	monitorName := r.getMemMonitorName(opName, processorID, "unlimited" /* suffix */)
 	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
@@ -1761,7 +1773,10 @@ func (r opResult) createUnlimitedMemAccount(
 // Note that the memory monitor name is not returned (unlike above) because no
 // caller actually needs it.
 func (r opResult) createDiskAccount(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	opName redact.RedactableString,
+	processorID int32,
 ) *mon.BoundAccount {
 	monitorName := r.getMemMonitorName(opName, processorID, "disk" /* suffix */)
 	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, monitorName)
@@ -1786,7 +1801,7 @@ func (r opResult) finishBufferedWindowerArgs(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecwindow.WindowArgs,
-	opName string,
+	opName redact.RedactableString,
 	processorID int32,
 	factory coldata.ColumnFactory,
 	needsBuffer bool,

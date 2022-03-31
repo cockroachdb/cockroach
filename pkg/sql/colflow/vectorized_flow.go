@@ -13,8 +13,6 @@ package colflow
 import (
 	"context"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -49,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/marusama/semaphore"
 )
 
@@ -673,7 +672,7 @@ func (s *vectorizedFlowCreator) Release() {
 //  NewColOperatorResult, meaning that we should probably find a way to refactor
 //  this.
 func (s *vectorizedFlowCreator) createBufferingUnlimitedMemMonitor(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name redact.RedactableString,
 ) *mon.BytesMonitor {
 	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
 		ctx, flowCtx.EvalCtx.Mon, name+"-unlimited",
@@ -687,7 +686,7 @@ func (s *vectorizedFlowCreator) createBufferingUnlimitedMemMonitor(
 // TODO(azhng): consolidate all allocation monitors/account management into one
 // place after branch cut for 20.1.
 func (s *vectorizedFlowCreator) createDiskAccounts(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name string, numAccounts int,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name redact.RedactableString, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	diskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, name)
 	s.monitors = append(s.monitors, diskMonitor)
@@ -769,11 +768,14 @@ func (s *vectorizedFlowCreator) setupRouter(
 	}
 
 	// HashRouter memory monitor names are the concatenated output stream IDs.
-	streamIDs := make([]string, len(output.Streams))
+	var streamIDs redact.RedactableString
 	for i, s := range output.Streams {
-		streamIDs[i] = strconv.Itoa(int(s.StreamID))
+		if i > 0 {
+			streamIDs = streamIDs + ","
+		}
+		streamIDs = redact.Sprintf("%s%d", streamIDs, s.StreamID)
 	}
-	mmName := "hash-router-[" + strings.Join(streamIDs, ",") + "]"
+	mmName := "hash-router-[" + streamIDs + "]"
 
 	hashRouterMemMonitor := s.createBufferingUnlimitedMemMonitor(ctx, flowCtx, mmName)
 	allocators := make([]*colmem.Allocator, len(output.Streams))
@@ -788,7 +790,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 		s.diskQueueCfg, s.fdSemaphore, diskAccounts,
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
-		router.Run(logtags.AddTag(ctx, "hashRouterID", strings.Join(streamIDs, ",")))
+		router.Run(logtags.AddTag(ctx, "hashRouterID", streamIDs))
 	}
 	s.accumulateAsyncComponent(runRouter)
 
