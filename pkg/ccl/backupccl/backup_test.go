@@ -10133,3 +10133,37 @@ func TestBackupRestoreSeparateExplicitIsDefault(t *testing.T) {
 		sqlDB.Exec(t, "DROP DATABASE inc_fkdb;")
 	}
 }
+
+// TestRestoreOnFailOrCancelAfterPause is a regression test that ensures that we
+// can cancel a paused restore job. Previously, this test would result in a nil
+// pointer exception when accessing the `r.execCfg` since the resumer was not
+// correctly initialized.
+//
+// TODO(adityamaru): Migrate to datadriven test once 78430 merges.
+func TestRestoreOnFailOrCancelAfterPause(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, sqlDB, dataDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/foo'`)
+
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dataDir,
+		InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+			},
+		})
+	defer cleanupEmptyCluster()
+
+	// Start a restore and expect it to hit a pausepoint error.
+	sqlDBRestore.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_load_descriptors_from_backup'`)
+	var id jobspb.JobID
+	sqlDBRestore.QueryRow(t, `RESTORE FROM LATEST IN 'nodelocal://1/foo' WITH detached`).Scan(&id)
+	jobutils.WaitForJobToPause(t, sqlDBRestore, id)
+
+	sqlDBRestore.Exec(t, `CANCEL JOB $1`, id)
+	jobutils.WaitForJobToCancel(t, sqlDBRestore, id)
+}

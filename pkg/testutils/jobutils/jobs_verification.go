@@ -46,6 +46,12 @@ func WaitForJobToPause(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID)
 	waitForJobToHaveStatus(t, db, jobID, jobs.StatusPaused)
 }
 
+// WaitForJobToCancel waits for the specified job ID to be cancelled.
+func WaitForJobToCancel(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusCanceled)
+}
+
 func waitForJobToHaveStatus(
 	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
 ) {
