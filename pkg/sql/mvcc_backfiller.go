@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -52,6 +53,7 @@ func (im *IndexBackfillerMergePlanner) plan(
 	todoSpanList [][]roachpb.Span,
 	addedIndexes, temporaryIndexes []descpb.IndexID,
 	metaFn func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
+	mergeTimestamp hlc.Timestamp,
 ) (func(context.Context) error, error) {
 	var p *PhysicalPlan
 	var evalCtx extendedEvalContext
@@ -64,7 +66,7 @@ func (im *IndexBackfillerMergePlanner) plan(
 		planCtx = im.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
 			DistributionTypeSystemTenantOnly)
 
-		spec, err := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes)
+		spec, err := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes, mergeTimestamp)
 		if err != nil {
 			return err
 		}
