@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -66,6 +67,7 @@ var sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-ite
 // resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]]
 // resolve_intent_range t=<name> k=<key> end=<key> [status=<txnstatus>]
 // check_intent   k=<key> [none]
+// add_lock       t=<name> k=<key>
 //
 // cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
 // del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
@@ -76,8 +78,8 @@ var sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-ite
 // merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
-// get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
-// scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
+// get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
+// scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey]
 //
 // iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [pointSynthesis [emitOnSeekGE]] [maskBelow=<int>[,<int>]]
@@ -376,8 +378,12 @@ func TestMVCCHistories(t *testing.T) {
 				// a transaction object. When set, the last modified txn
 				// object is reported in the result buffer at the end.
 				txnChange := false
+				// locksChange indicates whether some command has modified
+				// the lock table. When set, the lock table is reported in
+				// the result buffer at the end.
+				locksChange := false
 
-				reportResults := func(printTxn, printData bool) {
+				reportResults := func(printTxn, printData, printLocks bool) {
 					if printTxn && e.results.txn != nil {
 						buf.Printf("txn: %v\n", e.results.txn)
 					}
@@ -402,6 +408,21 @@ func TestMVCCHistories(t *testing.T) {
 								}
 							}
 						}
+					}
+					if printLocks {
+						var ks []string
+						for k := range e.locks {
+							ks = append(ks, k)
+						}
+						sort.Strings(ks)
+						buf.Printf("lock-table: {")
+						for i, k := range ks {
+							if i > 0 {
+								buf.Printf(", ")
+							}
+							buf.Printf("%s:%s", k, e.locks[k].ID)
+						}
+						buf.Printf("}\n")
 					}
 				}
 
@@ -472,6 +493,7 @@ func TestMVCCHistories(t *testing.T) {
 					cmd := e.getCmd()
 					txnChange = txnChange || cmd.typ == typTxnUpdate
 					dataChange = dataChange || cmd.typ == typDataUpdate
+					locksChange = locksChange || cmd.typ == typLocksUpdate
 
 					if trace || (stats && cmd.typ == typDataUpdate) {
 						// If tracing is also requested by the datadriven input,
@@ -496,7 +518,7 @@ func TestMVCCHistories(t *testing.T) {
 						// If tracing is enabled, we report the intermediate results
 						// after each individual step in the script.
 						// This may modify foundErr too.
-						reportResults(cmd.typ == typTxnUpdate, cmd.typ == typDataUpdate)
+						reportResults(cmd.typ == typTxnUpdate, cmd.typ == typDataUpdate, cmd.typ == typLocksUpdate)
 					}
 
 					if stats && cmd.typ == typDataUpdate {
@@ -535,10 +557,10 @@ func TestMVCCHistories(t *testing.T) {
 
 				if !trace {
 					// If we were not tracing, no results were printed yet. Do it now.
-					if txnChange || dataChange {
+					if txnChange || dataChange || locksChange {
 						buf.SafeString(">> at end:\n")
 					}
-					reportResults(txnChange, dataChange)
+					reportResults(txnChange, dataChange, locksChange)
 				}
 
 				// Calculate and output final stats if requested and the data changed.
@@ -548,7 +570,7 @@ func TestMVCCHistories(t *testing.T) {
 				}
 
 				signalError := e.t.Errorf
-				if txnChange || dataChange {
+				if txnChange || dataChange || locksChange {
 					// We can't recover from an error and continue
 					// to proceed further tests, because the state
 					// may have changed from what the test may be expecting.
@@ -602,6 +624,7 @@ const (
 	typReadOnly cmdType = iota
 	typTxnUpdate
 	typDataUpdate
+	typLocksUpdate
 )
 
 // commands is the list of all supported script commands.
@@ -618,6 +641,7 @@ var commands = map[string]cmd{
 	"resolve_intent":       {typDataUpdate, cmdResolveIntent},
 	"resolve_intent_range": {typDataUpdate, cmdResolveIntentRange},
 	"check_intent":         {typReadOnly, cmdCheckIntent},
+	"add_lock":             {typLocksUpdate, cmdAddLock},
 
 	"clear":          {typDataUpdate, cmdClear},
 	"clear_range":    {typDataUpdate, cmdClearRange},
@@ -844,6 +868,13 @@ func cmdCheckIntent(e *evalCtx) error {
 	return nil
 }
 
+func cmdAddLock(e *evalCtx) error {
+	txn := e.getTxn(mandatory)
+	key := e.getKey()
+	e.locks[string(key)] = txn
+	return nil
+}
+
 func cmdClear(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(nil)
@@ -986,6 +1017,10 @@ func cmdGet(e *evalCtx) error {
 	if e.hasArg("inconsistent") {
 		opts.Inconsistent = true
 		opts.Txn = nil
+	}
+	if e.hasArg("skipLocked") {
+		opts.SkipLocked = true
+		opts.LockTable = e.newLockTableView(txn, ts)
 	}
 	if e.hasArg("tombstones") {
 		opts.Tombstones = true
@@ -1161,6 +1196,10 @@ func cmdScan(e *evalCtx) error {
 	if e.hasArg("inconsistent") {
 		opts.Inconsistent = true
 		opts.Txn = nil
+	}
+	if e.hasArg("skipLocked") {
+		opts.SkipLocked = true
+		opts.LockTable = e.newLockTableView(txn, ts)
 	}
 	if e.hasArg("tombstones") {
 		opts.Tombstones = true
@@ -1592,6 +1631,7 @@ type evalCtx struct {
 	td         *datadriven.TestData
 	txns       map[string]*roachpb.Transaction
 	txnCounter uint128.Uint128
+	locks      map[string]*roachpb.Transaction
 	ms         *enginepb.MVCCStats
 	sstWriter  *SSTWriter
 	sstFile    *MemFile
@@ -1605,6 +1645,7 @@ func newEvalCtx(ctx context.Context, engine Engine) *evalCtx {
 		engine:     engine,
 		txns:       make(map[string]*roachpb.Transaction),
 		txnCounter: uint128.FromInts(0, 1),
+		locks:      make(map[string]*roachpb.Transaction),
 	}
 }
 
@@ -1833,6 +1874,33 @@ func (e *evalCtx) lookupTxn(txnName string) (*roachpb.Transaction, error) {
 		e.Fatalf("txn %s not open", txnName)
 	}
 	return txn, nil
+}
+
+func (e *evalCtx) newLockTableView(txn *roachpb.Transaction, ts hlc.Timestamp) LockTableView {
+	return &mockLockTableView{locks: e.locks, txn: txn, ts: ts}
+}
+
+// mockLockTableView is a mock implementation of LockTableView.
+type mockLockTableView struct {
+	locks map[string]*roachpb.Transaction
+	txn   *roachpb.Transaction
+	ts    hlc.Timestamp
+}
+
+func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
+	k roachpb.Key, s lock.Strength,
+) (bool, *enginepb.TxnMeta) {
+	holder, ok := lt.locks[string(k)]
+	if !ok {
+		return false, nil
+	}
+	if lt.txn != nil && lt.txn.ID == holder.ID {
+		return false, nil
+	}
+	if s == lock.None && lt.ts.Less(holder.WriteTimestamp) {
+		return false, nil
+	}
+	return true, &holder.TxnMeta
 }
 
 func (e *evalCtx) bareIter() SimpleMVCCIterator {
