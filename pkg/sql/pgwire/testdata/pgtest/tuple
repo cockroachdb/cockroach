@@ -64,3 +64,30 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"(a,b,c,\"d \",e,\"f  \")"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Try to send a prepared statement with a tuple argument.
+# 'S' for Statement
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s4", "Query": "select $1 AS a", "ParameterOIDs": [2249]}
+Bind {"DestinationPortal": "p4", "PreparedStatement": "s4", "ParameterFormatCodes": [0], "Parameters": [{"text":"(1,cat)"}]}
+Execute {"Portal": "p4"}
+Sync
+----
+
+# Postgres has a slightly different error message.
+until noncrdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"input of anonymous composite types is not implemented"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"error in argument for $1: could not parse \"(1,cat)\" as type tuple: cannot parse anonymous record type"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
