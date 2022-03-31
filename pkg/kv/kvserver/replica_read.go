@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -89,7 +90,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// the latches are released.
 
 	var result result.Result
-	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, &st, ui, g)
+	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, g, &st, ui)
 
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
@@ -165,14 +166,16 @@ func (r *Replica) executeReadOnlyBatch(
 	if len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		// We only allow synchronous intent resolution for consistent requests.
-		// Intent resolution is async/best-effort for inconsistent requests.
+		// Intent resolution is async/best-effort for inconsistent requests and
+		// for requests using the SkipLocked wait policy.
 		//
 		// An important case where this logic is necessary is for RangeLookup
 		// requests. In their case, synchronous intent resolution can deadlock
 		// if the request originated from the local node which means the local
 		// range descriptor cache has an in-flight RangeLookup request which
 		// prohibits any concurrent requests for the same range. See #17760.
-		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
+		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT &&
+			ba.WaitPolicy != lock.WaitPolicy_SkipLocked
 		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, allowSyncProcessing); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
@@ -245,9 +248,9 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	rw storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ba *roachpb.BatchRequest,
+	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
-	g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	log.Event(ctx, "executing read-only batch")
 
@@ -298,7 +301,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		now := timeutil.Now()
-		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, st, ui, true /* readOnly */)
+		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, g, st, ui, true /* readOnly */)
 		r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only.
