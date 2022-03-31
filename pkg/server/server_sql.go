@@ -426,6 +426,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.clock,
 			cfg.db,
 			cfg.circularInternalExecutor,
+			cfg.ClusterIDContainer,
 			cfg.nodeIDContainer,
 			cfg.sqlLivenessProvider,
 			cfg.Settings,

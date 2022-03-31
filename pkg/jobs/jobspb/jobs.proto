@@ -16,6 +16,7 @@ import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/tenant.proto";
@@ -958,7 +959,19 @@ message Payload {
   // the jobs.execution_errors.max_entries cluster setting.
   repeated RetriableExecutionFailure retriable_execution_failure_log = 32;
 
-  // NEXT ID: 34.
+  // CreationClusterID is populated at creation with the ClusterID, in case a
+  // job resuming later, needs to use this information, e.g. to determine if it
+  // has been restored into a different cluster, which might mean it should
+  // terminate, pause or update some other state.
+  bytes creation_cluster_id = 35 [(gogoproto.nullable) = false, (gogoproto.customname) = "CreationClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+
+  // CreationClusterVersion is populated at creation time with the then-active
+  // cluster version, in case a job resuming later needs to use this information
+  // to migrate or update the job.
+  roachpb.Version creation_cluster_version = 36 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 37.
 }
 
 message Progress {
