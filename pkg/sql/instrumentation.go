@@ -196,11 +196,12 @@ func (ih *instrumentationHelper) Setup(
 			// collection is enabled so that stats are shown in the traces, but
 			// no extra work is needed by the instrumentationHelper.
 			ih.collectExecStats = true
-			// We still, however, want to finish the instrumentationHelper in
-			// case we're collecting a bundle. We also capture the span in order
-			// to fetch the trace from it, but the span won't be finished.
+			// We always want to finish the instrumentationHelper in order
+			// to record the execution statistics. Note that we capture the
+			// span in order to fetch the trace from it, but the span won't be
+			// finished.
 			ih.sp = sp
-			return ctx, ih.collectBundle
+			return ctx, true /* needFinish */
 		}
 	} else {
 		if buildutil.CrdbTestBuild {
@@ -244,7 +245,7 @@ func (ih *instrumentationHelper) Finish(
 	cfg *ExecutorConfig,
 	statsCollector sqlstats.StatsCollector,
 	txnStats *execstats.QueryLevelStats,
-	collectTxnExecStats bool,
+	collectExecStats bool,
 	p *planner,
 	ast tree.Statement,
 	stmtRawSQL string,
@@ -314,7 +315,7 @@ func (ih *instrumentationHelper) Finish(
 				log.Warningf(ctx, "unable to record statement exec stats: %s", err)
 			}
 		}
-		if collectTxnExecStats || ih.implicitTxn {
+		if collectExecStats || ih.implicitTxn {
 			txnStats.Accumulate(queryLevelStats)
 		}
 	}
