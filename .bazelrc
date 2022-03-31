@@ -1,19 +1,39 @@
+# Define a set up flag aliases, so people can use `--cross` instead of the
+# longer `//build/toolchains:cross_flag`.
+build --flag_alias=crdb_test=//build/toolchains:crdb_test_flag
+build --flag_alias=cross=//build/toolchains:cross_flag
+build --flag_alias=dev=//build/toolchains:dev_flag
+build --flag_alias=lintonbuild=//build/toolchains:nogo_flag
+build --flag_alias=nolintonbuild=//build/toolchains:nonogo_explicit_flag
+build --flag_alias=with_ui=//pkg/ui:with_ui_flag
+
+build:cross --cross
+build:dev --dev
+build:lintonbuild --lintonbuild
+build:nolintonbuild --nolintonbuild
+# Note: nonogo is classically the name of the nolintonbuild configuration.
+build:nonogo --nolintonbuild
+build:test --crdb_test
+build:with_ui --with_ui
+
+# Basic settings.
 build --define gotags=bazel,gss
 build --experimental_proto_descriptor_sets_include_source_info
 build --incompatible_strict_action_env --incompatible_enable_cc_toolchain_resolution
 build --symlink_prefix=_bazel/
 test --config=test --experimental_ui_max_stdouterr_bytes=10485760
-build:with_ui --define cockroach_with_ui=y
-build:test --define crdb_test=y
+build --ui_event_filters=-DEBUG
+query --ui_event_filters=-DEBUG
+clean --ui_event_filters=-WARNING
+info --ui_event_filters=-WARNING
+
 build:race --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1 --test_sharding_strategy=disabled
 test:test --test_env=TZ=
 test:race --test_timeout=1200,6000,18000,72000
 
-build --ui_event_filters=-DEBUG
-query --ui_event_filters=-DEBUG
-
 # CI should always run with `--config=ci`.
 build:ci --experimental_convenience_symlinks=ignore
+build:ci --lintonbuild
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
 test:ci --test_env=GO_TEST_WRAP_TESTV=1
@@ -23,7 +43,6 @@ test:ci --test_output=errors
 test:ci --test_tmpdir=/artifacts/tmp
 
 build:cross --stamp
-build:cross --define cockroach_cross=y
 
 # Cross-compilation configurations. Add e.g. --config=crosslinux to turn these on.
 # Generally these should be used for development builds. Each cross config has
@@ -52,12 +71,9 @@ build:crosslinuxarmbase --config=cross
 # NB: This is consumed in `BUILD` files (see build/toolchains/BUILD.bazel).
 build:devdarwinx86_64 --platforms=//build/toolchains:darwin_x86_64
 build:devdarwinx86_64 --config=dev
-build:dev --define cockroach_bazel_dev=y
 build:dev --stamp --workspace_status_command=./build/bazelutil/stamp.sh
 build:dev --action_env=PATH
 build:dev --host_action_env=PATH
-
-build:nonogo --define cockroach_nonogo=y
 
 try-import %workspace%/.bazelrc.user
 
