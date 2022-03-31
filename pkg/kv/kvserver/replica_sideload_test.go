@@ -769,6 +769,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			os,
 			tc.repl.store.Engine().NewBatch,
 			func() {},
+			nil, /* bytesSentCounter */
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -890,6 +891,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			failingOS,
 			tc.repl.store.Engine().NewBatch,
 			func() {},
+			nil, /* bytesSentCounter */
 		)
 		if !errors.HasType(err, (*errMustRetrySnapshotDueToTruncation)(nil)) {
 			t.Fatal(err)

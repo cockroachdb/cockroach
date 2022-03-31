@@ -488,6 +488,18 @@ var (
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeSnapshotRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.rcvd-bytes",
+		Help:        "Number of snapshot bytes received",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotSentBytes = metric.Metadata{
+		Name:        "range.snapshots.sent-bytes",
+		Help:        "Number of snapshot bytes sent",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeRaftLeaderTransfers = metric.Metadata{
 		Name:        "range.raftleadertransfers",
 		Help:        "Number of raft leader transfers",
@@ -1207,6 +1219,8 @@ type StoreMetrics struct {
 	RangeSnapshotsAppliedForInitialUpreplication *metric.Counter
 	RangeSnapshotsAppliedByNonVoters             *metric.Counter
 	RangeRaftLeaderTransfers                     *metric.Counter
+	RangeSnapshotRcvdBytes                       *metric.Counter
+	RangeSnapshotSentBytes                       *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -1591,6 +1605,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotsAppliedByVoters: metric.NewCounter(metaRangeSnapshotsAppliedByVoters),
 		RangeSnapshotsAppliedForInitialUpreplication: metric.NewCounter(metaRangeSnapshotsAppliedForInitialUpreplication),
 		RangeSnapshotsAppliedByNonVoters:             metric.NewCounter(metaRangeSnapshotsAppliedByNonVoter),
+		RangeSnapshotRcvdBytes:                       metric.NewCounter(metaRangeSnapshotRcvdBytes),
+		RangeSnapshotSentBytes:                       metric.NewCounter(metaRangeSnapshotSentBytes),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 
 		// Raft processing metrics.
