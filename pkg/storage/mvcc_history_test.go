@@ -13,6 +13,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -54,14 +55,15 @@ import (
 //
 // resolve_intent t=<name> k=<key> [status=<txnstatus>]
 // check_intent   k=<key> [none]
+// add_lock       t=<name> k=<key>
 //
 // cput      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
 // del       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
+// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
+// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
@@ -203,8 +205,12 @@ func TestMVCCHistories(t *testing.T) {
 				// a transaction object. When set, the last modified txn
 				// object is reported in the result buffer at the end.
 				txnChange := false
+				// locksChange indicates whether some command has modified
+				// the lock table. When set, the lock table is reported in
+				// the result buffer at the end.
+				locksChange := false
 
-				reportResults := func(printTxn, printData bool) {
+				reportResults := func(printTxn, printData, printLocks bool) {
 					if printTxn && e.results.txn != nil {
 						buf.Printf("txn: %v\n", e.results.txn)
 					}
@@ -218,6 +224,21 @@ func TestMVCCHistories(t *testing.T) {
 								buf.Printf("error reading data: (%T:) %v\n", err, err)
 							}
 						}
+					}
+					if printLocks {
+						var ks []string
+						for k := range e.locks {
+							ks = append(ks, k)
+						}
+						sort.Strings(ks)
+						buf.Printf("lock-table: {")
+						for i, k := range ks {
+							if i > 0 {
+								buf.Printf(", ")
+							}
+							buf.Printf("%s:%s", k, e.locks[k].ID)
+						}
+						buf.Printf("}\n")
 					}
 				}
 
@@ -288,6 +309,7 @@ func TestMVCCHistories(t *testing.T) {
 					cmd := e.getCmd()
 					txnChange = txnChange || cmd.typ == typTxnUpdate
 					dataChange = dataChange || cmd.typ == typDataUpdate
+					locksChange = locksChange || cmd.typ == typLocksUpdate
 
 					if trace {
 						// If tracing is also requested by the datadriven input,
@@ -306,7 +328,7 @@ func TestMVCCHistories(t *testing.T) {
 						// If tracing is enabled, we report the intermediate results
 						// after each individual step in the script.
 						// This may modify foundErr too.
-						reportResults(cmd.typ == typTxnUpdate, cmd.typ == typDataUpdate)
+						reportResults(cmd.typ == typTxnUpdate, cmd.typ == typDataUpdate, cmd.typ == typLocksUpdate)
 					}
 
 					if foundErr != nil {
@@ -318,14 +340,14 @@ func TestMVCCHistories(t *testing.T) {
 
 				if !trace {
 					// If we were not tracing, no results were printed yet. Do it now.
-					if txnChange || dataChange {
+					if txnChange || dataChange || locksChange {
 						buf.SafeString(">> at end:\n")
 					}
-					reportResults(txnChange, dataChange)
+					reportResults(txnChange, dataChange, locksChange)
 				}
 
 				signalError := e.t.Errorf
-				if txnChange || dataChange {
+				if txnChange || dataChange || locksChange {
 					// We can't recover from an error and continue
 					// to proceed further tests, because the state
 					// may have changed from what the test may be expecting.
@@ -379,6 +401,7 @@ const (
 	typReadOnly cmdType = iota
 	typTxnUpdate
 	typDataUpdate
+	typLocksUpdate
 )
 
 // commands is the list of all supported script commands.
@@ -395,6 +418,7 @@ var commands = map[string]cmd{
 	"resolve_intent": {typDataUpdate, cmdResolveIntent},
 	// TODO(nvanbenschoten): test "resolve_intent_range".
 	"check_intent": {typReadOnly, cmdCheckIntent},
+	"add_lock":     {typLocksUpdate, cmdAddLock},
 
 	"clear_range": {typDataUpdate, cmdClearRange},
 	"cput":        {typDataUpdate, cmdCPut},
@@ -579,6 +603,13 @@ func cmdCheckIntent(e *evalCtx) error {
 	return nil
 }
 
+func cmdAddLock(e *evalCtx) error {
+	txn := e.getTxn(mandatory)
+	key := e.getKey()
+	e.locks[string(key)] = txn
+	return nil
+}
+
 func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	return e.engine.ClearMVCCRangeAndIntents(key, endKey)
@@ -668,6 +699,10 @@ func cmdGet(e *evalCtx) error {
 	if e.hasArg("inconsistent") {
 		opts.Inconsistent = true
 		opts.Txn = nil
+	}
+	if e.hasArg("skipLocked") {
+		opts.SkipLocked = true
+		opts.LockTable = e.newLockTableView(txn)
 	}
 	if e.hasArg("tombstones") {
 		opts.Tombstones = true
@@ -772,6 +807,10 @@ func cmdScan(e *evalCtx) error {
 		opts.Inconsistent = true
 		opts.Txn = nil
 	}
+	if e.hasArg("skipLocked") {
+		opts.SkipLocked = true
+		opts.LockTable = e.newLockTableView(txn)
+	}
 	if e.hasArg("tombstones") {
 		opts.Tombstones = true
 	}
@@ -846,6 +885,7 @@ type evalCtx struct {
 	td         *datadriven.TestData
 	txns       map[string]*roachpb.Transaction
 	txnCounter uint128.Uint128
+	locks      map[string]*roachpb.Transaction
 }
 
 func newEvalCtx(ctx context.Context, engine Engine) *evalCtx {
@@ -854,6 +894,7 @@ func newEvalCtx(ctx context.Context, engine Engine) *evalCtx {
 		engine:     engine,
 		txns:       make(map[string]*roachpb.Transaction),
 		txnCounter: uint128.FromInts(0, 1),
+		locks:      make(map[string]*roachpb.Transaction),
 	}
 }
 
@@ -1040,6 +1081,27 @@ func (e *evalCtx) lookupTxn(txnName string) (*roachpb.Transaction, error) {
 		e.Fatalf("txn %s not open", txnName)
 	}
 	return txn, nil
+}
+
+func (e *evalCtx) newLockTableView(txn *roachpb.Transaction) LockTableView {
+	return &mockLockTableView{locks: e.locks, txn: txn}
+}
+
+// mockLockTableView is a mock implementation of LockTableView.
+type mockLockTableView struct {
+	locks map[string]*roachpb.Transaction
+	txn   *roachpb.Transaction
+}
+
+func (lt *mockLockTableView) IsKeyLocked(k roachpb.Key) (bool, *enginepb.TxnMeta) {
+	holder, ok := lt.locks[string(k)]
+	if !ok {
+		return false, nil
+	}
+	if lt.txn != nil && lt.txn.ID == holder.ID {
+		return false, nil
+	}
+	return true, &holder.TxnMeta
 }
 
 func toKey(s string) roachpb.Key {
