@@ -46,6 +46,134 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 3"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Extra fields.
+
+send crdb_only
+Query {"String": "CREATE TABLE copy_hidden_table (id INT, nv TEXT NOT VISIBLE, t TEXT)"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "COPY copy_hidden_table FROM STDIN"}
+CopyData {"Data": "1\tblah\tbad\tpk\n"}
+CopyDone
+----
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"ErrorResponse","Code":"22P04","Message":"expected 2 values, got 4"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "COPY copy_hidden_table FROM STDIN CSV"}
+CopyData {"Data": "2,blah,bad,pk\n"}
+CopyDone
+----
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"ErrorResponse","Code":"22P04","Message":"read CSV record: record on line 1: wrong number of fields"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "COPY copy_hidden_table FROM STDIN"}
+CopyData {"Data": "3\tgood\n"}
+CopyDone
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Set copy_expect_and_ignore_not_visible_columns - now it should be allowed.
+# We insert 4 columns because the rowid column is also implicit.
+send crdb_only
+Query {"String": "SET copy_expect_and_ignore_not_visible_columns = true"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "COPY copy_hidden_table FROM STDIN"}
+CopyData {"Data": "1\tblah\tgood\tpk\n"}
+CopyDone
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "COPY copy_hidden_table FROM STDIN CSV"}
+CopyData {"Data": "2,blah,good,pk\n"}
+CopyDone
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "COPY copy_hidden_table FROM STDIN"}
+CopyData {"Data": "4\tnow_bad\n"}
+CopyDone
+----
+
+until crdb_only keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"ErrorResponse","Code":"22P04","Message":"expected 4 values, got 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SELECT *, nv FROM copy_hidden_table ORDER BY id"}
+----
+
+until ignore=RowDescription crdb_only
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"good"},null]}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"good"},null]}
+{"Type":"DataRow","Values":[{"text":"3"},{"text":"good"},null]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SET copy_expect_and_ignore_not_visible_columns = false"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # Invalid ESCAPE syntax.
 send
 Query {"String": "COPY t FROM STDIN ESCAPE 'xxx'"}

@@ -2025,6 +2025,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`copy_expect_and_ignore_not_visible_columns`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`copy_expect_and_ignore_not_visible_columns`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("copy_expect_and_ignore_not_visible_columns", s)
+			if err != nil {
+				return err
+			}
+			m.SetCopyExpectAndIgnoreNotVisibleColumns(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().CopyExpectAndIgnoreNotVisibleColumns), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
