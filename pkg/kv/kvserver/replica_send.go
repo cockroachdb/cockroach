@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
@@ -1088,10 +1089,36 @@ func (r *Replica) collectSpans(
 
 	// Note that we are letting locking readers be considered for optimistic
 	// evaluation. This is correct, though not necessarily beneficial.
-	considerOptEval := ba.IsReadOnly() && ba.IsAllTransactional() && ba.Header.MaxSpanRequestKeys > 0 &&
+	considerOptEval := ba.IsReadOnly() && ba.IsAllTransactional() &&
 		optimisticEvalLimitedScans.Get(&r.ClusterSettings().SV)
-	// When considerOptEval, these are computed below and used to decide whether
-	// to actually do optimistic evaluation.
+
+	// If the request is using a SkipLocked wait policy, we always perform
+	// optimistic evaluation. In Replica.collectSpansRead, SkipLocked reads are
+	// able to constraint their read spans down to point reads on just those keys
+	// that were returned and were not already locked. This means that there is a
+	// good chance that some or all of the write latches that the SkipLocked read
+	// would have blocked on won't overlap with the keys that the request ends up
+	// returning, so they won't conflict when checking for optimistic conflicts.
+	//
+	// Concretely, SkipLocked reads can ignore write latches when:
+	// 1. a key is first being written to non-transactionally (or through 1PC)
+	//    and its write is in flight.
+	// 2. a key is locked and its value is being updated by a write from its
+	//    transaction that is in flight.
+	// 3. a key is locked and the lock is being removed by intent resolution.
+	//
+	// In all three of these cases, optimistic evaluation improves concurrency
+	// because the SkipLocked request does not return the key that is currently
+	// write latched. However, SkipLocked reads will fail optimistic evaluation
+	// if they return a key that is write latched. For instance, it can fail if
+	// it returns a key that is being updated without first being locked.
+	optEvalForSkipLocked := considerOptEval && ba.Header.WaitPolicy == lock.WaitPolicy_SkipLocked
+
+	// If the request is using a key limit, we may want it to perform optimistic
+	// evaluation, depending on how large the limit is.
+	considerOptEvalForLimit := considerOptEval && ba.Header.MaxSpanRequestKeys > 0
+	// When considerOptEvalForLimit, these are computed below and used to decide
+	// whether to actually do optimistic evaluation.
 	hasScans := false
 	numGets := 0
 
@@ -1107,7 +1134,7 @@ func (r *Replica) collectSpans(
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
 			cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans, r.Clock().MaxOffset())
-			if considerOptEval {
+			if considerOptEvalForLimit {
 				switch inner.(type) {
 				case *roachpb.ScanRequest, *roachpb.ReverseScanRequest:
 					hasScans = true
@@ -1132,12 +1159,12 @@ func (r *Replica) collectSpans(
 		}
 	}
 
-	requestEvalKind = concurrency.PessimisticEval
-	if considerOptEval {
+	optEvalForLimit := false
+	if considerOptEvalForLimit {
 		// Evaluate batches optimistically if they have a key limit which is less
 		// than the upper bound on number of keys that can be returned for this
 		// batch. For scans, the upper bound is the number of live keys on the
-		// Range. For gets, it is the minimum of he number of live keys on the
+		// Range. For gets, it is the minimum of the number of live keys on the
 		// Range and the number of gets. Ignoring write latches and locks can be
 		// beneficial because it can help avoid waiting on writes to keys that the
 		// batch will never actually need to read due to the overestimate of its
@@ -1161,8 +1188,13 @@ func (r *Replica) collectSpans(
 			upperBoundKeys = int64(numGets)
 		}
 		if ba.Header.MaxSpanRequestKeys < upperBoundKeys {
-			requestEvalKind = concurrency.OptimisticEval
+			optEvalForLimit = true
 		}
+	}
+
+	requestEvalKind = concurrency.PessimisticEval
+	if optEvalForSkipLocked || optEvalForLimit {
+		requestEvalKind = concurrency.OptimisticEval
 	}
 
 	return latchSpans, lockSpans, requestEvalKind, nil
