@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -554,9 +555,16 @@ func (b *SSTBatcher) addSSTable(
 					req.SSTTimestampToRequestTimestamp = b.batchTS
 				}
 
-				ba := roachpb.BatchRequest{Header: roachpb.Header{Timestamp: b.batchTS}}
+				ba := roachpb.BatchRequest{
+					Header: roachpb.Header{Timestamp: b.batchTS},
+					AdmissionHeader: roachpb.AdmissionHeader{
+						Priority:                 int32(admission.LowPri),
+						CreateTime:               timeutil.Now().UnixNano(),
+						Source:                   roachpb.AdmissionHeader_FROM_SQL,
+						NoMemoryReservedAtSource: true,
+					},
+				}
 				ba.Add(req)
-
 				beforeSend := timeutil.Now()
 				br, pErr := b.db.NonTransactionalSender().Send(ctx, ba)
 				sendTime := timeutil.Since(beforeSend)
