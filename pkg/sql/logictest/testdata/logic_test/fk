@@ -1006,7 +1006,6 @@ SELECT job_type FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND
  (description LIKE 'GC for updating table "a"%' OR
   description = 'GC for DROP TABLE a');
 ----
-SCHEMA CHANGE GC
 
 statement ok
 DROP TABLE b

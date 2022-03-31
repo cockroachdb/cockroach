@@ -138,7 +138,7 @@ upsert descriptor #106
   +  state: DROP
   +  version: "2"
 delete comment for descriptor #106 of type SchemaCommentType
-create job #1 (non-cancelable: true): "schema change job"
+create job #1 (non-cancelable: true): "DROP SCHEMA db.sc"
   descriptor IDs: [104 106]
 # end PreCommitPhase
 commit transaction #1
@@ -506,7 +506,7 @@ upsert descriptor #108
   -  version: "1"
   +  version: "2"
 delete all comments for table descriptors [108]
-create job #1 (non-cancelable: true): "schema change job"
+create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
   descriptor IDs: [108]
 # end PreCommitPhase
 commit transaction #1
@@ -1176,7 +1176,7 @@ upsert descriptor #110
   +  state: DROP
   +  version: "2"
 delete comment for descriptor #107 of type SchemaCommentType
-create job #1 (non-cancelable: true): "schema change job"
+create job #1 (non-cancelable: true): "DROP SCHEMA db.sc CASCADE"
   descriptor IDs: [104 107 109 110]
 # end PreCommitPhase
 commit transaction #1
@@ -1429,7 +1429,7 @@ upsert descriptor #105
 delete comment for descriptor #104 of type DatabaseCommentType
 delete comment for descriptor #105 of type SchemaCommentType
 delete role settings for database on #104
-create job #1 (non-cancelable: true): "schema change job"
+create job #1 (non-cancelable: true): "DROP DATABASE db CASCADE"
   descriptor IDs: [104 105]
 # end PreCommitPhase
 commit transaction #1
@@ -4227,7 +4227,7 @@ delete comment for descriptor #112 of type SchemaCommentType
 delete comment for descriptor #113 of type SchemaCommentType
 delete all comments for table descriptors [114 115 116 117 118 119 120 121 122 125]
 delete role settings for database on #111
-create job #1 (non-cancelable: true): "schema change job"
+create job #1 (non-cancelable: true): "DROP DATABASE db1 CASCADE"
   descriptor IDs: [111 112 113 114 115 116 117 118 119 120 121 122 123 124 125]
 # end PreCommitPhase
 commit transaction #1
