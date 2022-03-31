@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1479,6 +1480,7 @@ func injectTableStats(
 	}
 
 	// Insert each statistic.
+StatsLoop:
 	for i := range jsonStats {
 		s := &jsonStats[i]
 		h, err := s.GetHistogram(&params.p.semaCtx, params.EvalContext())
@@ -1499,7 +1501,11 @@ func injectTableStats(
 		for _, colName := range s.Columns {
 			col, err := desc.FindColumnWithName(tree.Name(colName))
 			if err != nil {
-				return err
+				params.p.BufferClientNotice(
+					params.ctx,
+					pgnotice.Newf("column %q does not exist", colName),
+				)
+				continue StatsLoop
 			}
 			if err := columnIDs.Append(tree.NewDInt(tree.DInt(col.GetID()))); err != nil {
 				return err
