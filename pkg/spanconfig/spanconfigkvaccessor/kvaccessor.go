@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -53,6 +54,7 @@ type KVAccessor struct {
 	// opening a fresh txn.
 	optionalTxn *kv.Txn
 	settings    *cluster.Settings
+	clock       *hlc.Clock
 
 	// configurationsTableFQN is typically 'system.public.span_configurations',
 	// but left configurable for ease-of-testing.
@@ -68,6 +70,7 @@ func New(
 	db *kv.DB,
 	ie sqlutil.InternalExecutor,
 	settings *cluster.Settings,
+	clock *hlc.Clock,
 	configurationsTableFQN string,
 	knobs *spanconfig.TestingKnobs,
 ) *KVAccessor {
@@ -75,7 +78,7 @@ func New(
 		panic(fmt.Sprintf("unabled to parse configurations table FQN: %s", configurationsTableFQN))
 	}
 
-	return newKVAccessor(db, ie, settings, configurationsTableFQN, knobs, nil /* optionalTxn */)
+	return newKVAccessor(db, ie, settings, clock, configurationsTableFQN, knobs, nil /* optionalTxn */)
 }
 
 // WithTxn is part of the KVAccessor interface.
@@ -83,7 +86,7 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 	if k.optionalTxn != nil {
 		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithTxn(...) chained multiple times?)")
 	}
-	return newKVAccessor(k.db, k.ie, k.settings, k.configurationsTableFQN, k.knobs, txn)
+	return newKVAccessor(k.db, k.ie, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn)
 }
 
 // GetAllSystemSpanConfigsThatApply is part of the spanconfig.KVAccessor
@@ -153,21 +156,59 @@ func (k *KVAccessor) GetSpanConfigRecords(
 
 // UpdateSpanConfigRecords is part of the KVAccessor interface.
 func (k *KVAccessor) UpdateSpanConfigRecords(
-	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
+	ctx context.Context,
+	toDelete []spanconfig.Target,
+	toUpsert []spanconfig.Record,
+	leaseStartTime hlc.Timestamp,
+	leaseExpirationTime hlc.Timestamp,
 ) error {
 	if k.optionalTxn != nil {
+		if k.optionalTxn.ReadTimestamp().Less(leaseStartTime) {
+			return errors.AssertionFailedf(
+				"scoped transaction's read timestamp is below the supplied lease start time",
+			)
+		}
+		if err := k.optionalTxn.UpdateDeadline(ctx, leaseExpirationTime); err != nil {
+			return errors.Wrapf(err, "scoped transaction's deadline cannot be updated")
+		}
 		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, k.optionalTxn)
 	}
 
+	if err := k.waitForLeaseStart(ctx, leaseStartTime); err != nil {
+		return err
+	}
+	// Given that our clock reading is past the supplied leaseStartTime now,
+	// we can go ahead and create a transaction and proceed to perform the
+	// update.
 	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Set the deadline of the transaction so that it commits before the
+		// lease of the job on behalf of which the KVAccessor is acting
+		// expires.
+		if leaseExpirationTime.Less(txn.ReadTimestamp()) {
+			return newRetryableLeaseExpiredError()
+		}
+		if err := txn.UpdateDeadline(ctx, leaseExpirationTime); err != nil {
+			return err
+		}
 		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, txn)
 	})
+}
+
+func (k *KVAccessor) waitForLeaseStart(ctx context.Context, leaseStartTime hlc.Timestamp) error {
+	if fn := k.knobs.KVAccessorUpdateLeaseStartWaitInterceptor; fn != nil {
+		fn()
+	}
+	if err := k.clock.SleepUntil(ctx, leaseStartTime); err != nil {
+		return errors.Wrapf(err, "waiting for lease start time to be valid")
+	}
+	return nil
 }
 
 func newKVAccessor(
 	db *kv.DB,
 	ie sqlutil.InternalExecutor,
 	settings *cluster.Settings,
+	clock *hlc.Clock,
 	configurationsTableFQN string,
 	knobs *spanconfig.TestingKnobs,
 	optionalTxn *kv.Txn,
@@ -178,6 +219,7 @@ func newKVAccessor(
 	return &KVAccessor{
 		db:                     db,
 		ie:                     ie,
+		clock:                  clock,
 		optionalTxn:            optionalTxn,
 		settings:               settings,
 		configurationsTableFQN: configurationsTableFQN,
@@ -251,7 +293,6 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 	if txn == nil {
 		log.Fatalf(ctx, "expected non-nil txn")
 	}
-
 	if err := validateUpdateArgs(toDelete, toUpsert); err != nil {
 		return err
 	}

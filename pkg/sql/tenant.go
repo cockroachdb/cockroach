@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -171,7 +172,7 @@ func CreateTenantRecord(
 	toUpsert := []spanconfig.Record{record}
 	scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
 	return scKVAccessor.UpdateSpanConfigRecords(
-		ctx, nil /* toDelete */, toUpsert,
+		ctx, nil, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 	)
 }
 
@@ -487,7 +488,9 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		for i, record := range records {
 			toDelete[i] = record.GetTarget()
 		}
-		return scKVAccessor.UpdateSpanConfigRecords(ctx, toDelete, nil /* toUpsert */)
+		return scKVAccessor.UpdateSpanConfigRecords(
+			ctx, toDelete, nil, hlc.MinTimestamp, hlc.MaxTimestamp,
+		)
 	})
 	return errors.Wrapf(err, "deleting tenant %d record", info.ID)
 }

@@ -23,6 +23,7 @@ go_library(
         "//pkg/spanconfig",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
+        "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
