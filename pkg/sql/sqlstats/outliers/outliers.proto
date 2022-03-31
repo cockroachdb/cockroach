@@ -1,0 +1,35 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.outliers;
+option go_package = "outliers";
+
+import "gogoproto/gogo.proto";
+
+message Outlier {
+  message Session {
+    bytes id = 1 [(gogoproto.customname) = "ID"];
+  }
+
+  message Transaction {
+    bytes id = 1 [(gogoproto.customname) = "ID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  }
+
+  message Statement {
+    bytes id = 1 [(gogoproto.customname) = "ID"];
+    double latencyInSeconds = 2;
+  }
+
+  Session session = 1;
+  Transaction transaction = 2;
+  Statement statement = 3;
+}

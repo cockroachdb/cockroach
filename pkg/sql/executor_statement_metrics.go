@@ -193,6 +193,8 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{
+		SessionID:       ex.sessionID.Uint128,
+		StatementID:     planner.stmt.QueryID.Uint128,
 		AutoRetryCount:  automaticRetryCount,
 		RowsAffected:    rowsAffected,
 		ParseLatency:    parseLat,

@@ -159,6 +159,8 @@ func (s *Container) RecordStatement(
 		}
 	}
 
+	s.outliersRegistry.ObserveStatement(value.SessionID, value.StatementID, value.ServiceLatency)
+
 	return stats.ID, nil
 }
 
@@ -266,6 +268,8 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.ExecStats.NetworkMessages.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.NetworkMessages))
 		stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
 	}
+
+	s.outliersRegistry.ObserveTransaction(value.SessionID, value.TransactionID)
 
 	return nil
 }
