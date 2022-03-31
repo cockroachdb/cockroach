@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -671,26 +672,54 @@ func MVCCBlindPutProto(
 	return MVCCBlindPut(ctx, writer, ms, key, timestamp, localTimestamp, value, txn)
 }
 
+// LockTableView is a transaction-bound view into an in-memory collections of
+// key-level locks. The set of per-key locks stored in the in-memory lock table
+// structure overlaps with those stored in the persistent lock table keyspace
+// (i.e. intents produced by an MVCCKeyAndIntentsIterKind iterator), but one is
+// not a subset of the other. There are locks only stored in the in-memory lock
+// table (i.e. unreplicated locks) and locks only stored in the persistent lock
+// table keyspace (i.e. replicated locks that have yet to be "discovered").
+type LockTableView interface {
+	// IsKeyLockedByConflictingTxn returns whether the specified key is locked by
+	// a conflicting transaction, given the caller's own desired locking strength.
+	// If so, the lock holder is returned. A transaction's own lock does not
+	// appear to be locked to itself (false is returned). The method is used by
+	// requests in conjunction with the SkipLocked wait policy to determine which
+	// keys they should skip over during evaluation.
+	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
+}
+
 // MVCCGetOptions bundles options for the MVCCGet family of functions.
 type MVCCGetOptions struct {
 	// See the documentation for MVCCGet for information on these parameters.
 	Inconsistent     bool
+	SkipLocked       bool
 	Tombstones       bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
 	Uncertainty      uncertainty.Interval
 	// MemoryAccount is used for tracking memory allocations.
 	MemoryAccount *mon.BoundAccount
+	// LockTable is used to determine whether keys are locked in the in-memory
+	// lock table when scanning with the SkipLocked option.
+	LockTable LockTableView
 }
 
 func (opts *MVCCGetOptions) validate() error {
 	if opts.Inconsistent && opts.Txn != nil {
 		return errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
+	if opts.Inconsistent && opts.SkipLocked {
+		return errors.Errorf("cannot allow inconsistent reads with skip locked option")
+	}
 	if opts.Inconsistent && opts.FailOnMoreRecent {
 		return errors.Errorf("cannot allow inconsistent reads with fail on more recent option")
 	}
 	return nil
+}
+
+func (opts *MVCCGetOptions) errOnIntents() bool {
+	return !opts.Inconsistent && !opts.SkipLocked
 }
 
 func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCIterator {
@@ -719,6 +748,13 @@ func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCItera
 //
 // If the timestamp is specified as hlc.Timestamp{}, the value is expected to be
 // "inlined". See MVCCPut().
+//
+// When reading in "skip locked" mode, a key that is locked by a transaction
+// other than the reader is not included in the result set and does not result
+// in a WriteIntentError. Instead, the key is included in the encountered intent
+// result parameter so that it can be resolved asynchronously. In this mode, the
+// LockTableView provided in the options is consulted any observed key to
+// determine whether it is locked with an unreplicated lock.
 //
 // When reading in "fail on more recent" mode, a WriteTooOldError will be
 // returned if the read observes a version with a timestamp above the read
@@ -760,10 +796,12 @@ func mvccGet(
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
 		memAccount:       opts.MemoryAccount,
+		lockTable:        opts.LockTable,
 		start:            key,
 		ts:               timestamp,
 		maxKeys:          1,
 		inconsistent:     opts.Inconsistent,
+		skipLocked:       opts.SkipLocked,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
 		keyBuf:           mvccScanner.keyBuf,
@@ -783,7 +821,7 @@ func mvccGet(
 	if err != nil {
 		return optionalValue{}, nil, err
 	}
-	if !opts.Inconsistent && len(intents) > 0 {
+	if opts.errOnIntents() && len(intents) > 0 {
 		return optionalValue{}, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
 
@@ -2327,6 +2365,7 @@ func mvccScanToBytes(
 	*mvccScanner = pebbleMVCCScanner{
 		parent:                 iter,
 		memAccount:             opts.MemoryAccount,
+		lockTable:              opts.LockTable,
 		reverse:                opts.Reverse,
 		start:                  key,
 		end:                    endKey,
@@ -2338,6 +2377,7 @@ func mvccScanToBytes(
 		wholeRows:              opts.WholeRowsOfSize > 1, // single-KV rows don't need processing
 		maxIntents:             opts.MaxIntents,
 		inconsistent:           opts.Inconsistent,
+		skipLocked:             opts.SkipLocked,
 		tombstones:             opts.Tombstones,
 		failOnMoreRecent:       opts.FailOnMoreRecent,
 		keyBuf:                 mvccScanner.keyBuf,
@@ -2371,7 +2411,7 @@ func mvccScanToBytes(
 		return MVCCScanResult{}, err
 	}
 
-	if !opts.Inconsistent && len(res.Intents) > 0 {
+	if opts.errOnIntents() && len(res.Intents) > 0 {
 		return MVCCScanResult{}, &roachpb.WriteIntentError{Intents: res.Intents}
 	}
 	return res, nil
@@ -2440,6 +2480,7 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 type MVCCScanOptions struct {
 	// See the documentation for MVCCScan for information on these parameters.
 	Inconsistent     bool
+	SkipLocked       bool
 	Tombstones       bool
 	Reverse          bool
 	FailOnMoreRecent bool
@@ -2487,16 +2528,26 @@ type MVCCScanOptions struct {
 	MaxIntents int64
 	// MemoryAccount is used for tracking memory allocations.
 	MemoryAccount *mon.BoundAccount
+	// LockTable is used to determine whether keys are locked in the in-memory
+	// lock table when scanning with the SkipLocked option.
+	LockTable LockTableView
 }
 
 func (opts *MVCCScanOptions) validate() error {
 	if opts.Inconsistent && opts.Txn != nil {
 		return errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
+	if opts.Inconsistent && opts.SkipLocked {
+		return errors.Errorf("cannot allow inconsistent reads with skip locked option")
+	}
 	if opts.Inconsistent && opts.FailOnMoreRecent {
 		return errors.Errorf("cannot allow inconsistent reads with fail on more recent option")
 	}
 	return nil
+}
+
+func (opts *MVCCScanOptions) errOnIntents() bool {
+	return !opts.Inconsistent && !opts.SkipLocked
 }
 
 // MVCCScanResult groups the values returned from an MVCCScan operation. Depending
@@ -2543,6 +2594,13 @@ type MVCCScanResult struct {
 //
 // Note that transactional scans must be consistent. Put another way, only
 // non-transactional scans may be inconsistent.
+//
+// When scanning in "skip locked" mode, keys that are locked by transactions
+// other than the reader are not included in the result set and do not result in
+// a WriteIntentError. Instead, these keys are included in the encountered
+// intents result parameter so that they can be resolved asynchronously. In this
+// mode, the LockTableView provided in the options is consulted for each key to
+// determine whether it is locked with an unreplicated lock.
 //
 // When scanning in "fail on more recent" mode, a WriteTooOldError will be
 // returned if the scan observes a version with a timestamp at or above the read

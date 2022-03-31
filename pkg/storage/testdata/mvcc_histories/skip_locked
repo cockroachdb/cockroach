@@ -1,0 +1,1195 @@
+## Test opts.SkipLocked.
+
+# Setup:
+#
+# k1: value   @ ts 11
+# k2: value   @ ts 12
+# k2: intent  @ ts 13
+# k3: intent  @ ts 14
+# k4: value   @ ts 15
+# k4: lock    @ ts 16
+# k5: value   @ ts 17
+#
+
+run ok
+txn_begin t=A ts=12,0
+txn_begin t=B ts=13,0
+txn_begin t=C ts=14,0
+txn_begin t=D ts=15,0
+txn_begin t=E ts=16,0
+----
+>> at end:
+txn: "E" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=16.000000000,0 wto=false gul=0,0
+
+run ok
+put k=k1 v=v1 ts=11,0
+put k=k2 v=v2 ts=12,0
+put k=k2 v=v3 ts=13,0 t=B
+put k=k3 v=v4 ts=14,0 t=C
+put k=k4 v=v5 ts=15,0
+put k=k5 v=v6 ts=17,0
+add_lock k=k4 t=E
+----
+>> at end:
+data: "k1"/11.000000000,0 -> /BYTES/v1
+meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0} ts=13.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k2"/13.000000000,0 -> /BYTES/v3
+data: "k2"/12.000000000,0 -> /BYTES/v2
+meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0} ts=14.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k3"/14.000000000,0 -> /BYTES/v4
+data: "k4"/15.000000000,0 -> /BYTES/v5
+data: "k5"/17.000000000,0 -> /BYTES/v6
+lock-table: {k4:00000000-0000-0000-0000-000000000005}
+
+# Test cases:
+#
+# for failOnMoreRecent in (true, false):
+#   for ts in (10, 11, 12, 13, 14, 15, 16, 17, 18):
+#     for txn in (nil, A, B, C, D, E):
+#       if txn != nil && txn.read_ts != ts: continue
+#       for op in (get, scan, revscan):
+#         testCase()
+#
+
+run ok
+get ts=10 k=k1 skipLocked
+----
+get: "k1" -> <no data>
+
+run ok
+get ts=10 k=k2 skipLocked
+----
+get: "k2" -> <no data>
+
+run ok
+get ts=10 k=k3 skipLocked
+----
+get: "k3" -> <no data>
+
+run ok
+get ts=10 k=k4 skipLocked
+----
+get: "k4" -> <no data>
+
+run ok
+get ts=10 k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=10 k=k1 end=k6 skipLocked
+----
+scan: "k1"-"k6" -> <no data>
+
+run ok
+scan ts=10 k=k1 end=k6 reverse skipLocked
+----
+scan: "k1"-"k6" -> <no data>
+
+run ok
+get ts=11 k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=11 k=k2 skipLocked
+----
+get: "k2" -> <no data>
+
+run ok
+get ts=11 k=k3 skipLocked
+----
+get: "k3" -> <no data>
+
+run ok
+get ts=11 k=k4 skipLocked
+----
+get: "k4" -> <no data>
+
+run ok
+get ts=11 k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=11 k=k1 end=k6 skipLocked
+----
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+scan ts=11 k=k1 end=k6 reverse skipLocked
+----
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=12 k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=12 k=k2 skipLocked
+----
+get: "k2" -> /BYTES/v2 @12.000000000,0
+
+run ok
+get ts=12 k=k3 skipLocked
+----
+get: "k3" -> <no data>
+
+run ok
+get ts=12 k=k4 skipLocked
+----
+get: "k4" -> <no data>
+
+run ok
+get ts=12 k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=12 k=k1 end=k6 skipLocked
+----
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k2" -> /BYTES/v2 @12.000000000,0
+
+run ok
+scan ts=12 k=k1 end=k6 reverse skipLocked
+----
+scan: "k2" -> /BYTES/v2 @12.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=12 t=A k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=12 t=A k=k2 skipLocked
+----
+get: "k2" -> /BYTES/v2 @12.000000000,0
+
+run ok
+get ts=12 t=A k=k3 skipLocked
+----
+get: "k3" -> <no data>
+
+run ok
+get ts=12 t=A k=k4 skipLocked
+----
+get: "k4" -> <no data>
+
+run ok
+get ts=12 t=A k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=12 t=A k=k1 end=k6 skipLocked
+----
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k2" -> /BYTES/v2 @12.000000000,0
+
+run ok
+scan ts=12 t=A k=k1 end=k6 reverse skipLocked
+----
+scan: "k2" -> /BYTES/v2 @12.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=13 k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=13 k=k2 skipLocked
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=13 k=k3 skipLocked
+----
+get: "k3" -> <no data>
+
+run ok
+get ts=13 k=k4 skipLocked
+----
+get: "k4" -> <no data>
+
+run ok
+get ts=13 k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=13 k=k1 end=k6 skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+scan ts=13 k=k1 end=k6 reverse skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=13 t=B k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=13 t=B k=k2 skipLocked
+----
+get: "k2" -> /BYTES/v3 @13.000000000,0
+
+run ok
+get ts=13 t=B k=k3 skipLocked
+----
+get: "k3" -> <no data>
+
+run ok
+get ts=13 t=B k=k4 skipLocked
+----
+get: "k4" -> <no data>
+
+run ok
+get ts=13 t=B k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=13 t=B k=k1 end=k6 skipLocked
+----
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k2" -> /BYTES/v3 @13.000000000,0
+
+run ok
+scan ts=13 t=B k=k1 end=k6 reverse skipLocked
+----
+scan: "k2" -> /BYTES/v3 @13.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=14 k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=14 k=k2 skipLocked
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=14 k=k3 skipLocked
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=14 k=k4 skipLocked
+----
+get: "k4" -> <no data>
+
+run ok
+get ts=14 k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=14 k=k1 end=k6 skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+scan ts=14 k=k1 end=k6 reverse skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=14 t=C k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=14 t=C k=k2 skipLocked
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=14 t=C k=k3 skipLocked
+----
+get: "k3" -> /BYTES/v4 @14.000000000,0
+
+run ok
+get ts=14 t=C k=k4 skipLocked
+----
+get: "k4" -> <no data>
+
+run ok
+get ts=14 t=C k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=14 t=C k=k1 end=k6 skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k3" -> /BYTES/v4 @14.000000000,0
+
+run ok
+scan ts=14 t=C k=k1 end=k6 reverse skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k3" -> /BYTES/v4 @14.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=15 k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=15 k=k2 skipLocked
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=15 k=k3 skipLocked
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=15 k=k4 skipLocked
+----
+get: "k4" -> /BYTES/v5 @15.000000000,0
+
+run ok
+get ts=15 k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=15 k=k1 end=k6 skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k4" -> /BYTES/v5 @15.000000000,0
+
+run ok
+scan ts=15 k=k1 end=k6 reverse skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k4" -> /BYTES/v5 @15.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=15 t=D k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=15 t=D k=k2 skipLocked
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=15 t=D k=k3 skipLocked
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=15 t=D k=k4 skipLocked
+----
+get: "k4" -> /BYTES/v5 @15.000000000,0
+
+run ok
+get ts=15 t=D k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=15 t=D k=k1 end=k6 skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k4" -> /BYTES/v5 @15.000000000,0
+
+run ok
+scan ts=15 t=D k=k1 end=k6 reverse skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k4" -> /BYTES/v5 @15.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=16 k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=16 k=k2 skipLocked
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=16 k=k3 skipLocked
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=16 k=k4 skipLocked
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run ok
+get ts=16 k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=16 k=k1 end=k6 skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+scan ts=16 k=k1 end=k6 reverse skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=16 t=E k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=16 t=E k=k2 skipLocked
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=16 t=E k=k3 skipLocked
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=16 t=E k=k4 skipLocked
+----
+get: "k4" -> /BYTES/v5 @15.000000000,0
+
+run ok
+get ts=16 t=E k=k5 skipLocked
+----
+get: "k5" -> <no data>
+
+run ok
+scan ts=16 t=E k=k1 end=k6 skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k4" -> /BYTES/v5 @15.000000000,0
+
+run ok
+scan ts=16 t=E k=k1 end=k6 reverse skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k4" -> /BYTES/v5 @15.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=17 k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=17 k=k2 skipLocked
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=17 k=k3 skipLocked
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=17 k=k4 skipLocked
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run ok
+get ts=17 k=k5 skipLocked
+----
+get: "k5" -> /BYTES/v6 @17.000000000,0
+
+run ok
+scan ts=17 k=k1 end=k6 skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k5" -> /BYTES/v6 @17.000000000,0
+
+run ok
+scan ts=17 k=k1 end=k6 reverse skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k5" -> /BYTES/v6 @17.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=18 k=k1 skipLocked
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=18 k=k2 skipLocked
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=18 k=k3 skipLocked
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=18 k=k4 skipLocked
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run ok
+get ts=18 k=k5 skipLocked
+----
+get: "k5" -> /BYTES/v6 @17.000000000,0
+
+run ok
+scan ts=18 k=k1 end=k6 skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k5" -> /BYTES/v6 @17.000000000,0
+
+run ok
+scan ts=18 k=k1 end=k6 reverse skipLocked
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k5" -> /BYTES/v6 @17.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+
+run error
+get ts=10 k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 11.000000000,1
+
+run ok
+get ts=10 k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=10 k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=10 k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=10 k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=10 k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 10.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=10 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 10.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+get ts=11 k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; wrote at 11.000000000,1
+
+run ok
+get ts=11 k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=11 k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=11 k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=11 k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=11 k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timestamp 11.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=11 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 11.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=12 k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=12 k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=12 k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=12 k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=12 k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=12 k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=12 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=12 t=A k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=12 t=A k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=12 t=A k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=12 t=A k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=12 t=A k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=12 t=A k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=12 t=A k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 12.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=13 k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=13 k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=13 k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=13 k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=13 k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=13 k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=13 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=13 t=B k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=13 t=B k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> /BYTES/v3 @13.000000000,0
+
+run ok
+get ts=13 t=B k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=13 t=B k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=13 t=B k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=13 t=B k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=13 t=B k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 13.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=14 k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=14 k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=14 k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=14 k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=14 k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=14 k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=14 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=14 t=C k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=14 t=C k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=14 t=C k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> /BYTES/v4 @14.000000000,0
+
+run ok
+get ts=14 t=C k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=14 t=C k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=14 t=C k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=14 t=C k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 14.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=15 k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=15 k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=15 k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=15 k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=15 k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=15 k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=15 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=15 t=D k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=15 t=D k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=15 t=D k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=15 t=D k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=15 t=D k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=15 t=D k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=15 t=D k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 15.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=16 k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=16 k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=16 k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=16 k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=16 k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=16 k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=16 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=16 t=E k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=16 t=E k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=16 t=E k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=16 t=E k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> /BYTES/v5 @15.000000000,0
+
+run error
+get ts=16 t=E k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=16 t=E k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=16 t=E k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 16.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=17 k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=17 k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=17 k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=17 k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run error
+get ts=17 k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=17 k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; wrote at 17.000000000,1
+
+run error
+scan ts=17 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1"-"k6" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k5" at timestamp 17.000000000,0 too old; wrote at 17.000000000,1
+
+run ok
+get ts=18 k=k1 skipLocked failOnMoreRecent
+----
+get: "k1" -> /BYTES/v1 @11.000000000,0
+
+run ok
+get ts=18 k=k2 skipLocked failOnMoreRecent
+----
+get: "k2" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> <no data>
+
+run ok
+get ts=18 k=k3 skipLocked failOnMoreRecent
+----
+get: "k3" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> <no data>
+
+run ok
+get ts=18 k=k4 skipLocked failOnMoreRecent
+----
+get: "k4" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> <no data>
+
+run ok
+get ts=18 k=k5 skipLocked failOnMoreRecent
+----
+get: "k5" -> /BYTES/v6 @17.000000000,0
+
+run ok
+scan ts=18 k=k1 end=k6 skipLocked failOnMoreRecent
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: "k1" -> /BYTES/v1 @11.000000000,0
+scan: "k5" -> /BYTES/v6 @17.000000000,0
+
+run ok
+scan ts=18 k=k1 end=k6 reverse skipLocked failOnMoreRecent
+----
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: "k1" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: "k5" -> /BYTES/v6 @17.000000000,0
+scan: "k1" -> /BYTES/v1 @11.000000000,0
