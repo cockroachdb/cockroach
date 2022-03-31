@@ -27,10 +27,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
+
+// NB: don't change the string here; this will cause cross-version issues since
+// this singleton is used as a marker.
+var errMarkCanRetryInvalidLease = errors.New("should retry with valid lease start time")
+
+func wrapRetryableKVAccessorLeaseInvalid(err error) error {
+	return errors.Mark(err, errMarkCanRetryInvalidLease)
+}
+
+// IsLeaseInvalidRetryableError detects whether an error emitted by the
+// KVAccessor failed because the lease information in the request was invalid
+// but is likely to succeed when retried again.
+func IsLeaseInvalidRetryableError(err error) bool {
+	return errors.Is(err, errMarkCanRetryInvalidLease)
+}
 
 // batchSizeSetting is a hidden cluster setting to control how many span config
 // records we access in a single batch, beyond which we start paginating.
@@ -153,14 +169,22 @@ func (k *KVAccessor) GetSpanConfigRecords(
 
 // UpdateSpanConfigRecords is part of the KVAccessor interface.
 func (k *KVAccessor) UpdateSpanConfigRecords(
-	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
+	ctx context.Context,
+	toDelete []spanconfig.Target,
+	toUpsert []spanconfig.Record,
+	leaseStartTime hlc.Timestamp,
+	leaseExpirationTime hlc.Timestamp,
 ) error {
 	if k.optionalTxn != nil {
-		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, k.optionalTxn)
+		return k.updateSpanConfigRecordsWithTxn(
+			ctx, toDelete, toUpsert, k.optionalTxn, leaseStartTime, leaseExpirationTime,
+		)
 	}
 
 	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, txn)
+		return k.updateSpanConfigRecordsWithTxn(
+			ctx, toDelete, toUpsert, txn, leaseStartTime, leaseExpirationTime,
+		)
 	})
 }
 
@@ -246,10 +270,56 @@ func (k *KVAccessor) getSpanConfigRecordsWithTxn(
 }
 
 func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
-	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record, txn *kv.Txn,
+	ctx context.Context,
+	toDelete []spanconfig.Target,
+	toUpsert []spanconfig.Record,
+	txn *kv.Txn,
+	leaseStartTime hlc.Timestamp,
+	leaseExpirationTime hlc.Timestamp,
 ) error {
 	if txn == nil {
 		log.Fatalf(ctx, "expected non-nil txn")
+	}
+
+	// Ensure the commit timestamp of the transaction being created here is within
+	// the interval of the job on behalf of which the KVAccessor is acting.
+	txnCommitTimestamp := txn.CommitTimestamp()
+	if k.knobs != nil && !k.knobs.KVAccessorOverrideUpdateTransactionTimestamp.IsEmpty() {
+		txnCommitTimestamp = k.knobs.KVAccessorOverrideUpdateTransactionTimestamp
+	}
+	if leaseExpirationTime.Less(txnCommitTimestamp) {
+		log.Infof(
+			ctx,
+			"txn commit timestamp %s is after the lease expiration time %s",
+			txnCommitTimestamp,
+			leaseExpirationTime,
+		)
+		// TODO(XXX): Does it make sense to mark this error retryable if the lease
+		// seems expired? I think it does, given the caller could have extended its
+		// lease in the meantime and the next time around it wouldn't be invalid
+		// here.
+		return wrapRetryableKVAccessorLeaseInvalid(
+			errors.Newf(
+				"KVAccessor txn commit timestamp %s is not less than the lease expiration time %s",
+				txnCommitTimestamp,
+				leaseExpirationTime,
+			),
+		)
+	}
+	if txnCommitTimestamp.Less(leaseStartTime) {
+		log.Infof(
+			ctx,
+			"txn commit timestamp %s is not after the lease start time %s",
+			txnCommitTimestamp,
+			leaseStartTime,
+		)
+		return wrapRetryableKVAccessorLeaseInvalid(
+			errors.Newf(
+				"KVAccessor txn commit timestamp %s is not after the lease start time %s",
+				txnCommitTimestamp,
+				leaseStartTime,
+			),
+		)
 	}
 
 	if err := validateUpdateArgs(toDelete, toUpsert); err != nil {

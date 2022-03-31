@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -43,10 +44,17 @@ type KVAccessor interface {
 	// Targets are not allowed to overlap with each other. When divvying up an
 	// existing target into multiple others with distinct configs, callers must
 	// issue deletes for the previous target and upserts for the new records.
+	//
+	// The updates being requested are performed transactionally and at a
+	// timestamp within the [leaseStartTime, leaseExpirationTime) interval. In
+	// practice, this is the lease interval of the reconciliation job on behalf of
+	// which the KVAccessor is acting.
 	UpdateSpanConfigRecords(
 		ctx context.Context,
 		toDelete []Target,
 		toUpsert []Record,
+		leaseStartTime hlc.Timestamp,
+		leaseExpirationTime hlc.Timestamp,
 	) error
 
 	// WithTxn returns a KVAccessor that runs using the given transaction (with
@@ -184,9 +192,11 @@ type Reconciler interface {
 	//
 	// [1]: It's possible for system.{zones,descriptor} to have been GC-ed away;
 	//      think suspended tenants.
+	// TODO(arul): write words about the session being passed in.
 	Reconcile(
 		ctx context.Context,
 		startTS hlc.Timestamp,
+		session sqlliveness.Session,
 		onCheckpoint func() error,
 	) error
 

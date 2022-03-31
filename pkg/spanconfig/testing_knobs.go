@@ -65,6 +65,10 @@ type TestingKnobs struct {
 	// of internally.
 	KVAccessorBatchSizeOverrideFn func() int
 
+	// KVAccessorOverrideUpdateTransactionTimestamp, if set, overrides the commit
+	// timestamp used by UpdateSpanConfigRecords.
+	KVAccessorOverrideUpdateTransactionTimestamp hlc.Timestamp
+
 	// SQLWatcherOnEventInterceptor, if set, is invoked when the SQLWatcher
 	// receives an event on one of its rangefeeds.
 	SQLWatcherOnEventInterceptor func() error

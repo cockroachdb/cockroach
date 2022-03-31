@@ -316,6 +316,11 @@ message GetSpanConfigsResponse {
 // Targets are not allowed to overlap with other targets in the same list. They
 // are, however, allowed to overlap across lists. This is necessary to support
 // the delete+upsert semantics described above.
+//
+// The delete/upsert updates are performed transactionally and the timestamp of
+// the transaction is within the [leaseStartTime, leaseExpirationTime) supplied.
+// Typically, this corresponds to the lease interval of the auto span config
+// reconciliation job issuing the request.
 message UpdateSpanConfigsRequest {
   reserved 1, 2;
 
@@ -325,6 +330,16 @@ message UpdateSpanConfigsRequest {
   // ToUpsert captures the targets we want to upsert and the configs we want
   // to upsert with.
   repeated SpanConfigEntry to_upsert = 4 [(gogoproto.nullable) = false];
+
+  // LeaseStartTime is the lease start timestamp of the request issuer.
+  // Typically, this is the lease start time of the auto span config
+  // reconciliation job.
+  util.hlc.Timestamp lease_start_time = 6 [(gogoproto.nullable) = false];
+
+  // LeaseExpirationTime is the lease expiration timestamp of the request
+  // issuer. Typically, this is the lease expiration time of the auto span
+  // config reconciliation job.
+  util.hlc.Timestamp lease_expiration_time = 5 [(gogoproto.nullable) = false];
 };
 
 message UpdateSpanConfigsResponse { };

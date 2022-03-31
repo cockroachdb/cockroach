@@ -189,7 +189,9 @@ func TestDataDriven(t *testing.T) {
 
 			case "update":
 				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, d.Input)
-				require.NoError(t, kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+				require.NoError(t, kvAccessor.UpdateSpanConfigRecords(
+					ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+				))
 				lastUpdateTS = ts.Clock().Now()
 
 			case "start":

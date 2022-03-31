@@ -20,6 +20,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sqlliveness",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",

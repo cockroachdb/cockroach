@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -101,7 +102,9 @@ func TestDataDriven(t *testing.T) {
 				return output.String()
 			case "kvaccessor-update":
 				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, d.Input)
-				if err := accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
+				if err := accessor.UpdateSpanConfigRecords(
+					ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+				); err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
 				return "ok"
@@ -159,7 +162,9 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 			start := timeutil.Now()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				require.NoError(b, accessor.UpdateSpanConfigRecords(ctx, nil, records))
+				require.NoError(b, accessor.UpdateSpanConfigRecords(
+					ctx, nil, records, hlc.MinTimestamp, hlc.MaxTimestamp,
+				))
 			}
 			duration := timeutil.Since(start)
 
@@ -236,35 +241,45 @@ span [j,k)
 	{ // Seed the accessor with 10 entries.
 		batches, batchSize = 0, 100
 		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, upsert10Confs)
-		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.NoError(t, accessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+		))
 		require.Equal(t, 1, batches)
 	}
 
 	{ // Lower the batch size, we should observe more batches.
 		batches, batchSize = 0, 2
 		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, upsert10Confs)
-		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.NoError(t, accessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+		))
 		require.Equal(t, 5, batches)
 	}
 
 	{ // Try another multiple, and with deletions.
 		batches, batchSize = 0, 5
 		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, delete10Confs)
-		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.NoError(t, accessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+		))
 		require.Equal(t, 2, batches)
 	}
 
 	{ // Try a multiple that doesn't factor exactly (re-inserting original entries).
 		batches, batchSize = 0, 3
 		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, upsert10Confs)
-		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.NoError(t, accessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+		))
 		require.Equal(t, 4, batches)
 	}
 
 	{ // Try another multiple using both upserts and deletes.
 		batches, batchSize = 0, 4
 		toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, delete10Confs+upsert10Confs)
-		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
+		require.NoError(t, accessor.UpdateSpanConfigRecords(
+			ctx, toDelete, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
+		))
 		require.Equal(t, 6, batches) // 3 batches for the updates, 3 more for the deletions
 	}
 
@@ -275,4 +290,74 @@ span [j,k)
 		require.NoError(t, err)
 		require.Equal(t, 2, batches)
 	}
+}
+
+// TestKVAccessorUpdatesHandleLeaseIntervals ensures the KVAccessor updates are
+// only performed under a valid lease.
+func TestKVAccessorUpdatesHandleLeaseIntervals(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
+
+	ts := func(nanos int) hlc.Timestamp {
+		return hlc.Timestamp{
+			WallTime: int64(nanos),
+		}
+	}
+
+	accessor := spanconfigkvaccessor.New(
+		tc.Server(0).DB(),
+		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+		tc.Server(0).ClusterSettings(),
+		dummySpanConfigurationsFQN,
+		&spanconfig.TestingKnobs{
+			KVAccessorOverrideUpdateTransactionTimestamp: ts(5),
+		},
+	)
+
+	t.Run("lease-start-invalid", func(t *testing.T) {
+		// Issue a request with the lease starting after the commit timestamp.
+		err := accessor.UpdateSpanConfigRecords(
+			ctx, nil /* toUpdate */, nil /* toUpsert */, ts(6), ts(10),
+		)
+		require.Error(t, err)
+		require.True(t, spanconfigkvaccessor.IsLeaseInvalidRetryableError(err))
+		testutils.IsError(err, "commit timestamp .* is not after the lease start time")
+	})
+
+	t.Run("lease-expiration-invalid", func(t *testing.T) {
+		// Issue a request with the lease expiring before the commit timestamp.
+		err := accessor.UpdateSpanConfigRecords(
+			ctx, nil /* toUpdate */, nil /* toUpsert */, ts(1), ts(4),
+		)
+		require.Error(t, err)
+		require.True(t, spanconfigkvaccessor.IsLeaseInvalidRetryableError(err))
+		testutils.IsError(err, "commit timestamp .* is not after the lease start time")
+	})
+
+	t.Run("lease-valid", func(t *testing.T) {
+		// We expect things to succeed if the lease expires at the same time as the
+		// commit timestamp.
+		err := accessor.UpdateSpanConfigRecords(
+			ctx, nil /* toUpdate */, nil /* toUpsert */, ts(1), ts(5),
+		)
+		require.NoError(t, err)
+		// Ditto for lease starting at the commit timestamp.
+		err = accessor.UpdateSpanConfigRecords(
+			ctx, nil /* toUpdate */, nil /* toUpsert */, ts(5), ts(10),
+		)
+		require.NoError(t, err)
+		// Things should succeed if the commit timestamp is comfortably sandwiched
+		// between the start and expiration timestamps as well.
+		err = accessor.UpdateSpanConfigRecords(
+			ctx, nil /* toUpdate */, nil /* toUpsert */, ts(1), ts(10),
+		)
+		require.NoError(t, err)
+	})
 }

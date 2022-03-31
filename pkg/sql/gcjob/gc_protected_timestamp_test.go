@@ -249,7 +249,7 @@ func (m *manualKVAccessor) GetAllSystemSpanConfigsThatApply(
 }
 
 func (m *manualKVAccessor) UpdateSpanConfigRecords(
-	context.Context, []spanconfig.Target, []spanconfig.Record,
+	context.Context, []spanconfig.Target, []spanconfig.Record, hlc.Timestamp, hlc.Timestamp,
 ) error {
 	panic("unimplemented")
 }
