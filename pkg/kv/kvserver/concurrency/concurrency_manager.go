@@ -732,6 +732,15 @@ func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
 	return g.lm.CheckOptimisticNoConflicts(g.lg, g.Req.LatchSpans)
 }
 
+// IsKeyLocked returns whether the provided key is locked by a conflicting
+// transaction in the Guard's snapshot of the lock table. If so, the lock
+// holder is returned. The method is used by requests in conjunction with the
+// SkipLocked wait policy to determine which keys they should skip over during
+// evaluation.
+func (g *Guard) IsKeyLocked(key roachpb.Key) (bool, *enginepb.TxnMeta) {
+	return g.ltg.IsKeyLocked(key)
+}
+
 func (g *Guard) moveLatchGuard() latchGuard {
 	lg := g.lg
 	g.lg = nil

@@ -64,6 +64,7 @@ import (
 // handle-txn-push-error      req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
 //
 // check-opt-no-conflicts req=<req-name>
+// is-key-locked          req=<req-name> key=<key>
 //
 // on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u]
 // on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
@@ -344,6 +345,20 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				reqs, _ := scanRequests(t, d, c)
 				latchSpans, lockSpans := c.collectSpans(t, g.Req.Txn, g.Req.Timestamp, reqs)
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(latchSpans, lockSpans))
+
+			case "is-key-locked":
+				var reqName string
+				d.ScanArgs(t, "req", &reqName)
+				g, ok := c.guardsByReqName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				var key string
+				d.ScanArgs(t, "key", &key)
+				if ok, txn := g.IsKeyLocked(roachpb.Key(key)); ok {
+					return fmt.Sprintf("locked: true, holder: %s", txn.ID)
+				}
+				return "locked: false"
 
 			case "on-lock-acquired":
 				var reqName string

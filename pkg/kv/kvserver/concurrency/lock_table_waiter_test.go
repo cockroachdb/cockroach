@@ -85,6 +85,9 @@ func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool) {
 	return true
 }
+func (g *mockLockTableGuard) IsKeyLocked(roachpb.Key) (bool, *enginepb.TxnMeta) {
+	panic("unimplemented")
+}
 func (g *mockLockTableGuard) notify() { g.signal <- struct{}{} }
 
 // mockLockTable overrides TransactionIsFinalized, which is the only LockTable

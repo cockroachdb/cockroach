@@ -94,6 +94,7 @@ const (
 	updatesTSCacheOnErr                                       // commands which make read data available on errors
 	needsRefresh                                              // commands which require refreshes to avoid serializable retries
 	canBackpressure                                           // commands which deserve backpressure when a Range grows too large
+	canSkipLocked                                             // commands which can evaluate under the SkipLocked wait policy
 	bypassesReplicaCircuitBreaker                             // commands which bypass the replica circuit breaker, i.e. opt out of fail-fast
 	requiresClosedTSOlderThanStorageSnapshot                  // commands which read a replica's closed timestamp that is older than the state of the storage engine
 )
@@ -205,6 +206,12 @@ func CanBackpressure(args Request) bool {
 	return (args.flags() & canBackpressure) != 0
 }
 
+// CanSkipLocked returns whether the command can evaluate under the
+// SkipLocked wait policy.
+func CanSkipLocked(args Request) bool {
+	return (args.flags() & canSkipLocked) != 0
+}
+
 // BypassesReplicaCircuitBreaker returns whether the command bypasses
 // the per-Replica circuit breakers. These requests will thus hang when
 // addressed to an unavailable range (instead of failing fast).
@@ -224,6 +231,34 @@ type Request interface {
 	// ShallowCopy returns a shallow copy of the receiver.
 	ShallowCopy() Request
 	flags() flag
+}
+
+// LockingReadRequest is an interface used to expose the key-level locking
+// strength of a read-only request.
+type LockingReadRequest interface {
+	Request
+	KeyLockingStrength() lock.Strength
+}
+
+var _ LockingReadRequest = (*GetRequest)(nil)
+
+// KeyLockingStrength implements the LockingReadRequest interface.
+func (gr *GetRequest) KeyLockingStrength() lock.Strength {
+	return gr.KeyLocking
+}
+
+var _ LockingReadRequest = (*ScanRequest)(nil)
+
+// KeyLockingStrength implements the LockingReadRequest interface.
+func (sr *ScanRequest) KeyLockingStrength() lock.Strength {
+	return sr.KeyLocking
+}
+
+var _ LockingReadRequest = (*ReverseScanRequest)(nil)
+
+// KeyLockingStrength implements the LockingReadRequest interface.
+func (rsr *ReverseScanRequest) KeyLockingStrength() lock.Strength {
+	return rsr.KeyLocking
 }
 
 // SizedWriteRequest is an interface used to expose the number of bytes a
@@ -1221,7 +1256,7 @@ func flagForLockStrength(l lock.Strength) flag {
 
 func (gr *GetRequest) flags() flag {
 	maybeLocking := flagForLockStrength(gr.KeyLocking)
-	return isRead | isTxn | maybeLocking | updatesTSCache | needsRefresh
+	return isRead | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 func (*PutRequest) flags() flag {
@@ -1303,12 +1338,12 @@ func (*RevertRangeRequest) flags() flag {
 
 func (sr *ScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(sr.KeyLocking)
-	return isRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh
+	return isRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 func (rsr *ReverseScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(rsr.KeyLocking)
-	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh
+	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 // EndTxn updates the timestamp cache to prevent replays.

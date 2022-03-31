@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
@@ -121,5 +122,6 @@ type CommandArgs struct {
 	Now     hlc.ClockTimestamp
 	// *Stats should be mutated to reflect any writes made by the command.
 	Stats       *enginepb.MVCCStats
+	Concurrency *concurrency.Guard
 	Uncertainty uncertainty.Interval
 }

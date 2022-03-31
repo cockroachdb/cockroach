@@ -125,6 +125,7 @@ go_library(
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/closedts/tracker",
         "//pkg/kv/kvserver/concurrency",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/constraint",
         "//pkg/kv/kvserver/gc",
