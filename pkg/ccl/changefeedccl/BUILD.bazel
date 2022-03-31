@@ -208,6 +208,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/sqllivenesstestutils",
         "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/storage",
