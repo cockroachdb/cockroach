@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -510,14 +511,27 @@ func (c *Connector) GetSpanConfigRecords(
 // UpdateSpanConfigRecords implements the spanconfig.KVAccessor
 // interface.
 func (c *Connector) UpdateSpanConfigRecords(
-	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
+	ctx context.Context,
+	toDelete []spanconfig.Target,
+	toUpsert []spanconfig.Record,
+	leaseStartTime hlc.Timestamp,
+	leaseExpirationTime hlc.Timestamp,
 ) error {
 	return c.withClient(ctx, func(ctx context.Context, c *client) error {
-		_, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
-			ToDelete: spanconfig.TargetsToProtos(toDelete),
-			ToUpsert: spanconfig.RecordsToEntries(toUpsert),
+		resp, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
+			ToDelete:            spanconfig.TargetsToProtos(toDelete),
+			ToUpsert:            spanconfig.RecordsToEntries(toUpsert),
+			LeaseStartTime:      leaseStartTime,
+			LeaseExpirationTime: leaseExpirationTime,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		if resp.Error.IsSet() {
+			// Logical error; propagate as such.
+			return errors.DecodeError(ctx, resp.Error)
+		}
+		return nil
 	})
 }
 
