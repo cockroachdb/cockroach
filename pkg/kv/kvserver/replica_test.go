@@ -2760,11 +2760,11 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 	}
 }
 
-// TestReplicaLatchingOptimisticEvaluation verifies that limited scans
+// TestReplicaLatchingOptimisticEvaluationKeyLimit verifies that limited scans
 // evaluate optimistically without waiting for latches to be acquired. In some
 // cases, this allows them to avoid waiting on writes that their
 // over-estimated declared spans overlapped with.
-func TestReplicaLatchingOptimisticEvaluation(t *testing.T) {
+func TestReplicaLatchingOptimisticEvaluationKeyLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "point-reads", func(t *testing.T, pointReads bool) {
@@ -2883,6 +2883,138 @@ func TestReplicaLatchingOptimisticEvaluation(t *testing.T) {
 				}
 			})
 		}
+	})
+}
+
+// TestReplicaLatchingOptimisticEvaluationSkipLocked verifies that reads using
+// the SkipLocked wait policy evaluate optimistically without waiting for
+// latches to be acquired. In some cases, this allows them to avoid waiting on
+// latches that are touching the same keys but that the weaker isolation level
+// of SkipLocked allows the read to skip.
+func TestReplicaLatchingOptimisticEvaluationSkipLocked(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testutils.RunTrueAndFalse(t, "point-reads", func(t *testing.T, pointReads bool) {
+		testutils.RunTrueAndFalse(t, "locking-reads", func(t *testing.T, lockingReads bool) {
+			var baRead roachpb.BatchRequest
+			baRead.WaitPolicy = lock.WaitPolicy_SkipLocked
+			if pointReads {
+				gArgs1, gArgs2 := getArgsString("a"), getArgsString("b")
+				gArgs3, gArgs4 := getArgsString("c"), getArgsString("d")
+				if lockingReads {
+					gArgs1.KeyLocking = lock.Exclusive
+					gArgs2.KeyLocking = lock.Exclusive
+					gArgs3.KeyLocking = lock.Exclusive
+					gArgs4.KeyLocking = lock.Exclusive
+				}
+				baRead.Add(gArgs1, gArgs2, gArgs3, gArgs4)
+			} else {
+				// Split into two back-to-back scans for better test coverage.
+				sArgs1 := scanArgsString("a", "c")
+				sArgs2 := scanArgsString("c", "e")
+				if lockingReads {
+					sArgs1.KeyLocking = lock.Exclusive
+					sArgs2.KeyLocking = lock.Exclusive
+				}
+				baRead.Add(sArgs1, sArgs2)
+			}
+			// The state that will block two writes while holding latches.
+			var blockWriters atomic.Value
+			blockKey1, blockKey2 := roachpb.Key("c"), roachpb.Key("d")
+			blockWriters.Store(false)
+			blockCh := make(chan struct{})
+			blockedCh := make(chan struct{}, 1)
+			// Setup filter to block the writes.
+			tc := testContext{}
+			tsc := TestStoreConfig(nil)
+			tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
+				func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
+					// Make sure the direct GC path doesn't interfere with this test.
+					reqKey := filterArgs.Req.Header().Key
+					if !reqKey.Equal(blockKey1) && !reqKey.Equal(blockKey2) {
+						return nil
+					}
+					if filterArgs.Req.Method() == roachpb.Put && blockWriters.Load().(bool) {
+						blockedCh <- struct{}{}
+						<-blockCh
+					}
+					return nil
+				}
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+			// Write initial keys on some, but not all keys.
+			for _, k := range []string{"a", "b", "c"} {
+				pArgs := putArgs([]byte(k), []byte("value"))
+				_, pErr := tc.SendWrapped(&pArgs)
+				require.Nil(t, pErr)
+			}
+
+			// Write #1: lock key "c" and then write to it again in the same txn. Since
+			// the key is locked at the time the write is blocked and the SkipLocked
+			// read evaluates, the read skips over the key and does not conflict with
+			// the write's latches.
+			txn := newTransaction("locker", blockKey1, 0, tc.Clock())
+			txnH := roachpb.Header{Txn: txn}
+			putArgs1 := putArgs(blockKey1, []byte("value"))
+			_, pErr := tc.SendWrappedWith(txnH, &putArgs1)
+			require.Nil(t, pErr)
+			// Write to the blocked key again, and this time stall. Note that this could
+			// also be the ResolveIntent request that's removing the lock, which is
+			// likely an even more common cause of blocking today. However, we use a Put
+			// here because we may stop acquiring latches during intent resolution in
+			// the future and don't want this test to break when we do.
+			errCh := make(chan *roachpb.Error, 3)
+			blockWriters.Store(true)
+			go func() {
+				_, pErr := tc.SendWrappedWith(txnH, &putArgs1)
+				errCh <- pErr
+			}()
+			<-blockedCh
+
+			// Write #2: perform an initial write on key "d". Since the key is missing
+			// at the time the write is blocked and the SkipLocked read evaluates, the
+			// read skips over the key and does not conflict with the write's latches.
+			putArgs2 := putArgs(blockKey2, []byte("value"))
+			go func() {
+				_, pErr := tc.SendWrappedWith(txnH, &putArgs2)
+				errCh <- pErr
+			}()
+			<-blockedCh
+
+			// The writes are now blocked while holding latches. Issue the read.
+			blockWriters.Store(false)
+			var respKeys []roachpb.Key
+			go func() {
+				errCh <- func() *roachpb.Error {
+					br, pErr := tc.Sender().Send(ctx, baRead)
+					if pErr != nil {
+						return pErr
+					}
+					for i, req := range baRead.Requests {
+						resp := br.Responses[i]
+						if err := roachpb.ResponseKeyIterate(req.GetInner(), resp.GetInner(), func(k roachpb.Key) {
+							respKeys = append(respKeys, k)
+						}); err != nil {
+							return roachpb.NewError(err)
+						}
+					}
+					return nil
+				}()
+			}()
+
+			// The read should complete first.
+			require.Nil(t, <-errCh)
+			// The writes should complete next, after they are unblocked.
+			close(blockCh)
+			require.Nil(t, <-errCh)
+			require.Nil(t, <-errCh)
+
+			// The read should have only returned the unlocked keys.
+			expRespKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b")}
+			require.Equal(t, expRespKeys, respKeys)
+		})
 	})
 }
 
