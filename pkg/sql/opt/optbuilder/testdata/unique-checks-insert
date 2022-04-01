@@ -341,9 +341,61 @@ insert uniq
            └── first-agg [as=column3:10]
                 └── column3:10
 
-# On conflict clause references unique without index constraint.
+# On conflict clause references unique without index constraint. The insert
+# values are inlined in the uniqueness check.
 build
 INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT (w) DO NOTHING
+----
+insert uniq
+ ├── arbiter constraints: unique_w
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => uniq.k:1
+ │    ├── column2:9 => uniq.v:2
+ │    ├── column3:10 => uniq.w:3
+ │    ├── column4:11 => uniq.x:4
+ │    └── column5:12 => uniq.y:5
+ ├── upsert-distinct-on
+ │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    ├── grouping columns: column3:10!null
+ │    ├── anti-join (hash)
+ │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
+ │    │    │    └── (1, 2, 3, 4, 5)
+ │    │    ├── scan uniq
+ │    │    │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
+ │    │    └── filters
+ │    │         └── column3:10 = uniq.w:15
+ │    └── aggregations
+ │         ├── first-agg [as=column1:8]
+ │         │    └── column1:8
+ │         ├── first-agg [as=column2:9]
+ │         │    └── column2:9
+ │         ├── first-agg [as=column4:11]
+ │         │    └── column4:11
+ │         └── first-agg [as=column5:12]
+ │              └── column5:12
+ └── unique-checks
+      └── unique-checks-item: uniq(x,y)
+           └── project
+                ├── columns: x:30!null y:31!null
+                └── semi-join (hash)
+                     ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
+                     ├── values
+                     │    ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
+                     │    └── (1, 2, 3, 4, 5)
+                     ├── scan uniq
+                     │    └── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
+                     └── filters
+                          ├── x:30 = uniq.x:23
+                          ├── y:31 = uniq.y:24
+                          └── k:27 != uniq.k:20
+
+# On conflict clause references unique without index constraint. The insert
+# values are not inlined because they are not constant.
+build
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5), (6, 7, 8, 9, 10) ON CONFLICT (w) DO NOTHING
 ----
 insert uniq
  ├── arbiter constraints: unique_w
@@ -362,7 +414,8 @@ insert uniq
  │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
  │    │    ├── values
  │    │    │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
- │    │    │    └── (1, 2, 3, 4, 5)
+ │    │    │    ├── (1, 2, 3, 4, 5)
+ │    │    │    └── (6, 7, 8, 9, 10)
  │    │    ├── scan uniq
  │    │    │    └── columns: uniq.k:13!null uniq.v:14 uniq.w:15 uniq.x:16 uniq.y:17
  │    │    └── filters
@@ -410,7 +463,6 @@ insert uniq
  │    ├── column3:10 => uniq.w:3
  │    ├── column4:11 => uniq.x:4
  │    └── column5:12 => uniq.y:5
- ├── input binding: &1
  ├── upsert-distinct-on
  │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null column5:12!null
  │    ├── grouping columns: column3:10!null
@@ -438,14 +490,9 @@ insert uniq
                 ├── columns: x:30!null y:31!null
                 └── semi-join (hash)
                      ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
-                     ├── with-scan &1
+                     ├── values
                      │    ├── columns: k:27!null v:28!null w:29!null x:30!null y:31!null
-                     │    └── mapping:
-                     │         ├──  column1:8 => k:27
-                     │         ├──  column2:9 => v:28
-                     │         ├──  column3:10 => w:29
-                     │         ├──  column4:11 => x:30
-                     │         └──  column5:12 => y:31
+                     │    └── (1, 2, 3, 4, 5)
                      ├── scan uniq
                      │    └── columns: uniq.k:20!null uniq.v:21 uniq.w:22 uniq.x:23 uniq.y:24
                      └── filters
@@ -1368,6 +1415,13 @@ CREATE TABLE uniq_partial_constraint_and_index (
 # Use a pseudo-partial index as the only arbiter. Note that we use the "norm"
 # directive instead of "build" to ensure that partial index predicates are fully
 # normalized when choosing arbiter indexes.
+# TODO(mgartner): There is no need to plan a uniqueness check because the
+# pseudo-partial index arbiter ensures that the unique constraint is not
+# violated. In this particular case, with one constant row being inserted, the
+# unique check is normalized to an empty Values expression. One option is to
+# recognize an empty Values uniqueness check and eliminate it. Eliminating this
+# uniqueness check in more general cases would require recognizing that the
+# check is not necessary and not building it in the first place.
 norm
 INSERT INTO uniq_partial_constraint_and_index VALUES (1, 1, 1)
 ON CONFLICT (a) WHERE b > 10 DO NOTHING
@@ -1380,7 +1434,6 @@ insert uniq_partial_constraint_and_index
  │    ├── column2:7 => uniq_partial_constraint_and_index.a:2
  │    └── column3:8 => uniq_partial_constraint_and_index.b:3
  ├── partial index put columns: partial_index_put1:15
- ├── input binding: &1
  ├── project
  │    ├── columns: partial_index_put1:15!null column1:6!null column2:7!null column3:8!null
  │    ├── anti-join (cross)
@@ -1401,31 +1454,8 @@ insert uniq_partial_constraint_and_index
  │         └── true [as=partial_index_put1:15]
  └── unique-checks
       └── unique-checks-item: uniq_partial_constraint_and_index(a)
-           └── project
-                ├── columns: a:22!null
-                └── semi-join (hash)
-                     ├── columns: k:21!null a:22!null b:23!null
-                     ├── select
-                     │    ├── columns: k:21!null a:22!null b:23!null
-                     │    ├── with-scan &1
-                     │    │    ├── columns: k:21!null a:22!null b:23!null
-                     │    │    └── mapping:
-                     │    │         ├──  column1:6 => k:21
-                     │    │         ├──  column2:7 => a:22
-                     │    │         └──  column3:8 => b:23
-                     │    └── filters
-                     │         └── b:23 > 10
-                     ├── select
-                     │    ├── columns: uniq_partial_constraint_and_index.k:16!null uniq_partial_constraint_and_index.a:17 uniq_partial_constraint_and_index.b:18!null
-                     │    ├── scan uniq_partial_constraint_and_index
-                     │    │    ├── columns: uniq_partial_constraint_and_index.k:16!null uniq_partial_constraint_and_index.a:17 uniq_partial_constraint_and_index.b:18
-                     │    │    └── partial index predicates
-                     │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
-                     │    └── filters
-                     │         └── uniq_partial_constraint_and_index.b:18 > 10
-                     └── filters
-                          ├── a:22 = uniq_partial_constraint_and_index.a:17
-                          └── k:21 != uniq_partial_constraint_and_index.k:16
+           └── values
+                └── columns: a:22!null
 
 exec-ddl
 CREATE TABLE uniq_constraint_and_partial_index (
@@ -1639,3 +1669,45 @@ insert uniq_computed_pk
                      └── filters
                           ├── d:44 = uniq_computed_pk.d:35
                           └── (i:42 != uniq_computed_pk.i:33) OR (c_i_expr:45 != uniq_computed_pk.c_i_expr:36)
+
+exec-ddl
+CREATE TABLE uniq_default (
+  k INT PRIMARY KEY,
+  a INT DEFAULT (10),
+  b INT,
+  UNIQUE WITHOUT INDEX (a, b)
+)
+----
+
+# Inline default values in uniqueness check. The norm directive is used so that
+# the projection of the default value is normalized into the values expression.
+# This normalization is required for the values to be inlined in the constraint
+# check.
+norm
+INSERT INTO uniq_default (k, b) VALUES (1, 100)
+----
+insert uniq_default
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => uniq_default.k:1
+ │    ├── a_default:8 => uniq_default.a:2
+ │    └── column2:7 => uniq_default.b:3
+ ├── values
+ │    ├── columns: column1:6!null column2:7!null a_default:8!null
+ │    └── (1, 100, 10)
+ └── unique-checks
+      └── unique-checks-item: uniq_default(a,b)
+           └── semi-join (cross)
+                ├── columns: a:15!null b:16!null
+                ├── values
+                │    ├── columns: a:15!null b:16!null
+                │    └── (10, 100)
+                ├── select
+                │    ├── columns: uniq_default.k:9!null uniq_default.a:10!null uniq_default.b:11!null
+                │    ├── scan uniq_default
+                │    │    └── columns: uniq_default.k:9!null uniq_default.a:10 uniq_default.b:11
+                │    └── filters
+                │         ├── uniq_default.a:10 = 10
+                │         ├── uniq_default.b:11 = 100
+                │         └── uniq_default.k:9 != 1
+                └── filters (true)

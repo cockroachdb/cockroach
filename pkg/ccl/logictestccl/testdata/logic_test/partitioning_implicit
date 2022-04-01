@@ -731,74 +731,54 @@ vectorized: true
 ├── • insert
 │   │ into: t(pk, pk2, partition_by, a, b, c, d)
 │   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             size: 8 columns, 1 row
+│   └── • values
+│         size: 8 columns, 1 row
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • hash join (right semi)
-│           │ equality: (pk) = (column1)
-│           │ right cols are key
-│           │ pred: column3 != partition_by
+│       └── • cross join
 │           │
-│           ├── • scan
-│           │     missing stats
-│           │     table: t@t_a_idx
-│           │     spans: FULL SCAN
+│           ├── • values
+│           │     size: 1 column, 1 row
 │           │
-│           └── • scan buffer
-│                 label: buffer 1
+│           └── • limit
+│               │ count: 1
+│               │
+│               └── • filter
+│                   │ filter: pk = 1
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: t@t_a_idx
+│                         spans: [ - /0] [/2 - ]
 │
 ├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
-│       └── • hash join (right semi)
-│           │ equality: (b) = (column5)
-│           │ right cols are key
-│           │ pred: (column1 != pk) OR (column3 != partition_by)
+│       └── • cross join
 │           │
-│           ├── • scan
-│           │     missing stats
-│           │     table: t@t_b_key
-│           │     spans: FULL SCAN
+│           ├── • values
+│           │     size: 1 column, 1 row
 │           │
-│           └── • scan buffer
-│                 label: buffer 1
+│           └── • limit
+│               │ count: 1
+│               │
+│               └── • filter
+│                   │ filter: (b = 1) AND ((pk != 1) OR (partition_by != 1))
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: t@t_b_key
+│                         spans: FULL SCAN
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • limit
-            │ count: 1
-            │
-            └── • lookup join
-                │ table: t@t_pkey
-                │ equality: (partition_by, pk) = (partition_by,pk)
-                │ equality cols are key
-                │
-                └── • hash join
-                    │ equality: (c) = (column6)
-                    │ right cols are key
-                    │ pred: (column1 != pk) OR (column3 != partition_by)
-                    │
-                    ├── • scan
-                    │     missing stats
-                    │     table: t@t_c_key (partial index)
-                    │     spans: FULL SCAN
-                    │
-                    └── • filter
-                        │ estimated row count: 1
-                        │ filter: column7 > 100
-                        │
-                        └── • scan buffer
-                              label: buffer 1
+        └── • norows
 
 statement ok
 INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1), (2, 2, 2, 2, 2, 2, 2)
