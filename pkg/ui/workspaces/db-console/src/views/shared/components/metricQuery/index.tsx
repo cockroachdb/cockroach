@@ -39,29 +39,7 @@ import Long from "long";
 import { History } from "history";
 import { TimeWindow, TimeScale } from "src/redux/timeScale";
 import { PayloadAction } from "src/interfaces/action";
-
-/**
- * AxisUnits is an enumeration used to specify the type of units being displayed
- * on an Axis.
- */
-export enum AxisUnits {
-  /**
-   * Units are a simple count.
-   */
-  Count,
-  /**
-   * Units are a count of bytes.
-   */
-  Bytes,
-  /**
-   * Units are durations expressed in nanoseconds.
-   */
-  Duration,
-  /**
-   * Units are percentages expressed as fractional values of 1 (1.0 = 100%).
-   */
-  Percentage,
-}
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 /**
  * AxisProps represents the properties of an Axis being specified as part of a

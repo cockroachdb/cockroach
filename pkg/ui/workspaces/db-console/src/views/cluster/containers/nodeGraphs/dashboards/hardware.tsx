@@ -11,11 +11,7 @@
 import React from "react";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import {
-  Metric,
-  Axis,
-  AxisUnits,
-} from "src/views/shared/components/metricQuery";
+import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
 import {
   GraphDashboardProps,
@@ -23,6 +19,7 @@ import {
   storeIDsForNode,
 } from "./dashboardUtils";
 import { AvailableDiscCapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 // TODO(vilterp): tooltips
 

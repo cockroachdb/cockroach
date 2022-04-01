@@ -12,11 +12,8 @@ import React from "react";
 import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import {
-  Axis,
-  AxisUnits,
-  Metric,
-} from "src/views/shared/components/metricQuery";
+import { Axis, Metric } from "src/views/shared/components/metricQuery";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import {
   GraphDashboardProps,
