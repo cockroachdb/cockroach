@@ -101,6 +101,7 @@ const selectDatabases = createSelector(
       });
 
       const nodesByRegionString = getNodesByRegionString(nodes, nodeRegions);
+      const numIndexRecommendations = stats?.num_index_recommendations || 0;
 
       return {
         loading: !!details?.inFlight,
@@ -110,6 +111,7 @@ const selectDatabases = createSelector(
         tableCount: details?.data?.table_names?.length || 0,
         rangeCount: rangeCount,
         nodesByRegionString,
+        numIndexRecommendations,
         missingTables: missingTables.map(table => {
           return {
             loading: !!tableStats[generateTableID(database, table)]?.inFlight,
