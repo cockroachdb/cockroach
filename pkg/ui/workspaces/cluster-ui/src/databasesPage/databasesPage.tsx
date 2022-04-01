@@ -34,6 +34,7 @@ import {
 import { syncHistory, tableStatsClusterSetting } from "src/util";
 import classnames from "classnames/bind";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
+import { CircleFilled } from "../icon";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -86,6 +87,7 @@ export interface DatabasesPageDataDatabase {
   // String of nodes grouped by region in alphabetical order, e.g.
   // regionA(n1,n2), regionB(n3)
   nodesByRegionString?: string;
+  numIndexRecommendations: number;
 }
 
 // A "missing" table is one for which we were unable to gather size and range
@@ -204,6 +206,29 @@ export class DatabasesPage extends React.Component<
     }
   };
 
+  private renderIndexRecommendations = (
+    database: DatabasesPageDataDatabase,
+  ): React.ReactNode => {
+    const text =
+      database.numIndexRecommendations > 0
+        ? `${database.numIndexRecommendations} index ${
+            database.numIndexRecommendations > 1
+              ? "recommendations"
+              : "recommendation"
+          }`
+        : "None";
+    const classname =
+      database.numIndexRecommendations > 0
+        ? "index-recommendations-icon__exist"
+        : "index-recommendations-icon__none";
+    return (
+      <div>
+        <CircleFilled className={cx(classname)} />
+        <span>{text}</span>
+      </div>
+    );
+  };
+
   private columns: ColumnDescriptor<DatabasesPageDataDatabase>[] = [
     {
       title: (
@@ -280,6 +305,20 @@ export class DatabasesPage extends React.Component<
       className: cx("databases-table__col-node-regions"),
       name: "nodeRegions",
       hideIfTenant: true,
+    },
+    {
+      title: (
+        <Tooltip
+          placement="bottom"
+          title="Index recommendations will appear if the system detects improper index usage, such as the occurrence of unused indexes. Following index recommendations may help improve query performance."
+        >
+          Index recommendations
+        </Tooltip>
+      ),
+      cell: this.renderIndexRecommendations,
+      sort: database => database.numIndexRecommendations,
+      className: cx("databases-table__col-node-regions"),
+      name: "numIndexRecommendations",
     },
   ];
 

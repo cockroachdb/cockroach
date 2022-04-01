@@ -40,6 +40,10 @@
   &--primary {
     fill: $colors--primary-text;
   }
+
+  &--warning {
+    fill: $colors--functional-orange-3;
+  }
 }
 
 .page-container {
@@ -71,12 +75,11 @@
     letter-spacing: 0.33px;
   }
   &--label {
-    font-family: $font-family--base;
+    font-family: $font-family--semi-bold;
     font-size: $font-size--medium;
-    font-weight: $font-weight--bold;
     line-height: $line-height--medium-small;
     letter-spacing: 0.1px;
-    color: $colors--neutral-6;
+    color: $colors--neutral-7;
     margin-right: 5px;
     margin-bottom: 0;
   }
@@ -91,5 +94,16 @@
     letter-spacing: 0.1px;
     color: $popover-color;
     margin-bottom: 0;
+  }
+}
+
+.index-recommendations {
+  &__tooltip-anchor {
+    a {
+      &:hover {
+        opacity: 0.8;
+        text-decoration: underline;
+      }
+    }
   }
 }

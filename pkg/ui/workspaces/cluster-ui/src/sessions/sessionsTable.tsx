@@ -117,7 +117,6 @@ function formatStatementStart(session: ISession): string {
 
   return start.format(formatStr);
 }
-
 const SessionStatus = (props: { session: ISession }) => {
   const { session } = props;
   const status = session.active_queries.length > 0 ? "Active" : "Idle";
