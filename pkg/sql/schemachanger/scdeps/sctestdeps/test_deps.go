@@ -229,6 +229,31 @@ func (s *TestState) MayResolveTable(
 	return prefix, table
 }
 
+// MayResolveIndex implements the scbuild.CatalogReader interface.
+func (s *TestState) MayResolveIndex(
+	ctx context.Context, indexName tree.Name, prefix tree.ObjectNamePrefix,
+) (catalog.Index, tree.TableName) {
+	if !prefix.ExplicitCatalog || !prefix.ExplicitSchema {
+		panic("explicit db name and schema name are expected")
+	}
+	db, sc := s.mayResolvePrefix(prefix)
+	dsNames, dsIDs := s.ReadObjectNamesAndIDs(ctx, db.(catalog.DatabaseDescriptor), sc.(catalog.SchemaDescriptor))
+	for i, dsID := range dsIDs {
+		desc := s.MustReadDescriptor(ctx, dsID)
+		if tblDesc, ok := desc.(catalog.TableDescriptor); ok {
+			if !tblDesc.IsTable() {
+				continue
+			}
+			for _, index := range tblDesc.NonDropIndexes() {
+				if index.GetName() == string(indexName) {
+					return index, dsNames[i]
+				}
+			}
+		}
+	}
+	return nil, tree.TableName{}
+}
+
 // MayResolveType implements the scbuild.CatalogReader interface.
 func (s *TestState) MayResolveType(
 	ctx context.Context, name tree.UnresolvedObjectName,

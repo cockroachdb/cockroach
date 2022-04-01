@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -130,6 +132,45 @@ func (d *buildDeps) MayResolveTable(
 		return prefix, nil
 	}
 	return prefix, desc.(catalog.TableDescriptor)
+}
+
+// MayResolveIndex implements the scbuild.CatalogReader interface.
+// It iterates through all tables within the specified db.schema and returns the
+// first one found.
+func (d *buildDeps) MayResolveIndex(
+	ctx context.Context, indexName tree.Name, prefix tree.ObjectNamePrefix,
+) (catalog.Index, tree.TableName) {
+	if !prefix.ExplicitCatalog || !prefix.ExplicitSchema {
+		panic(pgerror.Newf(pgcode.InvalidParameterValue, "both database and schema should specified"))
+	}
+
+	found, resolvedPrefix, err := d.schemaResolver.LookupSchema(ctx, prefix.Catalog(), prefix.Schema())
+	if err != nil {
+		panic(err)
+	}
+	if !found {
+		panic(pgerror.Newf(pgcode.UndefinedSchema,
+			"schema %q in database %q not found", prefix.Schema(), prefix.Catalog()))
+	}
+
+	dsNames, dsIDs := d.CatalogReader().ReadObjectNamesAndIDs(ctx, resolvedPrefix.Database, resolvedPrefix.Schema)
+	flags := tree.ObjectLookupFlags{}
+	flags.Required = true
+	for i, dsID := range dsIDs {
+		desc := d.MustReadDescriptor(ctx, dsID)
+		if tblDesc, ok := desc.(catalog.TableDescriptor); ok {
+			if !tblDesc.IsTable() {
+				continue
+			}
+			for _, index := range tblDesc.NonDropIndexes() {
+				if index.GetName() == string(indexName) {
+					return index, dsNames[i]
+				}
+			}
+		}
+	}
+
+	return nil, tree.TableName{}
 }
 
 // MayResolveType implements the scbuild.CatalogReader interface.

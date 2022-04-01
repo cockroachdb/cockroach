@@ -21,7 +21,10 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.DatabaseComment) scop.Op {
-					return notImplemented(this)
+					return &scop.AddDatabaseComment{
+						DatabaseID: this.DatabaseID,
+						Comment:    this.Comment,
+					}
 				}),
 			),
 		),

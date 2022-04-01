@@ -91,6 +91,19 @@ func TestPlanDataDriven(t *testing.T) {
 					t.Logf("created relation with id %d", tableID)
 				}
 				return ""
+			case "descriptor-metadata":
+				stmts, err := parser.Parse(d.Input)
+				require.NoError(t, err)
+				for _, stmt := range stmts {
+					switch stmt.AST.(type) {
+					case *tree.CommentOnDatabase, *tree.CommentOnSchema, *tree.CommentOnTable, *tree.CommentOnColumn,
+						*tree.CommentOnIndex, *tree.CommentOnConstraint:
+						tdb.Exec(t, stmt.SQL)
+					default:
+						t.Fatal("not a supported descriptor metadata statement")
+					}
+				}
+				return ""
 			case "ops", "deps":
 				var plan scplan.Plan
 				sctestutils.WithBuilderDependenciesFromTestServer(s, func(deps scbuild.Dependencies) {

@@ -412,6 +412,13 @@ type CreateSchemaChangerJob struct {
 	NonCancelable bool
 }
 
+// AddTableComment is used to add a comment to a table.
+type AddTableComment struct {
+	mutationOp
+	TableID descpb.ID
+	Comment string
+}
+
 // RemoveAllTableComments is used to delete all comments associated with a
 // table when dropping a table.
 type RemoveAllTableComments struct {
@@ -425,16 +432,38 @@ type RemoveTableComment struct {
 	TableID descpb.ID
 }
 
+// AddDatabaseComment is used to add a comment to a database.
+type AddDatabaseComment struct {
+	mutationOp
+	DatabaseID descpb.ID
+	Comment    string
+}
+
 // RemoveDatabaseComment is used to delete a comment associated with a database.
 type RemoveDatabaseComment struct {
 	mutationOp
 	DatabaseID descpb.ID
 }
 
+// AddSchemaComment is used to add a comment to a schema.
+type AddSchemaComment struct {
+	mutationOp
+	SchemaID descpb.ID
+	Comment  string
+}
+
 // RemoveSchemaComment is used to delete a comment associated with a schema.
 type RemoveSchemaComment struct {
 	mutationOp
 	SchemaID descpb.ID
+}
+
+// AddIndexComment is used to add a comment to an index.
+type AddIndexComment struct {
+	mutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+	Comment string
 }
 
 // RemoveIndexComment is used to delete a comment associated with an index.
@@ -444,11 +473,27 @@ type RemoveIndexComment struct {
 	IndexID descpb.IndexID
 }
 
+// AddColumnComment is used to add a comment to a column.
+type AddColumnComment struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+	Comment  string
+}
+
 // RemoveColumnComment is used to delete a comment associated with a column.
 type RemoveColumnComment struct {
 	mutationOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
+}
+
+// AddConstraintComment is used to add a comment to a constraint.
+type AddConstraintComment struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+	Comment      string
 }
 
 // RemoveConstraintComment is used to delete a comment associated with a
