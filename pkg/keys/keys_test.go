@@ -673,11 +673,11 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		err string
 	}{
 		// Column ID suffix size is too large.
-		{es(1), "malformed table key"},
 		{es(1, 2), "malformed table key"},
 		// The table ID is invalid.
-		{es(200)[:1], "insufficient bytes to decode uvarint value"},
+		{es(200)[:1], "not a valid table key"},
 		// The index ID is invalid.
+		{es(1), "not a valid table key"},
 		{es(1, 200)[:2], "insufficient bytes to decode uvarint value"},
 		// The column ID suffix is invalid.
 		{es(1, 2, 200)[:3], "insufficient bytes to decode uvarint value"},
@@ -685,9 +685,9 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		// to int carelessly, results in -6.
 		{encoding.EncodeVarintAscending(tenSysCodec.TablePrefix(999), 322434), "malformed table key"},
 		// Same test cases, but for tenant 5.
-		{e5(1), "malformed table key"},
 		{e5(1, 2), "malformed table key"},
-		{e5(200)[:3], "insufficient bytes to decode uvarint value"},
+		{e5(200)[:3], "not a valid table key"},
+		{e5(1), "not a valid table key"},
 		{e5(1, 200)[:4], "insufficient bytes to decode uvarint value"},
 		{e5(1, 2, 200)[:5], "insufficient bytes to decode uvarint value"},
 		{encoding.EncodeVarintAscending(ten5Codec.TablePrefix(999), 322434), "malformed table key"},
