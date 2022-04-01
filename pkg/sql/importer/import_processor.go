@@ -181,7 +181,6 @@ func newReadImportDataProcessor(
 func (idp *readImportDataProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", idp.spec.JobID)
 	ctx = idp.StartInternal(ctx, readImportDataProcessorName)
-	log.Infof(ctx, "starting read import")
 	// We don't have to worry about this go routine leaking because next we loop over progCh
 	// which is closed only after the go routine returns.
 	go func() {
