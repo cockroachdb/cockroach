@@ -51,6 +51,9 @@ type batchInfoCollector struct {
 		numBatches, numTuples uint64
 	}
 
+	// batch is the last batch returned by the wrapped operator.
+	batch coldata.Batch
+
 	// stopwatch keeps track of the amount of time the wrapped operator spent
 	// doing work. Note that this will include all of the time that the operator's
 	// inputs spent doing work - this will be corrected when stats are reported
@@ -91,19 +94,27 @@ func (bic *batchInfoCollector) Init(ctx context.Context) {
 	bic.mu.Unlock()
 }
 
+func (bic *batchInfoCollector) next() {
+	bic.batch = bic.Operator.Next()
+}
+
 // Next is part of the colexecop.Operator interface.
 func (bic *batchInfoCollector) Next() coldata.Batch {
-	var batch coldata.Batch
 	bic.stopwatch.Start()
-	batch = bic.Operator.Next()
+	// Wrap the call to Next() with a panic catcher in order to get the correct
+	// execution time (e.g. in the statement bundle).
+	err := colexecerror.CatchVectorizedRuntimeError(bic.next)
 	bic.stopwatch.Stop()
-	if batch.Length() > 0 {
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	if bic.batch.Length() > 0 {
 		bic.mu.Lock()
 		bic.mu.numBatches++
-		bic.mu.numTuples += uint64(batch.Length())
+		bic.mu.numTuples += uint64(bic.batch.Length())
 		bic.mu.Unlock()
 	}
-	return batch
+	return bic.batch
 }
 
 // finishAndGetStats calculates the final execution statistics for the wrapped
