@@ -13,9 +13,16 @@ package tests
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -43,13 +50,14 @@ import (
 // configuration for the nightly roachtests. Any changes must be made to both
 // references of the name.
 const (
-	KMSRegionAEnvVar  = "AWS_KMS_REGION_A"
-	KMSRegionBEnvVar  = "AWS_KMS_REGION_B"
-	KMSKeyARNAEnvVar  = "AWS_KMS_KEY_ARN_A"
-	KMSKeyARNBEnvVar  = "AWS_KMS_KEY_ARN_B"
-	KMSKeyNameAEnvVar = "GOOGLE_KMS_KEY_A"
-	KMSKeyNameBEnvVar = "GOOGLE_KMS_KEY_B"
-	KMSGCSCredentials = "GOOGLE_EPHEMERAL_CREDENTIALS"
+	AWSObjectLockedRegion = "AWS_OBJECT_LOCKED_REGION"
+	KMSRegionAEnvVar      = "AWS_KMS_REGION_A"
+	KMSRegionBEnvVar      = "AWS_KMS_REGION_B"
+	KMSKeyARNAEnvVar      = "AWS_KMS_KEY_ARN_A"
+	KMSKeyARNBEnvVar      = "AWS_KMS_KEY_ARN_B"
+	KMSKeyNameAEnvVar     = "GOOGLE_KMS_KEY_A"
+	KMSKeyNameBEnvVar     = "GOOGLE_KMS_KEY_B"
+	KMSGCSCredentials     = "GOOGLE_EPHEMERAL_CREDENTIALS"
 
 	// rows2TiB is the number of rows to import to load 2TB of data (when
 	// replicated).
@@ -166,7 +174,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 func registerBackupMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:            "backup/mixed-version",
+		Name:            "backup/mixed-version/upgrade",
 		Owner:           registry.OwnerBulkIO,
 		Cluster:         r.MakeClusterSpec(4),
 		EncryptAtRandom: true,
@@ -216,6 +224,86 @@ func registerBackupMixedVersion(r registry.Registry) {
 				successfulBackupStep(3),
 				// Backup from old node with revision history should succeed.
 				successfulBackupStep(4, "revision_history"),
+			)
+			u.run(ctx, t)
+		},
+	})
+
+	r.Add(registry.TestSpec{
+		Name:            "backup/mixed-version/write-once-checkpoint",
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         r.MakeClusterSpec(4),
+		EncryptAtRandom: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// An empty string means that the cockroach binary specified by flag
+			// `cockroach` will be used.
+			const mainVersion = ""
+			roachNodes := c.All()
+			predV, err := PredecessorVersion(*t.BuildVersion())
+			require.NoError(t, err)
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
+			loadBackupDataStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+				rows := rows3GiB
+				if c.IsLocal() {
+					rows = 100
+				}
+				runImportBankDataSplit(ctx, rows, 0 /* ranges */, t, u.c)
+			}
+			enableBackupPlanningPausepoint := func(nodeID int) versionStep {
+				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+					gatewayDB := c.Conn(ctx, t.L(), nodeID)
+					backupQuery := "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before_flow';"
+					_, err := gatewayDB.ExecContext(ctx, backupQuery)
+					require.NoError(t, err)
+				}
+			}
+			var jobID int64
+			planBackupStep := func(nodeID int, opts ...string) versionStep {
+				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+					backupOpts := ""
+					if len(opts) > 0 {
+						backupOpts = fmt.Sprintf("WITH %s", strings.Join(opts, ", "))
+					}
+					backupQuery := fmt.Sprintf("BACKUP bank.bank INTO 'nodelocal://%d/%s' %s",
+						nodeID, destinationName(c), backupOpts)
+
+					gatewayDB := c.Conn(ctx, t.L(), nodeID)
+					defer gatewayDB.Close()
+					t.Status("Running: ", backupQuery)
+					if _, err := gatewayDB.ExecContext(ctx, backupQuery); !testutils.IsError(err, "pause") {
+						t.Fatal(err)
+					}
+
+					findJobQuery := `SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC`
+					err := gatewayDB.QueryRowContext(ctx, findJobQuery).Scan(&jobID)
+					require.NoError(t, err)
+					waitForJobToHaveStatus(ctx, t, gatewayDB, jobspb.JobID(jobID), jobs.StatusPaused)
+				}
+			}
+			resumeBackupStep := func(nodeID int) versionStep {
+				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+					gatewayDB := c.Conn(ctx, t.L(), nodeID)
+					defer gatewayDB.Close()
+
+					resumeQuery := fmt.Sprintf("RESUME JOB %d", jobID)
+					t.Status("Running: ", resumeQuery)
+					_, err = gatewayDB.ExecContext(ctx, resumeQuery)
+					require.NoError(t, err)
+				}
+			}
+			u := newVersionUpgradeTest(c,
+				uploadAndStartFromCheckpointFixture(roachNodes, predV),
+				waitForUpgradeStep(roachNodes),
+				preventAutoUpgradeStep(1),
+				loadBackupDataStep,
+				// Upgrade some of the nodes.
+				binaryUpgradeStep(c.Nodes(1, 2), mainVersion),
+				// Enable pausepoint.
+				enableBackupPlanningPausepoint(1),
+				// Plan backup job on new node.
+				planBackupStep(1),
+				// Execute backup job from old node.
+				resumeBackupStep(3),
 			)
 			u.run(ctx, t)
 		},
@@ -634,6 +722,58 @@ func registerBackup(r registry.Registry) {
 		},
 	})
 
+	r.Add(registry.TestSpec{
+		Name:            "backup/AWS-object-locked",
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         r.MakeClusterSpec(1),
+		EncryptAtRandom: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			rows := rows15GiB
+			if c.IsLocal() {
+				rows = 100
+			}
+
+			dest := importBankData(ctx, rows, t, c)
+			conn := c.Conn(ctx, t.L(), 1)
+			m := c.NewMonitor(ctx)
+			m.Go(func(ctx context.Context) error {
+				_, err := conn.ExecContext(ctx, `
+					CREATE DATABASE restoreA;
+					CREATE DATABASE restoreB;
+				`)
+				return err
+			})
+			m.Wait()
+
+			m = c.NewMonitor(ctx)
+			m.Go(func(ctx context.Context) error {
+				accessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
+				if accessKeyID == "" {
+					return errors.New("env variable AWS_ACCESS_KEY_ID must be present to run the KMS test")
+				}
+				secretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+				if secretAccessKey == "" {
+					return errors.New("env variable AWS_SECRET_ACCESS_KEY must be present to run the KMS test")
+				}
+				bucket := os.Getenv("AWS_S3_BUCKET")
+				if bucket == "" {
+					return errors.New("env variable AWS_S3_BUCKET must be present to run the KMS test")
+				}
+				region := os.Getenv(AWSObjectLockedRegion)
+				if region == "" {
+					return errors.New("env variable AWS_OBJECT_LOCKED_REGION must be present to run the KMS test")
+				}
+
+				uri := amazon.S3URI(bucket, dest,
+					&roachpb.ExternalStorage_S3{AccessKey: accessKeyID, Secret: secretAccessKey, Region: region},
+				)
+
+				_, err := conn.ExecContext(ctx, `BACKUP bank.bank TO '`+uri+`'`)
+				return err
+			})
+			m.Wait()
+		},
+	})
 }
 
 func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
@@ -688,4 +828,30 @@ func getGCSKMSURI(keyIDEnvVariable string) (string, error) {
 	correctURI := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 
 	return correctURI, nil
+}
+
+func waitForJobToHaveStatus(
+	ctx context.Context, t test.Test, db *gosql.DB, jobID jobspb.JobID, expectedStatus jobs.Status,
+) {
+	t.Helper()
+	if err := retry.ForDuration(time.Minute*2, func() error {
+		var status string
+		var payloadBytes []byte
+		db.QueryRowContext(
+			ctx, `SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&status, &payloadBytes)
+		if jobs.Status(status) == jobs.StatusFailed {
+			payload := &jobspb.Payload{}
+			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
+				t.Fatalf("job failed: %s", payload.Error)
+			}
+			t.Fatalf("job failed")
+		}
+		if e, a := expectedStatus, jobs.Status(status); e != a {
+			return errors.Errorf("expected job status %s, but got %s", e, a)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
