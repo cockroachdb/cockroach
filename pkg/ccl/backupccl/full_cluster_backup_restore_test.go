@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -368,6 +369,42 @@ CREATE TABLE data2.foo (a int);
 			fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", tableName)).Scan(&tableID)
 		require.True(t, tableID > maxID)
 		require.NotEqual(t, dbID, tableID)
+	})
+}
+
+// TestSingletonSpanConfigJobPostRestore ensures that there's a single span
+// config reconciliation job running post restore.
+func TestSingletonSpanConfigJobPostRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+	const numAccounts = 10
+	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, params)
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+
+	const numRunningReconciliationJobQuery = `
+SELECT count(*) FROM [SHOW AUTOMATIC JOBS]
+WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION' AND status = 'running'
+`
+	testutils.SucceedsSoon(t, func() error {
+		var numRunningJobs int
+		sqlDBRestore.QueryRow(t, numRunningReconciliationJobQuery).Scan(&numRunningJobs)
+		if numRunningJobs != 1 {
+			return errors.Newf("expected single running reconciliation job, found %d", numRunningJobs)
+		}
+		return nil
 	})
 }
 
