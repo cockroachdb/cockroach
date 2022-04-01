@@ -28,6 +28,8 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
 		return d.delegateShowCreateTable(n)
 	case tree.ShowCreateModeDatabase:
 		return d.delegateShowCreateDatabase(n)
+	case tree.ShowCreateModeSecondaryIndexes:
+		return d.delegateShowCreateSecondaryIndexes(n)
 	default:
 		return nil, errors.Newf("unknown show create mode: %d", n.Mode)
 	}
@@ -50,6 +52,14 @@ WHERE name = %s
 	}
 
 	return parse(fmt.Sprintf(showCreateQuery, lexbase.EscapeSQLString(n.Name.Object())))
+}
+
+func (d *delegator) delegateShowCreateSecondaryIndexes(n *tree.ShowCreate) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Indexes)
+
+	const showCreateSecondaryIndexFromTable = `SELECT create_statement FROM %[4]s.crdb_internal.table_indexes WHERE descriptor_id = %[3]s::regclass::int AND index_type != 'primary'`
+
+	return d.showTableDetails(n.Name, showCreateSecondaryIndexFromTable)
 }
 
 func (d *delegator) delegateShowCreateTable(n *tree.ShowCreate) (tree.Statement, error) {

@@ -140,3 +140,22 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 COMMENT ON COLUMN public.t.c IS 'first comment'
+
+query T rowsort
+SHOW CREATE SECONDARY INDEXES FROM public.c
+----
+CREATE INDEX c_a_b_idx ON test.public.c (a ASC, b ASC)
+CREATE UNIQUE INDEX unique_a ON test.public.c (a ASC)
+
+statement ok
+CREATE INDEX test_idx ON public.c (b DESC, a ASC);
+
+query T rowsort
+SHOW CREATE SECONDARY INDEXES FROM public.c
+----
+CREATE INDEX c_a_b_idx ON test.public.c (a ASC, b ASC)
+CREATE UNIQUE INDEX unique_a ON test.public.c (a ASC)
+CREATE INDEX test_idx ON test.public.c (b DESC, a ASC)
+
+statement error pq: relation "public.nonexist" does not exist
+SHOW CREATE SECONDARY INDEXES FROM public.nonExist
