@@ -118,3 +118,6 @@ export const transactionLayerOverview = docsURL(
 // Not actually a docs URL.
 export const startTrial = "https://www.cockroachlabs.com/pricing/start-trial/";
 export const transactionsTable = docsURL("ui-transactions-page.html");
+export const performanceTuningRecipes = docsURLNoVersion(
+  "performance-recipes.html#fix-slow-writes",
+);

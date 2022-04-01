@@ -139,6 +139,7 @@ describe("Databases Page", function() {
           rangeCount: 0,
           nodesByRegionString: "",
           missingTables: [],
+          numIndexRecommendations: 0,
         },
         {
           loading: false,
@@ -149,6 +150,7 @@ describe("Databases Page", function() {
           rangeCount: 0,
           nodesByRegionString: "",
           missingTables: [],
+          numIndexRecommendations: 0,
         },
       ],
       sortSetting: { ascending: true, columnTitle: "name" },
@@ -193,6 +195,7 @@ describe("Databases Page", function() {
       rangeCount: 3,
       nodesByRegionString: "",
       missingTables: [],
+      numIndexRecommendations: 0,
     });
 
     driver.assertDatabaseProperties("test", {
@@ -204,6 +207,7 @@ describe("Databases Page", function() {
       rangeCount: 42,
       nodesByRegionString: "",
       missingTables: [],
+      numIndexRecommendations: 0,
     });
   });
 
@@ -235,6 +239,7 @@ describe("Databases Page", function() {
           rangeCount: 3,
           nodesByRegionString: "",
           missingTables: [{ loading: false, name: "bar" }],
+          numIndexRecommendations: 0,
         });
       });
 
@@ -270,6 +275,7 @@ describe("Databases Page", function() {
           rangeCount: 8,
           nodesByRegionString: "",
           missingTables: [],
+          numIndexRecommendations: 0,
         });
       });
     });
@@ -299,6 +305,7 @@ describe("Databases Page", function() {
             { loading: false, name: "foo" },
             { loading: false, name: "bar" },
           ],
+          numIndexRecommendations: 0,
         });
       });
 
@@ -334,6 +341,7 @@ describe("Databases Page", function() {
           rangeCount: 3,
           nodesByRegionString: "",
           missingTables: [{ loading: false, name: "bar" }],
+          numIndexRecommendations: 0,
         });
 
         await driver.refreshTableStats("system", "bar");
@@ -347,6 +355,7 @@ describe("Databases Page", function() {
           rangeCount: 8,
           nodesByRegionString: "",
           missingTables: [],
+          numIndexRecommendations: 0,
         });
       });
     });
