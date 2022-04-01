@@ -14,9 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"reflect"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -30,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
-	"github.com/kr/pretty"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
 )
 
 // WaitForJobToSucceed waits for the specified job ID to succeed.
@@ -134,6 +132,11 @@ func BulkOpResponseFilter(allowProgressIota *chan struct{}) kvserverbase.Replica
 	}
 }
 
+type logT struct{ testing.TB }
+
+func (n logT) Errorf(format string, args ...interface{}) { n.Logf(format, args...) }
+func (n logT) FailNow()                                  {}
+
 func verifySystemJob(
 	t testing.TB,
 	db *sqlutils.SQLRunner,
@@ -172,13 +175,10 @@ func verifySystemJob(
 	sort.Sort(actual.DescriptorIDs)
 	sort.Sort(expected.DescriptorIDs)
 	expected.Details = nil
-	if e, a := expected, actual; !reflect.DeepEqual(e, a) {
-		fmt.Printf("%+v\n", expected)
-		fmt.Printf("%+v\n", actual)
+	if e, a := expected, actual; !assert.Equal(logT{t}, e, a) {
 		return errors.Errorf("job %d did not match:\n%s",
-			offset, strings.Join(pretty.Diff(e, a), "\n"))
+			offset, sqlutils.MatrixToStr(db.QueryStr(t, "SELECT * FROM crdb_internal.jobs")))
 	}
-
 	if expectedStatus != statusString {
 		return errors.Errorf("job %d: expected status %v, got %v", offset, expectedStatus, statusString)
 	}

@@ -101,7 +101,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-create job #1 (non-cancelable: false): "schema change job"
+create job #1 (non-cancelable: false): "CREATE INDEX idx1 ON defaultdb.public.t (v)"
   descriptor IDs: [104]
 # end PreCommitPhase
 commit transaction #1

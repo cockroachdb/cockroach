@@ -266,7 +266,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 20 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForTable
       StatementForDropJob:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
+        Statement: DROP TABLE defaultdb.public.shipments CASCADE
       TableID: 108
     *scop.LogEvent
       Authorization:
@@ -282,10 +282,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 20 MutationType ops
         SourceElementID: 2
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
-      TableID: 109
+    *scop.DeleteDescriptor
+      DescriptorID: 109
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 109
@@ -306,7 +304,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 20 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForTable
       StatementForDropJob:
-        Statement: DROP TABLE defaultdb.shipments CASCADE
+        Statement: DROP TABLE defaultdb.public.shipments CASCADE
       TableID: 107
     *scop.MakeColumnAbsent
       ColumnID: 1
@@ -927,7 +925,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForTable
       StatementForDropJob:
-        Statement: DROP TABLE defaultdb.greeter
+        Statement: DROP TABLE defaultdb.public.greeter
       TableID: 112
     *scop.MakeColumnAbsent
       ColumnID: 1
