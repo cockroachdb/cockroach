@@ -18,11 +18,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/redact"
@@ -33,6 +38,7 @@ import (
 // purpose of facilitating end-to-end testing of the declarative schema changer.
 type TestState struct {
 	catalog, synthetic  nstree.MutableCatalog
+	comments            map[scdecomp.CommentKey]string
 	currentDatabase     string
 	phase               scop.Phase
 	sessionData         sessiondata.SessionData
@@ -133,5 +139,28 @@ func (s *TestState) CheckFeature(ctx context.Context, featureName tree.SchemaFea
 
 // FeatureChecker implements scbuild.Dependencies
 func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
+	return s
+}
+
+func (s *TestState) LoadCommentsForObjects(
+	ctx context.Context, descType catalog.DescriptorType, objIDs []descpb.ID,
+) error {
+	return nil
+}
+
+func (mf *TestState) Get(
+	ctx context.Context, objID catid.DescID, subID descpb.ID, commentType keys.CommentType,
+) (comment string, ok bool, err error) {
+	commentKey := scdecomp.CommentKey{
+		ObjectID:    objID,
+		SubID:       subID,
+		CommentType: commentType,
+	}
+	comment, ok = mf.comments[commentKey]
+	return comment, ok, nil
+}
+
+// DescriptorMetadataFetcher implements scbuild.Dependencies interface.
+func (s *TestState) DescriptorMetadataFetcher() scdecomp.DescriptorCommentCache {
 	return s
 }

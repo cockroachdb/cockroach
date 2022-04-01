@@ -11,6 +11,9 @@
 package scdecomp
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -26,11 +29,13 @@ import (
 type ElementVisitor func(status scpb.Status, element scpb.Element)
 
 type walkCtx struct {
+	ctx                  context.Context
 	desc                 catalog.Descriptor
 	ev                   ElementVisitor
 	lookupFn             func(id catid.DescID) catalog.Descriptor
 	cachedTypeIDClosures map[catid.DescID]map[catid.DescID]struct{}
 	backRefs             catalog.DescriptorIDSet
+	commentCache         DescriptorCommentCache
 }
 
 // WalkDescriptor walks through the elements which are implicitly defined in
@@ -52,13 +57,19 @@ type walkCtx struct {
 //  type ID closure of types referenced in expressions. This data should
 //  instead be stored in the backing struct of the catalog.Descriptor.
 func WalkDescriptor(
-	desc catalog.Descriptor, lookupFn func(id catid.DescID) catalog.Descriptor, ev ElementVisitor,
+	ctx context.Context,
+	desc catalog.Descriptor,
+	lookupFn func(id catid.DescID) catalog.Descriptor,
+	ev ElementVisitor,
+	commentCache DescriptorCommentCache,
 ) (backRefs catalog.DescriptorIDSet) {
 	w := walkCtx{
+		ctx:                  ctx,
 		desc:                 desc,
 		ev:                   ev,
 		lookupFn:             lookupFn,
 		cachedTypeIDClosures: make(map[catid.DescID]map[catid.DescID]struct{}),
+		commentCache:         commentCache,
 	}
 	w.walkRoot()
 	w.backRefs.Remove(catid.InvalidDescID)
@@ -108,10 +119,15 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 		DatabaseID: db.GetID(),
 		RoleName:   scpb.PlaceHolderRoleName,
 	})
-	w.ev(scpb.Status_PUBLIC, &scpb.DatabaseComment{
-		DatabaseID: db.GetID(),
-		Comment:    scpb.PlaceHolderComment,
-	})
+	if comment, ok, err := w.commentCache.Get(w.ctx, db.GetID(), 0, keys.DatabaseCommentType); err == nil && ok {
+		w.ev(scpb.Status_PUBLIC, &scpb.DatabaseComment{
+			DatabaseID: db.GetID(),
+			Comment:    comment,
+		})
+	} else if err != nil {
+		panic(err)
+	}
+
 	if db.IsMultiRegion() {
 		w.ev(scpb.Status_PUBLIC, &scpb.DatabaseRegionConfig{
 			DatabaseID:       db.GetID(),
@@ -135,11 +151,14 @@ func (w *walkCtx) walkSchema(sc catalog.SchemaDescriptor) {
 		SchemaID:         sc.GetID(),
 		ParentDatabaseID: sc.GetParentID(),
 	})
-	// TODO(postamar): proper handling of comment
-	w.ev(scpb.Status_PUBLIC, &scpb.SchemaComment{
-		SchemaID: sc.GetID(),
-		Comment:  scpb.PlaceHolderComment,
-	})
+	if comment, ok, err := w.commentCache.Get(w.ctx, sc.GetID(), 0, keys.SchemaCommentType); err == nil && ok {
+		w.ev(scpb.Status_PUBLIC, &scpb.SchemaComment{
+			SchemaID: sc.GetID(),
+			Comment:  comment,
+		})
+	} else if err != nil {
+		panic(err)
+	}
 }
 
 func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
@@ -205,11 +224,14 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		w.walkLocality(tbl, l)
 	}
 	{
-		// TODO(postamar): proper handling of comment
-		w.ev(scpb.Status_PUBLIC, &scpb.TableComment{
-			TableID: tbl.GetID(),
-			Comment: scpb.PlaceHolderComment,
-		})
+		if comment, ok, err := w.commentCache.Get(w.ctx, tbl.GetID(), 0, keys.TableCommentType); err == nil && ok {
+			w.ev(scpb.Status_PUBLIC, &scpb.TableComment{
+				TableID: tbl.GetID(),
+				Comment: comment,
+			})
+		} else if err != nil {
+			panic(err)
+		}
 	}
 	if !tbl.IsSequence() {
 		_ = tbl.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
@@ -361,12 +383,15 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			Expression: *expr,
 		})
 	}
-	// TODO(postamar): proper handling of comments
-	w.ev(scpb.Status_PUBLIC, &scpb.ColumnComment{
-		TableID:  tbl.GetID(),
-		ColumnID: col.GetID(),
-		Comment:  scpb.PlaceHolderComment,
-	})
+	if comment, ok, err := w.commentCache.Get(w.ctx, tbl.GetID(), descpb.ID(col.GetID()), keys.ColumnCommentType); err == nil && ok {
+		w.ev(scpb.Status_PUBLIC, &scpb.ColumnComment{
+			TableID:  tbl.GetID(),
+			ColumnID: col.GetID(),
+			Comment:  comment,
+		})
+	} else if err != nil {
+		panic(err)
+	}
 	owns := catalog.MakeDescriptorIDSet(col.ColumnDesc().OwnsSequenceIds...)
 	owns.Remove(catid.InvalidDescID)
 	owns.ForEach(func(id descpb.ID) {
@@ -436,12 +461,15 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 		IndexID: idx.GetID(),
 		Name:    idx.GetName(),
 	})
-	// TODO(postamar): proper handling of comments
-	w.ev(scpb.Status_PUBLIC, &scpb.IndexComment{
-		TableID: tbl.GetID(),
-		IndexID: idx.GetID(),
-		Comment: scpb.PlaceHolderComment,
-	})
+	if comment, ok, err := w.commentCache.Get(w.ctx, tbl.GetID(), descpb.ID(idx.GetID()), keys.IndexCommentType); err == nil && ok {
+		w.ev(scpb.Status_PUBLIC, &scpb.IndexComment{
+			TableID: tbl.GetID(),
+			IndexID: idx.GetID(),
+			Comment: comment,
+		})
+	} else if err != nil {
+		panic(err)
+	}
 }
 
 func (w *walkCtx) walkUniqueWithoutIndexConstraint(
@@ -458,12 +486,13 @@ func (w *walkCtx) walkUniqueWithoutIndexConstraint(
 		ConstraintID: c.ConstraintID,
 		Name:         c.Name,
 	})
-	// TODO(postamar): proper handling of comments
-	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
-		TableID:      tbl.GetID(),
-		ConstraintID: c.ConstraintID,
-		Comment:      scpb.PlaceHolderComment,
-	})
+	if comment, ok, err := w.commentCache.Get(w.ctx, tbl.GetID(), descpb.ID(c.ConstraintID), keys.ConstraintCommentType); err == nil && ok {
+		w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.ConstraintID,
+			Comment:      comment,
+		})
+	}
 }
 
 func (w *walkCtx) walkCheckConstraint(
@@ -486,12 +515,15 @@ func (w *walkCtx) walkCheckConstraint(
 		ConstraintID: c.ConstraintID,
 		Name:         c.Name,
 	})
-	// TODO(postamar): proper handling of comments
-	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
-		TableID:      tbl.GetID(),
-		ConstraintID: c.ConstraintID,
-		Comment:      scpb.PlaceHolderComment,
-	})
+	if comment, ok, err := w.commentCache.Get(w.ctx, tbl.GetID(), descpb.ID(c.ConstraintID), keys.ConstraintCommentType); err == nil && ok {
+		w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.ConstraintID,
+			Comment:      comment,
+		})
+	} else if err != nil {
+		panic(err)
+	}
 }
 
 func (w *walkCtx) walkForeignKeyConstraint(
@@ -510,10 +542,14 @@ func (w *walkCtx) walkForeignKeyConstraint(
 		ConstraintID: c.ConstraintID,
 		Name:         c.Name,
 	})
-	// TODO(postamar): proper handling of comments
-	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
-		TableID:      tbl.GetID(),
-		ConstraintID: c.ConstraintID,
-		Comment:      scpb.PlaceHolderComment,
-	})
+
+	if comment, ok, err := w.commentCache.Get(w.ctx, tbl.GetID(), descpb.ID(c.ConstraintID), keys.ConstraintCommentType); err == nil && ok {
+		w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.ConstraintID,
+			Comment:      comment,
+		})
+	} else if err != nil {
+		panic(err)
+	}
 }

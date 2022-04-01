@@ -118,10 +118,6 @@ ElementState:
       expr: s::STRING = name
     tableId: 108
   Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 108
-  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: id
@@ -221,31 +217,6 @@ ElementState:
         oid: 25
     tableId: 108
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    tableId: 108
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    tableId: 108
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 3
-    comment: __placeholder_comment__
-    tableId: 108
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 4
-    comment: __placeholder_comment__
-    tableId: 108
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 5
-    comment: __placeholder_comment__
-    tableId: 108
-  Status: PUBLIC
 - IndexName:
     indexId: 1
     name: tbl_pkey
@@ -262,24 +233,9 @@ ElementState:
     indexId: 2
     tableId: 108
   Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 1
-    tableId: 108
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 2
-    tableId: 108
-  Status: PUBLIC
 - ConstraintName:
     constraintId: 2
     name: mycheck
-    tableId: 108
-  Status: PUBLIC
-- ConstraintComment:
-    comment: __placeholder_comment__
-    constraintId: 2
     tableId: 108
   Status: PUBLIC
 - Namespace:
