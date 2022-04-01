@@ -56,7 +56,26 @@ func runInitialSQL(
 		}
 	}
 
+	if err := enableRangefeeds(ctx, s); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func enableRangefeeds(ctx context.Context, s *server.Server) error {
+	return s.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		enableRangefeedStmt := "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+		if _, err := ie.Exec(ctx, "enable-rangefeeds", nil, enableRangefeedStmt); err != nil {
+			return err
+		}
+
+		enableRangfeedForTenantsStmt := "ALTER TENANT ALL SET CLUSTER SETTING kv.rangefeed.enabled = true"
+		if _, err := ie.Exec(ctx, "enable-rangefeeds-for-tenants", nil, enableRangfeedForTenantsStmt); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 // createAdminUser creates an admin user with the given name.
