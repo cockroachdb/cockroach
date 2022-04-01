@@ -2269,14 +2269,6 @@ type GCJobTestingKnobs struct {
 	// protected timestamp status of a table or an index. The protection status is
 	// passed in along with the jobID.
 	RunAfterIsProtectedCheck func(jobID jobspb.JobID, isProtected bool)
-	// DisableNewProtectedTimestampSubsystemCheck disables checking the new
-	// protected timestamp subsystem when checking the protection status of a
-	// table or an index. This is useful for tests that disable the span
-	// configuration infrastructure, as the new protected timestamp subsystem is
-	// built on top of it.
-	// TODO(arul): Once we've fully migrated all tests to use span configurations
-	// we should be able to get rid of this testing knob as well.
-	DisableNewProtectedTimestampSubsystemCheck bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
