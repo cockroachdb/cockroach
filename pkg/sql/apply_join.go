@@ -308,7 +308,7 @@ func runPlanInsidePlan(params runParams, plan *planComponents, resultWriter rowR
 	)
 	distributeType := DistributionType(DistributionTypeNone)
 	if distributePlan.WillDistribute() {
-		distributeType = DistributionTypeSystemTenantOnly
+		distributeType = DistributionTypeAlways
 	}
 	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.NewPlanningCtx(
 		params.ctx, evalCtx, &plannerCopy, params.p.txn, distributeType)

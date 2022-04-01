@@ -839,6 +839,12 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 		// Not a table key, so the row prefix is the entire key.
 		return n, nil
 	}
+
+	// Check that the table key also has a valid index ID.
+	if _, _, _, err := DecodeTableIDIndexID(sqlKey); err != nil {
+		return 0, err
+	}
+
 	// The column family ID length is encoded as a varint and we take advantage
 	// of the fact that the column family ID itself will be encoded in 0-9 bytes
 	// and thus the length of the column family ID data will fit in a single

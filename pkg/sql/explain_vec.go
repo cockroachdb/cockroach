@@ -109,7 +109,7 @@ func newPlanningCtxForExplainPurposes(
 ) *PlanningCtx {
 	distribute := DistributionType(DistributionTypeNone)
 	if distribution.WillDistribute() {
-		distribute = DistributionTypeSystemTenantOnly
+		distribute = DistributionTypeAlways
 	}
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx,
 		params.p, params.p.txn, distribute)
