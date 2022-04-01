@@ -869,6 +869,10 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 // from recoverable internal errors, and is automatically committed
 // otherwise. The retryable function should have no side effects which could
 // cause problems in the event it must be run more than once.
+//
+// This transaction will not be subject to admission control. To enable this,
+// use TxnWithAdmissionControl.
+//
 // For example:
 // err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 //		if kv, err := txn.Get(ctx, key); err != nil {
@@ -877,11 +881,24 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 //		// ...
 //		return nil
 //	})
+//
 // Note that once the transaction encounters a retryable error, the txn object
 // is marked as poisoned and all future ops fail fast until the retry. The
 // callback may return either nil or the retryable error. Txn is responsible for
 // resetting the transaction and retrying the callback.
 func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
+	return db.TxnWithAdmissionControl(
+		ctx, roachpb.AdmissionHeader_OTHER, admission.NormalPri, retryable)
+}
+
+// TxnWithAdmissionControl is like Txn, but uses a configurable admission
+// control source and priority.
+func (db *DB) TxnWithAdmissionControl(
+	ctx context.Context,
+	source roachpb.AdmissionHeader_Source,
+	priority admission.WorkPriority,
+	retryable func(context.Context, *Txn) error,
+) error {
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
 
@@ -889,7 +906,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	//
 	// https://github.com/cockroachdb/cockroach/issues/48008
 	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
-	txn := NewTxn(ctx, db, nodeID)
+	txn := NewTxnWithAdmissionControl(ctx, db, nodeID, source, priority)
 	txn.SetDebugName("unnamed")
 	return runTxn(ctx, txn, retryable)
 }
