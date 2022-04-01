@@ -162,6 +162,7 @@ describe("Database Details Page", function() {
             roles: [],
             grants: [],
             statsLastUpdated: null,
+            hasIndexRecommendations: false,
           },
           stats: {
             loading: false,
@@ -182,6 +183,7 @@ describe("Database Details Page", function() {
             roles: [],
             grants: [],
             statsLastUpdated: null,
+            hasIndexRecommendations: false,
           },
           stats: {
             loading: false,
@@ -321,6 +323,7 @@ describe("Database Details Page", function() {
       statsLastUpdated: util.TimestampToMoment(
         makeTimestamp("0001-01-01T00:00:00Z"),
       ),
+      hasIndexRecommendations: false,
     });
 
     driver.assertTableDetails("bar", {
@@ -334,6 +337,7 @@ describe("Database Details Page", function() {
       statsLastUpdated: util.TimestampToMoment(
         makeTimestamp("0001-01-01T00:00:00Z"),
       ),
+      hasIndexRecommendations: false,
     });
   });
 

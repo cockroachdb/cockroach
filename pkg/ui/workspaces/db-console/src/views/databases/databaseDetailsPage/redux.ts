@@ -150,6 +150,7 @@ export const mapStateToProps = createSelector(
             statsLastUpdated: details?.data?.stats_last_created_at
               ? util.TimestampToMoment(details?.data?.stats_last_created_at)
               : null,
+            hasIndexRecommendations: details?.data?.has_index_recommendations,
           },
           stats: {
             loading: !!stats?.inFlight,

@@ -311,6 +311,7 @@ describe("Database Table Page", function() {
             makeTimestamp("2021-11-19T23:01:05.167627Z"),
           ),
           lastUsedType: "read",
+          indexRecommendations: [],
         },
         {
           indexName: "index_no_reads_no_resets",
@@ -319,6 +320,7 @@ describe("Database Table Page", function() {
             makeTimestamp("0001-01-01T00:00:00Z"),
           ),
           lastUsedType: "created",
+          indexRecommendations: [],
         },
       ],
       lastReset: util.TimestampToMoment(makeTimestamp("0001-01-01T00:00:00Z")),
