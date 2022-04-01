@@ -495,7 +495,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 					return raftCmdLimit
 				}
 				return limit
-			}))
+			},
+			&st.SV))
 	if rangeReedBudgetFactory != nil {
 		registry.AddMetricStruct(rangeReedBudgetFactory.Metrics())
 	}
