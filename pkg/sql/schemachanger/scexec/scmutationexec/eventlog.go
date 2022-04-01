@@ -97,6 +97,64 @@ func asEventPayload(
 		default:
 			return nil, errors.AssertionFailedf("unknown target status %s", targetStatus)
 		}
+	case *scpb.TableComment:
+		return &eventpb.CommentOnTable{
+			TableName:   fullName,
+			Comment:     e.Comment,
+			NullComment: false,
+		}, nil
+	case *scpb.ColumnComment:
+		tbl, err := m.checkOutTable(ctx, e.TableID)
+		if err != nil {
+			return nil, err
+		}
+		col, err := tbl.FindColumnWithID(e.ColumnID)
+		if err != nil {
+			return nil, err
+		}
+		return &eventpb.CommentOnColumn{
+			TableName:   fullName,
+			ColumnName:  col.GetName(),
+			Comment:     e.Comment,
+			NullComment: false,
+		}, nil
+	case *scpb.IndexComment:
+		tbl, err := m.checkOutTable(ctx, e.TableID)
+		if err != nil {
+			return nil, err
+		}
+		idx, err := tbl.FindIndexWithID(e.IndexID)
+		if err != nil {
+			return nil, err
+		}
+		return &eventpb.CommentOnIndex{
+			TableName:   fullName,
+			IndexName:   idx.GetName(),
+			Comment:     e.Comment,
+			NullComment: false,
+		}, nil
+	case *scpb.ConstraintComment:
+		tbl, err := m.checkOutTable(ctx, e.TableID)
+		if err != nil {
+			return nil, err
+		}
+		constraint, err := tbl.FindConstraintWithID(e.ConstraintID)
+		if err != nil {
+			return nil, err
+		}
+		return &eventpb.CommentOnConstraint{
+			TableName:      fullName,
+			ConstraintName: constraint.GetConstraintName(),
+			Comment:        e.Comment,
+			NullComment:    false,
+		}, nil
+	case *scpb.DatabaseComment:
+		return &eventpb.CommentOnDatabase{
+			DatabaseName: fullName,
+			Comment:      e.Comment,
+			NullComment:  false,
+		}, nil
+
 	}
 	return nil, errors.AssertionFailedf("unknown %s element type %T", targetStatus.String(), e)
 }

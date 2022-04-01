@@ -332,7 +332,7 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 		IsInaccessible:                    col.IsInaccessible(),
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOption(),
-		PgAttributeNum:                    col.ColumnDesc().PGAttributeNum,
+		PgAttributeNum:                    col.ColumnDesc().GetPGAttributeNum(),
 	}
 	w.ev(maybeMutationStatus(col), column)
 	w.ev(scpb.Status_PUBLIC, &scpb.ColumnName{
@@ -383,11 +383,12 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			Expression: *expr,
 		})
 	}
-	if comment, ok, err := w.commentCache.Get(w.ctx, tbl.GetID(), descpb.ID(col.GetID()), keys.ColumnCommentType); err == nil && ok {
+	if comment, ok, err := w.commentCache.Get(w.ctx, tbl.GetID(), descpb.ID(col.GetPGAttributeNum()), keys.ColumnCommentType); err == nil && ok {
 		w.ev(scpb.Status_PUBLIC, &scpb.ColumnComment{
-			TableID:  tbl.GetID(),
-			ColumnID: col.GetID(),
-			Comment:  comment,
+			TableID:        tbl.GetID(),
+			ColumnID:       col.GetID(),
+			Comment:        comment,
+			PGAttributeNum: col.GetPGAttributeNum(),
 		})
 	} else if err != nil {
 		panic(err)
@@ -422,6 +423,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			StoringColumnIDs:   cpy.StoreColumnIDs,
 			CompositeColumnIDs: cpy.CompositeColumnIDs,
 			IsInverted:         idx.GetType() == descpb.IndexDescriptor_INVERTED,
+			ConstraintID:       idx.GetConstraintID(),
 		}
 		index.KeyColumnDirections = make([]scpb.Index_Direction, len(index.KeyColumnIDs))
 		for i := 0; i < idx.NumKeyColumns(); i++ {

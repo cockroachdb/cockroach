@@ -282,6 +282,19 @@ func GetShardColumnName(colNames []string, buckets int32) string {
 	)
 }
 
+func (desc *wrapper) FindConstraintWithID(id descpb.ConstraintID) (descpb.ConstraintDetail, error) {
+	constraintInfo, err := desc.GetConstraintInfo()
+	if err != nil {
+		return descpb.ConstraintDetail{}, err
+	}
+	for _, info := range constraintInfo {
+		if info.ConstraintID == id {
+			return info, nil
+		}
+	}
+	return descpb.ConstraintDetail{}, nil
+}
+
 // GetConstraintInfo implements the TableDescriptor interface.
 func (desc *wrapper) GetConstraintInfo() (map[string]descpb.ConstraintDetail, error) {
 	return desc.collectConstraintInfo(nil)

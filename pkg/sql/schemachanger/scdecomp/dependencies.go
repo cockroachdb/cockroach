@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
 
+// CommentKey is used to uniquely identify an comment item from system.comments
+// table.
 type CommentKey struct {
 	ObjectID    catid.DescID
 	SubID       descpb.ID

@@ -152,13 +152,15 @@ func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
 	return s
 }
 
+// LoadCommentsForObjects implements scdecomp.DescriptorCommentCache interface.
 func (s *TestState) LoadCommentsForObjects(
 	ctx context.Context, descType catalog.DescriptorType, objIDs []descpb.ID,
 ) error {
 	return nil
 }
 
-func (mf *TestState) Get(
+// Get implements DescriptorCommentCache interface.
+func (s *TestState) Get(
 	ctx context.Context, objID catid.DescID, subID descpb.ID, commentType keys.CommentType,
 ) (comment string, ok bool, err error) {
 	commentKey := scdecomp.CommentKey{
@@ -166,11 +168,11 @@ func (mf *TestState) Get(
 		SubID:       subID,
 		CommentType: commentType,
 	}
-	comment, ok = mf.comments[commentKey]
+	comment, ok = s.comments[commentKey]
 	return comment, ok, nil
 }
 
-// DescriptorMetadataFetcher implements scbuild.Dependencies interface.
-func (s *TestState) DescriptorMetadataFetcher() scdecomp.DescriptorCommentCache {
+// DescriptorCommentCache implements scbuild.Dependencies interface.
+func (s *TestState) DescriptorCommentCache() scdecomp.DescriptorCommentCache {
 	return s
 }
