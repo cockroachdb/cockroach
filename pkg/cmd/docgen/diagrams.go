@@ -360,6 +360,11 @@ var specs = []stmtSpec{
 		unlink:  []string{"table_name"},
 	},
 	{
+		name:    "alter_changefeed",
+		stmt:    "alter_changefeed_stmt",
+		replace: map[string]string{"a_expr": "job_id", "alter_changefeed_cmds": "( 'ADD' 'target' ( 'WITH' ( 'initial_scan' | 'no_initial_scan' ) )? | 'DROP' 'target' | ( 'SET' | 'UNSET' ) 'option' )+"},
+	},
+	{
 		name:   "alter_column",
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_column", "alter_column_default", "opt_set_data", "opt_collate", "opt_alter_column_using"},

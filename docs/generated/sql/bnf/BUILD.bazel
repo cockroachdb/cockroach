@@ -4,7 +4,7 @@ FILES = [
     "abort_stmt",
     "add_column",
     "add_constraint",
-    "alter_changefeed_stmt",
+    "alter_changefeed",
     "alter_backup_stmt",
     "alter_column",
     "alter_database_add_region_stmt",
