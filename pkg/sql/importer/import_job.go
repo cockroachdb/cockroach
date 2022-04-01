@@ -1253,14 +1253,20 @@ func ingestWithRetry(
 	var err error
 	var retryCount int32
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		retryCount++
-		resumerSpan.RecordStructured(&roachpb.RetryTracingEvent{
-			Operation:     "importResumer.ingestWithRetry",
-			AttemptNumber: retryCount,
-			RetryError:    tracing.RedactAndTruncateError(err),
-		})
-		res, err = distImport(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
-			alwaysFlushProgress, procsPerNode)
+		for {
+			retryCount++
+			resumerSpan.RecordStructured(&roachpb.RetryTracingEvent{
+				Operation:     "importResumer.ingestWithRetry",
+				AttemptNumber: retryCount,
+				RetryError:    tracing.RedactAndTruncateError(err),
+			})
+			res, err = distImport(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
+				alwaysFlushProgress, procsPerNode)
+			// Replanning errors should not count towards retry limits.
+			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
+				break
+			}
+		}
 		if err == nil {
 			break
 		}
