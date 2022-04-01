@@ -314,12 +314,6 @@ func isProtected(
 			return true, nil
 		}
 
-		// Skip checking the new protected timestamp subsystem if the testing knob
-		// says as such.
-		if execCfg.GCJobTestingKnobs.DisableNewProtectedTimestampSubsystemCheck {
-			return false, nil
-		}
-
 		spanConfigRecords, err := kvAccessor.GetSpanConfigRecords(ctx, spanconfig.Targets{
 			spanconfig.MakeTargetFromSpan(sp),
 		})
