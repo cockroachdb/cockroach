@@ -16,11 +16,14 @@ import styles from "./indexDetailsPage.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { CaretRight } from "../icon/caretRight";
 import { Breadcrumbs } from "../breadcrumbs";
-import { Search as IndexIcon } from "@cockroachlabs/icons";
+import { Caution, Search as IndexIcon } from "@cockroachlabs/icons";
 import { SqlBox } from "src/sql";
 import { Col, Row, Tooltip } from "antd";
 import { SummaryCard } from "../summaryCard";
 import moment, { Moment } from "moment";
+import { Heading } from "@cockroachlabs/ui-components";
+import { Anchor } from "../anchor";
+import { performanceTuningRecipes } from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -60,6 +63,12 @@ interface IndexDetails {
   totalReads: number;
   lastRead: Moment;
   lastReset: Moment;
+  indexRecommendations: IndexRecommendation[];
+}
+
+interface IndexRecommendation {
+  type: string;
+  reason: string;
 }
 
 export interface IndexDetailPageActions {
@@ -116,6 +125,49 @@ export class IndexDetailsPage extends React.Component<
     } else {
       return timestamp.format("MMM DD, YYYY [at] h:mm A [(UTC)]");
     }
+  }
+
+  private renderIndexRecommendations(
+    indexRecommendations: IndexRecommendation[],
+  ) {
+    if (indexRecommendations.length === 0) {
+      return "None";
+    }
+    return indexRecommendations.map(recommendation => {
+      let recommendationType: string;
+      switch (recommendation.type) {
+        case "DROP_UNUSED":
+          recommendationType = "Drop unused index";
+      }
+      // TODO(thomas): using recommendation.type as the key seems not good.
+      //  - if it is possible for an index to have multiple recommendations of the same type
+      //  this could cause issues.
+      return (
+        <tr
+          key={recommendationType}
+          className={cx("summary-card--row", "table__row")}
+        >
+          <td className={cx("table__cell", "summary-card--label-cell")}>
+            <h4 className={cx("summary-card--label", "icon__container")}>
+              <Caution className={cx("icon--s", "icon--warning")} />
+              {recommendationType}
+            </h4>
+          </td>
+          <td
+            className={cx(
+              "summary-card--value",
+              "index-recommendations__tooltip-anchor",
+            )}
+          >
+            <span className={cx("summary-card--label")}>Reason:</span>{" "}
+            {recommendation.reason}{" "}
+            <Anchor href={performanceTuningRecipes} target="_blank">
+              Learn more
+            </Anchor>
+          </td>
+        </tr>
+      );
+    });
   }
 
   render() {
@@ -186,7 +238,7 @@ export class IndexDetailsPage extends React.Component<
             </Row>
             <Row gutter={18}>
               <Col className="gutter-row" span={18}>
-                <SummaryCard className={cx("summary-card")}>
+                <SummaryCard className={cx("summary-card--row")}>
                   <table className="table">
                     <tbody>
                       <tr className={cx("summary-card--row", "table__row")}>
@@ -225,6 +277,20 @@ export class IndexDetailsPage extends React.Component<
                           </p>
                         </td>
                       </tr>
+                    </tbody>
+                  </table>
+                </SummaryCard>
+              </Col>
+            </Row>
+            <Row gutter={18}>
+              <Col className="gutter-row" span={18}>
+                <SummaryCard className={cx("summary-card--row")}>
+                  <Heading type="h5">Index recommendations</Heading>
+                  <table className="table">
+                    <tbody>
+                      {this.renderIndexRecommendations(
+                        this.props.details.indexRecommendations,
+                      )}
                     </tbody>
                   </table>
                 </SummaryCard>
