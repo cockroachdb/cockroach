@@ -91,7 +91,7 @@ func TestPlanDataDriven(t *testing.T) {
 					t.Logf("created relation with id %d", tableID)
 				}
 				return ""
-			case "descriptor-metadata":
+			case "setup":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 				for _, stmt := range stmts {

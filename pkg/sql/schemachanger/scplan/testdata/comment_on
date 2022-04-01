@@ -83,7 +83,7 @@ StatementPhase stage 1 of 1 with 1 MutationType ops
       ConstraintID: 2
       TableID: 107
 
-descriptor-metadata
+setup
 COMMENT ON DATABASE db1 IS 'db1 is good';
 COMMENT ON SCHEMA db1.sc1 IS 'sc1 is good';
 COMMENT ON TABLE db1.sc1.t1 IS 't1 is good';

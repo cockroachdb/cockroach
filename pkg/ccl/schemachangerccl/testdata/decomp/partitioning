@@ -73,10 +73,6 @@ ElementState:
       - 1
       tableId: 104
   Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 104
-  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: pk
@@ -119,21 +115,6 @@ ElementState:
     isNullable: true
     tableId: 104
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    tableId: 104
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    tableId: 104
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 3
-    comment: __placeholder_comment__
-    tableId: 104
-  Status: PUBLIC
 - IndexName:
     indexId: 1
     name: table_implicit_pkey
@@ -166,16 +147,6 @@ ElementState:
         - Awo=
       numColumns: 1
       numImplicitColumns: 1
-    tableId: 104
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 1
-    tableId: 104
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 2
     tableId: 104
   Status: PUBLIC
 - Namespace:
@@ -247,10 +218,6 @@ ElementState:
       - 1
       tableId: 105
   Status: PUBLIC
-- TableComment:
-    comment: __placeholder_comment__
-    tableId: 105
-  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: a
@@ -280,16 +247,6 @@ ElementState:
     isNullable: true
     tableId: 105
   Status: PUBLIC
-- ColumnComment:
-    columnId: 1
-    comment: __placeholder_comment__
-    tableId: 105
-  Status: PUBLIC
-- ColumnComment:
-    columnId: 2
-    comment: __placeholder_comment__
-    tableId: 105
-  Status: PUBLIC
 - IndexName:
     indexId: 1
     name: table_partitioned_index_pkey
@@ -309,16 +266,6 @@ ElementState:
         values:
         - AwI=
       numColumns: 1
-    tableId: 105
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 1
-    tableId: 105
-  Status: PUBLIC
-- IndexComment:
-    comment: __placeholder_comment__
-    indexId: 2
     tableId: 105
   Status: PUBLIC
 - Namespace:
