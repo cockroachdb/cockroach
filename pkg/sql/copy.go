@@ -22,16 +22,21 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -105,6 +110,9 @@ type copyMachine struct {
 	parsingEvalCtx *tree.EvalContext
 
 	processRows func(ctx context.Context) error
+	tableDesc   catalog.TableDescriptor
+	conv        *row.DatumRowConverter
+	kvCh        chan row.KVBatch
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -200,6 +208,7 @@ func newCopyMachine(
 	if err != nil {
 		return nil, err
 	}
+	c.tableDesc = tableDesc
 	if err := c.p.CheckPrivilege(ctx, tableDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
@@ -229,6 +238,15 @@ func newCopyMachine(
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
+	c.kvCh = make(chan row.KVBatch, 1024)
+	conv, err := row.NewDatumRowConverter(
+		ctx, &c.p.semaCtx, c.tableDesc, n.Columns, c.p.EvalContext(),
+		c.kvCh, nil /* seqChunkProvider */, nil /* metrics */)
+	if err != nil {
+		return nil, err
+	}
+	c.conv = conv
+
 	c.processRows = c.insertRows
 	return c, nil
 }
@@ -256,6 +274,44 @@ type copyTxnOpt struct {
 func (c *copyMachine) run(ctx context.Context) error {
 	defer c.rowsMemAcc.Close(ctx)
 	defer c.bufMemAcc.Close(ctx)
+
+	ingestionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	g := ctxgroup.WithContext(ingestionCtx)
+	writeTS := hlc.Timestamp{WallTime: c.p.ExecCfg().Clock.Now().WallTime}
+	const bufferSize = 64 << 20
+	adder, err := c.p.ExecCfg().DistSQLPlanner.distSQLSrv.ServerConfig.BulkAdder(
+		ctx, c.p.txn.DB(), writeTS, kvserverbase.BulkAdderOptions{
+			Name:          c.tableDesc.GetName(),
+			MinBufferSize: bufferSize,
+			// We disallow shadowing here to ensure that we report errors when builds
+			// of unique indexes fail when there are duplicate values. Note that while
+			// the timestamp passed does allow shadowing other writes by the same job,
+			// the check for allowed shadowing also requires the values match, so a
+			// conflicting unique index entry would still be rejected as its value
+			// would point to a different owning row.
+			DisallowShadowingBelow: writeTS,
+			WriteAtBatchTimestamp:  true,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	defer adder.Close(ctx)
+	g.GoCtx(func(ctx context.Context) (retErr error) {
+		cleanup := c.p.preparePlannerForCopy(ctx, c.txnOpt)
+		defer func() {
+			retErr = cleanup(ctx, retErr)
+		}()
+		for kvBatch := range c.kvCh {
+			for _, kv := range kvBatch.KVs {
+				if err := adder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
+					return err
+				}
+			}
+		}
+		return adder.Flush(ctx)
+	})
 
 	format := pgwirebase.FormatText
 	if c.format == tree.CopyFormatBinary {
@@ -339,6 +395,15 @@ Loop:
 		default:
 			return pgwirebase.NewUnrecognizedMsgTypeErr(typ)
 		}
+	}
+
+	if err := c.conv.SendBatch(ctx); err != nil {
+		return err
+	}
+	close(c.kvCh)
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	// Finalize execution by sending the statement tag and number of rows
@@ -708,44 +773,20 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 	if len(c.rows) == 0 {
 		return nil
 	}
-	cleanup := c.p.preparePlannerForCopy(ctx, c.txnOpt)
-	defer func() {
-		retErr = cleanup(ctx, retErr)
-	}()
-
-	vc := &tree.ValuesClause{Rows: c.rows}
-	numRows := len(c.rows)
+	rows := c.rows
 	// Reuse the same backing array once the Insert is complete.
 	c.rows = c.rows[:0]
 	c.rowsMemAcc.Clear(ctx)
 
-	c.p.stmt = Statement{}
-	c.p.stmt.AST = &tree.Insert{
-		Table:   c.table,
-		Columns: c.columns,
-		Rows: &tree.Select{
-			Select: vc,
-		},
-		Returning: tree.AbsentReturningClause,
+	for i, r := range rows {
+		for j, expr := range r {
+			c.conv.Datums[j] = expr.(tree.Datum)
+		}
+		if err := c.conv.Row(ctx, 0, int64(i)); err != nil {
+			return err
+		}
 	}
-	if err := c.p.makeOptimizerPlan(ctx); err != nil {
-		return err
-	}
-
-	var res streamingCommandResult
-	err := c.execInsertPlan(ctx, &c.p, &res)
-	if err != nil {
-		return err
-	}
-	if err := res.Err(); err != nil {
-		return err
-	}
-
-	if rows := res.RowsAffected(); rows != numRows {
-		log.Fatalf(ctx, "didn't insert all buffered rows and yet no error was reported. "+
-			"Inserted %d out of %d rows.", rows, numRows)
-	}
-	c.insertedRows += numRows
+	c.insertedRows += len(rows)
 
 	return nil
 }
