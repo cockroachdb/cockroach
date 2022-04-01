@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -2757,7 +2758,8 @@ CREATE TABLE crdb_internal.table_indexes (
   is_inverted         BOOL NOT NULL,
   is_sharded          BOOL NOT NULL,
   shard_bucket_count  INT,
-  created_at          TIMESTAMP
+  created_at          TIMESTAMP,
+  create_statement    STRING NOT NULL
 )
 `,
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -2766,7 +2768,7 @@ CREATE TABLE crdb_internal.table_indexes (
 		row := make(tree.Datums, 7)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db catalog.DatabaseDescriptor, _ string, table catalog.TableDescriptor) error {
+				func(db catalog.DatabaseDescriptor, schemaName string, table catalog.TableDescriptor) error {
 					tableID := tree.NewDInt(tree.DInt(table.GetID()))
 					tableName := tree.NewDString(table.GetName())
 					// We report the primary index of non-physical tables here. These
@@ -2792,6 +2794,29 @@ CREATE TABLE crdb_internal.table_indexes (
 						if idx.IsSharded() {
 							shardBucketCnt = tree.NewDInt(tree.DInt(idx.GetSharded().ShardBuckets))
 						}
+						// Build the PARTITION BY clause.
+						var partitionBuf bytes.Buffer
+						a := &tree.DatumAlloc{}
+						if err := ShowCreatePartitioning(
+							a, p.ExecCfg().Codec, table, idx, idx.GetPartitioning(), &partitionBuf, 1 /* indent */, 0, /* colOffset */
+						); err != nil {
+							return err
+						}
+						fullTableName := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName()))
+						createIdxStmt, err := catformat.IndexForDisplay(
+							ctx,
+							table,
+							&fullTableName,
+							idx,
+							partitionBuf.String(),
+							tree.FmtSimple,
+							p.RunParams(ctx).p.SemaCtx(),
+							p.RunParams(ctx).p.SessionData(),
+							catformat.IndexDisplayDefOnly,
+						)
+						if err != nil {
+							return err
+						}
 						row = append(row,
 							tableID,
 							tableName,
@@ -2803,6 +2828,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.MakeDBool(tree.DBool(idx.IsSharded())),
 							shardBucketCnt,
 							createdAt,
+							tree.NewDString("CREATE "+createIdxStmt),
 						)
 						return pusher.pushRow(row...)
 					})

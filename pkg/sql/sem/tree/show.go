@@ -522,6 +522,8 @@ const (
 	ShowCreateModeSequence
 	// ShowCreateModeDatabase represents SHOW CREATE DATABASE
 	ShowCreateModeDatabase
+	// ShowCreateModeSecondaryIndexes represents SHOW CREATE SECONDARY INDEXES
+	ShowCreateModeSecondaryIndexes
 )
 
 // ShowCreate represents a SHOW CREATE statement.
@@ -537,6 +539,8 @@ func (node *ShowCreate) Format(ctx *FmtCtx) {
 	switch node.Mode {
 	case ShowCreateModeDatabase:
 		ctx.WriteString("DATABASE ")
+	case ShowCreateModeSecondaryIndexes:
+		ctx.WriteString("SECONDARY INDEXES FROM ")
 	}
 	ctx.FormatNode(node.Name)
 }
