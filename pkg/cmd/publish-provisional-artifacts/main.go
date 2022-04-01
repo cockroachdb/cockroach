@@ -261,7 +261,13 @@ func putRelease(svc s3I, o opts) {
 }
 
 func markLatestRelease(svc s3I, o opts) {
+	markLatestReleaseWithSuffix(svc, o, "")
+	markLatestReleaseWithSuffix(svc, o, release.ChecksumSuffix)
+}
+
+func markLatestReleaseWithSuffix(svc s3I, o opts, suffix string) {
 	_, keyRelease := s3KeyRelease(o)
+	keyRelease += suffix
 	log.Printf("Downloading from %s/%s", o.BucketName, keyRelease)
 	binary, err := svc.GetObject(&s3.GetObjectInput{
 		Bucket: &o.BucketName,
@@ -279,6 +285,7 @@ func markLatestRelease(svc s3I, o opts) {
 	oLatest := o
 	oLatest.VersionStr = latestStr
 	_, keyLatest := s3KeyRelease(oLatest)
+	keyLatest += suffix
 	log.Printf("Uploading to s3://%s/%s", o.BucketName, keyLatest)
 	putObjectInput := s3.PutObjectInput{
 		Bucket:       &o.BucketName,
