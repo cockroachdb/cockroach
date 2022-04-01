@@ -996,6 +996,41 @@ other_db       testuser  DROP            NO
 statement ok
 SET DATABASE = test
 
+## crdb_internal.invalid_objects
+subtest invalid_objects
+
+query ITTTT colnames
+SELECT * FROM crdb_internal.invalid_objects
+----
+id  database_name  schema_name  obj_name  error
+
+# corrupt the namespace table
+statement ok
+SELECT crdb_internal.unsafe_upsert_namespace_entry(0, 0, 'baddb', 500, true);
+SELECT crdb_internal.unsafe_upsert_namespace_entry(1, 0, 'badschema', 501, true);
+SELECT crdb_internal.unsafe_upsert_namespace_entry(1, 29, 'badobj', 502, true);
+SELECT crdb_internal.unsafe_upsert_namespace_entry(1, 404, 'badobj', 503, true);
+
+query ITTTT colnames
+SELECT * FROM "".crdb_internal.invalid_objects
+----
+id   database_name  schema_name  obj_name  error
+500  baddb          ·            ·         descriptor not found
+501  system         badschema    ·         descriptor not found
+502  system         public       badobj    descriptor not found
+503  system         [404]        badobj    descriptor not found
+
+statement ok
+SELECT crdb_internal.unsafe_delete_namespace_entry(0, 0, 'baddb', 500, true);
+SELECT crdb_internal.unsafe_delete_namespace_entry(1, 0, 'badschema', 501, true);
+SELECT crdb_internal.unsafe_delete_namespace_entry(1, 29, 'badobj', 502, true);
+SELECT crdb_internal.unsafe_delete_namespace_entry(1, 404, 'badobj', 503, true);
+
+query ITTTT colnames
+SELECT * FROM crdb_internal.invalid_objects
+----
+id  database_name  schema_name  obj_name  error
+
 # crdb_internal can be used with the anonymous database.
 # It should show information across all databases.
 subtest anonymous_database
