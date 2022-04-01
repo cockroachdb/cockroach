@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
@@ -58,6 +59,10 @@ type Dependencies interface {
 	// IndexPartitioningCCLCallback returns the CCL callback for creating
 	// partitioning descriptors for indexes.
 	IndexPartitioningCCLCallback() CreatePartitioningCCLCallback
+
+	// DescriptorMetadataFetcher returns a scdecomp.DescriptorCommentCache
+	// Implementation.
+	DescriptorMetadataFetcher() scdecomp.DescriptorCommentCache
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
