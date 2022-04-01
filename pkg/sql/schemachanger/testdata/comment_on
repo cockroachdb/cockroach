@@ -1,0 +1,180 @@
+setup
+CREATE DATABASE db;
+CREATE SCHEMA db.sc;
+CREATE TABLE db.sc.t (
+  id INT PRIMARY KEY,
+  amount INT,
+  CONSTRAINT t_amount_gt_10 CHECK(amount > 10)
+);
+----
+...
++database {0 0 db} -> 104
++schema {104 0 public} -> 105
++schema {104 0 sc} -> 106
++object {104 106 t} -> 107
+
+test
+COMMENT ON DATABASE db IS 'db is good';
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+## StatementPhase stage 1 of 1 with 1 MutationType ops
+upsert db is good comment for descriptor #104 of type DatabaseCommentType
+# end StatementPhase
+# begin PreCommitPhase
+# end PreCommitPhase
+commit transaction #1
+
+test
+COMMENT ON SCHEMA db.sc IS 'sc is good';
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+## StatementPhase stage 1 of 1 with 1 MutationType ops
+upsert sc is good comment for descriptor #106 of type SchemaCommentType
+# end StatementPhase
+# begin PreCommitPhase
+# end PreCommitPhase
+commit transaction #1
+
+test
+COMMENT ON TABLE db.sc.t IS 't is good';
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+## StatementPhase stage 1 of 1 with 1 MutationType ops
+upsert t is good comment for descriptor #107 of type TableCommentType
+# end StatementPhase
+# begin PreCommitPhase
+# end PreCommitPhase
+commit transaction #1
+
+test
+COMMENT ON COLUMN db.sc.t.id IS 'id is good';
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+## StatementPhase stage 1 of 1 with 1 MutationType ops
+upsert id is good comment for descriptor #107 of type ColumnCommentType
+# end StatementPhase
+# begin PreCommitPhase
+# end PreCommitPhase
+commit transaction #1
+
+test
+COMMENT ON INDEX db.sc.t@t_pkey IS 'pkey is good';
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+## StatementPhase stage 1 of 1 with 1 MutationType ops
+upsert pkey is good comment for descriptor #107 of type IndexCommentType
+# end StatementPhase
+# begin PreCommitPhase
+# end PreCommitPhase
+commit transaction #1
+
+test
+COMMENT ON CONSTRAINT t_amount_gt_10 ON db.sc.t IS 'amount constraint is good';
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+## StatementPhase stage 1 of 1 with 1 MutationType ops
+upsert amount constraint is good comment for descriptor #107 of type ConstraintCommentType
+# end StatementPhase
+# begin PreCommitPhase
+# end PreCommitPhase
+commit transaction #1
+
+setup
+COMMENT ON DATABASE db IS 'db is good';
+COMMENT ON SCHEMA db.sc IS 'sc is good';
+COMMENT ON TABLE db.sc.t IS 't is good';
+COMMENT ON COLUMN db.sc.t.id IS 'id is good';
+COMMENT ON INDEX db.sc.t@t_pkey IS 'pkey is good';
+COMMENT ON CONSTRAINT t_amount_gt_10 ON db.sc.t IS 'amount constraint is good';
+----
+...
+
+test
+COMMENT ON DATABASE db IS NULL;
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 1 MutationType ops
+delete comment for descriptor #104 of type DatabaseCommentType
+# end PreCommitPhase
+commit transaction #1
+
+test
+COMMENT ON SCHEMA db.sc IS NULL;
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 1 MutationType ops
+delete comment for descriptor #106 of type SchemaCommentType
+# end PreCommitPhase
+commit transaction #1
+
+test
+COMMENT ON TABLE db.sc.t IS NULL;
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 1 MutationType ops
+delete comment for descriptor #107 of type TableCommentType
+# end PreCommitPhase
+commit transaction #1
+
+test
+COMMENT ON COLUMN db.sc.t.id IS NULL;
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 1 MutationType ops
+delete comment for descriptor #107 of type ColumnCommentType
+# end PreCommitPhase
+commit transaction #1
+
+test
+COMMENT ON INDEX db.sc.t@t_pkey IS NULL;
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 1 MutationType ops
+delete comment for descriptor #107 of type IndexCommentType
+# end PreCommitPhase
+commit transaction #1
+
+test
+COMMENT ON CONSTRAINT t_amount_gt_10 ON db.sc.t IS NULL;
+----
+checking for feature: COMMENT ON
+begin transaction #1
+# begin StatementPhase
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 1 MutationType ops
+delete comment for constraint on #107, constraint id: 2
+# end PreCommitPhase
+commit transaction #1
