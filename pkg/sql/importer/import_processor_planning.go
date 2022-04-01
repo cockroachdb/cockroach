@@ -93,6 +93,18 @@ func distImport(
 
 	dsp.FinalizePlan(planCtx, p)
 
+	var diagram string
+	specs := p.GenerateFlowSpecs()
+	if diag, err := execinfrapb.GeneratePlanDiagram(job.Payload().Description, specs, execinfrapb.DiagramFlags{}); err != nil {
+		log.Warning(ctx, err.Error())
+	} else {
+		if _, u, err := diag.ToURL(); err != nil {
+			log.Warning(ctx, err.Error())
+		} else {
+			diagram = u.String()
+		}
+	}
+
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
 	if importDetails.ReadProgress == nil {
 		// Initialize the progress metrics on the first attempt.
@@ -107,7 +119,7 @@ func distImport(
 						prog.SequenceDetails[i] = &jobspb.SequenceDetails{}
 					}
 				}
-
+				prog.DebugFlowDiagram = diagram
 				return 0.0
 			},
 		); err != nil {

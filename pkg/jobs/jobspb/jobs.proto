@@ -472,6 +472,8 @@ message ImportProgress {
   repeated SequenceDetails sequence_details = 6;
 
   roachpb.BulkOpSummary summary = 7 [(gogoproto.nullable) = false];
+
+  string debugFlowDiagram = 8;
 }
 
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.
