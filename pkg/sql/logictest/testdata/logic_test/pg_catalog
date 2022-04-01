@@ -1,5 +1,10 @@
 # LogicTest: local
 
+# Set the distsql_workmem to the default production value because of a problem
+# with losing 'name' attribute when spilling to disk (#78547).
+statement ok
+SET distsql_workmem = '64MiB'
+
 # Verify pg_catalog database handles mutation statements correctly.
 
 query error database "pg_catalog" does not exist

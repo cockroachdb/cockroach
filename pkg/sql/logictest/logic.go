@@ -1847,8 +1847,8 @@ func (t *logicTest) newCluster(
 			t.Fatal(err)
 		}
 
-		if cfg.randomizeWorkmem {
-			workmem := t.rng.Intn(90<<10) + 10<<10
+		{
+			workmem := 10 << 10
 			if _, err := conn.Exec(
 				fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem = '%dB'", workmem),
 			); err != nil {
