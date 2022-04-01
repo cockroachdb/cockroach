@@ -50,7 +50,6 @@ func TestFullClusterBackup(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DisableSpanConfigs: true, // TODO(irfansharif): #75060.
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					// We compare job progress before and after a restore. Disable
@@ -91,10 +90,17 @@ func TestFullClusterBackup(t *testing.T) {
 	}
 
 	// The claim_session_id field in jobs is a uuid and so needs to be excluded
-	// when comparing jobs pre/post restore.
+	// when comparing jobs pre/post restore. The span config reconciliation job
+	// too is something we exclude; because it's a singleton job, when restored
+	// into another cluster it self-terminates.
 	const jobsQuery = `
 SELECT id, status, created, payload, progress, created_by_type, created_by_id, claim_instance_id
 FROM system.jobs
+WHERE id NOT IN
+(
+	SELECT job_id FROM [SHOW AUTOMATIC JOBS]
+  WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION'
+)
 	`
 	// Pause SQL Stats compaction job to ensure the test is deterministic.
 	sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS]`)
