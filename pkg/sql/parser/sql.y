@@ -6395,7 +6395,7 @@ show_create_stmt:
 | SHOW CREATE SECONDARY INDEXES FROM table_name
 	{
 		/* SKIP DOC */
-		$$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeSecondaryIndexes, Name: $5.unresolvedObjectName()}
+		$$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeSecondaryIndexes, Name: $6.unresolvedObjectName()}
 	}
 | SHOW CREATE DATABASE db_name
 	{
