@@ -106,7 +106,11 @@ func (sr *SQLRunner) ExpectErr(t testutils.TB, errRE string, query string, args 
 	t.Helper()
 	_, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if !testutils.IsError(err, errRE) {
-		t.Fatalf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
+		s := "nil"
+		if err != nil {
+			s = pgerror.FullError(err)
+		}
+		t.Fatalf("expected error '%s', got: %s", errRE, s)
 	}
 }
 
