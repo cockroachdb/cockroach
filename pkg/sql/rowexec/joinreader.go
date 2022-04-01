@@ -915,8 +915,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		return nil
 	}
 
-	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
-	return &execinfrapb.ComponentStats{
+	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
@@ -926,6 +925,13 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: jr.OutputHelper.Stats(),
 	}
+	// Note that there is no need to include the maximum bytes of
+	// jr.limitedMemMonitor because it is a child of jr.MemMonitor.
+	ret.Exec.MaxAllocatedMem.Add(jr.MemMonitor.MaximumBytes())
+	if jr.diskMonitor != nil {
+		ret.Exec.MaxAllocatedDisk.Add(jr.diskMonitor.MaximumBytes())
+	}
+	return ret
 }
 
 func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
