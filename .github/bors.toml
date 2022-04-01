@@ -10,6 +10,10 @@ status = ["GitHub CI (Cockroach)"]
 # before merging.
 pr_status = ["license/cla", "blathers/release-justification-check"]
 
+# Number of project members who must approve the PR (using GitHub Reviews)
+# before it is pushed to master.
+required_approvals = 1
+
 # List of PR labels that may not be attached to a PR when it is r+-ed.
 block_labels = ["do-not-merge"]
 
