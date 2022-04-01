@@ -107,11 +107,6 @@ func (s *substring_StartType_LengthTypeOperator) Next() coldata.Batch {
 	startVec := batch.ColVec(s.argumentCols[1])._StartType()
 	lengthVec := batch.ColVec(s.argumentCols[2])._LengthType()
 	outputVec := batch.ColVec(s.outputIdx)
-	if outputVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		outputVec.Nulls().UnsetNulls()
-	}
 	outputCol := outputVec.Bytes()
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},

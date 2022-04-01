@@ -333,6 +333,8 @@ const (
 	ShowRegionsFromAllDatabases
 	// ShowRegionsFromDefault represents SHOW REGIONS.
 	ShowRegionsFromDefault
+	// ShowSuperRegionsFromDatabase represents SHOW SUPER REGIONS FROM DATABASE.
+	ShowSuperRegionsFromDatabase
 )
 
 // ShowRegions represents a SHOW REGIONS statement
@@ -343,12 +345,16 @@ type ShowRegions struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRegions) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW REGIONS")
+	if node.ShowRegionsFrom == ShowSuperRegionsFromDatabase {
+		ctx.WriteString("SHOW SUPER REGIONS")
+	} else {
+		ctx.WriteString("SHOW REGIONS")
+	}
 	switch node.ShowRegionsFrom {
 	case ShowRegionsFromDefault:
 	case ShowRegionsFromAllDatabases:
 		ctx.WriteString(" FROM ALL DATABASES")
-	case ShowRegionsFromDatabase:
+	case ShowRegionsFromDatabase, ShowSuperRegionsFromDatabase:
 		ctx.WriteString(" FROM DATABASE")
 		if node.DatabaseName != "" {
 			ctx.WriteString(" ")

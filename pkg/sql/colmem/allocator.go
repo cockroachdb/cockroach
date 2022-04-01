@@ -218,15 +218,20 @@ func (a *Allocator) NewMemColumn(t *types.T, capacity int) coldata.Vec {
 }
 
 // MaybeAppendColumn might append a newly allocated coldata.Vec of the given
-// type to b at position colIdx. Behavior of the function depends on how colIdx
-// compares to the width of b:
+// type to b at position colIdx. The vector is guaranteed to be in a "reset"
+// state when this function returns (meaning that no nulls are set,
+// coldata.Bytes.Reset is called if applicable, etc).
+//
+// Behavior of the function depends on how colIdx compares to the width of b:
 // 1. if colIdx < b.Width(), then we expect that correctly-typed vector is
 // already present in position colIdx. If that's not the case, we will panic.
+// Nulls are unset on the vector.
 // 2. if colIdx == b.Width(), then we will append a newly allocated coldata.Vec
 // of the given type.
 // 3. if colIdx > b.Width(), then we will panic because such condition
 // indicates an error in setting up vector type enforcers during the planning
 // stage.
+//
 // NOTE: b must be non-zero length batch.
 func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 	if b.Length() == 0 {
@@ -266,6 +271,9 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				a.ReleaseMemory(presentVec.Datum().Reset())
 			} else {
 				coldata.ResetIfBytesLike(presentVec)
+			}
+			if presentVec.MaybeHasNulls() {
+				presentVec.Nulls().UnsetNulls()
 			}
 			return
 		}

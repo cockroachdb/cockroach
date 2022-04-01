@@ -607,6 +607,26 @@ and which stays constant throughout the transaction. This timestamp
 has no relationship with the commit order of concurrent transactions.</p>
 <p>This function is the preferred overload and will be evaluated by default.</p>
 </span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: <a href="date.html">date</a>, e1: <a href="date.html">date</a>, s1: <a href="date.html">date</a>, e2: <a href="date.html">date</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns if two time periods (defined by their endpoints) overlap.</p>
+</span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: <a href="date.html">date</a>, e1: <a href="interval.html">interval</a>, s1: <a href="date.html">date</a>, e2: <a href="interval.html">interval</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns if two time periods (defined by their endpoints) overlap.</p>
+</span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: <a href="time.html">time</a>, e1: <a href="interval.html">interval</a>, s1: <a href="time.html">time</a>, e2: <a href="interval.html">interval</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns if two time periods (defined by their endpoints) overlap.</p>
+</span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: <a href="time.html">time</a>, e1: <a href="time.html">time</a>, s1: <a href="time.html">time</a>, e2: <a href="time.html">time</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns if two time periods (defined by their endpoints) overlap.</p>
+</span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: <a href="timestamp.html">timestamp</a>, e1: <a href="interval.html">interval</a>, s1: <a href="timestamp.html">timestamp</a>, e2: <a href="interval.html">interval</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns if two time periods (defined by their endpoints) overlap.</p>
+</span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: <a href="timestamp.html">timestamp</a>, e1: <a href="timestamp.html">timestamp</a>, s1: <a href="timestamp.html">timestamp</a>, e2: <a href="timestamp.html">timestamp</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns if two time periods (defined by their endpoints) overlap.</p>
+</span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: <a href="timestamp.html">timestamptz</a>, e1: <a href="interval.html">interval</a>, s1: <a href="timestamp.html">timestamptz</a>, e2: <a href="interval.html">interval</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns if two time periods (defined by their endpoints) overlap.</p>
+</span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: <a href="timestamp.html">timestamptz</a>, e1: <a href="timestamp.html">timestamptz</a>, s1: <a href="timestamp.html">timestamptz</a>, e2: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns if two time periods (defined by their endpoints) overlap.</p>
+</span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: timetz, e1: <a href="interval.html">interval</a>, s1: timetz, e2: <a href="interval.html">interval</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns if two time periods (defined by their endpoints) overlap.</p>
+</span></td></tr>
+<tr><td><a name="overlaps"></a><code>overlaps(s1: timetz, e1: timetz, s1: timetz, e2: timetz) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns if two time periods (defined by their endpoints) overlap.</p>
+</span></td></tr>
 <tr><td><a name="statement_timestamp"></a><code>statement_timestamp() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the start time of the current statement.</p>
 </span></td></tr>
 <tr><td><a name="statement_timestamp"></a><code>statement_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns the start time of the current statement.</p>
