@@ -1085,8 +1085,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
+	mode := ex.sessionData().DistSQLMode
 	distributePlan := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeID, ex.sessionData().DistSQLMode, planner.curPlan.main,
+		ctx, planner, planner.execCfg.NodeID, mode, planner.curPlan.main,
 	)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
@@ -1138,7 +1139,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	distribute := DistributionType(DistributionTypeNone)
 	if distributePlan.WillDistribute() {
-		distribute = DistributionTypeSystemTenantOnly
+		distribute = DistributionTypeAlways
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(

@@ -1,0 +1,16 @@
+# LogicTest: 3node-tenant
+# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants allow-multi-region-abstractions-for-secondary-tenants
+
+statement ok
+CREATE TABLE tbl (a INT PRIMARY KEY, b INT)
+
+query T
+EXPLAIN SELECT * FROM tbl WHERE a < 3 OR (a > 7 AND a < 9) OR a > 14
+----
+distribution: full
+vectorized: true
+·
+• scan
+  missing stats
+  table: tbl@tbl_pkey
+  spans: [ - /2] [/8 - /8] [/15 - ]
