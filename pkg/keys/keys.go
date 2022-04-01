@@ -835,10 +835,29 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	}
 	sqlN := len(sqlKey)
 
+	// Check that the prefix contains a valid TableID.
 	if encoding.PeekType(sqlKey) != encoding.Int {
 		// Not a table key, so the row prefix is the entire key.
 		return n, nil
 	}
+	tableIDLen, err := encoding.GetUvarintLen(sqlKey)
+	if err != nil {
+		return 0, err
+	}
+
+	// Check whether the prefix contains a valid IndexID after the TableID. Not
+	// all keys contain an index ID.
+	if encoding.PeekType(sqlKey[tableIDLen:]) == encoding.Int {
+		indexIDLen, err := encoding.GetUvarintLen(sqlKey[tableIDLen:])
+		if err != nil {
+			return 0, err
+		}
+		// If the IndexID is the last part of the key, the entire key is the prefix.
+		if tableIDLen+indexIDLen == sqlN {
+			return n, nil
+		}
+	}
+
 	// The column family ID length is encoded as a varint and we take advantage
 	// of the fact that the column family ID itself will be encoded in 0-9 bytes
 	// and thus the length of the column family ID data will fit in a single

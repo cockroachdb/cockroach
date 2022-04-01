@@ -622,6 +622,7 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		expected roachpb.Key
 	}{
 		{es(), es()},                     // Not a table key
+		{es(1, 2), es(1, 2)},             // /Table/1/2 -> /Table/1/2
 		{es(1, 2, 0), es(1, 2)},          // /Table/1/2/0 -> /Table/1/2
 		{es(1, 2, 1), es(1)},             // /Table/1/2/1 -> /Table/1
 		{es(1, 2, 2), es()},              // /Table/1/2/2 -> /Table
@@ -631,6 +632,7 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		{es(1, 2, 3, 4, 1), es(1, 2, 3)}, // /Table/1/2/3/4/1 -> /Table/1/2/3
 		// Same test cases, but for tenant 5.
 		{e5(), e5()},                     // Not a table key
+		{e5(1, 2), e5(1, 2)},             // /Tenant/5/Table/1/2 -> /Tenant/5/Table/1/2
 		{e5(1, 2, 0), e5(1, 2)},          // /Tenant/5/Table/1/2/0 -> /Tenant/5/Table/1/2
 		{e5(1, 2, 1), e5(1)},             // /Tenant/5/Table/1/2/1 -> /Tenant/5/Table/1
 		{e5(1, 2, 2), e5()},              // /Tenant/5/Table/1/2/2 -> /Tenant/5/Table
@@ -674,23 +676,22 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 	}{
 		// Column ID suffix size is too large.
 		{es(1), "malformed table key"},
-		{es(1, 2), "malformed table key"},
+		{es(1, 2, 5), "malformed table key"},
 		// The table ID is invalid.
 		{es(200)[:1], "insufficient bytes to decode uvarint value"},
-		// The index ID is invalid.
-		{es(1, 200)[:2], "insufficient bytes to decode uvarint value"},
 		// The column ID suffix is invalid.
+		{es(1, 200)[:2], "insufficient bytes to decode uvarint value"},
 		{es(1, 2, 200)[:3], "insufficient bytes to decode uvarint value"},
 		// Exercises a former overflow bug. We decode a uint(18446744073709551610) which, if cast
-		// to int carelessly, results in -6.
-		{encoding.EncodeVarintAscending(tenSysCodec.TablePrefix(999), 322434), "malformed table key"},
+		// to int carelessly, results in -6 for the column family length.
+		{encoding.EncodeVarintAscending(es(999, 2), 322434), "malformed table key"},
 		// Same test cases, but for tenant 5.
 		{e5(1), "malformed table key"},
-		{e5(1, 2), "malformed table key"},
+		{e5(1, 2, 5), "malformed table key"},
 		{e5(200)[:3], "insufficient bytes to decode uvarint value"},
 		{e5(1, 200)[:4], "insufficient bytes to decode uvarint value"},
 		{e5(1, 2, 200)[:5], "insufficient bytes to decode uvarint value"},
-		{encoding.EncodeVarintAscending(ten5Codec.TablePrefix(999), 322434), "malformed table key"},
+		{encoding.EncodeVarintAscending(e5(999, 2), 322434), "malformed table key"},
 	}
 	for i, d := range errorData {
 		_, err := EnsureSafeSplitKey(d.in)

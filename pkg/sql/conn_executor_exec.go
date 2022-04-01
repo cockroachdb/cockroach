@@ -1139,7 +1139,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	distribute := DistributionType(DistributionTypeNone)
 	if distributePlan.WillDistribute() {
-		distribute = DistributionTypeSystemTenantOnly
+		distribute = DistributionTypeAlways
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
