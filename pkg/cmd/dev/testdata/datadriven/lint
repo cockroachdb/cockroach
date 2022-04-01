@@ -19,7 +19,12 @@ exec
 dev lint -f TestLowercaseFunctionNames --cpus 4
 ----
 bazel run --config=test //build/bazelutil:lint --local_cpu_resources=4 -- -test.v -test.run Lint/TestLowercaseFunctionNames
-bazel build //pkg/cmd/cockroach-short --//build/toolchains:nogo_flag
+
+exec
+dev lint --cpus 4
+----
+bazel run --config=test //build/bazelutil:lint --local_cpu_resources=4 -- -test.v
+bazel build //pkg/cmd/cockroach-short --//build/toolchains:nogo_flag --local_cpu_resources=4
 
 exec
 dev lint pkg/cmd/dev pkg/spanconfig
