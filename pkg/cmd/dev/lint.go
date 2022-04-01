@@ -82,6 +82,9 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 	}
 	if !short {
 		args := []string{"build", "//pkg/cmd/cockroach-short", "--//build/toolchains:nogo_flag"}
+		if numCPUs != 0 {
+			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+		}
 		logCommand("bazel", args...)
 		return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	}
