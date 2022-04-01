@@ -292,7 +292,7 @@ role_name  member     is_admin
 testrole   testuser   true
 testrole   testuser2  true
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW GRANTS ON ROLE FOR testuser, testuser2
 ----
 role_name  member     is_admin
@@ -300,7 +300,7 @@ admin      testuser   false
 testrole   testuser   true
 testrole   testuser2  true
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW GRANTS ON ROLE admin, testrole FOR root, testuser2
 ----
 role_name  member     is_admin

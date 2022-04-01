@@ -1255,7 +1255,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	).WillDistribute()
 	distribute := DistributionType(DistributionTypeNone)
 	if distributeSubquery {
-		distribute = DistributionTypeSystemTenantOnly
+		distribute = DistributionTypeAlways
 	}
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn,
 		distribute)
@@ -1602,7 +1602,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	).WillDistribute()
 	distribute := DistributionType(DistributionTypeNone)
 	if distributePostquery {
-		distribute = DistributionTypeSystemTenantOnly
+		distribute = DistributionTypeAlways
 	}
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn,
 		distribute)
