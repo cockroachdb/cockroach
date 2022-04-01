@@ -581,8 +581,8 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 		// Account for the new allocations.
 		sliceOverhead := memsize.IntSliceOverhead*int64(cap(s.inputRowIdxToLookedUpRowIndices)) +
 			memsize.Int64*int64(cap(s.accountedFor.inputRowIdxToLookedUpRowIndices))
-		if err := s.memAcc.Grow(s.Ctx, sliceOverhead-s.accountedFor.sliceOverhead); err != nil {
-			return nil, addWorkmemHint(err)
+		if err := s.growMemoryAccount(sliceOverhead - s.accountedFor.sliceOverhead); err != nil {
+			return nil, err
 		}
 		s.accountedFor.sliceOverhead = sliceOverhead
 	}
@@ -646,8 +646,8 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 		delta += newSize - s.accountedFor.inputRowIdxToLookedUpRowIndices[idx]
 		s.accountedFor.inputRowIdxToLookedUpRowIndices[idx] = newSize
 	}
-	if err := s.memAcc.Grow(s.Ctx, delta); err != nil {
-		return jrStateUnknown, addWorkmemHint(err)
+	if err := s.growMemoryAccount(delta); err != nil {
+		return jrStateUnknown, err
 	}
 
 	return jrPerformingLookup, nil
@@ -755,4 +755,23 @@ func (s *joinReaderOrderingStrategy) close(ctx context.Context) {
 	*s = joinReaderOrderingStrategy{
 		testingInfoSpilled: s.lookedUpRows.Spilled(),
 	}
+}
+
+// growMemoryAccount registers delta bytes with the memory account. If the
+// reservation is denied initially, then it'll attempt to spill lookedUpRows row
+// container to disk, so the error is only returned when that wasn't
+// successful.
+func (s *joinReaderOrderingStrategy) growMemoryAccount(delta int64) error {
+	if err := s.memAcc.Grow(s.Ctx, delta); err != nil {
+		// We don't have enough budget to account for the new size. Check
+		// whether we can spill the looked up rows to disk to free up the
+		// budget.
+		spilled, spillErr := s.lookedUpRows.SpillToDisk(s.Ctx)
+		if !spilled || spillErr != nil {
+			return addWorkmemHint(errors.CombineErrors(err, spillErr))
+		}
+		// We freed up some budget, so try to perform the accounting again.
+		return addWorkmemHint(s.memAcc.ResizeTo(s.Ctx, delta))
+	}
+	return nil
 }
