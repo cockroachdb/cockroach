@@ -333,6 +333,8 @@ const (
 	AutoStatsTableSettings
 	// ForecastStats enables statistics forecasting per table.
 	ForecastStats
+	// SuperRegions enables the usage on super regions.
+	SuperRegions
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -563,6 +565,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ForecastStats,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 102},
+	},
+	{
+		Key:     SuperRegions,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 104},
 	},
 
 	// *************************************************
