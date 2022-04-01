@@ -1404,6 +1404,7 @@ message ExternalStorage {
 
     string account_name = 3;
     string account_key = 4;
+    string environment = 5;
   }
   message FileTable {
     // User interacting with the external storage. This is used to check access
