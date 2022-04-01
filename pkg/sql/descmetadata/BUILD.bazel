@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "descmetadata",
     srcs = [
+        "metadata_fetcher.go",
         "metadata_updater.go",
         "metadata_updater_factory.go",
     ],
@@ -16,6 +17,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/schemachanger/scdecomp",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -125,6 +126,7 @@ type builderState struct {
 	semaCtx         *tree.SemaContext
 	cr              CatalogReader
 	auth            AuthorizationAccessor
+	metadataFetcher scdecomp.DescriptorMetadataFetcher
 	createPartCCL   CreatePartitioningCCLCallback
 	hasAdmin        bool
 
@@ -167,6 +169,7 @@ func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentSt
 		output:          make([]elementState, 0, len(initial.Current)),
 		descCache:       make(map[catid.DescID]*cachedDesc),
 		tempSchemas:     make(map[catid.DescID]catalog.SchemaDescriptor),
+		metadataFetcher: d.DescriptorMetadataFetcher(),
 	}
 	var err error
 	bs.hasAdmin, err = bs.auth.HasAdminRole(ctx)

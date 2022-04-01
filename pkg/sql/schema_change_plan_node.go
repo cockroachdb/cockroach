@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -72,6 +73,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p.SessionData(),
 		p.ExecCfg().Settings,
 		scs.stmts,
+		descmetadata.NewMetadataFetcher(p.Txn(), p.execCfg.InternalExecutor),
 	)
 	state, err := scbuild.Build(ctx, deps, scs.state, stmt)
 	if scerrors.HasNotImplemented(err) &&

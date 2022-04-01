@@ -81,7 +81,8 @@ func runDecomposeTest(
 		visitor := func(status scpb.Status, element scpb.Element) {
 			m[element] = status
 		}
-		backRefs := scdecomp.WalkDescriptor(desc, allDescs.LookupDescriptorEntry, visitor)
+		commentFetcher := sctestdeps.NewTestDependencies(sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)))
+		backRefs := scdecomp.WalkDescriptor(ctx, desc, allDescs.LookupDescriptorEntry, visitor, commentFetcher)
 		return marshalResult(t, m, backRefs)
 
 	default:

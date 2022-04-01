@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -47,6 +48,7 @@ func NewBuilderDependencies(
 	sessionData *sessiondata.SessionData,
 	settings *cluster.Settings,
 	statements []string,
+	metadataFetcher scdecomp.DescriptorMetadataFetcher,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -60,6 +62,7 @@ func NewBuilderDependencies(
 		statements:      statements,
 		astFormatter:    astFormatter,
 		featureChecker:  featureChecker,
+		metadataFetcher: metadataFetcher,
 	}
 }
 
@@ -75,6 +78,7 @@ type buildDeps struct {
 	statements      []string
 	astFormatter    scbuild.AstFormatter
 	featureChecker  scbuild.FeatureChecker
+	metadataFetcher scdecomp.DescriptorMetadataFetcher
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -317,4 +321,9 @@ func (d *buildDeps) IncrementUserDefinedSchemaCounter(
 // IncrementEnumCounter implements the scbuild.Dependencies interface.
 func (d *buildDeps) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryType) {
 	sqltelemetry.IncrementEnumCounter(counterType)
+}
+
+// DescriptorMetadataFetcher implements the scbuild.Dependencies interface.
+func (d *buildDeps) DescriptorMetadataFetcher() scdecomp.DescriptorMetadataFetcher {
+	return d.metadataFetcher
 }

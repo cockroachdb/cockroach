@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
@@ -74,13 +75,14 @@ func WithBuilderDependenciesFromTestServer(
 		execCfg.Codec,
 		planner.Txn(),
 		planner.Descriptors(),
-		planner,
-		planner,
-		planner,
-		planner,
+		planner, /* schemaResolver */
+		planner, /* authAccessor */
+		planner, /* astFormatter */
+		planner, /* featureChecker */
 		planner.SessionData(),
 		execCfg.Settings,
 		nil, /* statements */
+		descmetadata.NewMetadataFetcher(planner.Txn(), execCfg.InternalExecutor),
 	))
 }
 

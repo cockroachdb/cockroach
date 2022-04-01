@@ -736,7 +736,7 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 			current: status,
 		})
 	}
-	c.backrefs = scdecomp.WalkDescriptor(c.desc, crossRefLookupFn, visitorFn)
+	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn, b.metadataFetcher)
 	// Name prefix and namespace lookups.
 	switch d := c.desc.(type) {
 	case catalog.DatabaseDescriptor:

@@ -4,11 +4,13 @@ go_library(
     name = "scdecomp",
     srcs = [
         "decomp.go",
+        "dependencies.go",
         "helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/catpb",

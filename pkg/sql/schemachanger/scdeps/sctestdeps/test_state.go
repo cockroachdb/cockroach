@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -33,6 +34,7 @@ import (
 // purpose of facilitating end-to-end testing of the declarative schema changer.
 type TestState struct {
 	catalog, synthetic  nstree.MutableCatalog
+	commentCache        *scdecomp.CommentCache
 	currentDatabase     string
 	phase               scop.Phase
 	sessionData         sessiondata.SessionData
@@ -133,5 +135,17 @@ func (s *TestState) CheckFeature(ctx context.Context, featureName tree.SchemaFea
 
 // FeatureChecker implements scbuild.Dependencies
 func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
+	return s
+}
+
+// GetAllCommentsOnObject implements scdecomp.DescriptorMetadataFetcher interface.
+func (s *TestState) GetAllCommentsOnObject(
+	ctx context.Context, objectID int64,
+) (*scdecomp.CommentCache, error) {
+	return s.commentCache.CommentsForObject(objectID), nil
+}
+
+// DescriptorMetadataFetcher implements scbuild.Dependencies interface.
+func (s *TestState) DescriptorMetadataFetcher() scdecomp.DescriptorMetadataFetcher {
 	return s
 }

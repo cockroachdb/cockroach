@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -105,6 +106,13 @@ func WithBackfillTracker(backfillTracker scexec.BackfillTracker) Option {
 func WithBackfiller(backfiller scexec.Backfiller) Option {
 	return optionFunc(func(state *TestState) {
 		state.backfiller = backfiller
+	})
+}
+
+// WithComments injects sets comment cache of TestState to the provided value.
+func WithComments(commentCache *scdecomp.CommentCache) Option {
+	return optionFunc(func(state *TestState) {
+		state.commentCache = commentCache
 	})
 }
 
