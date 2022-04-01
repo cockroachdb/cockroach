@@ -200,9 +200,13 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, i, idx)
 		}
-		// We want all the memory to be usable by the cache, so spill to disk.
-		require.NoError(t, rc.testingSpillToDisk(ctx))
-		require.True(t, rc.UsingDisk())
+		if !rc.UsingDisk() {
+			// We want all the memory to be usable by the cache, so spill to
+			// disk.
+			spilled, err := rc.SpillToDisk(ctx)
+			require.NoError(t, err)
+			require.True(t, spilled)
+		}
 		// Random access of the inserted rows.
 		var accesses [][]int
 		for i := 0; i < 2*numRows; i++ {
@@ -369,7 +373,8 @@ func (d numberedContainerUsingNRC) getRow(
 	return d.rc.GetRow(ctx, idx, false)
 }
 func (d numberedContainerUsingNRC) spillToDisk(ctx context.Context) error {
-	return d.rc.testingSpillToDisk(ctx)
+	_, err := d.rc.SpillToDisk(ctx)
+	return err
 }
 func (d numberedContainerUsingNRC) unsafeReset(ctx context.Context) error {
 	return d.rc.UnsafeReset(ctx)
@@ -389,9 +394,9 @@ func makeNumberedContainerUsingNRC(
 	diskMonitor *mon.BytesMonitor,
 ) numberedContainerUsingNRC {
 	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
-	rc := NewDiskBackedNumberedRowContainer(
-		false /* deDup */, types, evalCtx, engine, memoryMonitor, diskMonitor)
-	require.NoError(t, rc.testingSpillToDisk(ctx))
+	rc := NewDiskBackedNumberedRowContainer(false /* deDup */, types, evalCtx, engine, memoryMonitor, diskMonitor)
+	_, err := rc.SpillToDisk(ctx)
+	require.NoError(t, err)
 	return numberedContainerUsingNRC{rc: rc, memoryMonitor: memoryMonitor}
 }
 

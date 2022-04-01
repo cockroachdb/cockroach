@@ -1,0 +1,34 @@
+# LogicTest: local !metamorphic
+
+# Lower the workmem limit so that less data needs to be inserted. The join
+# reader overrides it to be at least 8MiB, so we cannot go lower than that.
+statement ok
+SET distsql_workmem = '8MiB';
+
+# Populate two tables such that there will be very large input:output lookup
+# ratio.
+statement ok
+CREATE TABLE numbers (n INT, INDEX (n) );
+INSERT INTO numbers SELECT g % 10 FROM generate_series(0, 999999) as g;
+CREATE TABLE small (n INT PRIMARY KEY);
+INSERT INTO small SELECT generate_series(0, 9);
+
+# Read from the small table and perform the lookup join into the large table.
+# We want to make sure that the query succeeds and doesn't run into "budget
+# exceeded" error - the row container will have to spill to disk.
+query II
+SELECT small.n, count(*) FROM small
+INNER LOOKUP JOIN numbers ON small.n = numbers.n
+GROUP BY small.n
+ORDER BY small.n;
+----
+0  100000
+1  100000
+2  100000
+3  100000
+4  100000
+5  100000
+6  100000
+7  100000
+8  100000
+9  100000
