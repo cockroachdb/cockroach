@@ -1043,7 +1043,11 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 		desc,
 		conf,
 		transferLeaseOptions{
+			goal:   leaseCountConvergence,
 			dryRun: dryRun,
+			// NB: This option means that the allocator is asked to not consider the
+			// current replica in its set of potential candidates.
+			checkTransferLeaseSource: false,
 		},
 	)
 	return transferred == transferOK, err
