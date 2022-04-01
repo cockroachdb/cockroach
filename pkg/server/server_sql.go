@@ -575,6 +575,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		leaseMgr,
 		virtualSchemas,
 		hydratedTablesCache,
+		spanConfig.splitter,
 		spanConfig.limiter,
 	)
 
