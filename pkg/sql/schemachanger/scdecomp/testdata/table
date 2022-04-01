@@ -28,10 +28,12 @@ ElementState:
   Status: PUBLIC
 - Column:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 104
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -98,18 +100,22 @@ ElementState:
   Status: PUBLIC
 - Column:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
 - Column:
     columnId: 2
+    pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
 - Column:
     columnId: 3
+    pgAttributeNum: 3
     tableId: 105
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -193,6 +199,7 @@ ElementState:
 - ColumnComment:
     columnId: 1
     comment: id is a identifier
+    pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
 - IndexName:
@@ -275,14 +282,17 @@ ElementState:
   Status: PUBLIC
 - Column:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 104
   Status: PUBLIC
 - Column:
     columnId: 2
+    pgAttributeNum: 2
     tableId: 104
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:
@@ -372,15 +382,18 @@ ElementState:
   Status: PUBLIC
 - Column:
     columnId: 1
+    pgAttributeNum: 1
     tableId: 108
   Status: PUBLIC
 - Column:
     columnId: 2
     isHidden: true
+    pgAttributeNum: 2
     tableId: 108
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
+      constraintId: 1
       indexId: 1
       isUnique: true
       keyColumnDirections:

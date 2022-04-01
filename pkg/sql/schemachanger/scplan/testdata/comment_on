@@ -17,18 +17,31 @@ CREATE TABLE db1.sc1.t1 (
 ops
 COMMENT ON DATABASE db1 IS 'db1 is good';
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[DatabaseComment:{DescID: 104, Comment: db1 is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertDatabaseComment
       Comment: db1 is good
       DatabaseID: 104
+    *scop.LogEvent
+      Authorization:
+        UserName: root
+      Element:
+        DatabaseComment:
+          comment: db1 is good
+          databaseId: 104
+      Statement: COMMENT ON DATABASE ‹db1› IS 'db1 is good'
+      StatementTag: COMMENT ON DATABASE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      TargetStatus: 2
 
 ops
 COMMENT ON SCHEMA db1.sc1 IS 'sc1 is good';
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[SchemaComment:{DescID: 106, Comment: sc1 is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
@@ -39,30 +52,59 @@ StatementPhase stage 1 of 1 with 1 MutationType ops
 ops
 COMMENT ON TABLE db1.sc1.t1 IS 't1 is good';
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[TableComment:{DescID: 107, Comment: t1 is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertTableComment
       Comment: t1 is good
       TableID: 107
+    *scop.LogEvent
+      Authorization:
+        UserName: root
+      Element:
+        TableComment:
+          comment: t1 is good
+          tableId: 107
+      Statement: COMMENT ON TABLE ‹db1›.‹sc1›.‹t1› IS 't1 is good'
+      StatementTag: COMMENT ON TABLE
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      TargetStatus: 2
 
 ops
 COMMENT ON COLUMN db1.sc1.t1.id IS 'id is important';
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[ColumnComment:{DescID: 107, ColumnID: 1, Comment: id is important}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertColumnComment
       ColumnID: 1
       Comment: id is important
+      PGAttributeNum: 1
       TableID: 107
+    *scop.LogEvent
+      Authorization:
+        UserName: root
+      Element:
+        ColumnComment:
+          columnId: 1
+          comment: id is important
+          pgAttributeNum: 1
+          tableId: 107
+      Statement: COMMENT ON COLUMN ‹db1›.‹sc1›.‹t1›.‹id› IS 'id is important'
+      StatementTag: COMMENT ON COLUMN
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      TargetStatus: 2
 
 ops
 COMMENT ON INDEX db1.sc1.t1_pkey IS 'pkey is good';
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
@@ -70,11 +112,25 @@ StatementPhase stage 1 of 1 with 1 MutationType ops
       Comment: pkey is good
       IndexID: 1
       TableID: 107
+    *scop.LogEvent
+      Authorization:
+        UserName: root
+      Element:
+        IndexComment:
+          comment: pkey is good
+          indexId: 1
+          tableId: 107
+      Statement: COMMENT ON INDEX ‹db1›.‹sc1›.‹t1_pkey› IS 'pkey is good'
+      StatementTag: COMMENT ON INDEX
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      TargetStatus: 2
 
 ops
 COMMENT ON CONSTRAINT t1_amount_gt_10 ON db1.sc1.t1 IS 'this is a rule';
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[ConstraintComment:{DescID: 107, ConstraintID: 2, Comment: this is a rule}, PUBLIC], ABSENT] -> PUBLIC
   ops:
@@ -82,8 +138,23 @@ StatementPhase stage 1 of 1 with 1 MutationType ops
       Comment: this is a rule
       ConstraintID: 2
       TableID: 107
+    *scop.LogEvent
+      Authorization:
+        UserName: root
+      Element:
+        ConstraintComment:
+          comment: this is a rule
+          constraintId: 2
+          tableId: 107
+      Statement: COMMENT ON CONSTRAINT ‹t1_amount_gt_10› ON ‹db1›.‹sc1›.‹t1› IS 'this is
+        a rule'
+      StatementTag: COMMENT ON CONSTRAINT
+      TargetMetadata:
+        SourceElementID: 1
+        SubWorkID: 1
+      TargetStatus: 2
 
-descriptor-metadata
+setup
 COMMENT ON DATABASE db1 IS 'db1 is good';
 COMMENT ON SCHEMA db1.sc1 IS 'sc1 is good';
 COMMENT ON TABLE db1.sc1.t1 IS 't1 is good';
@@ -95,7 +166,7 @@ COMMENT ON CONSTRAINT t1_amount_gt_10 ON db1.sc1.t1 IS 'this is a rule';
 ops
 COMMENT ON DATABASE db1 IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 1 MutationType ops
+PreCommitPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -105,7 +176,7 @@ PreCommitPhase stage 1 of 1 with 1 MutationType ops
 ops
 COMMENT ON SCHEMA db1.sc1 IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 1 MutationType ops
+PreCommitPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[SchemaComment:{DescID: 106, Comment: sc1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -115,7 +186,7 @@ PreCommitPhase stage 1 of 1 with 1 MutationType ops
 ops
 COMMENT ON TABLE db1.sc1.t1 IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 1 MutationType ops
+PreCommitPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[TableComment:{DescID: 107, Comment: t1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -125,18 +196,19 @@ PreCommitPhase stage 1 of 1 with 1 MutationType ops
 ops
 COMMENT ON COLUMN db1.sc1.t1.id IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 1 MutationType ops
+PreCommitPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[ColumnComment:{DescID: 107, ColumnID: 1, Comment: id is important}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveColumnComment
       ColumnID: 1
+      PGAttributeNum: 1
       TableID: 107
 
 ops
 COMMENT ON INDEX db1.sc1.t1_pkey IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 1 MutationType ops
+PreCommitPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -147,7 +219,7 @@ PreCommitPhase stage 1 of 1 with 1 MutationType ops
 ops
 COMMENT ON CONSTRAINT t1_amount_gt_10 ON db1.sc1.t1 IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 1 MutationType ops
+PreCommitPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[ConstraintComment:{DescID: 107, ConstraintID: 2, Comment: this is a rule}, ABSENT], PUBLIC] -> ABSENT
   ops:

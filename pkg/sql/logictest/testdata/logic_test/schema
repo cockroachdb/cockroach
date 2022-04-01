@@ -450,10 +450,10 @@ ALTER TABLE privs.usage_tbl ADD COLUMN y INT DEFAULT NULL
 statement error pq: user testuser does not have USAGE privilege on schema privs
 CREATE INDEX ON privs.usage_tbl (x)
 
-statement error pq: user testuser does not have USAGE privilege on schema privs
+statement error pq: must be owner of table usage_tbl or have CREATE privilege on table usage_tbl
 COMMENT ON TABLE privs.usage_tbl IS 'foo'
 
-statement error pq: user testuser does not have USAGE privilege on schema privs
+statement error pq: must be owner of table usage_tbl or have CREATE privilege on table usage_tbl
 COMMENT ON COLUMN privs.usage_tbl.x IS 'foo'
 
 statement error pq: user testuser does not have USAGE privilege on schema privs
