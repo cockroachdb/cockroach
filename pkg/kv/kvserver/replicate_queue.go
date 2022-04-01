@@ -824,6 +824,9 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 		conf,
 		transferLeaseOptions{
 			dryRun: dryRun,
+			// NB: This option means that the allocator is asked to not consider the
+			// current replica in its set of potential candidates.
+			checkTransferLeaseSource: false,
 		},
 	)
 	return transferred == transferOK, err
