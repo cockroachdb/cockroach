@@ -1,0 +1,365 @@
+bootstrap
+USE system; SHOW CREATE ALL TABLES;
+----
+CREATE TABLE public.descriptor (
+	id INT8 NOT NULL,
+	descriptor BYTES NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id),
+	FAMILY fam_2_descriptor (descriptor)
+);
+CREATE TABLE public.users (
+	username STRING NOT NULL,
+	"hashedPassword" BYTES NULL,
+	"isRole" BOOL NOT NULL DEFAULT false,
+	CONSTRAINT "primary" PRIMARY KEY (username ASC),
+	FAMILY "primary" (username),
+	FAMILY "fam_2_hashedPassword" ("hashedPassword"),
+	FAMILY "fam_3_isRole" ("isRole")
+);
+CREATE TABLE public.zones (
+	id INT8 NOT NULL,
+	config BYTES NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id),
+	FAMILY fam_2_config (config)
+);
+CREATE TABLE public.settings (
+	name STRING NOT NULL,
+	value STRING NOT NULL,
+	"lastUpdated" TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	"valueType" STRING NULL,
+	CONSTRAINT "primary" PRIMARY KEY (name ASC),
+	FAMILY "fam_0_name_value_lastUpdated_valueType" (name, value, "lastUpdated", "valueType")
+);
+CREATE TABLE public.tenants (
+	id INT8 NOT NULL,
+	active BOOL NOT NULL DEFAULT true,
+	info BYTES NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC)
+);
+CREATE TABLE public.lease (
+	"descID" INT8 NOT NULL,
+	version INT8 NOT NULL,
+	"nodeID" INT8 NOT NULL,
+	expiration TIMESTAMP NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY ("descID" ASC, version ASC, expiration ASC, "nodeID" ASC)
+);
+CREATE TABLE public.eventlog (
+	"timestamp" TIMESTAMP NOT NULL,
+	"eventType" STRING NOT NULL,
+	"targetID" INT8 NOT NULL,
+	"reportingID" INT8 NOT NULL,
+	info STRING NULL,
+	"uniqueID" BYTES NOT NULL DEFAULT uuid_v4(),
+	CONSTRAINT "primary" PRIMARY KEY ("timestamp" ASC, "uniqueID" ASC),
+	FAMILY "primary" ("timestamp", "uniqueID"),
+	FAMILY "fam_2_eventType" ("eventType"),
+	FAMILY "fam_3_targetID" ("targetID"),
+	FAMILY "fam_4_reportingID" ("reportingID"),
+	FAMILY fam_5_info (info)
+);
+CREATE TABLE public.rangelog (
+	"timestamp" TIMESTAMP NOT NULL,
+	"rangeID" INT8 NOT NULL,
+	"storeID" INT8 NOT NULL,
+	"eventType" STRING NOT NULL,
+	"otherRangeID" INT8 NULL,
+	info STRING NULL,
+	"uniqueID" INT8 NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT "primary" PRIMARY KEY ("timestamp" ASC, "uniqueID" ASC),
+	FAMILY "primary" ("timestamp", "uniqueID"),
+	FAMILY "fam_2_rangeID" ("rangeID"),
+	FAMILY "fam_3_storeID" ("storeID"),
+	FAMILY "fam_4_eventType" ("eventType"),
+	FAMILY "fam_5_otherRangeID" ("otherRangeID"),
+	FAMILY fam_6_info (info)
+);
+CREATE TABLE public.ui (
+	key STRING NOT NULL,
+	value BYTES NULL,
+	"lastUpdated" TIMESTAMP NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (key ASC),
+	FAMILY "primary" (key),
+	FAMILY fam_2_value (value),
+	FAMILY "fam_3_lastUpdated" ("lastUpdated")
+);
+CREATE TABLE public.jobs (
+	id INT8 NOT NULL DEFAULT unique_rowid(),
+	status STRING NOT NULL,
+	created TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	payload BYTES NOT NULL,
+	progress BYTES NULL,
+	created_by_type STRING NULL,
+	created_by_id INT8 NULL,
+	claim_session_id BYTES NULL,
+	claim_instance_id INT8 NULL,
+	num_runs INT8 NULL,
+	last_run TIMESTAMP NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	INDEX jobs_status_created_idx (status ASC, created ASC),
+	INDEX jobs_created_by_type_created_by_id_idx (created_by_type ASC, created_by_id ASC) STORING (status),
+	INDEX jobs_run_stats_idx (claim_session_id ASC, status ASC, created ASC) STORING (last_run, num_runs, claim_instance_id) WHERE status IN ('running':::STRING, 'reverting':::STRING, 'pending':::STRING, 'pause-requested':::STRING, 'cancel-requested':::STRING),
+	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id),
+	FAMILY progress (progress),
+	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
+);
+CREATE TABLE public.web_sessions (
+	id INT8 NOT NULL DEFAULT unique_rowid(),
+	"hashedSecret" BYTES NOT NULL,
+	username STRING NOT NULL,
+	"createdAt" TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	"expiresAt" TIMESTAMP NOT NULL,
+	"revokedAt" TIMESTAMP NULL,
+	"lastUsedAt" TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	"auditInfo" STRING NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	INDEX "web_sessions_expiresAt_idx" ("expiresAt" ASC),
+	INDEX "web_sessions_createdAt_idx" ("createdAt" ASC),
+	INDEX "web_sessions_revokedAt_idx" ("revokedAt" ASC),
+	INDEX "web_sessions_lastUsedAt_idx" ("lastUsedAt" ASC),
+	FAMILY "fam_0_id_hashedSecret_username_createdAt_expiresAt_revokedAt_lastUsedAt_auditInfo" (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
+);
+CREATE TABLE public.table_statistics (
+	"tableID" INT8 NOT NULL,
+	"statisticID" INT8 NOT NULL DEFAULT unique_rowid(),
+	name STRING NULL,
+	"columnIDs" INT8[] NOT NULL,
+	"createdAt" TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	"rowCount" INT8 NOT NULL,
+	"distinctCount" INT8 NOT NULL,
+	"nullCount" INT8 NOT NULL,
+	histogram BYTES NULL,
+	"avgSize" INT8 NOT NULL DEFAULT 0:::INT8,
+	CONSTRAINT "primary" PRIMARY KEY ("tableID" ASC, "statisticID" ASC),
+	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize")
+);
+CREATE TABLE public.locations (
+	"localityKey" STRING NOT NULL,
+	"localityValue" STRING NOT NULL,
+	latitude DECIMAL(18,15) NOT NULL,
+	longitude DECIMAL(18,15) NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY ("localityKey" ASC, "localityValue" ASC),
+	FAMILY "fam_0_localityKey_localityValue_latitude_longitude" ("localityKey", "localityValue", latitude, longitude)
+);
+CREATE TABLE public.role_members (
+	"role" STRING NOT NULL,
+	member STRING NOT NULL,
+	"isAdmin" BOOL NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY ("role" ASC, member ASC),
+	INDEX role_members_role_idx ("role" ASC),
+	INDEX role_members_member_idx (member ASC),
+	FAMILY "primary" ("role", member),
+	FAMILY "fam_3_isAdmin" ("isAdmin")
+);
+CREATE TABLE public.comments (
+	type INT8 NOT NULL,
+	object_id INT8 NOT NULL,
+	sub_id INT8 NOT NULL,
+	comment STRING NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (type ASC, object_id ASC, sub_id ASC),
+	FAMILY "primary" (type, object_id, sub_id),
+	FAMILY fam_4_comment (comment)
+);
+CREATE TABLE public.replication_constraint_stats (
+	zone_id INT8 NOT NULL,
+	subzone_id INT8 NOT NULL,
+	type STRING NOT NULL,
+	config STRING NOT NULL,
+	report_id INT8 NOT NULL,
+	violation_start TIMESTAMPTZ NULL,
+	violating_ranges INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, type ASC, config ASC)
+);
+CREATE TABLE public.replication_critical_localities (
+	zone_id INT8 NOT NULL,
+	subzone_id INT8 NOT NULL,
+	locality STRING NOT NULL,
+	report_id INT8 NOT NULL,
+	at_risk_ranges INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, locality ASC)
+);
+CREATE TABLE public.replication_stats (
+	zone_id INT8 NOT NULL,
+	subzone_id INT8 NOT NULL,
+	report_id INT8 NOT NULL,
+	total_ranges INT8 NOT NULL,
+	unavailable_ranges INT8 NOT NULL,
+	under_replicated_ranges INT8 NOT NULL,
+	over_replicated_ranges INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC)
+);
+CREATE TABLE public.reports_meta (
+	id INT8 NOT NULL,
+	"generated" TIMESTAMPTZ NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC)
+);
+CREATE TABLE public.namespace (
+	"parentID" INT8 NOT NULL,
+	"parentSchemaID" INT8 NOT NULL,
+	name STRING NOT NULL,
+	id INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY ("parentID" ASC, "parentSchemaID" ASC, name ASC),
+	FAMILY "primary" ("parentID", "parentSchemaID", name),
+	FAMILY fam_4_id (id)
+);
+CREATE TABLE public.protected_ts_meta (
+	singleton BOOL NOT NULL DEFAULT true,
+	version INT8 NOT NULL,
+	num_records INT8 NOT NULL,
+	num_spans INT8 NOT NULL,
+	total_bytes INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (singleton ASC),
+	CONSTRAINT check_singleton CHECK (singleton)
+);
+CREATE TABLE public.protected_ts_records (
+	id UUID NOT NULL,
+	ts DECIMAL NOT NULL,
+	meta_type STRING NOT NULL,
+	meta BYTES NULL,
+	num_spans INT8 NOT NULL,
+	spans BYTES NOT NULL,
+	verified BOOL NOT NULL DEFAULT false,
+	target BYTES NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC)
+);
+CREATE TABLE public.role_options (
+	username STRING NOT NULL,
+	option STRING NOT NULL,
+	value STRING NULL,
+	CONSTRAINT "primary" PRIMARY KEY (username ASC, option ASC)
+);
+CREATE TABLE public.statement_bundle_chunks (
+	id INT8 NOT NULL DEFAULT unique_rowid(),
+	description STRING NULL,
+	data BYTES NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC)
+);
+CREATE TABLE public.statement_diagnostics_requests (
+	id INT8 NOT NULL DEFAULT unique_rowid(),
+	completed BOOL NOT NULL DEFAULT false,
+	statement_fingerprint STRING NOT NULL,
+	statement_diagnostics_id INT8 NULL,
+	requested_at TIMESTAMPTZ NOT NULL,
+	min_execution_latency INTERVAL NULL,
+	expires_at TIMESTAMPTZ NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	INDEX completed_idx_v2 (completed ASC, id ASC) STORING (statement_fingerprint, min_execution_latency, expires_at)
+);
+CREATE TABLE public.statement_diagnostics (
+	id INT8 NOT NULL DEFAULT unique_rowid(),
+	statement_fingerprint STRING NOT NULL,
+	statement STRING NOT NULL,
+	collected_at TIMESTAMPTZ NOT NULL,
+	trace JSONB NULL,
+	bundle_chunks INT8[] NULL,
+	error STRING NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC)
+);
+CREATE TABLE public.scheduled_jobs (
+	schedule_id INT8 NOT NULL DEFAULT unique_rowid(),
+	schedule_name STRING NOT NULL,
+	created TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+	owner STRING NOT NULL,
+	next_run TIMESTAMPTZ NULL,
+	schedule_state BYTES NULL,
+	schedule_expr STRING NULL,
+	schedule_details BYTES NULL,
+	executor_type STRING NOT NULL,
+	execution_args BYTES NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (schedule_id ASC),
+	INDEX next_run_idx (next_run ASC),
+	FAMILY sched (schedule_id, next_run, schedule_state),
+	FAMILY other (schedule_name, created, owner, schedule_expr, schedule_details, executor_type, execution_args)
+);
+CREATE TABLE public.sqlliveness (
+	session_id BYTES NOT NULL,
+	expiration DECIMAL NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (session_id ASC),
+	FAMILY fam0_session_id_expiration (session_id, expiration)
+);
+CREATE TABLE public.migrations (
+	major INT8 NOT NULL,
+	minor INT8 NOT NULL,
+	patch INT8 NOT NULL,
+	internal INT8 NOT NULL,
+	completed_at TIMESTAMPTZ NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (major ASC, minor ASC, patch ASC, internal ASC)
+);
+CREATE TABLE public.join_tokens (
+	id UUID NOT NULL,
+	secret BYTES NOT NULL,
+	expiration TIMESTAMPTZ NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC)
+);
+CREATE TABLE public.statement_statistics (
+	aggregated_ts TIMESTAMPTZ NOT NULL,
+	fingerprint_id BYTES NOT NULL,
+	transaction_fingerprint_id BYTES NOT NULL,
+	plan_hash BYTES NOT NULL,
+	app_name STRING NOT NULL,
+	node_id INT8 NOT NULL,
+	agg_interval INTERVAL NOT NULL,
+	metadata JSONB NOT NULL,
+	statistics JSONB NOT NULL,
+	plan JSONB NOT NULL,
+	crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)), 8:::INT8)) STORED,
+	CONSTRAINT "primary" PRIMARY KEY (aggregated_ts ASC, fingerprint_id ASC, transaction_fingerprint_id ASC, plan_hash ASC, app_name ASC, node_id ASC) USING HASH WITH (bucket_count=8),
+	INDEX fingerprint_stats_idx (fingerprint_id ASC, transaction_fingerprint_id ASC)
+);
+CREATE TABLE public.transaction_statistics (
+	aggregated_ts TIMESTAMPTZ NOT NULL,
+	fingerprint_id BYTES NOT NULL,
+	app_name STRING NOT NULL,
+	node_id INT8 NOT NULL,
+	agg_interval INTERVAL NOT NULL,
+	metadata JSONB NOT NULL,
+	statistics JSONB NOT NULL,
+	crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(aggregated_ts, app_name, fingerprint_id, node_id)), 8:::INT8)) STORED,
+	CONSTRAINT "primary" PRIMARY KEY (aggregated_ts ASC, fingerprint_id ASC, app_name ASC, node_id ASC) USING HASH WITH (bucket_count=8),
+	INDEX fingerprint_stats_idx (fingerprint_id ASC)
+);
+CREATE TABLE public.database_role_settings (
+	database_id OID NOT NULL,
+	role_name STRING NOT NULL,
+	settings STRING[] NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (database_id ASC, role_name ASC)
+);
+CREATE TABLE public.tenant_usage (
+	tenant_id INT8 NOT NULL,
+	instance_id INT8 NOT NULL,
+	next_instance_id INT8 NOT NULL,
+	last_update TIMESTAMP NOT NULL,
+	ru_burst_limit FLOAT8 NULL,
+	ru_refill_rate FLOAT8 NULL,
+	ru_current FLOAT8 NULL,
+	current_share_sum FLOAT8 NULL,
+	total_consumption BYTES NULL,
+	instance_lease BYTES NULL,
+	instance_seq INT8 NULL,
+	instance_shares FLOAT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (tenant_id ASC, instance_id ASC)
+);
+CREATE TABLE public.sql_instances (
+	id INT8 NOT NULL,
+	addr STRING NULL,
+	session_id BYTES NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC)
+);
+CREATE TABLE public.span_configurations (
+	start_key BYTES NOT NULL,
+	end_key BYTES NOT NULL,
+	config BYTES NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (start_key ASC),
+	CONSTRAINT check_bounds CHECK (start_key < end_key)
+);
+CREATE TABLE public.tenant_settings (
+	tenant_id INT8 NOT NULL,
+	name STRING NOT NULL,
+	value STRING NOT NULL,
+	last_updated TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	value_type STRING NOT NULL,
+	reason STRING NULL,
+	CONSTRAINT "primary" PRIMARY KEY (tenant_id ASC, name ASC),
+	FAMILY fam_0_tenant_id_name_value_last_updated_value_type_reason (tenant_id, name, value, last_updated, value_type, reason)
+);
