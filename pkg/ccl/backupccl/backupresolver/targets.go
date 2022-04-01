@@ -306,7 +306,7 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 // session database) or if one of its tables matches the targets. All expanded
 // DBs, via either `foo.*` or `DATABASE foo` are noted, as are those explicitly
 // named as DBs (e.g. with `DATABASE foo`, not `foo.*`). These distinctions are
-// used e.g. by RESTORE.
+// used e.g. by RESTORE. tablePatternMap will be populated if non-nil.
 //
 // This is guaranteed to not return duplicates.
 func DescriptorsMatchingTargets(
@@ -316,6 +316,7 @@ func DescriptorsMatchingTargets(
 	descriptors []catalog.Descriptor,
 	targets tree.TargetList,
 	asOf hlc.Timestamp,
+	tablePatternMap map[tree.TablePattern]catalog.Descriptor,
 ) (DescriptorsMatched, error) {
 	ret := DescriptorsMatched{}
 
@@ -420,6 +421,7 @@ func DescriptorsMatchingTargets(
 	alreadyRequestedSchemasByDBs := make(map[descpb.ID]map[string]struct{})
 	for _, pattern := range targets.Tables {
 		var err error
+		origPat := pattern
 		pattern, err = pattern.NormalizeTablePattern()
 		if err != nil {
 			return ret, err
@@ -457,6 +459,10 @@ func DescriptorsMatchingTargets(
 			); err != nil {
 				// Return a does not exist error if explicitly asking for this table.
 				return ret, doesNotExistErr
+			}
+
+			if tablePatternMap != nil {
+				tablePatternMap[origPat] = descI
 			}
 
 			// If the parent database is not requested already, request it now.
@@ -536,6 +542,13 @@ func DescriptorsMatchingTargets(
 				}
 				scMap := alreadyRequestedSchemasByDBs[dbID]
 				scMap[p.Schema()] = struct{}{}
+				if tablePatternMap != nil {
+					tablePatternMap[origPat] = prefix.Schema
+				}
+			} else {
+				if tablePatternMap != nil {
+					tablePatternMap[origPat] = prefix.Database
+				}
 			}
 		default:
 			return ret, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
@@ -645,7 +658,7 @@ func ResolveTargetsToDescriptors(
 
 	var matched DescriptorsMatched
 	if matched, err = DescriptorsMatchingTargets(ctx,
-		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets, endTime); err != nil {
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets, endTime, nil /*tablePatternMap*/); err != nil {
 		return nil, nil, err
 	}
 
@@ -656,4 +669,24 @@ func ResolveTargetsToDescriptors(
 	sort.Slice(matched.Descs, func(i, j int) bool { return matched.Descs[i].GetID() < matched.Descs[j].GetID() })
 
 	return matched.Descs, matched.ExpandedDB, nil
+}
+
+// MapTablePatternsToDescriptors performs the same name resolution as ResolveTargetsToDescriptors, but returns
+// in a different format, a map of TablePattern -> Descriptor.
+func MapTablePatternsToDescriptors(
+	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, tablePatterns tree.TablePatterns,
+) (map[tree.TablePattern]catalog.Descriptor, error) {
+	allDescs, err := LoadAllDescs(ctx, p.ExecCfg(), endTime)
+	if err != nil {
+		return nil, err
+	}
+
+	targets := tree.TargetList{Tables: tablePatterns}
+
+	tablePatternMap := make(map[tree.TablePattern]catalog.Descriptor)
+	_, err = DescriptorsMatchingTargets(ctx, p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets, endTime, tablePatternMap)
+	if err != nil {
+		return nil, err
+	}
+	return tablePatternMap, nil
 }

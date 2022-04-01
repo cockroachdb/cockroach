@@ -639,16 +639,12 @@ func fetchSpansForDescs(
 	statementTime hlc.Timestamp,
 	descs []catalog.Descriptor,
 ) ([]roachpb.Span, error) {
-	_, tables, err := getTargetsAndTables(ctx, p, descs, tree.ChangefeedTargets{}, opts)
-	if err != nil {
-		return nil, err
+	targets := make([]jobspb.ChangefeedTargetSpecification, len(descs))
+	for i, d := range descs {
+		targets[i] = jobspb.ChangefeedTargetSpecification{TableID: d.GetID()}
 	}
 
-	details := jobspb.ChangefeedDetails{
-		Tables: tables,
-	}
-
-	spans, err := fetchSpansForTargets(ctx, p.ExecCfg(), AllTargets(details), statementTime)
+	spans, err := fetchSpansForTargets(ctx, p.ExecCfg(), targets, statementTime)
 
 	return spans, err
 }

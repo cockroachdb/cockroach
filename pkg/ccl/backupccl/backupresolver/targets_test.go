@@ -255,8 +255,10 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			}
 			targets := stmt.AST.(*tree.Grant).Targets
 
+			tablePatternMap := make(map[tree.TablePattern]catalog.Descriptor)
+
 			matched, err := DescriptorsMatchingTargets(context.Background(),
-				test.sessionDatabase, searchPath, descriptors, targets, hlc.Timestamp{})
+				test.sessionDatabase, searchPath, descriptors, targets, hlc.Timestamp{}, tablePatternMap)
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
 					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)
@@ -281,6 +283,12 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 				}
 				if !reflect.DeepEqual(test.expectedDBs, matchedDBNames) {
 					t.Fatalf("expected %q got %q", test.expectedDBs, matchedDBNames)
+				}
+				for _, p := range targets.Tables {
+					_, ok := tablePatternMap[p]
+					if !ok {
+						t.Fatalf("no entry in %q for %q", tablePatternMap, p)
+					}
 				}
 			}
 		})
