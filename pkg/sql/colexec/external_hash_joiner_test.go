@@ -76,7 +76,7 @@ func TestExternalHashJoiner(t *testing.T) {
 					// allNullsInjection test for now.
 					tc.skipAllNullsInjection = true
 				}
-				runHashJoinTestCase(t, tc, func(sources []colexecop.Operator) (colexecop.Operator, error) {
+				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					sem := colexecop.NewTestingSemaphore(externalHJMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
 					spec := createSpecForHashJoiner(tc)
