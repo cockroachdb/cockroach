@@ -52,6 +52,13 @@ type NamespaceTableRow struct {
 	ID int64
 }
 
+var _ catalog.NameEntry = (*NamespaceTableRow)(nil)
+
+// GetID implements the catalog.NameEntry interface.
+func (nsr *NamespaceTableRow) GetID() descpb.ID {
+	return descpb.ID(nsr.ID)
+}
+
 // NamespaceTable represents data read from `system.namespace`.
 type NamespaceTable []NamespaceTableRow
 
@@ -193,8 +200,7 @@ func ExamineDescriptors(
 		}
 	}
 	for _, row := range namespaceTable {
-		desc := cb.LookupDescriptorEntry(descpb.ID(row.ID))
-		err := validateNamespaceRow(row, desc)
+		err := cb.ValidateNamespaceEntry(row)
 		if err != nil {
 			problemsFound = true
 			nsReport(stdout, row, err.Error())
@@ -204,41 +210,6 @@ func ExamineDescriptors(
 	}
 
 	return !problemsFound, err
-}
-
-func validateNamespaceRow(row NamespaceTableRow, desc catalog.Descriptor) error {
-	id := descpb.ID(row.ID)
-	if id == keys.PublicSchemaID {
-		// The public schema doesn't have a descriptor.
-		return nil
-	}
-	isSchema := row.ParentID != keys.RootNamespaceID && row.ParentSchemaID == keys.RootNamespaceID
-	if isSchema && strings.HasPrefix(row.Name, "pg_temp_") {
-		// Temporary schemas have namespace entries but not descriptors.
-		return nil
-	}
-	if id == descpb.InvalidID {
-		return errors.New("invalid descriptor ID")
-	}
-	if desc == nil {
-		return catalog.ErrDescriptorNotFound
-	}
-	for _, dn := range desc.GetDrainingNames() {
-		if dn == row.NameInfo {
-			return nil
-		}
-	}
-	if desc.Dropped() {
-		return errors.Newf("no matching name info in draining names of dropped %s",
-			desc.DescriptorType())
-	}
-	if row.ParentID == desc.GetParentID() &&
-		row.ParentSchemaID == desc.GetParentSchemaID() &&
-		row.Name == desc.GetName() {
-		return nil
-	}
-	return errors.Newf("no matching name info found in non-dropped %s %q",
-		desc.DescriptorType(), desc.GetName())
 }
 
 // ExamineJobs runs a suite of consistency checks over the system.jobs table.
