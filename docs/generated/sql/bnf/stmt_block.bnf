@@ -1216,6 +1216,7 @@ unreserved_keyword ::=
 	| 'SCRUB'
 	| 'SEARCH'
 	| 'SECOND'
+	| 'SECONDARY'
 	| 'SERIALIZABLE'
 	| 'SEQUENCE'
 	| 'SEQUENCES'

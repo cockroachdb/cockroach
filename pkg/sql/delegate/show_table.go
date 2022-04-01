@@ -28,6 +28,8 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
 		return d.delegateShowCreateTable(n)
 	case tree.ShowCreateModeDatabase:
 		return d.delegateShowCreateDatabase(n)
+	case tree.ShowCreateModeSecondaryIndexes:
+		return d.delegateShowCreateSecondaryIndexes(n)
 	default:
 		return nil, errors.Newf("unknown show create mode: %d", n.Mode)
 	}
@@ -50,6 +52,46 @@ WHERE name = %s
 	}
 
 	return parse(fmt.Sprintf(showCreateQuery, lexbase.EscapeSQLString(n.Name.Object())))
+}
+
+func (d *delegator) delegateShowCreateSecondaryIndexes(n *tree.ShowCreate) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Indexes)
+
+	const showCreateSecondaryIndexFromTable = `
+WITH index_basic AS (
+	WITH index_cols_agg AS (
+		SELECT
+			descriptor_id,
+			index_id,
+			string_agg(concat(column_name, ' ',  column_direction), ', ') as columns_name
+		FROM
+			crdb_internal.index_columns
+		WHERE
+			column_type != 'extra'
+		GROUP BY
+			descriptor_id, index_id
+	)
+	SELECT
+		is_unique, index_name, descriptor_name, columns_name
+	FROM
+		crdb_internal.table_indexes lhs join index_cols_agg rhs on (lhs.index_id = rhs.index_id and lhs.descriptor_id = rhs.descriptor_id)
+	WHERE
+			descriptor_name = %[2]s
+		AND
+			index_type = 'secondary'
+)
+SELECT
+	concat(
+		'CREATE',
+		CASE
+			WHEN is_unique THEN ' UNIQUE'
+			ELSE ''
+		END,
+		concat(' INDEX ', index_name, ' ON ', descriptor_name, ' (', columns_name, ') ')) as create_statement
+FROM
+	index_basic`
+
+	return d.showTableDetails(n.Name, showCreateSecondaryIndexFromTable)
 }
 
 func (d *delegator) delegateShowCreateTable(n *tree.ShowCreate) (tree.Statement, error) {
