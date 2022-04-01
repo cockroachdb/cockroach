@@ -169,7 +169,7 @@ func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentSt
 		output:          make([]elementState, 0, len(initial.Current)),
 		descCache:       make(map[catid.DescID]*cachedDesc),
 		tempSchemas:     make(map[catid.DescID]catalog.SchemaDescriptor),
-		commentCache:    d.DescriptorMetadataFetcher(),
+		commentCache:    d.DescriptorCommentCache(),
 	}
 	var err error
 	bs.hasAdmin, err = bs.auth.HasAdminRole(ctx)

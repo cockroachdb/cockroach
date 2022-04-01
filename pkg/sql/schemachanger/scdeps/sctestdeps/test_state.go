@@ -161,6 +161,6 @@ func (mf *TestState) Get(
 }
 
 // DescriptorMetadataFetcher implements scbuild.Dependencies interface.
-func (s *TestState) DescriptorMetadataFetcher() scdecomp.DescriptorCommentCache {
+func (s *TestState) DescriptorCommentCache() scdecomp.DescriptorCommentCache {
 	return s
 }

@@ -687,6 +687,32 @@ func (b *builderState) ResolveIndex(
 	})
 }
 
+// ResolveTableWithIndexBestEffort implements the scbuildstmt.NameResolver interface.
+// Current database is used if no explicit db is specified and public schema is used if
+// no explicit schema is specified.
+func (b *builderState) ResolveTableWithIndexBestEffort(
+	prefix tree.ObjectNamePrefix, indexName tree.Name, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	// Use public schema by default.
+	if !prefix.ExplicitSchema {
+		prefix.SchemaName = catconstants.PublicSchemaName
+		prefix.ExplicitSchema = true
+	}
+	// Use current database by default.
+	if !prefix.ExplicitCatalog {
+		prefix.CatalogName = tree.Name(b.cr.CurrentDatabase())
+		prefix.ExplicitCatalog = true
+	}
+
+	resolvedPrefix, tblDesc, _ := b.cr.MayResolveIndex(b.ctx, indexName, prefix)
+	tableName := tree.NewTableNameWithSchema(
+		tree.Name(resolvedPrefix.Database.GetName()),
+		tree.Name(resolvedPrefix.Schema.GetName()),
+		tree.Name(tblDesc.GetName()),
+	)
+	return b.ResolveTable(tableName.ToUnresolvedObjectName(), p)
+}
+
 // ResolveColumn implements the scbuildstmt.NameResolver interface.
 func (b *builderState) ResolveColumn(
 	relationID catid.DescID, columnName tree.Name, p scbuildstmt.ResolveParams,
@@ -711,6 +737,33 @@ func (b *builderState) ResolveColumn(
 	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
 		return idI != nil && idI.(catid.ColumnID) == columnID
+	})
+}
+
+// ResolveConstraint implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolveConstraint(
+	relationID catid.DescID, constraintName tree.Name, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	b.ensureDescriptor(relationID)
+	c := b.descCache[relationID]
+	rel := c.desc.(catalog.TableDescriptor)
+	var constraintID catid.ConstraintID
+	scpb.ForEachConstraintName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintName) {
+		if e.TableID == relationID && tree.Name(e.Name) == constraintName {
+			constraintID = e.ConstraintID
+		}
+	})
+	if constraintID == 0 {
+		if p.IsExistenceOptional {
+			return nil
+		}
+		panic(pgerror.Newf(pgcode.UndefinedObject,
+			"constraint %q of relation %q does not exist", constraintName, rel.GetName()))
+	}
+
+	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		return idI != nil && idI.(catid.ConstraintID) == constraintID
 	})
 }
 
@@ -749,8 +802,11 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		})
 	}
 
-	if err := b.commentCache.LoadCommentsForObjects(b.ctx, c.desc.DescriptorType(), []descpb.ID{c.desc.GetID()}); err != nil {
-		panic(err)
+	switch c.desc.DescriptorType() {
+	case catalog.Database, catalog.Schema, catalog.Table:
+		if err := b.commentCache.LoadCommentsForObjects(b.ctx, c.desc.DescriptorType(), []descpb.ID{c.desc.GetID()}); err != nil {
+			panic(err)
+		}
 	}
 	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn, b.commentCache)
 	// Name prefix and namespace lookups.

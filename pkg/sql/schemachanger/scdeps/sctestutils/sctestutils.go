@@ -52,8 +52,6 @@ func WithBuilderDependenciesFromTestServer(
 		security.RootUserName(),
 		&sql.MemoryMetrics{},
 		&execCfg,
-		// Setting the database on the session data to "defaultdb" in the obvious
-		// way doesn't seem to do what we want.
 		sessiondatapb.SessionData{},
 	)
 	defer cleanup()
@@ -66,6 +64,8 @@ func WithBuilderDependenciesFromTestServer(
 		scbuild.AstFormatter
 		scbuild.FeatureChecker
 	})
+	// Use "defaultdb" as current database.
+	planner.SessionData().Database = "defaultdb"
 	// For setting up a builder inside tests we will ensure that the new schema
 	// changer will allow non-fully implemented operations.
 	planner.SessionData().NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe

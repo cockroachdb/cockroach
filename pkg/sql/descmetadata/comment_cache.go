@@ -12,6 +12,8 @@ package descmetadata
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -33,6 +35,7 @@ type metadataCache struct {
 	objIDsChecked map[catid.DescID]struct{}
 }
 
+// Get implements the scdecomp.DescriptorCommentCache interface.
 func (mf metadataCache) Get(
 	ctx context.Context, objID catid.DescID, subID descpb.ID, commentType keys.CommentType,
 ) (comment string, ok bool, err error) {
@@ -89,14 +92,23 @@ func (mf metadataCache) LoadCommentsForObjects(
 		return errors.Errorf("unexpected descriptor type %q for fetching comment", descType)
 	}
 
+	var buf strings.Builder
+	_, _ = fmt.Fprintf(&buf, `SELECT type, object_id, sub_id, comment FROM system.comments WHERE type IN (%d`, commentTypes[0])
+	for _, typ := range commentTypes[1:] {
+		_, _ = fmt.Fprintf(&buf, ", %d", typ)
+	}
+	_, _ = fmt.Fprintf(&buf, `) AND object_id IN (%d`, uncheckedObjIDs[0])
+	for _, id := range uncheckedObjIDs[1:] {
+		_, _ = fmt.Fprintf(&buf, ", %d", id)
+	}
+	buf.WriteString(")")
+
 	rows, err := mf.ie.QueryBufferedEx(
 		ctx,
 		"mf-get-table-comments",
 		mf.txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		"SELECT type, obj_id, sub_id, comment FROM system.comments WHERE type IN ($1) AND object_id IN ($2)",
-		commentTypes,
-		objIDs,
+		buf.String(),
 	)
 
 	if err != nil {

@@ -428,6 +428,18 @@ func (mvs *mutationVisitorState) DeleteDescriptor(id descpb.ID) {
 	mvs.descriptorsToDelete.Add(id)
 }
 
+func (mvs *mutationVisitorState) AddComment(
+	id descpb.ID, subID int, commentType keys.CommentType, comment string,
+) {
+	mvs.commentsToUpdate = append(mvs.commentsToUpdate,
+		commentToUpdate{
+			id:          int64(id),
+			subID:       int64(subID),
+			commentType: commentType,
+			comment:     comment,
+		})
+}
+
 func (mvs *mutationVisitorState) DeleteAllTableComments(id descpb.ID) {
 	mvs.tableCommentsToDelete.Add(id)
 }

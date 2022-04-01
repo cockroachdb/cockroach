@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -132,6 +134,30 @@ func (d *buildDeps) MayResolveTable(
 		return prefix, nil
 	}
 	return prefix, desc.(catalog.TableDescriptor)
+}
+
+// MayResolveIndex implements the scbuild.CatalogReader interface.
+// It iterates through all tables within the specified db.schema and returns the
+// first one found.
+func (d *buildDeps) MayResolveIndex(
+	ctx context.Context, indexName tree.Name, prefix tree.ObjectNamePrefix,
+) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor, catalog.Index) {
+	if !prefix.ExplicitCatalog || !prefix.ExplicitSchema {
+		panic(pgerror.Newf(pgcode.InvalidParameterValue, "both database and schema should specified"))
+	}
+
+	found, resolvedPrefix, err := d.schemaResolver.LookupSchema(ctx, prefix.Catalog(), prefix.Schema())
+	if err != nil {
+		panic(err)
+	}
+	if !found {
+		panic(pgerror.Newf(pgcode.UndefinedSchema,
+			"schema %q in database %q not found", prefix.Schema(), prefix.Catalog()))
+	}
+
+	dsNames, dsIDs := d.CatalogReader().ReadObjectNamesAndIDs(ctx, resolvedPrefix.Database, resolvedPrefix.Schema)
+	tableDesc, idxDesc := FindTableContainsIndex(ctx, d.CatalogReader(), indexName, dsNames, dsIDs)
+	return resolvedPrefix, tableDesc, idxDesc
 }
 
 // MayResolveType implements the scbuild.CatalogReader interface.
@@ -326,6 +352,6 @@ func (d *buildDeps) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryT
 }
 
 // DescriptorMetadataFetcher implements the scbuild.Dependencies interface.
-func (d *buildDeps) DescriptorMetadataFetcher() scdecomp.DescriptorCommentCache {
+func (d *buildDeps) DescriptorCommentCache() scdecomp.DescriptorCommentCache {
 	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
 }

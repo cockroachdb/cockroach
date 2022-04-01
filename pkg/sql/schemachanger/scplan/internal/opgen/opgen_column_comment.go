@@ -21,7 +21,11 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.ColumnComment) scop.Op {
-					return notImplemented(this)
+					return &scop.UpsertColumnComment{
+						TableID:  this.TableID,
+						ColumnID: this.ColumnID,
+						Comment:  this.Comment,
+					}
 				}),
 			),
 		),
