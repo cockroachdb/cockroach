@@ -519,7 +519,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 		beforeSize := s.memUsage(nil)
 		s.inputRowIdxToLookedUpRowIndices = make([][]int, len(rows))
 		afterSize := s.memUsage(nil)
-		if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
+		if err := s.resizeMemoryAccount(beforeSize, afterSize); err != nil {
 			return nil, addWorkmemHint(err)
 		}
 	}
@@ -578,7 +578,7 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 
 	// Perform memory accounting.
 	afterSize := s.memUsage(matchingInputRowIndices)
-	if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
+	if err := s.resizeMemoryAccount(beforeSize, afterSize); err != nil {
 		return jrStateUnknown, addWorkmemHint(err)
 	}
 
@@ -706,4 +706,28 @@ func (s *joinReaderOrderingStrategy) memUsage(matchingInputRowIndices []int) int
 	}
 
 	return size
+}
+
+// resizeMemoryAccount updates the memory account based on provided before and
+// after values. If the reservation is denied initially, then it'll attempt to
+// spill lookedUpRows row container to disk, so the error is only returned when
+// that wasn't successful.
+func (s *joinReaderOrderingStrategy) resizeMemoryAccount(before, after int64) error {
+	delta := after - before
+	if delta <= 0 {
+		s.memAcc.Shrink(s.Ctx, -delta)
+		return nil
+	}
+	if err := s.memAcc.Grow(s.Ctx, delta); err != nil {
+		// We don't have enough budget to account for the new size. Check
+		// whether we can spill the looked up rows to disk to free up the
+		// budget.
+		spilled, spillErr := s.lookedUpRows.SpillToDisk(s.Ctx)
+		if !spilled || spillErr != nil {
+			return addWorkmemHint(errors.CombineErrors(err, spillErr))
+		}
+		// We freed up some budget, so try to perform the accounting again.
+		return addWorkmemHint(s.memAcc.Grow(s.Ctx, delta))
+	}
+	return nil
 }
