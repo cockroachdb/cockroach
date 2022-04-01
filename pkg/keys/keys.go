@@ -888,6 +888,30 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	return key[:idx], nil
 }
 
+// EnsureSafeSplitKeyPrefix is like EnsureSafeSplitKey, except that the key
+// may only be a prefix of a complete key (i.e., the original key may not
+// include column family information). If the column family field appears to be
+// invalid, the original key is returned.
+func EnsureSafeSplitKeyPrefix(key roachpb.Key) (roachpb.Key, error) {
+	safeKey, err := EnsureSafeSplitKey(key)
+	if err != nil {
+		// If the key was malformed, just return the original key.
+		return key, nil //nolint:returnerrcheck
+	}
+	// Validate that there is a table and index in the new safe key.
+	sqlKey, _, err := DecodeTenantPrefix(safeKey)
+	if err != nil {
+		return nil, errors.Errorf("%s: not a valid table key", key)
+	}
+	if _, _, _, err = DecodeTableIDIndexID(sqlKey); err != nil {
+		// If the safeKey had no table or index, then the original key had no valid
+		// column family and EnsureSafeSplitKey mangled the safe key. Return the
+		// original key instead.
+		return key, nil //nolint:returnerrcheck
+	}
+	return safeKey, nil
+}
+
 // Range returns a key range encompassing the key ranges of all requests.
 func Range(reqs []roachpb.RequestUnion) (roachpb.RSpan, error) {
 	from := roachpb.RKeyMax

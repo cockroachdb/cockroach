@@ -14,8 +14,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/logictest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -53,4 +55,25 @@ func TestTenantLogic(t *testing.T) {
 func TestTenantSQLLiteLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	logictest.RunSQLLiteLogicTest(t, "3node-tenant")
+}
+
+// TestTenantExecBuild runs execbuilder test files under the 3node-tenant
+// configuration, which constructs a secondary tenant and runs the test within
+// that secondary tenant's sandbox.
+func TestTenantExecBuild(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testdataDir := "../../sql/opt/exec/execbuilder/testdata/"
+	if bazel.BuiltWithBazel() {
+		runfile, err := bazel.Runfile("pkg/sql/opt/exec/execbuilder/testdata/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		testdataDir = runfile
+	}
+
+	defer sql.TestingOverrideExplainEnvVersion("CockroachDB execbuilder test version")()
+	skip.UnderDeadlock(t, "times out and/or hangs")
+	logictest.RunLogicTestWithDefaultConfig(
+		t, logictest.TestServerArgs{DisableWorkmemRandomization: true}, "3node-tenant", true, /* runCCLConfigs */
+		filepath.Join(testdataDir, "[^.]*"))
 }

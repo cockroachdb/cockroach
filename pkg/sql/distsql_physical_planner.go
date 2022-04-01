@@ -436,6 +436,12 @@ func mustWrapValuesNode(planCtx *PlanningCtx, specifiedInQuery bool) bool {
 func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 	switch n := node.(type) {
 	// Keep these cases alphabetized, please!
+	case *createStatsNode:
+		if n.runAsJob {
+			return cannotDistribute, planNodeNotSupportedErr
+		}
+		return shouldDistribute, nil
+
 	case *distinctNode:
 		return checkSupportForPlanNode(n.plan)
 
@@ -648,12 +654,6 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		}
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
-		}
-		return shouldDistribute, nil
-
-	case *createStatsNode:
-		if n.runAsJob {
-			return cannotDistribute, planNodeNotSupportedErr
 		}
 		return shouldDistribute, nil
 
@@ -1182,10 +1182,23 @@ func (dsp *DistSQLPlanner) partitionSpansTenant(
 
 	// nodeMap maps a SQLInstanceID to an index inside the partitions array.
 	nodeMap := make(map[base.SQLInstanceID]int)
+	var lastKey roachpb.Key
+	var lastIdx int
 	for i := range spans {
 		span := spans[i]
 		if log.V(1) {
 			log.Infof(ctx, "partitioning span %s", span)
+		}
+		// Rows with column families may have been split into different spans. These
+		// spans should be assigned the same pod so that the pod can stitch together
+		// the rows correctly. Split rows are in adjacent spans.
+		if safeKey, err := keys.EnsureSafeSplitKeyPrefix(span.Key); err == nil {
+			if safeKey.Equal(lastKey) {
+				partition := &partitions[lastIdx]
+				partition.Spans = append(partition.Spans, span)
+				continue
+			}
+			lastKey = safeKey
 		}
 		sqlInstanceID := instances[i%len(instances)].InstanceID
 		partitionIdx, inNodeMap := nodeMap[sqlInstanceID]
@@ -1196,6 +1209,12 @@ func (dsp *DistSQLPlanner) partitionSpansTenant(
 		}
 		partition := &partitions[partitionIdx]
 		partition.Spans = append(partition.Spans, span)
+		lastIdx = partitionIdx
+	}
+	// If spans were only assigned to one SQL instance, then assign them all to
+	// the gateway instance.
+	if len(partitions) == 1 && partitions[0].SQLInstanceID != dsp.gatewaySQLInstanceID {
+		partitions[0].SQLInstanceID = dsp.gatewaySQLInstanceID
 	}
 	return partitions, nil
 }
@@ -2901,6 +2920,20 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	switch n := node.(type) {
 	// Keep these cases alphabetized, please!
+	case *createStatsNode:
+		if n.runAsJob {
+			plan, err = dsp.wrapPlan(ctx, planCtx, n, false /* allowPartialDistribution */)
+		} else {
+			// Create a job record but don't actually start the job.
+			var record *jobs.Record
+			record, err = n.makeJobRecord(ctx)
+			if err != nil {
+				return nil, err
+			}
+			plan, err = dsp.createPlanForCreateStats(ctx, planCtx, 0, /* jobID */
+				record.Details.(jobspb.CreateStatsDetails))
+		}
+
 	case *distinctNode:
 		plan, err = dsp.createPlanForDistinct(ctx, planCtx, n)
 
@@ -3020,20 +3053,6 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *zigzagJoinNode:
 		plan, err = dsp.createPlanForZigzagJoin(planCtx, n)
-
-	case *createStatsNode:
-		if n.runAsJob {
-			plan, err = dsp.wrapPlan(ctx, planCtx, n, false /* allowPartialDistribution */)
-		} else {
-			// Create a job record but don't actually start the job.
-			var record *jobs.Record
-			record, err = n.makeJobRecord(ctx)
-			if err != nil {
-				return nil, err
-			}
-			plan, err = dsp.createPlanForCreateStats(ctx, planCtx, 0, /* jobID */
-				record.Details.(jobspb.CreateStatsDetails))
-		}
 
 	default:
 		// Can't handle a node? We wrap it and continue on our way.

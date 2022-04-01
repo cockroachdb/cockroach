@@ -17,6 +17,7 @@ go_test(
     data = glob(["testdata/**"]) + [
         "//pkg/sql/logictest:testdata",
         "//c-deps:libgeos",
+        "//pkg/sql/opt/exec/execbuilder:testdata",
     ],
     embed = [":logictestccl"],
     deps = [
@@ -26,9 +27,11 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/logictest",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",

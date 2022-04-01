@@ -820,10 +820,11 @@ var logicTestConfigs = []testClusterConfig{
 		// logictest command.
 		// To run a logic test with this config as a directive, run:
 		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic//<test_name>
-		name:        threeNodeTenantConfigName,
-		numNodes:    3,
-		useTenant:   true,
-		isCCLConfig: true,
+		name:                threeNodeTenantConfigName,
+		numNodes:            3,
+		useTenant:           true,
+		isCCLConfig:         true,
+		overrideDistSQLMode: "on",
 	},
 	// Regions and zones below are named deliberately, and contain "-"'s to be reflective
 	// of the naming convention in public clouds.  "-"'s are handled differently in SQL
@@ -3403,7 +3404,7 @@ func (t *logicTest) verifyError(
 		} else {
 			newErr := errors.Errorf("%s: %s\nexpected error code %q, but found success",
 				pos, sql, expectErrCode)
-			return (err != nil), newErr
+			return err != nil, newErr
 		}
 	}
 	return true, nil
