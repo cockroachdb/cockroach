@@ -15,9 +15,6 @@ import { createSelector } from "reselect";
 import { hoverOff, hoverOn, HoverState } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
-  AxisDomain,
-  calculateXAxisDomain,
-  calculateYAxisDomain,
   configureUPlotLineChart,
   formatMetricData,
   formattedSeries,
@@ -29,16 +26,25 @@ import {
   MetricProps,
   MetricsDataComponentProps,
 } from "src/views/shared/components/metricQuery";
-import Visualization from "src/views/cluster/components/visualization";
-import { TimeScale, util } from "@cockroachlabs/cluster-ui";
+import {} from "@cockroachlabs/cluster-ui";
+import {
+  calculateXAxisDomain,
+  calculateYAxisDomain,
+  AxisDomain,
+  TimeScale,
+  Visualization,
+  util,
+} from "@cockroachlabs/cluster-ui";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
+import "./linegraph.styl";
 import Long from "long";
 import {
   findClosestTimeScale,
   defaultTimeScaleOptions,
   TimeWindow,
 } from "@cockroachlabs/cluster-ui";
+import _ from "lodash";
 
 export interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
@@ -265,8 +271,14 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     // and are called when recomputing certain axis and
     // series options. This lets us use updated domains
     // when redrawing the uPlot chart on data change.
-    this.yAxisDomain = calculateYAxisDomain(axis.props.units, data);
-    this.xAxisDomain = calculateXAxisDomain(this.props.timeInfo);
+    const resultDatapoints = _.flatMap(data.results, result =>
+      result.datapoints.map(dp => dp.value),
+    );
+    this.yAxisDomain = calculateYAxisDomain(axis.props.units, resultDatapoints);
+    this.xAxisDomain = calculateXAxisDomain(
+      util.NanoToMilli(this.props.timeInfo.start.toNumber()),
+      util.NanoToMilli(this.props.timeInfo.end.toNumber()),
+    );
 
     const prevKeys =
       prevProps.data && prevProps.data.results
