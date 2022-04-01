@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -34,6 +35,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+)
+
+var replanThreshold = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"bulkio.import.replan_flow_threshold",
+	"fraction of initial flow instances that would be been added or updated if restarted above which an IMPORT is restarted (0=disabled)",
+	0.0,
+)
+
+var replanFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"bulkio.import.replan_flow_frequency",
+	"frequency at which IMPORT checks to see if re-planning would change its physical processor placement",
+	time.Minute*2,
+	settings.PositiveDuration,
 )
 
 // distImport is used by IMPORT to run a DistSQL flow to ingest data by starting
@@ -52,13 +68,46 @@ func distImport(
 	alwaysFlushProgress bool,
 	procsPerNode int,
 ) (roachpb.BulkOpSummary, error) {
-	dsp := execCtx.DistSQLPlanner()
-	evalCtx := execCtx.ExtendedEvalContext()
 
-	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+	dsp := execCtx.DistSQLPlanner()
+	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
+		evalCtx := execCtx.ExtendedEvalContext()
+
+		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
+		if err != nil {
+			return nil, nil, err
+		}
+
+		inputSpecs := makeImportReaderSpecs(job, tables, typeDescs, from, format, sqlInstanceIDs, walltime,
+			execCtx.User(), procsPerNode)
+
+		p := planCtx.NewPhysicalPlan()
+
+		// Setup a one-stage plan with one proc per input spec.
+		corePlacement := make([]physicalplan.ProcessorCorePlacement, len(inputSpecs))
+		for i := range inputSpecs {
+			corePlacement[i].SQLInstanceID = sqlInstanceIDs[i%len(sqlInstanceIDs)]
+			corePlacement[i].Core.ReadImport = inputSpecs[i]
+		}
+		p.AddNoInputStage(
+			corePlacement,
+			execinfrapb.PostProcessSpec{},
+			// The direct-ingest readers will emit a binary encoded BulkOpSummary.
+			[]*types.T{types.Bytes, types.Bytes},
+			execinfrapb.Ordering{},
+		)
+
+		p.PlanToStreamColMap = []int{0, 1}
+
+		dsp.FinalizePlan(planCtx, p)
+		return p, planCtx, nil
+	}
+
+	p, planCtx, err := makePlan(ctx, dsp)
 	if err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
+	evalCtx := planCtx.ExtendedEvalCtx
 
 	// accumulatedBulkSummary accumulates the BulkOpSummary returned from each
 	// processor in their progress updates. It stores stats about the amount of
@@ -70,29 +119,6 @@ func distImport(
 	accumulatedBulkSummary.Lock()
 	accumulatedBulkSummary.BulkOpSummary = getLastImportSummary(job)
 	accumulatedBulkSummary.Unlock()
-
-	inputSpecs := makeImportReaderSpecs(job, tables, typeDescs, from, format, sqlInstanceIDs, walltime,
-		execCtx.User(), procsPerNode)
-
-	p := planCtx.NewPhysicalPlan()
-
-	// Setup a one-stage plan with one proc per input spec.
-	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(inputSpecs))
-	for i := range inputSpecs {
-		corePlacement[i].SQLInstanceID = sqlInstanceIDs[i%len(sqlInstanceIDs)]
-		corePlacement[i].Core.ReadImport = inputSpecs[i]
-	}
-	p.AddNoInputStage(
-		corePlacement,
-		execinfrapb.PostProcessSpec{},
-		// The direct-ingest readers will emit a binary encoded BulkOpSummary.
-		[]*types.T{types.Bytes, types.Bytes},
-		execinfrapb.Ordering{},
-	)
-
-	p.PlanToStreamColMap = []int{0, 1}
-
-	dsp.FinalizePlan(planCtx, p)
 
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
 	if importDetails.ReadProgress == nil {
@@ -191,7 +217,14 @@ func distImport(
 	)
 	defer recv.Release()
 
+	replanChecker, stopReplanner := sql.PhysicalPlanChangeChecker(
+		ctx, "import", p, makePlan, execCtx,
+		replanFrequency.Get(&execCtx.ExecCfg().Settings.SV),
+		func() float64 { return replanThreshold.Get(&execCtx.ExecCfg().Settings.SV) },
+	)
+
 	stopProgress := make(chan struct{})
+
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
 		tick := time.NewTicker(time.Second * 10)
@@ -213,11 +246,15 @@ func distImport(
 
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(stopProgress)
+		defer close(stopReplanner)
+
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
 		dsp.Run(planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
 		return rowResultWriter.Err()
 	})
+
+	g.GoCtx(replanChecker)
 
 	if err := g.Wait(); err != nil {
 		return roachpb.BulkOpSummary{}, err
