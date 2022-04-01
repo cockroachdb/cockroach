@@ -80,3 +80,9 @@ go_test(
         "//pkg/util/randutil",
     ],
 )
+
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//pkg/ccl/logictestccl:__subpackages__"],
+)
