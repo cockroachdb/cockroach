@@ -1055,7 +1055,6 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		return nil
 	}
 
-	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
 	jr.scanStats = execinfra.GetScanStats(jr.Ctx)
 	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
@@ -1066,6 +1065,18 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(jr.Ctx)),
 		},
 		Output: jr.OutputHelper.Stats(),
+	}
+	// Note that there is no need to include the maximum bytes of
+	// jr.limitedMemMonitor because it is a child of jr.MemMonitor.
+	ret.Exec.MaxAllocatedMem.Add(jr.MemMonitor.MaximumBytes())
+	if jr.diskMonitor != nil {
+		ret.Exec.MaxAllocatedDisk.Add(jr.diskMonitor.MaximumBytes())
+	}
+	if jr.usesStreamer {
+		ret.Exec.MaxAllocatedMem.Add(jr.streamerInfo.unlimitedMemMonitor.MaximumBytes())
+		if jr.streamerInfo.diskMonitor != nil {
+			ret.Exec.MaxAllocatedDisk.Add(jr.streamerInfo.diskMonitor.MaximumBytes())
+		}
 	}
 	execinfra.PopulateKVMVCCStats(&ret.KV, &jr.scanStats)
 	return ret
