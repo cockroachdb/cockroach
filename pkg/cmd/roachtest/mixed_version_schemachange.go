@@ -12,7 +12,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -48,23 +47,9 @@ func uploadAndInitSchemaChangeWorkload() versionStep {
 }
 
 func runSchemaChangeWorkloadStep(loadNode, maxOps, concurrency int) versionStep {
-	var numFeatureRuns int
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		numFeatureRuns++
-		t.l.Printf("Workload step run: %d", numFeatureRuns)
-		runCmd := []string{
-			"./workload run schemachange --verbose=1",
-			// The workload is still in development and occasionally discovers schema
-			// change errors so for now we don't fail on them but only on panics, server
-			// crashes, deadlocks, etc.
-			// TODO(spaskob): remove when https://github.com/cockroachdb/cockroach/issues/47430
-			// is closed.
-			"--tolerate-errors=true",
-			fmt.Sprintf("--max-ops %d", maxOps),
-			fmt.Sprintf("--concurrency %d", concurrency),
-			fmt.Sprintf("{pgurl:1-%d}", u.c.spec.NodeCount),
-		}
-		u.c.Run(ctx, u.c.Node(loadNode), runCmd...)
+		t.l.Printf("skipping schema change workload step due to flaky nature in 21.2 due " +
+			"to missing fixes, see: PR #76532.")
 	}
 }
 
