@@ -21,7 +21,11 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.IndexComment) scop.Op {
-					return notImplemented(this)
+					return &scop.UpsertIndexComment{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+						Comment: this.Comment,
+					}
 				}),
 			),
 		),

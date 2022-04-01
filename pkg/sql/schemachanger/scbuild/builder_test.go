@@ -110,7 +110,7 @@ func run(
 	withDependencies func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuild.Dependencies)),
 ) string {
 	switch d.Cmd {
-	case "create-table", "create-view", "create-type", "create-sequence", "create-schema", "create-database":
+	case "create-table", "create-view", "create-type", "create-sequence", "create-schema", "create-database", "comment-on":
 		stmts, err := parser.Parse(d.Input)
 		require.NoError(t, err)
 		require.Len(t, stmts, 1)
@@ -142,6 +142,19 @@ func run(
 			t.Logf("created relation with id %d", tableID)
 		}
 
+		return ""
+	case "descriptor-metadata":
+		stmts, err := parser.Parse(d.Input)
+		require.NoError(t, err)
+		for _, stmt := range stmts {
+			switch stmt.AST.(type) {
+			case *tree.CommentOnDatabase, *tree.CommentOnSchema, *tree.CommentOnTable, *tree.CommentOnColumn,
+				*tree.CommentOnIndex, *tree.CommentOnConstraint:
+				tdb.Exec(t, stmt.SQL)
+			default:
+				t.Fatal("not a supported descriptor metadata statement")
+			}
+		}
 		return ""
 	case "build":
 		if a := d.CmdArgs; len(a) > 0 && a[0].Key == "skip" {

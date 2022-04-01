@@ -71,12 +71,18 @@ type MutationVisitor interface {
 	SetJobStateOnDescriptor(context.Context, SetJobStateOnDescriptor) error
 	UpdateSchemaChangerJob(context.Context, UpdateSchemaChangerJob) error
 	CreateSchemaChangerJob(context.Context, CreateSchemaChangerJob) error
+	UpsertTableComment(context.Context, UpsertTableComment) error
 	RemoveAllTableComments(context.Context, RemoveAllTableComments) error
 	RemoveTableComment(context.Context, RemoveTableComment) error
+	UpsertDatabaseComment(context.Context, UpsertDatabaseComment) error
 	RemoveDatabaseComment(context.Context, RemoveDatabaseComment) error
+	UpsertSchemaComment(context.Context, UpsertSchemaComment) error
 	RemoveSchemaComment(context.Context, RemoveSchemaComment) error
+	UpsertIndexComment(context.Context, UpsertIndexComment) error
 	RemoveIndexComment(context.Context, RemoveIndexComment) error
+	UpsertColumnComment(context.Context, UpsertColumnComment) error
 	RemoveColumnComment(context.Context, RemoveColumnComment) error
+	UpsertConstraintComment(context.Context, UpsertConstraintComment) error
 	RemoveConstraintComment(context.Context, RemoveConstraintComment) error
 	RemoveDatabaseRoleSettings(context.Context, RemoveDatabaseRoleSettings) error
 	DeleteSchedule(context.Context, DeleteSchedule) error
@@ -328,6 +334,11 @@ func (op CreateSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) e
 }
 
 // Visit is part of the MutationOp interface.
+func (op UpsertTableComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpsertTableComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op RemoveAllTableComments) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveAllTableComments(ctx, op)
 }
@@ -338,8 +349,18 @@ func (op RemoveTableComment) Visit(ctx context.Context, v MutationVisitor) error
 }
 
 // Visit is part of the MutationOp interface.
+func (op UpsertDatabaseComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpsertDatabaseComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op RemoveDatabaseComment) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveDatabaseComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op UpsertSchemaComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpsertSchemaComment(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -348,13 +369,28 @@ func (op RemoveSchemaComment) Visit(ctx context.Context, v MutationVisitor) erro
 }
 
 // Visit is part of the MutationOp interface.
+func (op UpsertIndexComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpsertIndexComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op RemoveIndexComment) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveIndexComment(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
+func (op UpsertColumnComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpsertColumnComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op RemoveColumnComment) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveColumnComment(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op UpsertConstraintComment) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpsertConstraintComment(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
