@@ -75,6 +75,11 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 		LastRead:       timeutil.Now(),
 	}
 
+	expectedStatsIndexPrimary := roachpb.IndexUsageStatistics{
+		TotalReadCount: 1,
+		LastRead:       timeutil.Now(),
+	}
+
 	firstPgURL, firstServerConnCleanup := sqlutils.PGUrl(
 		t, firstServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
 	defer firstServerConnCleanup()
@@ -109,6 +114,11 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	err = rows.Scan(&tableID)
 	require.NoError(t, err)
 	require.False(t, rows.Next())
+
+	indexKeyPrimary := roachpb.IndexUsageKey{
+		TableID: roachpb.TableID(tableID),
+		IndexID: 1, // t@t_pkey
+	}
 
 	indexKeyA := roachpb.IndexUsageKey{
 		TableID: roachpb.TableID(tableID),
@@ -149,7 +159,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	_, err = secondServerSQLConn.Exec("SELECT k FROM t WHERE a = 10 AND b = 200")
 	require.NoError(t, err)
 
-	// Record a full scan over t_b_idx.
+	// Record an index join and full scan of t_b_idx.
 	_, err = secondServerSQLConn.Exec("SELECT * FROM t@t_b_idx")
 	require.NoError(t, err)
 
@@ -163,13 +173,19 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	thirdLocalStatsReader := thirdServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
 
 	// First node should have nothing.
-	stats := firstLocalStatsReader.Get(indexKeyA.TableID, indexKeyA.IndexID)
+	stats := firstLocalStatsReader.Get(indexKeyPrimary.TableID, indexKeyPrimary.IndexID)
+	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 1, but found %v", stats)
+
+	stats = firstLocalStatsReader.Get(indexKeyA.TableID, indexKeyA.IndexID)
 	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 1, but found %v", stats)
 
 	stats = firstLocalStatsReader.Get(indexKeyB.TableID, indexKeyB.IndexID)
 	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 1, but found %v", stats)
 
 	// Third node should have nothing.
+	stats = firstLocalStatsReader.Get(indexKeyPrimary.TableID, indexKeyPrimary.IndexID)
+	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 3, but found %v", stats)
+
 	stats = thirdLocalStatsReader.Get(indexKeyA.TableID, indexKeyA.IndexID)
 	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 3, but found %v", stats)
 
@@ -177,6 +193,9 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 1, but found %v", stats)
 
 	// Second server should have nonempty local storage.
+	stats = secondLocalStatsReader.Get(indexKeyPrimary.TableID, indexKeyPrimary.IndexID)
+	compareStatsHelper(t, expectedStatsIndexPrimary, stats, time.Minute)
+
 	stats = secondLocalStatsReader.Get(indexKeyA.TableID, indexKeyA.IndexID)
 	compareStatsHelper(t, expectedStatsIndexA, stats, time.Minute)
 
@@ -196,6 +215,8 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 		}
 		statsEntries++
 		switch stats.Key.IndexID {
+		case indexKeyPrimary.IndexID: // t@t_pkey
+			compareStatsHelper(t, expectedStatsIndexPrimary, stats.Stats, time.Minute)
 		case indexKeyA.IndexID: // t@t_a_idx
 			compareStatsHelper(t, expectedStatsIndexA, stats.Stats, time.Minute)
 		case indexKeyB.IndexID: // t@t_b_idx
@@ -203,7 +224,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 		}
 	}
 
-	require.True(t, statsEntries == 2, "expect to find two stats entries in RPC response, but found %d", statsEntries)
+	require.Equal(t, 3, statsEntries, "expect to find 3 stats entries in RPC response, but found %d", statsEntries)
 
 	// Test disabling subsystem.
 	_, err = secondServerSQLConn.Exec("SET CLUSTER SETTING sql.metrics.index_usage_stats.enabled = false")
@@ -231,5 +252,5 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 			compareStatsHelper(t, expectedStatsIndexB, stats.Stats, time.Minute)
 		}
 	}
-	require.True(t, statsEntries == 2, "expect to find two stats entries in RPC response, but found %d", statsEntries)
+	require.Equal(t, 3, statsEntries, "expect to find 3 stats entries in RPC response, but found %d", statsEntries)
 }
