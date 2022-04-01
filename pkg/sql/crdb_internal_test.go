@@ -412,30 +412,33 @@ func TestInvalidObjects(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	var id int
-	var dbName, schemaName, objName, errStr string
-	// No inconsistency should be found so this should return ErrNoRow.
-	require.Error(t, sqlDB.QueryRow(`SELECT * FROM "".crdb_internal.invalid_objects`).
-		Scan(&id, dbName, schemaName, objName, errStr))
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
-	if _, err := sqlDB.Exec(`CREATE DATABASE t;
+	// No inconsistency should be found.
+	tdb.CheckQueryResults(t, `SELECT count(*) FROM "".crdb_internal.invalid_objects`, [][]string{{"0"}})
+
+	// Create a database and some tables.
+	tdb.Exec(t, `
+CREATE DATABASE t;
 CREATE TABLE t.test (k INT8);
 CREATE TABLE fktbl (id INT8 PRIMARY KEY);
 CREATE TABLE tbl (
 	customer INT8 NOT NULL REFERENCES fktbl (id)
 );
-CREATE TABLE nojob (k INT8);`); err != nil {
-		t.Fatal(err)
-	}
+CREATE TABLE nojob (k INT8);
+	`)
 
+	// Retrieve their IDs.
 	databaseID := int(sqlutils.QueryDatabaseID(t, sqlDB, "t"))
+	schemaID := int(sqlutils.QuerySchemaID(t, sqlDB, "t", "public"))
 	tableTID := int(sqlutils.QueryTableID(t, sqlDB, "t", "public", "test"))
 	tableFkTblID := int(sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "fktbl"))
 	tableTblID := int(sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "tbl"))
 	tableNoJobID := int(sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "nojob"))
+	const fakeID = 12345
 
 	// Now introduce some inconsistencies.
-	if _, err := sqlDB.Exec(fmt.Sprintf(`
+	tdb.Exec(t, fmt.Sprintf(`
 INSERT INTO system.users VALUES ('node', NULL, true);
 GRANT node TO root;
 DELETE FROM system.descriptor WHERE id = %d;
@@ -464,51 +467,34 @@ FROM
 	system.descriptor
 WHERE
 	id = %d;
-UPDATE system.namespace SET id = 12345 WHERE id = %d;
-`, databaseID, tableFkTblID, tableNoJobID, tableTID)); err != nil {
-		t.Fatal(err)
-	}
+UPDATE system.namespace SET id = %d WHERE id = %d;
+	`, databaseID, tableFkTblID, tableNoJobID, fakeID, tableTID))
 
-	require.NoError(t, sqlDB.QueryRow(`SELECT id FROM system.descriptor ORDER BY id DESC LIMIT 1`).
-		Scan(&id))
-	require.Equal(t, tableNoJobID, id)
+	tdb.CheckQueryResults(t, `SELECT id FROM system.descriptor ORDER BY id DESC LIMIT 1`, [][]string{
+		{fmt.Sprintf("%d", tableNoJobID)},
+	})
 
-	rows, err := sqlDB.Query(`SELECT * FROM "".crdb_internal.invalid_objects`)
-	require.NoError(t, err)
-	defer rows.Close()
-
-	require.True(t, rows.Next())
-	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
-	require.Equal(t, tableTID, id)
-	require.Equal(t, "", dbName)
-	require.Equal(t, "", schemaName)
-	require.Equal(t, fmt.Sprintf(`relation "test" (%d): referenced database ID %d: referenced descriptor not found`, tableTID, databaseID), errStr)
-
-	require.True(t, rows.Next())
-	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
-	require.Equal(t, tableTID, id)
-	require.Equal(t, "", dbName)
-	require.Equal(t, "", schemaName)
-	require.Equal(t, fmt.Sprintf(`relation "test" (%d): expected matching namespace entry value, instead found 12345`, tableTID), errStr)
-
-	require.True(t, rows.Next())
-	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
-	require.Equal(t, tableTblID, id)
-	require.Equal(t, "defaultdb", dbName)
-	require.Equal(t, "public", schemaName)
-	require.Equal(t, fmt.Sprintf(
-		`relation "tbl" (%d): invalid foreign key: missing table=%d: referenced table ID %d: referenced descriptor not found`,
-		tableTblID, tableFkTblID, tableFkTblID), errStr)
-
-	require.True(t, rows.Next())
-	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
-	require.Equal(t, tableNoJobID, id)
-	require.Equal(t, "defaultdb", dbName)
-	require.Equal(t, "public", schemaName)
-	require.Equal(t, "nojob", objName)
-	require.Equal(t, `mutation job 123456: job not found`, errStr)
-
-	require.False(t, rows.Next())
+	tdb.CheckQueryResults(t, `SELECT * FROM "".crdb_internal.invalid_objects`, [][]string{
+		{fmt.Sprintf("%d", tableTID), fmt.Sprintf("[%d]", databaseID), "public", "test",
+			fmt.Sprintf(`relation "test" (%d): referenced database ID %d: referenced descriptor not found`, tableTID, databaseID),
+		},
+		{fmt.Sprintf("%d", tableTID), fmt.Sprintf("[%d]", databaseID), "public", "test",
+			fmt.Sprintf(`relation "test" (%d): expected matching namespace entry value, instead found 12345`, tableTID),
+		},
+		{fmt.Sprintf("%d", tableTblID), "defaultdb", "public", "tbl",
+			fmt.Sprintf(
+				`relation "tbl" (%d): invalid foreign key: missing table=%d:`+
+					` referenced table ID %d: referenced descriptor not found`,
+				tableTblID, tableFkTblID, tableFkTblID),
+		},
+		{fmt.Sprintf("%d", tableNoJobID), "defaultdb", "public", "nojob", `mutation job 123456: job not found`},
+		{fmt.Sprintf("%d", schemaID), fmt.Sprintf("[%d]", databaseID), "public", "",
+			fmt.Sprintf(`schema "public" (%d): referenced database ID %d: referenced descriptor not found`, schemaID, databaseID),
+		},
+		{fmt.Sprintf("%d", databaseID), "t", "", "", `descriptor not found`},
+		{fmt.Sprintf("%d", tableFkTblID), "defaultdb", "public", "fktbl", `descriptor not found`},
+		{fmt.Sprintf("%d", fakeID), fmt.Sprintf("[%d]", databaseID), "public", "test", `descriptor not found`},
+	})
 }
 
 func TestDistSQLFlowsVirtualTables(t *testing.T) {
