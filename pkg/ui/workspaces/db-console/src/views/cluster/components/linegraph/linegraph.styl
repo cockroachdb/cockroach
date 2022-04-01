@@ -1,0 +1,71 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require nib
+@require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
+
+$viz-bottom = 65px
+$viz-sides = 62px
+
+.anchor-light
+  color white
+  text-decoration underline
+  &:hover
+    color gray
+    text-decoration underline
+
+.linegraph
+  height 100%
+  .uplot
+    display flex
+    > .u-legend
+      display none
+      position absolute
+      left 0
+      top 0
+      font-size 10px
+      background-color white
+      text-align left
+      margin-top 20px
+      z-index 100
+      pointer-events: none;
+      width: fit-content;
+      border-radius: 5px
+      padding: 10px;
+      border 1px solid rgba(0,0,0,0.1)
+
+    // stick the legend to the char's bottom.
+    // Chart height is hardcoded to 300px (pkg/ui/src/views/cluster/util/graphs.ts)
+    > .u-legend.u-legend--place-bottom
+      top 300px!important
+      left 0!important
+      width auto
+      margin-left -1px
+      margin-right -1px
+      border-top none
+      border-radius 0px 0px 5px 5px
+      padding-left 50px
+
+      // the first line in the legend represents Y-axis and it occupies an entire line
+      // to stand out from the rest of x-axis values
+      > tr:first-child
+        width 100%
+        font-size $font-size--small
+
+      > tr
+        min-width 30%
+
+  .u-legend:not(.u-legend--place-bottom)
+    .u-series
+      display block
+
+.linked-guideline__line
+  stroke $link-color
