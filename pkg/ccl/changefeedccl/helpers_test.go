@@ -305,11 +305,15 @@ func expectResolvedTimestampAvro(t testing.TB, f cdctest.TestFeed) hlc.Timestamp
 	return parseTimeToHLC(t, resolved.(map[string]interface{})[`string`].(string))
 }
 
-var serverSetupStatements = `
+var hostSetupStatements = `
+ALTER TENANT ALL SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
-SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
+`
+
+var tenantSetupStatements = `
 SET CLUSTER SETTING sql.defaults.vectorize=on;
+SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 CREATE DATABASE d;
 `
 
@@ -359,7 +363,9 @@ func startTestFullServer(
 		}
 	}()
 
-	_, err = db.ExecContext(ctx, serverSetupStatements)
+	_, err = db.ExecContext(ctx, hostSetupStatements)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, tenantSetupStatements)
 	require.NoError(t, err)
 
 	if region := serverArgsRegion(args); region != "" {
@@ -399,7 +405,9 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 			require.NoError(t, err)
 		}
 	}()
-	_, err = db.ExecContext(ctx, serverSetupStatements)
+	_, err = db.ExecContext(ctx, hostSetupStatements)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, tenantSetupStatements)
 	require.NoError(t, err)
 
 	_, err = db.ExecContext(ctx, `ALTER DATABASE d PRIMARY REGION "us-east1"`)
@@ -431,8 +439,7 @@ func startTestTenant(
 	}
 
 	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
-	// Re-run setup on the tenant as well
-	_, err := tenantDB.ExecContext(ctx, serverSetupStatements)
+	_, err := tenantDB.ExecContext(ctx, tenantSetupStatements)
 	require.NoError(t, err)
 
 	server := &testServerShim{tenantServer, kvServer}

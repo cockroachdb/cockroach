@@ -478,8 +478,11 @@ func validateSettings(ctx context.Context, p sql.PlanHookState) error {
 	// Changefeeds are based on the Rangefeed abstraction, which
 	// requires the `kv.rangefeed.enabled` setting to be true.
 	if !kvserver.RangefeedEnabled.Get(&p.ExecCfg().Settings.SV) {
-		return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
-			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+		docsURL := docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`)
+		if !p.ExecCfg().Codec.ForSystemTenant() {
+			return errors.Errorf("rangefeeds require the system cluster operator set kv.rangefeed.enable to true for this tenant. See %s", docsURL)
+		}
+		return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s", docsURL)
 	}
 
 	ok, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
