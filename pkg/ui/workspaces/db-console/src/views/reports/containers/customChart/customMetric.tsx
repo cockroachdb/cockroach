@@ -13,7 +13,7 @@ import * as React from "react";
 import Select from "react-select";
 
 import * as protos from "src/js/protos";
-import { AxisUnits } from "src/views/shared/components/metricQuery";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 import { MetricOption } from "./metricOption";
