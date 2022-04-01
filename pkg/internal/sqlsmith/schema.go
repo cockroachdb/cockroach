@@ -482,6 +482,11 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 		switch def.Name {
 		case "pg_sleep":
 			continue
+		case "st_frechetdistance", "st_buffer":
+			// Some spatial functions can be very computationally expensive and
+			// run for a long time or never finish, so we avoid generating them.
+			// See #69213.
+			continue
 		}
 		skip := false
 		for _, substr := range []string{
