@@ -173,6 +173,11 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 	p := execCtx.(sql.JobExecContext)
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()
+
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint("gcjob.before_resume"); err != nil {
+		return err
+	}
+
 	if fn := execCfg.GCJobTestingKnobs.RunBeforeResume; fn != nil {
 		if err := fn(r.jobID); err != nil {
 			return err

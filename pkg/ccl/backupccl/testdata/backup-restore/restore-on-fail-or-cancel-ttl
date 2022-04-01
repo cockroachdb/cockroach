@@ -1,0 +1,73 @@
+# This test ensures that a failed or cancelled restore cleans up the ttl schedule
+# that is created when resotring a table with a row level ttl configuration.
+
+new-server name=s1 nodes=1
+----
+
+subtest restore-fail-cleans-up-ttl-schedules-before-publishing
+
+exec-sql
+CREATE DATABASE d;
+CREATE TABLE d.tb (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes');
+----
+
+exec-sql
+BACKUP DATABASE d INTO 'userfile:///foo'
+----
+
+# Attempt the restore but pause it before publishing descriptors.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_publishing_descriptors';
+DROP DATABASE d;
+----
+
+restore expect-pausepoint tag=a
+RESTORE DATABASE d FROM LATEST IN 'userfile:///foo';
+----
+job paused at pausepoint
+
+# Cancel the job so that the cleanup hook runs.
+job cancel=a
+----
+
+query-sql
+SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%';
+----
+0
+
+subtest end
+
+
+subtest restore-fail-cleans-up-ttl-schedules-after-publishing
+
+exec-sql
+CREATE DATABASE d;
+CREATE TABLE d.tb (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes');
+----
+
+exec-sql
+BACKUP DATABASE d INTO 'userfile:///foo'
+----
+
+# Attempt the restore but pause it after publishing descriptors.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_publishing_descriptors';
+DROP DATABASE d;
+----
+
+restore expect-pausepoint tag=b
+RESTORE DATABASE d FROM LATEST IN 'userfile:///foo';
+----
+job paused at pausepoint
+
+# Cancel the job so that the cleanup hook runs.
+job cancel=b
+----
+
+query-sql
+SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%';
+----
+0
+
+subtest end

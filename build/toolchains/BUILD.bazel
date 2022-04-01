@@ -175,6 +175,17 @@ config_setting(
 )
 
 config_setting(
+    name = "is_dev_macos_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:aarch64",
+    ],
+    flag_values = {
+        ":dev_flag": "true",
+    },
+)
+
+config_setting(
     name = "is_cross_linux",
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:linux",

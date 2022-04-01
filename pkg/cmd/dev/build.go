@@ -95,6 +95,7 @@ var buildTargetMapping = map[string]string{
 	"short":            "//pkg/cmd/cockroach-short:cockroach-short",
 	"staticcheck":      "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
 	"stress":           stressTarget,
+	"swagger":          "@com_github_go_swagger_go_swagger//cmd/swagger:swagger",
 	"workload":         "//pkg/cmd/workload:workload",
 }
 
