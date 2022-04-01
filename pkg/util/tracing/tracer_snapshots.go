@@ -145,7 +145,7 @@ func (t *Tracer) generateSnapshot() SpansSnapshot {
 	capturedAt := timeutil.Now()
 	// Collect the traces.
 	traces := make([]Recording, 0, 1000)
-	_ = t.SpanRegistry().VisitSpans(func(sp RegistrySpan) error {
+	_ = t.SpanRegistry().VisitRoots(func(sp RegistrySpan) error {
 		rec := sp.GetFullRecording(RecordingVerbose)
 		traces = append(traces, rec)
 		return nil

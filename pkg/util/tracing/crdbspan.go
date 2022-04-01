@@ -676,6 +676,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		Duration:       s.mu.duration,
 		RedactableLogs: true,
 		Verbose:        s.recordingType() == RecordingVerbose,
+		RecordingMode:  s.recordingType().ToProto(),
 	}
 
 	if rs.Duration == -1 {
@@ -895,6 +896,17 @@ func (s *crdbSpan) parentFinished() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.parent.release()
+}
+
+// visitOpenChildren calls the visitor for every open child. The receiver's lock
+// is held for the duration of the iteration, so the visitor should be quick.
+// The visitor is not allowed to hold on to children after it returns.
+func (s *crdbSpan) visitOpenChildren(visitor func(child *Span)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.mu.openChildren {
+		visitor(c.spanRef.Span)
+	}
 }
 
 // SetRecordingType is part of the RegistrySpan interface.

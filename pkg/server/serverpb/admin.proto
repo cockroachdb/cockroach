@@ -1191,9 +1191,15 @@ message TracingSpan {
   uint64 trace_id = 2 [(gogoproto.customname) = "TraceID"];
   uint64 span_id = 3 [(gogoproto.customname) = "SpanID"];
   uint64 parent_span_id = 4 [(gogoproto.customname) = "ParentSpanID"];
-  google.protobuf.Timestamp start = 5 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp start = 5 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
   uint64 goroutine_id = 6 [(gogoproto.customname) = "GoroutineID"];
   repeated SpanTag processed_tags = 7;
+  // current is set if the span is still alive (i.e. still present in the active
+  // spans registry).
+  bool current = 8;
+  // current_recording_mode represents the span's current recording mode. This is
+  // not set if current == false.
+  util.tracing.tracingpb.RecordingMode current_recording_mode = 9;
 }
 
 // SpanTag represents a tag on a tracing span, in a form processed for the use

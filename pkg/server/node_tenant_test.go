@@ -104,6 +104,7 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			RedactableLogs    bool
 			Logs              []tracingpb.LogRecord
 			Verbose           bool
+			RecordingMode     tracingpb.RecordingMode
 			GoroutineID       uint64
 			Finished          bool
 			StructuredRecords []tracingpb.StructuredRecord
