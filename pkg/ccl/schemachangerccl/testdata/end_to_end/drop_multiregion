@@ -3,6 +3,10 @@ CREATE DATABASE multi_region_test_db PRIMARY REGION "us-east1" REGIONS "us-east2
 CREATE TABLE multi_region_test_db.public.table_regional_by_row (
   k INT PRIMARY KEY
 ) LOCALITY REGIONAL BY ROW;
+COMMENT ON DATABASE multi_region_test_db IS 'multi region db is good';
+COMMENT ON TABLE multi_region_test_db.public.table_regional_by_row IS 'regional by row is good';
+COMMENT ON COLUMN multi_region_test_db.public.table_regional_by_row.k IS 'k is good';
+COMMENT ON INDEX multi_region_test_db.public.table_regional_by_row@table_regional_by_row_pkey IS 'pkey is good';
 ----
 ...
 +database {0 0 multi_region_test_db} -> 104
@@ -82,7 +86,6 @@ upsert descriptor #108
   +    - ABSENT
   +    - ABSENT
   +    - WRITE_ONLY
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -180,7 +183,7 @@ upsert descriptor #108
   +      targetStatus: ABSENT
   +    - elementProto:
   +        tableComment:
-  +          comment: __placeholder_comment__
+  +          comment: regional by row is good
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -228,7 +231,7 @@ upsert descriptor #108
   +    - elementProto:
   +        columnComment:
   +          columnId: 1
-  +          comment: __placeholder_comment__
+  +          comment: k is good
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -278,15 +281,6 @@ upsert descriptor #108
   +            usesTypeIds:
   +            - 105
   +            - 107
-  +          tableId: 108
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        columnComment:
-  +          columnId: 2
-  +          comment: __placeholder_comment__
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -343,7 +337,7 @@ upsert descriptor #108
   +      targetStatus: ABSENT
   +    - elementProto:
   +        indexComment:
-  +          comment: __placeholder_comment__
+  +          comment: pkey is good
   +          indexId: 1
   +          tableId: 108
   +      metadata:
@@ -421,7 +415,6 @@ upsert descriptor #108
   -    - ABSENT
   -    - ABSENT
   -    - WRITE_ONLY
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -519,7 +512,7 @@ upsert descriptor #108
   -      targetStatus: ABSENT
   -    - elementProto:
   -        tableComment:
-  -          comment: __placeholder_comment__
+  -          comment: regional by row is good
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -567,7 +560,7 @@ upsert descriptor #108
   -    - elementProto:
   -        columnComment:
   -          columnId: 1
-  -          comment: __placeholder_comment__
+  -          comment: k is good
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -617,15 +610,6 @@ upsert descriptor #108
   -            usesTypeIds:
   -            - 105
   -            - 107
-  -          tableId: 108
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        columnComment:
-  -          columnId: 2
-  -          comment: __placeholder_comment__
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -682,7 +666,7 @@ upsert descriptor #108
   -      targetStatus: ABSENT
   -    - elementProto:
   -        indexComment:
-  -          comment: __placeholder_comment__
+  -          comment: pkey is good
   -          indexId: 1
   -          tableId: 108
   -      metadata:
@@ -758,13 +742,10 @@ upsert descriptor #109
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - ABSENT
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
-  +    - ABSENT
   +    - VALIDATED
-  +    - ABSENT
   +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
@@ -789,8 +770,6 @@ upsert descriptor #109
   +    - 11
   +    - 12
   +    - 13
-  +    - 14
-  +    - 15
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -853,14 +832,6 @@ upsert descriptor #109
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
-  +        tableComment:
-  +          comment: __placeholder_comment__
-  +          tableId: 109
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
   +        columnFamily:
   +          name: primary
   +          tableId: 109
@@ -900,15 +871,6 @@ upsert descriptor #109
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
-  +        columnComment:
-  +          columnId: 1
-  +          comment: __placeholder_comment__
-  +          tableId: 109
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            indexId: 1
@@ -926,15 +888,6 @@ upsert descriptor #109
   +        indexName:
   +          indexId: 1
   +          name: table_regional_by_table_pkey
-  +          tableId: 109
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        indexComment:
-  +          comment: __placeholder_comment__
-  +          indexId: 1
   +          tableId: 109
   +      metadata:
   +        sourceElementId: 1
@@ -990,13 +943,10 @@ upsert descriptor #109
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - ABSENT
   -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
-  -    - ABSENT
   -    - VALIDATED
-  -    - ABSENT
   -    - ABSENT
   -    jobId: "1"
   -    relevantStatements:
@@ -1021,8 +971,6 @@ upsert descriptor #109
   -    - 11
   -    - 12
   -    - 13
-  -    - 14
-  -    - 15
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -1085,14 +1033,6 @@ upsert descriptor #109
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
-  -        tableComment:
-  -          comment: __placeholder_comment__
-  -          tableId: 109
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
   -        columnFamily:
   -          name: primary
   -          tableId: 109
@@ -1132,15 +1072,6 @@ upsert descriptor #109
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
-  -        columnComment:
-  -          columnId: 1
-  -          comment: __placeholder_comment__
-  -          tableId: 109
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            indexId: 1
@@ -1158,15 +1089,6 @@ upsert descriptor #109
   -        indexName:
   -          indexId: 1
   -          name: table_regional_by_table_pkey
-  -          tableId: 109
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        indexComment:
-  -          comment: __placeholder_comment__
-  -          indexId: 1
   -          tableId: 109
   -      metadata:
   -        sourceElementId: 1
@@ -1196,7 +1118,7 @@ begin transaction #1
 ## StatementPhase stage 1 of 1 with 4 MutationType ops
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 18 MutationType ops
+## PreCommitPhase stage 1 of 1 with 17 MutationType ops
 delete database namespace entry {0 0 multi_region_test_db} -> 104
 delete object namespace entry {104 106 crdb_internal_region} -> 105
 delete schema namespace entry {104 0 public} -> 106
@@ -1293,7 +1215,7 @@ upsert descriptor #104
   +      targetStatus: ABSENT
   +    - elementProto:
   +        databaseComment:
-  +          comment: __placeholder_comment__
+  +          comment: multi region db is good
   +          databaseId: 104
   +      metadata:
   +        sourceElementId: 1
@@ -1336,13 +1258,13 @@ upsert descriptor #105
   +        statement: DROP DATABASE multi_region_test_db CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 16
   +    - 17
   +    - 18
   +    - 19
   +    - 20
   +    - 21
   +    - 22
-  +    - 23
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1427,7 +1349,6 @@ upsert descriptor #106
   +    - ABSENT
   +    - DROPPED
   +    - ABSENT
-  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -1442,7 +1363,6 @@ upsert descriptor #106
   +    - 13
   +    - 14
   +    - 15
-  +    - 16
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1504,14 +1424,6 @@ upsert descriptor #106
   +        sourceElementId: 2
   +        subWorkId: 1
   +      targetStatus: ABSENT
-  +    - elementProto:
-  +        schemaComment:
-  +          comment: __placeholder_comment__
-  +          schemaId: 106
-  +      metadata:
-  +        sourceElementId: 2
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
      id: 106
      modificationTime: {}
   ...
@@ -1542,13 +1454,13 @@ upsert descriptor #107
   +        statement: DROP DATABASE multi_region_test_db CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
+  +    - 23
   +    - 24
   +    - 25
   +    - 26
   +    - 27
   +    - 28
   +    - 29
-  +    - 30
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1632,7 +1544,6 @@ upsert descriptor #107
   +  state: DROP
   +  version: "5"
 delete comment for descriptor #104 of type DatabaseCommentType
-delete comment for descriptor #106 of type SchemaCommentType
 delete role settings for database on #104
 create job #1 (non-cancelable: true): "DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [104 105 106 107]
