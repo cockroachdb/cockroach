@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -130,23 +132,37 @@ func distImport(
 	accumulatedBulkSummary.BulkOpSummary = getLastImportSummary(job)
 	accumulatedBulkSummary.Unlock()
 
+	var diagram string
+	specs := p.GenerateFlowSpecs()
+	if diag, err := execinfrapb.GeneratePlanDiagram(job.Payload().Description, specs, execinfrapb.DiagramFlags{}); err != nil {
+		log.Warning(ctx, err.Error())
+	} else {
+		if _, u, err := diag.ToURL(); err != nil {
+			log.Warning(ctx, err.Error())
+		} else {
+			diagram = u.String()
+		}
+	}
+
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
 	if importDetails.ReadProgress == nil {
 		// Initialize the progress metrics on the first attempt.
-		if err := job.FractionProgressed(ctx, nil, /* txn */
-			func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-				prog := details.(*jobspb.Progress_Import).Import
-				prog.ReadProgress = make([]float32, len(from))
-				prog.ResumePos = make([]int64, len(from))
-				if prog.SequenceDetails == nil {
-					prog.SequenceDetails = make([]*jobspb.SequenceDetails, len(from))
-					for i := range prog.SequenceDetails {
-						prog.SequenceDetails[i] = &jobspb.SequenceDetails{}
-					}
+		if err := job.Update(ctx, nil /* txn */, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			prog := md.Progress.GetImport()
+			prog.ReadProgress = make([]float32, len(from))
+			prog.ResumePos = make([]int64, len(from))
+			if prog.SequenceDetails == nil {
+				prog.SequenceDetails = make([]*jobspb.SequenceDetails, len(from))
+				for i := range prog.SequenceDetails {
+					prog.SequenceDetails[i] = &jobspb.SequenceDetails{}
 				}
-
-				return 0.0
-			},
+			}
+			md.Progress.Progress = &jobspb.Progress_FractionCompleted{FractionCompleted: 0.0}
+			ju.UpdateProgress(md.Progress)
+			md.Payload.GetImport().DebugFlowDiagram = diagram
+			ju.UpdatePayload(md.Payload)
+			return nil
+		},
 		); err != nil {
 			return roachpb.BulkOpSummary{}, err
 		}

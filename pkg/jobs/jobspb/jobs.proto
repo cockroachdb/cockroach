@@ -426,7 +426,9 @@ message ImportDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"
   ];
 
-  // next val: 28
+  string debugFlowDiagram = 28;
+
+  // NEXT ID: 29.
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated
