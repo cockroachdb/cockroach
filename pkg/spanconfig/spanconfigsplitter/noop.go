@@ -15,15 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/errors"
 )
 
-var _ spanconfig.Splitter = &IllegalSplitter{}
+var _ spanconfig.Splitter = &NoopSplitter{}
 
-// IllegalSplitter is a Splitter that only returns "illegal use" errors.
-type IllegalSplitter struct{}
+// NoopSplitter is a Splitter that only returns "illegal use" errors.
+type NoopSplitter struct{}
 
 // Splits is part of spanconfig.Splitter.
-func (i IllegalSplitter) Splits(context.Context, catalog.TableDescriptor) (int, error) {
-	return 0, errors.New("illegal use of splitter")
+func (i NoopSplitter) Splits(context.Context, catalog.TableDescriptor) (int, error) {
+	return 0, nil
 }

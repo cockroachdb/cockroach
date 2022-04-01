@@ -139,7 +139,8 @@ func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
 
 // IsUncommittedVersion implements the Descriptor interface.
 func (desc *Mutable) IsUncommittedVersion() bool {
-	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
+	clusterVersion := desc.ClusterVersion()
+	return desc.IsNew() || desc.GetVersion() != clusterVersion.GetVersion()
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 )
 
 var _ spanconfig.Limiter = &NoopLimiter{}
@@ -24,8 +23,6 @@ var _ spanconfig.Limiter = &NoopLimiter{}
 type NoopLimiter struct{}
 
 // ShouldLimit is part of the spanconfig.Limiter interface.
-func (n NoopLimiter) ShouldLimit(
-	_ context.Context, _ *kv.Txn, _, _ catalog.TableDescriptor,
-) (bool, error) {
+func (n NoopLimiter) ShouldLimit(context.Context, *kv.Txn, int) (bool, error) {
 	return false, nil
 }

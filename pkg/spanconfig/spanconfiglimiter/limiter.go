@@ -14,7 +14,6 @@ package spanconfiglimiter
 
 import (
 	"context"
-	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -22,12 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,16 +43,12 @@ var tenantLimitSetting = settings.RegisterIntSetting(
 type Limiter struct {
 	ie       sqlutil.InternalExecutor
 	settings *cluster.Settings
-	splitter spanconfig.Splitter
 	knobs    *spanconfig.TestingKnobs
 }
 
 // New constructs and returns a Limiter.
 func New(
-	ie sqlutil.InternalExecutor,
-	settings *cluster.Settings,
-	splitter spanconfig.Splitter,
-	knobs *spanconfig.TestingKnobs,
+	ie sqlutil.InternalExecutor, settings *cluster.Settings, knobs *spanconfig.TestingKnobs,
 ) *Limiter {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
@@ -64,53 +56,24 @@ func New(
 	return &Limiter{
 		ie:       ie,
 		settings: settings,
-		splitter: splitter,
 		knobs:    knobs,
 	}
 }
 
 // ShouldLimit is part of the spanconfig.Limiter interface.
-func (l *Limiter) ShouldLimit(
-	ctx context.Context, txn *kv.Txn, committed, uncommitted catalog.TableDescriptor,
-) (bool, error) {
+func (l *Limiter) ShouldLimit(ctx context.Context, txn *kv.Txn, delta int) (bool, error) {
 	if !l.settings.Version.IsActive(ctx, clusterversion.PreSeedSpanCountTable) {
 		return false, nil // nothing to do
 	}
 
-	if isNil(committed) && isNil(uncommitted) {
-		log.Fatalf(ctx, "unexpected: got two empty table descriptors")
-	}
-
-	var nonNilDesc catalog.TableDescriptor
-	if !isNil(committed) {
-		nonNilDesc = committed
-	} else {
-		nonNilDesc = uncommitted
-	}
-	if nonNilDesc.GetParentID() == systemschema.SystemDB.GetID() {
-		return false, nil // we don't count tables in system database
+	if delta == 0 {
+		return false, nil
 	}
 
 	limit := tenantLimitSetting.Get(&l.settings.SV)
 	if overrideFn := l.knobs.LimiterLimitOverride; overrideFn != nil {
 		limit = overrideFn()
 	}
-
-	committedSplits, err := l.splitter.Splits(ctx, committed)
-	if err != nil {
-		return false, err
-	}
-	uncommittedSplits, err := l.splitter.Splits(ctx, uncommitted)
-	if err != nil {
-		return false, err
-	}
-
-	delta := uncommittedSplits - committedSplits
-	if delta == 0 {
-		return false, nil
-	}
-
-	log.VInfof(ctx, 1, "adding %d to span count for %s", delta, nonNilDesc.GetName())
 
 	const updateSpanCountStmt = `
 INSERT INTO system.span_count (span_count) VALUES ($1)
@@ -133,9 +96,4 @@ RETURNING span_count
 	}
 	spanCountWithDelta := int64(tree.MustBeDInt(datums[0]))
 	return spanCountWithDelta > limit, nil
-}
-
-func isNil(table catalog.TableDescriptor) bool {
-	vTable := reflect.ValueOf(table)
-	return vTable.Kind() == reflect.Ptr && vTable.IsNil() || table == nil
 }

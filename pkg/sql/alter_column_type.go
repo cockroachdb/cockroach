@@ -154,7 +154,7 @@ func AlterColumnType(
 		if err := alterColumnTypeGeneral(ctx, tableDesc, col, typ, t.Using, params, cmds, tn); err != nil {
 			return err
 		}
-		if err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, tree.AsStringWithFQNames(t, params.Ann()), tableDesc.ClusterVersion.NextMutationID); err != nil {
+		if err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, tree.AsStringWithFQNames(t, params.Ann()), tableDesc.ClusterVersion().NextMutationID); err != nil {
 			return err
 		}
 		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("ALTER COLUMN TYPE changes are finalized asynchronously; "+
@@ -270,7 +270,7 @@ func alterColumnTypeGeneral(
 
 	// Disallow ALTER COLUMN TYPE general if the table is already undergoing
 	// a schema change.
-	currentMutationID := tableDesc.ClusterVersion.NextMutationID
+	currentMutationID := tableDesc.ClusterVersion().NextMutationID
 	for i := range tableDesc.Mutations {
 		mut := &tableDesc.Mutations[i]
 		if mut.MutationID < currentMutationID {

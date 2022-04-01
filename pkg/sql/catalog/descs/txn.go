@@ -92,7 +92,7 @@ func (cf *CollectionFactory) Txn(
 				return err
 			}
 			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
-			if err := CheckSpanCountLimit(ctx, &descsCol, cf.spanConfigLimiter, txn); err != nil {
+			if err := CheckSpanCountLimit(ctx, &descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn); err != nil {
 				return err
 			}
 			retryErr, err := CheckTwoVersionInvariant(
@@ -229,9 +229,14 @@ func CheckTwoVersionInvariant(
 // would exceed the span count limit we're allowed (applicable only to secondary
 // tenants).
 func CheckSpanCountLimit(
-	ctx context.Context, descsCol *Collection, spanConfigLimiter spanconfig.Limiter, txn *kv.Txn,
+	ctx context.Context,
+	descsCol *Collection,
+	splitter spanconfig.Splitter,
+	limiter spanconfig.Limiter,
+	txn *kv.Txn,
 ) error {
 	if !descsCol.codec().ForSystemTenant() {
+		var totalSpanCountDelta int
 		for _, ut := range descsCol.GetUncommittedTables() {
 			uncommittedMutTable, err := descsCol.GetUncommittedMutableTableByID(ut.GetID())
 			if err != nil {
@@ -239,13 +244,19 @@ func CheckSpanCountLimit(
 			}
 
 			originalTableDesc := uncommittedMutTable.OriginalDescriptor().(catalog.TableDescriptor)
-			shouldLimit, err := spanConfigLimiter.ShouldLimit(ctx, txn, originalTableDesc, uncommittedMutTable)
+			delta, err := spanconfig.Delta(ctx, splitter, originalTableDesc, uncommittedMutTable)
 			if err != nil {
 				return err
 			}
-			if shouldLimit {
-				return errExceededSpanCountLimit
-			}
+			totalSpanCountDelta += delta
+		}
+
+		shouldLimit, err := limiter.ShouldLimit(ctx, txn, totalSpanCountDelta)
+		if err != nil {
+			return err
+		}
+		if shouldLimit {
+			return errExceededSpanCountLimit
 		}
 	}
 

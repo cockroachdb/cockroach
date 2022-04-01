@@ -558,14 +558,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}{}
 	if codec.ForSystemTenant() {
 		spanConfig.limiter = spanconfiglimiter.NoopLimiter{}
-		spanConfig.splitter = spanconfigsplitter.IllegalSplitter{}
+		spanConfig.splitter = spanconfigsplitter.NoopSplitter{}
 	} else {
 		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
 		spanConfig.splitter = spanconfigsplitter.New(codec, spanConfigKnobs)
 		spanConfig.limiter = spanconfiglimiter.New(
 			cfg.circularInternalExecutor,
 			cfg.Settings,
-			spanConfig.splitter,
 			spanConfigKnobs,
 		)
 	}
@@ -575,6 +574,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		leaseMgr,
 		virtualSchemas,
 		hydratedTablesCache,
+		spanConfig.splitter,
 		spanConfig.limiter,
 	)
 

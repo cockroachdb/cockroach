@@ -12,13 +12,16 @@ package spanconfig
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // KVAccessor mediates access to KV span configurations pertaining to a given
@@ -258,15 +261,12 @@ type StoreReader interface {
 }
 
 // Limiter is used to limit the number of span configs installed by secondary
-// tenants. It considers the committed and uncommitted state of a table
-// descriptor and computes the "span" delta, each unit we can apply a
-// configuration over. It uses these deltas to maintain an aggregate counter,
-// informing the caller if exceeding the configured limit.
+// tenants. It takes in a delta (typically the difference in span configs
+// between the committed and uncommitted state in the txn), uses it to maintain
+// an aggregate counter, and informs the caller if exceeding the prescribed
+// limit.
 type Limiter interface {
-	ShouldLimit(
-		ctx context.Context, txn *kv.Txn,
-		committed, uncommitted catalog.TableDescriptor,
-	) (bool, error)
+	ShouldLimit(ctx context.Context, txn *kv.Txn, delta int) (bool, error)
 }
 
 // Splitter returns the number of split points for the given table descriptor.
@@ -298,6 +298,39 @@ type Limiter interface {
 //
 type Splitter interface {
 	Splits(ctx context.Context, table catalog.TableDescriptor) (int, error)
+}
+
+// Delta considers both the committed and uncommitted state of a table
+// descriptor and computes the difference in the number of spans we can apply a
+// configuration over.
+func Delta(
+	ctx context.Context, s Splitter, committed, uncommitted catalog.TableDescriptor,
+) (int, error) {
+	if isNil(committed) && isNil(uncommitted) {
+		log.Fatalf(ctx, "unexpected: got two empty table descriptors")
+	}
+
+	var nonNilDesc catalog.TableDescriptor
+	if !isNil(committed) {
+		nonNilDesc = committed
+	} else {
+		nonNilDesc = uncommitted
+	}
+	if nonNilDesc.GetParentID() == systemschema.SystemDB.GetID() {
+		return 0, nil // we don't count tables in the system database
+	}
+
+	committedSplits, err := s.Splits(ctx, committed)
+	if err != nil {
+		return 0, err
+	}
+	uncommittedSplits, err := s.Splits(ctx, uncommitted)
+	if err != nil {
+		return 0, err
+	}
+
+	delta := uncommittedSplits - committedSplits
+	return delta, nil
 }
 
 // SQLUpdate captures either a descriptor or a protected timestamp update.
@@ -456,4 +489,9 @@ func (r *emptyProtectedTSReader) GetProtectionTimestamps(
 	context.Context, roachpb.Span,
 ) ([]hlc.Timestamp, hlc.Timestamp, error) {
 	return nil, (*hlc.Clock)(r).Now(), nil
+}
+
+func isNil(table catalog.TableDescriptor) bool {
+	vTable := reflect.ValueOf(table)
+	return vTable.Kind() == reflect.Ptr && vTable.IsNil() || table == nil
 }
