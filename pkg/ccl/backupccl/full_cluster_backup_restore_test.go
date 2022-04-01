@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -49,16 +50,12 @@ func TestFullClusterBackup(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DisableSpanConfigs: true, // TODO(irfansharif): #75060.
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					// We compare job progress before and after a restore. Disable
 					// the automatic jobs checkpointing which could possibly mutate
 					// the progress data during the backup/restore process.
 					JobDisablePersistingCheckpoints: true,
-				},
-				GCJob: &sql.GCJobTestingKnobs{
-					DisableNewProtectedTimestampSubsystemCheck: true,
 				},
 			},
 		}}
@@ -90,10 +87,17 @@ func TestFullClusterBackup(t *testing.T) {
 	}
 
 	// The claim_session_id field in jobs is a uuid and so needs to be excluded
-	// when comparing jobs pre/post restore.
+	// when comparing jobs pre/post restore. The span config reconciliation job
+	// too is something we exclude; because it's a singleton job, when restored
+	// into another cluster it self-terminates.
 	const jobsQuery = `
 SELECT id, status, created, payload, progress, created_by_type, created_by_id, claim_instance_id
 FROM system.jobs
+WHERE id NOT IN
+(
+	SELECT job_id FROM [SHOW AUTOMATIC JOBS]
+  WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION'
+)
 	`
 	// Pause SQL Stats compaction job to ensure the test is deterministic.
 	sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS]`)
@@ -368,6 +372,42 @@ CREATE TABLE data2.foo (a int);
 			fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", tableName)).Scan(&tableID)
 		require.True(t, tableID > maxID)
 		require.NotEqual(t, dbID, tableID)
+	})
+}
+
+// TestSingletonSpanConfigJobPostRestore ensures that there's a single span
+// config reconciliation job running post restore.
+func TestSingletonSpanConfigJobPostRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+	const numAccounts = 10
+	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, params)
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
+
+	const numRunningReconciliationJobQuery = `
+SELECT count(*) FROM [SHOW AUTOMATIC JOBS]
+WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION' AND status = 'running'
+`
+	testutils.SucceedsSoon(t, func() error {
+		var numRunningJobs int
+		sqlDBRestore.QueryRow(t, numRunningReconciliationJobQuery).Scan(&numRunningJobs)
+		if numRunningJobs != 1 {
+			return errors.Newf("expected single running reconciliation job, found %d", numRunningJobs)
+		}
+		return nil
 	})
 }
 
