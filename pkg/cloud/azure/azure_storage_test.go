@@ -11,13 +11,17 @@
 package azure
 
 import (
+	"context"
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"os"
 	"testing"
 
+	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -27,24 +31,29 @@ import (
 )
 
 type azureConfig struct {
-	account, key, bucket string
+	account, key, bucket, environment string
 }
 
 func (a azureConfig) filePath(f string) string {
-	return fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
+	return fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s&%s=%s",
 		a.bucket, f,
 		AzureAccountKeyParam, url.QueryEscape(a.key),
-		AzureAccountNameParam, url.QueryEscape(a.account))
+		AzureAccountNameParam, url.QueryEscape(a.account),
+		AzureEnvironmentKeyParam, url.QueryEscape(a.environment))
 }
 
 func getAzureConfig() (azureConfig, error) {
 	cfg := azureConfig{
-		account: os.Getenv("AZURE_ACCOUNT_NAME"),
-		key:     os.Getenv("AZURE_ACCOUNT_KEY"),
-		bucket:  os.Getenv("AZURE_CONTAINER"),
+		account:     os.Getenv("AZURE_ACCOUNT_NAME"),
+		key:         os.Getenv("AZURE_ACCOUNT_KEY"),
+		bucket:      os.Getenv("AZURE_CONTAINER"),
+		environment: azure.PublicCloud.Name,
 	}
 	if cfg.account == "" || cfg.key == "" || cfg.bucket == "" {
 		return azureConfig{}, errors.New("AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY, AZURE_CONTAINER must all be set")
+	}
+	if v, ok := os.LookupEnv(AzureEnvironmentKeyParam); ok {
+		cfg.environment = v
 	}
 	return cfg, nil
 }
@@ -79,4 +88,53 @@ func TestAntagonisticAzureRead(t *testing.T) {
 	require.NoError(t, err)
 
 	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)
+}
+
+func TestParseAzureURL(t *testing.T) {
+	t.Run("Defaults to Public Cloud when AZURE_ENVIRONEMNT unset", func(t *testing.T) {
+		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AZURE_ACCOUNT_KEY=key")
+		require.NoError(t, err)
+
+		sut, err := parseAzureURL(cloud.ExternalStorageURIContext{}, u)
+		require.NoError(t, err)
+
+		require.Equal(t, azure.PublicCloud.Name, sut.AzureConfig.Environment)
+	})
+
+	t.Run("Can Override AZURE_ENVIRONMENT", func(t *testing.T) {
+		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AZURE_ACCOUNT_KEY=key&AZURE_ENVIRONMENT=AzureUSGovernmentCloud")
+		require.NoError(t, err)
+
+		sut, err := parseAzureURL(cloud.ExternalStorageURIContext{}, u)
+		require.NoError(t, err)
+
+		require.Equal(t, azure.USGovernmentCloud.Name, sut.AzureConfig.Environment)
+	})
+}
+
+func TestMakeAzureStorageURLFromEnvironment(t *testing.T) {
+	for _, tt := range []struct {
+		environment string
+		expected    string
+	}{
+		{environment: azure.PublicCloud.Name, expected: "https://account.blob.core.windows.net/container"},
+		{environment: azure.USGovernmentCloud.Name, expected: "https://account.blob.core.usgovcloudapi.net/container"},
+	} {
+		t.Run(tt.environment, func(t *testing.T) {
+			sut, err := makeAzureStorage(context.Background(), cloud.ExternalStorageContext{}, roachpb.ExternalStorage{
+				AzureConfig: &roachpb.ExternalStorage_Azure{
+					Container:   "container",
+					Prefix:      "path",
+					AccountName: "account",
+					AccountKey:  base64.StdEncoding.EncodeToString([]byte("key")),
+					Environment: tt.environment,
+				},
+			})
+
+			require.NoError(t, err)
+
+			u := sut.(*azureStorage).container.URL()
+			require.Equal(t, tt.expected, u.String())
+		})
+	}
 }
