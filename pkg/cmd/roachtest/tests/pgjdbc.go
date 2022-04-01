@@ -23,7 +23,7 @@ import (
 )
 
 var pgjdbcReleaseTagRegex = regexp.MustCompile(`^REL(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedPGJDBCTag = "REL42.2.19"
+var supportedPGJDBCTag = "REL42.3.3"
 
 // This test runs pgjdbc's full test suite against a single cockroach node.
 
