@@ -388,7 +388,7 @@ func TestCrossJoiner(t *testing.T) {
 		for _, tc := range getCJTestCases() {
 			for _, tc := range tc.mutateTypes() {
 				log.Infof(ctx, "spillForced=%t", spillForced)
-				runHashJoinTestCase(t, tc, func(sources []colexecop.Operator) (colexecop.Operator, error) {
+				runHashJoinTestCase(t, tc, nil /* rng */, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
 						Spec:                spec,
