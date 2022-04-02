@@ -672,6 +672,9 @@ func (u *sqlSymUnion) replicationOptions() *tree.ReplicationOptions {
 func (u *sqlSymUnion) copyOptions() *tree.CopyOptions {
   return u.val.(*tree.CopyOptions)
 }
+func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
+  return u.val.(tree.ShowBackupDetails)
+}
 func (u *sqlSymUnion) restoreOptions() *tree.RestoreOptions {
   return u.val.(*tree.RestoreOptions)
 }
@@ -1182,6 +1185,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
 %type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
+%type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -5741,51 +5745,76 @@ show_backup_stmt:
       InCollection:    $4.expr(),
     }
   }
-| SHOW BACKUP string_or_placeholder opt_with_options
-  {
-    $$.val = &tree.ShowBackup{
-      Details: tree.BackupDefaultDetails,
-      Path:    $3.expr(),
-      Options: $4.kvOptions(),
-    }
-  }
+| SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder opt_with_options
+	{
+		$$.val = &tree.ShowBackup{
+			From:    true,
+			Details:    $3.showBackupDetails(),
+			Path:    $5.expr(),
+			InCollection: $7.expr(),
+			Options: $8.kvOptions(),
+		}
+	}
 | SHOW BACKUP string_or_placeholder IN string_or_placeholder opt_with_options
-  {
-    $$.val = &tree.ShowBackup{
-      Details: tree.BackupDefaultDetails,
-      Path:    $3.expr(),
-      InCollection: $5.expr(),
-      Options: $6.kvOptions(),
-    }
-  }
+	{
+		$$.val = &tree.ShowBackup{
+			Details:  tree.BackupDefaultDetails,
+			Path:    $3.expr(),
+			InCollection: $5.expr(),
+			Options: $6.kvOptions(),
+		}
+	}
+| SHOW BACKUP string_or_placeholder opt_with_options
+	{
+		$$.val = &tree.ShowBackup{
+		  Details:  tree.BackupDefaultDetails,
+			Path:    $3.expr(),
+			Options: $4.kvOptions(),
+		}
+	}
 | SHOW BACKUP SCHEMAS string_or_placeholder opt_with_options
-  {
-    $$.val = &tree.ShowBackup{
-      Details: tree.BackupDefaultDetails,
-      ShouldIncludeSchemas: true,
-      Path:    $4.expr(),
-      Options: $5.kvOptions(),
-    }
-  }
-| SHOW BACKUP RANGES string_or_placeholder opt_with_options
-  {
-    /* SKIP DOC */
-    $$.val = &tree.ShowBackup{
-      Details: tree.BackupRangeDetails,
-      Path:    $4.expr(),
-      Options: $5.kvOptions(),
-    }
-  }
+	{
+		$$.val = &tree.ShowBackup{
+		  Details:  tree.BackupSchemaDetails,
+			Path:    $4.expr(),
+			Options: $5.kvOptions(),
+		}
+	}
 | SHOW BACKUP FILES string_or_placeholder opt_with_options
-  {
-    /* SKIP DOC */
-    $$.val = &tree.ShowBackup{
-      Details: tree.BackupFileDetails,
-      Path:    $4.expr(),
-      Options: $5.kvOptions(),
-    }
-  }
+	{
+		$$.val = &tree.ShowBackup{
+		  Details:  tree.BackupFileDetails,
+			Path:    $4.expr(),
+			Options: $5.kvOptions(),
+		}
+	}
+| SHOW BACKUP RANGES string_or_placeholder opt_with_options
+	{
+		$$.val = &tree.ShowBackup{
+		  Details:  tree.BackupRangeDetails,
+			Path:    $4.expr(),
+			Options: $5.kvOptions(),
+		}
+	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
+
+show_backup_details:
+  /* EMPTY -- default */
+  {
+    $$.val = tree.BackupDefaultDetails
+  }
+| SCHEMAS
+  {
+    $$.val = tree.BackupSchemaDetails
+  }
+| FILES
+	{
+	$$.val = tree.BackupFileDetails
+	}
+| RANGES
+	{
+	$$.val = tree.BackupRangeDetails
+	}
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
 // %Category: Cfg

@@ -37,6 +37,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO (msbutler): when refactoring these tests to data driven tests, keep the
+// original go test on 22.1 and only use new backup syntax in data driven test
+
 func TestShowBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -492,7 +495,8 @@ func TestShowBackups(t *testing.T) {
 	// check that we can show the inc layers in the individual full backups.
 	b1 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP $1 IN $2] WHERE object_type='table'`, rows[0][0], full)
 	require.Equal(t, 4, len(b1))
-	b2 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
+	b2 := sqlDBRestore.QueryStr(t,
+		`SELECT * FROM [SHOW BACKUP FROM $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
 	require.Equal(t, 3, len(b2))
 
 	require.Equal(t,
@@ -507,6 +511,53 @@ func TestShowBackups(t *testing.T) {
 
 }
 
+func TestShowNonDefaultBackups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	const full = localFoo + "/full"
+	const remoteInc = localFoo + "/inc"
+
+	// Make an initial backup.
+	fullNonDefault := full + "NonDefault"
+	incNonDefault := remoteInc + "NonDefault"
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, fullNonDefault)
+
+	// Get base number of files, schemas, and ranges in the backup
+	var oldCount [3]int
+	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES"} {
+		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s']`, typ,
+			fullNonDefault)
+		count, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])
+		require.NoError(t, err, "error converting original count to integer")
+		oldCount[i] = count
+	}
+
+	// Increase the number of files,schemas, and ranges that will be in the backup chain
+	sqlDB.Exec(t, `CREATE TABLE data.blob (a INT PRIMARY KEY); INSERT INTO data.blob VALUES (0)`)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1`, fullNonDefault)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH incremental_location=$2`, fullNonDefault, incNonDefault)
+
+	// Show backup should contain more rows as new files/schemas/ranges were
+	// added in the incremental backup
+	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES"} {
+		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s']`, typ,
+			fullNonDefault)
+		newCount, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])
+		require.NoError(t, err, "error converting new count to integer")
+		require.Greater(t, newCount, oldCount[i])
+
+		queryInc := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s' WITH incremental_location='%s']`, typ,
+			fullNonDefault, incNonDefault)
+		newCountInc, err := strconv.Atoi(sqlDB.QueryStr(t, queryInc)[0][0])
+		require.NoError(t, err, "error converting new count to integer")
+		require.Greater(t, newCountInc, oldCount[i])
+	}
+}
 func TestShowBackupTenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

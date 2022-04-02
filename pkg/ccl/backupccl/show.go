@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -91,6 +92,9 @@ func (m manifestInfoReader) header() colinfo.ResultColumns {
 // showBackup reads backup info from the manifest, populates the manifestInfoReader,
 // calls the backupShower to process the manifest info into datums,
 // and pipes the information to the user's sql console via the results channel.
+
+// TODO(msbutler): during the old backup syntax purge, remove store, incStore, incPaths,
+// and pass only `stores []cloud.ExternalStorage` object in signature
 func (m manifestInfoReader) showBackup(
 	ctx context.Context,
 	mem *mon.BoundAccount,
@@ -256,13 +260,11 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	if _, asJSON := opts[backupOptAsJSON]; asJSON {
-		backup.Details = tree.BackupManifestAsJSON
-	}
-
 	var infoReader backupInfoReader
 	if _, dumpSST := opts[backupOptDebugMetadataSST]; dumpSST {
 		infoReader = metadataSSTInfoReader{}
+	} else if _, asJSON := opts[backupOptAsJSON]; asJSON {
+		infoReader = manifestInfoReader{shower: jsonShower}
 	} else {
 		var shower backupShower
 		switch backup.Details {
@@ -270,10 +272,10 @@ func showBackupPlanHook(
 			shower = backupShowerRanges
 		case tree.BackupFileDetails:
 			shower = backupShowerFiles
-		case tree.BackupManifestAsJSON:
-			shower = jsonShower
+		case tree.BackupSchemaDetails:
+			shower = backupShowerDefault(ctx, p, true, opts)
 		default:
-			shower = backupShowerDefault(ctx, p, backup.ShouldIncludeSchemas, opts)
+			shower = backupShowerDefault(ctx, p, false, opts)
 		}
 		infoReader = manifestInfoReader{shower}
 	}
@@ -296,8 +298,17 @@ func showBackupPlanHook(
 			if err != nil {
 				return err
 			}
+		} else {
+			// Deprecation notice for old `SHOW BACKUP` syntax. Remove this once the syntax is
+			// deleted in 22.2.
+			p.BufferClientNotice(ctx,
+				pgnotice.Newf("The `SHOW BACKUP` syntax without the `IN` keyword will be removed in a"+
+					" future release. Please switch over to using `SHOW BACKUP FROM <backup> IN"+
+					" <collection>` to view metadata on a backup collection: %s."+
+					" Also note that backups created using the `BACKUP TO` syntax may not be showable or"+
+					" restoreable in the next major version release. Use `BACKUP INTO` instead.",
+					"https://www.cockroachlabs.com/docs/stable/show-backup.html"))
 		}
-
 		if err := checkShowBackupURIPrivileges(ctx, p, dest); err != nil {
 			return err
 		}

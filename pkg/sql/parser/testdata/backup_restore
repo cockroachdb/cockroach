@@ -167,6 +167,38 @@ SHOW BACKUP '_' IN '_' -- literals removed
 SHOW BACKUP 'foo' IN 'bar' -- identifiers removed
 
 parse
+SHOW BACKUP FROM $1 IN $2 WITH foo = 'bar'
+----
+SHOW BACKUP FROM $1 IN $2 WITH foo = 'bar'
+SHOW BACKUP FROM ($1) IN ($2) WITH foo = ('bar') -- fully parenthesized
+SHOW BACKUP FROM $1 IN $2 WITH foo = '_' -- literals removed
+SHOW BACKUP FROM $1 IN $2 WITH _ = 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP FILES FROM 'foo' IN 'bar'
+----
+SHOW BACKUP FILES FROM 'foo' IN 'bar'
+SHOW BACKUP FILES FROM ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP FILES FROM '_' IN '_' -- literals removed
+SHOW BACKUP FILES FROM 'foo' IN 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP RANGES FROM 'foo' IN 'bar'
+----
+SHOW BACKUP RANGES FROM 'foo' IN 'bar'
+SHOW BACKUP RANGES FROM ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP RANGES FROM '_' IN '_' -- literals removed
+SHOW BACKUP RANGES FROM 'foo' IN 'bar' -- identifiers removed
+
+parse
+SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar'
+----
+SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar'
+SHOW BACKUP SCHEMAS FROM ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP SCHEMAS FROM '_' IN '_' -- literals removed
+SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar' -- identifiers removed
+
+parse
 SHOW BACKUP $1 IN $2 WITH foo = 'bar'
 ----
 SHOW BACKUP $1 IN $2 WITH foo = 'bar'
