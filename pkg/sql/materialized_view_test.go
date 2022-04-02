@@ -60,6 +60,10 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 	// Update the view and refresh it.
 	if _, err := sqlDB.Exec(`
 INSERT INTO t.t VALUES (3);
+`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
 REFRESH MATERIALIZED VIEW t.v;
 `); err != nil {
 		t.Fatal(err)

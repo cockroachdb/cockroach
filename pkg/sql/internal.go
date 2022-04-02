@@ -748,6 +748,9 @@ func (ie *InternalExecutor) execInternal(
 				TimeReceived: timeReceived,
 				ParseStart:   parseStart,
 				ParseEnd:     parseEnd,
+				// This is the only and last statement in the batch, so that this
+				// transaction can be autocommited as a single statement transaction.
+				LastInBatch: true,
 			}); err != nil {
 			return nil, err
 		}
@@ -769,7 +772,14 @@ func (ie *InternalExecutor) execInternal(
 			return nil, err
 		}
 
-		if err := stmtBuf.Push(ctx, ExecPortal{TimeReceived: timeReceived}); err != nil {
+		if err := stmtBuf.Push(ctx,
+			ExecPortal{
+				TimeReceived: timeReceived,
+				// Next command will be a sync, so this can be considered as another single
+				// statement transaction.
+				FollowedBySync: true,
+			},
+		); err != nil {
 			return nil, err
 		}
 	}

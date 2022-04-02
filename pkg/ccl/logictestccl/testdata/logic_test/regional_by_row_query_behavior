@@ -6,6 +6,8 @@
 # we need to wait for the system config to propagate.
 statement ok
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+
+statement ok
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
 
 statement ok
@@ -1280,6 +1282,8 @@ CREATE INDEX new_idx ON regional_by_row_table(a, b)
 # #56201).
 statement ok
 CREATE TABLE t56201 (a INT, b STRING, c STRING NOT NULL) LOCALITY REGIONAL BY ROW;
+
+statement ok
 ALTER TABLE t56201 INJECT STATISTICS '[
   {
     "columns": ["a"],
@@ -1301,6 +1305,8 @@ ALTER TABLE t56201 INJECT STATISTICS '[
     "created_at": "2018-01-01 1:00:00.00000+00:00"
   }
 ]';
+
+statement ok
 ALTER TABLE t56201 ADD CONSTRAINT key_a_b UNIQUE (a, b);
 
 query T

@@ -65,6 +65,18 @@ func (sr *SQLRunner) Exec(t testutils.TB, query string, args ...interface{}) gos
 	return r
 }
 
+// ExecMultiple is a wrapper around gosql.Exec that executes multiple statements
+// and kills the test on error.
+func (sr *SQLRunner) ExecMultiple(t testutils.TB, queries ...string) {
+	t.Helper()
+	for _, query := range queries {
+		_, err := sr.DB.ExecContext(context.Background(), query)
+		if err != nil {
+			t.Fatalf("error executing '%s': %s", query, err)
+		}
+	}
+}
+
 func (sr *SQLRunner) succeedsWithin(t testutils.TB, f func() error) {
 	t.Helper()
 	d := sr.SucceedsSoonDuration

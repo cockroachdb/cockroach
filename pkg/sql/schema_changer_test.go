@@ -754,7 +754,11 @@ func TestDropWhileBackfill(t *testing.T) {
 	sqlDB := tc.ServerConn(0)
 
 	if _, err := sqlDB.Exec(`
-SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+	SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
