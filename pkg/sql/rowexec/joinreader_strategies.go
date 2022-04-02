@@ -202,7 +202,7 @@ func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 
 		// Perform memory accounting.
 		if err := s.memAcc.ResizeTo(s.Ctx, s.memUsage()); err != nil {
-			return jrStateUnknown, err
+			return jrStateUnknown, addWorkmemHint(err)
 		}
 	}
 	s.emitState.processingLookupRow = true
@@ -238,7 +238,7 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 
 			// Perform memory accounting.
 			if err := s.memAcc.ResizeTo(s.Ctx, s.memUsage()); err != nil {
-				return nil, jrStateUnknown, err
+				return nil, jrStateUnknown, addWorkmemHint(err)
 			}
 		}
 
@@ -497,7 +497,18 @@ type joinReaderOrderingStrategy struct {
 	// memAcc is owned by this strategy and is closed when the strategy is
 	// closed. inputRows are owned by the joinReader, so they aren't accounted
 	// for with this memory account.
-	memAcc *mon.BoundAccount
+	memAcc       *mon.BoundAccount
+	accountedFor struct {
+		// sliceOverhead contains the memory usage of
+		// inputRowIdxToLookedUpRowIndices and
+		// accountedFor.inputRowIdxToLookedUpRowIndices that is currently
+		// registered with memAcc.
+		sliceOverhead int64
+		// inputRowIdxToLookedUpRowIndices is a 1:1 mapping with the multimap
+		// with the same name, where each int64 indicates the memory usage of
+		// the corresponding []int that is currently registered with memAcc.
+		inputRowIdxToLookedUpRowIndices []int64
+	}
 
 	// testingInfoSpilled is set when the strategy is closed to indicate whether
 	// it has spilled to disk during its lifetime. Used only in tests.
@@ -556,10 +567,24 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 			s.inputRowIdxToLookedUpRowIndices[i] = s.inputRowIdxToLookedUpRowIndices[i][:0]
 		}
 	} else {
+		// Make sure to reuse the old slices.
+		oldSlices := s.inputRowIdxToLookedUpRowIndices
 		s.inputRowIdxToLookedUpRowIndices = make([][]int, len(rows))
-		if err := s.memAcc.ResizeTo(s.Ctx, s.memUsage(nil /* matchingInputRowIndices */)); err != nil {
-			return nil, err
+		for i := range oldSlices {
+			s.inputRowIdxToLookedUpRowIndices[i] = oldSlices[i][:0]
 		}
+		oldAccountedFor := s.accountedFor.inputRowIdxToLookedUpRowIndices
+		s.accountedFor.inputRowIdxToLookedUpRowIndices = make([]int64, len(rows))
+		// Since the capacity of old slices hasn't changed, we simply carry over
+		// what we've already accounted for.
+		copy(s.accountedFor.inputRowIdxToLookedUpRowIndices, oldAccountedFor)
+		// Account for the new allocations.
+		sliceOverhead := memsize.IntSliceOverhead*int64(cap(s.inputRowIdxToLookedUpRowIndices)) +
+			memsize.Int64*int64(cap(s.accountedFor.inputRowIdxToLookedUpRowIndices))
+		if err := s.memAcc.Grow(s.Ctx, sliceOverhead-s.accountedFor.sliceOverhead); err != nil {
+			return nil, addWorkmemHint(err)
+		}
+		s.accountedFor.sliceOverhead = sliceOverhead
 	}
 
 	s.inputRows = rows
@@ -613,9 +638,16 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 		}
 	}
 
-	// Perform memory accounting.
-	if err := s.memAcc.ResizeTo(s.Ctx, s.memUsage(matchingInputRowIndices)); err != nil {
-		return jrStateUnknown, err
+	// Perform memory accounting. Iterate only over the slices that might have
+	// changed in size.
+	var delta int64
+	for _, idx := range matchingInputRowIndices {
+		newSize := memsize.Int * int64(cap(s.inputRowIdxToLookedUpRowIndices[idx]))
+		delta += newSize - s.accountedFor.inputRowIdxToLookedUpRowIndices[idx]
+		s.accountedFor.inputRowIdxToLookedUpRowIndices[idx] = newSize
+	}
+	if err := s.memAcc.Grow(s.Ctx, delta); err != nil {
+		return jrStateUnknown, addWorkmemHint(err)
 	}
 
 	return jrPerformingLookup, nil
@@ -723,32 +755,4 @@ func (s *joinReaderOrderingStrategy) close(ctx context.Context) {
 	*s = joinReaderOrderingStrategy{
 		testingInfoSpilled: s.lookedUpRows.Spilled(),
 	}
-}
-
-// memUsage returns the size of inputRowIdxToLookedUpRowIndices in bytes, to
-// be used for memory accounting.
-//
-// If matchingInputRowIndices is non-nil, memUsage will only account for the
-// the slices in inputRowIdxToLookedUpRowIndices at the indexes corresponding to
-// matchingInputRowIndices. Otherwise, it will account for all slices.
-func (s *joinReaderOrderingStrategy) memUsage(matchingInputRowIndices []int) int64 {
-	// Account for the memory used by the outer slice.
-	size := memsize.IntSliceOverhead * int64(cap(s.inputRowIdxToLookedUpRowIndices))
-
-	// Account for the memory used by the inner slices.
-	if matchingInputRowIndices != nil {
-		// We only need to account for a subset of the rows.
-		for _, idx := range matchingInputRowIndices {
-			size += memsize.Int * int64(cap(s.inputRowIdxToLookedUpRowIndices[idx]))
-		}
-	} else {
-		// Slice the full capacity so we can account for the memory used past the
-		// length of inputRowIdxToLookedUpRowIndices.
-		fullCap := s.inputRowIdxToLookedUpRowIndices[:cap(s.inputRowIdxToLookedUpRowIndices)]
-		for i := range fullCap {
-			size += memsize.Int * int64(cap(fullCap[i]))
-		}
-	}
-
-	return size
 }
