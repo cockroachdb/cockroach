@@ -18,6 +18,9 @@ BACKUP DATABASE d INTO 'userfile:///foo'
 # Attempt the restore but pause it before publishing descriptors.
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_publishing_descriptors';
+----
+
+exec-sql
 DROP DATABASE d;
 ----
 
@@ -52,7 +55,13 @@ BACKUP DATABASE d INTO 'userfile:///foo'
 # Attempt the restore but pause it after publishing descriptors.
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_publishing_descriptors';
+----
+
+exec-sql
 DROP DATABASE d;
 ----
 
