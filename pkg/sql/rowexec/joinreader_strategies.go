@@ -197,7 +197,7 @@ func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 		// Perform memory accounting.
 		afterSize := s.memUsage()
 		if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
-			return jrStateUnknown, err
+			return jrStateUnknown, addWorkmemHint(err)
 		}
 	}
 	s.emitState.processingLookupRow = true
@@ -237,7 +237,7 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 			// Perform memory accounting.
 			afterSize := s.memUsage()
 			if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
-				return nil, jrStateUnknown, err
+				return nil, jrStateUnknown, addWorkmemHint(err)
 			}
 		}
 
@@ -510,6 +510,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 	// processedLookedUpRow(), as lookup results are received (possibly out of
 	// order).
 	if cap(s.inputRowIdxToLookedUpRowIndices) >= len(rows) {
+		// We can reuse the multimap from the previous lookup rows batch.
 		s.inputRowIdxToLookedUpRowIndices = s.inputRowIdxToLookedUpRowIndices[:len(rows)]
 		for i := range s.inputRowIdxToLookedUpRowIndices {
 			s.inputRowIdxToLookedUpRowIndices[i] = s.inputRowIdxToLookedUpRowIndices[i][:0]
@@ -519,7 +520,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 		s.inputRowIdxToLookedUpRowIndices = make([][]int, len(rows))
 		afterSize := s.memUsage(nil)
 		if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
-			return nil, err
+			return nil, addWorkmemHint(err)
 		}
 	}
 
@@ -578,7 +579,7 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	// Perform memory accounting.
 	afterSize := s.memUsage(matchingInputRowIndices)
 	if err := s.memAcc.Resize(s.Ctx, beforeSize, afterSize); err != nil {
-		return jrStateUnknown, err
+		return jrStateUnknown, addWorkmemHint(err)
 	}
 
 	return jrPerformingLookup, nil
