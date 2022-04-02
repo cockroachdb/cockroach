@@ -76,6 +76,7 @@ go_library(
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/cancelchecker",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
