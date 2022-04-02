@@ -98,6 +98,51 @@ func (c *CustomFuncs) remapScanColsInScalarExpr(
 	return c.RemapCols(scalar, colMap)
 }
 
+// RemapJoinColsInFilter returns a new FiltersExpr where columns in leftSrc's
+// table are replaced with columns of the same ordinal in leftDst's table and
+// rightSrc's table are replaced with columns of the same ordinal in rightDst's
+// table. leftSrc and leftDst must scan the same base table. rightSrc and
+// rightDst must scan the same base table.
+func (c *CustomFuncs) remapJoinColsInFilter(
+	filters memo.FiltersExpr, leftSrc, leftDst, rightSrc, rightDst *memo.ScanPrivate,
+) memo.FiltersExpr {
+	newFilters := c.remapJoinColsInScalarExpr(&filters, leftSrc, leftDst, rightSrc, rightDst).(*memo.FiltersExpr)
+	return *newFilters
+}
+
+// remapJoinColsInScalarExpr remaps ColumnIDs in a scalar expression involving
+// columns from a join of two base table scans.
+func (c *CustomFuncs) remapJoinColsInScalarExpr(
+	scalar opt.ScalarExpr, leftSrc, leftDst, rightSrc, rightDst *memo.ScanPrivate,
+) opt.ScalarExpr {
+	md := c.e.mem.Metadata()
+	if md.Table(leftSrc.Table).ID() != md.Table(leftDst.Table).ID() {
+		panic(errors.AssertionFailedf("left scans must have the same base table"))
+	}
+	if md.Table(rightSrc.Table).ID() != md.Table(rightDst.Table).ID() {
+		panic(errors.AssertionFailedf("right scans must have the same base table"))
+	}
+	if leftSrc.Cols.Len() != leftDst.Cols.Len() {
+		panic(errors.AssertionFailedf("left scans must have the same number of columns"))
+	}
+	if rightSrc.Cols.Len() != rightDst.Cols.Len() {
+		panic(errors.AssertionFailedf("rightscans must have the same number of columns"))
+	}
+	// Remap each column in leftSrc to a column in leftDst.
+	var colMap opt.ColMap
+	for srcCol, ok := leftSrc.Cols.Next(0); ok; srcCol, ok = leftSrc.Cols.Next(srcCol + 1) {
+		ord := leftSrc.Table.ColumnOrdinal(srcCol)
+		dstCol := leftDst.Table.ColumnID(ord)
+		colMap.Set(int(srcCol), int(dstCol))
+	}
+	for srcCol, ok := rightSrc.Cols.Next(0); ok; srcCol, ok = rightSrc.Cols.Next(srcCol + 1) {
+		ord := rightSrc.Table.ColumnOrdinal(srcCol)
+		dstCol := rightDst.Table.ColumnID(ord)
+		colMap.Set(int(srcCol), int(dstCol))
+	}
+	return c.RemapCols(scalar, colMap)
+}
+
 // checkConstraintFilters generates all filters that we can derive from the
 // check constraints. These are constraints that have been validated and are
 // non-nullable. We only use non-nullable check constraints because they
