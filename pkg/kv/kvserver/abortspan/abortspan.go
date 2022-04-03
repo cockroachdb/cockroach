@@ -76,13 +76,9 @@ func (sc *AbortSpan) max() roachpb.Key {
 
 // ClearData removes all persisted items stored in the cache.
 func (sc *AbortSpan) ClearData(e storage.Engine) error {
-	// NB: The abort span is a Range-ID local key which has no versions or intents.
-	iter := e.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: sc.max()})
-	defer iter.Close()
-	b := e.NewUnindexedBatch(true /* writeOnly */)
+	b := e.NewUnindexedBatch(false /* writeOnly */)
 	defer b.Close()
-	err := b.ClearIterRange(iter, sc.min(), sc.max())
-	if err != nil {
+	if err := b.ClearIterRange(sc.min(), sc.max()); err != nil {
 		return err
 	}
 	return b.Commit(false /* sync */)

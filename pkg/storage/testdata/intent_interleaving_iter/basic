@@ -40,7 +40,6 @@ prev
 prev
 prev
 stats
-set-upper k=c
 seek-ge k=b
 stats
 next
