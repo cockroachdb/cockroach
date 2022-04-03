@@ -39,10 +39,9 @@ type pebbleIterator struct {
 	// use two slices for each of the bounds since this caller should not change
 	// the slice holding the current bounds, that the callee (pebble.MVCCIterator)
 	// is currently using, until after the caller has made the SetBounds call.
-	lowerBoundBuf            [2][]byte
-	upperBoundBuf            [2][]byte
-	curBuf                   int
-	testingSetBoundsListener testingSetBoundsListener
+	lowerBoundBuf [2][]byte
+	upperBoundBuf [2][]byte
+	curBuf        int
 
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC/Engine key when true.
@@ -77,10 +76,6 @@ var pebbleIterPool = sync.Pool{
 type cloneableIter interface {
 	Clone() (*pebble.Iterator, error)
 	Close() error
-}
-
-type testingSetBoundsListener interface {
-	postSetBounds(lower, upper []byte)
 }
 
 // Instantiates a new Pebble iterator, or gets one from the pool.
@@ -265,9 +260,6 @@ func (p *pebbleIterator) setBounds(lowerBound, upperBound roachpb.Key) {
 		p.options.UpperBound = p.upperBoundBuf[i]
 	}
 	p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
-	if p.testingSetBoundsListener != nil {
-		p.testingSetBoundsListener.postSetBounds(p.options.LowerBound, p.options.UpperBound)
-	}
 }
 
 // Close implements the MVCCIterator interface.
@@ -757,37 +749,6 @@ func findSplitKeyUsingIterator(
 		return prevKey, nil
 	}
 	return bestSplitKey, nil
-}
-
-// SetUpperBound implements the MVCCIterator interface. Note that this is not
-// the first time that bounds will be passed to the underlying
-// pebble.Iterator. The existing bounds are in p.options.
-func (p *pebbleIterator) SetUpperBound(upperBound roachpb.Key) {
-	if upperBound == nil {
-		panic("SetUpperBound must not use a nil key")
-	}
-	if p.options.UpperBound != nil {
-		// We know that we've appended 0x00 to p.options.UpperBound, which must be
-		// ignored for this comparison.
-		if bytes.Equal(p.options.UpperBound[:len(p.options.UpperBound)-1], upperBound) {
-			// Nothing to do. This noop optimization helps the underlying
-			// pebble.Iterator to optimize seeks.
-			return
-		}
-	}
-	p.curBuf = (p.curBuf + 1) % 2
-	i := p.curBuf
-	if p.options.LowerBound != nil {
-		p.lowerBoundBuf[i] = append(p.lowerBoundBuf[i][:0], p.options.LowerBound...)
-		p.options.LowerBound = p.lowerBoundBuf[i]
-	}
-	p.upperBoundBuf[i] = append(p.upperBoundBuf[i][:0], upperBound...)
-	p.upperBoundBuf[i] = append(p.upperBoundBuf[i], 0x00)
-	p.options.UpperBound = p.upperBoundBuf[i]
-	p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
-	if p.testingSetBoundsListener != nil {
-		p.testingSetBoundsListener.postSetBounds(p.options.LowerBound, p.options.UpperBound)
-	}
 }
 
 // Stats implements the {MVCCIterator,EngineIterator} interfaces.
