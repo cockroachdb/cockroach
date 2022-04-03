@@ -80,7 +80,7 @@ const (
 // bounds, the call to newIntentInterleavingIter must have specified at least
 // one of the lower or upper bound. We use that to "constrain" the iterator as
 // either a local key iterator or global key iterator and panic if a caller
-// violates that in a subsequent SeekGE/SeekLT/SetUpperBound call.
+// violates that in a subsequent SeekGE/SeekLT call.
 type intentInterleavingIter struct {
 	prefix     bool
 	constraint intentInterleavingIterConstraint
@@ -952,17 +952,6 @@ func (i *intentInterleavingIter) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	return findSplitKeyUsingIterator(i, start, end, minSplitKey, targetSize)
-}
-
-func (i *intentInterleavingIter) SetUpperBound(key roachpb.Key) {
-	i.iter.SetUpperBound(key)
-	// Preceding call to SetUpperBound has confirmed that key != nil.
-	if i.constraint != notConstrained {
-		i.checkConstraint(key, true)
-	}
-	var intentUpperBound roachpb.Key
-	intentUpperBound, i.intentKeyBuf = keys.LockTableSingleKey(key, i.intentKeyBuf)
-	i.intentIter.SetUpperBound(intentUpperBound)
 }
 
 func (i *intentInterleavingIter) Stats() IteratorStats {
