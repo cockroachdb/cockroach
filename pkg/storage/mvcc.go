@@ -3401,7 +3401,7 @@ func MVCCResolveWriteIntentRange(
 		mvccIter = rw.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
 	} else {
 		// For correctness, we need mvccIter to be consistent with engineIter.
-		mvccIter = newMVCCIteratorByCloningEngineIter(engineIter, iterOpts)
+		mvccIter = newPebbleIterator(nil, engineIter.GetRawIter(), iterOpts, StandardDurability)
 	}
 	iterAndBuf := GetBufUsingIter(mvccIter)
 	defer func() {
