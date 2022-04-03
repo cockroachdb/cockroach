@@ -233,7 +233,7 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	if reader.ConsistentIterators() {
 		iter = reader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	} else {
-		iter = newMVCCIteratorByCloningEngineIter(intentIter, opts)
+		iter = newPebbleIterator(nil, intentIter.GetRawIter(), opts, StandardDurability)
 	}
 
 	*iiIter = intentInterleavingIter{
@@ -971,18 +971,6 @@ func (i *intentInterleavingIter) Stats() IteratorStats {
 
 func (i *intentInterleavingIter) SupportsPrev() bool {
 	return true
-}
-
-// newMVCCIteratorByCloningEngineIter assumes MVCCKeyIterKind and no timestamp
-// hints. It uses pebble.Iterator.Clone to ensure that the two iterators see
-// the identical engine state.
-func newMVCCIteratorByCloningEngineIter(iter EngineIterator, opts IterOptions) MVCCIterator {
-	pIter := iter.GetRawIter()
-	it := newPebbleIterator(nil, pIter, opts, StandardDurability)
-	if iter == nil {
-		panic("couldn't create a new iterator")
-	}
-	return it
 }
 
 // unsageMVCCIterator is used in RaceEnabled test builds to randomly inject
