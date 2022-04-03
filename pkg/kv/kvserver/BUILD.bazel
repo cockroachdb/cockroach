@@ -290,6 +290,7 @@ go_test(
         "replicate_test.go",
         "reset_quorum_test.go",
         "scanner_test.go",
+        "scatter_test.go",
         "scheduler_test.go",
         "single_key_test.go",
         "split_delay_helper_test.go",
