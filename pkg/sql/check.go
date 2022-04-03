@@ -381,7 +381,7 @@ func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) er
 	}
 
 	for _, tableDesc := range tableDescs {
-		if err = p.revalidateUniqueConstraintsInTable(ctx, tableDesc); err != nil {
+		if err = RevalidateUniqueConstraintsInTable(ctx, p.Txn(), p.ExecCfg().InternalExecutor, tableDesc); err != nil {
 			return err
 		}
 	}
@@ -402,7 +402,7 @@ func (p *planner) RevalidateUniqueConstraintsInTable(ctx context.Context, tableI
 	if err != nil {
 		return err
 	}
-	return p.revalidateUniqueConstraintsInTable(ctx, tableDesc)
+	return RevalidateUniqueConstraintsInTable(ctx, p.Txn(), p.ExecCfg().InternalExecutor, tableDesc)
 }
 
 // RevalidateUniqueConstraint verifies that the given unique constraint on the
@@ -465,7 +465,23 @@ func (p *planner) RevalidateUniqueConstraint(
 	return errors.Newf("unique constraint %s does not exist", constraintName)
 }
 
-// revalidateUniqueConstraintsInTable verifies that all unique constraints
+// HasVirtualUniqueConstraints returns true if the table has one or more
+// constraints that are validated by RevalidateUniqueConstraintsInTable.
+func HasVirtualUniqueConstraints(tableDesc catalog.TableDescriptor) bool {
+	for _, index := range tableDesc.ActiveIndexes() {
+		if index.IsUnique() && index.GetPartitioning().NumImplicitColumns() > 0 {
+			return true
+		}
+	}
+	for _, uc := range tableDesc.GetUniqueWithoutIndexConstraints() {
+		if uc.Validity == descpb.ConstraintValidity_Validated {
+			return true
+		}
+	}
+	return false
+}
+
+// RevalidateUniqueConstraintsInTable verifies that all unique constraints
 // defined on the given table are valid. In other words, it verifies that all
 // rows in the table have unique values for every unique constraint defined on
 // the table.
@@ -473,8 +489,8 @@ func (p *planner) RevalidateUniqueConstraint(
 // Note that we only need to validate UNIQUE constraints that are not already
 // enforced by an index. This includes implicitly partitioned UNIQUE indexes
 // and UNIQUE WITHOUT INDEX constraints.
-func (p *planner) revalidateUniqueConstraintsInTable(
-	ctx context.Context, tableDesc catalog.TableDescriptor,
+func RevalidateUniqueConstraintsInTable(
+	ctx context.Context, txn *kv.Txn, ie *InternalExecutor, tableDesc catalog.TableDescriptor,
 ) error {
 	// Check implicitly partitioned UNIQUE indexes.
 	for _, index := range tableDesc.ActiveIndexes() {
@@ -485,8 +501,8 @@ func (p *planner) revalidateUniqueConstraintsInTable(
 				index.GetName(),
 				index.IndexDesc().KeyColumnIDs[index.GetPartitioning().NumImplicitColumns():],
 				index.GetPredicate(),
-				p.ExecCfg().InternalExecutor,
-				p.Txn(),
+				ie,
+				txn,
 				true, /* preExisting */
 			); err != nil {
 				log.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
@@ -504,8 +520,8 @@ func (p *planner) revalidateUniqueConstraintsInTable(
 				uc.Name,
 				uc.ColumnIDs,
 				uc.Predicate,
-				p.ExecCfg().InternalExecutor,
-				p.Txn(),
+				ie,
+				txn,
 				true, /* preExisting */
 			); err != nil {
 				log.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
