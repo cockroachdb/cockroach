@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1474,6 +1475,121 @@ func (a *Allocator) scorerOptionsForScatter() *scatterScorerOptions {
 	}
 }
 
+// ValidLeaseTargets returns a set of candidate stores that are suitable to be
+// transferred a lease for the given range.
+//
+// - It excludes stores that are dead, or marked draining or suspect.
+// - If the range has lease_preferences, and there are any non-draining,
+// non-suspect nodes that match those preferences, it excludes stores that don't
+// match those preferences.
+// - It excludes replicas that may need snapshots. If replica calling this
+// method is not the Raft leader (meaning that it doesn't know whether follower
+// replicas need a snapshot or not), produces no results.
+func (a *Allocator) ValidLeaseTargets(
+	ctx context.Context,
+	conf roachpb.SpanConfig,
+	existing []roachpb.ReplicaDescriptor,
+	leaseRepl interface {
+		RaftStatus() *raft.Status
+		StoreID() roachpb.StoreID
+	},
+	// excludeLeaseRepl dictates whether the result set can include the source
+	// replica.
+	excludeLeaseRepl bool,
+) []roachpb.ReplicaDescriptor {
+	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
+	for i := range existing {
+		if existing[i].GetType() != roachpb.VOTER_FULL {
+			continue
+		}
+		// If we're not allowed to include the current replica, remove it from
+		// consideration here.
+		if existing[i].StoreID == leaseRepl.StoreID() && excludeLeaseRepl {
+			continue
+		}
+		candidates = append(candidates, existing[i])
+	}
+	candidates, _ = a.storePool.liveAndDeadReplicas(
+		candidates, false, /* includeSuspectAndDrainingStores */
+	)
+
+	if a.knobs == nil || !a.knobs.AllowLeaseTransfersToReplicasNeedingSnapshots {
+		// Only proceed with the lease transfer if we are also the raft leader (we
+		// already know we are the leaseholder at this point), and only consider
+		// replicas that are in `StateReplicate` as potential candidates.
+		//
+		// NB: The RaftStatus() only returns a non-empty and non-nil result on the
+		// Raft leader (since Raft followers do not track the progress of other
+		// replicas, only the leader does).
+		//
+		// NB: On every Raft tick, we try to ensure that leadership is collocated with
+		// leaseholdership (see
+		// Replica.maybeTransferRaftLeadershipToLeaseholderLocked()). This means that
+		// on a range that is not already borked (i.e. can accept writes), periods of
+		// leader/leaseholder misalignment should be ephemeral and rare. We choose to
+		// be pessimistic here and choose to bail on the lease transfer, as opposed to
+		// potentially transferring the lease to a replica that may be waiting for a
+		// snapshot (which will wedge the range until the replica applies that
+		// snapshot).
+		candidates = excludeReplicasInNeedOfSnapshots(ctx, leaseRepl.RaftStatus(), candidates)
+	}
+
+	// Determine which store(s) is preferred based on user-specified preferences.
+	// If any stores match, only consider those stores as candidates.
+	preferred := a.preferredLeaseholders(conf, candidates)
+	if len(preferred) > 0 {
+		candidates = preferred
+	}
+	return candidates
+}
+
+// leaseholderViolatesPreferences returns true if the current leaseholder is in
+// violation of lease preferences _that can otherwise be satisfied_ by some
+// existing replica.
+//
+// INVARIANT: This method should only be called with an `allExistingReplicas`
+// slice that contains `leaseRepl`.
+func (a *Allocator) leaseholderViolatesPreferences(
+	ctx context.Context,
+	conf roachpb.SpanConfig,
+	leaseRepl interface {
+		RaftStatus() *raft.Status
+		StoreID() roachpb.StoreID
+	},
+	allExistingReplicas []roachpb.ReplicaDescriptor,
+) bool {
+	// Defensive check to ensure that this is never called with a replica set that
+	// does not contain the leaseholder.
+	var leaseholderInExisting bool
+	for _, repl := range allExistingReplicas {
+		if repl.StoreID == leaseRepl.StoreID() {
+			leaseholderInExisting = true
+			break
+		}
+	}
+	if !leaseholderInExisting && !buildutil.CrdbTestBuild {
+		log.Fatal(ctx, "expected leaseholder store to be in the slice of existing replicas")
+	}
+
+	// Exclude suspect/draining/dead stores.
+	candidates, _ := a.storePool.liveAndDeadReplicas(
+		allExistingReplicas, false, /* includeSuspectAndDrainingStores */
+	)
+	// If there are any replicas that do match lease preferences, then we check if
+	// the existing leaseholder is one of them.
+	preferred := a.preferredLeaseholders(conf, candidates)
+	if len(preferred) == 0 {
+		return false
+	} else {
+		for _, repl := range preferred {
+			if repl.StoreID == leaseRepl.StoreID() {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
 // to from the provided list. It excludes the current lease holder replica
 // unless asked to do otherwise by the checkTransferLeaseSource parameter.
@@ -1501,13 +1617,19 @@ func (a *Allocator) TransferLeaseTarget(
 	forceDecisionWithoutStats bool,
 	opts transferLeaseOptions,
 ) roachpb.ReplicaDescriptor {
+	checkTransferLeaseSource := opts.checkTransferLeaseSource
+	if a.leaseholderViolatesPreferences(ctx, conf, leaseRepl, existing) {
+		// Explicitly exclude the current leaseholder from the result set if it is
+		// in violation of lease preferences that can be satisfied by some other
+		// replica.
+		checkTransferLeaseSource = false
+	}
+
 	allStoresList, _, _ := a.storePool.getStoreList(storeFilterNone)
 	storeDescMap := storeListToMap(allStoresList)
-
 	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.excludeInvalid(conf.Constraints)
 	sl = sl.excludeInvalid(conf.VoterConstraints)
-
 	candidateLeasesMean := sl.candidateLeases.mean
 
 	source, ok := a.storePool.getStoreDescriptor(leaseRepl.StoreID())
@@ -1515,69 +1637,9 @@ func (a *Allocator) TransferLeaseTarget(
 		return roachpb.ReplicaDescriptor{}
 	}
 
-	// Determine which store(s) is preferred based on user-specified preferences.
-	// If any stores match, only consider those stores as candidates. If only one
-	// store matches, it's where the lease should be (unless the preferred store
-	// is the current one and checkTransferLeaseSource is false).
-	var preferred []roachpb.ReplicaDescriptor
-	checkTransferLeaseSource := opts.checkTransferLeaseSource
-	if checkTransferLeaseSource {
-		preferred = a.preferredLeaseholders(conf, existing)
-	} else {
-		// TODO(a-robinson): Should we just always remove the source store from
-		// existing when checkTransferLeaseSource is false? I'd do it now, but
-		// it's too big a change to make right before a major release.
-		var candidates []roachpb.ReplicaDescriptor
-		for _, repl := range existing {
-			if repl.StoreID != leaseRepl.StoreID() {
-				candidates = append(candidates, repl)
-			}
-		}
-		preferred = a.preferredLeaseholders(conf, candidates)
-	}
-	if len(preferred) == 1 {
-		if preferred[0].StoreID == leaseRepl.StoreID() {
-			return roachpb.ReplicaDescriptor{}
-		}
-		// Verify that the preferred replica is eligible to receive the lease.
-		preferred, _ = a.storePool.liveAndDeadReplicas(preferred, false /* includeSuspectAndDrainingStores */)
-		if len(preferred) == 1 {
-			return preferred[0]
-		}
-		return roachpb.ReplicaDescriptor{}
-	} else if len(preferred) > 1 {
-		// If the current leaseholder is not preferred, set checkTransferLeaseSource
-		// to false to motivate the below logic to transfer the lease.
-		existing = preferred
-		if !storeHasReplica(leaseRepl.StoreID(), roachpb.MakeReplicaSet(preferred).ReplicationTargets()) {
-			checkTransferLeaseSource = false
-		}
-	}
-
-	// Only consider live, non-draining, non-suspect replicas.
-	existing, _ = a.storePool.liveAndDeadReplicas(existing, false /* includeSuspectAndDrainingStores */)
-
-	if a.knobs == nil || !a.knobs.AllowLeaseTransfersToReplicasNeedingSnapshots {
-		// Only proceed with the lease transfer if we are also the raft leader (we
-		// already know we are the leaseholder at this point), and only consider
-		// replicas that are in `StateReplicate` as potential candidates.
-		//
-		// NB: The RaftStatus() only returns a non-empty and non-nil result on the
-		// Raft leader (since Raft followers do not track the progress of other
-		// replicas, only the leader does).
-		//
-		// NB: On every Raft tick, we try to ensure that leadership is collocated with
-		// leaseholdership (see
-		// Replica.maybeTransferRaftLeadershipToLeaseholderLocked()). This means that
-		// on a range that is not already borked (i.e. can accept writes), periods of
-		// leader/leaseholder misalignment should be ephemeral and rare. We choose to
-		// be pessimistic here and choose to bail on the lease transfer, as opposed to
-		// potentially transferring the lease to a replica that may be waiting for a
-		// snapshot (which will wedge the range until the replica applies that
-		// snapshot).
-		existing = excludeReplicasInNeedOfSnapshots(ctx, leaseRepl.RaftStatus(), existing)
-	}
-
+	existing = a.ValidLeaseTargets(
+		ctx, conf, existing, leaseRepl, !checkTransferLeaseSource, /* excludeLeaseRepl */
+	)
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
 		log.VEventf(ctx, 2, "no lease transfer target found for r%d", leaseRepl.GetRangeID())
@@ -1616,8 +1678,17 @@ func (a *Allocator) TransferLeaseTarget(
 	case leaseCountConvergence:
 		// Fall back to logic that doesn't take request counts and latency into
 		// account if the counts/latency-based logic couldn't pick a best replica.
-		candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
+
+		// If we want to ignore the existing lease counts on replicas, just do a
+		// random transfer.
+		if !opts.checkCandidateFullness {
+			a.randGen.Lock()
+			defer a.randGen.Unlock()
+			return existing[a.randGen.Intn(len(existing))]
+		}
+
 		var bestOption roachpb.ReplicaDescriptor
+		candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
 		bestOptionLeaseCount := int32(math.MaxInt32)
 		for _, repl := range existing {
 			if leaseRepl.StoreID() == repl.StoreID {
@@ -1627,17 +1698,18 @@ func (a *Allocator) TransferLeaseTarget(
 			if !ok {
 				continue
 			}
-			if !opts.checkCandidateFullness || float64(storeDesc.Capacity.LeaseCount) < candidateLeasesMean-0.5 {
+			if float64(storeDesc.Capacity.LeaseCount) < candidateLeasesMean-0.5 {
 				candidates = append(candidates, repl)
-			} else if storeDesc.Capacity.LeaseCount < bestOptionLeaseCount {
+			}
+			if storeDesc.Capacity.LeaseCount < bestOptionLeaseCount {
 				bestOption = repl
 				bestOptionLeaseCount = storeDesc.Capacity.LeaseCount
 			}
 		}
 		if len(candidates) == 0 {
-			// If we aren't supposed to be considering the current leaseholder (e.g.
-			// because we need to remove this replica for some reason), return
-			// our best option if we otherwise wouldn't want to do anything.
+			// If there were no existing replicas on stores with less-than-mean
+			// leases, and we _must_ move the lease away (indicated by
+			// `opts.checkTransferLeaseSource`), just return the best possible option.
 			if !checkTransferLeaseSource {
 				return bestOption
 			}
@@ -1784,41 +1856,30 @@ func (a *Allocator) ShouldTransferLease(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
-	leaseStoreID roachpb.StoreID,
+	leaseRepl interface {
+		RaftStatus() *raft.Status
+		StoreID() roachpb.StoreID
+	},
 	stats *replicaStats,
 ) bool {
-	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
-	if !ok {
+	if a.leaseholderViolatesPreferences(ctx, conf, leaseRepl, existing) {
+		return true
+	}
+	existing = a.ValidLeaseTargets(ctx, conf, existing, leaseRepl, false /* excludeLeaseRepl */)
+
+	// Short-circuit if there are no valid targets out there.
+	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
 		return false
 	}
-
-	// Determine which store(s) is preferred based on user-specified preferences.
-	// If any stores match, only consider those stores as options. If only one
-	// store matches, it's where the lease should be.
-	preferred := a.preferredLeaseholders(conf, existing)
-	if len(preferred) == 1 {
-		return preferred[0].StoreID != leaseStoreID
-	} else if len(preferred) > 1 {
-		existing = preferred
-		// If the current leaseholder isn't one of the preferred stores, then we
-		// should try to transfer the lease.
-		if !storeHasReplica(leaseStoreID, roachpb.MakeReplicaSet(existing).ReplicationTargets()) {
-			return true
-		}
+	source, ok := a.storePool.getStoreDescriptor(leaseRepl.StoreID())
+	if !ok {
+		return false
 	}
 
 	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.excludeInvalid(conf.Constraints)
 	sl = sl.excludeInvalid(conf.VoterConstraints)
-	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
-
-	// Only consider live, non-draining, non-suspect replicas.
-	existing, _ = a.storePool.liveAndDeadReplicas(existing, false /* includeSuspectNodes */)
-
-	// Short-circuit if there are no valid targets out there.
-	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == source.StoreID) {
-		return false
-	}
+	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseRepl, sl)
 
 	transferDec, _ := a.shouldTransferLeaseForAccessLocality(
 		ctx,
@@ -1840,7 +1901,9 @@ func (a *Allocator) ShouldTransferLease(
 		log.Fatalf(ctx, "unexpected transfer decision %d", transferDec)
 	}
 
-	log.VEventf(ctx, 3, "ShouldTransferLease decision (lease-holder=%d): %t", leaseStoreID, result)
+	log.VEventf(
+		ctx, 3, "ShouldTransferLease decision (lease-holder=s%d): %t", leaseRepl.StoreID(), result,
+	)
 	return result
 }
 
