@@ -6442,7 +6442,7 @@ func TestImportMultiRegion(t *testing.T) {
 
 	baseDir := filepath.Join("testdata")
 	tc, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 2 /* numServers */, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(baseDir),
+		t, 3 /* numServers */, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(baseDir),
 	)
 	defer cleanup()
 
@@ -6468,7 +6468,7 @@ func TestImportMultiRegion(t *testing.T) {
 
 	// Create the databases
 	tdb.Exec(t, `CREATE DATABASE foo`)
-	tdb.Exec(t, `CREATE DATABASE multi_region PRIMARY REGION "us-east1"`)
+	tdb.Exec(t, `CREATE DATABASE multi_region PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2"`)
 
 	simpleOcf := fmt.Sprintf("nodelocal://0/avro/%s", "simple.ocf")
 
@@ -6586,6 +6586,17 @@ DROP VIEW IF EXISTS v`,
 				data:   "1,\"foo\",NULL,us-east1\n",
 			},
 			{
+				name:  "import-into-multi-region-regional-by-row-dupes",
+				db:    "multi_region",
+				table: "mr_regional_by_row",
+				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY) LOCALITY REGIONAL BY ROW;" +
+					"INSERT INTO mr_regional_by_row (i, crdb_region) VALUES (1, 'us-east2')",
+				sql:       "IMPORT INTO mr_regional_by_row (i, crdb_region) CSV DATA ($1)",
+				args:      []interface{}{srv.URL},
+				data:      "1,us-east1\n",
+				errString: `failed to validate unique constraint`,
+			},
+			{
 				name:   "import-into-multi-region-regional-by-row-to-multi-region-database-concurrent-table-add",
 				db:     "multi_region",
 				table:  "mr_regional_by_row",
@@ -6601,7 +6612,7 @@ DROP VIEW IF EXISTS v`,
 				table:  "mr_regional_by_row",
 				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
 				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
-				during: `ALTER DATABASE multi_region ADD REGION "us-east2"`,
+				during: `ALTER DATABASE multi_region ADD REGION "us-east3"`,
 				errString: `type descriptor "crdb_internal_region" \(54\) has been ` +
 					`modified, potentially incompatibly, since import planning; ` +
 					`aborting to avoid possible corruption`,
@@ -6618,7 +6629,7 @@ CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY RE
 `,
 				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
 				during: `ALTER TYPE typ ADD VALUE 'b'`,
-				errString: `type descriptor "typ" \(67\) has been ` +
+				errString: `type descriptor "typ" \(\d\d\) has been ` +
 					`modified, potentially incompatibly, since import planning; ` +
 					`aborting to avoid possible corruption`,
 				args: []interface{}{srv.URL},

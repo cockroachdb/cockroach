@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -142,6 +143,9 @@ type InternalExecutor interface {
 		stmt string,
 		qargs ...interface{},
 	) (InternalRows, error)
+
+	// WithSyntheticDescriptors sets synthetic descriptors. See implementation.
+	WithSyntheticDescriptors(descs []catalog.Descriptor, run func() error) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
