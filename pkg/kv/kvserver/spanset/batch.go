@@ -208,11 +208,6 @@ func (i *MVCCIterator) FindSplitKey(
 	return i.i.FindSplitKey(start, end, minSplitKey, targetSize)
 }
 
-// SetUpperBound is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SetUpperBound(key roachpb.Key) {
-	i.i.SetUpperBound(key)
-}
-
 // Stats is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) Stats() storage.IteratorStats {
 	return i.i.Stats()
@@ -372,11 +367,6 @@ func (i *EngineIterator) Value() []byte {
 // UnsafeRawEngineKey is part of the storage.EngineIterator interface.
 func (i *EngineIterator) UnsafeRawEngineKey() []byte {
 	return i.i.UnsafeRawEngineKey()
-}
-
-// SetUpperBound is part of the storage.EngineIterator interface.
-func (i *EngineIterator) SetUpperBound(key roachpb.Key) {
-	i.i.SetUpperBound(key)
 }
 
 // GetRawIter is part of the storage.EngineIterator interface.
@@ -592,11 +582,11 @@ func (s spanSetWriter) ClearMVCCRange(start, end storage.MVCCKey) error {
 	return s.w.ClearMVCCRange(start, end)
 }
 
-func (s spanSetWriter) ClearIterRange(iter storage.MVCCIterator, start, end roachpb.Key) error {
+func (s spanSetWriter) ClearIterRange(start, end roachpb.Key) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ClearIterRange(iter, start, end)
+	return s.w.ClearIterRange(start, end)
 }
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {

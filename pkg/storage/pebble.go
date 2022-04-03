@@ -1225,12 +1225,12 @@ func (p *Pebble) clearRange(start, end MVCCKey) error {
 }
 
 // ClearIterRange implements the Engine interface.
-func (p *Pebble) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
+func (p *Pebble) ClearIterRange(start, end roachpb.Key) error {
 	// Write all the tombstones in one batch.
-	batch := p.NewUnindexedBatch(true /* writeOnly */)
+	batch := p.NewUnindexedBatch(false /* writeOnly */)
 	defer batch.Close()
 
-	if err := batch.ClearIterRange(iter, start, end); err != nil {
+	if err := batch.ClearIterRange(start, end); err != nil {
 		return err
 	}
 	return batch.Commit(true)
@@ -2066,7 +2066,7 @@ func (p *pebbleReadOnly) ClearMVCCRange(start, end MVCCKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
+func (p *pebbleReadOnly) ClearIterRange(start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
