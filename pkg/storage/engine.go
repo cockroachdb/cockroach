@@ -169,26 +169,6 @@ type MVCCIterator interface {
 	// package-level MVCCFindSplitKey instead. For correct operation, the caller
 	// must set the upper bound on the iterator before calling this method.
 	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
-	// SetUpperBound installs a new upper bound for this iterator. The caller
-	// can modify the parameter after this function returns. This must not be a
-	// nil key. When Reader.ConsistentIterators is true, prefer creating a new
-	// iterator.
-	//
-	// Due to the rare use, we are limiting this method to not switch an
-	// iterator from a global key upper-bound to a local key upper-bound (it
-	// simplifies some code in intentInterleavingIter) or vice versa. Iterator
-	// reuse already happens under-the-covers for most Reader implementations
-	// when constructing a new iterator, and that is a much cleaner solution.
-	//
-	// TODO(sumeer): this method is rarely used and is a source of complexity
-	// since intentInterleavingIter needs to fiddle with the bounds of its
-	// underlying iterators when this is called. Currently only used by
-	// pebbleBatch.ClearIterRange to modify the upper bound of the iterator it
-	// is given: this use is unprincipled and there is a comment in that code
-	// about it. The caller is already usually setting the bounds accurately,
-	// and in some cases the callee is tightening the upper bound. Remove that
-	// use case and remove this from the interface.
-	SetUpperBound(roachpb.Key)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
 	// SupportsPrev returns true if MVCCIterator implementation supports reverse
@@ -239,10 +219,6 @@ type EngineIterator interface {
 	// Value returns the current value as a byte slice.
 	// REQUIRES: latest positioning function returned valid=true.
 	Value() []byte
-	// SetUpperBound installs a new upper bound for this iterator. When
-	// Reader.ConsistentIterators is true, prefer creating a new iterator.
-	// TODO(sumeer): remove this method.
-	SetUpperBound(roachpb.Key)
 	// GetRawIter is a low-level method only for use in the storage package,
 	// that returns the underlying pebble Iterator.
 	GetRawIter() *pebble.Iterator
@@ -326,8 +302,8 @@ const (
 	// Specifically:
 	// - If both bounds are set they must not span from local to global.
 	// - Any bound (lower or upper), constrains the iterator for its lifetime to
-	//   one of local or global keys. The iterator will not tolerate a seek or
-	//   SetUpperBound call that violates this constraint.
+	//   one of local or global keys. The iterator will not tolerate a seek that
+	//   violates this constraint.
 	// We could, with significant code complexity, not constrain an iterator for
 	// its lifetime, and allow a seek that specifies a global (local) key to
 	// change the constraint to global (local). This would allow reuse of the
@@ -563,17 +539,11 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearMVCCRange(start, end MVCCKey) error
 
-	// ClearIterRange removes a set of entries, from start (inclusive) to end
-	// (exclusive). Similar to Clear and ClearRange, this method actually
-	// removes entries from the storage engine. Unlike ClearRange, the entries
-	// to remove are determined by iterating over iter and per-key storage
-	// tombstones (not MVCC tombstones) are generated. If the MVCCIterator was
-	// constructed using MVCCKeyAndIntentsIterKind, any separated intents/locks
-	// will also be cleared.
-	//
-	// It is safe to modify the contents of the arguments after ClearIterRange
-	// returns.
-	ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
+	// ClearIterRange removes all keys in the given span using an iterator to
+	// iterate over point keys and remove them from the storage engine using
+	// per-key storage tombstones (not MVCC tombstones). Any separated
+	// intents/locks will also be cleared.
+	ClearIterRange(start, end roachpb.Key) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged

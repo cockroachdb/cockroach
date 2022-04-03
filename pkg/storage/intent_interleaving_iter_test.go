@@ -184,7 +184,7 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 // - iter: for iterating, is defined as
 //   iter [lower=<lower>] [upper=<upper>] [prefix=<true|false>]
 //   followed by newline separated sequence of operations:
-//     next, prev, seek-lt, seek-ge, set-upper, next-key, stats
+//     next, prev, seek-lt, seek-ge, next-key, stats
 //
 // Keys are interpreted as:
 // - starting with L is interpreted as a local-range key.
@@ -362,10 +362,6 @@ func TestIntentInterleavingIter(t *testing.T) {
 						iter.NextKey()
 						fmt.Fprintf(&b, "next-key: ")
 						checkAndOutputIter(iter, &b)
-					case "set-upper":
-						k := scanRoachKey(t, d, "k")
-						iter.SetUpperBound(k)
-						fmt.Fprintf(&b, "set-upper %s\n", string(makePrintableKey(MVCCKey{Key: k}).Key))
 					case "stats":
 						stats := iter.Stats()
 						// Setting non-deterministic InternalStats to empty.
@@ -395,16 +391,12 @@ func TestIntentInterleavingIterBoundaries(t *testing.T) {
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToLocal, iter.constraint)
-		iter.SetUpperBound(keys.LocalMax)
-		require.Equal(t, constrainedToLocal, iter.constraint)
 		iter.SeekLT(MVCCKey{Key: keys.LocalMax})
 	}()
 	func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
 		defer iter.Close()
-		require.Equal(t, constrainedToLocal, iter.constraint)
-		iter.SetUpperBound(keys.LocalMax)
 		require.Equal(t, constrainedToLocal, iter.constraint)
 	}()
 	require.Panics(t, func() {
@@ -420,13 +412,6 @@ func TestIntentInterleavingIterBoundaries(t *testing.T) {
 		defer iter.Close()
 		require.Equal(t, constrainedToGlobal, iter.constraint)
 	}()
-	require.Panics(t, func() {
-		opts := IterOptions{LowerBound: keys.LocalMax}
-		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
-		defer iter.Close()
-		require.Equal(t, constrainedToGlobal, iter.constraint)
-		iter.SetUpperBound(keys.LocalMax)
-	})
 	func() {
 		opts := IterOptions{LowerBound: keys.LocalMax}
 		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
@@ -923,14 +908,12 @@ func BenchmarkIntentInterleavingSeekGEAndIter(b *testing.B) {
 						iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
 					}
 					b.ResetTimer()
-					var unsafeKey MVCCKey
 					for i := 0; i < b.N; i++ {
 						j := i % len(seekKeys)
 						upperIndex := j + 1
+						scanTo := MVCCKey{Key: endKey}
 						if upperIndex < len(seekKeys) {
-							iter.SetUpperBound(seekKeys[upperIndex])
-						} else {
-							iter.SetUpperBound(endKey)
+							scanTo.Key = seekKeys[upperIndex]
 						}
 						iter.SeekGE(MVCCKey{Key: seekKeys[j]})
 						for {
@@ -941,11 +924,12 @@ func BenchmarkIntentInterleavingSeekGEAndIter(b *testing.B) {
 							if !valid {
 								break
 							}
-							unsafeKey = iter.UnsafeKey()
+							if iter.UnsafeKey().Compare(scanTo) >= 0 {
+								break
+							}
 							iter.Next()
 						}
 					}
-					_ = unsafeKey
 				})
 		}
 	})
