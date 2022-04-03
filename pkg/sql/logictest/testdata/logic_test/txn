@@ -1217,9 +1217,3 @@ query T
 SHOW default_transaction_quality_of_service
 ----
 regular
-
-# Sanity: Implicit txns with multiple statements can't have SET CLUSTER
-# SETTING.
-statement error pq: SET CLUSTER SETTING cannot be used inside an explicit transaction
-SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'on';
-SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
