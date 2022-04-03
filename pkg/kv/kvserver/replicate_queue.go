@@ -277,7 +277,7 @@ func (rq *replicateQueue) shouldQueue(
 	status := repl.LeaseStatusAt(ctx, now)
 	if status.IsValid() &&
 		rq.canTransferLeaseFrom(ctx, repl) &&
-		rq.allocator.ShouldTransferLease(ctx, conf, voterReplicas, status.Lease.Replica.StoreID, repl.leaseholderStats) {
+		rq.allocator.ShouldTransferLease(ctx, conf, voterReplicas, repl, repl.leaseholderStats) {
 
 		log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 		return true, 0
@@ -823,7 +823,6 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 		desc,
 		conf,
 		transferLeaseOptions{
-			goal:   leaseCountConvergence,
 			dryRun: dryRun,
 			// NB: This option means that the allocator is asked to not consider the
 			// current replica in its set of potential candidates.
