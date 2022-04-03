@@ -1921,15 +1921,6 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		return iter
 	}
 
-	if !opts.MinTimestampHint.IsEmpty() {
-		// MVCCIterators that specify timestamp bounds cannot be cached.
-		iter := MVCCIterator(newPebbleIterator(p.parent.db, nil, opts, p.durability))
-		if util.RaceEnabled {
-			iter = wrapInUnsafeIter(iter)
-		}
-		return iter
-	}
-
 	iter := &p.normalIter
 	if opts.Prefix {
 		iter = &p.prefixIter
@@ -1937,11 +1928,9 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	if iter.inuse {
 		return newPebbleIterator(p.parent.db, p.iter, opts, p.durability)
 	}
-	// Ensures no timestamp hints etc.
-	checkOptionsForIterReuse(opts)
 
 	if iter.iter != nil {
-		iter.setBounds(opts.LowerBound, opts.UpperBound)
+		iter.setOptions(opts, p.durability)
 	} else {
 		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability)
 		if p.iter == nil {
@@ -1973,11 +1962,9 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.inuse {
 		return newPebbleIterator(p.parent.db, p.iter, opts, p.durability)
 	}
-	// Ensures no timestamp hints etc.
-	checkOptionsForIterReuse(opts)
 
 	if iter.iter != nil {
-		iter.setBounds(opts.LowerBound, opts.UpperBound)
+		iter.setOptions(opts, p.durability)
 	} else {
 		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability)
 		if p.iter == nil {
@@ -1990,18 +1977,6 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 
 	iter.inuse = true
 	return iter
-}
-
-// checkOptionsForIterReuse checks that the options are appropriate for
-// iterators that are reusable, and panics if not. This includes disallowing
-// any timestamp hints.
-func checkOptionsForIterReuse(opts IterOptions) {
-	if !opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty() {
-		panic("iterator with timestamp hints cannot be reused")
-	}
-	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
-		panic("iterator must set prefix or upper bound or lower bound")
-	}
 }
 
 // ConsistentIterators implements the Engine interface.
