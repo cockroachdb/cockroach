@@ -3321,14 +3321,17 @@ func (r *Replica) adminScatter(
 	// probability 1/N of choosing each.
 	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
 		desc := r.Desc()
-		// Learner replicas aren't allowed to become the leaseholder or raft leader,
-		// so only consider the `VoterDescriptors` replicas.
-		voterReplicas := desc.Replicas().VoterDescriptors()
-		newLeaseholderIdx := rand.Intn(len(voterReplicas))
-		targetStoreID := voterReplicas[newLeaseholderIdx].StoreID
-		if targetStoreID != r.store.StoreID() {
-			if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
-				log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
+		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
+			ctx, r.SpanConfig(), desc.Replicas().VoterDescriptors(), r, false, /* excludeLeaseRepl */
+		)
+		if len(potentialLeaseTargets) > 0 {
+			newLeaseholderIdx := rand.Intn(len(potentialLeaseTargets))
+			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID
+			if targetStoreID != r.store.StoreID() {
+				log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
+				if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
+					log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
+				}
 			}
 		}
 	}
