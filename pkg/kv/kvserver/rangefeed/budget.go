@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -41,6 +42,9 @@ var totalSharedFeedBudgetFraction = envutil.EnvOrDefaultFloat64("COCKROACH_RANGE
 // 8 * 0.5 * 0.05 = 200 MB budget limit.
 // With 8 GB node and 0.25 sql memory budget (2 GB) each range would get max of
 // 2 * 0.5 * 0.05 = 50 MB budget limit.
+// Note that regardless of calculated value, memory budged can't go below max
+// raft command size since we should be able to send any command through
+// rangefeed. See kvserver.MaxCommandSize for details on raft command size.
 var maxFeedFraction = envutil.EnvOrDefaultFloat64("COCKROACH_RANGEFEED_TOTAL_MEM_FRACTION", 0.05)
 
 // Pre allocated memory limit for system RangeFeeds. Each event should never
@@ -48,6 +52,25 @@ var maxFeedFraction = envutil.EnvOrDefaultFloat64("COCKROACH_RANGEFEED_TOTAL_MEM
 // ranges to have such objects, but we'll have a multiple of those just in case.
 var systemRangeFeedBudget = envutil.EnvOrDefaultInt64("COCKROACH_RANGEFEED_SYSTEM_BUDGET",
 	2*64*1024*1024 /* 128MB */)
+
+// RangefeedBudgetsEnabled is a cluster setting that enables rangefeed memory
+// budgets. This is meant to be an escape hatch to disable budgets if they cause
+// feeds to fail unexpectedly despite nodes have plenty of memory or if bugs in
+// budgeting are discovered and mitigation is required.
+// With budgets disabled, rangefeeds will behave as they did prior to 22.1.
+// Note that disabling this feature will not disable budgets on already running
+// rangefeeds, but will affect feeds that are created after the option was
+// changed. You need to restart all feeds to ensure that the budget is fully
+// disabled.
+// This feature is also globally controlled by useBudgets environment option
+// defined above. If budgets are disabled by environment variable, cluster
+// setting has no effect.
+var RangefeedBudgetsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.memory_budgets.enabled",
+	"if set, rangefeed memory budgets are enabled",
+	true,
+)
 
 var budgetAllocationSyncPool = sync.Pool{
 	New: func() interface{} {
@@ -98,8 +121,13 @@ type FeedBudget struct {
 	limit int64
 	// Channel to notify that memory was returned to the budget.
 	replenishC chan interface{}
-	// Budget cancellation request
+	// Budget cancellation request.
 	stopC chan interface{}
+	// Cluster settings to be able to check RangefeedBudgetsEnabled on the fly.
+	// When budgets are disabled, all new messages should pass through, all
+	// previous allocations should still be returned as memory pool is shared with
+	// SQL.
+	settings *settings.Values
 
 	closed sync.Once
 }
@@ -107,7 +135,7 @@ type FeedBudget struct {
 // NewFeedBudget creates a FeedBudget to be used with RangeFeed. If nil account
 // is passed, function will return nil which is safe to use with RangeFeed as
 // it effectively disables memory accounting for that feed.
-func NewFeedBudget(budget *mon.BoundAccount, limit int64) *FeedBudget {
+func NewFeedBudget(budget *mon.BoundAccount, limit int64, settings *settings.Values) *FeedBudget {
 	if budget == nil {
 		return nil
 	}
@@ -119,6 +147,7 @@ func NewFeedBudget(budget *mon.BoundAccount, limit int64) *FeedBudget {
 		replenishC: make(chan interface{}, 1),
 		stopC:      make(chan interface{}),
 		limit:      limit,
+		settings:   settings,
 	}
 	f.mu.memBudget = budget
 	return f
@@ -128,6 +157,9 @@ func NewFeedBudget(budget *mon.BoundAccount, limit int64) *FeedBudget {
 // returns error immediately.
 // Returned allocation has its use counter set to 1.
 func (f *FeedBudget) TryGet(ctx context.Context, amount int64) (*SharedBudgetAllocation, error) {
+	if !RangefeedBudgetsEnabled.Get(f.settings) {
+		return nil, nil
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.mu.closed {
@@ -235,42 +267,82 @@ func (a *SharedBudgetAllocation) Release(ctx context.Context) {
 // settings.
 type BudgetFactory struct {
 	limit              int64
+	adjustLimit        func(int64) int64
 	feedBytesMon       *mon.BytesMonitor
 	systemFeedBytesMon *mon.BytesMonitor
+
+	settings *settings.Values
 
 	metrics *FeedBudgetPoolMetrics
 }
 
-// NewBudgetFactory creates a factory callback that would create RangeFeed
-// memory budget according to system policy.
-func NewBudgetFactory(
-	ctx context.Context,
+// BudgetFactoryConfig is a config for a BudgetFactory. It's main purpose is to
+// decouple derived parameter calculation from the function that creates
+// factories so that it could be tested independently.
+type BudgetFactoryConfig struct {
+	rootMon                 *mon.BytesMonitor
+	provisionalFeedLimit    int64
+	adjustLimit             func(int64) int64
+	totalRangeReedBudget    int64
+	histogramWindowInterval time.Duration
+	settings                *settings.Values
+}
+
+func (b BudgetFactoryConfig) empty() bool {
+	return b.rootMon == nil
+}
+
+// CreateBudgetFactoryConfig creates new config using system defaults set by
+// environment variables. If budgets are disabled, factory created from the
+// config will be nil and will disable all feed memory budget accounting.
+func CreateBudgetFactoryConfig(
 	rootMon *mon.BytesMonitor,
 	memoryPoolSize int64,
 	histogramWindowInterval time.Duration,
-) *BudgetFactory {
-	if !useBudgets || rootMon == nil {
-		return nil
+	adjustLimit func(int64) int64,
+	settings *settings.Values,
+) BudgetFactoryConfig {
+	if rootMon == nil || !useBudgets {
+		return BudgetFactoryConfig{}
 	}
 	totalRangeReedBudget := int64(float64(memoryPoolSize) * totalSharedFeedBudgetFraction)
 	feedSizeLimit := int64(float64(totalRangeReedBudget) * maxFeedFraction)
+	return BudgetFactoryConfig{
+		rootMon:                 rootMon,
+		provisionalFeedLimit:    feedSizeLimit,
+		adjustLimit:             adjustLimit,
+		totalRangeReedBudget:    totalRangeReedBudget,
+		histogramWindowInterval: histogramWindowInterval,
+		settings:                settings,
+	}
+}
 
-	metrics := NewFeedBudgetMetrics(histogramWindowInterval)
+// NewBudgetFactory creates a factory callback that would create RangeFeed
+// memory budget according to system policy.
+func NewBudgetFactory(ctx context.Context, config BudgetFactoryConfig) *BudgetFactory {
+	if config.empty() {
+		return nil
+	}
+	metrics := NewFeedBudgetMetrics(config.histogramWindowInterval)
 	systemRangeMonitor := mon.NewMonitorInheritWithLimit("rangefeed-system-monitor",
-		systemRangeFeedBudget, rootMon)
+		systemRangeFeedBudget, config.rootMon)
 	systemRangeMonitor.SetMetrics(metrics.SystemBytesCount, nil /* maxHist */)
-	systemRangeMonitor.Start(ctx, rootMon,
+	systemRangeMonitor.Start(ctx, config.rootMon,
 		mon.MakeStandaloneBudget(systemRangeFeedBudget))
 
-	rangeFeedPoolMonitor := mon.NewMonitorInheritWithLimit("rangefeed-monitor", totalRangeReedBudget,
-		rootMon)
+	rangeFeedPoolMonitor := mon.NewMonitorInheritWithLimit(
+		"rangefeed-monitor",
+		config.totalRangeReedBudget,
+		config.rootMon)
 	rangeFeedPoolMonitor.SetMetrics(metrics.SharedBytesCount, nil /* maxHist */)
-	rangeFeedPoolMonitor.Start(ctx, rootMon, mon.BoundAccount{})
+	rangeFeedPoolMonitor.Start(ctx, config.rootMon, mon.BoundAccount{})
 
 	return &BudgetFactory{
-		limit:              feedSizeLimit,
+		limit:              config.provisionalFeedLimit,
+		adjustLimit:        config.adjustLimit,
 		feedBytesMon:       rangeFeedPoolMonitor,
 		systemFeedBytesMon: systemRangeMonitor,
+		settings:           config.settings,
 		metrics:            metrics,
 	}
 }
@@ -292,13 +364,17 @@ func (f *BudgetFactory) CreateBudget(key roachpb.RKey) *FeedBudget {
 	if f == nil {
 		return nil
 	}
+	rangeLimit := f.adjustLimit(f.limit)
+	if rangeLimit == 0 {
+		return nil
+	}
 	// We use any table with reserved ID in system tenant as system case.
 	if key.Less(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1))) {
 		acc := f.systemFeedBytesMon.MakeBoundAccount()
-		return NewFeedBudget(&acc, 0)
+		return NewFeedBudget(&acc, 0, f.settings)
 	}
 	acc := f.feedBytesMon.MakeBoundAccount()
-	return NewFeedBudget(&acc, f.limit)
+	return NewFeedBudget(&acc, rangeLimit, f.settings)
 }
 
 // Metrics exposes Metrics for BudgetFactory so that they could be registered
