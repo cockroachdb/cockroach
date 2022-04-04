@@ -1935,7 +1935,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		iter = &p.prefixIter
 	}
 	if iter.inuse {
-		panic("iterator already in use")
+		return newPebbleIterator(p.parent.db, p.iter, opts, p.durability)
 	}
 	// Ensures no timestamp hints etc.
 	checkOptionsForIterReuse(opts)
@@ -1971,7 +1971,7 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 		iter = &p.prefixEngineIter
 	}
 	if iter.inuse {
-		panic("iterator already in use")
+		return newPebbleIterator(p.parent.db, p.iter, opts, p.durability)
 	}
 	// Ensures no timestamp hints etc.
 	checkOptionsForIterReuse(opts)
