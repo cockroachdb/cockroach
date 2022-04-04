@@ -669,7 +669,9 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	assertMin := func(exp uint64, now time.Time) {
 		t.Helper()
 		const anyRecipientStore roachpb.StoreID = 0
-		if maxIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now, anyRecipientStore); maxIndex != exp {
+		if maxIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(
+			now, anyRecipientStore, false, /* ignoreDeadline */
+		); maxIndex != exp {
 			t.Fatalf("unexpected max index %d, wanted %d", maxIndex, exp)
 		}
 	}

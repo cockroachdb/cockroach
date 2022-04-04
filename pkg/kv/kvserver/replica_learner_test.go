@@ -1166,9 +1166,90 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	checkFails()
 }
 
+func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var activateSnapshotTestingKnob int64
+	blockSnapshot := make(chan struct{})
+	tc := testcluster.StartTestCluster(
+		t, 2, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						// Disable load-based splitting, so that the absence of sufficient
+						// QPS measurements do not prevent ranges from merging.
+						DisableLoadBasedSplitting: true,
+						ReceiveSnapshot: func(_ *kvserverpb.SnapshotRequest_Header) error {
+							if atomic.LoadInt64(&activateSnapshotTestingKnob) == 1 {
+								<-blockSnapshot
+							}
+							return nil
+						},
+					},
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	splitKey := scratchKey.Next()
+
+	// Split and then unsplit the range to clear the sticky bit, otherwise the
+	// mergeQueue will ignore the range.
+	tc.SplitRangeOrFatal(t, splitKey)
+	require.NoError(t, tc.Server(0).DB().AdminUnsplit(ctx, splitKey))
+
+	atomic.StoreInt64(&activateSnapshotTestingKnob, 1)
+	replicationChange := make(chan error)
+	go func() {
+		_, err := tc.AddVoters(scratchKey, makeReplicationTargets(2)...)
+		replicationChange <- err
+	}()
+
+	select {
+	case <-time.After(100 * time.Millisecond):
+	// Continue.
+	case <-replicationChange:
+		t.Fatal("did not expect the replication change to complete")
+	}
+	defer func() {
+		// Unblock the replication change and ensure that it succeeds.
+		close(blockSnapshot)
+		require.NoError(t, <-replicationChange)
+	}()
+
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	// TestCluster currently overrides this when used with ReplicationManual.
+	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
+
+	testutils.SucceedsWithin(
+		t, func() error {
+			// While this replication change is stalled, we'll trigger a merge and
+			// ensure that the merge correctly notices that there is a snapshot in
+			// flight and ignores the range.
+			store, repl := getFirstStoreReplica(t, tc.Server(0), scratchKey)
+			trace, _, _ := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+			formattedTrace := trace.String()
+			matched, err := regexp.MatchString(
+				"cannot remove learner while a snapshot is in flight", formattedTrace,
+			)
+			require.NoError(t, err)
+			if !matched {
+				return errors.Errorf("expected trace to contain 'cannot remove learner while snapshot is in flight'")
+			}
+			return nil
+		}, 20*time.Second,
+	)
+}
+
 func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
 	// Disable load-based splitting, so that the absence of sufficient QPS
@@ -1202,7 +1283,6 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		ltk.withStopAfterLearnerAtomic(func() {
 			_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))
 		})
-
 		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 		trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
