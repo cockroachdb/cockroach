@@ -170,7 +170,7 @@ func TestAddSSTQPSStat(t *testing.T) {
 		require.Nil(t, pErr)
 
 		repl.leaseholderStats.mu.Lock()
-		queriesAfter, _ := repl.leaseholderStats.sumQueriesLocked()
+		queriesAfter, _ := repl.leaseholderStats.sumLocked()
 		repl.leaseholderStats.mu.Unlock()
 
 		// If queries are correctly recorded, we should see increase in query

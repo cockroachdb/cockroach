@@ -252,7 +252,7 @@ func calcBehindCount(
 // practically none). See Replica.getBatchRequestQPS() for how this is
 // accounted for.
 func (r *Replica) QueriesPerSecond() (float64, time.Duration) {
-	return r.leaseholderStats.avgQPS()
+	return r.leaseholderStats.meanRate()
 }
 
 // WritesPerSecond returns the range's average keys written per second. A
@@ -262,7 +262,7 @@ func (r *Replica) QueriesPerSecond() (float64, time.Duration) {
 // writes (12 for the metadata, 12 for the versions). A DeleteRange that
 // ultimately only removes one key counts as one (or two if it's transactional).
 func (r *Replica) WritesPerSecond() float64 {
-	wps, _ := r.writeStats.avgQPS()
+	wps, _ := r.writeStats.meanRate()
 	return wps
 }
 

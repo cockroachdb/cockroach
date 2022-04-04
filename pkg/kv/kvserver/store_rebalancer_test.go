@@ -273,7 +273,7 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 		repl.mu.state.Stats = &enginepb.MVCCStats{}
 
 		repl.leaseholderStats = newReplicaStats(s.Clock(), nil)
-		repl.leaseholderStats.setAvgQPSForTesting(r.qps)
+		repl.leaseholderStats.setMeanRateForTesting(r.qps)
 
 		repl.writeStats = newReplicaStats(s.Clock(), nil)
 		acc.addReplica(replicaWithStats{

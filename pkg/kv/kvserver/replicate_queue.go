@@ -1593,7 +1593,7 @@ func (rq *replicateQueue) shedLease(
 		return noTransferDryRun, nil
 	}
 
-	avgQPS, qpsMeasurementDur := repl.leaseholderStats.avgQPS()
+	avgQPS, qpsMeasurementDur := repl.leaseholderStats.meanRate()
 	if qpsMeasurementDur < MinStatsDuration {
 		avgQPS = 0
 	}
