@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -78,6 +79,13 @@ func (r *importResumer) ForceRealSpan() bool {
 }
 
 var _ jobs.Resumer = &importResumer{}
+
+var processorsPerNode = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"bulkio.import.processors_per_node",
+	"number of input processors to run on each sql instance", 1,
+	settings.PositiveInt,
+)
 
 type preparedSchemaMetadata struct {
 	schemaPreparedDetails jobspb.ImportDetails
@@ -267,8 +275,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
+	procsPerNode := int(processorsPerNode.Get(&p.ExecCfg().Settings.SV))
+
 	res, err := ingestWithRetry(ctx, p, r.job, tables, typeDescs, files, format, details.Walltime,
-		r.testingKnobs.alwaysFlushJobProgress)
+		r.testingKnobs.alwaysFlushJobProgress, procsPerNode)
 	if err != nil {
 		return err
 	}
@@ -1224,6 +1234,7 @@ func ingestWithRetry(
 	format roachpb.IOFileFormat,
 	walltime int64,
 	alwaysFlushProgress bool,
+	procsPerNode int,
 ) (roachpb.BulkOpSummary, error) {
 	resumerSpan := tracing.SpanFromContext(ctx)
 
@@ -1249,7 +1260,7 @@ func ingestWithRetry(
 			RetryError:    tracing.RedactAndTruncateError(err),
 		})
 		res, err = distImport(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
-			alwaysFlushProgress)
+			alwaysFlushProgress, procsPerNode)
 		if err == nil {
 			break
 		}
