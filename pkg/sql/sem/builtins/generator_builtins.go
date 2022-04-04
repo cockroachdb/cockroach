@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -28,10 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -463,6 +466,21 @@ The output can be used to recreate a database.'
 			makeDecodePlanGistGenerator,
 			`Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table.
 			`,
+			tree.VolatilityVolatile,
+		),
+	),
+	"crdb_internal.probe_range": makeBuiltin(
+		tree.FunctionProperties{
+			Class: tree.GeneratorClass,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{Name: "timeout", Typ: types.Interval},
+				{Name: "write", Typ: types.Bool},
+			},
+			probeRangeGeneratorType,
+			makeProbeRangeGenerator,
+			`Returns rows of range data that have been received from the prober`,
 			tree.VolatilityVolatile,
 		),
 	),
@@ -2354,3 +2372,135 @@ func makeShowCreateAllTypesGenerator(
 		acc:         ctx.Mon.MakeBoundAccount(),
 	}, nil
 }
+
+// probeRangeTypesGenerator supports the execution of
+// crdb_internal.probe_range(timeout).
+
+var probeRangeGeneratorLabels = []string{"range_id", "error", "end_to_end_latency_ms", "verbose_trace"}
+
+var probeRangeGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.String, types.Int, types.String},
+	probeRangeGeneratorLabels,
+)
+
+type probeRangeRow struct {
+	rangeID      int
+	error        string
+	latency      time.Duration
+	verboseTrace string
+}
+
+type probeRangeGenerator struct {
+	db      *kv.DB
+	timeout time.Duration
+	isWrite bool
+	tracer  *tracing.Tracer
+	ranges  []kv.KeyValue
+
+	// The following variables are updated during
+	// calls to Next() and change throughout the lifecycle of
+	// probeRangeGenerator.
+	curr     probeRangeRow
+	rangeIdx int
+}
+
+func makeProbeRangeGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+	// The user must be an admin to use this builtin.
+	isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"only users with the admin role are allowed to use crdb_internal.probe_range",
+		)
+	}
+	// Handle args passed in.
+	timeout := time.Duration(tree.MustBeDInterval(args[0]).Duration.Nanos())
+	isWrite := bool(tree.MustBeDBool(args[1]))
+	ranges, err := kvclient.ScanMetaKVs(ctx.Context, ctx.Txn, roachpb.Span{
+		Key:    keys.MinKey,
+		EndKey: keys.MaxKey,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &probeRangeGenerator{
+		db:       ctx.DB,
+		timeout:  timeout,
+		isWrite:  isWrite,
+		tracer:   ctx.Tracer,
+		ranges:   ranges,
+		rangeIdx: 0,
+	}, nil
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (p *probeRangeGenerator) ResolvedType() *types.T {
+	return probeRangeGeneratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (p *probeRangeGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
+	if p.rangeIdx == len(p.ranges) {
+		return false, nil
+	}
+	var opName string
+	if p.isWrite {
+		opName = "write probe"
+	} else {
+		opName = "read probe"
+	}
+	probeCtx, sp := tracing.EnsureChildSpan(
+		ctx, p.tracer, opName,
+		tracing.WithForceRealSpan(),
+	)
+	sp.SetRecordingType(tracing.RecordingVerbose)
+	defer sp.Finish()
+	r := p.ranges[p.rangeIdx]
+	var desc roachpb.RangeDescriptor
+	if err := r.ValueProto(&desc); err != nil {
+		return false, err
+	}
+	ops := &kvprober.ProberOpsImpl{}
+	tBegin := timeutil.Now()
+	err := contextutil.RunWithTimeout(probeCtx, opName, p.timeout, func(_ context.Context) error {
+		if p.isWrite {
+			ops.Write(r.Key)
+		} else {
+			ops.Read(r.Key)
+		}
+		return nil
+	})
+	if err != nil {
+		p.curr.error = err.Error()
+	} else {
+		p.curr.error = ""
+	}
+	p.rangeIdx++
+
+	p.curr.rangeID = int(desc.RangeID)
+	p.curr.latency = timeutil.Since(tBegin)
+	p.curr.verboseTrace = sp.GetRecording(tracing.RecordingVerbose).String()
+
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (p *probeRangeGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{
+		tree.NewDInt(tree.DInt(p.curr.rangeID)),
+		tree.NewDString(p.curr.error),
+		tree.NewDInt(tree.DInt(p.curr.latency.Milliseconds())),
+		tree.NewDString(p.curr.verboseTrace),
+	}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (p *probeRangeGenerator) Close(_ context.Context) {}

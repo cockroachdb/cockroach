@@ -3137,6 +3137,15 @@ table. Returns an error if validation fails.</p>
 </span></td></tr></tbody>
 </table>
 
+### TUPLE{INT AS RANGE_ID, STRING AS ERROR, INT AS END_TO_END_LATENCY_MS, STRING AS VERBOSE_TRACE} functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="crdb_internal.probe_range"></a><code>crdb_internal.probe_range(timeout: <a href="interval.html">interval</a>, write: <a href="bool.html">bool</a>) &rarr; tuple{int AS range_id, string AS error, int AS end_to_end_latency_ms, string AS verbose_trace}</code></td><td><span class="funcdesc"><p>Returns rows of range data that have been received from the prober</p>
+</span></td></tr></tbody>
+</table>
+
 ### UUID functions
 
 <table>
