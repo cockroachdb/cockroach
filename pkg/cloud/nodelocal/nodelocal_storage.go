@@ -160,7 +160,7 @@ func (l *localFileStorage) ReadFileAt(
 }
 
 func (l *localFileStorage) List(
-	ctx context.Context, prefix, delim string, fn cloud.ListingFn, limit int,
+	ctx context.Context, prefix, delim string, fn cloud.ListingFn,
 ) error {
 	dest := cloud.JoinPathPreservingTrailingSlash(l.base, prefix)
 
@@ -172,7 +172,6 @@ func (l *localFileStorage) List(
 	// Sort results so that we can group as we go.
 	sort.Strings(res)
 	var prevPrefix string
-	count := 0
 	for _, f := range res {
 		f = strings.TrimPrefix(f, dest)
 		if delim != "" {
@@ -186,9 +185,6 @@ func (l *localFileStorage) List(
 		}
 		if err := fn(f); err != nil {
 			return err
-		}
-		if count++; limit != 0 && count >= limit {
-			return nil
 		}
 	}
 	return nil

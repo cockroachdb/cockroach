@@ -296,7 +296,7 @@ func (es *generatorExternalStorage) Writer(
 }
 
 func (es *generatorExternalStorage) List(
-	ctx context.Context, _, _ string, _ cloud.ListingFn, _ int,
+	ctx context.Context, _, _ string, _ cloud.ListingFn,
 ) error {
 	return errors.New("unsupported")
 }
