@@ -518,4 +518,3 @@ vectorized: true
 └── • virtual table
       table: pg_type@pg_type_oid_idx
       spans: [/1 - /1000]
-

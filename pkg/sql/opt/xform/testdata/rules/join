@@ -3826,6 +3826,34 @@ anti-join (hash)
       ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
+# Regression test for #79384. Do not generate unnecessary cross-joins with
+# constant values when generating a lookup join with a lookup expression.
+exec-ddl
+CREATE TABLE t79384 (
+  a INT,
+  b INT,
+  c INT,
+  INDEX (a, b, c)
+)
+----
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small JOIN t79384 ON b IN (1, 2, 3) AND c > 0 AND m = a
+----
+project
+ ├── columns: m:1!null
+ └── inner-join (lookup t79384@secondary)
+      ├── columns: m:1!null a:6!null b:7!null c:8!null
+      ├── lookup expression
+      │    └── filters
+      │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │         ├── b:7 IN (1, 2, 3) [outer=(7), constraints=(/7: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+      │         └── c:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+      ├── fd: (1)==(6), (6)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters (true)
+
 # --------------------------------------------------
 # GenerateLookupJoinsWithFilter + Partial Indexes
 # --------------------------------------------------

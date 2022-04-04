@@ -478,6 +478,9 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 
 			// Reset KeyCols since we're not using it anymore.
 			lookupJoin.KeyCols = opt.ColList{}
+			// Reset input since we don't need any constant values that may have
+			// been joined on the input above.
+			lookupJoin.Input = input
 		}
 
 		if len(lookupJoin.KeyCols) == 0 && len(lookupJoin.LookupExpr) == 0 {
