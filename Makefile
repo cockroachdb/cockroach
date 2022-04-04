@@ -1384,9 +1384,6 @@ pkg/ui/assets.ccl.installed: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(s
 pkg/ui/assets.oss.installed: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
 pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.app.js $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
 	find pkg/ui/dist$*/assets -mindepth 1 -not -name index.html -delete
-	for dll in $(shell find pkg/ui/workspaces/db-console/dist -name '*.dll.js' -type f); do \
-		echo $$dll | sed -E "s/.oss.dll.js|.ccl.dll.js/.dll.js/" | sed -E "s|^.*\/|pkg/ui/dist$*/assets/|" | xargs -I{} cp $$dll {};\
-	done
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) --config webpack.app.js --env.dist=$*
 	touch $@
 
