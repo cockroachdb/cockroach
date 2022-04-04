@@ -496,7 +496,10 @@ func TestConnector_lookupAddr(t *testing.T) {
 				require.Equal(t, ctx, fnCtx)
 				require.Equal(t, c.TenantID, tenantID)
 				require.Equal(t, c.ClusterName, clusterName)
-				return []*tenant.Pod{{Addr: "127.0.0.10:80"}}, nil
+				return []*tenant.Pod{
+					{Addr: "127.0.0.10:70", State: tenant.DRAINING},
+					{Addr: "127.0.0.10:80", State: tenant.RUNNING},
+				}, nil
 			},
 		}
 
@@ -536,7 +539,11 @@ func TestConnector_lookupAddr(t *testing.T) {
 
 				pods := make([]*tenant.Pod, 0, len(mu.pods))
 				for addr, load := range mu.pods {
-					pods = append(pods, &tenant.Pod{Addr: addr, Load: load})
+					pods = append(pods, &tenant.Pod{
+						Addr:  addr,
+						Load:  load,
+						State: tenant.RUNNING,
+					})
 				}
 				return pods, nil
 			},

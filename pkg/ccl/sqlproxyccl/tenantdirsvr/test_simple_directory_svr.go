@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -67,9 +68,10 @@ func (d *TestSimpleDirectoryServer) ListPods(
 	return &tenant.ListPodsResponse{
 		Pods: []*tenant.Pod{
 			{
-				TenantID: req.TenantID,
-				Addr:     d.podAddr,
-				State:    tenant.RUNNING,
+				TenantID:       req.TenantID,
+				Addr:           d.podAddr,
+				State:          tenant.RUNNING,
+				StateTimestamp: timeutil.Now(),
 			},
 		},
 	}, nil

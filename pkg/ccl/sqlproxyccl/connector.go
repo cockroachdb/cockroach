@@ -275,14 +275,17 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 	pods, err := c.DirectoryCache.LookupTenantPods(ctx, c.TenantID, c.ClusterName)
 	switch {
 	case err == nil:
-		// Note that LookupTenantPods will always return RUNNING pods, so this
-		// is fine for now. If we start changing that to also return DRAINING
-		// pods, we'd have to filter accordingly.
-		pod, err := c.Balancer.SelectTenantPod(pods)
+		runningPods := make([]*tenant.Pod, 0, len(pods))
+		for _, pod := range pods {
+			if pod.State == tenant.RUNNING {
+				runningPods = append(runningPods, pod)
+			}
+		}
+		pod, err := c.Balancer.SelectTenantPod(runningPods)
 		if err != nil {
 			// This should never happen because LookupTenantPods ensured that
-			// len(pods) should never be 0. Mark it as a retriable connection
-			// anyway.
+			// there should be at least one RUNNING pod. Mark it as a retriable
+			// connection anyway.
 			return "", markAsRetriableConnectorError(err)
 		}
 		return pod.Addr, nil
