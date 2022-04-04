@@ -430,10 +430,10 @@ func streamPartition(
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
-	return &eventStream{
+	return tree.MakeStreamingValueGenerator(&eventStream{
 		streamID: streamID,
 		spec:     spec,
 		execCfg:  execCfg,
 		mon:      evalCtx.Mon,
-	}, nil
+	}), nil
 }
