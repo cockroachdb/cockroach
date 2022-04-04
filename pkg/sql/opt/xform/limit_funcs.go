@@ -60,7 +60,14 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 		// unconstrained scans on non-partial indexes.
 		return false
 	}
-
+	// Virtual indexes are not sorted, but are presented to the optimizer as
+	// sorted, and have a sort automatically applied to them on the output of the
+	// scan. Since this implicit sort happens after the scan, we can't place a
+	// hard limit on the scan if the query semantics require a sort order on the
+	// entire relation.
+	if scanPrivate.IsVirtualTable(md) && !required.Any() {
+		return false
+	}
 	ok, _ := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
 	return ok
 }
@@ -87,6 +94,14 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 func (c *CustomFuncs) GenerateLimitedScans(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, limit tree.Datum, required props.OrderingChoice,
 ) {
+	// Virtual indexes are not sorted, but are presented to the optimizer as
+	// sorted, and have a sort automatically applied to them on the output of the
+	// scan. Since this implicit sort happens after the scan, we can't place a
+	// hard limit on the scan if the query semantics require a sort order on the
+	// entire relation.
+	if scanPrivate.IsVirtualTable(c.e.mem.Metadata()) && !required.Any() {
+		return
+	}
 	limitVal := int64(*limit.(*tree.DInt))
 
 	var pkCols opt.ColSet

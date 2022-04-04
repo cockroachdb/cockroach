@@ -344,3 +344,10 @@ SELECT * FROM t65171 WHERE x = 1 OR x = 2 ORDER BY y LIMIT 2
 ----
 1  2
 1  2
+
+query IT
+SELECT oid::INT, typname FROM pg_type ORDER BY oid LIMIT 3
+----
+16  bool
+17  bytea
+18  char
