@@ -74,6 +74,8 @@ build:devdarwinx86_64 --config=dev
 build:dev --stamp --workspace_status_command=./build/bazelutil/stamp.sh
 build:dev --action_env=PATH
 build:dev --host_action_env=PATH
+build:dev --spawn_strategy=local --strategy=Genrule=sandboxed
+build:dev --nostamp
 
 try-import %workspace%/.bazelrc.user
 
