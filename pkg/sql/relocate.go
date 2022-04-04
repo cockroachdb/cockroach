@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -123,33 +124,34 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	existingNonVoters := rangeDesc.Replicas().NonVoters().ReplicationTargets()
 	switch n.subjectReplicas {
 	case tree.RelocateLease:
-		if err := params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
+		if err = params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
 			return false, err
 		}
 	case tree.RelocateNonVoters:
-		if err := params.p.ExecCfg().DB.AdminRelocateRange(
+		err = params.p.ExecCfg().DB.AdminRelocateRange(
 			params.ctx,
 			rowKey,
 			existingVoters,
 			relocationTargets,
 			true, /* transferLeaseToFirstVoter */
-		); err != nil {
-			return false, err
-		}
+		)
 	case tree.RelocateVoters:
-		if err := params.p.ExecCfg().DB.AdminRelocateRange(
+		err = params.p.ExecCfg().DB.AdminRelocateRange(
 			params.ctx,
 			rowKey,
 			relocationTargets,
 			existingNonVoters,
 			true, /* transferLeaseToFirstVoter */
-		); err != nil {
-			return false, err
-		}
+		)
 	default:
 		return false, errors.AssertionFailedf("unknown relocate mode: %v", n.subjectReplicas)
 	}
-
+	// If the `AdminRelocateRange`call failed because it found that the range was
+	// already in the process of being rebalanced, ignore the error and move on to
+	// the next range.
+	if err != nil && !kvserver.IsReplicationChangeInProgressError(err) {
+		return false, err
+	}
 	return true, nil
 }
 
