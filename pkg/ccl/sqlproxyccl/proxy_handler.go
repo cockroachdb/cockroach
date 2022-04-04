@@ -170,8 +170,6 @@ func newProxyHandler(
 		metrics:      proxyMetrics,
 		ProxyOptions: options,
 		certManager:  certmgr.NewCertManager(ctx),
-		balancer:     balancer.NewBalancer(),
-		connTracker:  balancer.NewConnTracker(),
 	}
 
 	err := handler.setupIncomingCert()
@@ -180,6 +178,13 @@ func newProxyHandler(
 	}
 
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+
+	// Create the balancer component. Do this with a wrapped ctx.
+	handler.balancer, err = balancer.NewBalancer(ctx, stopper)
+	if err != nil {
+		return nil, err
+	}
+	handler.connTracker = balancer.NewConnTracker()
 
 	// If denylist functionality is requested, create the denylist service.
 	if options.Denylist != "" {
