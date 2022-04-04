@@ -354,10 +354,10 @@ func rangeUsageInfoForRepl(repl *Replica) RangeUsageInfo {
 	info := RangeUsageInfo{
 		LogicalBytes: repl.GetMVCCStats().Total(),
 	}
-	if queriesPerSecond, dur := repl.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+	if queriesPerSecond, dur := repl.leaseholderStats.averageRatePerSecond(); dur >= MinStatsDuration {
 		info.QueriesPerSecond = queriesPerSecond
 	}
-	if writesPerSecond, dur := repl.writeStats.avgQPS(); dur >= MinStatsDuration {
+	if writesPerSecond, dur := repl.writeStats.averageRatePerSecond(); dur >= MinStatsDuration {
 		info.WritesPerSecond = writesPerSecond
 	}
 	return info
@@ -1737,7 +1737,7 @@ func (a *Allocator) TransferLeaseTarget(
 		return candidates[a.randGen.Intn(len(candidates))]
 
 	case qpsConvergence:
-		leaseReplQPS, _ := stats.avgQPS()
+		leaseReplQPS, _ := stats.averageRatePerSecond()
 		candidates := make([]roachpb.StoreID, 0, len(existing)-1)
 		for _, repl := range existing {
 			if repl.StoreID != leaseRepl.StoreID() {
@@ -1970,7 +1970,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 		}
 	}
 
-	qpsStats, qpsStatsDur := stats.perLocalityDecayingQPS()
+	qpsStats, qpsStatsDur := stats.perLocalityDecayingRate()
 
 	// If we haven't yet accumulated enough data, avoid transferring for now,
 	// unless we've been explicitly asked otherwise. Do not fall back to the

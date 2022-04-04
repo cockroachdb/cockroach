@@ -562,8 +562,8 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
 	}
-	QPS, _ := replica.leaseholderStats.avgQPS()
-	WPS, _ := replica.writeStats.avgQPS()
+	QPS, _ := replica.leaseholderStats.averageRatePerSecond()
+	WPS, _ := replica.writeStats.averageRatePerSecond()
 	if expectedRangeCount := int32(6); desc.Capacity.RangeCount != expectedRangeCount {
 		t.Errorf("expected RangeCount %d, but got %d", expectedRangeCount, desc.Capacity.RangeCount)
 	}
