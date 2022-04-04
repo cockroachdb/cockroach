@@ -165,21 +165,26 @@ var throttledError = errors.WithHint(
 func newProxyHandler(
 	ctx context.Context, stopper *stop.Stopper, proxyMetrics *metrics, options ProxyOptions,
 ) (*proxyHandler, error) {
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+
 	handler := proxyHandler{
 		stopper:      stopper,
 		metrics:      proxyMetrics,
 		ProxyOptions: options,
 		certManager:  certmgr.NewCertManager(ctx),
-		balancer:     balancer.NewBalancer(),
-		connTracker:  balancer.NewConnTracker(),
 	}
 
-	err := handler.setupIncomingCert()
+	err := handler.setupIncomingCert(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+	// Create the balancer component.
+	handler.balancer, err = balancer.NewBalancer(ctx, stopper)
+	if err != nil {
+		return nil, err
+	}
+	handler.connTracker = balancer.NewConnTracker()
 
 	// If denylist functionality is requested, create the denylist service.
 	if options.Denylist != "" {
@@ -469,7 +474,7 @@ func (handler *proxyHandler) incomingTLSConfig() *tls.Config {
 // using self-signed, runtime generated cert (if cert is set to *) or
 // using file based cert where the cert/key values refer to file names
 // containing the information.
-func (handler *proxyHandler) setupIncomingCert() error {
+func (handler *proxyHandler) setupIncomingCert(ctx context.Context) error {
 	if (handler.ListenKey == "") != (handler.ListenCert == "") {
 		return errors.New("must specify either both or neither of cert and key")
 	}
@@ -479,7 +484,6 @@ func (handler *proxyHandler) setupIncomingCert() error {
 	}
 
 	// TODO(darin): change the cert manager so it uses the stopper.
-	ctx, _ := handler.stopper.WithCancelOnQuiesce(context.Background())
 	certMgr := certmgr.NewCertManager(ctx)
 	var cert certmgr.Cert
 	if handler.ListenCert == "*" {
