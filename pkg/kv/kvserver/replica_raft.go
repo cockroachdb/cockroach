@@ -1536,6 +1536,10 @@ func (r *Replica) addSnapshotLogTruncationConstraintLocked(
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = snapTruncationInfo{
 		index:          index,
 		recipientStore: recipientStore,
+		// NB: We explicitly do not want to set a deadline here, since the presence
+		// of a deadline is assumed to indicate that the snapshot has been
+		// successfully transmitted (but perhaps not yet applied) by the logic
+		// inside getAndGCSnapshotLogTruncationConstraintsLocked().
 	}
 }
 
@@ -1559,20 +1563,47 @@ func (r *Replica) completeSnapshotLogTruncationConstraint(
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
 }
 
+// hasOutstandingLearnerSnapshotInFlight returns true if there is a snapshot in
+// progress from this replica to a learner replica for this range.
+func (r *Replica) hasOutstandingLearnerSnapshotInFlight() bool {
+	learners := r.Desc().Replicas().LearnerDescriptors()
+	for _, repl := range learners {
+		if yes := r.hasOutstandingSnapshotInFlightToStore(repl.StoreID); yes {
+			return yes
+		}
+	}
+	return false
+}
+
+// hasOutstandingSnapshotInFlightToStore returns true if there is a snapshot in
+// flight from this replica to the store with the given ID.
+func (r *Replica) hasOutstandingSnapshotInFlightToStore(storeID roachpb.StoreID) bool {
+	return r.getAndGCSnapshotLogTruncationConstraints(
+		// NB: We do not want to consider truncation constraints that have been
+		// marked completed but have not expired.
+		timeutil.Now(), storeID, true, /* onlyInFlight */
+	) > 0
+}
+
 // getAndGCSnapshotLogTruncationConstraints returns the minimum index of any
 // currently outstanding snapshot being sent from this replica to the specified
 // recipient or 0 if there isn't one. Passing 0 for recipientStore means any
 // recipient.
+//
+// If onlyInFlight is true, only truncation constraints corresponding to
+// snapshots currently in flight are considered. In other words, truncation
+// constraints that have been marked completed (but have not expired their grace
+// period yet) are not returned.
 func (r *Replica) getAndGCSnapshotLogTruncationConstraints(
-	now time.Time, recipientStore roachpb.StoreID,
+	now time.Time, recipientStore roachpb.StoreID, onlyInFlight bool,
 ) (minSnapIndex uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.getAndGCSnapshotLogTruncationConstraintsLocked(now, recipientStore)
+	return r.getAndGCSnapshotLogTruncationConstraintsLocked(now, recipientStore, onlyInFlight)
 }
 
 func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
-	now time.Time, recipientStore roachpb.StoreID,
+	now time.Time, recipientStore roachpb.StoreID, onlyInFlight bool,
 ) (minSnapIndex uint64) {
 	for snapUUID, item := range r.mu.snapshotLogTruncationConstraints {
 		if item.deadline != (time.Time{}) && item.deadline.Before(now) {
@@ -1582,6 +1613,17 @@ func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
 			continue
 		}
 		if recipientStore != 0 && item.recipientStore != recipientStore {
+			continue
+		}
+		// NB: Deadlines are only assigned to truncation constraints that correspond
+		// to snapshots that have been marked "completed" (i.e. have been
+		// transmitted to the recipient). These deadlines are meant to guard against
+		// ill-timed log truncations before the recipient of the snapshot has
+		// applied the snapshot.
+		//
+		// If the caller of this method only cares about snapshots that are
+		// currently in-flight, we ignore such deadlines.
+		if item.deadline != (time.Time{}) && onlyInFlight {
 			continue
 		}
 		if minSnapIndex == 0 || minSnapIndex > item.index {

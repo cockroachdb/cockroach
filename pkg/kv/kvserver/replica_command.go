@@ -1289,8 +1289,15 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 		return nil, err
 	}
 
+	// If we detect that there are learners in the process of receiving their
+	// initial upreplication snapshot, we don't want to remove them and we bail
+	// out.
+	if r.hasOutstandingLearnerSnapshotInFlight() {
+		return desc, errors.New("cannot remove learner while a snapshot is in flight")
+	}
+
 	// Now the config isn't joint any more, but we may have demoted some voters
-	// into learners. These learners should go as well.
+	// into learners. If so, we need to remove them.
 	learners := desc.Replicas().LearnerDescriptors()
 	if len(learners) == 0 {
 		return desc, nil
