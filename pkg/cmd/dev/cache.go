@@ -131,6 +131,7 @@ func (d *dev) cacheIsUp(ctx context.Context) bool {
 // string which is a line that should be added to ~/.bazelrc.
 func (d *dev) setUpCache(ctx context.Context) (string, error) {
 	if d.cacheIsUp(ctx) {
+		log.Printf("Cache is already up\n")
 		return d.getCacheBazelrcLine(ctx)
 	}
 
