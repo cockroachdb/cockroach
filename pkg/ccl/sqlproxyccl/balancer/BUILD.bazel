@@ -33,6 +33,7 @@ go_test(
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/roachpb",
         "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
 )
