@@ -154,10 +154,11 @@ func NewDirectoryCache(
 	return dir, nil
 }
 
-// LookupTenantPods returns a list of SQL pods in the RUNNING state for the
-// given tenant. If the tenant was just created or is suspended, such that there
-// are no available processes, then LookupTenantPods will trigger resumption of a
-// new instance and block until the process is ready.
+// LookupTenantPods returns a list of SQL pods in the RUNNING and DRAINING
+// states for the given tenant. If the tenant was just created or is suspended,
+// such that there are no available RUNNING processes, then LookupTenantPods
+// will trigger resumption of a new instance (or a conversion of a DRAINING pod
+// to a RUNNING one) and block until that happens.
 //
 // If clusterName is non-empty, then a GRPC NotFound error is returned if no
 // pods match the cluster name. This can be used to ensure that the incoming SQL
@@ -191,7 +192,16 @@ func (d *directoryCache) LookupTenantPods(
 
 	ctx, _ = d.stopper.WithCancelOnQuiesce(ctx)
 	tenantPods := entry.GetPods()
-	if len(tenantPods) == 0 {
+
+	// Trigger resumption if there are no RUNNING pods.
+	hasRunningPod := false
+	for _, pod := range tenantPods {
+		if pod.State == RUNNING {
+			hasRunningPod = true
+			break
+		}
+	}
+	if !hasRunningPod {
 		// There are no known pod IP addresses, so fetch pod information from
 		// the directory server. Resume the tenant if it is suspended; that
 		// will always result in at least one pod IP address (or an error).
@@ -206,12 +216,12 @@ func (d *directoryCache) LookupTenantPods(
 	return tenantPods, nil
 }
 
-// TryLookupTenantPods returns a list of SQL pods in the RUNNING state for the
-// given tenant. It returns a GRPC NotFound error if the tenant does not exist
-// (e.g. it has not yet been created) or if it has not yet been fetched into the
-// directory's cache (TryLookupTenantPods will never attempt to fetch it). If no
-// processes are available for the tenant, TryLookupTenantPods will return the
-// empty set (unlike LookupTenantPod).
+// TryLookupTenantPods returns a list of SQL pods in the RUNNING and DRAINING
+// states for thegiven tenant. It returns a GRPC NotFound error if the tenant
+// does not exist (e.g. it has not yet been created) or if it has not yet been
+// fetched into the directory's cache (TryLookupTenantPods will never attempt to
+// fetch it). If no processes are available for the tenant, TryLookupTenantPods
+// will return the empty set (unlike LookupTenantPod).
 //
 // WARNING: Callers should never attempt to modify values returned by this
 // method, or else they may be a race. Other instances may be reading from the
@@ -450,8 +460,8 @@ func (d *directoryCache) updateTenantEntry(ctx context.Context, pod *Pod) {
 	}
 
 	switch pod.State {
-	case RUNNING:
-		// Add entries of RUNNING pods if they are not already present.
+	case RUNNING, DRAINING:
+		// Add entries of RUNNING and DRAINING pods if they are not already present.
 		if entry.AddPod(pod) {
 			log.Infof(ctx, "added IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
 		} else {
@@ -463,7 +473,7 @@ func (d *directoryCache) updateTenantEntry(ctx context.Context, pod *Pod) {
 			log.Infof(ctx, "updated IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
 		}
 	default:
-		// Remove addresses of DRAINING and DELETING pods.
+		// Remove addresses of DELETING pods.
 		if entry.RemovePodByAddr(pod.Addr) {
 			log.Infof(ctx, "deleted IP address %s for tenant %d", pod.Addr, pod.TenantID)
 		}

@@ -174,10 +174,11 @@ func (s *TestDirectoryServer) SetFakeLoad(id roachpb.TenantID, addr net.Addr, fa
 	defer s.listen.RUnlock()
 	s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
 		Pod: &tenant.Pod{
-			Addr:     addr.String(),
-			TenantID: id.ToUint64(),
-			Load:     fakeLoad,
-			State:    tenant.UNKNOWN,
+			Addr:           addr.String(),
+			TenantID:       id.ToUint64(),
+			Load:           fakeLoad,
+			State:          tenant.UNKNOWN,
+			StateTimestamp: timeutil.Now(),
 		},
 	})
 }
@@ -260,9 +261,10 @@ func (s *TestDirectoryServer) Drain() {
 			defer s.listen.RUnlock()
 			s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
 				Pod: &tenant.Pod{
-					TenantID: tenantID,
-					Addr:     addr.String(),
-					State:    tenant.DRAINING,
+					TenantID:       tenantID,
+					Addr:           addr.String(),
+					State:          tenant.DRAINING,
+					StateTimestamp: timeutil.Now(),
 				},
 			})
 		}
@@ -335,10 +337,11 @@ func (s *TestDirectoryServer) listLocked(
 	resp := tenant.ListPodsResponse{}
 	for addr, proc := range processByAddr {
 		resp.Pods = append(resp.Pods, &tenant.Pod{
-			TenantID: req.TenantID,
-			Addr:     addr.String(),
-			State:    tenant.RUNNING,
-			Load:     proc.FakeLoad,
+			TenantID:       req.TenantID,
+			Addr:           addr.String(),
+			State:          tenant.RUNNING,
+			Load:           proc.FakeLoad,
+			StateTimestamp: timeutil.Now(),
 		})
 	}
 	return &resp, nil
@@ -356,10 +359,11 @@ func (s *TestDirectoryServer) registerInstanceLocked(tenantID uint64, process *P
 	defer s.listen.RUnlock()
 	s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
 		Pod: &tenant.Pod{
-			TenantID: tenantID,
-			Addr:     process.SQL.String(),
-			State:    tenant.RUNNING,
-			Load:     process.FakeLoad,
+			TenantID:       tenantID,
+			Addr:           process.SQL.String(),
+			State:          tenant.RUNNING,
+			Load:           process.FakeLoad,
+			StateTimestamp: timeutil.Now(),
 		},
 	})
 }
@@ -379,9 +383,10 @@ func (s *TestDirectoryServer) deregisterInstance(tenantID uint64, sql net.Addr) 
 		defer s.listen.RUnlock()
 		s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
 			Pod: &tenant.Pod{
-				TenantID: tenantID,
-				Addr:     sql.String(),
-				State:    tenant.DELETING,
+				TenantID:       tenantID,
+				Addr:           sql.String(),
+				State:          tenant.DELETING,
+				StateTimestamp: timeutil.Now(),
 			},
 		})
 	}
