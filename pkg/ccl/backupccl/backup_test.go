@@ -857,7 +857,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 					files = append(files, f)
 				}
 				return err
-			}, 0 /*limit*/))
+			}))
 			full1 = strings.TrimSuffix(files[0], backupManifestName)
 			full2 = strings.TrimSuffix(files[1], backupManifestName)
 
@@ -871,7 +871,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 					subdirFiles = append(subdirFiles, f)
 				}
 				return err
-			}, 0 /*limit*/))
+			}))
 			require.NoError(t, err)
 			subdirFull1 = strings.TrimSuffix(strings.TrimPrefix(subdirFiles[0], "foo"),
 				backupManifestName)
@@ -10247,7 +10247,7 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 			}
 		}
 		return nil
-	}, 0 /*limit*/))
+	}))
 
 	// numCheckpointWritten only accounts for checkpoints written in the
 	// progress loop, each time we Resume we write another checkpoint.
@@ -10372,10 +10372,11 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 			}
 			require.NoError(t, err)
 			var actual string
-			require.NoError(t, store.List(ctx, "/progress/", "", func(f string) error {
+			err = store.List(ctx, "/progress/", "", func(f string) error {
 				actual = f
-				return nil
-			}, 1 /*limit*/))
+				return cloud.ErrListingUnsupported
+			})
+			require.Equal(t, err, cloud.ErrListingUnsupported)
 			require.Equal(t, expectedCheckpoint, actual)
 			for _, checkpoint := range checkpoints {
 				require.NoError(t, store.Delete(ctx, "/progress/"+checkpoint))

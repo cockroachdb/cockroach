@@ -1154,7 +1154,7 @@ func getEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]
 		}
 
 		return nil
-	}, 0 /*limit*/)
+	})
 	if len(files) < 1 {
 		return nil, errors.New("no ENCRYPTION-INFO files found")
 	}
@@ -1255,7 +1255,7 @@ func ListFullBackupsInCollection(
 			backupPaths = append(backupPaths, f)
 		}
 		return nil
-	}, 0 /*limit*/); err != nil {
+	}); err != nil {
 		return nil, err
 	}
 	for i, backupPath := range backupPaths {
@@ -1287,8 +1287,10 @@ func readLatestCheckpointFile(
 		p = strings.TrimPrefix(p, "/")
 		checkpoint = strings.TrimSuffix(p, backupManifestChecksumSuffix)
 		checkpointFound = true
-		return nil
-	}, 1 /*limit*/)
+		// We only want the first checkpoint so return an error that it is
+		// listing.
+		return cloud.ErrListingDone
+	})
 	// If the list failed because the storage used does not support listing,
 	// such as http we can try reading the non timestamped backup checkpoint
 	// directly. This can still fail if it is a mixed cluster and the
@@ -1300,7 +1302,7 @@ func readLatestCheckpointFile(
 		if err == nil {
 			return r, nil
 		}
-	} else if err != nil {
+	} else if err != nil && !errors.Is(err, cloud.ErrListingDone) {
 		return nil, err
 	}
 

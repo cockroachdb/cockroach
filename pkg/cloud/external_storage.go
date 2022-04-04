@@ -78,12 +78,11 @@ type ExternalStorage interface {
 	// List enumerates files within the supplied prefix, calling the passed
 	// function with the name of each file found, relative to the external storage
 	// destination's configured prefix. If the passed function returns a non-nil
-	// error, iteration is stopped it is returned. Iteration is also stopped
-	// if the number of filenames reaches the limit, 0 is no limit.
-	// If delimiter is non-empty names which have the same prefix, prior
-	// to the delimiter, are grouped into a single result which is that
-	// prefix. The order that results are passed to the callback is undefined.
-	List(ctx context.Context, prefix, delimiter string, fn ListingFn, limit int) error
+	// error, iteration is stopped it is returned. If delimiter is non-empty
+	// names which have the same prefix, prior to the delimiter, are grouped
+	// into a single result which is that prefix. The order that results are
+	// passed to the callback is undefined.
+	List(ctx context.Context, prefix, delimiter string, fn ListingFn) error
 
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error
@@ -116,6 +115,9 @@ var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
 // ErrListingUnsupported is a marker for indicating listing is unsupported.
 var ErrListingUnsupported = errors.New("listing is not supported")
+
+// ErrListingDone is a marker for indicating listing is done.
+var ErrListingDone = errors.New("listing is done")
 
 // RedactedParams is a helper for making a set of param names to redact in URIs.
 func RedactedParams(strs ...string) map[string]struct{} {
