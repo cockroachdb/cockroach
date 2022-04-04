@@ -98,20 +98,24 @@ func (d *DiskBackedNumberedRowContainer) Spilled() bool {
 	return d.rc.Spilled()
 }
 
-// testingSpillToDisk is for tests to spill the container(s)
-// to disk.
-func (d *DiskBackedNumberedRowContainer) testingSpillToDisk(ctx context.Context) error {
+// SpillToDisk spills the container(s) to disk. Boolean indicates whether at
+// least one container actually spilled.
+func (d *DiskBackedNumberedRowContainer) SpillToDisk(ctx context.Context) (bool, error) {
+	if d.rc.UsingDisk() && (!d.deDup || d.deduper.(*DiskBackedRowContainer).UsingDisk()) {
+		// All containers are already using disk, so there is nothing to spill.
+		return false, nil
+	}
 	if !d.rc.UsingDisk() {
 		if err := d.rc.SpillToDisk(ctx); err != nil {
-			return err
+			return false, err
 		}
 	}
 	if d.deDup && !d.deduper.(*DiskBackedRowContainer).UsingDisk() {
 		if err := d.deduper.(*DiskBackedRowContainer).SpillToDisk(ctx); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return true, nil
 }
 
 // AddRow tries to add a row. It returns the position of the

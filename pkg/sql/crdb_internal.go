@@ -1404,19 +1404,15 @@ CREATE TABLE crdb_internal.cluster_inflight_traces (
   jaeger_json  STRING NULL,     -- Jaeger JSON representation of the traced remote operation.
   INDEX(trace_id)
 )`,
-	indexes: []virtualIndex{{populate: func(ctx context.Context, constraint tree.Datum, p *planner,
+	indexes: []virtualIndex{{populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner,
 		db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 		var traceID tracingpb.TraceID
-		d := tree.UnwrapDatum(p.EvalContext(), constraint)
-		if d == tree.DNull {
-			return false, nil
-		}
-		switch t := d.(type) {
+		switch t := unwrappedConstraint.(type) {
 		case *tree.DInt:
 			traceID = tracingpb.TraceID(*t)
 		default:
 			return false, errors.AssertionFailedf(
-				"unexpected type %T for trace_id column in virtual table crdb_internal.cluster_inflight_traces", d)
+				"unexpected type %T for trace_id column in virtual table crdb_internal.cluster_inflight_traces", unwrappedConstraint)
 		}
 
 		if !p.ExecCfg().Codec.ForSystemTenant() {
@@ -2442,16 +2438,12 @@ CREATE TABLE crdb_internal.create_type_statements (
 		{
 			populate: func(
 				ctx context.Context,
-				constraint tree.Datum,
+				unwrappedConstraint tree.Datum,
 				p *planner,
 				db catalog.DatabaseDescriptor,
 				addRow func(...tree.Datum) error,
 			) (matched bool, err error) {
-				d := tree.UnwrapDatum(p.EvalContext(), constraint)
-				if d == tree.DNull {
-					return false, nil
-				}
-				id := descpb.ID(tree.MustBeDInt(d))
+				id := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
 				scName, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id)
 				if err != nil || typDesc == nil {
 					return false, err
