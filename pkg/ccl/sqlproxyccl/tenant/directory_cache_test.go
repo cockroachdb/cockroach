@@ -92,6 +92,7 @@ func TestWatchPods(t *testing.T) {
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
 	require.Equal(t, tenant.RUNNING, pod.State)
+	require.False(t, pod.StateTimestamp.IsZero())
 
 	// Trigger drain of pod.
 	tds.Drain()
@@ -99,13 +100,7 @@ func TestWatchPods(t *testing.T) {
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
 	require.Equal(t, tenant.DRAINING, pod.State)
-
-	// Ensure that all addresses have been cleared from the directory, since
-	// it should only return RUNNING addresses.
-	require.Eventually(t, func() bool {
-		tenantPods, _ := dir.TryLookupTenantPods(ctx, tenantID)
-		return len(tenantPods) == 0
-	}, 10*time.Second, 100*time.Millisecond)
+	require.False(t, pod.StateTimestamp.IsZero())
 
 	// Now shut the tenant directory down.
 	processes := tds.Get(tenantID)
@@ -121,13 +116,14 @@ func TestWatchPods(t *testing.T) {
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
 	require.Equal(t, tenant.DELETING, pod.State)
+	require.False(t, pod.StateTimestamp.IsZero())
 
-	// We know that the directory should have been emptied earlier since we
-	// don't add DRAINING pods to the directory, so putting the pod into the
-	// DELETING state should not make a difference.
-	pods, err = dir.TryLookupTenantPods(ctx, tenantID)
-	require.NoError(t, err)
-	require.Empty(t, pods)
+	// Ensure that all addresses have been cleared from the directory, since
+	// it should only return RUNNING or DRAINING addresses.
+	require.Eventually(t, func() bool {
+		tenantPods, _ := dir.TryLookupTenantPods(ctx, tenantID)
+		return len(tenantPods) == 0
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// Resume tenant again by a direct call to the directory server
 	_, err = tds.EnsurePod(ctx, &tenant.EnsurePodRequest{tenantID.ToUint64()})
@@ -148,6 +144,7 @@ func TestWatchPods(t *testing.T) {
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
 	require.Equal(t, tenant.RUNNING, pod.State)
+	require.False(t, pod.StateTimestamp.IsZero())
 
 	// Verify that LookupTenantPods returns the pod's IP address.
 	pods, err = dir.LookupTenantPods(ctx, tenantID, "")
@@ -177,6 +174,7 @@ func TestWatchPods(t *testing.T) {
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
 	require.Equal(t, tenant.DELETING, pod.State)
+	require.False(t, pod.StateTimestamp.IsZero())
 
 	// Verify that a new call to LookupTenantPods will resume again the tenant.
 	pods, err = dir.LookupTenantPods(ctx, tenantID, "")
@@ -189,6 +187,7 @@ func TestWatchPods(t *testing.T) {
 	require.Equal(t, tenantID.ToUint64(), pod.TenantID)
 	require.Equal(t, addr, pod.Addr)
 	require.Equal(t, tenant.RUNNING, pod.State)
+	require.False(t, pod.StateTimestamp.IsZero())
 }
 
 func TestCancelLookups(t *testing.T) {
@@ -352,6 +351,10 @@ func TestRefreshThrottling(t *testing.T) {
 	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
 	pods, err = dir.TryLookupTenantPods(ctx, tenantID)
 	require.NoError(t, err)
+	require.NotEmpty(t, pods)
+
+	// Reset StateTimestamp for deterministic comparison.
+	pods[0].StateTimestamp = time.Time{}
 	require.Equal(t, []*tenant.Pod{{
 		TenantID: tenantID.ToUint64(),
 		Addr:     addr,
@@ -364,6 +367,10 @@ func TestRefreshThrottling(t *testing.T) {
 	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
 	pods, err = dir.TryLookupTenantPods(ctx, tenantID)
 	require.NoError(t, err)
+	require.NotEmpty(t, pods)
+
+	// Reset StateTimestamp for deterministic comparison.
+	pods[0].StateTimestamp = time.Time{}
 	require.Equal(t, []*tenant.Pod{{
 		TenantID: tenantID.ToUint64(),
 		Addr:     addr,
