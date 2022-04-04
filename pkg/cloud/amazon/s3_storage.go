@@ -498,9 +498,7 @@ func (s *s3Storage) ReadFileAt(
 		cloud.IsResumableHTTPError, s3ErrDelay), size, nil
 }
 
-func (s *s3Storage) List(
-	ctx context.Context, prefix, delim string, fn cloud.ListingFn, limit int,
-) error {
+func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.List")
 	defer sp.Finish()
 
@@ -513,7 +511,6 @@ func (s *s3Storage) List(
 	}
 
 	var fnErr error
-	count := 0
 	pageFn := func(page *s3.ListObjectsOutput, lastPage bool) bool {
 		for _, x := range page.CommonPrefixes {
 			if fnErr = fn(strings.TrimPrefix(*x.Prefix, dest)); fnErr != nil {
@@ -522,9 +519,6 @@ func (s *s3Storage) List(
 		}
 		for _, fileObject := range page.Contents {
 			if fnErr = fn(strings.TrimPrefix(*fileObject.Key, dest)); fnErr != nil {
-				return false
-			}
-			if count++; limit != 0 && count >= limit {
 				return false
 			}
 		}

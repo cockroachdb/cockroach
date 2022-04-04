@@ -659,7 +659,7 @@ func listDir(
 	if log.V(1) {
 		log.Infof(ctx, "Listing %s", dir)
 	}
-	return es.List(ctx, dir, "/", lsFn, 0 /*limit*/)
+	return es.List(ctx, dir, "/", lsFn)
 }
 
 // ListFixtures returns the object paths to all fixtures stored in a FixtureConfig.

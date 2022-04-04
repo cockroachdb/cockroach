@@ -83,7 +83,7 @@ func FindPriorBackups(
 			prev = append(prev, p)
 		}
 		return nil
-	}, 0 /*limit*/); err != nil {
+	}); err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
 	sort.Strings(prev)
