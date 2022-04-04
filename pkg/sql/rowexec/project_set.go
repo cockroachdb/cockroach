@@ -120,6 +120,17 @@ func newProjectSetProcessor(
 	return ps, nil
 }
 
+// MustBeStreaming implements the execinfra.Processor interface.
+func (ps *projectSetProcessor) MustBeStreaming() bool {
+	// If we have a single streaming generator, then the processor is such too.
+	for _, gen := range ps.gens {
+		if tree.IsStreamingValueGenerator(gen) {
+			return true
+		}
+	}
+	return false
+}
+
 // Start is part of the RowSource interface.
 func (ps *projectSetProcessor) Start(ctx context.Context) {
 	ctx = ps.StartInternal(ctx, projectSetProcName)
