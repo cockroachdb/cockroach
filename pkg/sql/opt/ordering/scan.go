@@ -49,6 +49,10 @@ func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
 func ScanPrivateCanProvide(
 	md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,
 ) (ok bool, reverse bool) {
+	table := md.Table(s.Table)
+	if table.IsVirtualTable() && !required.Any() {
+		return false, false
+	}
 	// Scan naturally orders according to scanned index's key columns. A scan can
 	// be executed either as a forward or as a reverse scan (unless it has a row
 	// limit, in which case the direction is fixed).
@@ -79,7 +83,7 @@ func ScanPrivateCanProvide(
 			direction = rev
 		}
 	}
-	index := md.Table(s.Table).Index(s.Index)
+	index := table.Index(s.Index)
 	for left, right := 0, 0; right < len(required.Columns); {
 		if left >= index.KeyColumnCount() {
 			return false, false
