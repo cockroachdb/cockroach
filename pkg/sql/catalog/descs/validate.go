@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 )
 
 // Validate returns any descriptor validation errors after validating using the
@@ -79,62 +78,30 @@ var _ validate.ValidationDereferencer = &collectionBackedDereferencer{}
 // interface by leveraging the collection's uncommitted descriptors.
 func (c collectionBackedDereferencer) DereferenceDescriptors(
 	ctx context.Context, version clusterversion.ClusterVersion, reqs []descpb.ID,
-) (ret []catalog.Descriptor, _ error) {
-	ret = make([]catalog.Descriptor, len(reqs))
-	fallbackReqs := make([]descpb.ID, 0, len(reqs))
-	fallbackRetIndexes := make([]int, 0, len(reqs))
-	for i, id := range reqs {
-		desc, err := c.fastDescLookup(ctx, id)
-		if err != nil {
-			return nil, err
-		}
+) (ret []catalog.Descriptor, err error) {
+	ret, err = catkv.GetCrossReferencedDescriptorsForValidation(
+		ctx,
+		version,
+		c.tc.codec(),
+		c.txn,
+		reqs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	for i, desc := range ret {
 		if desc == nil {
-			fallbackReqs = append(fallbackReqs, id)
-			fallbackRetIndexes = append(fallbackRetIndexes, i)
-		} else {
+			continue
+		}
+		if uc, _ := c.tc.uncommitted.getImmutableByID(desc.GetID()); uc == nil {
+			desc, err = c.tc.uncommitted.add(desc.NewBuilder().BuildExistingMutable(), notValidatedYet)
+			if err != nil {
+				return nil, err
+			}
 			ret[i] = desc
 		}
 	}
-	if len(fallbackReqs) > 0 {
-		fallbackRet, err := catkv.GetCrossReferencedDescriptorsForValidation(
-			ctx,
-			version,
-			c.tc.codec(),
-			c.txn,
-			fallbackReqs,
-		)
-		if err != nil {
-			return nil, err
-		}
-		for j, desc := range fallbackRet {
-			if desc == nil {
-				continue
-			}
-			if uc, _ := c.tc.uncommitted.getImmutableByID(desc.GetID()); uc == nil {
-				desc, err = c.tc.uncommitted.add(desc.NewBuilder().BuildExistingMutable(), notValidatedYet)
-				if err != nil {
-					return nil, err
-				}
-			}
-			ret[fallbackRetIndexes[j]] = desc
-		}
-	}
 	return ret, nil
-}
-
-func (c collectionBackedDereferencer) fastDescLookup(
-	ctx context.Context, id descpb.ID,
-) (catalog.Descriptor, error) {
-	if uc, status := c.tc.uncommitted.getImmutableByID(id); uc != nil {
-		if status == checkedOutAtLeastOnce {
-			return nil, nil
-		}
-		return uc, nil
-	}
-	if ld := c.tc.leased.cache.GetByID(id); ld != nil {
-		return ld.(lease.LeasedDescriptor).Underlying(), nil
-	}
-	return nil, nil
 }
 
 // DereferenceDescriptorIDs implements the validate.ValidationDereferencer
