@@ -68,6 +68,13 @@ func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 	return false
 }
 
+// IsVirtualTable returns true if the table being scanned is a virtual table.
+func (c *CustomFuncs) IsVirtualTable(scanPrivate *memo.ScanPrivate) bool {
+	md := c.e.mem.Metadata()
+	tab := md.Table(scanPrivate.Table)
+	return tab.IsVirtualTable()
+}
+
 // RemapScanColsInFilter returns a new FiltersExpr where columns in src's table
 // are replaced with columns of the same ordinal in dst's table. src and dst
 // must scan the same base table.
