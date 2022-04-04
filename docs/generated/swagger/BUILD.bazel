@@ -16,6 +16,7 @@ genrule(
         "@com_github_go_swagger_go_swagger//cmd/swagger",
         "@go_sdk//:bin/go",
     ],
+    visibility = ["//visibility:public"],
 )
 
 go_path(
