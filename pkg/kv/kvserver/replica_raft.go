@@ -1594,6 +1594,24 @@ func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
 	return minSnapIndex
 }
 
+// hasOutstandingLearnerSnapshotInFlight returns true if there is a snapshot in
+// progress from this replica to a learner replica for this range.
+func (r *Replica) hasOutstandingLearnerSnapshotInFlight() bool {
+	learners := r.Desc().Replicas().LearnerDescriptors()
+	for _, repl := range learners {
+		if yes := r.hasOutstandingSnapshotInFlightToStore(repl.StoreID); yes {
+			return yes
+		}
+	}
+	return false
+}
+
+// hasOutstandingSnapshotInFlightToStore returns true if there is a snapshot in
+// flight from this replica to the store with the given ID.
+func (r *Replica) hasOutstandingSnapshotInFlightToStore(storeID roachpb.StoreID) bool {
+	return r.getAndGCSnapshotLogTruncationConstraints(timeutil.Now(), storeID) > 0
+}
+
 func isRaftLeader(raftStatus *raft.Status) bool {
 	return raftStatus != nil && raftStatus.SoftState.RaftState == raft.StateLeader
 }
