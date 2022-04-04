@@ -25,8 +25,8 @@ func TestConnTracker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tracker := NewConnTracker()
-	makeConn := func(tenantID int, podAddr string) (roachpb.TenantID, *testConnectionHandle) {
-		return roachpb.MakeTenantID(uint64(tenantID)), newTestConnectionHandle(podAddr)
+	makeConn := func(tenantID int, podAddr string) (roachpb.TenantID, *testTrackerConnHandle) {
+		return roachpb.MakeTenantID(uint64(tenantID)), newTestTrackerConnHandle(podAddr)
 	}
 
 	tenantID, handle := makeConn(20, "127.0.0.10:8090")
@@ -69,7 +69,7 @@ func TestTenantEntry(t *testing.T) {
 
 	entry := newTenantEntry()
 
-	h1 := newTestConnectionHandle("10.0.0.1:12345")
+	h1 := newTestTrackerConnHandle("10.0.0.1:12345")
 	require.True(t, entry.addHandle(h1))
 	require.False(t, entry.addHandle(h1))
 
@@ -83,25 +83,25 @@ func TestTenantEntry(t *testing.T) {
 	require.Len(t, conns, 1)
 }
 
-// testConnectionHandle is a test connection handle that only implements a
-// small subset of methods.
-type testConnectionHandle struct {
+// testTrackerConnHandle is a test connection handle that only implements a
+// small subset of methods used for testing the connection tracker.
+type testTrackerConnHandle struct {
 	ConnectionHandle
 	remoteAddr string
 }
 
-var _ ConnectionHandle = &testConnectionHandle{}
+var _ ConnectionHandle = &testTrackerConnHandle{}
 
-func newTestConnectionHandle(remoteAddr string) *testConnectionHandle {
-	return &testConnectionHandle{remoteAddr: remoteAddr}
+func newTestTrackerConnHandle(remoteAddr string) *testTrackerConnHandle {
+	return &testTrackerConnHandle{remoteAddr: remoteAddr}
 }
 
 // Context implements the ConnectionHandle interface.
-func (h *testConnectionHandle) Context() context.Context {
+func (h *testTrackerConnHandle) Context() context.Context {
 	return context.Background()
 }
 
 // ServerRemoteAddr implements the ConnectionHandle interface.
-func (h *testConnectionHandle) ServerRemoteAddr() string {
+func (h *testTrackerConnHandle) ServerRemoteAddr() string {
 	return h.remoteAddr
 }

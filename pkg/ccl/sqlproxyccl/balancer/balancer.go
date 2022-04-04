@@ -9,7 +9,10 @@
 package balancer
 
 import (
+	"container/list"
 	"math/rand"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -61,4 +64,102 @@ func (b *Balancer) randFloat32() float32 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.mu.rng.Float32()
+}
+
+// rebalanceRequest corresponds to a rebalance request. For now, this only
+// indicates where the connection should be transferred to through dst.
+type rebalanceRequest struct {
+	createdAt time.Time
+	conn      ConnectionHandle
+	dst       string
+}
+
+// balancerQueue represents the balancer's internal queue which is used for
+// rebalancing requests.
+type balancerQueue struct {
+	mu       syncutil.Mutex
+	cond     sync.Cond
+	queue    *list.List
+	elements map[ConnectionHandle]*list.Element
+	closed   bool
+}
+
+// newBalancerQueue returns a new instance of balancerQueue.
+func newBalancerQueue() *balancerQueue {
+	q := &balancerQueue{
+		queue:    list.New(),
+		elements: make(map[ConnectionHandle]*list.Element),
+	}
+	q.cond.L = &q.mu
+	return q
+}
+
+// isClosed returns true if the balancer queue is closed, or false otherwise.
+func (q *balancerQueue) isClosed() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.closed
+}
+
+// close closes the balancer queue, and wakes up all goroutines blocked on
+// dequeue.
+func (q *balancerQueue) close() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.closed = true
+	q.cond.Broadcast()
+}
+
+// enqueue puts the rebalance request into the queue. If a request for the
+// connection already exists, the newer of the two will be used. If the queue
+// has already been closed, this is a no-op.
+//
+// NOTE: req cannot be nil as that is used as a sentinel return value for
+// dequeue to denote that the queue has been closed.
+func (q *balancerQueue) enqueue(req *rebalanceRequest) {
+	// req cannot be nil. See note above.
+	if req == nil {
+		return
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if q.closed {
+		return
+	}
+	e, ok := q.elements[req.conn]
+	if ok {
+		// Use the newer request of the two.
+		if e.Value.(*rebalanceRequest).createdAt.Before(req.createdAt) {
+			e.Value = req
+		}
+	} else {
+		e = q.queue.PushBack(req)
+		q.elements[req.conn] = e
+	}
+	q.cond.Broadcast()
+}
+
+// dequeue removes a request at the front of the queue, and returns that. If the
+// queue has no items, dequeue will block until the queue is non-empty. If the
+// queue has already been closed, this returns nil.
+func (q *balancerQueue) dequeue() *rebalanceRequest {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	var e *list.Element
+	for {
+		e = q.queue.Front()
+		if e != nil {
+			break
+		}
+		if q.closed {
+			return nil
+		}
+		q.cond.Wait()
+	}
+	req := q.queue.Remove(e).(*rebalanceRequest)
+	delete(q.elements, req.conn)
+	return req
 }
