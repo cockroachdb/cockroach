@@ -114,6 +114,18 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
 
+	bazelRcLine, err := d.setUpCache(ctx)
+	if err != nil {
+		return err
+	}
+	msg, err := d.checkPresenceInBazelRc(bazelRcLine)
+	if err != nil {
+		return err
+	}
+	if msg != "" {
+		return fmt.Errorf(msg)
+	}
+
 	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets)
 	if err != nil {
 		return err
