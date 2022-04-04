@@ -21,9 +21,9 @@
       border-color: $colors--primary-blue-3;
 
       &:after {
-        background-color: white;
-        top: 4px;
-        left: 4px;
+        background-color: $colors--primary-blue-3;
+        top: 3px;
+        left: 3px;
         margin-left: 0;
         margin-top: 0;
       }
