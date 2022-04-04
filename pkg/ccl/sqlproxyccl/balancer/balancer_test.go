@@ -9,20 +9,30 @@
 package balancer
 
 import (
+	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func TestBalancer(t *testing.T) {
+func TestBalancer_SelectTenantPod(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	b := NewBalancer()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	b, err := NewBalancer(ctx, stopper)
+	require.NoError(t, err)
 
 	t.Run("no pods", func(t *testing.T) {
 		pod, err := b.SelectTenantPod([]*tenant.Pod{})
@@ -34,6 +44,166 @@ func TestBalancer(t *testing.T) {
 		pod, err := b.SelectTenantPod([]*tenant.Pod{{Addr: "1"}, {Addr: "2"}})
 		require.NoError(t, err)
 		require.Contains(t, []string{"1", "2"}, pod.Addr)
+	})
+}
+
+func TestBalancer_processQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	b, err := NewBalancer(ctx, stopper, MaxConcurrentRebalances(2))
+	require.NoError(t, err)
+
+	// Use a custom time source for testing.
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := timeutil.NewManualTime(t0)
+
+	eventCh := make(chan struct{})
+	b.testingKnobs.afterProcessQueueItem = func() {
+		eventCh <- struct{}{}
+	}
+
+	t.Run("retries_up_to_maxTransferAttempts", func(t *testing.T) {
+		count := 0
+		conn := &testBalancerConnHandle{
+			onTransferConnection: func() error {
+				count++
+				return errors.New("cannot transfer")
+			},
+		}
+		req := &rebalanceRequest{
+			createdAt: timeSource.Now(),
+			conn:      conn,
+			dst:       "foo",
+		}
+		b.queue.enqueue(req)
+
+		// Wait until the item has been processed.
+		<-eventCh
+
+		// Ensure that we only retried up to 3 times.
+		require.Equal(t, 3, count)
+	})
+
+	t.Run("conn_was_transferred_by_other", func(t *testing.T) {
+		count := 0
+		conn := &testBalancerConnHandle{}
+		conn.onTransferConnection = func() error {
+			count++
+			// Simulate that connection was transferred by someone else.
+			conn.remoteAddr = "foo"
+			return errors.New("cannot transfer")
+		}
+		req := &rebalanceRequest{
+			createdAt: timeSource.Now(),
+			conn:      conn,
+			dst:       "foo",
+		}
+		b.queue.enqueue(req)
+
+		// Wait until the item has been processed.
+		<-eventCh
+
+		// We should only retry once.
+		require.Equal(t, 1, count)
+	})
+
+	t.Run("conn_was_transferred", func(t *testing.T) {
+		count := 0
+		conn := &testBalancerConnHandle{}
+		conn.onTransferConnection = func() error {
+			count++
+			conn.remoteAddr = "foo"
+			return nil
+		}
+		req := &rebalanceRequest{
+			createdAt: timeSource.Now(),
+			conn:      conn,
+			dst:       "foo",
+		}
+		b.queue.enqueue(req)
+
+		// Wait until the item has been processed.
+		<-eventCh
+
+		// We should only retry once.
+		require.Equal(t, 1, count)
+	})
+
+	t.Run("conn_was_closed", func(t *testing.T) {
+		count := 0
+		conn := &testBalancerConnHandle{}
+		conn.onTransferConnection = func() error {
+			count++
+			return context.Canceled
+		}
+		req := &rebalanceRequest{
+			createdAt: timeSource.Now(),
+			conn:      conn,
+			dst:       "foo",
+		}
+		b.queue.enqueue(req)
+
+		// Wait until the item has been processed.
+		<-eventCh
+
+		// We should only retry once.
+		require.Equal(t, 1, count)
+	})
+
+	t.Run("limit_concurrent_rebalances", func(t *testing.T) {
+		var wg sync.WaitGroup
+		var mu struct {
+			syncutil.Mutex
+			count int
+		}
+		b.testingKnobs.beforeProcessQueueItem = func() {
+			mu.Lock()
+			defer mu.Unlock()
+
+			// Count should not exceed the maximum number of concurrent
+			// rebalances defined.
+			mu.count++
+			require.True(t, mu.count <= 2)
+		}
+		b.testingKnobs.afterProcessQueueItem = func() {
+			mu.Lock()
+			defer mu.Unlock()
+
+			mu.count--
+			wg.Done()
+		}
+
+		const reqCount = 100
+		wg.Add(reqCount)
+		waitCh := make(chan struct{})
+		for i := 0; i < reqCount; i++ {
+			conn := &testBalancerConnHandle{
+				onTransferConnection: func() error {
+					// Wait until all requests have been enqueued.
+					<-waitCh
+					return nil
+				},
+			}
+			req := &rebalanceRequest{
+				createdAt: timeSource.Now(),
+				conn:      conn,
+				dst:       "foo",
+			}
+			b.queue.enqueue(req)
+		}
+
+		// Close channel to start processing requests.
+		close(waitCh)
+
+		// Wait until all transfers have completed.
+		wg.Wait()
+
+		// We should only retry once.
+		require.Equal(t, 0, mu.count)
 	})
 }
 
@@ -148,9 +318,21 @@ func TestBalancerQueueBlocking(t *testing.T) {
 }
 
 // testBalancerConnHandle is a test connection handle that is used for testing
-// the balancer. This currently does not require any methods to be implemented.
+// the balancer.
 type testBalancerConnHandle struct {
 	ConnectionHandle
+	remoteAddr           string
+	onTransferConnection func() error
 }
 
 var _ ConnectionHandle = &testBalancerConnHandle{}
+
+// TransferConnection implements the ConnectionHandle interface.
+func (h *testBalancerConnHandle) TransferConnection() error {
+	return h.onTransferConnection()
+}
+
+// ServerRemoteAddr implements the ConnectionHandle interface.
+func (h *testBalancerConnHandle) ServerRemoteAddr() string {
+	return h.remoteAddr
+}
