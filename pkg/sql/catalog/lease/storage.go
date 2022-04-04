@@ -122,11 +122,13 @@ func (s storage) acquire(
 		}
 
 		expiration = txn.ReadTimestamp().Add(int64(s.jitteredLeaseDuration()), 0)
-		if expiration.LessEq(minExpiration) {
+		if !storedLeaseExpiration(expiration).
+			After(storedLeaseExpiration(minExpiration).Time) {
 			// In the rare circumstances where expiration <= minExpiration
 			// use an expiration based on the minExpiration to guarantee
-			// a monotonically increasing expiration.
-			expiration = minExpiration.Add(int64(time.Millisecond), 0)
+			// a monotonically increasing expiration. Use microseconds to deal
+			// with the fact that we store leases with a microsecond granularity.
+			expiration = minExpiration.Add(int64(time.Microsecond), 0)
 		}
 
 		version := s.settings.Version.ActiveVersion(ctx)
