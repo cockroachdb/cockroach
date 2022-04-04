@@ -27,8 +27,9 @@ type dev struct {
 	exec *exec.Exec
 
 	knobs struct { // testing knobs
-		skipDoctorCheck bool
-		devBinOverride  string
+		skipDoctorCheck           bool
+		skipCacheCheckDuringBuild bool
+		devBinOverride            string
 	}
 }
 
