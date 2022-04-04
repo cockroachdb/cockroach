@@ -136,6 +136,7 @@ func TestRecorderDriven(t *testing.T) {
 			dev := makeDevCmd()
 			dev.exec, dev.os = devExec, devOS
 			dev.knobs.skipDoctorCheck = true
+			dev.knobs.skipCacheCheckDuringBuild = true
 			dev.knobs.devBinOverride = "dev"
 
 			if !verbose {
