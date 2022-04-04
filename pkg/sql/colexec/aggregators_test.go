@@ -1172,25 +1172,17 @@ func BenchmarkAggregator(b *testing.B) {
 		numRows = []int{32, 32 * coldata.BatchSize()}
 		groupSizes = []int{1, coldata.BatchSize()}
 	}
-	for _, aggFn := range []execinfrapb.AggregatorSpec_Func{
-		// We choose any_not_null aggregate function because it is the simplest
-		// possible and, thus, its Compute function call will have the least
-		// impact when benchmarking the aggregator logic.
-		execinfrapb.AnyNotNull,
-		// min aggregate function has been used before transitioning to
-		// any_not_null in 22.1 cycle. It is kept so that we could use it for
-		// comparison of 22.1 against 21.2.
-		// TODO(yuzefovich): use only any_not_null in 22.2 (#75106).
-		execinfrapb.Min,
-	} {
-		for _, agg := range aggTypes {
-			for _, numInputRows := range numRows {
-				for _, groupSize := range groupSizes {
-					benchmarkAggregateFunction(
-						b, agg, aggFn, []*types.T{types.Int}, 1, /* numGroupCol */
-						groupSize, 0 /* distinctProb */, numInputRows,
-						0 /* chunkSize */, 0 /* limit */)
-				}
+	// We choose any_not_null aggregate function because it is the simplest
+	// possible and, thus, its Compute function call will have the least impact
+	// when benchmarking the aggregator logic.
+	aggFn := execinfrapb.AnyNotNull
+	for _, agg := range aggTypes {
+		for _, numInputRows := range numRows {
+			for _, groupSize := range groupSizes {
+				benchmarkAggregateFunction(
+					b, agg, aggFn, []*types.T{types.Int}, 1, /* numGroupCol */
+					groupSize, 0 /* distinctProb */, numInputRows,
+					0 /* chunkSize */, 0 /* limit */)
 			}
 		}
 	}

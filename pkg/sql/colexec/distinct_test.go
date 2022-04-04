@@ -637,11 +637,8 @@ func BenchmarkDistinct(b *testing.B) {
 		},
 	}
 	unorderedShuffled := "UnorderedShuffled"
-	// TODO(yuzefovich): remove Unordered in 22.2 without renaming
-	// unorderedShuffled (#75106).
-	distinctNames := []string{"Unordered", "PartiallyOrdered", "Ordered", unorderedShuffled}
-	distinctConstructors = append(distinctConstructors, distinctConstructors[0])
-	orderedColsFraction := []float64{0, 0.5, 1.0, 0}
+	distinctNames := []string{unorderedShuffled, "PartiallyOrdered", "Ordered"}
+	orderedColsFraction := []float64{0, 0.5, 1.0}
 	for distinctIdx, distinctConstructor := range distinctConstructors {
 		runDistinctBenchmarks(
 			ctx,
