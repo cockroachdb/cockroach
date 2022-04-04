@@ -153,7 +153,7 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 
 		sinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
 	} else if args.whichSink == pubsubSink {
-		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest"
+		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
 	} else {
 		t.Status("installing kafka")
 		kafka.install(ctx)
