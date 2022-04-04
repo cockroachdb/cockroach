@@ -236,8 +236,12 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	if opts.Prefix {
 		iter = &p.prefixIter
 	}
+	handle := pebble.Reader(p.batch)
+	if !p.batch.Indexed() {
+		handle = p.db
+	}
 	if iter.inuse {
-		panic("iterator already in use")
+		return newPebbleIterator(handle, p.iter, opts, StandardDurability)
 	}
 	// Ensures no timestamp hints etc.
 	checkOptionsForIterReuse(opts)
@@ -245,11 +249,7 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	if iter.iter != nil {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
-		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, p.iterUnused, opts, StandardDurability)
-		} else {
-			iter.init(p.db, p.iter, p.iterUnused, opts, StandardDurability)
-		}
+		iter.init(handle, p.iter, p.iterUnused, opts, StandardDurability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -279,8 +279,12 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if opts.Prefix {
 		iter = &p.prefixEngineIter
 	}
+	handle := pebble.Reader(p.batch)
+	if !p.batch.Indexed() {
+		handle = p.db
+	}
 	if iter.inuse {
-		panic("iterator already in use")
+		return newPebbleIterator(handle, p.iter, opts, StandardDurability)
 	}
 	// Ensures no timestamp hints etc.
 	checkOptionsForIterReuse(opts)
@@ -288,11 +292,7 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.iter != nil {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
-		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, p.iterUnused, opts, StandardDurability)
-		} else {
-			iter.init(p.db, p.iter, p.iterUnused, opts, StandardDurability)
-		}
+		iter.init(handle, p.iter, p.iterUnused, opts, StandardDurability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter

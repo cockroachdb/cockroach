@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1250,4 +1251,90 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	roGuaranteed2 := eng.NewReadOnly(GuaranteedDurability)
 	defer roGuaranteed2.Close()
 	require.Equal(t, v.Value.RawBytes, checkGetAndIter(roGuaranteed2))
+}
+
+// TestPebbleReaderMultipleIterators tests that all Pebble readers support
+// multiple concurrent iterators of the same type.
+func TestPebbleReaderMultipleIterators(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	a1 := MVCCKey{Key: roachpb.Key("a"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	b1 := MVCCKey{Key: roachpb.Key("b"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	c1 := MVCCKey{Key: roachpb.Key("c"), Timestamp: hlc.Timestamp{WallTime: 1}}
+
+	v1 := MVCCValue{Value: roachpb.MakeValueFromString("1")}
+	v2 := MVCCValue{Value: roachpb.MakeValueFromString("2")}
+	v3 := MVCCValue{Value: roachpb.MakeValueFromString("3")}
+	vx := MVCCValue{Value: roachpb.MakeValueFromString("x")}
+
+	decodeValue := func(encoded []byte) MVCCValue {
+		value, err := DecodeMVCCValue(encoded)
+		require.NoError(t, err)
+		return value
+	}
+
+	require.NoError(t, eng.PutMVCC(a1, v1))
+	require.NoError(t, eng.PutMVCC(b1, v2))
+	require.NoError(t, eng.PutMVCC(c1, v3))
+
+	readOnly := eng.NewReadOnly(StandardDurability)
+	defer readOnly.Close()
+	require.NoError(t, readOnly.PinEngineStateForIterators())
+
+	snapshot := eng.NewSnapshot()
+	defer snapshot.Close()
+	require.NoError(t, snapshot.PinEngineStateForIterators())
+
+	batch := eng.NewBatch()
+	defer batch.Close()
+	require.NoError(t, batch.PinEngineStateForIterators())
+
+	// These writes should not be visible to any of the pinned iterators.
+	require.NoError(t, eng.PutMVCC(a1, vx))
+	require.NoError(t, eng.PutMVCC(b1, vx))
+	require.NoError(t, eng.PutMVCC(c1, vx))
+
+	testcases := map[string]Reader{
+		"Engine":   eng,
+		"ReadOnly": readOnly,
+		"Snapshot": snapshot,
+		"Batch":    batch,
+	}
+	for name, r := range testcases {
+		t.Run(name, func(t *testing.T) {
+			// Make sure we can create two iterators of the same type.
+			i1 := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{LowerBound: a1.Key, UpperBound: keys.MaxKey})
+			i2 := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{LowerBound: b1.Key, UpperBound: keys.MaxKey})
+
+			// Make sure the iterators are independent.
+			i1.SeekGE(a1)
+			i2.SeekGE(a1)
+			require.Equal(t, a1, i1.UnsafeKey())
+			require.Equal(t, b1, i2.UnsafeKey()) // b1 because of LowerBound
+
+			// Check iterator consistency.
+			if r.ConsistentIterators() {
+				require.Equal(t, v1, decodeValue(i1.UnsafeValue()))
+				require.Equal(t, v2, decodeValue(i2.UnsafeValue()))
+			} else {
+				require.Equal(t, vx, decodeValue(i1.UnsafeValue()))
+				require.Equal(t, vx, decodeValue(i2.UnsafeValue()))
+			}
+
+			// Closing one iterator shouldn't affect the other.
+			i1.Close()
+			i2.Next()
+			require.Equal(t, c1, i2.UnsafeKey())
+			i2.Close()
+
+			// Quick check for engine iterators too.
+			e1 := r.NewEngineIterator(IterOptions{UpperBound: keys.MaxKey})
+			defer e1.Close()
+			e2 := r.NewEngineIterator(IterOptions{UpperBound: keys.MaxKey})
+			defer e2.Close()
+		})
+	}
 }
