@@ -560,13 +560,6 @@ func (rq *replicateQueue) processOneChange(
 	action, _ := rq.allocator.ComputeAction(ctx, conf, desc)
 	log.VEventf(ctx, 1, "next replica action: %s", action)
 
-	// For simplicity, the first thing the allocator does is remove learners, so
-	// it can do all of its reasoning about only voters. We do the same here so
-	// the executions of the allocator's decisions can be in terms of voters.
-	if action == AllocatorRemoveLearner {
-		return rq.removeLearner(ctx, repl, dryRun)
-	}
-
 	switch action {
 	case AllocatorNoop, AllocatorRangeUnavailable:
 		// We're either missing liveness information or the range is known to have
@@ -668,7 +661,11 @@ func (rq *replicateQueue) processOneChange(
 		return rq.removeDead(ctx, repl, deadNonVoterReplicas, nonVoterTarget, dryRun)
 
 	case AllocatorRemoveLearner:
-		return rq.removeLearner(ctx, repl, dryRun)
+		_, err := repl.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, repl.Desc())
+		if err != nil {
+			return false, err
+		}
+		return true, nil
 	case AllocatorConsiderRebalance:
 		return rq.considerRebalance(
 			ctx,
@@ -1244,43 +1241,6 @@ func (rq *replicateQueue) removeDead(
 		desc,
 		kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonStoreDead,
-		"",
-		dryRun,
-	); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func (rq *replicateQueue) removeLearner(
-	ctx context.Context, repl *Replica, dryRun bool,
-) (requeue bool, _ error) {
-	desc := repl.Desc()
-	learnerReplicas := desc.Replicas().LearnerDescriptors()
-	if len(learnerReplicas) == 0 {
-		log.VEventf(ctx, 1, "range of replica %s was identified as having learner replicas, "+
-			"but no learner replicas were found", repl)
-		return true, nil
-	}
-	learnerReplica := learnerReplicas[0]
-	if !dryRun {
-		rq.metrics.RemoveLearnerReplicaCount.Inc(1)
-	}
-	log.VEventf(ctx, 1, "removing learner replica %+v from store", learnerReplica)
-	target := roachpb.ReplicationTarget{
-		NodeID:  learnerReplica.NodeID,
-		StoreID: learnerReplica.StoreID,
-	}
-	// NB: we don't check whether to transfer the lease away because we're very unlikely
-	// to be the learner (and if so, we don't have the lease any more, so after the removal
-	// fails the situation will have rectified itself).
-	if err := rq.changeReplicas(
-		ctx,
-		repl,
-		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
-		desc,
-		kvserverpb.SnapshotRequest_UNKNOWN,
-		kvserverpb.ReasonAbandonedLearner,
 		"",
 		dryRun,
 	); err != nil {

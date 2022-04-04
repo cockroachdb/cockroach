@@ -1278,6 +1278,11 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 		})
 }
 
+// ErrCannotRemoveLearnerWhileSnapshotInFlight is returned when we cannot remove
+// a learner replica because it is in the process of receiving its initial
+// snapshot.
+var ErrCannotRemoveLearnerWhileSnapshotInFlight = errors.New("cannot remove learner while snapshot is in flight")
+
 // maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
 // returns, all remaining replicas will be of type VOTER_FULL or NON_VOTER.
@@ -1289,8 +1294,15 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 		return nil, err
 	}
 
+	// If we detect that there are learners in the process of receiving their
+	// initial upreplication snapshot, we don't want to remove them and we bail
+	// out.
+	if r.hasOutstandingLearnerSnapshotInFlight() {
+		return desc, ErrCannotRemoveLearnerWhileSnapshotInFlight
+	}
+
 	// Now the config isn't joint any more, but we may have demoted some voters
-	// into learners. These learners should go as well.
+	// into learners. If so, we need to remove them.
 	learners := desc.Replicas().LearnerDescriptors()
 	if len(learners) == 0 {
 		return desc, nil
