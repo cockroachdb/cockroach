@@ -13,6 +13,7 @@ package typedesc
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -205,7 +206,10 @@ func (v TableImplicitRecordType) GetReferencedDescIDs() (catalog.DescriptorIDSet
 }
 
 // ValidateSelf implements the Descriptor interface.
-func (v TableImplicitRecordType) ValidateSelf(_ catalog.ValidationErrorAccumulator) {}
+func (v TableImplicitRecordType) ValidateSelf(
+	_ catalog.ValidationErrorAccumulator, _ clusterversion.ClusterVersion,
+) {
+}
 
 // ValidateCrossReferences implements the Descriptor interface.
 func (v TableImplicitRecordType) ValidateCrossReferences(

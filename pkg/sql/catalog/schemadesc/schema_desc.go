@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -171,7 +172,9 @@ func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
 }
 
 // ValidateSelf implements the catalog.Descriptor interface.
-func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
+func (desc *immutable) ValidateSelf(
+	vea catalog.ValidationErrorAccumulator, _ clusterversion.ClusterVersion,
+) {
 	// Validate local properties of the descriptor.
 	vea.Report(catalog.ValidateName(desc.GetName(), "descriptor"))
 	if desc.GetID() == descpb.InvalidID {

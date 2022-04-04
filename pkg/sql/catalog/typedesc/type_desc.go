@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -492,7 +493,9 @@ func (e EnumMembers) Less(i, j int) bool {
 func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
 // ValidateSelf performs validation on the TypeDescriptor.
-func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
+func (desc *immutable) ValidateSelf(
+	vea catalog.ValidationErrorAccumulator, _ clusterversion.ClusterVersion,
+) {
 	// Validate local properties of the descriptor.
 	vea.Report(catalog.ValidateName(desc.Name, "type"))
 	if desc.GetID() == descpb.InvalidID {

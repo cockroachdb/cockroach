@@ -13,6 +13,7 @@ package catalog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -199,7 +200,7 @@ type Descriptor interface {
 	GetReferencedDescIDs() (DescriptorIDSet, error)
 
 	// ValidateSelf checks the internal consistency of the descriptor.
-	ValidateSelf(vea ValidationErrorAccumulator)
+	ValidateSelf(vea ValidationErrorAccumulator, version clusterversion.ClusterVersion)
 
 	// ValidateCrossReferences performs cross-reference checks.
 	ValidateCrossReferences(vea ValidationErrorAccumulator, vdg ValidationDescGetter)

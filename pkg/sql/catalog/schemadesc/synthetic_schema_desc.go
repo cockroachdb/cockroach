@@ -13,6 +13,7 @@ package schemadesc
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -94,7 +95,10 @@ func (p synthetic) NewBuilder() catalog.DescriptorBuilder {
 func (p synthetic) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	return catalog.DescriptorIDSet{}, nil
 }
-func (p synthetic) ValidateSelf(_ catalog.ValidationErrorAccumulator) {}
+func (p synthetic) ValidateSelf(
+	_ catalog.ValidationErrorAccumulator, _ clusterversion.ClusterVersion,
+) {
+}
 func (p synthetic) ValidateCrossReferences(
 	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {

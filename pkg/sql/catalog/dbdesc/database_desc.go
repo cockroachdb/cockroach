@@ -15,6 +15,7 @@ package dbdesc
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -253,7 +254,9 @@ func (desc *immutable) GetNonDroppedSchemaName(schemaID descpb.ID) string {
 // ValidateSelf validates that the database descriptor is well formed.
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
-func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
+func (desc *immutable) ValidateSelf(
+	vea catalog.ValidationErrorAccumulator, _ clusterversion.ClusterVersion,
+) {
 	// Validate local properties of the descriptor.
 	vea.Report(catalog.ValidateName(desc.GetName(), "descriptor"))
 	if desc.GetID() == descpb.InvalidID {

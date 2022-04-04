@@ -55,7 +55,7 @@ func Validate(
 		catalog.ValidationLevelSelfOnly,
 		descriptors,
 		func(desc catalog.Descriptor) {
-			desc.ValidateSelf(&vea)
+			desc.ValidateSelf(&vea, version)
 			validateSchemaChangerState(desc, &vea)
 		}) {
 		return vea.errors
