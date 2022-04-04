@@ -37,14 +37,14 @@ const (
 	noCacheFlag = "no-cache"
 )
 
-func (d *dev) checkDoctorStatus(ctx context.Context) error {
-	if d.knobs.skipDoctorCheck {
-		return nil
-	}
-
+// getDoctorStatus returns the current doctor status number. This function only
+// returns an error in exceptional situations -- if the status file does not
+// already exist (as would be the case for a clean checkout), this function
+// simply returns 0, nil.
+func (d *dev) getDoctorStatus(ctx context.Context) (int, error) {
 	dir, err := d.getWorkspace(ctx)
 	if err != nil {
-		return err
+		return -1, err
 	}
 	statusFile := filepath.Join(dir, doctorStatusFile)
 	content, err := ioutil.ReadFile(statusFile)
@@ -52,20 +52,39 @@ func (d *dev) checkDoctorStatus(ctx context.Context) error {
 		if errors.Is(err, os.ErrNotExist) {
 			content = []byte("0")
 		} else {
-			return err
+			return -1, err
 		}
 	}
-	status, err := strconv.Atoi(strings.TrimSpace(string(content)))
+	return strconv.Atoi(strings.TrimSpace(string(content)))
+}
+
+// checkDoctorStatus returns an error iff the current doctor status is not the
+// latest.
+func (d *dev) checkDoctorStatus(ctx context.Context) error {
+	if d.knobs.skipDoctorCheck {
+		return nil
+	}
+
+	status, err := d.getDoctorStatus(ctx)
 	if err != nil {
 		return err
 	}
+
 	if status < doctorStatusVersion {
 		return errors.New("please run `dev doctor` to refresh dev status, then try again")
 	}
 	return nil
 }
 
-func (d *dev) writeDoctorStatus(ctx context.Context, ex *exec.Exec) error {
+func (d *dev) writeDoctorStatus(ctx context.Context) error {
+	prevStatus, err := d.getDoctorStatus(ctx)
+	if err != nil {
+		return err
+	}
+	if prevStatus <= 0 {
+		// In this case recommend the user `bazel clean --expunge`.
+		log.Println("It is recommended to run `bazel clean --expunge` to avoid any spurious failures now that your machine is set up. (You only have to do this once.)")
+	}
 	dir, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
@@ -264,7 +283,7 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 		return errors.New("please address the errors described above and try again")
 	}
 
-	if err := d.writeDoctorStatus(ctx, d.exec); err != nil {
+	if err := d.writeDoctorStatus(ctx); err != nil {
 		return err
 	}
 	log.Println("You are ready to build :)")
