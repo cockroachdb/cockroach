@@ -87,7 +87,7 @@ query TTT
 SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name
 FROM crdb_internal.jobs
 WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
-ORDER BY created DESC
+ORDER BY created DESC, 2 DESC
 LIMIT 3
 ----
 SCHEMA CHANGE GC  GC for temporary index used during index backfill                           root

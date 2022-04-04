@@ -2604,6 +2604,15 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{StorageLayer, "RocksDB", "Migrations"}},
+		Charts: []chartDescription{
+			{
+				Title:   "SSTables Marked for Compaction",
+				Metrics: []string{"storage.marked-for-compaction-files"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Overview"}},
 		Charts: []chartDescription{
 			{
