@@ -37,13 +37,13 @@ ok defaultdb
 # they do not have a password by default.
 connect_unix user=root
 ----
-ERROR: password authentication failed for user root (SQLSTATE 28000)
+ERROR: password authentication failed for user root (SQLSTATE 28P01)
 
 # When no client cert is presented, the server would otherwise require
 # password auth. However, root does not have a password.
 connect user=root password=foo sslmode=verify-ca sslcert=
 ----
-ERROR: password authentication failed for user root (SQLSTATE 28000)
+ERROR: password authentication failed for user root (SQLSTATE 28P01)
 
 subtest end root
 
@@ -58,7 +58,7 @@ ok defaultdb
 # present a cert so auth fails.
 connect_unix user=testuser
 ----
-ERROR: password authentication failed for user testuser (SQLSTATE 28000)
+ERROR: password authentication failed for user testuser (SQLSTATE 28P01)
 
 # Make the user need a password.
 sql
@@ -78,7 +78,7 @@ ok defaultdb
 # If we don't present the client certificate, the password is required.
 connect user=testuser password=invalid sslmode=verify-ca sslcert=
 ----
-ERROR: password authentication failed for user testuser (SQLSTATE 28000)
+ERROR: password authentication failed for user testuser (SQLSTATE 28P01)
 
 connect user=testuser password=pass sslmode=verify-ca sslcert=
 ----
@@ -104,13 +104,13 @@ ok
 # and password auth becomes required.
 connect user=testuser_nocert
 ----
-ERROR: password authentication failed for user testuser_nocert (SQLSTATE 28000)
+ERROR: password authentication failed for user testuser_nocert (SQLSTATE 28P01)
 
 # Even though the user has no password, trying to present the
 # empty password fails. The user simply cannot log in.
 connect user=testuser_nocert password=
 ----
-ERROR: password authentication failed for user testuser_nocert (SQLSTATE 28000)
+ERROR: password authentication failed for user testuser_nocert (SQLSTATE 28P01)
 
 sql
 DROP USER testuser_nocert
