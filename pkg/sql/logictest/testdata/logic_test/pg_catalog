@@ -1,5 +1,10 @@
 # LogicTest: local
 
+# Set the distsql_workmem to the default production value because of a problem
+# with losing 'name' attribute when spilling to disk (#78547).
+statement ok
+SET distsql_workmem = '64MiB'
+
 # Verify pg_catalog database handles mutation statements correctly.
 
 query error database "pg_catalog" does not exist
@@ -4058,7 +4063,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version' AND name != 'session_id'
+  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem')
 ----
 name                                                  setting             category  short_desc  extra_desc  vartype
 alter_primary_region_super_region_override            off                 NULL      NULL        NULL        string
@@ -4086,7 +4091,6 @@ disable_partially_distributed_plans                   off                 NULL  
 disable_plan_gists                                    off                 NULL      NULL        NULL        string
 disallow_full_table_scans                             off                 NULL      NULL        NULL        string
 distsql                                               off                 NULL      NULL        NULL        string
-distsql_workmem                                       64 MiB              NULL      NULL        NULL        string
 enable_experimental_alter_column_type_general         off                 NULL      NULL        NULL        string
 enable_experimental_stream_replication                off                 NULL      NULL        NULL        string
 enable_implicit_select_for_update                     on                  NULL      NULL        NULL        string
@@ -4178,7 +4182,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer' AND name != 'crdb_version' AND name != 'session_id'
+  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem')
 ----
 name                                                  setting             unit  context  enumvals  boot_val            reset_val
 alter_primary_region_super_region_override            off                 NULL  user     NULL      off                 off
@@ -4206,7 +4210,6 @@ disable_partially_distributed_plans                   off                 NULL  
 disable_plan_gists                                    off                 NULL  user     NULL      off                 off
 disallow_full_table_scans                             off                 NULL  user     NULL      off                 off
 distsql                                               off                 NULL  user     NULL      off                 off
-distsql_workmem                                       64 MiB              NULL  user     NULL      64 MiB              64 MiB
 enable_experimental_alter_column_type_general         off                 NULL  user     NULL      off                 off
 enable_experimental_stream_replication                off                 NULL  user     NULL      off                 off
 enable_implicit_select_for_update                     on                  NULL  user     NULL      on                  on
