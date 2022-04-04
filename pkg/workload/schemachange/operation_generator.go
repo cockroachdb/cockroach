@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -1116,9 +1118,36 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (strin
 	if err != nil {
 		return "", err
 	}
+
+	// Detect if primary indexes contain computed columns, which are disallowed
+	// on older versions of Cockroach.
+	computedColInIndex := false
+	primaryKeyDisallowsComputedCols, err := isClusterVersionLessThan(ctx, tx,
+		clusterversion.TestingBinaryMinSupportedVersion)
+	if err != nil {
+		return "", err
+	}
+	if primaryKeyDisallowsComputedCols {
+		computedCols := make(map[string]struct{})
+		for _, def := range stmt.Defs {
+			if colDef, ok := def.(*tree.ColumnTableDef); ok {
+				if colDef.IsVirtual() {
+					computedCols[colDef.Name.String()] = struct{}{}
+				}
+			} else if indexDef, ok := def.(*tree.IndexTableDef); ok {
+				for _, indexCol := range indexDef.Columns {
+					if _, ok := computedCols[indexCol.Column.String()]; ok {
+						computedColInIndex = true
+					}
+				}
+			}
+		}
+	}
+
 	codesWithConditions{
 		{code: pgcode.DuplicateRelation, condition: tableExists && !stmt.IfNotExists},
 		{code: pgcode.UndefinedSchema, condition: !schemaExists},
+		{code: pgcode.FeatureNotSupported, condition: computedColInIndex},
 	}.add(og.expectedExecErrors)
 
 	return tree.Serialize(stmt), nil
@@ -3029,4 +3058,22 @@ func (og *operationGenerator) typeFromTypeName(
 		return nil, errors.Wrapf(err, "ResolveType: %v", typeName)
 	}
 	return typ, nil
+}
+
+// Check if the test is running with a mixed version cluster, with a version
+// less than or equal to the target version number. This can be used to detect
+// in mixed version environments if certain errors should be encountered.
+func isClusterVersionLessThan(
+	ctx context.Context, tx pgx.Tx, targetVersion roachpb.Version,
+) (bool, error) {
+	var clusterVersionStr string
+	row := tx.QueryRow(ctx, `SHOW CLUSTER SETTING version`)
+	if err := row.Scan(&clusterVersionStr); err != nil {
+		return false, err
+	}
+	clusterVersion, err := roachpb.ParseVersion(clusterVersionStr)
+	if err != nil {
+		return false, err
+	}
+	return clusterVersion.LessEq(targetVersion), nil
 }
