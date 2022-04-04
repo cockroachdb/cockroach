@@ -9,12 +9,17 @@
 package balancer
 
 import (
+	"container/list"
+	"context"
+	"math"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/marusama/semaphore"
 )
 
 // ErrNoAvailablePods is an error that indicates that no pods are available
@@ -61,4 +66,87 @@ func (b *Balancer) randFloat32() float32 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.mu.rng.Float32()
+}
+
+// rebalanceRequest corresponds to a rebalance request. For now, this only
+// indicates where the connection should be transferred to through dst.
+type rebalanceRequest struct {
+	createdAt time.Time
+	conn      ConnectionHandle
+	dst       string
+}
+
+// rebalancerQueue represents the balancer's internal queue which is used for
+// rebalancing requests.
+type rebalancerQueue struct {
+	mu       syncutil.Mutex
+	sem      semaphore.Semaphore
+	queue    *list.List
+	elements map[ConnectionHandle]*list.Element
+}
+
+// newRebalancerQueue returns a new instance of rebalancerQueue.
+func newRebalancerQueue(ctx context.Context) (*rebalancerQueue, error) {
+	q := &rebalancerQueue{
+		sem:      semaphore.New(math.MaxInt32),
+		queue:    list.New(),
+		elements: make(map[ConnectionHandle]*list.Element),
+	}
+	// sem represents the number of items in the queue, so we'll acquire
+	// everything to denote an empty queue.
+	if err := q.sem.Acquire(ctx, math.MaxInt32); err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
+// enqueue puts the rebalance request into the queue. If a request for the
+// connection already exists, the newer of the two will be used. This returns
+// nil if the operation succeeded.
+//
+// NOTE: req should not be nil.
+func (q *rebalancerQueue) enqueue(req *rebalanceRequest) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	e, ok := q.elements[req.conn]
+	if ok {
+		// Use the newer request of the two.
+		if e.Value.(*rebalanceRequest).createdAt.Before(req.createdAt) {
+			e.Value = req
+		}
+	} else {
+		e = q.queue.PushBack(req)
+		q.elements[req.conn] = e
+	}
+	q.sem.Release(1)
+}
+
+// dequeue removes a request at the front of the queue, and returns that. If the
+// queue has no items, dequeue will block until the queue is non-empty.
+//
+// NOTE: It is unsafe to continue using the queue if dequeue returns an error.
+func (q *rebalancerQueue) dequeue(ctx context.Context) (*rebalanceRequest, error) {
+	// Block until there is an item in the queue. There is a possibility where
+	// Acquire returns an error AND obtains the semaphore. It is unsafe to
+	// continue using the queue when that happens.
+	//
+	// It is deliberate to block on acquiring the semaphore before obtaining
+	// the mu lock. We need that lock to enqueue items.
+	if err := q.sem.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	e := q.queue.Front()
+	if e == nil {
+		// The queue cannot be empty here.
+		return nil, errors.AssertionFailedf("unexpected empty queue")
+	}
+
+	req := q.queue.Remove(e).(*rebalanceRequest)
+	delete(q.elements, req.conn)
+	return req, nil
 }
