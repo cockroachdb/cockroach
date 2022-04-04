@@ -15,9 +15,11 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_marusama_semaphore//:semaphore",
     ],
 )
 
@@ -33,7 +35,11 @@ go_test(
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/roachpb",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

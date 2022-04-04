@@ -10,19 +10,54 @@ package balancer
 
 import (
 	"container/list"
+	"context"
 	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/marusama/semaphore"
 )
 
 // ErrNoAvailablePods is an error that indicates that no pods are available
 // for selection.
 var ErrNoAvailablePods = errors.New("no available pods")
+
+// defaultMaxConcurrentRebalances represents the maximum number of concurrent
+// rebalance requests that are being processed. This effectively limits the
+// number of concurrent transfers per proxy.
+const defaultMaxConcurrentRebalances = 100
+
+// maxTransferAttempts represents the maximum number of transfer attempts per
+// rebalance requests when the previous attempts failed (possibly due to an
+// unsafe transfer point). Note that each transfer attempt currently has a
+// timeout of 15 seconds, so retrying up to 3 times may hold onto processSem
+// up to 45 seconds for each rebalance request.
+//
+// TODO(jaylim-crl): Reduce transfer timeout to 5 seconds.
+const maxTransferAttempts = 3
+
+// balancerOptions controls the behavior of the balancer component.
+type balancerOptions struct {
+	maxConcurrentRebalances int
+}
+
+// Option defines an option that can be passed to NewBalancer in order to
+// control its behavior.
+type Option func(opts *balancerOptions)
+
+// MaxConcurrentRebalances defines the maximum number of concurrent rebalance
+// operations for the balancer. This defaults to defaultMaxConcurrentRebalances.
+func MaxConcurrentRebalances(max int) Option {
+	return func(opts *balancerOptions) {
+		opts.maxConcurrentRebalances = max
+	}
+}
 
 // Balancer handles load balancing of SQL connections within the proxy.
 // All methods on the Balancer instance are thread-safe.
@@ -35,16 +70,59 @@ type Balancer struct {
 		// be used for load balancing.
 		rng *rand.Rand
 	}
+
+	// stopper is used to start async tasks (e.g. transfer requests) within the
+	// balancer.
+	stopper *stop.Stopper
+
+	// queue represents the rebalancer queue. All transfer requests should be
+	// enqueued to this queue instead of calling the transfer API directly.
+	queue *rebalancerQueue
+
+	// processSem is used to limit the number of concurrent rebalance requests
+	// that are being processed.
+	processSem semaphore.Semaphore
+
+	// testingKnobs are knobs used for testing.
+	testingKnobs struct {
+		beforeProcessQueueItem func()
+		afterProcessQueueItem  func()
+	}
 }
 
 // NewBalancer constructs a new Balancer instance that is responsible for
 // load balancing SQL connections within the proxy.
 //
 // TODO(jaylim-crl): Update Balancer to take in a ConnTracker object.
-func NewBalancer() *Balancer {
-	b := &Balancer{}
+func NewBalancer(ctx context.Context, stopper *stop.Stopper, opts ...Option) (*Balancer, error) {
+	// Handle options.
+	options := &balancerOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+	if options.maxConcurrentRebalances == 0 {
+		options.maxConcurrentRebalances = defaultMaxConcurrentRebalances
+	}
+
+	b := &Balancer{
+		stopper:    stopper,
+		queue:      newRebalancerQueue(),
+		processSem: semaphore.New(options.maxConcurrentRebalances),
+	}
 	b.mu.rng, _ = randutil.NewPseudoRand()
-	return b
+
+	if err := b.stopper.RunAsyncTask(ctx, "processQueue", b.processQueue); err != nil {
+		return nil, err
+	}
+
+	if err := b.stopper.RunAsyncTask(ctx, "processQueue-closer", func(ctx context.Context) {
+		<-b.stopper.ShouldQuiesce()
+		b.queue.close()
+	}); err != nil {
+		return nil, err
+	}
+
+	return b, nil
 }
 
 // SelectTenantPod selects a tenant pod from the given list based on a weighted
@@ -66,6 +144,74 @@ func (b *Balancer) randFloat32() float32 {
 	return b.mu.rng.Float32()
 }
 
+// processQueue runs on a background goroutine, and invokes TransferConnection
+// for each rebalance request.
+func (b *Balancer) processQueue(ctx context.Context) {
+	// processOneReq processors a request from the balancer queue. If the queue
+	// is empty, this blocks. This returns true if processing should continue,
+	// or false otherwise.
+	processOneReq := func() (canContinue bool) {
+		if err := b.processSem.Acquire(ctx, 1); err != nil {
+			log.Errorf(ctx, "could not acquire processSem: %v", err.Error())
+			return false
+		}
+
+		req := b.queue.dequeue()
+
+		// Queue has been closed. Releasing the semaphore here isn't necessary,
+		// but we'll do that for consistency.
+		if req == nil {
+			b.processSem.Release(1)
+			return false
+		}
+
+		// TODO(jaylim-crl): implement enhancements:
+		//   1. Add metrics to track the number of active transfers.
+		//   2. Rate limit the number of transfers per connection (e.g. once
+		//      every 5 minutes). This ensures that the connection isn't
+		//      ping-ponged between pods within a short interval. However, for
+		//      draining ones, we may want to move right away (or after 60 secs),
+		//      even if the connection was recently transferred to the draining
+		//      pod.
+		if err := b.stopper.RunAsyncTask(ctx, "processQueue-item", func(ctx context.Context) {
+			defer b.processSem.Release(1)
+
+			if b.testingKnobs.beforeProcessQueueItem != nil {
+				b.testingKnobs.beforeProcessQueueItem()
+			}
+
+			// Each request is retried up to maxTransferAttempts.
+			for i := 0; i < maxTransferAttempts && ctx.Err() == nil; i++ {
+				// TODO(jaylim-crl): Once the TransferConnection API accepts a
+				// destination, we could update this code, and pass along dst.
+				err := req.conn.TransferConnection( /* req.dst */ )
+				if err == nil || errors.Is(err, context.Canceled) ||
+					req.dst == req.conn.ServerRemoteAddr() {
+					break
+				}
+
+				// Retry again if the connection hasn't been closed or
+				// transferred to the destination.
+				time.Sleep(250 * time.Millisecond)
+			}
+
+			if b.testingKnobs.afterProcessQueueItem != nil {
+				b.testingKnobs.afterProcessQueueItem()
+			}
+		}); err != nil {
+			// We should not hit this case, but if we did, log and abandon the
+			// transfer.
+			log.Errorf(ctx, "could not run async task for processQueue-item: %v", err.Error())
+		}
+		return true
+	}
+	for ctx.Err() == nil && !b.queue.isClosed() {
+		if !processOneReq() {
+			return
+		}
+	}
+}
+
 // rebalanceRequest corresponds to a rebalance request. For now, this only
 // indicates where the connection should be transferred to through dst.
 type rebalanceRequest struct {
@@ -74,8 +220,8 @@ type rebalanceRequest struct {
 	dst       string
 }
 
-// rebalancerQueue represents the balancer's internal queue which is used for
-// rebalancing requests.
+// balancerQueue represents the balancer's internal queue which is used for
+// rebalancing requests. All methods on the queue are thread-safe.
 type rebalancerQueue struct {
 	mu       syncutil.Mutex
 	cond     sync.Cond
