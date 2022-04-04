@@ -2,7 +2,7 @@
 set-state admitted=0 l0-bytes=10000 l0-added=1000 l0-files=21 l0-sublevels=21
 ----
 admitted: 0, bytes: 10000, added-bytes: 1000,
-smoothed-removed: 0, smoothed-admit: 0,
+smoothed-removed: 0, smoothed-admit: 0, smoothed-bytes-added-per-work: 0,
 tokens: unlimited, tokens-allocated: 0
 tick: 0, setAvailableIOTokens: unlimited
 tick: 1, setAvailableIOTokens: unlimited
@@ -27,7 +27,7 @@ tick: 14, setAvailableIOTokens: unlimited
 set-state admitted=10000 l0-bytes=10000 l0-added=101000 l0-files=21 l0-sublevels=21
 ----
 admitted: 10000, bytes: 10000, added-bytes: 101000,
-smoothed-removed: 50000, smoothed-admit: 1250,
+smoothed-removed: 50000, smoothed-admit: 1250, smoothed-bytes-added-per-work: 10,
 tokens: 1250, tokens-allocated: 0
 tick: 0, setAvailableIOTokens: 84
 tick: 1, setAvailableIOTokens: 84
@@ -49,7 +49,7 @@ tick: 14, setAvailableIOTokens: 74
 set-state admitted=20000 l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21
 ----
 admitted: 20000, bytes: 10000, added-bytes: 201000,
-smoothed-removed: 75000, smoothed-admit: 2500,
+smoothed-removed: 75000, smoothed-admit: 2500, smoothed-bytes-added-per-work: 10,
 tokens: 2500, tokens-allocated: 0
 tick: 0, setAvailableIOTokens: 167
 tick: 1, setAvailableIOTokens: 167
@@ -71,30 +71,30 @@ tick: 14, setAvailableIOTokens: 162
 set-state admitted=20000 l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21
 ----
 admitted: 20000, bytes: 10000, added-bytes: 201000,
-smoothed-removed: 37500, smoothed-admit: 10625,
-tokens: 10625, tokens-allocated: 0
-tick: 0, setAvailableIOTokens: 709
-tick: 1, setAvailableIOTokens: 709
-tick: 2, setAvailableIOTokens: 709
-tick: 3, setAvailableIOTokens: 709
-tick: 4, setAvailableIOTokens: 709
-tick: 5, setAvailableIOTokens: 709
-tick: 6, setAvailableIOTokens: 709
-tick: 7, setAvailableIOTokens: 709
-tick: 8, setAvailableIOTokens: 709
-tick: 9, setAvailableIOTokens: 709
-tick: 10, setAvailableIOTokens: 709
-tick: 11, setAvailableIOTokens: 709
-tick: 12, setAvailableIOTokens: 709
-tick: 13, setAvailableIOTokens: 709
-tick: 14, setAvailableIOTokens: 699
+smoothed-removed: 37500, smoothed-admit: 2187, smoothed-bytes-added-per-work: 10,
+tokens: 2187, tokens-allocated: 0
+tick: 0, setAvailableIOTokens: 146
+tick: 1, setAvailableIOTokens: 146
+tick: 2, setAvailableIOTokens: 146
+tick: 3, setAvailableIOTokens: 146
+tick: 4, setAvailableIOTokens: 146
+tick: 5, setAvailableIOTokens: 146
+tick: 6, setAvailableIOTokens: 146
+tick: 7, setAvailableIOTokens: 146
+tick: 8, setAvailableIOTokens: 146
+tick: 9, setAvailableIOTokens: 146
+tick: 10, setAvailableIOTokens: 146
+tick: 11, setAvailableIOTokens: 146
+tick: 12, setAvailableIOTokens: 146
+tick: 13, setAvailableIOTokens: 146
+tick: 14, setAvailableIOTokens: 143
 
 # l0-sublevels drops below threshold. We calculate the smoothed values, but
 # don't limit the tokens.
-set-state admitted=30000 l0-bytes=10000 l0-added=301000 l0-files=21 l0-sublevels=20
+set-state admitted=30000 l0-bytes=10000 l0-added=501000 l0-files=21 l0-sublevels=20
 ----
-admitted: 30000, bytes: 10000, added-bytes: 301000,
-smoothed-removed: 68750, smoothed-admit: 10312,
+admitted: 30000, bytes: 10000, added-bytes: 501000,
+smoothed-removed: 168750, smoothed-admit: 6093, smoothed-bytes-added-per-work: 20,
 tokens: unlimited, tokens-allocated: 0
 tick: 0, setAvailableIOTokens: unlimited
 tick: 1, setAvailableIOTokens: unlimited
