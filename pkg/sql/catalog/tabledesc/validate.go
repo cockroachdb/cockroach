@@ -13,6 +13,7 @@ package tabledesc
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -604,7 +605,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			desc.validateColumnFamilies(columnIDs),
 			desc.validateCheckConstraints(columnIDs),
 			desc.validateUniqueWithoutIndexConstraints(columnIDs),
-			desc.validateTableIndexes(columnNames),
+			desc.validateTableIndexes(columnNames, vea),
 			desc.validatePartitioning(),
 		}
 		hasErrs := false
@@ -1043,7 +1044,9 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 // IDs are unique, and the family of the primary key is 0. This does not check
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
-func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID) error {
+func (desc *wrapper) validateTableIndexes(
+	columnNames map[string]descpb.ColumnID, vea catalog.ValidationErrorAccumulator,
+) error {
 	if len(desc.PrimaryIndex.KeyColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
@@ -1051,6 +1054,15 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 	columnsByID := make(map[descpb.ColumnID]catalog.Column)
 	for _, col := range desc.DeletableColumns() {
 		columnsByID[col.GetID()] = col
+	}
+
+	if !vea.IsActive(clusterversion.Start22_1) {
+		// Verify that the primary index columns are not virtual.
+		for _, pkID := range desc.PrimaryIndex.KeyColumnIDs {
+			if col := columnsByID[pkID]; col != nil && col.IsVirtual() {
+				return errors.Newf("primary index column %q cannot be virtual", col.GetName())
+			}
+		}
 	}
 
 	indexNames := map[string]struct{}{}
@@ -1204,6 +1216,12 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			}
 		}
 		for _, colID := range idx.IndexDesc().KeySuffixColumnIDs {
+			if !vea.IsActive(clusterversion.Start22_1) {
+				if col := columnsByID[colID]; col != nil && col.IsVirtual() {
+					return errors.Newf("index %q cannot store virtual column %d", idx.GetName(), colID)
+				}
+			}
+
 			if _, ok := columnsByID[colID]; !ok {
 				return errors.Newf("column %d does not exist in table %s", colID, desc.Name)
 			}
