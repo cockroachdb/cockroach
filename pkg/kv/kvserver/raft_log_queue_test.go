@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	raft "go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
@@ -669,7 +669,9 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	assertMin := func(exp uint64, now time.Time) {
 		t.Helper()
 		const anyRecipientStore roachpb.StoreID = 0
-		if maxIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now, anyRecipientStore); maxIndex != exp {
+		if maxIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(
+			now, anyRecipientStore, false, /* onlyInFlight */
+		); maxIndex != exp {
 			t.Fatalf("unexpected max index %d, wanted %d", maxIndex, exp)
 		}
 	}
