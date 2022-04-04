@@ -78,3 +78,12 @@ var errMarkInvalidReplicationChange = errors.New("invalid replication change")
 func IsIllegalReplicationChangeError(err error) bool {
 	return errors.Is(err, errMarkInvalidReplicationChange)
 }
+
+var errMarkReplicationChangeInProgress = errors.New("replication change in progress")
+
+// IsReplicationChangeInProgressError detects whether an error (assumed to have
+// been emitted a replication change) indicates that the replication change
+// failed because another replication change was in progress on the range.
+func IsReplicationChangeInProgressError(err error) bool {
+	return errors.Is(err, errMarkReplicationChangeInProgress)
+}

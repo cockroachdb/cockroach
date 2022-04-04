@@ -163,6 +163,10 @@ func relocate(params runParams, req relocateRequest) (*roachpb.RangeDescriptor, 
 			{ChangeType: roachpb.REMOVE_VOTER, Target: fromTarget},
 		},
 	)
+	// TODO(aayush): If the `AdminChangeReplicas`call failed because it found that
+	// the range was already in the process of being rebalanced, we currently fail
+	// the statement. We should consider instead force-removing these learners
+	// when `AdminChangeReplicas` calls are issued by SQL.
 	return rangeDesc, err
 }
 
