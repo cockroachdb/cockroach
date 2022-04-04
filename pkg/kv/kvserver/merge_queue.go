@@ -296,8 +296,9 @@ func (mq *mergeQueue) process(
 		// performed by the LHS leaseholder, so it can easily do this for LHS.
 		// We deal with the RHS, whose leaseholder may be remote, further down.
 		var err error
-		lhsDesc, err =
-			lhsRepl.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, lhsDesc)
+		// TODO(aayush): Separately track metrics for how many learners were removed
+		// by the mergeQueue here.
+		lhsDesc, _, err = lhsRepl.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, lhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
 			return false, err
