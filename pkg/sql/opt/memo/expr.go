@@ -661,6 +661,12 @@ func (s *ScanPrivate) IsFullIndexScan(md *opt.Metadata) bool {
 		s.HardLimit == 0
 }
 
+// IsVirtualTable returns true if the table being scanned is a virtual table.
+func (s *ScanPrivate) IsVirtualTable(md *opt.Metadata) bool {
+	tab := md.Table(s.Table)
+	return tab.IsVirtualTable()
+}
+
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
 // locking mode. This can be the case either because the Scan is in the scope of
 // a SELECT .. FOR [KEY] UPDATE/SHARE clause or because the Scan was configured
