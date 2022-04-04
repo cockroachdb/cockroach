@@ -13,7 +13,6 @@ package bulk
 import (
 	"bytes"
 	"context"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -151,8 +150,9 @@ type SSTBatcher struct {
 	// lastRange is the span and remaining capacity of the last range added to,
 	// for checking if the next addition would overfill it.
 	lastRange struct {
-		span      roachpb.Span
-		remaining sz
+		span            roachpb.Span
+		remaining       sz
+		nextExistingKey roachpb.Key
 	}
 	// stores on-the-fly stats for the SST if disallowShadowingBelow is set.
 	ms enginepb.MVCCStats
@@ -420,27 +420,51 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	}
 
 	if shouldSplit {
+		expire := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Minute * 10).UnixNano()}
+
+		// If there was existing data as of last add that is above the file we are
+		// about to add, split there first, both since that could be why the range
+		// is full as well as because if we do not, that existing data will need to
+		// be moved when we scatter the span we're splitting for ingestion.
+		if len(b.lastRange.nextExistingKey) > 0 && end.Compare(b.lastRange.nextExistingKey) < 0 {
+			log.VEventf(ctx, 2, "%s splitting above file span %s at existing key %s",
+				b.name, roachpb.Span{Key: start, EndKey: end}, b.lastRange.nextExistingKey)
+			splitAbove, err := keys.EnsureSafeSplitKey(b.lastRange.nextExistingKey)
+			if err != nil {
+				log.Warningf(ctx, "%s failed to generate split-above key: %v", b.name, err)
+			} else {
+				beforeSplit := timeutil.Now()
+				err := b.db.AdminSplit(ctx, splitAbove, expire)
+				b.flushCounts.splitWait += timeutil.Since(beforeSplit)
+				if err != nil {
+					log.Warningf(ctx, "%s failed to split-above: %v", b.name, err)
+				} else {
+					b.flushCounts.splits++
+				}
+			}
+		}
+
 		splitAt, err := keys.EnsureSafeSplitKey(start)
 		if err != nil {
 			log.Warningf(ctx, "%s failed to generate split key: %v", b.name, err)
 		} else {
-			hour := hlc.Timestamp{WallTime: beforeFlush.Add(time.Hour).UnixNano()}
 			beforeSplit := timeutil.Now()
-			if err := b.db.AdminSplit(ctx, splitAt, hour); err != nil {
+			err := b.db.AdminSplit(ctx, splitAt, expire)
+			b.flushCounts.splitWait += timeutil.Since(beforeSplit)
+			if err != nil {
 				log.Warningf(ctx, "%s failed to split: %v", b.name, err)
 			} else {
-				b.flushCounts.splitWait += timeutil.Since(beforeSplit)
 				b.flushCounts.splits++
+
+				// Now scatter the RHS before we proceed to ingest into it. We know it
+				// should be empty since we split above if there was a nextExistingKey.
 				beforeScatter := timeutil.Now()
 				resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize)
 				b.flushCounts.scatterWait += timeutil.Since(beforeScatter)
 				if err != nil {
-					// TODO(dt): switch to a typed error.
-					if strings.Contains(err.Error(), "existing range size") {
-						log.VEventf(ctx, 1, "%s scattered non-empty range rejected: %v", b.name, err)
-					} else {
-						log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
-					}
+					// err could be a max size violation, but this is unexpected since we
+					// split before, so a warning is probably ok.
+					log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
 				} else {
 					b.flushCounts.scatters++
 					if resp.MVCCStats != nil {
@@ -542,12 +566,13 @@ func (b *SSTBatcher) addSSTable(
 				}
 
 				req := &roachpb.AddSSTableRequest{
-					RequestHeader:          roachpb.RequestHeader{Key: item.start, EndKey: item.end},
-					Data:                   item.sstBytes,
-					DisallowShadowing:      !b.disallowShadowingBelow.IsEmpty(),
-					DisallowShadowingBelow: b.disallowShadowingBelow,
-					MVCCStats:              &item.stats,
-					IngestAsWrites:         ingestAsWriteBatch,
+					RequestHeader:                          roachpb.RequestHeader{Key: item.start, EndKey: item.end},
+					Data:                                   item.sstBytes,
+					DisallowShadowing:                      !b.disallowShadowingBelow.IsEmpty(),
+					DisallowShadowingBelow:                 b.disallowShadowingBelow,
+					MVCCStats:                              &item.stats,
+					IngestAsWrites:                         ingestAsWriteBatch,
+					ReturnFollowingLikelyNonEmptySpanStart: true,
 				}
 				if b.writeAtBatchTS {
 					req.SSTTimestampToRequestTimestamp = b.batchTS
@@ -577,6 +602,7 @@ func (b *SSTBatcher) addSSTable(
 					if resp.RangeSpan.Valid() {
 						b.flushKey = resp.RangeSpan.EndKey
 						b.lastRange.remaining = sz(resp.AvailableBytes)
+						b.lastRange.nextExistingKey = resp.FollowingLikelyNonEmptySpanStart
 					}
 					files++
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, sendTime)

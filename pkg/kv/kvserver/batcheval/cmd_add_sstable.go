@@ -293,6 +293,28 @@ func EvalAddSSTable(
 	reply.RangeSpan = cArgs.EvalCtx.Desc().KeySpan().AsRawSpanWithNoLocals()
 	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes() - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
 
+	// If requested, locate and return the start of the span following the file
+	// span which may be non-empty, that is, the first key after the file's end
+	// at which there may be existing data in the range. "May" is operative here:
+	// it allows us to avoid consistency/isolation promises and thus avoid needing
+	// to latch the entire remainder of the range and/or look through intents in
+	// addition, and instead just use this key-only iterator. If a caller actually
+	// needs to know what data is there, it must issue its own real Scan.
+	if args.ReturnFollowingLikelyNonEmptySpanStart {
+		existingIter := readWriter.NewMVCCIterator(
+			storage.MVCCKeyIterKind, // don't care if it is committed or not, just that it isn't empty.
+			storage.IterOptions{UpperBound: reply.RangeSpan.EndKey},
+		)
+		defer existingIter.Close()
+		existingIter.SeekGE(end)
+		ok, err = existingIter.Valid()
+		if err != nil {
+			return result.Result{}, errors.Wrap(err, "error while searching for non-empty span start")
+		} else if ok {
+			reply.FollowingLikelyNonEmptySpanStart = existingIter.Key().Key
+		}
+	}
+
 	if args.IngestAsWrites {
 		span.RecordStructured(&types.StringValue{Value: fmt.Sprintf("ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))})
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))
