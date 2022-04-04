@@ -43,7 +43,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 	return &delayedNode{
 		name: s.String(),
 		constructor: func(ctx context.Context, p *planner) (_ planNode, _ error) {
-			if p.extendedEvalCtx.TxnIsSingleStmt {
+			if p.extendedEvalCtx.TxnImplicit {
 				return nil, pgerror.Newf(pgcode.NoActiveSQLTransaction, "DECLARE CURSOR can only be used in transaction blocks")
 			}
 
