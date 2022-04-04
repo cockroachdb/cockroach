@@ -266,6 +266,7 @@ ALL_TESTS = [
     "//pkg/sql/doctor:doctor_test",
     "//pkg/sql/enum:enum_test",
     "//pkg/sql/execinfra:execinfra_test",
+    "//pkg/sql/execinfrapb:execinfrapb_disallowed_imports_test",
     "//pkg/sql/execinfrapb:execinfrapb_test",
     "//pkg/sql/execstats:execstats_test",
     "//pkg/sql/flowinfra:flowinfra_test",
