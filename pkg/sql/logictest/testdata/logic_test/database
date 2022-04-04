@@ -41,6 +41,10 @@ postgres       root   NULL            {}       NULL           NULL
 system         node   NULL            {}       NULL           NULL
 test           root   NULL            {}       NULL           NULL
 
+# Verify that SHOW SCHEMAS FROM a includes user-defined schemas.
+statement ok
+CREATE SCHEMA a.s
+
 query TT colnames
 SHOW SCHEMAS FROM a
 ----
@@ -50,6 +54,7 @@ information_schema  NULL
 pg_catalog          NULL
 pg_extension        NULL
 public              admin
+s                   root
 
 statement ok
 CREATE DATABASE b TEMPLATE=template0
