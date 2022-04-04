@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // Below are exported to enable testing from kvprober_test.
@@ -58,6 +59,10 @@ func (p *Prober) ReadPlannerNext(ctx context.Context) (Step, error) {
 	return p.readPlanner.next(ctx)
 }
 
+func (p *Prober) WritePlannerNext(ctx context.Context) (Step, error) {
+	return p.writePlanner.next(ctx)
+}
+
 func (p *Prober) SetPlanningRateLimits(d time.Duration) {
 	p.readPlanner.(*meta2Planner).getRateLimit = func(_ time.Duration, _ *cluster.Settings) time.Duration {
 		return d
@@ -65,4 +70,8 @@ func (p *Prober) SetPlanningRateLimits(d time.Duration) {
 	p.writePlanner.(*meta2Planner).getRateLimit = func(_ time.Duration, _ *cluster.Settings) time.Duration {
 		return d
 	}
+}
+
+func (p *Prober) GetProbeTracer() *tracing.Tracer {
+	return p.tracer
 }

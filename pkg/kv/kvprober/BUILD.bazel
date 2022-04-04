@@ -6,6 +6,7 @@ go_library(
         "kvprober.go",
         "planner.go",
         "settings.go",
+        "helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvprober",
     visibility = ["//visibility:public"],
@@ -31,7 +32,7 @@ go_library(
 go_test(
     name = "kvprober_test",
     srcs = [
-        "helpers_test.go",
+        "helpers.go",
         "kvprober_integration_test.go",
         "kvprober_test.go",
         "main_test.go",
