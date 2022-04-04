@@ -1,3 +1,4 @@
+# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant
 
 statement ok
@@ -271,7 +272,6 @@ public       regional_by_row_table_explicit_crdb_region_column  table  root   0 
 
 # Add a gc.ttlseconds to a partition and ensure it displays.
 statement ok
-SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true;
 ALTER PARTITION "us-east-1" OF INDEX public.regional_by_row_table@regional_by_row_table_a_idx
 CONFIGURE ZONE USING gc.ttlseconds = 10
 

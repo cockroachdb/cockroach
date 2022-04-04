@@ -116,6 +116,11 @@ func (s *Tenant) Query(query string, args ...interface{}) *gosql.Rows {
 	return s.db.Query(s.t, query, args...)
 }
 
+// QueryRow is a wrapper around gosql.QueryRow that kills the test on error.
+func (s *Tenant) QueryRow(query string, args ...interface{}) *sqlutils.Row {
+	return s.db.QueryRow(s.t, query, args...)
+}
+
 // Reconciler returns the reconciler associated with the given tenant.
 func (s *Tenant) Reconciler() spanconfig.Reconciler {
 	return s.reconciler
