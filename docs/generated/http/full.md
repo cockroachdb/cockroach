@@ -6904,6 +6904,8 @@ the tracing UI.
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.GetTracingSnapshotResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | goroutine_id | [uint64](#cockroach.server.serverpb.GetTracingSnapshotResponse-uint64) |  |  | [reserved](#support-status) |
 | processed_tags | [SpanTag](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpanTag) | repeated |  | [reserved](#support-status) |
+| current | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  | current is set if the span is still alive (i.e. still present in the active spans registry). | [reserved](#support-status) |
+| current_recording_mode | [cockroach.util.tracing.tracingpb.RecordingMode](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.util.tracing.tracingpb.RecordingMode) |  | current_recording_mode represents the span's current recording mode. This is not set if current == false. | [reserved](#support-status) |
 
 
 
