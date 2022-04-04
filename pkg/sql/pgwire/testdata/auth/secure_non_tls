@@ -20,11 +20,11 @@ accept_sql_without_tls
 
 connect user=root sslmode=disable
 ----
-ERROR: password authentication failed for user root (SQLSTATE 28000)
+ERROR: password authentication failed for user root (SQLSTATE 28P01)
 
 connect user=testuser sslmode=disable
 ----
-ERROR: password authentication failed for user testuser (SQLSTATE 28000)
+ERROR: password authentication failed for user testuser (SQLSTATE 28P01)
 
 # set the password for testuser.
 sql
@@ -42,7 +42,7 @@ ok defaultdb
 
 connect password=wrongpass user=testuser sslmode=disable
 ----
-ERROR: password authentication failed for user testuser (SQLSTATE 28000)
+ERROR: password authentication failed for user testuser (SQLSTATE 28P01)
 
 # Now disable all non-TLS conns via HBA.
 set_hba

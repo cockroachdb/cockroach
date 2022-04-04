@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -193,5 +194,29 @@ func UserAuthPasswordHook(
 // failed password authentication for a user. It should be used when
 // the password is incorrect or the user does not exist.
 func NewErrPasswordUserAuthFailed(username SQLUsername) error {
-	return errors.Newf("password authentication failed for user %s", username)
+	return &PasswordUserAuthError{errors.Newf("password authentication failed for user %s", username)}
+}
+
+// PasswordUserAuthError indicates that an error was encountered
+// during the initial set-up of a SQL connection.
+type PasswordUserAuthError struct {
+	err error
+}
+
+// Error implements the error interface.
+func (i *PasswordUserAuthError) Error() string { return i.err.Error() }
+
+// Cause implements causer for compatibility with pkg/errors.
+// NB: this is obsolete. Use Unwrap() instead.
+func (i *PasswordUserAuthError) Cause() error { return i.err }
+
+// Unwrap implements errors.Wrapper.
+func (i *PasswordUserAuthError) Unwrap() error { return i.err }
+
+// Format implements fmt.Formatter.
+func (i *PasswordUserAuthError) Format(s fmt.State, verb rune) { errors.FormatError(i, s, verb) }
+
+// FormatError implements errors.Formatter.
+func (i *PasswordUserAuthError) FormatError(p errors.Printer) error {
+	return i.err
 }
