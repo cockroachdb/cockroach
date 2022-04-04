@@ -305,6 +305,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
+	if err := r.checkVirtualConstraints(ctx, p.ExecCfg(), r.job); err != nil {
+		return err
+	}
+
 	// If the table being imported into referenced UDTs, ensure that a concurrent
 	// schema change on any of the typeDescs has not modified the type descriptor. If
 	// it has, it is unsafe to import the data and we fail the import job.
@@ -1095,6 +1099,35 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 		}
 		return nil
 	})
+}
+
+// checkVirtualConstraints checks constraints that are enforced via runtime
+// checks, such as uniqueness checks that are not directly backed by an index.
+func (*importResumer) checkVirtualConstraints(
+	ctx context.Context, execCfg *sql.ExecutorConfig, job *jobs.Job,
+) error {
+	for _, tbl := range job.Details().(jobspb.ImportDetails).Tables {
+		desc := tabledesc.NewBuilder(tbl.Desc).BuildExistingMutableTable()
+		desc.SetPublic()
+
+		if sql.HasVirtualUniqueConstraints(desc) {
+			if err := job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+				return jobs.RunningStatus(fmt.Sprintf("re-validating %s", desc.GetName())), nil
+			}); err != nil {
+				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(job.ID()))
+			}
+		}
+
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			ie := execCfg.InternalExecutorFactory(ctx, sql.NewFakeSessionData(execCfg.SV()))
+			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+				return sql.RevalidateUniqueConstraintsInTable(ctx, txn, ie, desc)
+			})
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // checkForUDTModification checks whether any of the types referenced by the
