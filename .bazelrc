@@ -71,9 +71,11 @@ build:crosslinuxarmbase --config=cross
 # NB: This is consumed in `BUILD` files (see build/toolchains/BUILD.bazel).
 build:devdarwinx86_64 --platforms=//build/toolchains:darwin_x86_64
 build:devdarwinx86_64 --config=dev
-build:dev --stamp --workspace_status_command=./build/bazelutil/stamp.sh
+build:dev --workspace_status_command=./build/bazelutil/stamp.sh
 build:dev --action_env=PATH
 build:dev --host_action_env=PATH
+build:dev --spawn_strategy=local --strategy=Genrule=sandboxed
+build:dev --nostamp
 
 try-import %workspace%/.bazelrc.user
 
