@@ -36,17 +36,20 @@ type raftRequestInfo struct {
 type raftRequestQueue struct {
 	syncutil.Mutex
 	infos []raftRequestInfo
+	size  int64
 }
 
-func (q *raftRequestQueue) drain() ([]raftRequestInfo, bool) {
+func (q *raftRequestQueue) drain() ([]raftRequestInfo, int64, bool) {
 	q.Lock()
 	defer q.Unlock()
 	if len(q.infos) == 0 {
-		return nil, false
+		return nil, 0, false
 	}
 	infos := q.infos
 	q.infos = nil
-	return infos, true
+	n := q.size
+	q.size = 0
+	return infos, n, true
 }
 
 func (q *raftRequestQueue) recycle(processed []raftRequestInfo) {
@@ -179,6 +182,10 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		s.metrics.RaftRcvdMsgDropped.Inc(1)
 		return false
 	}
+	n := int64(req.Size())
+	q.size += n
+	s.metrics.RaftIncomingQueueBytes.Inc(n)
+	s.metrics.RaftIncomingQueueLen.Inc(1)
 	q.infos = append(q.infos, raftRequestInfo{
 		req:        req,
 		respStream: respStream,
@@ -445,10 +452,12 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		return false
 	}
 	q := (*raftRequestQueue)(value)
-	infos, ok := q.drain()
+	infos, n, ok := q.drain()
 	if !ok {
 		return false
 	}
+	s.metrics.RaftIncomingQueueBytes.Dec(n)
+	s.metrics.RaftIncomingQueueLen.Dec(int64(len(infos)))
 	defer q.recycle(infos)
 
 	var hadError bool

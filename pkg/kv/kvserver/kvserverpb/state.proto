@@ -184,6 +184,8 @@ message RangeInfo {
   // The circuit breaker error, if any. This is nonzero if and only if the
   // circuit breaker on the source Replica is tripped.
   string circuit_breaker_error = 20;
+  int64 incoming_raft_queue_len = 21;
+  int64 incoming_raft_queue_bytes = 22;
 }
 
 // RangeSideTransportInfo describes a range's closed timestamp info communicated

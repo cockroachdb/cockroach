@@ -740,6 +740,19 @@ of processing.
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftIncomingQueueBytes = metric.Metadata{
+		Name:        "raft.rcvd.queue_bytes",
+		Help:        "Number of bytes in messages waiting for the raft scheduler",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftIncomingQueueLen = metric.Metadata{
+		Name:        "raft.rcvd.queue_len",
+		Help:        "Number of messages waiting for the raft scheduler",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	// TODO fix up the above var names etc
 	metaRaftEnqueuedPending = metric.Metadata{
 		Name: "raft.enqueued.pending",
 		Help: `Number of pending outgoing messages in the Raft Transport queue.
@@ -1436,6 +1449,9 @@ type StoreMetrics struct {
 	RaftRcvdMessages   [maxRaftMsgType + 1]*metric.Counter
 	RaftRcvdMsgDropped *metric.Counter
 
+	RaftIncomingQueueBytes *metric.Gauge
+	RaftIncomingQueueLen   *metric.Gauge
+
 	// Raft log metrics.
 	RaftLogFollowerBehindCount *metric.Gauge
 	RaftLogTruncated           *metric.Counter
@@ -1885,6 +1901,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			raftpb.MsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
 		},
 		RaftRcvdMsgDropped: metric.NewCounter(metaRaftRcvdDropped),
+
+		RaftIncomingQueueBytes: metric.NewGauge(metaRaftIncomingQueueBytes),
+		RaftIncomingQueueLen:   metric.NewGauge(metaRaftIncomingQueueLen),
 
 		// Raft log metrics.
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),

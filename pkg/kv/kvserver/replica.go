@@ -1273,6 +1273,13 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	if err := r.breaker.Signal().Err(); err != nil {
 		ri.CircuitBreakerError = err.Error()
 	}
+	if qi, ok := r.store.replicaQueues.Load(int64(r.RangeID)); ok {
+		q := (*raftRequestQueue)(qi)
+		q.Lock()
+		ri.IncomingRaftQueueBytes = q.size
+		ri.IncomingRaftQueueLen = int64(len(q.infos))
+		q.Unlock()
+	}
 
 	return ri
 }
