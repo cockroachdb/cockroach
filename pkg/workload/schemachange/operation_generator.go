@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -1116,9 +1117,16 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (strin
 	if err != nil {
 		return "", err
 	}
+
+	mixedVersion, err := isInMixedVersion(ctx, tx)
+	if err != nil {
+		return "", err
+	}
+
 	codesWithConditions{
 		{code: pgcode.DuplicateRelation, condition: tableExists && !stmt.IfNotExists},
 		{code: pgcode.UndefinedSchema, condition: !schemaExists},
+		{code: pgcode.FeatureNotSupported, condition: mixedVersion},
 	}.add(og.expectedExecErrors)
 
 	return tree.Serialize(stmt), nil
@@ -3029,4 +3037,16 @@ func (og *operationGenerator) typeFromTypeName(
 		return nil, errors.Wrapf(err, "ResolveType: %v", typeName)
 	}
 	return typ, nil
+}
+
+// Check if the test is running with a mixed version cluster. The assumption
+// here is that if running in a mixed cluster the cluster version is always
+// the maximum cluster version from predecessor binary.
+func isInMixedVersion(ctx context.Context, tx pgx.Tx) (bool, error) {
+	var clusterVersionStr string
+	row := tx.QueryRow(ctx, `SHOW CLUSTER SETTING version`)
+	if err := row.Scan(&clusterVersionStr); err != nil {
+		return false, err
+	}
+	return clusterVersionStr == clusterversion.TestingBinaryMinSupportedVersion.String(), nil
 }
