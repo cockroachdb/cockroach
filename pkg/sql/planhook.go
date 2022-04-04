@@ -108,7 +108,6 @@ type PlanHookState interface {
 	MigrationJobDeps() migration.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
-	IsAutoCommit() bool
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
