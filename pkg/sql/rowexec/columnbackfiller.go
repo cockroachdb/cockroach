@@ -107,7 +107,7 @@ func (cb *columnBackfiller) runChunk(
 	var key roachpb.Key
 	var commitWaitFn func(context.Context) error
 	err := cb.flowCtx.Cfg.DB.TxnWithAdmissionControl(
-		ctx, roachpb.AdmissionHeader_FROM_SQL, admission.NormalPri,
+		ctx, roachpb.AdmissionHeader_FROM_SQL, admission.BulkNormalPri,
 		func(ctx context.Context, txn *kv.Txn) error {
 			if cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk != nil {
 				if err := cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk(sp); err != nil {
