@@ -493,7 +493,7 @@ func initArrayToArrayConcatenation() {
 // initNonArrayToNonArrayConcatenation initializes string + nonarrayelement
 // and nonarrayelement + string concatenation.
 func initNonArrayToNonArrayConcatenation() {
-	addConcat := func(leftType, rightType *types.T, volatility volatility.V) {
+	addConcat := func(leftType, rightType *types.T, vol volatility.V) {
 		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
 			LeftType:     leftType,
 			RightType:    rightType,
@@ -516,7 +516,7 @@ func initNonArrayToNonArrayConcatenation() {
 				}
 				return nil, errors.New("neither LHS or RHS matched DString")
 			},
-			Volatility: volatility,
+			Volatility: vol,
 		})
 	}
 	fromTypeToVolatility := make(map[oid.Oid]volatility.V)
