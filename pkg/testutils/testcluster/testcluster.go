@@ -882,6 +882,35 @@ func (tc *TestCluster) SwapVoterWithNonVoterOrFatal(
 	return afterDesc
 }
 
+// RebalanceVoter is part of TestClusterInterface.
+func (tc *TestCluster) RebalanceVoter(
+	ctx context.Context, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+) (*roachpb.RangeDescriptor, error) {
+	key := keys.MustAddr(startKey)
+	var beforeDesc roachpb.RangeDescriptor
+	if err := tc.Servers[0].DB().GetProto(
+		ctx, keys.RangeDescriptorKey(key), &beforeDesc,
+	); err != nil {
+		return nil, errors.Wrap(err, "range descriptor lookup error")
+	}
+	changes := []roachpb.ReplicationChange{
+		{ChangeType: roachpb.REMOVE_VOTER, Target: src},
+		{ChangeType: roachpb.ADD_VOTER, Target: dest},
+	}
+	return tc.Servers[0].DB().AdminChangeReplicas(ctx, key, beforeDesc, changes)
+}
+
+// RebalanceVoterOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) RebalanceVoterOrFatal(
+	ctx context.Context, t *testing.T, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+) *roachpb.RangeDescriptor {
+	afterDesc, err := tc.RebalanceVoter(ctx, startKey, src, dest)
+	if err != nil {
+		t.Fatalf("could not rebalance voter: %+v", err)
+	}
+	return afterDesc
+}
+
 // TransferRangeLease is part of the TestServerInterface.
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
