@@ -6660,12 +6660,12 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 				tenant10C2.CheckQueryResults(t, `SELECT * FROM foo.bar`, tenant10.QueryStr(t, `SELECT * FROM foo.bar`))
 			})
 			t.Run("into-different-tenant-id", func(t *testing.T) {
-				tenant11C2.ExpectErr(t, `cannot cluster RESTORE backups taken from different tenant: 10`,
-					`RESTORE FROM $1`, httpAddr)
+				tenant11C2.Exec(t, `RESTORE FROM $1`, httpAddr)
+				tenant11C2.CheckQueryResults(t, `SELECT * FROM foo.bar`, tenant10.QueryStr(t, `SELECT * FROM foo.bar`))
 			})
 			t.Run("into-system-tenant-id", func(t *testing.T) {
-				systemDB2.ExpectErr(t, `cannot cluster RESTORE backups taken from different tenant: 10`,
-					`RESTORE FROM $1`, httpAddr)
+				systemDB2.Exec(t, `RESTORE FROM $1`, httpAddr)
+				systemDB2.CheckQueryResults(t, `SELECT * FROM foo.bar`, tenant10.QueryStr(t, `SELECT * FROM foo.bar`))
 			})
 		})
 
@@ -6717,8 +6717,7 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 				defer cleanupEmptyCluster()
 
 				emptySystemDB.Exec(t, `BACKUP TO $1`, httpAddrEmpty)
-				tenant20C2.ExpectErr(t, `cannot cluster RESTORE backups taken from different tenant: system`,
-					`RESTORE FROM $1`, httpAddrEmpty)
+				tenant20C2.Exec(t, `RESTORE FROM $1`, httpAddrEmpty)
 			})
 		})
 
@@ -6728,6 +6727,60 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 			systemDB.CheckQueryResults(t, `SELECT * FROM data.bank`, tenant10.QueryStr(t, `SELECT * FROM data.bank`))
 		})
 
+	})
+}
+
+// TestBackupRestoreTenantSettings tests the behaviour of the custom restore function for
+// the system.tenant_settings table.
+func TestBackupRestoreTenantSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const numAccounts = 1
+
+	makeTenant := func(srv serverutils.TestServerInterface, tenant uint64) (*sqlutils.SQLRunner, func()) {
+		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(tenant)})
+		cleanup := func() { conn.Close() }
+		return sqlutils.MakeSQLRunner(conn), cleanup
+	}
+	tc, systemDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, _ = tc, systemDB
+	defer cleanupFn()
+
+	// NB: tenant certs for 10, 11, and 20 are embedded. See:
+	_ = security.EmbeddedTenantIDs()
+
+	// Create another server.
+	tc2, _, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	srv2 := tc2.Server(0)
+	defer cleanupEmptyCluster()
+
+	tenant10C2, cleanupT10C2 := makeTenant(srv2, 10)
+	defer cleanupT10C2()
+
+	t.Run("cluster-restore-into-tenant-with-no-tenant-settings-succeeds", func(t *testing.T) {
+		httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
+		defer httpServerCleanup()
+		systemDB.Exec(t, `BACKUP TO $1`, httpAddr)
+		tenant10C2.Exec(t, `RESTORE FROM $1`, httpAddr)
+	})
+
+	systemDB.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING sql.notices.enabled = false`)
+	backup2HttpAddr, backup2Cleanup := makeInsecureHTTPServer(t)
+	defer backup2Cleanup()
+
+	systemDB.Exec(t, `BACKUP TO $1`, backup2HttpAddr)
+
+	tenant20C2, cleanupT20C2 := makeTenant(srv2, 20)
+	defer cleanupT20C2()
+
+	t.Run("cluster-restore-into-tenant-with-tenant-settings-fails", func(t *testing.T) {
+		tenant20C2.ExpectErr(t, `restoring system table tenant_settings: cannot restore non-empty system.tenant_settings table`, `RESTORE FROM $1`, backup2HttpAddr)
+	})
+
+	_, systemDB3, cleanupDB3 := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupDB3()
+	t.Run("cluster-restore-into-cluster-with-tenant-settings-succeeds", func(t *testing.T) {
+		systemDB3.Exec(t, `RESTORE FROM $1`, backup2HttpAddr)
 	})
 }
 
@@ -6797,12 +6850,11 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 				tenant10C2[0].CheckQueryResults(t, `SELECT * FROM foo.bar`, tenant10[0].QueryStr(t, `SELECT * FROM foo.bar`))
 			})
 			t.Run("into-different-tenant-id", func(t *testing.T) {
-				tenant11C2.ExpectErr(t, `cannot cluster RESTORE backups taken from different tenant: 10`,
-					`RESTORE FROM $1`, httpAddr)
+				tenant11C2.Exec(t, `RESTORE FROM $1`, httpAddr)
+				tenant11C2.CheckQueryResults(t, `SELECT * FROM foo.bar`, tenant10[0].QueryStr(t, `SELECT * FROM foo.bar`))
 			})
 			t.Run("into-system-tenant-id", func(t *testing.T) {
-				systemDB2.ExpectErr(t, `cannot cluster RESTORE backups taken from different tenant: 10`,
-					`RESTORE FROM $1`, httpAddr)
+				systemDB2.Exec(t, `RESTORE FROM $1`, httpAddr)
 			})
 		})
 
@@ -6854,8 +6906,7 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 				defer cleanupEmptyCluster()
 
 				emptySystemDB.Exec(t, `BACKUP TO $1`, httpAddrEmpty)
-				tenant20C2.ExpectErr(t, `cannot cluster RESTORE backups taken from different tenant: system`,
-					`RESTORE FROM $1`, httpAddrEmpty)
+				tenant20C2.Exec(t, `RESTORE FROM $1`, httpAddrEmpty)
 			})
 		})
 

@@ -113,6 +113,41 @@ func defaultSystemTableRestoreFunc(
 
 // Custom restore functions for different system tables.
 
+// tenantSettingsTableRestoreFunc restores the system.tenant_settings table. It
+// returns an error when trying to restore a non-empty tenant_settings table
+// into a non-system tenant.
+func tenantSettingsTableRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	executor := execCfg.InternalExecutor
+
+	countQuery := fmt.Sprintf("SELECT count(1) FROM %s", tempTableName)
+	row, err := executor.QueryRow(ctx, "count-tenant-settings", txn, countQuery)
+	if err != nil {
+		return errors.Wrapf(err, "checking for existing tenant settings")
+	}
+
+	count, ok := row[0].(*tree.DInt)
+	if !ok {
+		return errors.AssertionFailedf("failed to read count as DInt (was %T)", count)
+	}
+
+	if int64(*count) > 0 && !execCfg.Codec.ForSystemTenant() {
+		// TODO(ssd): It would be good if we could detect this before we've done all of the work of
+		// restoring the user data.
+		return errors.New("cannot restore non-empty system.tenant_settings table")
+	}
+
+	if int64(*count) == 0 {
+		return nil
+	}
+
+	return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+}
+
 // jobsMigrationFunc resets the progress on schema change jobs, and marks all
 // other jobs as reverting.
 func jobsMigrationFunc(
@@ -360,6 +395,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.TenantSettingsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            tenantSettingsTableRestoreFunc,
 	},
 }
 
