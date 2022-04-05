@@ -196,7 +196,11 @@ func changefeedPlanHook(
 			codec := p.ExecCfg().Codec
 
 			activeTimestampProtection := changefeedbase.ActiveProtectedTimestampsEnabled.Get(&p.ExecCfg().Settings.SV)
-			shouldProtectTimestamp := activeTimestampProtection || initialScanFromOptions(details.Opts)
+			initialScanType, err := initialScanTypeFromOpts(details.Opts)
+			if err != nil {
+				return err
+			}
+			shouldProtectTimestamp := activeTimestampProtection || (initialScanType != changefeedbase.NoInitialScan)
 			if shouldProtectTimestamp {
 				ptr = createProtectedTimestampRecord(ctx, codec, jobID, AllTargets(details), details.StatementTime, progress.GetChangefeed())
 			}
@@ -295,8 +299,14 @@ func createChangefeedJobRecord(
 		endTime = asOf.Timestamp
 	}
 
-	if _, ok := opts[changefeedbase.OptInitialScanOnly]; ok {
-		endTime = statementTime
+	{
+		initialScanType, err := initialScanTypeFromOpts(opts)
+		if err != nil {
+			return nil, err
+		}
+		if initialScanType == changefeedbase.OnlyInitialScan {
+			endTime = statementTime
+		}
 	}
 
 	targetList := uniqueTableNames(changefeedStmt.Targets)
@@ -763,15 +773,6 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	{
-		_, withInitialScan := details.Opts[changefeedbase.OptInitialScan]
-		_, noInitialScan := details.Opts[changefeedbase.OptNoInitialScan]
-		if withInitialScan && noInitialScan {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`cannot specify both %s and %s`, changefeedbase.OptInitialScan,
-				changefeedbase.OptNoInitialScan)
-		}
-	}
-	{
 		const opt = changefeedbase.OptEnvelope
 		switch v := changefeedbase.EnvelopeType(details.Opts[opt]); v {
 		case changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeDeprecatedRow:
@@ -824,21 +825,20 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	{
-		_, noInitialScan := details.Opts[changefeedbase.OptNoInitialScan]
+		initialScanType := details.Opts[changefeedbase.OptInitialScan]
 		_, onlyInitialScan := details.Opts[changefeedbase.OptInitialScanOnly]
 		_, endTime := details.Opts[changefeedbase.OptEndTime]
-		if onlyInitialScan && noInitialScan {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`cannot specify both %s and %s`, changefeedbase.OptInitialScanOnly,
-				changefeedbase.OptNoInitialScan)
-		}
 		if endTime && onlyInitialScan {
 			return jobspb.ChangefeedDetails{}, errors.Errorf(
 				`cannot specify both %s and %s`, changefeedbase.OptInitialScanOnly,
 				changefeedbase.OptEndTime)
 		}
-	}
-	{
+
+		if strings.ToLower(initialScanType) == `only` && endTime {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`cannot specify both %s='only' and %s`, changefeedbase.OptInitialScan, changefeedbase.OptEndTime)
+		}
+
 		if !details.EndTime.IsEmpty() && details.EndTime.Less(details.StatementTime) {
 			return jobspb.ChangefeedDetails{}, errors.Errorf(
 				`specified end time %s cannot be less than statement time %s`,
