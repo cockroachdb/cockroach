@@ -15,6 +15,7 @@ import (
 	"time"
 
 	democlusterapi "github.com/cockroachdb/cockroach/pkg/cli/democluster/api"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -79,4 +80,8 @@ type internalContext struct {
 		cancelFn func()
 		doneCh   chan struct{}
 	}
+
+	// passwordHashMethod saves the hash method used for password encryption.
+	// This is used by the `\password` cli command.
+	passwordHashMethod password.HashMethod
 }

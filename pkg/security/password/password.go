@@ -86,7 +86,31 @@ func (h HashMethod) String() string {
 	case HashSCRAMSHA256:
 		return "scram-sha-256"
 	default:
-		panic(errors.AssertionFailedf("programming errof: unknown hash method %d", int(h)))
+		panic(errors.AssertionFailedf("programming error: unknown hash method %d", int(h)))
+	}
+}
+
+// GetDefaultCost retrieves the default hashing cost for the given method.
+func (h HashMethod) GetDefaultCost() int {
+	switch h {
+	case HashBCrypt:
+		return DefaultBcryptCost
+	case HashSCRAMSHA256:
+		return DefaultSCRAMCost
+	default:
+		return -1
+	}
+}
+
+// LookupMethod returns the HashMethod by name.
+func LookupMethod(s string) HashMethod {
+	switch s {
+	case HashBCrypt.String():
+		return HashBCrypt
+	case HashSCRAMSHA256.String():
+		return HashSCRAMSHA256
+	default:
+		return HashInvalidMethod
 	}
 }
 

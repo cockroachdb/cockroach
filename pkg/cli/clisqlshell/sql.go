@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -66,6 +68,8 @@ Connection
   \c, \connect {[DB] [USER] [HOST] [PORT] | [URL]}
                     connect to a server or print the current connection URL.
                     (Omitted values reuse previous parameters. Use '-' to skip a field.)
+  \password [USERNAME]   
+                    securely change the password for a user
 
 Input/Output
   \echo [STRING]    write the provided string to standard output.
@@ -1205,6 +1209,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			}
 		}
 
+	case `\password`:
+		return c.handlePassword(cmd[1:], cliRunStatement, errState)
+
 	case `\|`:
 		return c.pipeSyscmd(c.lastInputLine, nextState, errState)
 
@@ -1314,6 +1321,77 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	}
 
 	return loopState
+}
+
+func (c *cliState) handlePassword(
+	cmd []string, nextState, errState cliStateEnum,
+) (resState cliStateEnum) {
+	if len(cmd) > 1 {
+		return c.invalidSyntax(errState)
+	}
+
+	passwordHashMethod, err := c.getPasswordHashMethod()
+	if err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "retrieving hash method from server: %v\n", err)
+		c.exitErr = err
+		return errState
+	}
+
+	var escapedUserName string
+	if len(cmd) > 0 {
+		escapedUserName = lexbase.EscapeSQLIdent(cmd[0])
+	} else {
+		// "current_user" is a keyword.
+		escapedUserName = "current_user"
+	}
+	fmt.Fprintln(c.iCtx.stdout, "changing password for user", escapedUserName)
+
+	// TODO(jane,knz): currently Ctrl+C during password entry prints out
+	// a weird message and it's confusing to the user what they can do
+	// to stop the entry. This needs to be cleaned up.
+	password1, err := pprompt.PromptForPassword("" /* prompt */)
+	if err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "reading password: %v\n", err)
+		c.exitErr = err
+		return errState
+	}
+
+	password2, err := pprompt.PromptForPassword("Enter it again: ")
+	if err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "reading password: %v\n", err)
+		c.exitErr = err
+		return errState
+	}
+
+	if password1 != password2 {
+		c.exitErr = errors.New("passwords didn't match")
+		fmt.Fprintln(c.iCtx.stderr, c.exitErr)
+		return errState
+	}
+
+	var hashedPassword []byte
+	hashedPassword, err = password.HashPassword(
+		context.Background(),
+		passwordHashMethod.GetDefaultCost(),
+		passwordHashMethod,
+		password1)
+
+	if err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "hashing password: %v\n", err)
+		c.exitErr = err
+		return errState
+	}
+
+	c.concatLines = fmt.Sprintf(
+		`ALTER USER %s WITH LOGIN PASSWORD %s`,
+		// Note: we need to use .SQLIdentifier() to ensure that any special
+		// characters in the username are properly quoted, to make this robust
+		// to SQL injection.
+		escapedUserName,
+		lexbase.EscapeSQLString(string(hashedPassword)),
+	)
+
+	return nextState
 }
 
 func (c *cliState) handleConnect(
@@ -2223,4 +2301,42 @@ func (c *cliState) runWithInterruptableCtx(fn func(ctx context.Context) error) e
 	// Now run the query.
 	err := fn(ctx)
 	return err
+}
+
+// getPasswordHashMethod checks the session variable `password_encryption`
+// to get the password hash method.
+func (c *cliState) getPasswordHashMethod() (password.HashMethod, error) {
+	passwordHashMethodStr, err := c.getSessionVarValue("password_encryption")
+	if err != nil {
+		return password.HashInvalidMethod, err
+	}
+
+	hashMethod := password.LookupMethod(passwordHashMethodStr)
+	if hashMethod == password.HashInvalidMethod {
+		return password.HashInvalidMethod, errors.Newf("unknown hash method: %q", passwordHashMethodStr)
+	}
+	return hashMethod, nil
+}
+
+// getSessionVarValue is to get the value for a session variable.
+func (c *cliState) getSessionVarValue(sessionVar string) (string, error) {
+	query := fmt.Sprintf("SHOW %s", sessionVar)
+	var rows [][]string
+	var err error
+	err = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn,
+			clisqlclient.MakeQuery(query), true)
+		return err
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	for _, row := range rows {
+		if len(row) != 0 {
+			return row[0], nil
+		}
+	}
+	return "", nil
 }
