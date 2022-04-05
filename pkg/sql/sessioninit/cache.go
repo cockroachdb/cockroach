@@ -54,7 +54,7 @@ type Cache struct {
 	dbRoleSettingsTableVersion descpb.DescriptorVersion
 	boundAccount               mon.BoundAccount
 	// authInfoCache is a mapping from username to AuthInfo.
-	authInfoCache map[security.SQLUsername]AuthInfo
+	authInfoCache map[security.SQLUserInfo]AuthInfo
 	// settingsCache is a mapping from (dbID, username) to default settings.
 	settingsCache map[SettingsCacheKey][]string
 	// populateCacheGroup is used to ensure that there is at most one in-flight
@@ -161,7 +161,7 @@ func (a *Cache) GetAuthInfo(
 	// versions are also part of the request key so that we don't read data
 	// from an old version of either table.
 	val, err := a.loadValueOutsideOfCache(
-		ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
+		ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Username.Normalized(), usersTableVersion, roleOptionsTableVersion),
 		func(loadCtx context.Context) (interface{}, error) {
 			return readFromSystemTables(loadCtx, ie, username)
 		})
@@ -186,7 +186,7 @@ func (a *Cache) readAuthInfoFromCache(
 	ctx context.Context,
 	usersTableVersion descpb.DescriptorVersion,
 	roleOptionsTableVersion descpb.DescriptorVersion,
-	username security.SQLUsername,
+	username security.SQLUserInfo,
 ) (AuthInfo, bool) {
 	a.Lock()
 	defer a.Unlock()
@@ -239,7 +239,7 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 	usersTableVersion descpb.DescriptorVersion,
 	roleOptionsTableVersion descpb.DescriptorVersion,
 	aInfo AuthInfo,
-	username security.SQLUsername,
+	username security.SQLUserInfo,
 ) bool {
 	a.Lock()
 	defer a.Unlock()
@@ -257,7 +257,7 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 		hpSize = aInfo.HashedPassword.Size()
 	}
 
-	sizeOfEntry := sizeOfUsername + len(username.Normalized()) +
+	sizeOfEntry := sizeOfUsername + len(username.Username.Normalized()) +
 		sizeOfAuthInfo + hpSize +
 		sizeOfTimestamp
 	if err := a.boundAccount.Grow(ctx, int64(sizeOfEntry)); err != nil {
@@ -473,7 +473,7 @@ func (a *Cache) clearCacheIfStale(
 		a.usersTableVersion = usersTableVersion
 		a.roleOptionsTableVersion = roleOptionsTableVersion
 		a.dbRoleSettingsTableVersion = dbRoleSettingsTableVersion
-		a.authInfoCache = make(map[security.SQLUsername]AuthInfo)
+		a.authInfoCache = make(map[security.SQLUserInfo]AuthInfo)
 		a.settingsCache = make(map[SettingsCacheKey][]string)
 		a.boundAccount.Empty(ctx)
 	} else if a.usersTableVersion > usersTableVersion ||

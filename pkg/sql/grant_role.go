@@ -227,10 +227,10 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 	n.run.rowsAffected += rowsAffected
 	//fmt.Printf("the actual update end")
 
-	sqlUsernameToStrings := func(sqlUsernames []security.SQLUsername) []string {
+	sqlUsernameToStrings := func(sqlUsernames []security.SQLUserInfo) []string {
 		strings := make([]string, len(sqlUsernames))
 		for i, sqlUsername := range sqlUsernames {
-			strings[i] = sqlUsername.Normalized()
+			strings[i] = sqlUsername.Username.Normalized()
 		}
 		return strings
 	}

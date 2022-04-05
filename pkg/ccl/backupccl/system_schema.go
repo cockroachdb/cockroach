@@ -271,6 +271,234 @@ func settingsRestoreFunc(
 	return nil
 }
 
+func usersRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	f := makeUsersRestoreFuncWithQuery(`SELECT * FROM crdb_temp_system.users`)
+	return f(ctx, execCfg, txn, systemTableName, tempTableName)
+}
+
+func makeUsersRestoreFuncWithQuery(
+	query string,
+) func(context.Context, *sql.ExecutorConfig, *kv.Txn, string, string) error {
+	return func(
+		ctx context.Context,
+		execCfg *sql.ExecutorConfig,
+		txn *kv.Txn,
+		systemTableName, tempTableName string,
+	) error {
+		fmt.Println(query)
+		executor := execCfg.InternalExecutor
+		it, err := executor.QueryIteratorEx(
+			ctx,
+			"get-users-from-temp-system-users-table",
+			txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			query,
+		)
+		if err != nil {
+			return err
+		}
+
+		for {
+			ok, err := it.Next(ctx)
+			if !ok {
+				if err != nil {
+					return err
+				}
+				break
+			}
+
+			user := tree.MustBeDString(it.Cur()[0])
+			hashedPassword := it.Cur()[1] // Can be NULL.
+			isRole := tree.MustBeDBool(it.Cur()[2])
+
+			var oid *tree.DOid
+			if it.Cur().Len() >= 4 {
+				oid = tree.MustBeDOid(it.Cur()[3])
+			}
+
+			username, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(string(user))
+			if err != nil {
+				return err
+			}
+			if username == security.RootUserName() || username == security.AdminRoleName() {
+				continue
+			}
+
+			if oid != nil {
+				restoreQuery := fmt.Sprintf(`INSERT INTO system.%s VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING;`,
+					systemTableName)
+
+				opName := "system_users-data-insert"
+				if _, err := executor.ExecEx(ctx, opName, txn, sessiondata.NodeUserSessionDataOverride, restoreQuery, user, hashedPassword, isRole, oid); err != nil {
+					return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+				}
+			} else {
+				restoreQuery := fmt.Sprintf(`INSERT INTO system.%s VALUES ($1, $2, $3, (nextval('system.user_id_seq') + 100)::OID) ON CONFLICT DO NOTHING;`,
+					systemTableName)
+
+				opName := "system_users-data-insert"
+				if _, err := executor.ExecEx(ctx, opName, txn, sessiondata.NodeUserSessionDataOverride, restoreQuery, user, hashedPassword, isRole); err != nil {
+					return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+				}
+			}
+		}
+		return nil
+	}
+}
+
+func roleMembersRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	restoreFunc := makeRoleMembersRestoreFunc(`SELECT * FROM crdb_temp_system.role_members`)
+	return restoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+}
+
+func makeRoleMembersRestoreFunc(
+	query string,
+) func(context.Context, *sql.ExecutorConfig, *kv.Txn, string, string) error {
+	return func(
+		ctx context.Context,
+		execCfg *sql.ExecutorConfig,
+		txn *kv.Txn,
+		systemTableName, tempTableName string,
+	) error {
+		executor := execCfg.InternalExecutor
+
+		it, err := executor.QueryIteratorEx(
+			ctx,
+			"get-role-members-from-temp-table",
+			txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			query,
+		)
+		if err != nil {
+			return err
+		}
+
+		for {
+			ok, err := it.Next(ctx)
+			if !ok {
+				if err != nil {
+					return err
+				}
+				break
+			}
+
+			role := tree.MustBeDString(it.Cur()[0])
+			member := tree.MustBeDString(it.Cur()[1])
+			isAdmin := tree.MustBeDBool(it.Cur()[2])
+
+			username, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(string(role))
+			if err != nil {
+				return err
+			}
+			memberName, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(string(member))
+			if err != nil {
+				return err
+			}
+
+			roleId, err := sql.GetUserID(ctx, executor, txn, username)
+			if err != nil {
+				return err
+			}
+
+			memberId, err := sql.GetUserID(ctx, executor, txn, memberName)
+			if err != nil {
+				return err
+			}
+
+			// Skip this one as it should automatically be granted.
+			if username == security.AdminRoleName() && memberName == security.RootUserName() {
+				continue
+			}
+
+			restoreQuery := fmt.Sprintf(`INSERT INTO system.%s VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING;`,
+				systemTableName)
+			opName := "system_role_members-data-insert"
+			if _, err := executor.ExecEx(ctx, opName, txn, sessiondata.InternalExecutorOverride{
+				User: security.RootUserName(),
+			}, restoreQuery, role, member, isAdmin, roleId, memberId); err != nil {
+				return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+			}
+		}
+
+		return nil
+	}
+}
+
+func roleOptionsRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	restoreFunc := makeRoleOptionsRestoreFunc(`SELECT * FROM crdb_temp_system.role_options`)
+	return restoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+}
+
+func makeRoleOptionsRestoreFunc(
+	query string,
+) func(context.Context, *sql.ExecutorConfig, *kv.Txn, string, string) error {
+	return func(
+		ctx context.Context,
+		execCfg *sql.ExecutorConfig,
+		txn *kv.Txn,
+		systemTableName, tempTableName string,
+	) error {
+		executor := execCfg.InternalExecutor
+
+		it, err := executor.QueryIteratorEx(
+			ctx,
+			"get-role-options-from-temp-table",
+			txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			query,
+		)
+		if err != nil {
+			return err
+		}
+
+		for {
+			ok, err := it.Next(ctx)
+			if !ok {
+				if err != nil {
+					return err
+				}
+				break
+			}
+
+			username := tree.MustBeDString(it.Cur()[0])
+			option := tree.MustBeDString(it.Cur()[1])
+			value := it.Cur()[2]
+			sqlUsername, err := security.MakeSQLUsernameFromPreNormalizedStringChecked(string(username))
+			if err != nil {
+				return err
+			}
+			roleId, err := sql.GetUserID(ctx, executor, txn, sqlUsername)
+			if err != nil {
+				return err
+			}
+			restoreQuery := fmt.Sprintf(`INSERT INTO system.%s VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING;`,
+				systemTableName)
+			opName := "system_role_options-data-insert"
+			if _, err := executor.ExecEx(ctx, opName, txn, sessiondata.InternalExecutorOverride{
+				User: security.RootUserName(),
+			}, restoreQuery, username, option, value, roleId); err != nil {
+				return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+			}
+		}
+		return nil
+	}
+}
+
 // systemTableBackupConfiguration is a map from every systemTable present in the
 // cluster to a configuration struct which specifies how it should be treated by
 // backup. Every system table should have a specification defined here, enforced
@@ -278,6 +506,7 @@ func settingsRestoreFunc(
 var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.UsersTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            usersRestoreFunc,
 	},
 	systemschema.ZonesTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
@@ -298,9 +527,11 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.RoleMembersTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            roleMembersRestoreFunc,
 	},
 	systemschema.RoleOptionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            roleOptionsRestoreFunc,
 	},
 	systemschema.UITable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
