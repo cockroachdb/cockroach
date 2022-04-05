@@ -234,6 +234,166 @@ func settingsRestoreFunc(
 	return nil
 }
 
+func usersRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	executor := execCfg.InternalExecutor
+
+	it, err := executor.QueryIteratorEx(
+		ctx,
+		"get-users-from-temp-system-users-table",
+		txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
+	)
+	if err != nil {
+		return err
+	}
+
+	for {
+		ok, err := it.Next(ctx)
+		if !ok {
+			if err != nil {
+				return err
+			}
+			break
+		}
+
+		user := it.Cur()[0]
+		hashedPassword := it.Cur()[1]
+
+		pwBytes := []byte(*(it.Cur()[1].(*tree.DBytes)))
+		fmt.Println(pwBytes)
+		isRole := it.Cur()[2]
+		fmt.Println(user, hashedPassword, isRole)
+
+		if user.String() == "'admin'" {
+			continue
+		}
+		if user.String() == "'root'" {
+			continue
+		}
+
+		restoreQuery := fmt.Sprintf(`INSERT INTO system.%s VALUES ($1, $2, $3, 101)`,
+			systemTableName)
+		fmt.Println(restoreQuery)
+		opName := "system_users-data-insert"
+		if _, err := executor.Exec(ctx, opName, txn, restoreQuery, user, hashedPassword, isRole); err != nil {
+			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+		}
+	}
+
+	//restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4, $5)",
+	//	systemTableName)
+	//opName :=  "system_users-data-insert"
+	//if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
+	//	return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	//}
+
+	//query := fmt.Sprintf(`SELECT username, "hashedPassword", "isRole" FROM %s`, tempTableName)
+	//it, err := executor.QueryIteratorEx(
+	//	ctx, "user-migration-query-system-users", txn,
+	//	sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+	//	query)
+	//if err != nil {
+	//	return errors.Wrap(err, "fetching system users")
+	//}
+	//
+	//datums, err := executor.QueryRowEx(ctx, "test", txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()}, fmt.Sprintf(`SELECT * FROM %s`, tempTableName))
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//fmt.Println(datums)
+	//
+	//for {
+	//	ok, err := it.Next(ctx)
+	//	if !ok {
+	//		if err != nil {
+	//			return err
+	//		}
+	//		break
+	//	}
+	//
+	//	fmt.Println(it.Cur())
+	//}
+
+	//restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4, $5)",
+	//	systemTableName)
+	//opName :=  "system_users-data-insert"
+	//if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
+	//	return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	//}
+	return nil
+}
+
+func roleMembersRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	fmt.Println("roleMembersRestoreFunc")
+	executor := execCfg.InternalExecutor
+
+	it, err := executor.QueryIteratorEx(ctx, "test", txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()}, fmt.Sprintf(`SELECT * FROM %s`, systemTableName))
+	if err != nil {
+		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	}
+
+	for {
+		ok, err := it.Next(ctx)
+		if !ok || err != nil {
+			break
+		}
+
+		fmt.Println(it.Cur())
+	}
+
+	//restoreQuery := fmt.Sprintf(`INSERT INTO system.%s VALUES ('test', '', false, 100)`,
+	//	systemTableName)
+	//opName := "system_users-data-insert"
+	//if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
+	//	return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	//}
+	return nil
+}
+
+func roleOptionsRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	fmt.Println("roleOptionsRestoreFunc")
+	executor := execCfg.InternalExecutor
+
+	it, err := executor.QueryIteratorEx(ctx, "test", txn, sessiondata.InternalExecutorOverride{User: security.RootUserName()}, fmt.Sprintf(`SELECT * FROM %s`, systemTableName))
+	if err != nil {
+		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	}
+
+	for {
+		ok, err := it.Next(ctx)
+		if !ok || err != nil {
+			break
+		}
+
+		fmt.Println(it.Cur())
+	}
+
+	//restoreQuery := fmt.Sprintf(`INSERT INTO system.%s VALUES ('test', '', false, 100)`,
+	//	systemTableName)
+	//opName := "system_users-data-insert"
+	//if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
+	//	return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	//}
+	return nil
+}
+
 // systemTableBackupConfiguration is a map from every systemTable present in the
 // cluster to a configuration struct which specifies how it should be treated by
 // backup. Every system table should have a specification defined here, enforced
@@ -241,6 +401,7 @@ func settingsRestoreFunc(
 var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.UsersTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            usersRestoreFunc,
 	},
 	systemschema.ZonesTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
@@ -261,9 +422,11 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.RoleMembersTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            roleMembersRestoreFunc,
 	},
 	systemschema.RoleOptionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:            roleOptionsRestoreFunc,
 	},
 	systemschema.UITable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,

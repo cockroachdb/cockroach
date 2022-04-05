@@ -527,6 +527,13 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 			{"0", "52", "0", "database comment string"},
 			{"1", "53", "0", "table comment string"},
 		})
+
+		sqlDB.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
+			{"admin", "", "true", "2"},
+			{"craig", "", "false", "101"},
+			{"root", "", "false", "1"},
+		})
+
 		// In the backup, Public schemas for non-system databases have ID 29.
 		// These should all be updated to explicit public schemas.
 		sqlDB.CheckQueryResults(t, `SELECT

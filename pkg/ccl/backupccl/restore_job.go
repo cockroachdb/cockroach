@@ -2368,7 +2368,7 @@ type systemTableNameWithConfig struct {
 
 // Restore system.users from the backup into the restoring cluster. Only recreate users
 // which are in a backup of system.users but do not currently exist (ignoring those who do)
-// and re-grant roles for users if the backup has system.role_members.
+//// and re-grant roles for users if the backup has system.role_members.
 func (r *restoreResumer) restoreSystemUsers(
 	ctx context.Context, db *kv.DB, systemTables []catalog.TableDescriptor,
 ) error {
@@ -2382,12 +2382,12 @@ func (r *restoreResumer) restoreSystemUsers(
 			return err
 		}
 
-		insertUser := `INSERT INTO system.users ("username", "hashedPassword", "isRole") VALUES ($1, $2, $3)`
+		insertUser := `INSERT INTO system.users ("username", "hashedPassword", "isRole", "user_id") VALUES ($1, $2, $3, $4)`
 		newUsernames := make(map[string]bool)
 		for _, user := range users {
 			newUsernames[user[0].String()] = true
 			if _, err = executor.Exec(ctx, "insert-non-existent-users", txn, insertUser,
-				user[0], user[1], user[2]); err != nil {
+				user[0], user[1], user[2], 5); err != nil {
 				return err
 			}
 		}
@@ -2405,12 +2405,12 @@ func (r *restoreResumer) restoreSystemUsers(
 			return err
 		}
 
-		insertRoleMember := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3)`
+		insertRoleMember := `INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, $3, $4, $5)`
 		for _, roleMember := range roleMembers {
 			// Only grant roles to users that don't currently exist, i.e., new users we just added
 			if _, ok := newUsernames[roleMember[1].String()]; ok {
 				if _, err = executor.Exec(ctx, "insert-non-existent-role-members", txn, insertRoleMember,
-					roleMember[0], roleMember[1], roleMember[2]); err != nil {
+					roleMember[0], roleMember[1], roleMember[2], 5, 6); err != nil {
 					return err
 				}
 			}

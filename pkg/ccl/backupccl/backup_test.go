@@ -9306,7 +9306,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 78963)
+	//skip.WithIssue(t, 78963)
 
 	sqlDB, tempDir, cleanupFn := createEmptyCluster(t, singleNode)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
