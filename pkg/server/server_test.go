@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"embed"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -66,6 +67,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// embedFsys is a small instance of embed.FS used for testing purposes only
+//go:embed doc.go
+var embedFsys embed.FS
 
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
 // been specified.
@@ -1150,6 +1155,77 @@ Binary built without web UI.
 			if respString != expected {
 				t.Fatalf("expected %s; got %s", expected, respString)
 			}
+		}
+	})
+
+	t.Run("Client-side caching", func(t *testing.T) {
+		ctx := context.Background()
+		linkInFakeUI()
+		defer unlinkFakeUI()
+
+		ui.Assets = embedFsys
+
+		// Clear fake asset FS when we're done
+		defer func() {
+			ui.Assets = embed.FS{}
+		}()
+
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
+		tsrv := s.(*TestServer)
+
+		loggedInClient, err := tsrv.GetAdminAuthenticatedHTTPClient()
+		require.NoError(t, err)
+		loggedOutClient, err := tsrv.GetHTTPClient()
+		require.NoError(t, err)
+
+		cases := []struct {
+			desc   string
+			client http.Client
+		}{
+			{
+				desc:   "unauthenticated user",
+				client: loggedOutClient,
+			},
+			{
+				desc:   "authenticated user",
+				client: loggedInClient,
+			},
+		}
+
+		for _, testCase := range cases {
+			t.Run(fmt.Sprintf("bundle caching for %s", testCase.desc), func(t *testing.T) {
+				// Request bundle.js without an If-None-Match header first, to simulate the initial load
+				uncachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/doc.go", nil)
+				require.NoError(t, err)
+
+				uncachedResp, err := testCase.client.Do(uncachedReq)
+				require.NoError(t, err)
+				defer uncachedResp.Body.Close()
+				require.Equal(t, 200, uncachedResp.StatusCode)
+
+				etag := uncachedResp.Header.Get("ETag")
+				require.NotEmpty(t, etag, "Server must provide ETag response header with asset responses")
+
+				// Use that ETag header on the next request to simulate a client reload
+				cachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/doc.go", nil)
+				require.NoError(t, err)
+				cachedReq.Header.Add("If-None-Match", etag)
+
+				cachedResp, err := testCase.client.Do(cachedReq)
+				require.NoError(t, err)
+				defer cachedResp.Body.Close()
+				require.Equal(t, 304, cachedResp.StatusCode)
+
+				respBytes, err := ioutil.ReadAll(cachedResp.Body)
+				require.NoError(t, err)
+				require.Empty(t, respBytes, "Server must provide empty body for cached response")
+
+				etagFromEmptyResp := cachedResp.Header.Get("ETag")
+				require.NotEmpty(t, etag, "Server must provide ETag response header with asset responses")
+
+				require.Equal(t, etag, etagFromEmptyResp, "Server must provide consistent ETag response headers")
+			})
 		}
 	})
 }

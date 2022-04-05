@@ -22,11 +22,11 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
-	"io/fs"
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -113,8 +113,24 @@ type Config struct {
 // including index.html, which has some login-related variables
 // templated into it, as well as static assets.
 func Handler(cfg Config) http.Handler {
-	fs, _ := fs.Sub(Assets, "assets")
-	fileServer := http.FileServer(http.FS(fs))
+	// etags is used to provide a unique per-file checksum for each served file,
+	// which enables client-side caching using Cache-Control and ETag headers.
+	etags := make(map[string]string)
+
+	if HaveUI {
+		// Only compute hashes for UI-enabled builds
+		err := httputil.ComputeEtags(Assets, etags)
+		if err != nil {
+			log.Errorf(context.Background(), "Unable to compute asset hashes: %+v", err)
+		}
+	}
+
+	fileHandlerChain := httputil.EtagHandler(
+		etags,
+		http.FileServer(
+			http.FS(Assets),
+		),
+	)
 	buildInfo := build.GetInfo()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +140,7 @@ func Handler(cfg Config) http.Handler {
 		}
 
 		if r.URL.Path != "/" {
-			fileServer.ServeHTTP(w, r)
+			fileHandlerChain.ServeHTTP(w, r)
 			return
 		}
 
