@@ -15,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,15 +26,6 @@ type testCase struct {
 	path               string
 	ifNoneMatch        string
 	expectedStatusCode int
-}
-
-func mustParseURL(unparsed string) *url.URL {
-	out, err := url.Parse(unparsed)
-	if err != nil {
-		panic(err)
-	}
-
-	return out
 }
 
 func TestEtagHandler(t *testing.T) {
@@ -54,9 +44,6 @@ func TestEtagHandler(t *testing.T) {
 	}
 
 	handler := EtagHandler(hashedFiles, okHandler)
-	server := httptest.NewServer(handler)
-	defer server.Close()
-	client := server.Client()
 
 	cases := []testCase{
 		{
@@ -93,18 +80,15 @@ func TestEtagHandler(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(fmt.Sprintf("request to %s with %s", tc.path, tc.desc), func(t *testing.T) {
-			tmp := mustParseURL(server.URL + tc.path)
-			fmt.Printf("GETing url '%s'\n", tmp)
-			resp, err := client.Do(&http.Request{
-				URL: mustParseURL(server.URL + tc.path),
-				Header: http.Header{
-					"If-None-Match": []string{tc.ifNoneMatch},
-				},
-			})
+			req := httptest.NewRequest("GET", tc.path, nil)
+			req.Header.Set("If-None-Match", tc.ifNoneMatch)
+			w := httptest.NewRecorder()
 
-			require.NoError(t, err)
-			defer resp.Body.Close()
-			require.Equal(t, tc.expectedStatusCode, resp.StatusCode)
+			handler.ServeHTTP(w, req)
+			res := w.Result()
+
+			defer res.Body.Close()
+			require.Equal(t, tc.expectedStatusCode, res.StatusCode)
 
 			checksum, checksumExists := hashedFiles[tc.path]
 			// Requests for files with ETags must always include the ETag in the response
@@ -112,12 +96,12 @@ func TestEtagHandler(t *testing.T) {
 				require.Equal(
 					t,
 					`"`+checksum+`"`,
-					resp.Header.Get("ETag"),
+					res.Header.Get("ETag"),
 					"Requests for hashed files must always include an ETag response header",
 				)
 			}
 
-			bodyBytes, err := io.ReadAll(resp.Body)
+			bodyBytes, err := io.ReadAll(res.Body)
 			require.NoError(t, err)
 			body := string(bodyBytes)
 
