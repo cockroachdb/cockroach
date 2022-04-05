@@ -32,7 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -65,6 +68,8 @@ Connection
   \c, \connect {[DB] [USER] [HOST] [PORT] | [URL]}
                     connect to a server or print the current connection URL.
                     (Omitted values reuse previous parameters. Use '-' to skip a field.)
+  \password [USERNAME]   
+                    securely change the password for a user
 
 Input/Output
   \echo [STRING]    write the provided string to standard output.
@@ -1158,6 +1163,68 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			}
 		}
 
+	case `\password`:
+		if c.iCtx.passwordHashMethod == security.HashInvalidMethod {
+			err := errors.AssertionFailedf("\\password not supported for current password encryption method")
+			fmt.Fprintf(c.iCtx.stderr, err.Error())
+			c.exitErr = err
+			return errState
+		}
+		password1, err := pprompt.PromptForPassword()
+		if err != nil {
+			fmt.Fprintf(c.iCtx.stderr, "reading password: %v\n", err)
+			c.exitErr = err
+			return errState
+		}
+
+		fmt.Fprintf(c.iCtx.stdout, "Enter it again: ")
+		password2, err := pprompt.PromptForPassword()
+		if err != nil {
+			fmt.Fprintf(c.iCtx.stderr, "reading password: %v\n", err)
+			c.exitErr = err
+			return errState
+		}
+
+		if password1 != password2 {
+			fmt.Fprintf(c.iCtx.stderr, "passwords didn't match\n")
+			c.exitErr = err
+			return errState
+		} else {
+			var userName security.SQLUsername
+
+			if len(cmd) > 1 {
+				userName, err = security.MakeSQLUsernameFromUserInput(cmd[1], security.UsernameValidation)
+				for _, extraArg := range cmd[2:] {
+					fmt.Fprintf(c.iCtx.stdout, "\\password: extra argument \"%s\" ignored\n", extraArg)
+				}
+			} else {
+				userName, err = security.MakeSQLUsernameFromUserInput("current_user", security.UsernameValidation)
+			}
+			if err != nil {
+				c.exitErr = errors.NewAssertionErrorWithWrappedErrf(err, "server-side username does not pass validation")
+				return errState
+			}
+
+			var hashedPassword []byte
+
+			sv := cluster.MakeClusterSettings().SV
+			hashedPassword, err = security.HashPassword(context.Background(), &sv, c.iCtx.passwordHashMethod, password1)
+
+			if err != nil {
+				fmt.Fprintf(c.iCtx.stderr, "hashing password: %v\n", err)
+				c.exitErr = err
+				return errState
+			}
+
+			c.concatLines = fmt.Sprintf(
+				`ALTER USER %s WITH LOGIN PASSWORD %s`,
+				userName.SQLIdentifier(),
+				lexbase.EscapeSQLString(string(hashedPassword)),
+			)
+
+			return cliRunStatement
+		}
+
 	case `\|`:
 		return c.pipeSyscmd(c.lastInputLine, nextState, errState)
 
@@ -1728,6 +1795,8 @@ func (c *cliState) RunInteractive(cmdIn, cmdOut, cmdErr *os.File) (exitErr error
 	finalFn := c.maybeHandleInterrupt()
 	defer finalFn()
 
+	c.iCtx.passwordHashMethod = c.getPasswordHashMethod()
+
 	return c.doRunShell(cliStart, cmdIn, cmdOut, cmdErr)
 }
 
@@ -2090,4 +2159,55 @@ func (c *cliState) runWithInterruptableCtx(fn func(ctx context.Context) error) e
 	// Now run the query.
 	err := fn(ctx)
 	return err
+}
+
+// getPasswordHashMethod checks the session variable `password_encryption`
+// to get the password hash method.
+func (c *cliState) getPasswordHashMethod() security.HashMethod {
+	passwordEncryptMethodStr, err := c.getSessionVarValue("password_encryption")
+	if err != nil {
+		clierror.OutputError(c.iCtx.stdout,
+			errors.Wrap(
+				err,
+				"get password hash method via password_encryption session var"),
+			true,  /*showSeverity*/
+			false, /*verbose*/
+		)
+		return security.HashInvalidMethod
+	}
+
+	hashMethod, err := security.GetHashMethodFromString(passwordEncryptMethodStr)
+	if err != nil {
+		clierror.OutputError(c.iCtx.stdout,
+			errors.Wrap(
+				err,
+				"get password hash method from string"),
+			true,  /*showSeverity*/
+			false, /*verbose*/
+		)
+	}
+	return hashMethod
+}
+
+// getSessionVarValue is to get the value for a session variable.
+func (c *cliState) getSessionVarValue(sessionVar string) (string, error) {
+	query := fmt.Sprintf("SHOW %s", sessionVar)
+	var rows [][]string
+	var err error
+	err = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn,
+			clisqlclient.MakeQuery(query), true)
+		return err
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	for _, row := range rows {
+		if len(row) != 0 {
+			return row[0], nil
+		}
+	}
+	return "", nil
 }
