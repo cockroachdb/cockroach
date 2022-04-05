@@ -3138,10 +3138,8 @@ subtest session_revival_token
 
 user host-cluster-root
 
-# TODO(rafi): use ALTER TENANT ALL when available.
 statement ok
-INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
-		(0, 'server.user_login.session_revival_token.enabled', 'true', 'b');
+ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true
 
 user root
 
@@ -3206,10 +3204,8 @@ Ed25519  testuser  true  true  true  true
 
 user host-cluster-root
 
-# TODO(rafi): use ALTER TENANT ALL when available.
 statement ok
-UPSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
-		(0, 'server.user_login.session_revival_token.enabled', 'false', 'b')
+ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = false
 
 user root
 
