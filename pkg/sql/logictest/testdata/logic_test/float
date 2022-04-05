@@ -77,6 +77,21 @@ SELECT * FROM i WHERE f = 0
 -0
 0
 
+statement ok
+CREATE INDEX ON i (f DESC)
+
+query R rowsort
+SELECT * FROM i@i_f_idx;
+----
+-0
+0
+
+query R rowsort
+SELECT * FROM i@i_f_idx1;
+----
+-0
+0
+
 statement error violates unique constraint
 CREATE UNIQUE INDEX ON i (f)
 
