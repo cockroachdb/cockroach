@@ -71,6 +71,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 
 // buildTargetMapping maintains shorthands that map 1:1 with bazel targets.
 var buildTargetMapping = map[string]string{
+	"all_tests":        "//pkg:all_tests",
 	"bazel-remote":     bazelRemoteTarget,
 	"buildifier":       "@com_github_bazelbuild_buildtools//buildifier:buildifier",
 	"buildozer":        "@com_github_bazelbuild_buildtools//buildozer:buildozer",
@@ -81,6 +82,7 @@ var buildTargetMapping = map[string]string{
 	"crlfmt":           "@com_github_cockroachdb_crlfmt//:crlfmt",
 	"dev":              "//pkg/cmd/dev:dev",
 	"docgen":           "//pkg/cmd/docgen:docgen",
+	"enormous_tests":   "//pkg:enormous_tests",
 	"execgen":          "//pkg/sql/colexec/execgen/cmd/execgen:execgen",
 	"gofmt":            "@com_github_cockroachdb_gostdlib//cmd/gofmt:gofmt",
 	"goimports":        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports:goimports",
@@ -89,13 +91,17 @@ var buildTargetMapping = map[string]string{
 	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
 	"oss":              "//pkg/cmd/cockroach-oss:cockroach-oss",
 	"langgen":          "//pkg/sql/opt/optgen/cmd/langgen:langgen",
+	"large_tests":      "//pkg:large_tests",
+	"medium_tests":     "//pkg:medium_tests",
 	"roachprod":        "//pkg/cmd/roachprod:roachprod",
 	"roachprod-stress": "//pkg/cmd/roachprod-stress:roachprod-stress",
 	"roachtest":        "//pkg/cmd/roachtest:roachtest",
 	"short":            "//pkg/cmd/cockroach-short:cockroach-short",
+	"small_tests":      "//pkg:small_tests",
 	"staticcheck":      "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
 	"stress":           stressTarget,
 	"swagger":          "@com_github_go_swagger_go_swagger//cmd/swagger:swagger",
+	"tests":            "//pkg:all_tests",
 	"workload":         "//pkg/cmd/workload:workload",
 }
 
@@ -322,7 +328,7 @@ func (d *dev) getBasicBuildArgs(
 				typ := fields[0]
 				args = append(args, fullTargetName)
 				buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, kind: typ})
-				if typ == "go_test" || typ == "go_transition_test" {
+				if typ == "go_test" || typ == "go_transition_test" || typ == "test_suite" {
 					shouldBuildWithTestConfig = true
 				}
 			}

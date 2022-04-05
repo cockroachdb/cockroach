@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,16 +39,45 @@ const (
 	vModuleFlag      = "vmodule"
 )
 
+var testTargetMapping = map[string]string{
+	"all":            "//pkg:all_tests",
+	"all_tests":      "//pkg:all_tests",
+	"enormous":       "//pkg:enormous_tests",
+	"enormous_tests": "//pkg:enormous_tests",
+	"large":          "//pkg:large_tests",
+	"large_tests":    "//pkg:large_tests",
+	"medium":         "//pkg:medium_tests",
+	"medium_tests":   "//pkg:medium_tests",
+	"small":          "//pkg:small_tests",
+	"small_tests":    "//pkg:small_tests",
+}
+
+var testShorthands []string = func() []string {
+	ret := make([]string, 0, len(testTargetMapping))
+	for t := range testTargetMapping {
+		ret = append(ret, t)
+	}
+	sort.Strings(ret)
+	return ret
+}()
+
 func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	// testCmd runs the specified cockroachdb tests.
 	testCmd := &cobra.Command{
 		Use:   "test [pkg..]",
 		Short: `Run the specified tests`,
-		Long:  `Run the specified tests.`,
+		Long: `Run the specified tests.
+
+This command takes a list of packages or build targets and tests all of them.
+The build target can be a normal bazel build target (like
+pkg/kv/kvserver:kvserver_test), or it can be a plain directory (like
+pkg/kv/kvserver). Furthermore, we accept the following shorthands:
+` + fmt.Sprintf("\n\t%s", strings.Join(testShorthands, "\n\t")),
 		Example: `
 	dev test
 	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
 	dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
+        dev test small -v
 	dev test --stress --race ...`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
@@ -120,6 +150,11 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	var testTargets []string
 	for _, pkg := range pkgs {
+		if alias, ok := testTargetMapping[pkg]; ok {
+			testTargets = append(testTargets, alias)
+			continue
+		}
+
 		pkg = strings.TrimPrefix(pkg, "//")
 		pkg = strings.TrimPrefix(pkg, "./")
 		pkg = strings.TrimRight(pkg, "/")
