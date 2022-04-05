@@ -792,6 +792,14 @@ func backupPlanHook(
 				initialDetails.Destination.Subdir = latestFileName
 			} else if subdir != "" {
 				initialDetails.Destination.Subdir = "/" + strings.TrimPrefix(subdir, "/")
+				// Deprecation notice for `BACKUP INTO` syntax with an explicit subdir.
+				// Remove this once the syntax is deleted in 22.2.
+				p.BufferClientNotice(ctx,
+					pgnotice.Newf("BACKUP commands with an explicitly specified"+
+						" subdirectory will be removed in a future release. Users can create a full backup via `BACKUP ... "+
+						"INTO <collectionURI>`, or an incremental backup on the latest full backup in their "+
+						"collection via `BACKUP ... INTO LATEST IN <collectionURI>`"))
+
 			} else {
 				initialDetails.Destination.Subdir = endTime.GoTime().Format(DateBasedIntoFolderName)
 			}
