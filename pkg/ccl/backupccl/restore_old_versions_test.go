@@ -74,6 +74,7 @@ func TestRestoreOldVersions(t *testing.T) {
 		privilegeDirs               = testdataBase + "/privileges"
 		multiRegionDirs             = testdataBase + "/multi-region"
 		publicSchemaDirs            = testdataBase + "/public-schema-remap"
+		roleDirs                    = testdataBase + "/roles"
 	)
 
 	t.Run("table-restore", func(t *testing.T) {
@@ -288,6 +289,18 @@ ORDER BY object_type, object_name`, [][]string{
 			t.Run(dir.Name(), restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir))
 		}
 	})
+
+	t.Run("role_id_restore_test", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(roleDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(roleDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restoreOldVersionRoleIDTest(exportDir))
+		}
+	})
+
 }
 
 func restoreOldVersionTestWithInterleave(exportDir string) func(t *testing.T) {
@@ -990,5 +1003,58 @@ func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) f
 		// We should have no non-system database with a public schema name space
 		// entry with id 29.
 		sqlDB.CheckQueryResults(t, `SELECT id FROM system.namespace WHERE name = 'public' AND id=29 AND "parentID"!=1`, [][]string{})
+	}
+}
+
+func restoreOldVersionRoleIDTest(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		externalDir, dirCleanup := testutils.TempDir(t)
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				ExternalIODir: externalDir,
+			},
+		})
+		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		defer func() {
+			tc.Stopper().Stop(ctx)
+			dirCleanup()
+		}()
+		err := os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
+		require.NoError(t, err)
+
+		// Ensure that the restore succeeds.
+		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
+
+		sqlDB.CheckQueryResults(t, "SHOW USERS", [][]string{
+			{"admin", "", "{}"},
+			{"root", "", "{admin,test2}"},
+			{"test", "", "{}"},
+			{"test1", "VALID UNTIL=2020-01-01 00:00:00+00:00", "{}"},
+			{"test2", "", "{test1}"},
+			{"test3", "CREATELOGIN, NOLOGIN", "{}"},
+		})
+
+		sqlDB.CheckQueryResults(t, "SELECT * FROM system.users", [][]string{
+			{"admin", "", "true", "2"},
+			{"root", "", "false", "1"},
+			{"test", "NULL", "false", "101"},
+			{"test1", "SCRAM-SHA-256$119680:yNI1uZnUuY/r6N2WY+iQVw==$tT97RQJ7wqfdLb+jhjVK+JPH4rwt8nNeyHzHseSyLrI=:45cHm8tlPWK1D+tpUHvL5S6whwpW1Gi2t5efp6NTegU=", "false", "102"},
+			{"test2", "NULL", "false", "103"},
+			{"test3", "NULL", "false", "104"},
+		})
+
+		sqlDB.CheckQueryResults(t, "SELECT * FROM system.role_options", [][]string{
+			{"test1", "VALID UNTIL", "2020-01-01 00:00:00+00:00", "102"},
+			{"test3", "CREATELOGIN", "NULL", "104"},
+			{"test3", "NOLOGIN", "NULL", "104"},
+		})
+
+		sqlDB.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
+			{"admin", "root", "true", "2", "1"},
+			{"test1", "test2", "false", "102", "103"},
+			{"test2", "root", "false", "103", "1"},
+		})
+
 	}
 }

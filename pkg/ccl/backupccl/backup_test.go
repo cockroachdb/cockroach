@@ -9343,17 +9343,18 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"test_role", "NULL", "true"},
 		})
 		sqlDBRestore.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
-			{"admin", "app", "false"},
-			{"admin", "root", "true"},
-			{"app_role", "app", "false"},
-			{"app_role", "test_role", "false"},
+			{"admin", "app", "false", "2", "102"},
+			{"admin", "root", "true", "2", "1"},
+			{"app_role", "app", "false", "103", "102"},
+			{"app_role", "test_role", "false", "103", "104"},
+			{"test_role", "test", "false", "104", "101"},
 		})
 		sqlDBRestore.CheckQueryResults(t, "SHOW USERS", [][]string{
 			{"admin", "", "{}"},
 			{"app", "", "{admin,app_role}"},
 			{"app_role", "", "{}"},
 			{"root", "", "{admin}"},
-			{"test", "", "{}"},
+			{"test", "", "{test_role}"},
 			{"test_role", "", "{app_role}"},
 		})
 	})

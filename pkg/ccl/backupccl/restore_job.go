@@ -2372,24 +2372,13 @@ type systemTableNameWithConfig struct {
 func (r *restoreResumer) restoreSystemUsers(
 	ctx context.Context, db *kv.DB, systemTables []catalog.TableDescriptor,
 ) error {
-	executor := r.execCfg.InternalExecutor
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		selectNonExistentUsers := "SELECT * FROM crdb_temp_system.users temp " +
-			"WHERE NOT EXISTS (SELECT * FROM system.users u WHERE temp.username = u.username)"
-		users, err := executor.QueryBuffered(ctx, "get-users",
-			txn, selectNonExistentUsers)
-		if err != nil {
-			return err
-		}
+		selectNonExistentUsers := `SELECT username, "hashedPassword", "isRole" FROM crdb_temp_system.users temp
+			WHERE NOT EXISTS (SELECT * FROM system.users u WHERE temp.username = u.username)`
 
-		insertUser := `INSERT INTO system.users ("username", "hashedPassword", "isRole", "user_id") VALUES ($1, $2, $3, $4)`
-		newUsernames := make(map[string]bool)
-		for _, user := range users {
-			newUsernames[user[0].String()] = true
-			if _, err = executor.Exec(ctx, "insert-non-existent-users", txn, insertUser,
-				user[0], user[1], user[2], 5); err != nil {
-				return err
-			}
+		restoreUsersFunc := makeUsersRestoreFuncWithQuery(selectNonExistentUsers)
+		if err := restoreUsersFunc(ctx, r.execCfg, txn, "users", "" /* tempTableName - this is unused */); err != nil {
+			return err
 		}
 
 		// We skip granting roles if the backup does not contain system.role_members.
@@ -2397,24 +2386,52 @@ func (r *restoreResumer) restoreSystemUsers(
 			return nil
 		}
 
-		selectNonExistentRoleMembers := "SELECT * FROM crdb_temp_system.role_members temp_rm WHERE " +
-			"NOT EXISTS (SELECT * FROM system.role_members rm WHERE temp_rm.role = rm.role AND temp_rm.member = rm.member)"
-		roleMembers, err := executor.QueryBuffered(ctx, "get-role-members",
-			txn, selectNonExistentRoleMembers)
-		if err != nil {
+		// We insert the rows that do not already exist in the table and
+		// where the role and member both exist in the system.users table.
+		selectNonExistentRoleMembers := `
+SELECT *
+  FROM crdb_temp_system.role_members AS temp_rm
+ WHERE NOT EXISTS(
+            SELECT *
+              FROM system.role_members AS rm
+             WHERE temp_rm.role = rm.role
+               AND temp_rm.member = rm.member
+           )
+   AND EXISTS(
+        SELECT 1
+          FROM system.users AS u
+         WHERE temp_rm.role = u.username
+       )
+   AND EXISTS(
+        SELECT 1
+          FROM system.users AS u
+         WHERE temp_rm.role = u.username
+       );
+`
+		restoreRoleMembersFunc := makeRoleMembersRestoreFunc(selectNonExistentRoleMembers)
+		if err := restoreRoleMembersFunc(ctx, r.execCfg, txn, "role_members", "" /* tempTableName - this is unused */); err != nil {
 			return err
 		}
 
-		insertRoleMember := `INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, $3, $4, $5)`
-		for _, roleMember := range roleMembers {
-			// Only grant roles to users that don't currently exist, i.e., new users we just added
-			if _, ok := newUsernames[roleMember[1].String()]; ok {
-				if _, err = executor.Exec(ctx, "insert-non-existent-role-members", txn, insertRoleMember,
-					roleMember[0], roleMember[1], roleMember[2], 5, 6); err != nil {
-					return err
-				}
-			}
-		}
+		//		selectRoleOptionsForNonExistentRoles := `
+		//SELECT *
+		//  FROM crdb_temp_system.role_options AS temp_ro
+		// WHERE NOT EXISTS(
+		//            SELECT *
+		//              FROM system.role_members AS ro
+		//             WHERE temp_ro.role = ro.role
+		//               AND temp_rm.option = ro.option
+		//           )
+		//   AND EXISTS(
+		//        SELECT 1
+		//          FROM system.users AS u
+		//         WHERE temp_ro.role = u.username
+		//       )
+		//`
+		//		restoreRoleOptionsFunc := makeRoleMembersRestoreFunc(selectRoleOptionsForNonExistentRoles)
+		//		if err := restoreRoleOptionsFunc(ctx, r.execCfg, txn, "role_members", "" /* tempTableName - this is unused */); err != nil {
+		//			return err
+		//		}
 		return nil
 	})
 }
