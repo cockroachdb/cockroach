@@ -170,10 +170,6 @@ ElementState:
     privileges: 2
     userName: root
   Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 110
-    userName: public
-  Status: PUBLIC
 - ObjectParent:
     objectId: 110
     parentSchemaId: 106
@@ -295,10 +291,6 @@ ElementState:
     descriptorId: 109
     privileges: 2
     userName: root
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 109
-    userName: public
   Status: PUBLIC
 - ObjectParent:
     objectId: 109
@@ -470,10 +462,6 @@ ElementState:
     descriptorId: 108
     privileges: 2
     userName: root
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 108
-    userName: public
   Status: PUBLIC
 - ObjectParent:
     objectId: 108

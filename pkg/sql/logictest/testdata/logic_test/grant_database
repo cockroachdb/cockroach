@@ -42,19 +42,6 @@ a  readwrite  ALL      true
 a  root       ALL      true
 a  test-user  ALL      true
 
-# Create table to inherit DB permissions.
-statement ok
-CREATE TABLE a.t (id INT PRIMARY KEY)
-
-query TTTTTB colnames
-SHOW GRANTS ON a.t
-----
-database_name  schema_name  table_name  grantee    privilege_type  is_grantable
-a              public       t           admin      ALL             true
-a              public       t           readwrite  ALL             true
-a              public       t           root       ALL             true
-a              public       t           test-user  ALL             true
-
 query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
@@ -132,16 +119,6 @@ a  root    ALL      true
 query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-
-# Verify that the table privileges have not changed.
-query TTTTTB colnames
-SHOW GRANTS ON a.t
-----
-database_name  schema_name  table_name  grantee    privilege_type  is_grantable
-a              public       t           admin      ALL             true
-a              public       t           readwrite  ALL             true
-a              public       t           root       ALL             true
-a              public       t           test-user  ALL             true
 
 # Usage privilege should not be grantable on databases.
 

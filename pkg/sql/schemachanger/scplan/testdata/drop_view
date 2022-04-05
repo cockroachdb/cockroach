@@ -20,7 +20,6 @@ PreCommitPhase stage 1 of 1 with 8 MutationType ops
     [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -154,10 +153,6 @@ DROP VIEW defaultdb.v1
   to:   [View:{DescID: 105}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 105, Name: public}, ABSENT]
-  to:   [View:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
   to:   [View:{DescID: 105}, DROPPED]
   kind: Precedence
@@ -213,7 +208,6 @@ PreCommitPhase stage 1 of 1 with 40 MutationType ops
     [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -225,7 +219,6 @@ PreCommitPhase stage 1 of 1 with 40 MutationType ops
     [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 106}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -241,7 +234,6 @@ PreCommitPhase stage 1 of 1 with 40 MutationType ops
     [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 107}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -257,7 +249,6 @@ PreCommitPhase stage 1 of 1 with 40 MutationType ops
     [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 108, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -273,7 +264,6 @@ PreCommitPhase stage 1 of 1 with 40 MutationType ops
     [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -1006,19 +996,11 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [View:{DescID: 105}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 105, Name: public}, ABSENT]
-  to:   [View:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
   to:   [View:{DescID: 105}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
-  to:   [View:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 106, Name: public}, ABSENT]
   to:   [View:{DescID: 106}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -1030,10 +1012,6 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [View:{DescID: 107}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 107, Name: public}, ABSENT]
-  to:   [View:{DescID: 107}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
   to:   [View:{DescID: 107}, DROPPED]
   kind: Precedence
@@ -1042,19 +1020,11 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [View:{DescID: 108}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 108, Name: public}, ABSENT]
-  to:   [View:{DescID: 108}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
   to:   [View:{DescID: 108}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 111, Name: admin}, ABSENT]
-  to:   [View:{DescID: 111}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 111, Name: public}, ABSENT]
   to:   [View:{DescID: 111}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
