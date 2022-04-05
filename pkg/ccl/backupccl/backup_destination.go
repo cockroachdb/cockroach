@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -249,55 +248,6 @@ func getBackupManifests(
 	}
 
 	return manifests, memMu.total, nil
-}
-
-// getEncryptionFromBase retrieves the encryption options of a base backup. It
-// is expected that incremental backups use the same encryption options as the
-// base backups.
-func getEncryptionFromBase(
-	ctx context.Context,
-	user security.SQLUsername,
-	makeCloudStorage cloud.ExternalStorageFromURIFactory,
-	baseBackupURI string,
-	encryptionParams jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
-) (*jobspb.BackupEncryptionOptions, error) {
-	var encryptionOptions *jobspb.BackupEncryptionOptions
-	if encryptionParams.Mode != jobspb.EncryptionMode_None {
-		exportStore, err := makeCloudStorage(ctx, baseBackupURI, user)
-		if err != nil {
-			return nil, err
-		}
-		defer exportStore.Close()
-		opts, err := readEncryptionOptions(ctx, exportStore)
-		if err != nil {
-			return nil, err
-		}
-
-		switch encryptionParams.Mode {
-		case jobspb.EncryptionMode_Passphrase:
-			encryptionOptions = &jobspb.BackupEncryptionOptions{
-				Mode: jobspb.EncryptionMode_Passphrase,
-				Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), opts[0].Salt),
-			}
-		case jobspb.EncryptionMode_KMS:
-			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
-			for _, encFile := range opts {
-				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(encryptionParams.RawKmsUris,
-					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
-				if err == nil {
-					break
-				}
-			}
-			if err != nil {
-				return nil, err
-			}
-			encryptionOptions = &jobspb.BackupEncryptionOptions{
-				Mode:    jobspb.EncryptionMode_KMS,
-				KMSInfo: defaultKMSInfo}
-		}
-	}
-	return encryptionOptions, nil
 }
 
 func readLatestFile(

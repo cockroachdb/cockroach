@@ -527,3 +527,42 @@ vectorized: true
           estimated row count: 100 - 1,001 (100% of the table; stats collected <hidden> ago)
           table: a@a_i_j_idx
           spans: FULL SCAN
+
+# A limit cannot be pushed into the scan of a virtual table with ORDER BY.
+query T
+EXPLAIN SELECT oid, typname FROM pg_type ORDER BY oid LIMIT 10
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ count: 10
+│
+└── • virtual table
+      table: pg_type@pg_type_oid_idx
+
+# A limit can be pushed into the scan of a virtual table without ORDER BY.
+query T
+EXPLAIN SELECT oid, typname FROM pg_type LIMIT 10
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  table: pg_type@primary
+  limit: 10
+
+# A limit cannot be pushed into the constrained scan of a virtual table with
+# ORDER BY.
+query T
+EXPLAIN SELECT oid, typname FROM pg_type WHERE OID BETWEEN 1 AND 1000 ORDER BY oid LIMIT 10
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ count: 10
+│
+└── • virtual table
+      table: pg_type@pg_type_oid_idx
+      spans: [/1 - /1000]
