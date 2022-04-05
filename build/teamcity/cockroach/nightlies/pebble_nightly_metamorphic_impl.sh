@@ -13,12 +13,22 @@ echo "TC_SERVER_URL is $TC_SERVER_URL"
 bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
 
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
+RACE_FLAG=""
+
+N=$((1 + $RANDOM % 10))
+if [ $N -lt 3 ]; then
+        RACE_FLAG="--config race"
+        BAZEL_BIN=$(bazel info bazel-bin --config race --config ci)
+fi
+
+echo $BAZEL_BIN
+echo $RACE_FLAG
 
 exit_status=0
 # NB: If adjusting the metamorphic test flags below, be sure to also update
 # pkg/cmd/github-post/main.go to ensure the GitHub issue poster includes the
 # correct flags in the reproduction command.
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci test \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci $RACE_FLAG --config=ci test \
                                       @com_github_cockroachdb_pebble//internal/metamorphic:metamorphic_test -- \
                                       --test_timeout=14400 '--test_filter=TestMeta$' \
                                       --define gotags=bazel,invariants \
