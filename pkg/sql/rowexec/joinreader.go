@@ -625,6 +625,19 @@ func (jr *joinReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 	return nil, jr.DrainHelper()
 }
 
+// addWorkmemHint checks whether err is non-nil, and if so, wraps it with a hint
+// to increase workmem limit. It is expected that err was returned by the memory
+// accounting system.
+func addWorkmemHint(err error) error {
+	if err == nil {
+		return nil
+	}
+	return errors.WithHint(
+		err, "consider increasing sql.distsql.temp_storage.workmem cluster"+
+			" setting or distsql_workmem session variable",
+	)
+}
+
 // readInput reads the next batch of input rows and starts an index scan.
 // It can sometimes emit a single row on behalf of the previous batch.
 func (jr *joinReader) readInput() (
@@ -658,7 +671,7 @@ func (jr *joinReader) readInput() (
 			// Perform memory accounting.
 			sizeAfter := jr.memUsage()
 			if err := jr.memAcc.Resize(jr.Ctx, sizeBefore, sizeAfter); err != nil {
-				jr.MoveToDraining(err)
+				jr.MoveToDraining(addWorkmemHint(err))
 				return jrStateUnknown, nil, meta
 			}
 
@@ -685,7 +698,7 @@ func (jr *joinReader) readInput() (
 	// Perform memory accounting.
 	sizeAfter := jr.memUsage()
 	if err := jr.memAcc.Resize(jr.Ctx, sizeBefore, sizeAfter); err != nil {
-		jr.MoveToDraining(err)
+		jr.MoveToDraining(addWorkmemHint(err))
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
 
@@ -915,8 +928,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		return nil
 	}
 
-	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
-	return &execinfrapb.ComponentStats{
+	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
@@ -926,6 +938,13 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: jr.OutputHelper.Stats(),
 	}
+	// Note that there is no need to include the maximum bytes of
+	// jr.limitedMemMonitor because it is a child of jr.MemMonitor.
+	ret.Exec.MaxAllocatedMem.Add(jr.MemMonitor.MaximumBytes())
+	if jr.diskMonitor != nil {
+		ret.Exec.MaxAllocatedDisk.Add(jr.diskMonitor.MaximumBytes())
+	}
+	return ret
 }
 
 func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
