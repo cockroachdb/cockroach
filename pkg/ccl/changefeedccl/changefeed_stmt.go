@@ -196,7 +196,11 @@ func changefeedPlanHook(
 			codec := p.ExecCfg().Codec
 
 			activeTimestampProtection := changefeedbase.ActiveProtectedTimestampsEnabled.Get(&p.ExecCfg().Settings.SV)
-			shouldProtectTimestamp := activeTimestampProtection || initialScanFromOptions(details.Opts)
+			initialScanType, err := initialScanTypeFromOpts(details.Opts)
+			if err != nil {
+				return err
+			}
+			shouldProtectTimestamp := activeTimestampProtection || (initialScanType != changefeedbase.NoInitialScan)
 			if shouldProtectTimestamp {
 				ptr = createProtectedTimestampRecord(ctx, codec, jobID, AllTargets(details), details.StatementTime, progress.GetChangefeed())
 			}
@@ -295,14 +299,23 @@ func createChangefeedJobRecord(
 		endTime = asOf.Timestamp
 	}
 
-	if _, ok := opts[changefeedbase.OptInitialScanOnly]; ok {
-		endTime = statementTime
+	{
+		initialScanType, err := initialScanTypeFromOpts(opts)
+		if err != nil {
+			return nil, err
+		}
+		if initialScanType == changefeedbase.OnlyInitialScan {
+			endTime = statementTime
+		}
 	}
 
-	targetList := uniqueTableNames(changefeedStmt.Targets)
+	tableOnlyTargetList := tree.TargetList{}
+	for _, t := range changefeedStmt.Targets {
+		tableOnlyTargetList.Tables = append(tableOnlyTargetList.Tables, t.TableName)
+	}
 
 	// This grabs table descriptors once to get their ids.
-	targetDescs, err := getTableDescriptors(ctx, p, &targetList, statementTime, initialHighWater)
+	targetDescs, err := getTableDescriptors(ctx, p, &tableOnlyTargetList, statementTime, initialHighWater)
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +512,7 @@ func getTableDescriptors(
 	targets *tree.TargetList,
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
-) ([]catalog.Descriptor, error) {
+) (map[tree.TablePattern]catalog.Descriptor, error) {
 	// For now, disallow targeting a database or wildcard table selection.
 	// Getting it right as tables enter and leave the set over time is
 	// tricky.
@@ -517,9 +530,7 @@ func getTableDescriptors(
 		}
 	}
 
-	// This grabs table descriptors once to get their ids.
-	targetDescs, _, err := backupresolver.ResolveTargetsToDescriptors(
-		ctx, p, statementTime, targets)
+	_, _, targetDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
@@ -540,7 +551,7 @@ func getTableDescriptors(
 func getTargetsAndTables(
 	ctx context.Context,
 	p sql.PlanHookState,
-	targetDescs []catalog.Descriptor,
+	targetDescs map[tree.TablePattern]catalog.Descriptor,
 	rawTargets tree.ChangefeedTargets,
 	opts map[string]string,
 ) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
@@ -563,9 +574,13 @@ func getTargetsAndTables(
 		}
 	}
 	for i, ct := range rawTargets {
-		td, err := matchDescriptorToTablePattern(ctx, p, targetDescs, ct.TableName)
-		if err != nil {
-			return nil, nil, err
+		desc, ok := targetDescs[ct.TableName]
+		if !ok {
+			return nil, nil, errors.Newf("could not match %v to a fetched descriptor. fetched were %v", ct.TableName, targetDescs)
+		}
+		td, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(&ct))
 		}
 		typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
 		if ct.FamilyName != "" {
@@ -583,49 +598,6 @@ func getTargetsAndTables(
 		}
 	}
 	return targets, tables, nil
-}
-
-// TODO (zinger): This is redoing work already done in backupresolver. Have backupresolver
-// return a map of descriptors to table patterns so this isn't necessary and is less fragile.
-func matchDescriptorToTablePattern(
-	ctx context.Context, p sql.PlanHookState, descs []catalog.Descriptor, t tree.TablePattern,
-) (catalog.TableDescriptor, error) {
-	pattern, err := t.NormalizeTablePattern()
-	if err != nil {
-		return nil, err
-	}
-	name, ok := pattern.(*tree.TableName)
-	if !ok {
-		return nil, errors.Newf("%v is not a TableName", pattern)
-	}
-	for _, desc := range descs {
-		tbl, ok := desc.(catalog.TableDescriptor)
-		if !ok {
-			continue
-		}
-		if tbl.GetName() != string(name.ObjectName) {
-			continue
-		}
-		qtn, err := getQualifiedTableNameObj(ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, tbl)
-		if err != nil {
-			return nil, err
-		}
-		switch name.ToUnresolvedObjectName().NumParts {
-		case 1:
-			if qtn.CatalogName == tree.Name(p.CurrentDatabase()) {
-				return tbl, nil
-			}
-		case 2:
-			if qtn.CatalogName == name.SchemaName {
-				return tbl, nil
-			}
-		case 3:
-			if qtn.CatalogName == name.CatalogName && qtn.SchemaName == name.SchemaName {
-				return tbl, nil
-			}
-		}
-	}
-	return nil, errors.Newf("could not match %v to a fetched descriptor", t)
 }
 
 func validateSink(
@@ -771,15 +743,6 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	{
-		_, withInitialScan := details.Opts[changefeedbase.OptInitialScan]
-		_, noInitialScan := details.Opts[changefeedbase.OptNoInitialScan]
-		if withInitialScan && noInitialScan {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`cannot specify both %s and %s`, changefeedbase.OptInitialScan,
-				changefeedbase.OptNoInitialScan)
-		}
-	}
-	{
 		const opt = changefeedbase.OptEnvelope
 		switch v := changefeedbase.EnvelopeType(details.Opts[opt]); v {
 		case changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeDeprecatedRow:
@@ -832,21 +795,20 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	{
-		_, noInitialScan := details.Opts[changefeedbase.OptNoInitialScan]
+		initialScanType := details.Opts[changefeedbase.OptInitialScan]
 		_, onlyInitialScan := details.Opts[changefeedbase.OptInitialScanOnly]
 		_, endTime := details.Opts[changefeedbase.OptEndTime]
-		if onlyInitialScan && noInitialScan {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`cannot specify both %s and %s`, changefeedbase.OptInitialScanOnly,
-				changefeedbase.OptNoInitialScan)
-		}
 		if endTime && onlyInitialScan {
 			return jobspb.ChangefeedDetails{}, errors.Errorf(
 				`cannot specify both %s and %s`, changefeedbase.OptInitialScanOnly,
 				changefeedbase.OptEndTime)
 		}
-	}
-	{
+
+		if strings.ToLower(initialScanType) == `only` && endTime {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`cannot specify both %s='only' and %s`, changefeedbase.OptInitialScan, changefeedbase.OptEndTime)
+		}
+
 		if !details.EndTime.IsEmpty() && details.EndTime.Less(details.StatementTime) {
 			return jobspb.ChangefeedDetails{}, errors.Errorf(
 				`specified end time %s cannot be less than statement time %s`,
@@ -1160,20 +1122,4 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets []jobspb.ChangefeedTargetS
 		}
 	}
 	return
-}
-
-// uniqueTableNames creates a TargetList whose Tables are
-// the table names in cts, removing duplicates.
-func uniqueTableNames(cts tree.ChangefeedTargets) tree.TargetList {
-	uniqueTablePatterns := make(map[string]tree.TablePattern)
-	for _, t := range cts {
-		uniqueTablePatterns[t.TableName.String()] = t.TableName
-	}
-
-	targetList := tree.TargetList{}
-	for _, t := range uniqueTablePatterns {
-		targetList.Tables = append(targetList.Tables, t)
-	}
-
-	return targetList
 }
