@@ -139,7 +139,6 @@ func (p *planner) incrementSequenceUsingCache(
 
 	fetchNextValues := func() (currentValue, incrementAmount, sizeOfCache int64, err error) {
 		seqValueKey := p.ExecCfg().Codec.SequenceKey(uint32(descriptor.GetID()))
-
 		// We *do not* use the planner txn here, since nextval does not respect
 		// transaction boundaries. This matches the specification at
 		// https://www.postgresql.org/docs/14/functions-sequence.html

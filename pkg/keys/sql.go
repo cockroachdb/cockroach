@@ -151,6 +151,11 @@ func (e sqlEncoder) DescIDSequenceKey() roachpb.Key {
 	return e.SequenceKey(DescIDSequenceID)
 }
 
+// RoleIDSequenceKey returns the key used for the descriptor ID sequence.
+func (e sqlEncoder) RoleIDSequenceKey() roachpb.Key {
+	return e.SequenceKey(RoleIDSequenceID)
+}
+
 // ZoneKeyPrefix returns the key prefix for id's row in the system.zones table.
 func (e sqlEncoder) ZoneKeyPrefix(id uint32) roachpb.Key {
 	k := e.IndexPrefix(ZonesTableID, ZonesTablePrimaryIndexID)

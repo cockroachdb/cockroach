@@ -127,6 +127,9 @@ CREATE TABLE system.tenants (
 	CONSTRAINT "primary" PRIMARY KEY (id),
 	FAMILY "primary" (id, active, info)
 );`
+
+	RoleIDSequenceSchema = `
+CREATE SEQUENCE system.role_id_seq START 100;`
 )
 
 // These system tables are not part of the system config.
@@ -979,6 +982,51 @@ var (
 				Start:     1,
 				CacheSize: 1,
 			}
+			tbl.NextColumnID = 0
+			tbl.NextFamilyID = 0
+			tbl.NextIndexID = 0
+			tbl.NextMutationID = 0
+			// Sequences never exposed their internal constraints,
+			// so all IDs will be left at zero. CREATE SEQUENCE has
+			// the same behaviour.
+			tbl.NextConstraintID = 0
+			tbl.PrimaryIndex.ConstraintID = 0
+		},
+	)
+
+	// RoleIDSequence is the descriptor for the role id sequence.
+	RoleIDSequence = registerSystemTable(
+		RoleIDSequenceSchema,
+		systemTable(
+			catconstants.RoleIDSequenceName,
+			keys.RoleIDSequenceID,
+			[]descpb.ColumnDescriptor{
+				{Name: tabledesc.SequenceColumnName, ID: tabledesc.SequenceColumnID, Type: types.Int},
+			},
+			[]descpb.ColumnFamilyDescriptor{{
+				Name:            "primary",
+				ID:              keys.SequenceColumnFamilyID,
+				ColumnNames:     []string{tabledesc.SequenceColumnName},
+				ColumnIDs:       []descpb.ColumnID{tabledesc.SequenceColumnID},
+				DefaultColumnID: tabledesc.SequenceColumnID,
+			}},
+			descpb.IndexDescriptor{
+				ID:                  keys.SequenceIndexID,
+				Name:                tabledesc.LegacyPrimaryKeyIndexName,
+				KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+				KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			opts := &descpb.TableDescriptor_SequenceOpts{
+				Increment: 1,
+				MinValue:  1,
+				MaxValue:  math.MaxInt64,
+				Start:     100,
+				CacheSize: 1,
+			}
+			tbl.SequenceOpts = opts
 			tbl.NextColumnID = 0
 			tbl.NextFamilyID = 0
 			tbl.NextIndexID = 0

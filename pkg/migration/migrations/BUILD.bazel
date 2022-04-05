@@ -17,6 +17,7 @@ go_library(
         "public_schema_migration.go",
         "raft_applied_index_term.go",
         "remove_invalid_database_privileges.go",
+        "role_id_sequence_migration.go",
         "schema_changes.go",
         "seed_tenant_span_configs.go",
         "tenant_settings.go",

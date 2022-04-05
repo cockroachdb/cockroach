@@ -158,6 +158,12 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		add(ms.codec.DescIDSequenceKey(), value)
 	}
 
+	{
+		value := roachpb.Value{}
+		value.SetInt(100)
+		add(ms.codec.RoleIDSequenceKey(), value)
+	}
+
 	// Generate initial values for system databases and tables, which have
 	// static descriptors that were generated elsewhere.
 	for _, desc := range ms.descs {
@@ -320,6 +326,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 
 	// Tables introduced in 22.1.
 	target.AddDescriptorForSystemTenant(systemschema.TenantSettingsTable)
+
+	// Tables introduced in 22.2.
+	target.AddDescriptor(systemschema.RoleIDSequence)
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.

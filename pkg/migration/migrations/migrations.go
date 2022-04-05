@@ -131,6 +131,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		fixCastForStyleMigration,
 	),
+	migration.NewTenantMigration(
+		"Add system.role_id_sequence",
+		toCV(clusterversion.RoleIDSequence),
+		NoPrecondition,
+		roleIDSequenceMigration,
+	),
 }
 
 func init() {

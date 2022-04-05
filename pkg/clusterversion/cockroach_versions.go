@@ -336,6 +336,8 @@ const (
 	// SuperRegions enables the usage on super regions.
 	SuperRegions
 
+	// RoleIDSequence is the version where the system.role_id_sequence exists.
+	RoleIDSequence
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -569,6 +571,11 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SuperRegions,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 104},
+	},
+
+	{
+		Key:     RoleIDSequence,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 4},
 	},
 
 	// *************************************************

@@ -30,6 +30,7 @@ var (
 		catconstants.TransactionStatisticsTableName,
 		// TODO(postamar): remove in 21.2
 		catconstants.PreMigrationNamespaceTableName,
+		catconstants.RoleIDSequenceName,
 	}
 
 	readWriteSystemTables = []catconstants.SystemTableName{
