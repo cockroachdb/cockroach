@@ -95,6 +95,7 @@ func (c *tenantStreamingClusters) startStreamReplication(startTime string) (int,
 	if startTime != "" {
 		streamReplStmt = streamReplStmt + fmt.Sprintf(" AS OF SYSTEM TIME %s", startTime)
 	}
+	streamReplStmt = streamReplStmt + fmt.Sprintf("AS TENANT %s", c.args.destTenantID)
 	c.destSysSQL.QueryRow(c.t, streamReplStmt).Scan(&ingestionJobID)
 	c.srcSysSQL.CheckQueryResultsRetry(c.t,
 		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'STREAM REPLICATION'", [][]string{{"1"}})
@@ -201,7 +202,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 	`)
 			},
 			srcNumNodes:  3,
-			destTenantID: roachpb.MakeTenantID(10),
+			destTenantID: roachpb.MakeTenantID(20),
 			destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 				sysSQL.ExecMultiple(t, strings.Split(destClusterSetting, ";")...)
 			},

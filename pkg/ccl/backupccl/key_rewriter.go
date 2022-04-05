@@ -87,6 +87,8 @@ type KeyRewriter struct {
 	// fromSystemTenant is true if the backup was produced by a system tenant,
 	// which is important in that it means any tenant prefixed keys belong to a
 	// backup of that tenant.
+	// It is also true when we use this to restore a tenant from a replication stream as
+	// it is only allowed for system tenant.
 	fromSystemTenant bool
 
 	prefixes prefixRewriter
@@ -94,9 +96,12 @@ type KeyRewriter struct {
 	descs    map[descpb.ID]catalog.TableDescriptor
 }
 
-// makeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
-func makeKeyRewriterFromRekeys(
-	codec keys.SQLCodec, tableRekeys []execinfrapb.TableRekey, tenantRekeys []execinfrapb.TenantRekey,
+// MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
+func MakeKeyRewriterFromRekeys(
+	codec keys.SQLCodec,
+	tableRekeys []execinfrapb.TableRekey,
+	tenantRekeys []execinfrapb.TenantRekey,
+	restoreTenantFromStream bool,
 ) (*KeyRewriter, error) {
 	descs := make(map[descpb.ID]catalog.TableDescriptor)
 	for _, rekey := range tableRekeys {
@@ -116,7 +121,7 @@ func makeKeyRewriterFromRekeys(
 		descs[descpb.ID(rekey.OldID)] = tabledesc.NewBuilder(table).BuildImmutableTable()
 	}
 
-	return makeKeyRewriter(codec, descs, tenantRekeys)
+	return makeKeyRewriter(codec, descs, tenantRekeys, restoreTenantFromStream)
 }
 
 var (
@@ -134,6 +139,7 @@ func makeKeyRewriter(
 	codec keys.SQLCodec,
 	descs map[descpb.ID]catalog.TableDescriptor,
 	tenants []execinfrapb.TenantRekey,
+	restoreTenantFromStream bool,
 ) (*KeyRewriter, error) {
 	var prefixes prefixRewriter
 	var tenantPrefixes prefixRewriter
@@ -174,6 +180,10 @@ func makeKeyRewriter(
 		return bytes.Compare(prefixes.rewrites[i].OldPrefix, prefixes.rewrites[j].OldPrefix) < 0
 	})
 	fromSystemTenant := false
+	// Only system tenant can restore a tenant from replication stream
+	if restoreTenantFromStream {
+		fromSystemTenant = true
+	}
 	for i := range tenants {
 		if tenants[i] == isBackupFromSystemTenantRekey {
 			fromSystemTenant = true
@@ -208,8 +218,10 @@ func MakeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.
 // new value.
 func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	// If we are reading a system tenant backup and this is a tenant key then it
-	// is part of a backup *of* that tenant, so we we only restore it if we have a
+	// is part of a backup *of* that tenant, so we only restore it if we have a
 	// tenant rekey for it, i.e. we're restoring that tenant.
+	// We also enable rekeying if we are restoring a tenant from a replication stream
+	// in which case we are restoring as a system tenant.
 	if kr.fromSystemTenant && bytes.HasPrefix(key, keys.TenantPrefix) {
 		k, ok := kr.tenants.rewriteKey(key)
 		return k, ok, nil

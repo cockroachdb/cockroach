@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -71,7 +72,14 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 
 	v := roachpb.MakeValueFromString("value_1")
 	v.Timestamp = hlc.Timestamp{WallTime: 1}
-	sampleKV := roachpb.KeyValue{Key: roachpb.Key("key_1"), Value: v}
+
+	const tenantID = 20
+	sampleKV := func() roachpb.KeyValue {
+		key, err := keys.RewriteKeyToTenantPrefix(roachpb.Key("key_1"),
+			keys.MakeTenantPrefix(roachpb.MakeTenantID(tenantID)))
+		require.NoError(t, err)
+		return roachpb.KeyValue{Key: key, Value: v}
+	}
 
 	for _, tc := range []struct {
 		name                      string
@@ -95,9 +103,9 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			// emitted a resolved ts.
 			name: "no-checkpoints",
 			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeKVEvent(sampleKV),
+				streamingccl.MakeKVEvent(sampleKV()),
 			}, pa2: []streamingccl.Event{
-				streamingccl.MakeKVEvent(sampleKV),
+				streamingccl.MakeKVEvent(sampleKV()),
 			}},
 		},
 		{
@@ -157,6 +165,10 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			spec.PartitionAddresses = []string{pa1, pa2}
 			spec.PartitionIds = []string{pa1, pa2}
 			spec.PartitionSpecs = []string{pa1, pa2}
+			spec.TenantRekey = execinfrapb.TenantRekey{
+				OldID: roachpb.MakeTenantID(tenantID),
+				NewID: roachpb.MakeTenantID(tenantID + 10),
+			}
 			proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec, &post, out)
 			require.NoError(t, err)
 			sip, ok := proc.(*streamIngestionProcessor)
