@@ -150,6 +150,23 @@ func (h HashMethod) String() string {
 	}
 }
 
+// GetHashMethodFromString returns the HashMethod corresponding to
+// HashMethod.String().
+func GetHashMethodFromString(s string) (HashMethod, error) {
+	switch s {
+	case "<invalid>":
+		return HashInvalidMethod, nil
+	case "<missing password>":
+		return HashMissingPassword, nil
+	case "crdb-bcrypt":
+		return HashBCrypt, nil
+	case "scram-sha-256":
+		return HashSCRAMSHA256, nil
+	default:
+		return HashInvalidMethod, errors.AssertionFailedf("unknown hash method %s", s)
+	}
+}
+
 // PasswordHash represents the type of a password hash loaded from a credential store.
 type PasswordHash interface {
 	fmt.Stringer
