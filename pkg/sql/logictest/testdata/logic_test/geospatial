@@ -5310,6 +5310,9 @@ LINESTRING (1 2, 3 4, 5 6)
 MULTILINESTRING ((1 2, 3 4), (5 6, 7 8))
 GEOMETRYCOLLECTION EMPTY
 
+statement error st_linemerge\(\): value out of range: overflow
+select st_linemerge('01020000C003000000000000000000F0FF000000000000F8FF60DB272315DEBAC13CDE36003499DEC1000000000000F0FF000000000000F8FF9CDB5D9AA401E1C1D0C80253A5F1C4C1000000000000F0FF000000000000F8FF003E39CD6CDDD2C1A6909F31D737F4C1'::geometry);
+
 subtest public_schema_resolution
 
 query T
@@ -5646,6 +5649,8 @@ SELECT ST_MinimumBoundingCircle(NULL::geometry) IS NULL;
 ----
 true
 
+statement error st_minimumboundingcircle\(\): value out of range: overflow
+select st_minimumboundingcircle(st_makepoint(((-0.27013513189303495):::FLOAT8::FLOAT8 // 5e-324:::FLOAT8::FLOAT8)::FLOAT8::FLOAT8, (-0.4968052087960828):::FLOAT8::FLOAT8)::GEOMETRY::GEOMETRY)::GEOMETRY
 
 subtest st_unaryunion
 
