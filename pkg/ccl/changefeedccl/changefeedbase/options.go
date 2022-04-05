@@ -247,11 +247,7 @@ var NoLongerExperimental = map[string]string{
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
 // users to alter.
-// TODO(sherman): At the moment we disallow altering both the initial_scan_only
-// and the end_time option. However, there are instances in which it should be
-// allowed to alter either of these options. We need to support the alteration
-// of these fields.
-var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptEndTime)
+var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan, OptNoInitialScan, OptInitialScanOnly)
 
 // AlterChangefeedOptionExpectValues is used to parse alter changefeed options
 // using PlanHookState.TypeAsStringOpts().

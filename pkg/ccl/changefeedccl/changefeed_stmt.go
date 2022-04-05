@@ -141,10 +141,15 @@ func changefeedPlanHook(
 			return err
 		}
 
+		statementTime := hlc.Timestamp{
+			WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
+		}
+
 		jr, err := createChangefeedJobRecord(
 			ctx,
 			p,
 			changefeedStmt,
+			statementTime,
 			sinkURI,
 			opts,
 			jobspb.InvalidJobID,
@@ -243,6 +248,7 @@ func createChangefeedJobRecord(
 	ctx context.Context,
 	p sql.PlanHookState,
 	changefeedStmt *tree.CreateChangefeed,
+	statementTime hlc.Timestamp,
 	sinkURI string,
 	opts map[string]string,
 	jobID jobspb.JobID,
@@ -270,9 +276,6 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
-	statementTime := hlc.Timestamp{
-		WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
-	}
 	var initialHighWater hlc.Timestamp
 	if cursor, ok := opts[changefeedbase.OptCursor]; ok {
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
