@@ -90,7 +90,7 @@ func TestAlterChangefeedAddTargetFamily(t *testing.T) {
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(1, 'hello')`)
 		assertPayloads(t, testFeed, []string{
-			`foo: [1]->{"after": {"a": 1}}`,
+			`foo.onlya: [1]->{"after": {"a": 1}}`,
 		})
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
@@ -106,9 +106,9 @@ func TestAlterChangefeedAddTargetFamily(t *testing.T) {
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
 		assertPayloads(t, testFeed, []string{
-			`foo: [1]->{"after": {"b": "hello"}}`,
-			`foo: [2]->{"after": {"a": 2}}`,
-			`foo: [2]->{"after": {"b": "goodbye"}}`,
+			`foo.onlyb: [1]->{"after": {"b": "hello"}}`,
+			`foo.onlya: [2]->{"after": {"a": 2}}`,
+			`foo.onlyb: [2]->{"after": {"b": "goodbye"}}`,
 		})
 	}
 
@@ -128,7 +128,7 @@ func TestAlterChangefeedSwitchFamily(t *testing.T) {
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(1, 'hello')`)
 		assertPayloads(t, testFeed, []string{
-			`foo: [1]->{"after": {"a": 1}}`,
+			`foo.onlya: [1]->{"after": {"a": 1}}`,
 		})
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
@@ -144,8 +144,8 @@ func TestAlterChangefeedSwitchFamily(t *testing.T) {
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
 		assertPayloads(t, testFeed, []string{
-			`foo: [1]->{"after": {"b": "hello"}}`,
-			`foo: [2]->{"after": {"b": "goodbye"}}`,
+			`foo.onlyb: [1]->{"after": {"b": "hello"}}`,
+			`foo.onlyb: [2]->{"after": {"b": "goodbye"}}`,
 		})
 	}
 
@@ -212,8 +212,8 @@ func TestAlterChangefeedDropTargetFamily(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(1, 'hello')`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
 		assertPayloads(t, testFeed, []string{
-			`foo: [1]->{"after": {"a": 1}}`,
-			`foo: [2]->{"after": {"a": 2}}`,
+			`foo.onlya: [1]->{"after": {"a": 1}}`,
+			`foo.onlya: [2]->{"after": {"a": 2}}`,
 		})
 
 	}
