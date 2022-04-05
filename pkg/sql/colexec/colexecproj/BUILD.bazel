@@ -76,7 +76,8 @@ go_test(
 
 # Map between target name and relevant template.
 targets = [
-    ("default_cmp_proj_ops.eg.go", "default_cmp_proj_ops_tmpl.go"),
+    ("default_cmp_proj_const_op.eg.go", "default_cmp_proj_ops_tmpl.go"),
+    ("default_cmp_proj_op.eg.go", "default_cmp_proj_ops_tmpl.go"),
     ("proj_const_left_ops.eg.go", "proj_const_ops_tmpl.go"),
     ("proj_const_right_ops.eg.go", "proj_const_ops_tmpl.go"),
     ("proj_like_ops.eg.go", "proj_const_ops_tmpl.go"),
