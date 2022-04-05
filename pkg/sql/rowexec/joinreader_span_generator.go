@@ -167,7 +167,7 @@ func (g *defaultSpanGenerator) generateSpans(
 
 	// Memory accounting.
 	if err := g.memAcc.ResizeTo(ctx, g.memUsage()); err != nil {
-		return nil, err
+		return nil, addWorkmemHint(err)
 	}
 
 	return g.scratchSpans, nil
@@ -718,7 +718,7 @@ func (g *multiSpanGenerator) generateSpans(
 
 	// Memory accounting.
 	if err := g.memAcc.ResizeTo(ctx, g.memUsage()); err != nil {
-		return nil, err
+		return nil, addWorkmemHint(err)
 	}
 
 	return g.scratchSpans, nil
