@@ -150,7 +150,7 @@ pg_auth_members                  false
 pg_authid                        false
 pg_available_extension_versions  true
 pg_available_extensions          true
-pg_cast                          true
+pg_cast                          false
 pg_class                         false
 pg_collation                     false
 pg_config                        true
