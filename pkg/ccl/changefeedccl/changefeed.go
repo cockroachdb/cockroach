@@ -97,11 +97,32 @@ func makeSpansToProtect(
 	return spansToProtect
 }
 
-// initialScanFromOptions returns whether or not the options indicate the need
-// for an initial scan on the first run.
-func initialScanFromOptions(opts map[string]string) bool {
+// initialScanTypeFromOpts determines the type of initial scan the changefeed
+// should perform on the first run given the options provided from the user
+func initialScanTypeFromOpts(opts map[string]string) changefeedbase.InitialScanType {
 	_, cursor := opts[changefeedbase.OptCursor]
-	_, initialScan := opts[changefeedbase.OptInitialScan]
-	_, noInitialScan := opts[changefeedbase.OptNoInitialScan]
-	return (cursor && initialScan) || (!cursor && !noInitialScan)
+	initialScanType, initialScanSet := opts[changefeedbase.OptInitialScan]
+	_, initialScanOnlySet := opts[changefeedbase.OptInitialScanOnly]
+	_, noInitialScanSet := opts[changefeedbase.OptNoInitialScan]
+
+	if initialScanSet && (initialScanType == `` || initialScanType == string(changefeedbase.OptInitialScanType)) {
+		return changefeedbase.InitialScan
+	}
+
+	if initialScanOnlySet || initialScanType == string(changefeedbase.OptInitialScanOnlyType) {
+		return changefeedbase.OnlyInitialScan
+	}
+
+	if noInitialScanSet || initialScanType == string(changefeedbase.OptNoInitialScanType) {
+		return changefeedbase.NoInitialScan
+	}
+
+	// If we reach this point, this implies that the user did not specify any initial scan
+	// options. In this case the default behaviour is to perform an initial scan if the
+	// cursor is not specified.
+	if !cursor {
+		return changefeedbase.InitialScan
+	}
+
+	return changefeedbase.NoInitialScan
 }
