@@ -269,20 +269,24 @@ func runFollowerReadsTest(
 		t.Fatalf("failed to get follower read counts: %v", err)
 	}
 
-	// Perform reads on each node and ensure we get the expected value. Do so a
-	// few times on each follower to give caches time to warm up.
+	// Perform reads on each node and ensure we get the expected value. Do so for
+	// 15 seconds to give closed timestamps a chance to propagate and caches time
+	// to warm up.
 	t.L().Printf("warming up reads")
 	g, gCtx := errgroup.WithContext(ctx)
 	k, v := chooseKV()
+	until := timeutil.Now().Add(15 * time.Second)
 	for i := 1; i <= c.Spec().NodeCount; i++ {
 		fn := verifySelect(gCtx, i, k, v)
 		g.Go(func() error {
-			for j := 0; j < 100; j++ {
+			for {
+				if timeutil.Now().After(until) {
+					return nil
+				}
 				if err := fn(); err != nil {
 					return err
 				}
 			}
-			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
