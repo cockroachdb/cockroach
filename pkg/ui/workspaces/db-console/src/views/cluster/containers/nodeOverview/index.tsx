@@ -24,7 +24,7 @@ import {
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
-import { Bytes, DATE_FORMAT, Percentage } from "src/util/format";
+import { Bytes, DATE_FORMAT_24_UTC, Percentage } from "src/util/format";
 import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
 import {
@@ -286,7 +286,9 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
               />
               <SummaryValue
                 title="Last Update"
-                value={util.LongToMoment(node.updated_at).format(DATE_FORMAT)}
+                value={util
+                  .LongToMoment(node.updated_at)
+                  .format(DATE_FORMAT_24_UTC)}
               />
               <SummaryValue title="Build" value={node.build_info.tag} />
               <SummaryValue
