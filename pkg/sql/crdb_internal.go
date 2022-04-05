@@ -4672,55 +4672,114 @@ CREATE TABLE crdb_internal.invalid_objects (
 		if err != nil {
 			return err
 		}
+		version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
 
-		addRowsForObject := func(dbDesc catalog.DatabaseDescriptor, schema string, descriptor catalog.Descriptor) (err error) {
+		addValidationErrorRow := func(scName string, ne catalog.NameEntry, validationError error, lCtx tableLookupFn) error {
+			if validationError == nil {
+				return nil
+			}
+			dbName := fmt.Sprintf("[%d]", ne.GetParentID())
+			if scName == "" {
+				scName = fmt.Sprintf("[%d]", ne.GetParentSchemaID())
+			}
+			if n, ok := lCtx.dbNames[ne.GetParentID()]; ok {
+				dbName = n
+			}
+			if n, err := lCtx.getSchemaNameByID(ne.GetParentSchemaID()); err == nil {
+				scName = n
+			}
+			objName := ne.GetName()
+			if ne.GetParentSchemaID() == descpb.InvalidID {
+				scName = objName
+				objName = ""
+				if ne.GetParentID() == descpb.InvalidID {
+					dbName = scName
+					scName = ""
+				}
+			}
+			return addRow(
+				tree.NewDInt(tree.DInt(ne.GetID())),
+				tree.NewDString(dbName),
+				tree.NewDString(scName),
+				tree.NewDString(objName),
+				tree.NewDString(validationError.Error()),
+			)
+		}
+
+		doDescriptorValidationErrors := func(schema string, descriptor catalog.Descriptor, lCtx tableLookupFn) (err error) {
 			if descriptor == nil {
 				return nil
 			}
-			var dbName string
-			if dbDesc != nil {
-				dbName = dbDesc.GetName()
-			}
-			addValidationErrorRow := func(validationError error) {
-				if err == nil {
-					err = addRow(
-						tree.NewDInt(tree.DInt(descriptor.GetID())),
-						tree.NewDString(dbName),
-						tree.NewDString(schema),
-						tree.NewDString(descriptor.GetName()),
-						tree.NewDString(validationError.Error()),
-					)
+			doError := func(validationError error) {
+				if err != nil {
+					return
 				}
+				err = addValidationErrorRow(schema, descriptor, validationError, lCtx)
 			}
-			version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
-			ve := c.ValidateWithRecover(
-				ctx,
-				version,
-				descriptor)
+			ve := c.ValidateWithRecover(ctx, version, descriptor)
 			for _, validationError := range ve {
-				addValidationErrorRow(validationError)
+				doError(validationError)
 			}
-			jobs.ValidateJobReferencesInDescriptor(descriptor, jmg, addValidationErrorRow)
+			jobs.ValidateJobReferencesInDescriptor(descriptor, jmg, doError)
 			return err
 		}
 
+		// Validate table descriptors
 		const allowAdding = true
 		if err := forEachTableDescWithTableLookupInternalFromDescriptors(
 			ctx, p, dbContext, hideVirtual, allowAdding, c, func(
-				dbDesc catalog.DatabaseDescriptor, schema string, descriptor catalog.TableDescriptor, _ tableLookupFn,
+				_ catalog.DatabaseDescriptor, schema string, descriptor catalog.TableDescriptor, lCtx tableLookupFn,
 			) error {
-				return addRowsForObject(dbDesc, schema, descriptor)
+				return doDescriptorValidationErrors(schema, descriptor, lCtx)
 			}); err != nil {
 			return err
 		}
 
 		// Validate type descriptors.
-		return forEachTypeDescWithTableLookupInternalFromDescriptors(
+		if err := forEachTypeDescWithTableLookupInternalFromDescriptors(
 			ctx, p, dbContext, allowAdding, c, func(
-				dbDesc catalog.DatabaseDescriptor, schema string, descriptor catalog.TypeDescriptor, _ tableLookupFn,
+				_ catalog.DatabaseDescriptor, schema string, descriptor catalog.TypeDescriptor, lCtx tableLookupFn,
 			) error {
-				return addRowsForObject(dbDesc, schema, descriptor)
+				return doDescriptorValidationErrors(schema, descriptor, lCtx)
+			}); err != nil {
+			return err
+		}
+
+		// Validate database & schema descriptors, and namespace entries.
+		{
+			lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
+
+			if err := c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+				switch d := desc.(type) {
+				case catalog.DatabaseDescriptor:
+					if dbContext != nil && d.GetID() != dbContext.GetID() {
+						return nil
+					}
+				case catalog.SchemaDescriptor:
+					if dbContext != nil && d.GetParentID() != dbContext.GetID() {
+						return nil
+					}
+				default:
+					return nil
+				}
+				return doDescriptorValidationErrors("" /* scName */, desc, lCtx)
+			}); err != nil {
+				return err
+			}
+
+			return c.ForEachNamespaceEntry(func(ne catalog.NameEntry) error {
+				if dbContext != nil {
+					if ne.GetParentID() == descpb.InvalidID {
+						if ne.GetID() != dbContext.GetID() {
+							return nil
+						}
+					} else if ne.GetParentID() != dbContext.GetID() {
+						return nil
+					}
+				}
+				return addValidationErrorRow("" /* scName */, ne, c.ValidateNamespaceEntry(ne), lCtx)
 			})
+		}
 	},
 }
 
