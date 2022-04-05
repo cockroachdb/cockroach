@@ -362,7 +362,8 @@ var specs = []stmtSpec{
 	{
 		name:    "alter_changefeed",
 		stmt:    "alter_changefeed_stmt",
-		replace: map[string]string{"a_expr": "job_id", "alter_changefeed_cmds": "( 'ADD' 'target' ( 'WITH' ( 'initial_scan' | 'no_initial_scan' ) )? | 'DROP' 'target' | ( 'SET' | 'UNSET' ) 'option' )+"},
+		replace: map[string]string{"a_expr": "job_id", "alter_changefeed_cmds": "( 'ADD' target ( ( ',' target ) )* ( 'WITH' ( initial_scan | no_initial_scan ) )? | 'DROP' target ( ( ',' target ) )* | ( 'SET' | 'UNSET' ) option ( ( ',' option ) )* )+"},
+		unlink:  []string{"job_id", "target", "option", "initial_scan", "no_initial_scan"},
 	},
 	{
 		name:   "alter_column",

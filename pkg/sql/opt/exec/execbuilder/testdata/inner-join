@@ -248,4 +248,3 @@ vectorized: true
               missing stats
               table: def@def_pkey
               spans: FULL SCAN
-

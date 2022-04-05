@@ -754,41 +754,62 @@ func TestChangefeedInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	noInitialScanTests := map[string]string{
+		`no cursor - no initial scan`:     `CREATE CHANGEFEED FOR no_initial_scan WITH no_initial_scan, resolved='1s'`,
+		`no cursor - no initial backfill`: `CREATE CHANGEFEED FOR no_initial_scan WITH initial_scan = 'no', resolved='1s'`,
+	}
+
+	initialScanTests := map[string]string{
+		`cursor - with initial scan`:     `CREATE CHANGEFEED FOR initial_scan WITH initial_scan, resolved='1s', cursor='%s'`,
+		`cursor - with initial backfill`: `CREATE CHANGEFEED FOR initial_scan WITH initial_scan = 'yes', resolved='1s', cursor='%s'`,
+	}
+
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		t.Run(`no cursor - no initial scan`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE no_initial_scan (a INT PRIMARY KEY)`)
-			sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (1)`)
 
-			noInitialScan := feed(t, f, `CREATE CHANGEFEED FOR no_initial_scan `+
-				`WITH no_initial_scan, resolved='1s'`)
-			defer closeFeed(t, noInitialScan)
-			expectResolvedTimestamp(t, noInitialScan)
-			sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (2)`)
-			assertPayloads(t, noInitialScan, []string{
-				`no_initial_scan: [2]->{"after": {"a": 2}}`,
-			})
-		})
+		for testName, changefeedStmt := range noInitialScanTests {
+			t.Run(testName, func(t *testing.T) {
+				sqlDB.Exec(t, `CREATE TABLE no_initial_scan (a INT PRIMARY KEY)`)
+				sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (1)`)
 
-		t.Run(`cursor - with initial scan`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE initial_scan (a INT PRIMARY KEY)`)
-			sqlDB.Exec(t, `INSERT INTO initial_scan VALUES (1), (2), (3)`)
-			var tsStr string
-			var i int
-			sqlDB.QueryRow(t, `SELECT count(*), cluster_logical_timestamp() from initial_scan`).Scan(&i, &tsStr)
-			initialScan := feed(t, f, `CREATE CHANGEFEED FOR initial_scan `+
-				`WITH initial_scan, resolved='1s', cursor='`+tsStr+`'`)
-			defer closeFeed(t, initialScan)
-			assertPayloads(t, initialScan, []string{
-				`initial_scan: [1]->{"after": {"a": 1}}`,
-				`initial_scan: [2]->{"after": {"a": 2}}`,
-				`initial_scan: [3]->{"after": {"a": 3}}`,
+				noInitialScan := feed(t, f, changefeedStmt)
+				defer func() {
+					closeFeed(t, noInitialScan)
+					sqlDB.Exec(t, `DROP TABLE no_initial_scan`)
+				}()
+
+				expectResolvedTimestamp(t, noInitialScan)
+
+				sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (2)`)
+				assertPayloads(t, noInitialScan, []string{
+					`no_initial_scan: [2]->{"after": {"a": 2}}`,
+				})
 			})
-			sqlDB.Exec(t, `INSERT INTO initial_scan VALUES (4)`)
-			assertPayloads(t, initialScan, []string{
-				`initial_scan: [4]->{"after": {"a": 4}}`,
+		}
+
+		for testName, changefeedStmtFormat := range initialScanTests {
+			t.Run(testName, func(t *testing.T) {
+				sqlDB.Exec(t, `CREATE TABLE initial_scan (a INT PRIMARY KEY)`)
+				sqlDB.Exec(t, `INSERT INTO initial_scan VALUES (1), (2), (3)`)
+				var tsStr string
+				var i int
+				sqlDB.QueryRow(t, `SELECT count(*), cluster_logical_timestamp() from initial_scan`).Scan(&i, &tsStr)
+				initialScan := feed(t, f, fmt.Sprintf(changefeedStmtFormat, tsStr))
+				defer func() {
+					closeFeed(t, initialScan)
+					sqlDB.Exec(t, `DROP TABLE initial_scan`)
+				}()
+				assertPayloads(t, initialScan, []string{
+					`initial_scan: [1]->{"after": {"a": 1}}`,
+					`initial_scan: [2]->{"after": {"a": 2}}`,
+					`initial_scan: [3]->{"after": {"a": 3}}`,
+				})
+				sqlDB.Exec(t, `INSERT INTO initial_scan VALUES (4)`)
+				assertPayloads(t, initialScan, []string{
+					`initial_scan: [4]->{"after": {"a": 4}}`,
+				})
 			})
-		})
+		}
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
@@ -3726,6 +3747,16 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan_only`, `kafka://nope`,
 	)
 
+	// WITH initial_scan_only and initial_scan disallowed
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan and initial_scan_only`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan_only, initial_scan`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan and initial_scan_only`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan, initial_scan_only`, `kafka://nope`,
+	)
+
 	// WITH only_initial_scan and end_time disallowed
 	sqlDB.ExpectErr(
 		t, `cannot specify both initial_scan_only and end_time`,
@@ -3734,6 +3765,28 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `cannot specify both initial_scan_only and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', initial_scan_only`, `kafka://nope`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan='only' and end_time`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', initial_scan = 'only'`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan='only' and end_time`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'only', end_time = '1'`, `kafka://nope`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `unknown initial_scan: foo`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'foo'`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan and no_initial_scan`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'yes', no_initial_scan`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan and initial_scan_only`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'no', initial_scan_only`, `kafka://nope`,
 	)
 
 	var tsCurrent string
@@ -5714,42 +5767,52 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	initialScanOnlyTests := map[string]string{
+		`initial scan only`:     `CREATE CHANGEFEED FOR foo WITH initial_scan_only`,
+		`initial backfill only`: `CREATE CHANGEFEED FOR foo WITH initial_scan = 'only'`,
+	}
+
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
-		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
-		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
+		for testName, changefeedStmt := range initialScanOnlyTests {
+			t.Run(testName, func(t *testing.T) {
+				sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+				sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
 
-		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan_only")
+				feed := feed(t, f, changefeedStmt)
 
-		sqlDB.Exec(t, "INSERT INTO foo VALUES (4), (5), (6)")
+				sqlDB.Exec(t, "INSERT INTO foo VALUES (4), (5), (6)")
 
-		seenMoreMessages := false
-		g := ctxgroup.WithContext(context.Background())
-		g.Go(func() error {
-			assertPayloads(t, feed, []string{
-				`foo: [1]->{"after": {"a": 1}}`,
-				`foo: [2]->{"after": {"a": 2}}`,
-				`foo: [3]->{"after": {"a": 3}}`,
+				seenMoreMessages := false
+				g := ctxgroup.WithContext(context.Background())
+				g.Go(func() error {
+					assertPayloads(t, feed, []string{
+						`foo: [1]->{"after": {"a": 1}}`,
+						`foo: [2]->{"after": {"a": 2}}`,
+						`foo: [3]->{"after": {"a": 3}}`,
+					})
+					for {
+						_, err := feed.Next()
+						if err != nil {
+							return err
+						}
+						seenMoreMessages = true
+					}
+				})
+				defer func() {
+					closeFeed(t, feed)
+					sqlDB.Exec(t, `DROP TABLE foo`)
+					_ = g.Wait()
+					require.False(t, seenMoreMessages)
+				}()
+
+				jobFeed := feed.(cdctest.EnterpriseTestFeed)
+				require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
+					return s == jobs.StatusSucceeded
+				}))
 			})
-			for {
-				_, err := feed.Next()
-				if err != nil {
-					return err
-				}
-				seenMoreMessages = true
-			}
-		})
-		defer func() {
-			closeFeed(t, feed)
-			_ = g.Wait()
-			require.False(t, seenMoreMessages)
-		}()
-
-		jobFeed := feed.(cdctest.EnterpriseTestFeed)
-		require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
-			return s == jobs.StatusSucceeded
-		}))
+		}
 	}
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))

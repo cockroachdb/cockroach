@@ -31,6 +31,17 @@ type SchemaChangePolicy string
 // include virtual columns in an event
 type VirtualColumnVisibility string
 
+// InitialScanType configures whether the changefeed will perform an
+// initial scan, and the type of initial scan that it will perform
+type InitialScanType int
+
+// Constants for the initial scan types
+const (
+	InitialScan InitialScanType = iota
+	NoInitialScan
+	OnlyInitialScan
+)
+
 // Constants for the options.
 const (
 	OptAvroSchemaPrefix         = `avro_schema_prefix`
@@ -184,7 +195,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptSchemaChangeEvents:       sql.KVStringOptRequireValue,
 	OptSchemaChangePolicy:       sql.KVStringOptRequireValue,
 	OptSplitColumnFamilies:      sql.KVStringOptRequireNoValue,
-	OptInitialScan:              sql.KVStringOptRequireNoValue,
+	OptInitialScan:              sql.KVStringOptAny,
 	OptNoInitialScan:            sql.KVStringOptRequireNoValue,
 	OptInitialScanOnly:          sql.KVStringOptRequireNoValue,
 	OptProtectDataFromGCOnPause: sql.KVStringOptRequireNoValue,
@@ -251,7 +262,8 @@ var NoLongerExperimental = map[string]string{
 // and the end_time option. However, there are instances in which it should be
 // allowed to alter either of these options. We need to support the alteration
 // of these fields.
-var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptEndTime)
+var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan,
+	OptNoInitialScan, OptInitialScanOnly, OptEndTime)
 
 // AlterChangefeedOptionExpectValues is used to parse alter changefeed options
 // using PlanHookState.TypeAsStringOpts().

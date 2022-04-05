@@ -33,6 +33,15 @@ func (b *ByteSizeSetting) String(sv *Values) string {
 	return string(humanizeutil.IBytes(b.Get(sv)))
 }
 
+// DecodeToString decodes and renders an encoded value.
+func (b *ByteSizeSetting) DecodeToString(encoded string) (string, error) {
+	iv, err := b.decodeNum(encoded)
+	if err != nil {
+		return "", err
+	}
+	return string(humanizeutil.IBytes(iv)), nil
+}
+
 // WithPublic sets public visibility and can be chained.
 func (b *ByteSizeSetting) WithPublic() *ByteSizeSetting {
 	b.SetVisibility(Public)
