@@ -422,14 +422,15 @@ func HashPassword(ctx context.Context, sv *settings.Values, password string) ([]
 
 	case HashSCRAMSHA256:
 		cost := int(SCRAMCost.Get(sv))
-		return hashPasswordUsingSCRAM(ctx, cost, password)
+		return HashPasswordUsingSCRAM(ctx, cost, password)
 
 	default:
 		return nil, errors.Newf("unsupported hash method: %v", method)
 	}
 }
 
-func hashPasswordUsingSCRAM(ctx context.Context, cost int, cleartext string) ([]byte, error) {
+// HashPasswordUsingSCRAM hashes the cleartext password with given cost with SCRAM.
+func HashPasswordUsingSCRAM(ctx context.Context, cost int, cleartext string) ([]byte, error) {
 	prepared, err := stringprep.SASLprep.Prepare(cleartext)
 	if err != nil {
 		// Special PostgreSQL case, quoth comment at the top of
@@ -888,7 +889,7 @@ func MaybeUpgradePasswordHash(
 		log.Infof(ctx, "hash conversion: computing a SCRAM hash with iteration count %d (from bcrypt cost %d)", scramIterCount, bcryptCost)
 	}
 
-	rawHash, err := hashPasswordUsingSCRAM(ctx, int(scramIterCount), cleartext)
+	rawHash, err := HashPasswordUsingSCRAM(ctx, int(scramIterCount), cleartext)
 	if err != nil {
 		// This call only fail with hard errors.
 		return false, nil, nil, "", err
