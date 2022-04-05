@@ -1312,6 +1312,13 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	`store_client_pre_hashed_passwords_enabled`: {
+		Hidden: true,
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return strconv.FormatBool(security.AutoDetectPasswordHashes.Get(&evalCtx.Settings.SV)), nil
+		},
+	},
+
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/runtime-config-compatible.html#GUC-STANDARD-CONFORMING-STRINGS
 	// If this gets properly implemented, we will need to re-evaluate how escape_string_warning is implemented
