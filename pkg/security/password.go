@@ -429,6 +429,11 @@ func HashPassword(ctx context.Context, sv *settings.Values, password string) ([]
 	}
 }
 
+// HashPasswordUsingSCRAM hashes the cleartext password with given cost with SCRAM.
+func HashPasswordUsingSCRAM(ctx context.Context, cost int, cleartext string) ([]byte, error) {
+	return hashPasswordUsingSCRAM(ctx, cost, cleartext)
+}
+
 func hashPasswordUsingSCRAM(ctx context.Context, cost int, cleartext string) ([]byte, error) {
 	prepared, err := stringprep.SASLprep.Prepare(cleartext)
 	if err != nil {

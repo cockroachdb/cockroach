@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -65,6 +67,8 @@ Connection
   \c, \connect {[DB] [USER] [HOST] [PORT] | [URL]}
                     connect to a server or print the current connection URL.
                     (Omitted values reuse previous parameters. Use '-' to skip a field.)
+  \password [USERNAME]   
+                    securely change the password for a user
 
 Input/Output
   \echo [STRING]    write the provided string to standard output.
@@ -1158,6 +1162,64 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 			}
 		}
 
+	case `\password`:
+		// TODO(janexing): If the password is pasted instead of typed to the terminal,
+		// ANSI escape sequences will be automatically appended and prepended to
+		// the password. This should be fixed.
+		password1, err := pprompt.PromptForPassword()
+		if err != nil {
+			fmt.Fprintf(c.iCtx.stderr, "Reading password\n:%v", err)
+			c.exitErr = err
+			return errState
+		}
+
+		fmt.Fprintf(c.iCtx.stdout, "Enter it again: ")
+		password2, err := pprompt.PromptForPassword()
+		if err != nil {
+			fmt.Fprintf(c.iCtx.stderr, "Reading password\n:%v", err)
+			c.exitErr = err
+			return errState
+		}
+
+		if password1 != password2 {
+			fmt.Fprintf(c.iCtx.stderr, "Passwords didn't match\n")
+			c.exitErr = err
+			return errState
+		} else {
+			var userName string
+
+			if len(cmd) > 1 {
+				userName = cmd[1]
+				for _, extraArg := range cmd[2:] {
+					fmt.Fprintf(c.iCtx.stdout, "\\password: extra argument \"%s\" ignored\n", extraArg)
+				}
+			} else {
+				userName = "current_user"
+			}
+
+			// TODO (janexing): here we hard-coded the iteration count value for the
+			// scram-sha-256 method as the common default in
+			// security.bcryptCostToSCRAMIterCount. This is not ideal. But we have to
+			// pass a `cost` to prehash the clear text with SCRAM.
+			const scramIterCount = 119680
+			var hashedPassword = []byte(password1)
+
+			if c.checkPrehashScramEnabled() {
+				hashedPassword, err = security.HashPasswordUsingSCRAM(context.Background(), scramIterCount, password1)
+				if err != nil {
+					fmt.Fprintf(c.iCtx.stderr, "Hashing password using scram\n:%v", err)
+					c.exitErr = err
+					return errState
+				}
+			}
+
+			c.concatLines = fmt.Sprintf(
+				`ALTER USER %s WITH LOGIN PASSWORD '%s'`,
+				userName,
+				string(hashedPassword))
+			return cliRunStatement
+		}
+
 	case `\|`:
 		return c.pipeSyscmd(c.lastInputLine, nextState, errState)
 
@@ -2090,4 +2152,40 @@ func (c *cliState) runWithInterruptableCtx(fn func(ctx context.Context) error) e
 	// Now run the query.
 	err := fn(ctx)
 	return err
+}
+
+// checkPrehashScramEnabled checks if the session variable `password_encryption`
+// is set with value `scram-sha-256`.
+func (c *cliState) checkPrehashScramEnabled() bool {
+	passwrodEncrptMethod, err := c.getSessionVarValue("password_encryption")
+	if err != nil {
+		clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
+	}
+	if passwrodEncrptMethod == "scram-sha-256" {
+		return true
+	}
+	return false
+}
+
+// getSessionVarValue is to get the value for a session variable.
+func (c *cliState) getSessionVarValue(sessionVar string) (string, error) {
+	query := fmt.Sprintf("SHOW %s", sessionVar)
+	var rows [][]string
+	var err error
+	err = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn,
+			clisqlclient.MakeQuery(query), true)
+		return err
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	for _, row := range rows {
+		if len(row) != 0 {
+			return row[0], nil
+		}
+	}
+	return "", nil
 }
