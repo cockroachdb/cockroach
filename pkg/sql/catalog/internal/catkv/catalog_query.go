@@ -85,14 +85,14 @@ func lookupIDs(
 	}
 	ret := make([]descpb.ID, len(nameInfos))
 	for i, nameInfo := range nameInfos {
-		id := cb.LookupNamespaceEntry(nameInfo)
-		if id == descpb.InvalidID {
+		ne := cb.LookupNamespaceEntry(nameInfo)
+		if ne == nil {
 			if cq.isRequired {
 				return nil, errors.AssertionFailedf("expected namespace entry for %s, none found", nameInfo.String())
 			}
 			continue
 		}
-		ret[i] = id
+		ret[i] = ne.GetID()
 	}
 	return ret, nil
 }
