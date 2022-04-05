@@ -59,7 +59,7 @@ else
   bazel run pkg/gen/genbzl --run_under="cd $PWD && " -- --out-dir pkg/gen
 fi
 
-if files_unchanged_from_upstream $(find ./pkg -name BUILD.bazel) $(find ./pkg -name '*.bzl'); then
+if files_unchanged_from_upstream $(find ./pkg/cmd/generate-test-suites -name BUILD.bazel -or -name '*.go') $(find ./pkg -name BUILD.bazel) $(find ./pkg -name '*.bzl'); then
   echo "Skipping //pkg/cmd/generate-test-suites (relevant files are unchanged from upstream)."
 else
   CONTENTS=$(bazel run //pkg/cmd/generate-test-suites --run_under="cd $PWD && ")
