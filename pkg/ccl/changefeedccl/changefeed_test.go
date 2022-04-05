@@ -3516,6 +3516,21 @@ func TestChangefeedErrors(t *testing.T) {
 		`EXPERIMENTAL CHANGEFEED FOR vw`,
 	)
 
+	sqlDB.ExpectErr(
+		t, `CHANGEFEED targets TABLE foo and TABLE foo are duplicates`,
+		`EXPERIMENTAL CHANGEFEED FOR foo, foo`,
+	)
+	sqlDB.ExpectErr(
+		t, `CHANGEFEED targets TABLE foo and TABLE defaultdb.foo are duplicates`,
+		`EXPERIMENTAL CHANGEFEED FOR foo, defaultdb.foo`,
+	)
+	sqlDB.Exec(t,
+		`CREATE TABLE threefams (a int, b int, c int, family f_a(a), family f_b(b), family f_c(c))`)
+	sqlDB.ExpectErr(
+		t, `CHANGEFEED targets TABLE foo FAMILY f_a and TABLE foo FAMILY f_a are duplicates`,
+		`EXPERIMENTAL CHANGEFEED FOR foo family f_a, foo FAMILY f_b, foo FAMILY f_a`,
+	)
+
 	// Backup has the same bad error message #28170.
 	sqlDB.ExpectErr(
 		t, `"information_schema.tables" does not exist`,
