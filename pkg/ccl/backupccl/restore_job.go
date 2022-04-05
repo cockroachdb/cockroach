@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1279,13 +1278,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	if !backupCodec.TenantPrefix().Equal(p.ExecCfg().Codec.TenantPrefix()) {
-		// Disallow cluster restores until values like jobs are relocatable.
-		if details.DescriptorCoverage == tree.AllDescriptors {
-			return unimplemented.NewWithIssuef(62277,
-				"cannot cluster RESTORE backups taken from different tenant: %s",
-				backupTenantID.String())
-		}
-
 		// Ensure old processors fail if this is a previously unsupported restore of
 		// a tenant backup by the system tenant, which the old rekey processor would
 		// mishandle since it assumed the system tenant always restored tenant keys
