@@ -69,10 +69,25 @@ SELECT * FROM i WHERE f = 0
 0
 
 statement ok
-CREATE INDEX ON i (f)
+CREATE INDEX i_f_asc ON i (f)
 
 query R rowsort
 SELECT * FROM i WHERE f = 0
+----
+-0
+0
+
+statement ok
+CREATE INDEX i_f_desc ON i (f DESC)
+
+query R rowsort
+SELECT * FROM i@i_f_asc;
+----
+-0
+0
+
+query R rowsort
+SELECT * FROM i@i_f_desc;
 ----
 -0
 0
