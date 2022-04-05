@@ -184,7 +184,7 @@ func splitTxnAttempt(
 ) error {
 	txn.SetDebugName(splitTxnName)
 
-	_, dbDescValue, err := conditionalGetDescValueFromDB(
+	_, dbDescValue, _, err := conditionalGetDescValueFromDB(
 		ctx, txn, oldDesc.StartKey, false /* forUpdate */, checkDescsEqual(oldDesc))
 	if err != nil {
 		return err
@@ -256,7 +256,7 @@ func splitTxnAttempt(
 func splitTxnStickyUpdateAttempt(
 	ctx context.Context, txn *kv.Txn, desc *roachpb.RangeDescriptor, expiration hlc.Timestamp,
 ) error {
-	_, dbDescValue, err := conditionalGetDescValueFromDB(
+	_, dbDescValue, _, err := conditionalGetDescValueFromDB(
 		ctx, txn, desc.StartKey, false /* forUpdate */, checkDescsEqual(desc))
 	if err != nil {
 		return err
@@ -473,7 +473,7 @@ func (r *Replica) adminUnsplitWithDescriptor(
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, dbDescValue, err := conditionalGetDescValueFromDB(
+		_, dbDescValue, _, err := conditionalGetDescValueFromDB(
 			ctx, txn, desc.StartKey, false /* forUpdate */, checkDescsEqual(desc))
 		if err != nil {
 			return err
@@ -613,7 +613,7 @@ func (r *Replica) AdminMerge(
 		// the merge's transaction record. It is critical to the range merge
 		// protocol that the transaction record be placed on the the left hand
 		// side's descriptor, as the MergeTrigger depends on this.
-		_, dbOrigLeftDescValue, err := conditionalGetDescValueFromDB(
+		_, dbOrigLeftDescValue, _, err := conditionalGetDescValueFromDB(
 			ctx, txn, origLeftDesc.StartKey, true /* forUpdate */, checkDescsEqual(origLeftDesc))
 		if err != nil {
 			return err
@@ -1124,7 +1124,7 @@ func (r *Replica) changeReplicasImpl(
 
 	if removals := targets.nonVoterRemovals; len(removals) > 0 {
 		for _, rem := range removals {
-			iChgs := []internalReplicationChange{{target: rem, typ: internalChangeTypeRemove}}
+			iChgs := []internalReplicationChange{{target: rem, typ: internalChangeTypeRemoveNonVoter}}
 			var err error
 			desc, err = execChangeReplicasTxn(ctx, desc, reason, details, iChgs,
 				changeReplicasTxnArgs{
@@ -1278,6 +1278,27 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 		})
 }
 
+// TestingRemoveLearner is used by tests to manually remove a learner replica.
+func (r *Replica) TestingRemoveLearner(
+	ctx context.Context, beforeDesc *roachpb.RangeDescriptor, target roachpb.ReplicationTarget,
+) (*roachpb.RangeDescriptor, error) {
+	desc, err := execChangeReplicasTxn(
+		ctx, beforeDesc, kvserverpb.ReasonAbandonedLearner, "",
+		[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
+		changeReplicasTxnArgs{
+			db:                                   r.store.DB(),
+			liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+			logChange:                            r.store.logChange,
+			testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
+			testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
+		},
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, `removing learners from %s`, beforeDesc)
+	}
+	return desc, err
+}
+
 // maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
 // returns, all remaining replicas will be of type VOTER_FULL or NON_VOTER.
@@ -1289,6 +1310,9 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 		return nil, err
 	}
 
+	if fn := r.store.TestingKnobs().BeforeRemovingDemotedLearner; fn != nil {
+		fn()
+	}
 	// Now the config isn't joint any more, but we may have demoted some voters
 	// into learners. These learners should go as well.
 	learners := desc.Replicas().LearnerDescriptors()
@@ -1311,7 +1335,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 		var err error
 		desc, err = execChangeReplicasTxn(
 			ctx, desc, kvserverpb.ReasonAbandonedLearner, "",
-			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
+			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemoveLearner}},
 			changeReplicasTxnArgs{db: store.DB(),
 				liveAndDeadReplicas:                  store.allocator.storePool.liveAndDeadReplicas,
 				logChange:                            store.logChange,
@@ -1831,7 +1855,7 @@ func (r *Replica) execReplicationChangesForVoters(
 	}
 
 	for _, target := range voterRemovals {
-		typ := internalChangeTypeRemove
+		typ := internalChangeTypeRemoveLearner
 		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.GetType() == roachpb.VOTER_FULL {
 			typ = internalChangeTypeDemoteVoterToLearner
 		}
@@ -1870,10 +1894,19 @@ func (r *Replica) tryRollbackRaftLearner(
 	details string,
 ) {
 	repDesc, ok := rangeDesc.GetReplicaDescriptor(target.StoreID)
-	isLearnerOrNonVoter := repDesc.GetType() == roachpb.LEARNER || repDesc.GetType() == roachpb.NON_VOTER
-	if !ok || !isLearnerOrNonVoter {
+	if !ok {
 		// There's no learner to roll back.
 		log.Event(ctx, "learner to roll back not found; skipping")
+		return
+	}
+	var removeChgType internalChangeType
+	switch repDesc.GetType() {
+	case roachpb.NON_VOTER:
+		removeChgType = internalChangeTypeRemoveNonVoter
+	case roachpb.LEARNER:
+		removeChgType = internalChangeTypeRemoveLearner
+	default:
+		log.Event(ctx, "replica to rollback is no longer a learner; skipping")
 		return
 	}
 
@@ -1886,7 +1919,7 @@ func (r *Replica) tryRollbackRaftLearner(
 	rollbackFn := func(ctx context.Context) error {
 		_, err := execChangeReplicasTxn(
 			ctx, rangeDesc, reason, details,
-			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
+			[]internalReplicationChange{{target: target, typ: removeChgType}},
 			changeReplicasTxnArgs{
 				db:                                   r.store.DB(),
 				liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
@@ -1940,7 +1973,8 @@ const (
 	// NB: can't remove multiple learners at once (need to remove at least one
 	// voter with them), see:
 	// https://github.com/cockroachdb/cockroach/pull/40268
-	internalChangeTypeRemove
+	internalChangeTypeRemoveLearner
+	internalChangeTypeRemoveNonVoter
 )
 
 // internalReplicationChange is a replication target together with an internal
@@ -1961,6 +1995,9 @@ func (c internalReplicationChanges) useJoint() bool {
 	isDemotion := c[0].typ == internalChangeTypeDemoteVoterToNonVoter ||
 		c[0].typ == internalChangeTypeDemoteVoterToLearner
 	return len(c) > 1 || isDemotion
+}
+func (c internalReplicationChanges) isSingleLearnerRemoval() bool {
+	return len(c) == 1 && c[0].typ == internalChangeTypeRemoveLearner
 }
 
 func prepareChangeReplicasTrigger(
@@ -2013,7 +2050,7 @@ func prepareChangeReplicasTrigger(
 						chg.target)
 				}
 				added = append(added, rDesc)
-			case internalChangeTypeRemove:
+			case internalChangeTypeRemoveLearner, internalChangeTypeRemoveNonVoter:
 				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
 				if !ok {
 					return nil, errors.Errorf("target %s not found", chg.target)
@@ -2169,19 +2206,39 @@ func execChangeReplicasTxn(
 
 	descKey := keys.RangeDescriptorKey(referenceDesc.StartKey)
 
-	check := func(kvDesc *roachpb.RangeDescriptor) bool {
+	check := func(kvDesc *roachpb.RangeDescriptor) (matched, skip bool) {
 		// NB: We might fail to find the range if the range has been merged away
 		// in which case we definitely want to fail the check below.
-		if kvDesc != nil && kvDesc.RangeID == referenceDesc.RangeID && chgs.leaveJoint() {
-			// If there are no changes, we're trying to leave a joint config,
-			// so that's all we care about. But since leaving a joint config
-			// is done opportunistically whenever one is encountered, this is
-			// more likely to race than other operations. So we verify literally
-			// nothing about the descriptor, but once we get the descriptor out
-			// from conditionalGetDescValueFromDB, we'll check if it's in a
-			// joint config and if not, noop.
-			return true
+		if kvDesc != nil && kvDesc.RangeID == referenceDesc.RangeID {
+			if chgs.leaveJoint() && !kvDesc.Replicas().InAtomicReplicationChange() {
+				// If there are no changes, we're trying to leave a joint config, so
+				// that's all we care about. But since leaving a joint config is done
+				// opportunistically whenever one is encountered, this is more likely to
+				// race than other operations. So we verify that the descriptor fetched
+				// from kv is indeed in a joint config, and hint to the caller that it
+				// can no-op this replication change.
+				log.Infof(
+					ctx, "we were trying to exit a joint config but found that we are no longer in one; skipping",
+				)
+				return false /* matched */, true /* skip */
+			}
+			if chgs.isSingleLearnerRemoval() {
+				// If we're simply trying to remove a learner replica, but find that
+				// that learner has already been removed from the range, we can no-op.
+				learnerAlreadyRemoved := true
+				for _, repl := range kvDesc.Replicas().Descriptors() {
+					if repl.StoreID == chgs[0].target.StoreID {
+						learnerAlreadyRemoved = false
+						break
+					}
+				}
+				if learnerAlreadyRemoved {
+					log.Infof(ctx, "skipping learner removal because it was already removed")
+					return false /* matched */, true /* skip */
+				}
+			}
 		}
+
 		// Otherwise, check that the descriptors are equal.
 		//
 		// TODO(tbg): check that the replica sets are equal only. I was going to
@@ -2192,13 +2249,13 @@ func execChangeReplicasTxn(
 	if err := args.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		log.Event(ctx, "attempting txn")
 		txn.SetDebugName(replicaChangeTxnName)
-		desc, dbDescValue, err := conditionalGetDescValueFromDB(
+		desc, dbDescValue, skip, err := conditionalGetDescValueFromDB(
 			ctx, txn, referenceDesc.StartKey, false /* forUpdate */, check)
 		if err != nil {
 			return err
 		}
-		if chgs.leaveJoint() && !desc.Replicas().InAtomicReplicationChange() {
-			// Nothing to do. See comment in 'check' above for details.
+		if skip {
+			// The new descriptor already reflects what we needed to get done.
 			returnDesc = desc
 			return nil
 		}
@@ -2635,9 +2692,11 @@ func replicasCollocated(a, b []roachpb.ReplicaDescriptor) bool {
 	return true
 }
 
-func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescriptor) bool {
-	return func(desc2 *roachpb.RangeDescriptor) bool {
-		return desc.Equal(desc2)
+func checkDescsEqual(
+	desc *roachpb.RangeDescriptor,
+) func(*roachpb.RangeDescriptor) (matched bool, skip bool) {
+	return func(desc2 *roachpb.RangeDescriptor) (matched, skip bool) {
+		return desc.Equal(desc2) /* matched */, false /* skip */
 	}
 }
 
@@ -2645,6 +2704,11 @@ func checkDescsEqual(desc *roachpb.RangeDescriptor) func(*roachpb.RangeDescripto
 // checks that it matches the given expectation using proto Equals, and returns
 // the raw fetched roachpb.Value. If the fetched value doesn't match the
 // expectation, a ConditionFailedError is returned.
+//
+// The supplied `check` method verifies whether the descriptor fetched from kv
+// matches expectations and returns a "skip" hint. When this hint is returned
+// true, we don't care if the descriptor matches or not. This hint is true for
+// callers that are determined to be performing idempotent operations.
 //
 // The method allows callers to specify whether a locking read should be used or
 // not. A locking read can be used to manage contention and avoid transaction
@@ -2672,8 +2736,8 @@ func conditionalGetDescValueFromDB(
 	txn *kv.Txn,
 	startKey roachpb.RKey,
 	forUpdate bool,
-	check func(*roachpb.RangeDescriptor) bool,
-) (*roachpb.RangeDescriptor, []byte, error) {
+	check func(*roachpb.RangeDescriptor) (matched, skip bool),
+) (kvDesc *roachpb.RangeDescriptor, kvDescBytes []byte, skip bool, err error) {
 	get := txn.Get
 	if forUpdate {
 		get = txn.GetForUpdate
@@ -2681,20 +2745,26 @@ func conditionalGetDescValueFromDB(
 	descKey := keys.RangeDescriptorKey(startKey)
 	existingDescKV, err := get(ctx, descKey)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "fetching current range descriptor value")
+		return nil, nil, false /* skip */, errors.Wrap(err, "fetching current range descriptor value")
 	}
 	var existingDesc *roachpb.RangeDescriptor
 	if existingDescKV.Value != nil {
 		existingDesc = &roachpb.RangeDescriptor{}
 		if err := existingDescKV.Value.GetProto(existingDesc); err != nil {
-			return nil, nil, errors.Wrap(err, "decoding current range descriptor value")
+			return nil, nil, false /* skip */, errors.Wrap(err, "decoding current range descriptor value")
 		}
 	}
 
-	if !check(existingDesc) {
-		return nil, nil, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
+	matched, skip := check(existingDesc)
+	if skip {
+		// If the `check` method returned `skip=true`, we don't care whether the
+		// descriptor matched or not.
+		return existingDesc, existingDescKV.Value.TagAndDataBytes(), true /* skip */, nil
 	}
-	return existingDesc, existingDescKV.Value.TagAndDataBytes(), nil
+	if !matched {
+		return nil, nil, false /* skip */, &roachpb.ConditionFailedError{ActualValue: existingDescKV.Value}
+	}
+	return existingDesc, existingDescKV.Value.TagAndDataBytes(), false /* skip */, nil
 }
 
 // updateRangeDescriptor adds a ConditionalPut on the range descriptor. The
