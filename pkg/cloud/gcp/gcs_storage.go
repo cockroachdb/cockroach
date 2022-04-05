@@ -212,16 +212,13 @@ func (g *gcsStorage) ReadFileAt(
 	return r, r.Reader.(*gcs.Reader).Attrs.Size, nil
 }
 
-func (g *gcsStorage) List(
-	ctx context.Context, prefix, delim string, fn cloud.ListingFn, limit int,
-) error {
+func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
 	dest := cloud.JoinPathPreservingTrailingSlash(g.prefix, prefix)
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.List")
 	defer sp.Finish()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.List: %s", dest)})
 
 	it := g.bucket.Objects(ctx, &gcs.Query{Prefix: dest, Delimiter: delim})
-	count := 0
 	for {
 		attrs, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -236,9 +233,6 @@ func (g *gcsStorage) List(
 		}
 		if err := fn(strings.TrimPrefix(name, dest)); err != nil {
 			return err
-		}
-		if count++; limit != 0 && count >= limit {
-			return nil
 		}
 	}
 }
