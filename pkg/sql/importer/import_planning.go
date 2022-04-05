@@ -437,7 +437,7 @@ func importPlanHook(
 							expandedFiles = append(expandedFiles, uri.String())
 						}
 						return err
-					}, 0 /*limit*/); err != nil {
+					}); err != nil {
 						return err
 					}
 					if len(expandedFiles) < 1 {
