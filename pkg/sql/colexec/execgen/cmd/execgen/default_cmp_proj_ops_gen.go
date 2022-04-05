@@ -76,7 +76,7 @@ func getDefaultCmpProjOps(targetPkg string, overload defaultCmpProjOpOverload) g
 func init() {
 	registerGenerator(
 		getDefaultCmpProjOps(
-			"colexecproj", /* targetPkg */
+			"colexecprojconst", /* targetPkg */
 			defaultCmpProjOpOverload{
 				IsRightConst: true,
 				Kind:         "RConst",
