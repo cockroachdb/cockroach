@@ -531,6 +531,7 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 				return false
 			}
 		}
+
 		return true
 	}
 

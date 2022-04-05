@@ -219,7 +219,6 @@ func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.Li
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.List: %s", dest)})
 
 	it := g.bucket.Objects(ctx, &gcs.Query{Prefix: dest, Delimiter: delim})
-
 	for {
 		attrs, err := it.Next()
 		if errors.Is(err, iterator.Done) {
