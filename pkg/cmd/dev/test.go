@@ -43,11 +43,18 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	testCmd := &cobra.Command{
 		Use:   "test [pkg..]",
 		Short: `Run the specified tests`,
-		Long:  `Run the specified tests.`,
+		Long: `Run the specified tests.
+
+This command takes a list of packages or build targets and tests all of them.
+The build target can be a normal bazel build target (like
+pkg/kv/kvserver:kvserver_test), or it can be a plain directory (like
+pkg/kv/kvserver). Furthermore, we accept the following shorthands: all
+and all_tests.`,
 		Example: `
 	dev test
 	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
 	dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
+        dev test all_tests -v
 	dev test --stress --race ...`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
@@ -103,8 +110,8 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	// Enumerate all tests to run.
 	if len(pkgs) == 0 {
-		// Empty `dev test` does the same thing as `dev test pkg/...`
-		pkgs = append(pkgs, "pkg/...")
+		// Empty `dev test` does the same thing as `dev test all_tests`.
+		pkgs = append(pkgs, "all_tests")
 	}
 
 	var args []string
@@ -120,6 +127,11 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	var testTargets []string
 	for _, pkg := range pkgs {
+		if pkg == "all" || pkg == "all_tests" {
+			testTargets = append(testTargets, "//pkg:all_tests")
+			continue
+		}
+
 		pkg = strings.TrimPrefix(pkg, "//")
 		pkg = strings.TrimPrefix(pkg, "./")
 		pkg = strings.TrimRight(pkg, "/")
