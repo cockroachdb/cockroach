@@ -50,11 +50,12 @@ import (
 //
 // TODO(ajwerner): add metrics to go with these stats.
 type applyCommittedEntriesStats struct {
-	batchesProcessed     int
-	entriesProcessed     int
-	stateAssertions      int
-	numEmptyEntries      int
-	numConfChangeEntries int
+	batchesProcessed      int
+	entriesProcessed      int
+	entriesProcessedBytes int64
+	stateAssertions       int
+	numEmptyEntries       int
+	numConfChangeEntries  int
 }
 
 // nonDeterministicFailure is an error type that indicates that a state machine
@@ -430,6 +431,7 @@ type replicaAppBatch struct {
 
 	// Statistics.
 	entries      int
+	entryBytes   int64
 	emptyEntries int
 	mutations    int
 	start        time.Time
@@ -542,7 +544,9 @@ func (b *replicaAppBatch) Stage(
 	// them in the batch) is sufficient.
 	b.stageTrivialReplicatedEvalResult(ctx, cmd)
 	b.entries++
-	if len(cmd.ent.Data) == 0 {
+	size := len(cmd.ent.Data)
+	b.entryBytes += int64(size)
+	if size == 0 {
 		b.emptyEntries++
 	}
 
@@ -1014,6 +1018,7 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.sm.stats.entriesProcessed += b.entries
+	b.sm.stats.entriesProcessedBytes += b.entryBytes
 	b.sm.stats.numEmptyEntries += b.emptyEntries
 	b.sm.stats.batchesProcessed++
 

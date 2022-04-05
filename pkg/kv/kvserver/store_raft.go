@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -458,6 +460,8 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	}
 	s.metrics.RaftIncomingQueueBytes.Dec(n)
 	s.metrics.RaftIncomingQueueLen.Dec(int64(len(infos)))
+	s.metrics.RaftIncomingQueueProcessingBytes.Inc(n)
+	defer s.metrics.RaftIncomingQueueProcessingBytes.Dec(n)
 	defer q.recycle(infos)
 
 	var hadError bool
@@ -491,6 +495,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		if _, exists := s.mu.replicasByRangeID.Load(rangeID); !exists {
 			q.Lock()
 			if len(q.infos) == 0 {
+				// TODO(tbg): need to release bytes for metrics.
 				s.replicaQueues.Delete(int64(rangeID))
 			}
 			q.Unlock()
@@ -521,8 +526,32 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	// processing time means we'll have starved local replicas of ticks and
 	// remote replicas will likely start campaigning.
 	if elapsed >= defaultReplicaRaftMuWarnThreshold {
-		log.Infof(ctx, "handle raft ready: %.1fs [applied=%d, batches=%d, state_assertions=%d]; node might be overloaded",
-			elapsed.Seconds(), stats.entriesProcessed, stats.batchesProcessed, stats.stateAssertions)
+		var buf redact.StringBuilder
+		buf.Printf("handle raft ready: %.1fs", elapsed.Seconds())
+		if stats.snap.offered {
+			if stats.snap.applied {
+				buf.Printf(", snapshot applied")
+			} else {
+				buf.Printf(", snapshot ignored")
+			}
+		}
+		if n := stats.entriesAppended; n > 0 {
+			buf.Printf(", appended=%d", stats.entriesProcessed)
+			if b := stats.sideloadedBytes; b > 0 {
+				buf.Printf(" (sideloaded %s)", humanizeutil.IBytes(stats.sideloadedBytes))
+			}
+		}
+		if n, b := stats.entriesProcessed, stats.entriesProcessedBytes; n > 0 || b > 0 {
+			buf.Printf(", applied=%d (size=%s batches=%d)", stats.entriesProcessed, humanizeutil.IBytes(b), stats.batchesProcessed)
+		}
+		if n := stats.stateAssertions; n > 0 {
+			buf.Printf(", state_assertions=%d", n)
+		}
+		if stats.sync {
+			buf.Printf(", synced")
+		}
+		buf.Printf("; node might be overloaded")
+		log.Infof(ctx, "%s", &buf)
 	}
 }
 

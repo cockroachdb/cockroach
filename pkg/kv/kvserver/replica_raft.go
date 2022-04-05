@@ -539,7 +539,10 @@ type handleSnapshotStats struct {
 
 type handleRaftReadyStats struct {
 	applyCommittedEntriesStats
-	snap handleSnapshotStats
+	snap            handleSnapshotStats
+	entriesAppended int
+	sideloadedBytes int64
+	sync            bool
 }
 
 // noSnap can be passed to handleRaftReady when no snapshot should be processed.
@@ -824,6 +827,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			const expl = "during append"
 			return stats, expl, errors.Wrap(err, expl)
 		}
+		stats.sideloadedBytes += sideLoadedEntriesSize
+		stats.entriesAppended += len(thinEntries)
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if !r.IsInitialized() && rd.HardState.Commit != 0 {
@@ -856,7 +861,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
 	commitStart := timeutil.Now()
-	if err := batch.Commit(rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
+	sync := rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)
+	stats.sync = sync
+	if err := batch.Commit(sync); err != nil {
 		const expl = "while committing batch"
 		return stats, expl, errors.Wrap(err, expl)
 	}
