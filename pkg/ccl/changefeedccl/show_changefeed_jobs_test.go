@@ -114,7 +114,7 @@ func TestShowChangefeedJobsBasic(t *testing.T) {
 			u, err := url.Parse(sinkURI)
 			require.NoError(t, err)
 			if u.Scheme == changefeedbase.SinkSchemeKafka {
-				require.Equal(t, "foo", out.topics, "Expected topics:%s but found format:%s", "foo", out.topics)
+				require.Equal(t, "foo", out.topics, "Expected topics:%s but found topics:%s", "foo", out.topics)
 			}
 		}
 		require.Equal(t, "{d.public.foo}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{d.public.foo}", string(out.FullTableNames))

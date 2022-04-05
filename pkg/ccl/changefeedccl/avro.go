@@ -767,8 +767,11 @@ func tableToAvroSchema(
 		return nil, err
 	}
 	var name string
+	// Even though we now always specify a family,
+	// for backwards compatibility schemas for tables with only one family
+	// don't get family-specific names.
 	if tableDesc.NumFamilies() > 1 {
-		name = SQLNameToAvroName(tableDesc.GetName() + family.Name)
+		name = SQLNameToAvroName(tableDesc.GetName() + "." + family.Name)
 	} else {
 		name = SQLNameToAvroName(tableDesc.GetName())
 	}
