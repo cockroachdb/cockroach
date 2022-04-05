@@ -223,7 +223,74 @@ func TestAddRemoveNonVotingReplicasBasic(t *testing.T) {
 	require.NoError(t, tc.WaitForFullReplication())
 	require.Len(t, desc.Replicas().NonVoterDescriptors(), 0)
 }
+func TestAddReplicaViaDelegateSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
+	s := make(chan struct{}, 1)
+	s <- struct{}{}
+	var control int64
+	var count int64
+	tc := testcluster.StartTestCluster(
+		t, 3, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						BlockReceiveSnapshot: func() *chan struct{} {
+							if atomic.LoadInt64(&control) > 0 {
+								return &s
+							}
+							return nil
+						},
+						ThrottleEmptySnapshots:       true,
+						CountSendSnapshotsThrottling: &count,
+					},
+				},
+			},
+		},
+	)
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	scratch := tc.ScratchRange(t)
+
+	// After starting the cluster, block snapshots on receiver stores.
+	atomic.StoreInt64(&control, 1)
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(
+		func() error {
+			_, err := tc.AddNonVoters(scratch, tc.Target(2))
+			return err
+		},
+	)
+	g.Go(
+		func() error {
+			_, err := tc.AddNonVoters(scratch, tc.Target(1))
+			return err
+		},
+	)
+
+	require.Eventually(
+		t, func() bool {
+			return count == atomic.LoadInt64(&count)
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond,
+	)
+	atomic.StoreInt64(&control, 0)
+	<-s
+
+	require.Eventually(
+		t, func() bool {
+			desc := tc.LookupRangeOrFatal(t, scratch)
+			log.Infof(ctx, "%v", desc.Replicas().Descriptors())
+			if n := len(desc.Replicas().Descriptors()); n != 3 {
+				return false
+			}
+			return true
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond,
+	)
+	require.NoError(t, g.Wait())
+}
 func TestLearnerRaftConfState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -66,7 +66,9 @@ func (q *raftRequestQueue) recycle(processed []raftRequestInfo) {
 // SendDelegatedSnapshot reads the incoming delegated snapshot message and
 // throttles sending snapshots before passing the request to the sender replica.
 func (s *Store) SendDelegatedSnapshot(
-	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest,
+	ctx context.Context,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream DelegateSnapshotResponseStream,
 ) error {
 	ctx = s.AnnotateCtx(ctx)
 	const name = "storage.Store: handle snapshot delegation"
@@ -77,14 +79,8 @@ func (s *Store) SendDelegatedSnapshot(
 			if err != nil {
 				return err
 			}
-			// Throttle snapshot sending.
-			cleanup, err := s.reserveSendSnapshot(ctx, req)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
 			return sender.followerSendSnapshot(
-				ctx, req.Header.ToReplica, req,
+				ctx, req.Header.ToReplica, req, stream,
 			)
 		},
 	)

@@ -390,6 +390,14 @@ type StoreTestingKnobs struct {
 	// IgnoreStrictGCEnforcement is used by tests to op out of strict GC
 	// enforcement.
 	IgnoreStrictGCEnforcement bool
+	// BlockReceiveSnapshot uses a channel to block receiving snapshots on
+	// recipients.
+	BlockReceiveSnapshot func() *chan struct{}
+	// ThrottleEmptySnapshots includes empty snapshots for throttling.
+	ThrottleEmptySnapshots bool
+	// CountSendSnapshotsThrottling counts the number of snapshots currently
+	// throttled on sender replicas.
+	CountSendSnapshotsThrottling *int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

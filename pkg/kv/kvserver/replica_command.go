@@ -2546,7 +2546,6 @@ func (r *Replica) sendSnapshot(
 	}
 
 	// Create new delegate snapshot request header with only required metadata.
-	// TODO(amy): add RaftTruncatedState in request to choose sender
 	header := &kvserverpb.DelegateSnapshotRequest_Header{
 		RangeID:     r.RangeID,
 		FromReplica: desc,
@@ -2593,9 +2592,33 @@ var followerSnapshotsEnabled = func() *settings.BoolSetting {
 // snapshot from this replica. The entire process of generating and transmitting
 // the snapshot is handled, and errors are propagated back to the leaseholder.
 func (r *Replica) followerSendSnapshot(
-	ctx context.Context, recipient roachpb.ReplicaDescriptor, req *kvserverpb.DelegateSnapshotRequest,
+	ctx context.Context,
+	recipient roachpb.ReplicaDescriptor,
+	req *kvserverpb.DelegateSnapshotRequest,
+	stream DelegateSnapshotResponseStream,
 ) (retErr error) {
 	ctx = r.AnnotateCtx(ctx)
+
+	// TODO(amy): when delegating to different senders, check raft applied state
+	// to determine if this follower replica is fit to send.
+	// Acknowledge that the request has been accepted.
+	if err := stream.Send(
+		&kvserverpb.DelegateSnapshotResponse{
+			SnapResponse: &kvserverpb.SnapshotResponse{
+				Status: kvserverpb.SnapshotResponse_ACCEPTED,
+			},
+		},
+	); err != nil {
+		return err
+	}
+
+	// Throttle snapshot sending.
+	cleanup, err := r.store.reserveSendSnapshot(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	snapType := req.Header.Type
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
 	if err != nil {
