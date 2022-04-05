@@ -844,10 +844,6 @@ DROP DATABASE db1 CASCADE
     descriptorId: 106
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 106
-    userName: public
 - [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 106
@@ -858,10 +854,6 @@ DROP DATABASE db1 CASCADE
     descriptorId: 107
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 107
-    userName: public
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 107
@@ -872,10 +864,6 @@ DROP DATABASE db1 CASCADE
     descriptorId: 108
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 108, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 108
-    userName: public
 - [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 108
@@ -886,10 +874,6 @@ DROP DATABASE db1 CASCADE
     descriptorId: 109
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 109
-    userName: public
 - [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 109
@@ -900,10 +884,6 @@ DROP DATABASE db1 CASCADE
     descriptorId: 110
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 110, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 110
-    userName: public
 - [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 110
@@ -914,10 +894,6 @@ DROP DATABASE db1 CASCADE
     descriptorId: 111
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 111
-    userName: public
 - [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 111
@@ -928,10 +904,6 @@ DROP DATABASE db1 CASCADE
     descriptorId: 112
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 112
-    userName: public
 - [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 112
@@ -942,10 +914,6 @@ DROP DATABASE db1 CASCADE
     descriptorId: 113
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 113, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 113
-    userName: public
 - [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 113
@@ -956,10 +924,6 @@ DROP DATABASE db1 CASCADE
     descriptorId: 114
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 114, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 114
-    userName: public
 - [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 114
@@ -1000,10 +964,6 @@ DROP DATABASE db1 CASCADE
     descriptorId: 117
     privileges: 2
     userName: admin
-- [[UserPrivileges:{DescID: 117, Name: public}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 117
-    userName: public
 - [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 117

@@ -32,10 +32,9 @@ CREATE SEQUENCE testuser_s2;
 query TTTTTB colnames
 SHOW GRANTS ON testuser_s2
 ----
-database_name  schema_name  table_name   grantee   privilege_type  is_grantable
-d              public       testuser_s2  admin     ALL             true
-d              public       testuser_s2  root      ALL             true
-d              public       testuser_s2  testuser  CREATE          false
+database_name  schema_name  table_name   grantee  privilege_type  is_grantable
+d              public       testuser_s2  admin    ALL             true
+d              public       testuser_s2  root     ALL             true
 
 user root
 
@@ -129,10 +128,9 @@ CREATE SEQUENCE s4
 query TTTTTB colnames
 SHOW GRANTS ON s4
 ----
-database_name  schema_name  table_name  grantee   privilege_type  is_grantable
-d              public       s4          admin     ALL             true
-d              public       s4          root      ALL             true
-d              public       s4          testuser  CREATE          false
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+d              public       s4          admin    ALL             true
+d              public       s4          root     ALL             true
 
 user root
 statement ok
@@ -155,7 +153,6 @@ CREATE SEQUENCE s5
 query TTTTTB colnames
 SHOW GRANTS ON s5
 ----
-database_name  schema_name  table_name  grantee   privilege_type  is_grantable
-d              public       s5          admin     ALL             true
-d              public       s5          root      ALL             true
-d              public       s5          testuser  CREATE          false
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+d              public       s5          admin    ALL             true
+d              public       s5          root     ALL             true

@@ -89,10 +89,6 @@ ElementState:
     privileges: 2
     userName: root
   Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 104
-    userName: public
-  Status: PUBLIC
 - ObjectParent:
     objectId: 104
     parentSchemaId: 101
@@ -275,10 +271,6 @@ ElementState:
     privileges: 2
     userName: root
   Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 105
-    userName: public
-  Status: PUBLIC
 - ObjectParent:
     objectId: 105
     parentSchemaId: 101
@@ -399,10 +391,6 @@ ElementState:
     descriptorId: 104
     privileges: 2
     userName: root
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 104
-    userName: public
   Status: PUBLIC
 - ObjectParent:
     objectId: 104
@@ -529,10 +517,6 @@ ElementState:
     descriptorId: 108
     privileges: 2
     userName: root
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 108
-    userName: public
   Status: PUBLIC
 - ObjectParent:
     objectId: 108
