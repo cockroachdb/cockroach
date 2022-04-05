@@ -1795,6 +1795,11 @@ func doRestorePlan(
 		if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 			telemetry.Count("restore.full-cluster")
 		}
+		if restoreStmt.Subdir == nil {
+			telemetry.Count("restore.deprecated-subdir-syntax")
+		} else {
+			telemetry.Count("restore.collection")
+		}
 	}
 
 	encodedTables := make([]*descpb.TableDescriptor, len(tables))

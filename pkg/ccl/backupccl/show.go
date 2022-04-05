@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -433,9 +434,16 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 		defer mem.Close(ctx)
 
-		return infoReader.showBackup(ctx, &mem, store, incStore, encryption, incPaths, resultsCh)
+		if err := infoReader.showBackup(ctx, &mem, store, incStore, encryption, incPaths, resultsCh); err != nil {
+			return err
+		}
+		if backup.InCollection == nil {
+			telemetry.Count("show-backup.deprecated-subdir-syntax")
+		} else {
+			telemetry.Count("show-backup.collection")
+		}
+		return nil
 	}
-
 	return fn, infoReader.header(), nil, false, nil
 }
 
