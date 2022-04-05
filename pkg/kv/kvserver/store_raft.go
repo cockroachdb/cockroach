@@ -536,13 +536,13 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 			}
 		}
 		if n := stats.entriesAppended; n > 0 {
-			buf.Printf(", appended=%d", stats.entriesProcessed)
+			buf.Printf(", appended=%d", n)
 			if b := stats.sideloadedBytes; b > 0 {
-				buf.Printf(" (sideloaded %s)", humanizeutil.IBytes(stats.sideloadedBytes))
+				buf.Printf(" (sideloaded %s)", humanizeutil.IBytes(b))
 			}
 		}
 		if n, b := stats.entriesProcessed, stats.entriesProcessedBytes; n > 0 || b > 0 {
-			buf.Printf(", applied=%d (size=%s batches=%d)", stats.entriesProcessed, humanizeutil.IBytes(b), stats.batchesProcessed)
+			buf.Printf(", applied=%d (size=%s batches=%d)", n, humanizeutil.IBytes(b), stats.batchesProcessed)
 		}
 		if n := stats.stateAssertions; n > 0 {
 			buf.Printf(", state_assertions=%d", n)

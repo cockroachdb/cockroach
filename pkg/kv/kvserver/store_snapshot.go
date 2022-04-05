@@ -435,15 +435,16 @@ func (s *Store) reserveSnapshot(
 	// getting stuck behind large snapshots managed by the replicate queue.
 	if header.RangeSize != 0 {
 		queueCtx := ctx
+		var maybeTimeout time.Duration
 		if deadline, ok := queueCtx.Deadline(); ok {
 			// Enforce a more strict timeout for acquiring the snapshot reservation to
 			// ensure that if the reservation is acquired, the snapshot has sufficient
 			// time to complete. See the comment on snapshotReservationQueueTimeoutFraction
 			// and TestReserveSnapshotQueueTimeout.
 			timeoutFrac := snapshotReservationQueueTimeoutFraction.Get(&s.ClusterSettings().SV)
-			timeout := time.Duration(timeoutFrac * float64(timeutil.Until(deadline)))
+			maybeTimeout := time.Duration(timeoutFrac * float64(timeutil.Until(deadline)))
 			var cancel func()
-			queueCtx, cancel = context.WithTimeout(queueCtx, timeout) // nolint:context
+			queueCtx, cancel = context.WithTimeout(queueCtx, maybeTimeout) // nolint:context
 			defer cancel()
 		}
 		select {
@@ -453,8 +454,8 @@ func (s *Store) reserveSnapshot(
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
 			}
 			return nil, errors.Wrapf(queueCtx.Err(),
-				"giving up during snapshot reservation due to %q",
-				snapshotReservationQueueTimeoutFraction.Key())
+				"giving up during snapshot reservation due to %q after %.2fs",
+				snapshotReservationQueueTimeoutFraction.Key(), maybeTimeout.Seconds())
 		case <-s.stopper.ShouldQuiesce():
 			return nil, errors.Errorf("stopped")
 		}
@@ -464,6 +465,8 @@ func (s *Store) reserveSnapshot(
 	// Raft snapshot rate limiting of 32mb/s, we expect to spend less than 16s per snapshot.
 	// which is what we want to log.
 	const snapshotReservationWaitWarnThreshold = 32 * time.Second
+	// TODO(tbg): reservation waits are an opaque way in which snapshots slow down and block producers.
+	// Add metrics for these things and in particular the path in which we're timing out in a block above.
 	if elapsed := timeutil.Since(tBegin); elapsed > snapshotReservationWaitWarnThreshold {
 		replDesc, _ := header.State.Desc.GetReplicaDescriptor(s.StoreID())
 		log.Infof(
