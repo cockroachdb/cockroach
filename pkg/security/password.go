@@ -129,6 +129,23 @@ func hasClusterVersion(
 	return vh != nil && vh.IsActive(ctx, versionkey)
 }
 
+// GetConfiguredPasswordCost returns the configured hashing cost
+// for the given method.
+func GetConfiguredPasswordCost(
+	ctx context.Context, sv *settings.Values, method password.HashMethod,
+) (int, error) {
+	var cost int
+	switch method {
+	case password.HashBCrypt:
+		cost = int(BcryptCost.Get(sv))
+	case password.HashSCRAMSHA256:
+		cost = int(SCRAMCost.Get(sv))
+	default:
+		return -1, errors.Newf("unsupported hash method: %v", method)
+	}
+	return cost, nil
+}
+
 // GetConfiguredPasswordHashMethod returns the configured hash method
 // to use before storing passwords provided in cleartext from clients.
 func GetConfiguredPasswordHashMethod(
