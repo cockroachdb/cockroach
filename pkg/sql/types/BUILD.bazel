@@ -1,6 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "types",
@@ -33,7 +34,6 @@ go_test(
     name = "types_test",
     size = "small",
     srcs = [
-        "dep_test.go",
         "types_test.go",
         "types_text_marshal_test.go",
     ],
@@ -43,7 +43,6 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/oidext",
-        "//pkg/testutils/buildutil",
         "//pkg/util/protoutil",
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//assert",
@@ -71,5 +70,13 @@ go_proto_library(
     deps = [
         "//pkg/geo/geopb",
         "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+disallowed_imports_test(
+    "types",
+    [
+        "//pkg/clusterversion",
+        "//pkg/roachpb",
     ],
 )

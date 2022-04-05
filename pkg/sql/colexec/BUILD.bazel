@@ -1,6 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 load(":COLEXEC.bzl", "gen_sort_partitioner_rule")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "colexec",
@@ -102,7 +103,6 @@ go_test(
         "count_test.go",
         "crossjoiner_test.go",
         "default_agg_test.go",
-        "dep_test.go",
         "distinct_test.go",
         "external_distinct_test.go",
         "external_hash_aggregator_test.go",
@@ -168,7 +168,6 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/distsqlutils",
         "//pkg/testutils/skip",
@@ -219,4 +218,13 @@ gen_eg_go_rules(targets)
 gen_sort_partitioner_rule(
     name = "gen-sort-partitioner",
     target = "sort_partitioner.eg.go",
+)
+
+disallowed_imports_test(
+    "colexec",
+    [
+        "//pkg/sql/colflow",
+        "//pkg/sql/rowexec",
+        "//pkg/sql/rowflow",
+    ],
 )
