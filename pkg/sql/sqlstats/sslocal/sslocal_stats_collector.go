@@ -87,12 +87,19 @@ func (s *StatsCollector) StartExplicitTransaction() {
 func (s *StatsCollector) EndExplicitTransaction(
 	ctx context.Context, transactionFingerprintID roachpb.TransactionFingerprintID,
 ) {
+	// We possibly ignore the transactionFingerprintID, for situations where
+	// grouping by it would otherwise result in collecting higher-cardinality
+	// data in the system tables than the cleanup job is able to keep up with.
+	// See #78338.
+	if !AssociateStmtWithTxnFingerprint.Get(&s.st.SV) {
+		transactionFingerprintID = roachpb.TransactionFingerprintID(0)
+	}
+
 	var discardedStats uint64
 	discardedStats += s.flushTarget.MergeApplicationStatementStats(
 		ctx,
 		s.ApplicationStats,
-		func(statistics *roachpb.CollectedStatementStatistics,
-		) {
+		func(statistics *roachpb.CollectedStatementStatistics) {
 			statistics.Key.TransactionFingerprintID = transactionFingerprintID
 		},
 	)
