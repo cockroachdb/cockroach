@@ -89,9 +89,11 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 			return true
 		})
 		ex := metric.MakePrometheusExporter()
-		ex.ScrapeRegistry(store.Registry(), true /* includeChildMetrics */)
+		scrape := func(ex *metric.PrometheusExporter) {
+			ex.ScrapeRegistry(store.Registry(), true /* includeChildMetrics */)
+		}
 		var in bytes.Buffer
-		if err := ex.PrintAsText(&in); err != nil {
+		if err := ex.ScrapeAndPrintAsText(&in, scrape); err != nil {
 			t.Fatalf("failed to print prometheus data: %v", err)
 		}
 		if seen != 2 {

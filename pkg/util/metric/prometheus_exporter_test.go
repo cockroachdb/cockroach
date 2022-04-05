@@ -10,7 +10,13 @@
 
 package metric
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestPrometheusExporter(t *testing.T) {
 	r1, r2 := NewRegistry(), NewRegistry()
@@ -112,4 +118,16 @@ func TestPrometheusExporter(t *testing.T) {
 			t.Errorf("gathered %s has %d data points but expect none", fam.GetName(), num)
 		}
 	}
+
+	// Test ScrapeAndPrintAsText
+	var buf bytes.Buffer
+	pe = MakePrometheusExporter()
+	err = pe.ScrapeAndPrintAsText(&buf, func(exporter *PrometheusExporter) {
+		exporter.ScrapeRegistry(r1, true)
+	})
+	require.NoError(t, err)
+	output := buf.String()
+	require.Regexp(t, "one_gauge 0", output)
+	require.Regexp(t, "shared_counter{counter=\"one\"}", output)
+	require.Len(t, strings.Split(output, "\n"), 7)
 }
