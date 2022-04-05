@@ -26,8 +26,11 @@ import (
 
 // PromptForPassword prompts for a password.
 // This is meant to be used when using a password.
-func PromptForPassword() (string, error) {
-	fmt.Print("Enter password: ")
+func PromptForPassword(prompt string) (string, error) {
+	if prompt == "" {
+		prompt = "Enter password: "
+	}
+	fmt.Print(prompt)
 	password, err := term.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
 		return "", err
