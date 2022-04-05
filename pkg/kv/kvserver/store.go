@@ -765,7 +765,9 @@ type Store struct {
 	// Semaphore to limit concurrent non-empty snapshot application.
 	snapshotApplySem chan struct{}
 	// Semaphore to limit concurrent non-empty snapshot sending.
-	snapshotSendSem chan struct{}
+	initialSnapshotSendSem chan struct{}
+	// Semaphore to limit concurrent non-empty snapshot sending.
+	raftSnapshotSendSem chan struct{}
 
 	// Track newly-acquired expiration-based leases that we want to proactively
 	// renew. An object is sent on the signal whenever a new entry is added to
@@ -1039,8 +1041,8 @@ type StoreConfig struct {
 	// to be applied concurrently.
 	concurrentSnapshotApplyLimit int
 
-	// concurrentSnapshotSendLimit specifies the maximum number of empty and
-	// non-empty snapshots that are permitted to be sent concurrently.
+	// concurrentSnapshotSendLimit specifies the maximum number of each type of
+	// snapshot that are permitted to be sent concurrently.
 	concurrentSnapshotSendLimit int
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
@@ -1208,7 +1210,8 @@ func NewStore(
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
-	s.snapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
+	s.initialSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
+	s.raftSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
 	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
 		s.renewableLeasesSignal = ch
 	} else {

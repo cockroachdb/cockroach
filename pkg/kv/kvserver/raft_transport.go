@@ -133,7 +133,8 @@ type RaftMessageHandler interface {
 
 	// SendDelegatedSnapshot is called for each incoming delegated snapshot
 	// request.
-	SendDelegatedSnapshot(ctx context.Context, req *kvserverpb.DelegateSnapshotRequest) error
+	SendDelegatedSnapshot(ctx context.Context, req *kvserverpb.DelegateSnapshotRequest,
+		stream DelegateSnapshotResponseStream) error
 }
 
 type raftTransportStats struct {
@@ -418,7 +419,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	}
 }
 
-// DelegateRaftSnapshot handles incoming delegated snapshot requests and parses
+// DelegateRaftSnapshot handles incoming delegated snapshot requests and passes
 // the request to pass off to the sender store. Errors during the snapshots
 // process are sent back as a response.
 func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapshotServer) error {
@@ -467,19 +468,9 @@ func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapsh
 					)
 					return roachpb.NewStoreNotFoundError(req.DelegatedSender.StoreID)
 				}
-				// Acknowledge that the request has been accepted.
-				if err := stream.Send(
-					&kvserverpb.DelegateSnapshotResponse{
-						SnapResponse: &kvserverpb.SnapshotResponse{
-							Status: kvserverpb.SnapshotResponse_ACCEPTED,
-						},
-					},
-				); err != nil {
-					return err
-				}
 
 				// Pass off the snapshot request to the sender store.
-				err = handler.SendDelegatedSnapshot(ctx, req)
+				err = handler.SendDelegatedSnapshot(ctx, req, stream)
 
 				// Get the recording of the child RPC and serialize it in the response.
 				recording := span.FinishAndGetConfiguredRecording()

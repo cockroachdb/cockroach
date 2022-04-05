@@ -445,8 +445,15 @@ func (s *Store) reserveSnapshot(
 func (s *Store) reserveSendSnapshot(
 	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest,
 ) (_cleanup func(), _err error) {
+	sem := s.initialSnapshotSendSem
+	if req.Header.Type == kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE {
+		sem = s.raftSnapshotSendSem
+	}
+	if fn := s.cfg.TestingKnobs.CountSendSnapshotsThrottling; fn != nil {
+		fn(1)
+	}
 	return s.throttleSnapshot(
-		ctx, s.snapshotSendSem, req.Header.RangeSize,
+		ctx, sem, req.Header.RangeSize,
 		req.Header.RangeID, req.DelegatedSender.ReplicaID,
 	)
 }
@@ -466,7 +473,7 @@ func (s *Store) throttleSnapshot(
 	// apply. This vastly speeds up rebalancing any empty ranges created by a
 	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 	// getting stuck behind large snapshots managed by the replicate queue.
-	if rangeSize != 0 {
+	if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
 		queueCtx := ctx
 		if deadline, ok := queueCtx.Deadline(); ok {
 			// Enforce a more strict timeout for acquiring the snapshot reservation to
@@ -481,6 +488,10 @@ func (s *Store) throttleSnapshot(
 		}
 		select {
 		case snapshotSem <- struct{}{}:
+			// Got a spot in the semaphore, continue with sending the snapshot.
+			if fn := s.cfg.TestingKnobs.CountSendSnapshotsThrottling; fn != nil {
+				fn(-1)
+			}
 		case <-queueCtx.Done():
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
@@ -500,6 +511,8 @@ func (s *Store) throttleSnapshot(
 	// which is what we want to log.
 	const snapshotReservationWaitWarnThreshold = 32 * time.Second
 	elapsed := timeutil.Since(tBegin)
+	// NB: this log message is skipped in test builds as many tests do not mock
+	// all of the objects being logged.
 	if elapsed > snapshotReservationWaitWarnThreshold && !buildutil.CrdbTestBuild {
 		log.Infof(
 			ctx,
@@ -515,7 +528,8 @@ func (s *Store) throttleSnapshot(
 	return func() {
 		s.metrics.ReservedReplicaCount.Dec(1)
 		s.metrics.Reserved.Dec(rangeSize)
-		if rangeSize != 0 {
+
+		if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
 			<-snapshotSem
 		}
 	}, nil
@@ -1285,7 +1299,7 @@ func delegateSnapshot(
 	switch resp.SnapResponse.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
 		return errors.Errorf(
-			"%s: remote couldn't accept %s with error: %s", delegatedSender,
+			"%s: sender couldn't accept %s with error: %s", delegatedSender,
 			req, resp.SnapResponse.Message,
 		)
 	case kvserverpb.SnapshotResponse_ACCEPTED:
