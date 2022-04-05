@@ -76,18 +76,6 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 
 // */}}
 
-// projConstOpBase contains all of the fields for projections with a constant,
-// except for the constant itself.
-// NOTE: this struct should be declared in proj_const_ops_tmpl.go, but if we do
-// so, it'll be redeclared because we execute that template twice. To go
-// around the problem we specify it here.
-type projConstOpBase struct {
-	colexecop.OneInputHelper
-	allocator *colmem.Allocator
-	colIdx    int
-	outputIdx int
-}
-
 // projOpBase contains all of the fields for non-constant projections.
 type projOpBase struct {
 	colexecop.OneInputHelper

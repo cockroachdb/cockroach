@@ -105,6 +105,7 @@ disallowed_imports_test(
         "//pkg/sql/colexec",
         "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/colexecproj",
+        "//pkg/sql/colexec/colexecprojconst",
         "//pkg/sql/colexec/colexecsel",
         "//pkg/sql/colexec/colexecwindow",
     ],

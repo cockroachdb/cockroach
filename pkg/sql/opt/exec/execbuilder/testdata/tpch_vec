@@ -20536,11 +20536,11 @@ EXPLAIN (VEC) SELECT l_returnflag, l_linestatus, sum(l_quantity) AS sum_qty, sum
   └ *colexec.sortOp
     └ *colexec.hashAggregator
       └ *colexecproj.projMultFloat64Float64Op
-        └ *colexecproj.projPlusFloat64Float64ConstOp
+        └ *colexecprojconst.projPlusFloat64Float64ConstOp
           └ *colexecproj.projMultFloat64Float64Op
-            └ *colexecproj.projMinusFloat64ConstFloat64Op
+            └ *colexecprojconst.projMinusFloat64ConstFloat64Op
               └ *colexecproj.projMultFloat64Float64Op
-                └ *colexecproj.projMinusFloat64ConstFloat64Op
+                └ *colexecprojconst.projMinusFloat64ConstFloat64Op
                   └ *colexecsel.selLEInt64Int64ConstOp
                     └ *colfetcher.ColBatchScan
 
@@ -20607,7 +20607,7 @@ EXPLAIN (VEC) SELECT n_name, sum(l_extendedprice * (1 - l_discount)) AS revenue 
   └ *colexec.sortOp
     └ *colexec.hashAggregator
       └ *colexecproj.projMultFloat64Float64Op
-        └ *colexecproj.projMinusFloat64ConstFloat64Op
+        └ *colexecprojconst.projMinusFloat64ConstFloat64Op
           └ *colexecjoin.hashJoiner
             ├ *rowexec.joinReader
             │ └ *colexecjoin.hashJoiner
@@ -20643,7 +20643,7 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
   └ *colexec.sortOp
     └ *colexec.hashAggregator
       └ *colexecproj.projMultFloat64Float64Op
-        └ *colexecproj.projMinusFloat64ConstFloat64Op
+        └ *colexecprojconst.projMinusFloat64ConstFloat64Op
           └ *colexec.defaultBuiltinFuncOperator
             └ *colexecbase.constBytesOp
               └ *colexecjoin.hashJoiner
@@ -20660,13 +20660,13 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
                           ├ *colexecbase.constBoolOp
                           │ └ *colexec.andProjOp
                           │   ├ *colexec.bufferOp
-                          │   ├ *colexecproj.projEQBytesBytesConstOp
-                          │   └ *colexecproj.projEQBytesBytesConstOp
+                          │   ├ *colexecprojconst.projEQBytesBytesConstOp
+                          │   └ *colexecprojconst.projEQBytesBytesConstOp
                           ├ *colexecbase.constBoolOp
                           │ └ *colexec.andProjOp
                           │   ├ *colexec.bufferOp
-                          │   ├ *colexecproj.projEQBytesBytesConstOp
-                          │   └ *colexecproj.projEQBytesBytesConstOp
+                          │   ├ *colexecprojconst.projEQBytesBytesConstOp
+                          │   └ *colexecprojconst.projEQBytesBytesConstOp
                           └ *colexecbase.constBoolOp
                             └ *colexec.bufferOp
 
@@ -20682,7 +20682,7 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
         └ *colexec.caseOp
           ├ *colexec.bufferOp
           │ └ *colexecproj.projMultFloat64Float64Op
-          │   └ *colexecproj.projMinusFloat64ConstFloat64Op
+          │   └ *colexecprojconst.projMinusFloat64ConstFloat64Op
           │     └ *colexec.defaultBuiltinFuncOperator
           │       └ *colexecbase.constBytesOp
           │         └ *colexecjoin.hashJoiner
@@ -20699,7 +20699,7 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
           │           │         └ *colexecsel.selEQBytesBytesConstOp
           │           │           └ *colfetcher.ColBatchScan
           │           └ *colfetcher.ColBatchScan
-          ├ *colexecproj.projEQBytesBytesConstOp
+          ├ *colexecprojconst.projEQBytesBytesConstOp
           │ └ *colexec.bufferOp
           └ *colexecbase.constFloat64Op
             └ *colexec.bufferOp
@@ -20715,7 +20715,7 @@ EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_n
       └ *colexecproj.projMinusFloat64Float64Op
         └ *colexecproj.projMultFloat64Float64Op
           └ *colexecproj.projMultFloat64Float64Op
-            └ *colexecproj.projMinusFloat64ConstFloat64Op
+            └ *colexecprojconst.projMinusFloat64ConstFloat64Op
               └ *colexec.defaultBuiltinFuncOperator
                 └ *colexecbase.constBytesOp
                   └ *colexecjoin.hashJoiner
@@ -20739,7 +20739,7 @@ EXPLAIN (VEC) SELECT c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) 
   └ *colexec.topKSorter
     └ *colexec.hashAggregator
       └ *colexecproj.projMultFloat64Float64Op
-        └ *colexecproj.projMinusFloat64ConstFloat64Op
+        └ *colexecprojconst.projMinusFloat64ConstFloat64Op
           └ *colexecjoin.hashJoiner
             ├ *colexecjoin.hashJoiner
             │ ├ *colfetcher.ColBatchScan
@@ -20801,10 +20801,10 @@ EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extended
 │
 └ Node 1
   └ *colexecproj.projDivFloat64Float64Op
-    └ *colexecproj.projMultFloat64Float64ConstOp
+    └ *colexecprojconst.projMultFloat64Float64ConstOp
       └ *colexec.orderedAggregator
         └ *colexecproj.projMultFloat64Float64Op
-          └ *colexecproj.projMinusFloat64ConstFloat64Op
+          └ *colexecprojconst.projMinusFloat64ConstFloat64Op
             └ *colexec.caseOp
               ├ *colexec.bufferOp
               │ └ *colexecjoin.hashJoiner
@@ -20812,8 +20812,8 @@ EXPLAIN (VEC) SELECT 100.00 * sum(CASE WHEN p_type LIKE 'PROMO%' THEN l_extended
               │   └ *colfetcher.ColIndexJoin
               │     └ *colfetcher.ColBatchScan
               ├ *colexecproj.projMultFloat64Float64Op
-              │ └ *colexecproj.projMinusFloat64ConstFloat64Op
-              │   └ *colexecproj.projPrefixBytesBytesConstOp
+              │ └ *colexecprojconst.projMinusFloat64ConstFloat64Op
+              │   └ *colexecprojconst.projPrefixBytesBytesConstOp
               │     └ *colexec.bufferOp
               └ *colexecbase.constFloat64Op
                 └ *colexec.bufferOp
@@ -20835,7 +20835,7 @@ EXPLAIN (VEC) SELECT s_suppkey, s_name, s_address, s_phone, total_revenue FROM s
           └ *colexecbase.constNullOp
             └ *colexec.hashAggregator
               └ *colexecproj.projMultFloat64Float64Op
-                └ *colexecproj.projMinusFloat64ConstFloat64Op
+                └ *colexecprojconst.projMinusFloat64ConstFloat64Op
                   └ *colfetcher.ColIndexJoin
                     └ *colfetcher.ColBatchScan
 
@@ -20866,11 +20866,11 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice) / 7.0 AS avg_yearly FROM lineitem, par
 ----
 │
 └ Node 1
-  └ *colexecproj.projDivFloat64Float64ConstOp
+  └ *colexecprojconst.projDivFloat64Float64ConstOp
     └ *colexec.orderedAggregator
       └ *rowexec.joinReader
         └ *rowexec.joinReader
-          └ *colexecproj.projMultFloat64Float64ConstOp
+          └ *colexecprojconst.projMultFloat64Float64ConstOp
             └ *colexec.orderedAggregator
               └ *rowexec.joinReader
                 └ *rowexec.joinReader
@@ -20904,7 +20904,7 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice* (1 - l_discount)) AS revenue FROM line
 └ Node 1
   └ *colexec.orderedAggregator
     └ *colexecproj.projMultFloat64Float64Op
-      └ *colexecproj.projMinusFloat64ConstFloat64Op
+      └ *colexecprojconst.projMinusFloat64ConstFloat64Op
         └ *colexec.caseOp
           ├ *colexec.bufferOp
           │ └ *colexecjoin.hashJoiner
@@ -20920,31 +20920,31 @@ EXPLAIN (VEC) SELECT sum(l_extendedprice* (1 - l_discount)) AS revenue FROM line
           │   │ ├ *colexec.andProjOp
           │   │ │ ├ *colexec.andProjOp
           │   │ │ │ ├ *colexec.andProjOp
-          │   │ │ │ │ ├ *colexecproj.projEQBytesBytesConstOp
+          │   │ │ │ │ ├ *colexecprojconst.projEQBytesBytesConstOp
           │   │ │ │ │ └ *colexec.projectInOpBytes
-          │   │ │ │ └ *colexecproj.projGEFloat64Float64ConstOp
-          │   │ │ └ *colexecproj.projLEFloat64Float64ConstOp
-          │   │ └ *colexecproj.projLEInt64Int64ConstOp
+          │   │ │ │ └ *colexecprojconst.projGEFloat64Float64ConstOp
+          │   │ │ └ *colexecprojconst.projLEFloat64Float64ConstOp
+          │   │ └ *colexecprojconst.projLEInt64Int64ConstOp
           │   └ *colexec.andProjOp
           │     ├ *colexec.andProjOp
           │     │ ├ *colexec.andProjOp
           │     │ │ ├ *colexec.andProjOp
-          │     │ │ │ ├ *colexecproj.projEQBytesBytesConstOp
+          │     │ │ │ ├ *colexecprojconst.projEQBytesBytesConstOp
           │     │ │ │ └ *colexec.projectInOpBytes
-          │     │ │ └ *colexecproj.projGEFloat64Float64ConstOp
-          │     │ └ *colexecproj.projLEFloat64Float64ConstOp
-          │     └ *colexecproj.projLEInt64Int64ConstOp
+          │     │ │ └ *colexecprojconst.projGEFloat64Float64ConstOp
+          │     │ └ *colexecprojconst.projLEFloat64Float64ConstOp
+          │     └ *colexecprojconst.projLEInt64Int64ConstOp
           ├ *colexecbase.constBoolOp
           │ └ *colexec.andProjOp
           │   ├ *colexec.bufferOp
           │   ├ *colexec.andProjOp
           │   │ ├ *colexec.andProjOp
           │   │ │ ├ *colexec.andProjOp
-          │   │ │ │ ├ *colexecproj.projEQBytesBytesConstOp
+          │   │ │ │ ├ *colexecprojconst.projEQBytesBytesConstOp
           │   │ │ │ └ *colexec.projectInOpBytes
-          │   │ │ └ *colexecproj.projGEFloat64Float64ConstOp
-          │   │ └ *colexecproj.projLEFloat64Float64ConstOp
-          │   └ *colexecproj.projLEInt64Int64ConstOp
+          │   │ │ └ *colexecprojconst.projGEFloat64Float64ConstOp
+          │   │ └ *colexecprojconst.projLEFloat64Float64ConstOp
+          │   └ *colexecprojconst.projLEInt64Int64ConstOp
           └ *colexecbase.constBoolOp
             └ *colexec.bufferOp
 
@@ -20960,7 +20960,7 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
         └ *colexec.unorderedDistinct
           └ *rowexec.joinReader
             └ *colexecsel.selGTInt64Float64Op
-              └ *colexecproj.projMultFloat64Float64ConstOp
+              └ *colexecprojconst.projMultFloat64Float64ConstOp
                 └ *colexec.hashAggregator
                   └ *colexecjoin.hashJoiner
                     ├ *colfetcher.ColIndexJoin
