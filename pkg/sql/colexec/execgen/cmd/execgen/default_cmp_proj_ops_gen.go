@@ -77,7 +77,7 @@ func init() {
 	registerGenerator(
 		getDefaultCmpProjOps(
 			defaultCmpProjOpOverload{
-				TargetPkg:    "colexecproj",
+				TargetPkg:    "colexecprojconst",
 				IsRightConst: true,
 				Kind:         "RConst",
 			}),

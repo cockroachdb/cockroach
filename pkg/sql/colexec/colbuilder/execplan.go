@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecprojconst"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecsel"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
@@ -2335,7 +2336,7 @@ func planProjectionExpr(
 		resultIdx = len(typs)
 		// The projection result will be outputted to a new column which is
 		// appended to the input batch.
-		op, err = colexecproj.GetProjectionLConstOperator(
+		op, err = colexecprojconst.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
 			rightIdx, lConstArg, resultIdx, evalCtx, binFn, cmpExpr,
 		)
@@ -2381,7 +2382,7 @@ func planProjectionExpr(
 				switch cmpProjOp.Symbol {
 				case treecmp.Like, treecmp.NotLike:
 					negate := cmpProjOp.Symbol == treecmp.NotLike
-					op, err = colexecproj.GetLikeProjectionOperator(
+					op, err = colexecprojconst.GetLikeProjectionOperator(
 						allocator, evalCtx, input, leftIdx, resultIdx,
 						string(tree.MustBeDString(rConstArg)), negate,
 					)
@@ -2412,7 +2413,7 @@ func planProjectionExpr(
 			if op == nil || err != nil {
 				// op hasn't been created yet, so let's try the constructor for
 				// all other projection operators.
-				op, err = colexecproj.GetProjectionRConstOperator(
+				op, err = colexecprojconst.GetProjectionRConstOperator(
 					allocator, typs, right.ResolvedType(), outputType, projOp,
 					input, leftIdx, rConstArg, resultIdx, evalCtx, binFn, cmpExpr,
 				)

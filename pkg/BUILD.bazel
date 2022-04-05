@@ -248,6 +248,8 @@ ALL_TESTS = [
     "//pkg/sql/colexec/colexecjoin:colexecjoin_test",
     "//pkg/sql/colexec/colexecproj:colexecproj_disallowed_imports_test",
     "//pkg/sql/colexec/colexecproj:colexecproj_test",
+    "//pkg/sql/colexec/colexecprojconst:colexecprojconst_disallowed_imports_test",
+    "//pkg/sql/colexec/colexecprojconst:colexecprojconst_test",
     "//pkg/sql/colexec/colexecsel:colexecsel_disallowed_imports_test",
     "//pkg/sql/colexec/colexecsel:colexecsel_test",
     "//pkg/sql/colexec/colexecspan:colexecspan_disallowed_imports_test",
