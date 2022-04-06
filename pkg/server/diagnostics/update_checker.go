@@ -53,9 +53,12 @@ type UpdateChecker struct {
 	Config     *base.Config
 	Settings   *cluster.Settings
 
-	// ClusterID is not yet available at the time the updater is created, so
-	// instead initialize with a function to get it.
-	ClusterID func() uuid.UUID
+	// StorageClusterID is the cluster ID of the underlying storage
+	// cluster. It is not yet available at the time the updater is
+	// created, so instead initialize with a function to get it.
+	StorageClusterID func() uuid.UUID
+	// LogicalClusterID is the tenant-specific logical cluster ID.
+	LogicalClusterID func() uuid.UUID
 
 	// NodeID is not yet available at the time the updater is created, so
 	// instead initialize with a function to get it.
@@ -185,10 +188,11 @@ func (u *UpdateChecker) maybeCheckForUpdates(
 // If an empty updates URL is set (via empty environment variable), returns nil.
 func (u *UpdateChecker) buildUpdatesURL(ctx context.Context) *url.URL {
 	clusterInfo := ClusterInfo{
-		ClusterID:  u.ClusterID(),
-		TenantID:   roachpb.SystemTenantID,
-		IsInsecure: u.Config.Insecure,
-		IsInternal: sql.ClusterIsInternal(&u.Settings.SV),
+		StorageClusterID: u.StorageClusterID(),
+		LogicalClusterID: u.LogicalClusterID(),
+		TenantID:         roachpb.SystemTenantID,
+		IsInsecure:       u.Config.Insecure,
+		IsInternal:       sql.ClusterIsInternal(&u.Settings.SV),
 	}
 
 	var env diagnosticspb.Environment

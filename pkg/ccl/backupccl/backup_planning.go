@@ -475,7 +475,7 @@ func checkPrivilegesForBackup(
 
 func requireEnterprise(execCfg *sql.ExecutorConfig, feature string) error {
 	if err := utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings, execCfg.ClusterID(), execCfg.Organization(),
+		execCfg.Settings, execCfg.LogicalClusterID(), execCfg.Organization(),
 		fmt.Sprintf("BACKUP with %s", feature),
 	); err != nil {
 		return err
@@ -829,7 +829,7 @@ func backupPlanHook(
 		}
 
 		lic := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "",
+			p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(), "",
 		) != nil
 
 		if err := protectTimestampForBackup(
@@ -1455,7 +1455,7 @@ func getBackupDetailAndManifest(
 		// IDs are how we identify tables, and those are only meaningful in the
 		// context of their own cluster, so we need to ensure we only allow
 		// incremental previous backups that we created.
-		if fromCluster := prevBackups[i].ClusterID; !fromCluster.Equal(execCfg.ClusterID()) {
+		if fromCluster := prevBackups[i].ClusterID; !fromCluster.Equal(execCfg.LogicalClusterID()) {
 			return jobspb.BackupDetails{}, BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
 		}
 	}
@@ -1663,7 +1663,7 @@ func createBackupManifest(
 		FormatVersion:       BackupFormatDescriptorTrackingVersion,
 		BuildInfo:           build.GetInfo(),
 		ClusterVersion:      execCfg.Settings.Version.ActiveVersion(ctx).Version,
-		ClusterID:           execCfg.ClusterID(),
+		ClusterID:           execCfg.LogicalClusterID(),
 		StatisticsFilenames: statsFiles,
 		DescriptorCoverage:  coverage,
 	}

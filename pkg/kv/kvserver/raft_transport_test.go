@@ -125,7 +125,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	rttc.nodeRPCContext.ClusterID.Set(ctx, uuid.MakeV4())
+	rttc.nodeRPCContext.StorageClusterID.Set(ctx, uuid.MakeV4())
 
 	// We are sharing the same RPC context for all simulated nodes, so
 	// we can't enforce some of the RPC check validation.
