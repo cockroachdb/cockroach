@@ -442,7 +442,7 @@ func (s *Store) reserveSnapshot(
 			// time to complete. See the comment on snapshotReservationQueueTimeoutFraction
 			// and TestReserveSnapshotQueueTimeout.
 			timeoutFrac := snapshotReservationQueueTimeoutFraction.Get(&s.ClusterSettings().SV)
-			maybeTimeout := time.Duration(timeoutFrac * float64(timeutil.Until(deadline)))
+			maybeTimeout = time.Duration(timeoutFrac * float64(timeutil.Until(deadline)))
 			var cancel func()
 			queueCtx, cancel = context.WithTimeout(queueCtx, maybeTimeout) // nolint:context
 			defer cancel()
