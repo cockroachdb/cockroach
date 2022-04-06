@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -2318,52 +2319,31 @@ func (s *statusServer) HotRangesV2(
 			return nil, err
 		}
 		var ranges []*serverpb.HotRangesResponseV2_HotRange
+		ti := cachedTableInfo{
+			tables:    map[descpb.ID]catalog.TableDescriptor{},
+			indexes:   map[descpb.IndexID]catalog.Index{},
+			schemas:   map[descpb.ID]catalog.SchemaDescriptor{},
+			databases: map[descpb.ID]catalog.DatabaseDescriptor{},
+		}
+
 		for nodeID, hr := range resp.HotRangesByNodeID {
 			for _, store := range hr.Stores {
 				for _, r := range store.HotRanges {
 					var (
-						dbName, tableName, indexName, schemaName string
-						replicaNodeIDs                           []roachpb.NodeID
+						replicaNodeIDs                                 []roachpb.NodeID
+						tableName, databaseName, schemaName, indexName string
 					)
-					_, tableID, err := s.sqlServer.execCfg.Codec.DecodeTablePrefix(r.Desc.StartKey.AsRawKey())
-					if err != nil {
-						log.Warningf(ctx, "cannot decode tableID for range descriptor: %s. %s", r.Desc.String(), err.Error())
-						continue
-					}
 					if err := s.sqlServer.distSQLServer.CollectionFactory.Txn(
 						ctx, s.sqlServer.internalExecutor, s.db,
 						func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-							commonLookupFlags := tree.CommonLookupFlags{
-								Required:    false,
-								AvoidLeased: true,
-							}
-							desc, err := col.GetImmutableTableByID(ctx, txn, descpb.ID(tableID), tree.ObjectLookupFlags{
-								CommonLookupFlags: commonLookupFlags,
-							})
-							if err != nil {
-								// Skip the range without failing to proceed with other ranges.
-								return nil
-							}
-							tableName = desc.GetName()
-
-							if _, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey()); err == nil {
-								if index, err := desc.FindIndexWithID(descpb.IndexID(idxID)); err != nil {
-									indexName = index.GetName()
-								}
-							}
-							ok, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), commonLookupFlags)
+							tableName, databaseName, schemaName, indexName, err = ti.LookupObjectNames(ctx, txn, s.sqlServer.execCfg.Codec, col, r.Desc.StartKey.AsRawKey())
 							if err != nil {
 								return err
 							}
-							if ok {
-								dbName = dbDesc.GetName()
-							}
-							if schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), commonLookupFlags); err == nil {
-								schemaName = schemaDesc.GetName()
-							}
 							return nil
 						}); err != nil {
-						return nil, err
+						log.Warningf(ctx, "cannot find table info for range key: %s. %s", r.Desc.StartKey.AsRawKey().String(), err.Error())
+						continue
 					}
 					for _, repl := range r.Desc.Replicas().Descriptors() {
 						replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
@@ -2374,7 +2354,7 @@ func (s *statusServer) HotRangesV2(
 						QPS:               r.QueriesPerSecond,
 						TableName:         tableName,
 						SchemaName:        schemaName,
-						DatabaseName:      dbName,
+						DatabaseName:      databaseName,
 						IndexName:         indexName,
 						ReplicaNodeIds:    replicaNodeIDs,
 						LeaseholderNodeID: r.LeaseholderNodeID,
@@ -2434,6 +2414,91 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 		return serverpb.HotRangesResponse_NodeResponse{ErrorMessage: err.Error()}
 	}
 	return resp
+}
+
+type cachedTableInfo struct {
+	tables    map[descpb.ID]catalog.TableDescriptor
+	indexes   map[descpb.IndexID]catalog.Index
+	schemas   map[descpb.ID]catalog.SchemaDescriptor
+	databases map[descpb.ID]catalog.DatabaseDescriptor
+}
+
+// LookupObjectNames returns the names of table, database, schema and index that are related to provided rangeKey.
+// It returns error in case table descriptor is not found for provided range key.
+// This function preserves found descriptors in local cache. In case of failure to get descriptor for particular
+// range key, Nil is assigned as a cached value.
+func (c cachedTableInfo) LookupObjectNames(
+	ctx context.Context,
+	txn *kv.Txn,
+	sqlCodec keys.SQLCodec,
+	col *descs.Collection,
+	rangeKey roachpb.Key,
+) (table, database, schema, index string, err error) {
+	commonLookupFlags := tree.CommonLookupFlags{
+		Required:    false,
+		AvoidLeased: true,
+	}
+
+	_, tableID, err := sqlCodec.DecodeTablePrefix(rangeKey)
+	if err != nil {
+		// Cache table IDs with Nil values in case of failure to retrieve descriptor to
+		// make sure that next time this table ID will be found in cache and not accessing
+		// to store. The same logic applied to all error cases below.
+		c.tables[descpb.ID(tableID)] = nil
+		log.Warningf(ctx, "cannot decode tableID for range descriptor: %s. %s", rangeKey.String(), err.Error())
+		return "", "", "", "", err
+	}
+	desc, ok := c.tables[descpb.ID(tableID)]
+	if !ok {
+		desc, err = col.GetImmutableTableByID(ctx, txn, descpb.ID(tableID), tree.ObjectLookupFlags{
+			CommonLookupFlags: commonLookupFlags,
+		})
+		if err != nil {
+			c.tables[descpb.ID(tableID)] = nil
+			return "", "", "", "", err
+		}
+		c.tables[descpb.ID(tableID)] = desc
+	}
+	table = desc.GetName()
+
+	if _, _, idxID, err := sqlCodec.DecodeIndexPrefix(rangeKey); err == nil {
+		indexDesc, ok := c.indexes[descpb.IndexID(idxID)]
+		if !ok {
+			indexDesc, err = desc.FindIndexWithID(descpb.IndexID(idxID))
+			c.indexes[descpb.IndexID(idxID)] = indexDesc
+			if err != nil {
+				log.Warningf(ctx, "cannot resolve index descriptor for range: %s. %s", rangeKey.String(), err.Error())
+			}
+		}
+		if indexDesc != nil {
+			index = indexDesc.GetName()
+		}
+	}
+
+	dbDesc, ok := c.databases[desc.GetParentID()]
+	if !ok {
+		_, dbDesc, err = col.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), commonLookupFlags)
+		c.databases[desc.GetParentID()] = dbDesc
+		if err != nil {
+			log.Warningf(ctx, "cannot resolve database descriptor for range: %s. %s", rangeKey.String(), err.Error())
+		}
+	}
+	if dbDesc != nil {
+		database = dbDesc.GetName()
+	}
+
+	schemaDesc, ok := c.schemas[desc.GetParentSchemaID()]
+	if !ok {
+		schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), commonLookupFlags)
+		c.schemas[desc.GetParentSchemaID()] = schemaDesc
+		if err != nil {
+			log.Warningf(ctx, "cannot resolve schema descriptor for range: %s. %s", rangeKey.String(), err.Error())
+		}
+	}
+	if schemaDesc != nil {
+		schema = schemaDesc.GetName()
+	}
+	return table, database, schema, index, nil
 }
 
 // Range returns rangeInfos for all nodes in the cluster about a specific
