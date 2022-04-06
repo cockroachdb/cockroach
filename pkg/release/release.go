@@ -215,7 +215,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		}
 		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s official-binary", targetTriple))
 	}
-	configs := []string{"-c", "opt", "--config=ci", "--config=with_ui", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
+	configs := []string{"-c", "opt", "--config=ci", "--config=force_build_cdeps", "--config=with_ui", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
 	buildArgs = append(buildArgs, configs...)
 	cmd := exec.Command("bazel", buildArgs...)
 	cmd.Dir = pkgDir
@@ -238,7 +238,11 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 	if err := stageBinary("//pkg/cmd/cockroach-sql", platform, bazelBin, pkgDir, true); err != nil {
 		return err
 	}
-	if err := stageLibraries(platform, bazelBin, filepath.Join(pkgDir, "lib")); err != nil {
+	execRoot, err := getPathToBazelExecRoot(opts.ExecFn, pkgDir, configs)
+	if err != nil {
+		return err
+	}
+	if err := stageLibraries(platform, execRoot, filepath.Join(pkgDir, "lib")); err != nil {
 		return err
 	}
 
@@ -618,8 +622,8 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 	}
 }
 
-func getPathToBazelBin(execFn ExecFn, pkgDir string, configArgs []string) (string, error) {
-	args := []string{"info", "bazel-bin"}
+func getBazelInfo(execFn ExecFn, pkgDir string, configArgs []string, which string) (string, error) {
+	args := []string{"info", which}
 	args = append(args, configArgs...)
 	cmd := exec.Command("bazel", args...)
 	cmd.Dir = pkgDir
@@ -629,6 +633,14 @@ func getPathToBazelBin(execFn ExecFn, pkgDir string, configArgs []string) (strin
 		return "", errors.Wrapf(err, "failed to run %s: %s", cmd.Args, string(stdoutBytes))
 	}
 	return strings.TrimSpace(string(stdoutBytes)), nil
+}
+
+func getPathToBazelBin(execFn ExecFn, pkgDir string, configArgs []string) (string, error) {
+	return getBazelInfo(execFn, pkgDir, configArgs, "bazel-bin")
+}
+
+func getPathToBazelExecRoot(execFn ExecFn, pkgDir string, configArgs []string) (string, error) {
+	return getBazelInfo(execFn, pkgDir, configArgs, "execution_root")
 }
 
 func stageBinary(
@@ -660,18 +672,22 @@ func stageBinary(
 	return err
 }
 
-func stageLibraries(platform Platform, bazelBin string, dir string) error {
+func stageLibraries(platform Platform, execRoot string, dir string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 	ext := SharedLibraryExtensionFromPlatform(platform)
+	platformString := strings.TrimSuffix(strings.TrimPrefix(CrossConfigFromPlatform(platform), "cross"), "base")
 	for _, lib := range CRDBSharedLibraries {
 		libDir := "lib"
 		if platform == PlatformWindows {
 			// NB: On Windows these libs end up in the `bin` subdir.
 			libDir = "bin"
 		}
-		src := filepath.Join(bazelBin, "c-deps", "libgeos", libDir, lib+ext)
+		src := filepath.Join(
+			execRoot, "external",
+			fmt.Sprintf("archived_cdep_libgeos_%s", platformString),
+			libDir, lib+ext)
 		srcF, err := os.Open(src)
 		if err != nil {
 			return err

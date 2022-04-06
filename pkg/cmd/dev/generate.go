@@ -168,7 +168,7 @@ func (d *dev) generateRedactSafe(ctx context.Context) error {
 
 func (d *dev) generateCgo(cmd *cobra.Command) error {
 	ctx := cmd.Context()
-	args := []string{"build", "//c-deps:libjemalloc", "//c-deps:libproj", "//c-deps:libgeos"}
+	args := []string{"build", "//c-deps:libjemalloc", "//c-deps:libproj"}
 	if runtime.GOOS == "linux" {
 		args = append(args, "//c-deps:libkrb5")
 	}
