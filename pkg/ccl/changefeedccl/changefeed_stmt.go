@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -117,7 +118,8 @@ func changefeedPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	// rowFn impements sql.PlanHookRowFn
+	rowFn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
@@ -127,7 +129,7 @@ func changefeedPlanHook(
 
 		sinkURI, err := sinkURIFn()
 		if err != nil {
-			return err
+			return changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
 		}
 
 		if !unspecifiedSink && sinkURI == `` {
@@ -151,7 +153,7 @@ func changefeedPlanHook(
 			`changefeed.create`,
 		)
 		if err != nil {
-			return err
+			return changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
 		}
 
 		details := jr.Details.(jobspb.ChangefeedDetails)
@@ -173,6 +175,7 @@ func changefeedPlanHook(
 			p.ExtendedEvalContext().Descs.ReleaseAll(ctx)
 
 			telemetry.Count(`changefeed.create.core`)
+			logChangefeedCreateTelemetry(ctx, opts, jr)
 			err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
 			if err != nil {
 				telemetry.Count(`changefeed.core.error`)
@@ -230,6 +233,8 @@ func changefeedPlanHook(
 			return err
 		}
 
+		logChangefeedCreateTelemetry(ctx, opts, jr)
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -238,9 +243,16 @@ func changefeedPlanHook(
 		}:
 			return nil
 		}
-
 	}
-	return fn, header, nil, avoidBuffering, nil
+
+	rowFnLogErrors := func(ctx context.Context, pn []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+		err := rowFn(ctx, pn, resultsCh)
+		if err != nil {
+			logChangefeedFailedTelemetry(ctx, "", "", failureTypeForStartupError(err))
+		}
+		return err
+	}
+	return rowFnLogErrors, header, nil, avoidBuffering, nil
 }
 
 func createChangefeedJobRecord(
@@ -991,6 +1003,14 @@ func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, jobExec interfac
 	} else {
 		telemetry.Count(`changefeed.enterprise.fail`)
 		exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
+
+		changefeedDetails := b.job.Details().(jobspb.ChangefeedDetails)
+		parsedSink, err := url.Parse(changefeedDetails.SinkURI)
+		if err != nil {
+			log.Warningf(ctx, "failed to parse sink for telemetry logging: %v", err)
+		} else {
+			logChangefeedFailedTelemetry(ctx, b.job.Payload().Description, parsedSink.Scheme, changefeedbase.UnknownError)
+		}
 	}
 	return nil
 }
@@ -1122,4 +1142,80 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets []jobspb.ChangefeedTargetS
 		}
 	}
 	return
+}
+
+func logChangefeedCreateTelemetry(ctx context.Context, opts map[string]string, jr *jobs.Record) {
+	sinkType := "core"
+	changefeedDetails := jr.Details.(jobspb.ChangefeedDetails)
+	if changefeedDetails.SinkURI != `` {
+		parsedSink, err := url.Parse(changefeedDetails.SinkURI)
+		if err != nil {
+			log.Warningf(ctx, "failed to parse sink for telemetry logging: %v", err)
+		}
+		sinkType = parsedSink.Scheme
+	}
+
+	var initialScan string
+	initialScanType, initialScanSet := opts[changefeedbase.OptInitialScan]
+	_, initialScanOnlySet := opts[changefeedbase.OptInitialScanOnly]
+	_, noInitialScanSet := opts[changefeedbase.OptNoInitialScan]
+	if initialScanSet && initialScanType == `` {
+		initialScan = `yes`
+	} else if initialScanSet && initialScanType != `` {
+		initialScan = initialScanType
+	} else if initialScanOnlySet {
+		initialScan = `only`
+	} else if noInitialScanSet {
+		initialScan = `no`
+	}
+
+	var resolved string
+	resolvedValue, resolvedSet := opts[changefeedbase.OptResolvedTimestamps]
+	if !resolvedSet {
+		resolved = "no"
+	} else if resolved == `` {
+		resolved = "yes"
+	} else {
+		resolved = resolvedValue
+	}
+
+	changefeedEventDetails := eventpb.CommonChangefeedEventDetails{
+		Description: jr.Description,
+		SinkType:    sinkType,
+	}
+
+	createChangefeedEvent := &eventpb.CreateChangefeed{
+		CommonChangefeedEventDetails: changefeedEventDetails,
+		NumTables:                    int32(len(AllTargets(changefeedDetails))),
+		Resolved:                     resolved,
+		Format:                       opts[changefeedbase.OptFormat],
+		InitialScan:                  initialScan,
+	}
+
+	log.StructuredEvent(ctx, createChangefeedEvent)
+}
+
+func logChangefeedFailedTelemetry(
+	ctx context.Context, description string, sinkType string, failureType changefeedbase.FailureType,
+) {
+	changefeedEventDetails := eventpb.CommonChangefeedEventDetails{
+		Description: description,
+		SinkType:    sinkType,
+	}
+
+	changefeedFailedEvent := &eventpb.ChangefeedFailed{
+		CommonChangefeedEventDetails: changefeedEventDetails,
+		FailureType:                  failureType,
+	}
+
+	log.StructuredEvent(ctx, changefeedFailedEvent)
+}
+
+func failureTypeForStartupError(err error) changefeedbase.FailureType {
+	if errors.Is(err, context.Canceled) { // Occurs for sinkless changefeeds
+		return changefeedbase.ConnectionClosed
+	} else if isTagged, tag := changefeedbase.IsTaggedError(err); isTagged {
+		return tag
+	}
+	return changefeedbase.OnStartup
 }
