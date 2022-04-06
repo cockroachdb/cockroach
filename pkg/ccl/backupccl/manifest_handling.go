@@ -324,10 +324,12 @@ func readManifest(
 		if err != nil {
 			return BackupManifest{}, 0, err
 		}
-		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
+		plaintextBytes, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
 		if err != nil {
 			return BackupManifest{}, 0, err
 		}
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = plaintextBytes
 	}
 
 	if isGZipped(descBytes) {
@@ -377,7 +379,6 @@ func readManifest(
 			t.ModificationTime = hlc.Timestamp{WallTime: 1}
 		}
 	}
-
 	return backupManifest, approxMemSize, nil
 }
 
@@ -407,10 +408,12 @@ func readBackupPartitionDescriptor(
 		if err != nil {
 			return BackupPartitionDescriptor{}, 0, err
 		}
-		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
+		plaintextData, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
 		if err != nil {
 			return BackupPartitionDescriptor{}, 0, err
 		}
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = plaintextData
 	}
 
 	if isGZipped(descBytes) {
@@ -461,7 +464,7 @@ func readTableStatistics(
 		if err != nil {
 			return nil, err
 		}
-		statsBytes, err = storageccl.DecryptFile(statsBytes, encryptionKey)
+		statsBytes, err = storageccl.DecryptFile(ctx, statsBytes, encryptionKey, nil)
 		if err != nil {
 			return nil, err
 		}

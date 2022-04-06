@@ -71,7 +71,7 @@ func ExternalSSTReader(
 			return nil, err
 		}
 		if encryption != nil {
-			content, err = DecryptFile(content, encryption.Key)
+			content, err = DecryptFile(ctx, content, encryption.Key, nil)
 			if err != nil {
 				return nil, err
 			}
