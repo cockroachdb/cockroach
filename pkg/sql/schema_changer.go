@@ -871,6 +871,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 
 		b := txn.NewBatch()
 		scTable.SetDropped()
+		scTable.DropTime = timeutil.Now().UnixNano()
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, scTable, b); err != nil {
 			return err
 		}
