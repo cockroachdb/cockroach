@@ -81,7 +81,7 @@ func registerTypeORM(r *testRegistry) {
 			c,
 			node,
 			"add nodesource repository",
-			`sudo apt install ca-certificates && curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -`,
+			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -143,14 +143,14 @@ func registerTypeORM(r *testRegistry) {
 			c,
 			node,
 			"building TypeORM",
-			`cd /mnt/data1/typeorm/ && sudo npm install --unsafe-perm=true --allow-root`,
+			`cd /mnt/data1/typeorm/ && npm install`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("running TypeORM test suite - approx 12 mins")
 		rawResults, err := c.RunWithBuffer(ctx, t.l, node,
-			`cd /mnt/data1/typeorm/ && sudo npm test --unsafe-perm=true --allow-root`,
+			`cd /mnt/data1/typeorm/ && npm test`,
 		)
 		rawResultsStr := string(rawResults)
 		c.l.Printf("Test Results: %s", rawResultsStr)
