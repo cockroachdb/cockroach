@@ -507,7 +507,10 @@ func (handler *proxyHandler) setupIncomingCert(ctx context.Context) error {
 // the connection parameters, and rewrites the database and options parameters,
 // if necessary.
 //
-// We currently support embedding the cluster identifier in two ways:
+// We currently support embedding the cluster identifier in three ways:
+//
+// - Through server name identification (SNI) when using TLS connections
+//   (e.g. serverless-101.5xj.gcp-us-central1.cockroachlabs.cloud)
 //
 // - Within the database param (e.g. "happy-koala-3.defaultdb")
 //
@@ -530,6 +533,20 @@ func clusterNameAndTenantFromParams(
 
 	// No cluster identifiers were specified.
 	if clusterIdentifierDB == "" && clusterIdentifierOpt == "" {
+		// Try SNI if the tenant id and cluster name not provided in any other way.
+		if fe.sniServerName != "" {
+			// Try to obtain tenant ID from SNI
+			parts := strings.Split(fe.sniServerName, ".")
+			if len(parts) != 0 {
+				hostname := parts[0]
+				hostnameParts := strings.Split(hostname, "-")
+				if len(hostnameParts) == 2 && strings.EqualFold("serverless", hostnameParts[0]) {
+					if tenID, err := strconv.ParseUint(hostnameParts[1], 10, 64); err == nil {
+						return fe.msg, "", roachpb.MakeTenantID(tenID), nil
+					}
+				}
+			}
+		}
 		err := errors.New("missing cluster identifier")
 		err = errors.WithHint(err, clusterIdentifierHint)
 		return fe.msg, "", roachpb.MaxTenantID, err

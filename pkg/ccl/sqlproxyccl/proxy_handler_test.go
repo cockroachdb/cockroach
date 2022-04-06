@@ -237,6 +237,8 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	s, addr := newSecureProxyServer(
 		ctx, t, sql.Stopper(), &ProxyOptions{RoutingRule: sql.ServingSQLAddr(), SkipVerify: true},
 	)
+	_, port, err := net.SplitHostPort(addr)
+	require.NoError(t, err)
 
 	url := fmt.Sprintf("postgres://bob:wrong@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
@@ -244,13 +246,26 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	url = fmt.Sprintf("postgres://bob@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
 
+	url = fmt.Sprintf("postgres://bob:builder@toothless-28.blah:%s/defaultdb?sslmode=require", port)
+	te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "server error")
+
+	url = fmt.Sprintf("postgres://bob:builder@tenant-cluster-28.blah:%s/defaultdb?sslmode=require", port)
+	te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "server error")
+
 	url = fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 		require.NoError(t, runTestQuery(ctx, conn))
 	})
-	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+
+	url = fmt.Sprintf("postgres://bob:builder@serverless-28.blah:%s/defaultdb?sslmode=require", port)
+	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
+		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+		require.NoError(t, runTestQuery(ctx, conn))
+	})
+	require.Equal(t, int64(2), s.metrics.SuccessfulConnCount.Count())
 	require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
+	require.Equal(t, int64(2), s.metrics.RoutingErrCount.Count())
 }
 
 func TestProxyTLSConf(t *testing.T) {
@@ -1466,7 +1481,13 @@ func (te *tester) TestConnect(ctx context.Context, t *testing.T, url string, fn 
 	t.Helper()
 	te.setAuthenticated(false)
 	te.setErrToClient(nil)
-	conn, err := pgx.Connect(ctx, url)
+	connConfig, err := pgx.ParseConfig(url)
+	require.NoError(t, err)
+	if !strings.EqualFold(connConfig.Host, "127.0.0.1") {
+		connConfig.TLSConfig.ServerName = connConfig.Host
+		connConfig.Host = "127.0.0.1"
+	}
+	conn, err := pgx.ConnectConfig(ctx, connConfig)
 	require.NoError(t, err)
 	fn(conn)
 	require.NoError(t, conn.Close(ctx))
@@ -1487,6 +1508,10 @@ func (te *tester) TestConnectErr(
 
 	// Prevent pgx from tying to connect to the `::1` ipv6 address for localhost.
 	cfg.LookupFunc = func(ctx context.Context, s string) ([]string, error) { return []string{s}, nil }
+	if !strings.EqualFold(cfg.Host, "127.0.0.1") && cfg.TLSConfig != nil {
+		cfg.TLSConfig.ServerName = cfg.Host
+		cfg.Host = "127.0.0.1"
+	}
 	conn, err := pgx.ConnectConfig(ctx, cfg)
 	if err == nil {
 		_ = conn.Close(ctx)
