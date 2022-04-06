@@ -59,7 +59,7 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		ctx,
 		mvs.descriptorsToDelete,
 		dbZoneConfigsToDelete,
-		mvs.checkedOutDescriptors,
+		mvs.modifiedDescriptors,
 		mvs.drainedNames,
 		deps.Catalog(),
 	); err != nil {
@@ -86,15 +86,15 @@ func performBatchedCatalogWrites(
 	ctx context.Context,
 	descriptorsToDelete catalog.DescriptorIDSet,
 	dbZoneConfigsToDelete catalog.DescriptorIDSet,
-	checkedOutDescriptors nstree.Map,
+	modifiedDescriptors nstree.Map,
 	drainedNames map[descpb.ID][]descpb.NameInfo,
 	cat Catalog,
 ) error {
 	b := cat.NewCatalogChangeBatcher()
 	descriptorsToDelete.ForEach(func(id descpb.ID) {
-		checkedOutDescriptors.Remove(id)
+		modifiedDescriptors.Remove(id)
 	})
-	err := checkedOutDescriptors.IterateByID(func(entry catalog.NameEntry) error {
+	err := modifiedDescriptors.IterateByID(func(entry catalog.NameEntry) error {
 		return b.CreateOrUpdateDescriptor(ctx, entry.(catalog.MutableDescriptor))
 	})
 	if err != nil {
@@ -319,7 +319,7 @@ func manageJobs(
 
 type mutationVisitorState struct {
 	c                            Catalog
-	checkedOutDescriptors        nstree.Map
+	modifiedDescriptors          nstree.Map
 	drainedNames                 map[descpb.ID][]descpb.NameInfo
 	descriptorsToDelete          catalog.DescriptorIDSet
 	commentsToUpdate             []commentToUpdate
@@ -390,7 +390,7 @@ var _ scmutationexec.MutationVisitorStateUpdater = (*mutationVisitorState)(nil)
 func (mvs *mutationVisitorState) GetDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	if entry := mvs.checkedOutDescriptors.GetByID(id); entry != nil {
+	if entry := mvs.modifiedDescriptors.GetByID(id); entry != nil {
 		return entry.(catalog.Descriptor), nil
 	}
 	descs, err := mvs.c.MustReadImmutableDescriptors(ctx, id)
@@ -403,7 +403,7 @@ func (mvs *mutationVisitorState) GetDescriptor(
 func (mvs *mutationVisitorState) CheckOutDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
-	entry := mvs.checkedOutDescriptors.GetByID(id)
+	entry := mvs.modifiedDescriptors.GetByID(id)
 	if entry != nil {
 		return entry.(catalog.MutableDescriptor), nil
 	}
@@ -412,12 +412,12 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 		return nil, err
 	}
 	mut.MaybeIncrementVersion()
-	mvs.checkedOutDescriptors.Upsert(mut)
+	mvs.modifiedDescriptors.Upsert(mut)
 	return mut, nil
 }
 
 func (mvs *mutationVisitorState) MaybeCheckedOutDescriptor(id descpb.ID) catalog.Descriptor {
-	entry := mvs.checkedOutDescriptors.GetByID(id)
+	entry := mvs.modifiedDescriptors.GetByID(id)
 	if entry == nil {
 		return nil
 	}
