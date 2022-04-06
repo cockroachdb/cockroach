@@ -18,6 +18,31 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// CombinedTLP returns a single SQL query that compares the results of the two
+// TLP queries:
+//
+//   WITH unpart AS MATERIALIZED (
+//     <unpartitioned query>
+//   ), part AS MATERIALIZED (
+//     <partitioned query>
+//   ), undiff AS (
+//     TABLE unpart EXCEPT ALL TABLE part
+//   ), diff AS (
+//     TABLE part EXCEPT ALL TABLE unpart
+//   )
+//   SELECT (SELECT count(*) FROM undiff), (SELECT count(*) FROM diff)
+//
+// This combined query can be used to check TLP equality with SQL comparison,
+// which will sometimes differ from TLP equality checked with string comparison.
+func CombinedTLP(unpartitioned, partitioned string) string {
+	return fmt.Sprintf(`WITH unpart AS MATERIALIZED (%s),
+part AS MATERIALIZED (%s),
+undiff AS (TABLE unpart EXCEPT ALL TABLE part),
+diff AS (TABLE part EXCEPT ALL TABLE unpart)
+SELECT (SELECT count(*) FROM undiff), (SELECT count(*) FROM diff)`,
+		unpartitioned, partitioned)
+}
+
 // GenerateTLP returns two SQL queries as strings that can be used for Ternary
 // Logic Partitioning (TLP). It also returns any placeholder arguments necessary
 // for the second partitioned query. TLP is a method for logically testing DBMSs
