@@ -29,6 +29,13 @@ const withData: IndexDetailsPageProps = {
     totalReads: 0,
     lastRead: moment("2021-10-21T22:00:00Z"),
     lastReset: moment("2021-12-02T07:12:00Z"),
+    indexRecommendations: [
+      {
+        type: "DROP_UNUSED",
+        reason:
+          "This index has not been used and can be removed for better write performance.",
+      },
+    ],
   },
   refreshIndexStats: () => {},
   resetIndexUsageStats: () => {},

@@ -110,24 +110,34 @@ const withData: DatabaseTablePageProps = {
         lastUsed: moment("2021-10-11T11:29:00Z"),
         lastUsedType: "read",
         indexName: "primary",
+        indexRecommendations: [],
       },
       {
         totalReads: 3,
         lastUsed: moment("2021-11-10T16:29:00Z"),
         lastUsedType: "read",
         indexName: "primary",
+        indexRecommendations: [],
       },
       {
         totalReads: 2,
         lastUsed: moment("2021-09-04T13:55:00Z"),
         lastUsedType: "reset",
         indexName: "secondary",
+        indexRecommendations: [],
       },
       {
         totalReads: 0,
         lastUsed: moment("2022-03-12T14:31:00Z"),
         lastUsedType: "created",
         indexName: "secondary",
+        indexRecommendations: [
+          {
+            type: "DROP_UNUSED",
+            reason:
+              "This index has not been used and can be removed for better write performance.",
+          },
+        ],
       },
     ],
     lastReset: moment("2021-09-04T13:55:00Z"),

@@ -116,3 +116,35 @@
   }
 }
 
+.index-recommendations {
+  &-icon {
+    &__exist {
+      height: 10px;
+      width: 20px;
+      fill: $colors--warning;
+    }
+
+    &__none {
+      height: 10px;
+      width: 20px;
+      fill: $colors--neutral-11;
+    }
+  }
+
+  &-text {
+    &__border {
+      border-bottom: 1px dashed $colors--disabled;
+    }
+    &__tooltip-anchor {
+        a {
+          font-size: $font-size--small;
+          color: $colors--white;
+          text-decoration: underline;
+          &:hover {
+            opacity: 0.8;
+            color: $colors--white;
+          }
+        }
+    }
+  }
+}

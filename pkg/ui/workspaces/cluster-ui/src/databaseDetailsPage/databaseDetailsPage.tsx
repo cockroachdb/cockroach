@@ -35,6 +35,7 @@ import {
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
 import { Moment } from "moment";
+import { Caution } from "@cockroachlabs/icons";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -101,6 +102,7 @@ export interface DatabaseDetailsPageDataTableDetails {
   roles: string[];
   grants: string[];
   statsLastUpdated?: Moment;
+  hasIndexRecommendations: boolean;
 }
 
 export interface DatabaseDetailsPageDataTableStats {
@@ -330,7 +332,22 @@ export class DatabaseDetailsPage extends React.Component<
             Indexes
           </Tooltip>
         ),
-        cell: table => table.details.indexCount,
+        cell: table => {
+          if (table.details.hasIndexRecommendations) {
+            return (
+              <div className={cx("icon__container")}>
+                <Tooltip
+                  placement="bottom"
+                  title="This table has index recommendations. Click the table name to see more details."
+                >
+                  <Caution className={cx("icon--s", "icon--warning")} />
+                </Tooltip>
+                {table.details.indexCount}
+              </div>
+            );
+          }
+          return table.details.indexCount;
+        },
         sort: table => table.details.indexCount,
         className: cx("database-table__col-index-count"),
         name: "indexCount",

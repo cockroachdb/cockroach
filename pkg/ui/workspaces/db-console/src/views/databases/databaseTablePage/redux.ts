@@ -40,6 +40,8 @@ const {
   TableIndexStatsRequest,
 } = cockroach.server.serverpb;
 
+const { RecommendationType } = cockroach.sql.IndexRecommendation;
+
 export const mapStateToProps = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, databaseNameAttr),
@@ -89,14 +91,29 @@ export const mapStateToProps = createSelector(
           lastUsed = lastRead;
           lastUsedType = "read";
         }
+        const filteredIndexRecommendations =
+          indexStats?.data?.index_recommendations.filter(
+            indexRec =>
+              indexRec.index_id === indexStat?.statistics.key.index_id,
+          ) || [];
+        const indexRecommendations = filteredIndexRecommendations.map(
+          indexRec => {
+            return {
+              type: RecommendationType[indexRec.type].toString(),
+              reason: indexRec.reason,
+            };
+          },
+        );
         return {
           indexName: indexStat.index_name,
           totalReads: longToInt(indexStat.statistics?.stats?.total_read_count),
           lastUsed: lastUsed,
           lastUsedType: lastUsedType,
+          indexRecommendations,
         };
       },
     );
+
     const grants = _.flatMap(details?.data?.grants, grant =>
       _.map(grant.privileges, privilege => {
         return { user: grant.user, privilege };

@@ -104,6 +104,7 @@ function createTable(): DatabaseDetailsPageDataTable {
       roles: roles,
       grants: grants,
       statsLastUpdated: moment("0001-01-01T00:00:00Z"),
+      hasIndexRecommendations: false,
     },
     stats: {
       loading: false,
