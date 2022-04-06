@@ -88,6 +88,10 @@ func (d *dev) getBazelBin(ctx context.Context) (string, error) {
 	return d.getBazelInfo(ctx, "bazel-bin")
 }
 
+func (d *dev) getExecutionRoot(ctx context.Context) (string, error) {
+	return d.getBazelInfo(ctx, "execution_root")
+}
+
 // getDevBin returns the path to the running dev executable.
 func (d *dev) getDevBin() string {
 	if d.knobs.devBinOverride != "" {

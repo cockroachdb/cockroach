@@ -125,14 +125,17 @@ func parseArgs(args []string, argsLenAtDash int) (*parsedArgs, error) {
 // request. We query bazel for this data before running the build and use it to
 // find output artifacts.
 type buildInfo struct {
+	// Location of the execution_root directory.
+	executionRootDir string
 	// Location of the bazel-bin directory.
 	binDir string
 	// Location of the bazel-testlogs directory.
 	testlogsDir string
 	// Expanded list of Go binary targets to be built.
 	goBinaries []string
-	// Expanded list of cmake targets to be built.
-	cmakeTargets []string
+	// Set to true iff we are to build the geos library. (It
+	// requires special handling.)
+	geos bool
 	// Expanded list of genrule targets to be built.
 	genruleTargets []string
 	// Expanded list of Go test targets to be run. Test suites are split up
@@ -177,11 +180,16 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 	if err != nil {
 		return buildInfo{}, err
 	}
+	executionRoot, err := runBazelReturningStdout("info", "execution_root")
+	if err != nil {
+		return buildInfo{}, err
+	}
 
 	ret := buildInfo{
-		binDir:          binDir,
-		testlogsDir:     testlogsDir,
-		transitionTests: make(map[string]string),
+		executionRootDir: executionRoot,
+		binDir:           binDir,
+		testlogsDir:      testlogsDir,
+		transitionTests:  make(map[string]string),
 	}
 
 	for _, target := range args.targets {
@@ -197,9 +205,12 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 		targetKind := outputSplit[0]
 		fullTarget := outputSplit[2]
 
+		if fullTarget == "//c-deps:libgeos" {
+			ret.geos = true
+			continue
+		}
+
 		switch targetKind {
-		case "cmake":
-			ret.cmakeTargets = append(ret.cmakeTargets, fullTarget)
 		case "genrule", "batch_gen":
 			ret.genruleTargets = append(ret.genruleTargets, fullTarget)
 		case "go_binary":
@@ -345,20 +356,11 @@ func configArgList(exceptions ...string) []string {
 	return ret
 }
 
-func usingCrossWindowsConfig() bool {
+func getCrossConfig() string {
 	for _, config := range configs {
-		if config == "crosswindows" {
-			return true
+		if strings.HasPrefix(config, "cross") {
+			return config
 		}
 	}
-	return false
-}
-
-func usingCrossDarwinConfig() bool {
-	for _, config := range configs {
-		if config == "crossmacos" {
-			return true
-		}
-	}
-	return false
+	return ""
 }

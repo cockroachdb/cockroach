@@ -215,7 +215,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		}
 		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s official-binary", targetTriple))
 	}
-	configs := []string{"-c", "opt", "--config=ci", "--config=with_ui", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
+	configs := []string{"-c", "opt", "--config=ci", "--config=force_build_cdeps", "--config=with_ui", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
 	buildArgs = append(buildArgs, configs...)
 	cmd := exec.Command("bazel", buildArgs...)
 	cmd.Dir = pkgDir
@@ -671,7 +671,7 @@ func stageLibraries(platform Platform, bazelBin string, dir string) error {
 			// NB: On Windows these libs end up in the `bin` subdir.
 			libDir = "bin"
 		}
-		src := filepath.Join(bazelBin, "c-deps", "libgeos", libDir, lib+ext)
+		src := filepath.Join(bazelBin, "c-deps", "libgeos_foreign", libDir, lib+ext)
 		srcF, err := os.Open(src)
 		if err != nil {
 			return err
