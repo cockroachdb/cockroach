@@ -24,6 +24,8 @@ import (
 // Metrics are for production monitoring of each job type.
 type Metrics struct {
 	JobMetrics [jobspb.NumJobTypes]*JobTypeMetrics
+	// RunningNonIdleJobs is the total number of running jobs that are not idle.
+	RunningNonIdleJobs *metric.Gauge
 
 	RowLevelTTL  metric.Struct
 	Changefeed   metric.Struct
@@ -173,6 +175,16 @@ var (
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_GAUGE,
 	}
+
+	// MetaRunningNonIdleJobs is the count of currently running jobs that are not
+	// reporting as being idle.
+	MetaRunningNonIdleJobs = metric.Metadata{
+		Name:        "jobs.running_non_idle",
+		Help:        "number of running jobs that are not idle",
+		Measurement: "jobs",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_GAUGE,
+	}
 )
 
 // MetricStruct implements the metric.Struct interface.
@@ -192,6 +204,7 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 	m.AdoptIterations = metric.NewCounter(metaAdoptIterations)
 	m.ClaimedJobs = metric.NewCounter(metaClaimedJobs)
 	m.ResumedJobs = metric.NewCounter(metaResumedClaimedJobs)
+	m.RunningNonIdleJobs = metric.NewGauge(MetaRunningNonIdleJobs)
 	for i := 0; i < jobspb.NumJobTypes; i++ {
 		jt := jobspb.Type(i)
 		if jt == jobspb.TypeUnspecified { // do not track TypeUnspecified
