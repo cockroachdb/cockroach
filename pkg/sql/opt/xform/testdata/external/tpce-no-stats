@@ -4081,34 +4081,31 @@ project
  │    │    ├── fd: ()-->(1,8,27,30,31,45-47), (48)-->(49,50), (31)==(47), (47)==(31), (8)==(45), (45)==(8)
  │    │    ├── limit hint: 1.00
  │    │    ├── inner-join (lookup commission_rate)
- │    │    │    ├── columns: c_id:1!null c_tier:8!null cr_c_tier:45!null cr_tt_id:46!null cr_ex_id:47!null cr_from_qty:48!null cr_to_qty:49!null commission_rate.cr_rate:50!null
- │    │    │    ├── key columns: [8 57] = [45 46]
- │    │    │    ├── key: (47,48)
- │    │    │    ├── fd: ()-->(1,8,45,46), (47,48)-->(49,50), (8)==(45), (45)==(8)
- │    │    │    ├── project
- │    │    │    │    ├── columns: "lookup_join_const_col_@46":57!null c_id:1!null c_tier:8!null
+ │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null cr_c_tier:45!null cr_tt_id:46!null cr_ex_id:47!null cr_from_qty:48!null cr_to_qty:49!null commission_rate.cr_rate:50!null
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── cr_ex_id:47 = s_ex_id:31 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
+ │    │    │    │         ├── cr_c_tier:45 IN (1, 2, 3) [outer=(45), constraints=(/45: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    │    │    │         ├── cr_tt_id:46 = 'TLS' [outer=(46), constraints=(/46: [/'TLS' - /'TLS']; tight), fd=()-->(46)]
+ │    │    │    │         └── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
+ │    │    │    ├── key: (45,48)
+ │    │    │    ├── fd: ()-->(27,30,31,46,47), (45,48)-->(49,50), (31)==(47), (47)==(31)
+ │    │    │    ├── scan security
+ │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(1,8,57)
- │    │    │    │    ├── scan customer
- │    │    │    │    │    ├── columns: c_id:1!null c_tier:8!null
- │    │    │    │    │    ├── constraint: /1: [/0 - /0]
- │    │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── fd: ()-->(1,8)
- │    │    │    │    └── projections
- │    │    │    │         └── 'TLS' [as="lookup_join_const_col_@46":57]
+ │    │    │    │    └── fd: ()-->(27,30,31)
  │    │    │    └── filters
- │    │    │         ├── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
  │    │    │         └── cr_to_qty:49 >= 200 [outer=(49), constraints=(/49: [/200 - ]; tight)]
- │    │    ├── scan security
- │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
- │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
+ │    │    ├── scan customer
+ │    │    │    ├── columns: c_id:1!null c_tier:8!null
+ │    │    │    ├── constraint: /1: [/0 - /0]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(27,30,31)
+ │    │    │    └── fd: ()-->(1,8)
  │    │    └── filters
- │    │         └── cr_ex_id:47 = s_ex_id:31 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
+ │    │         └── cr_c_tier:45 = c_tier:8 [outer=(8,45), constraints=(/8: (/NULL - ]; /45: (/NULL - ]), fd=(8)==(45), (45)==(8)]
  │    └── 1
  └── projections
       └── commission_rate.cr_rate:50::FLOAT8 [as=cr_rate:53, outer=(50), immutable]
@@ -4149,32 +4146,25 @@ project
  │    │    ├── key: (48)
  │    │    ├── fd: ()-->(1,8,27,30,31,45-47), (48)-->(49,50), (8)==(45), (45)==(8), (31)==(47), (47)==(31)
  │    │    ├── limit hint: 1.00
- │    │    ├── project
- │    │    │    ├── columns: "lookup_join_const_col_@46":54!null c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null
  │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(1,8,27,30,31,54)
- │    │    │    ├── inner-join (cross)
- │    │    │    │    ├── columns: c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    │    ├── fd: ()-->(1,8,27,30,31)
+ │    │    │    ├── scan customer
+ │    │    │    │    ├── columns: c_id:1!null c_tier:8!null
+ │    │    │    │    ├── constraint: /1: [/0 - /0]
  │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(1,8,27,30,31)
- │    │    │    │    ├── scan customer
- │    │    │    │    │    ├── columns: c_id:1!null c_tier:8!null
- │    │    │    │    │    ├── constraint: /1: [/0 - /0]
- │    │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── fd: ()-->(1,8)
- │    │    │    │    ├── scan security
- │    │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
- │    │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
- │    │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── fd: ()-->(27,30,31)
- │    │    │    │    └── filters (true)
- │    │    │    └── projections
- │    │    │         └── 'TLS' [as="lookup_join_const_col_@46":54]
+ │    │    │    │    └── fd: ()-->(1,8)
+ │    │    │    ├── scan security
+ │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    └── fd: ()-->(27,30,31)
+ │    │    │    └── filters (true)
  │    │    └── filters
  │    │         └── cr_to_qty:49 >= 200 [outer=(49), constraints=(/49: [/200 - ]; tight)]
  │    └── 1

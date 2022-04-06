@@ -856,31 +856,21 @@ project
  │    │         │    │    ├── key: (1,22-24)
  │    │         │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (1,22-24)-->(20,21)
  │    │         │    │    ├── ordering: +1
- │    │         │    │    ├── project
- │    │         │    │    │    ├── columns: "lookup_join_const_col_@21":43!null "lookup_join_const_col_@20":42!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+ │    │         │    │    ├── select
+ │    │         │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
  │    │         │    │    │    ├── immutable
- │    │         │    │    │    ├── stats: [rows=19000]
+ │    │         │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0]
  │    │         │    │    │    ├── key: (1)
- │    │         │    │    │    ├── fd: ()-->(42,43), (1)-->(2-6), (2,4,5)~~>(1,3,6)
- │    │         │    │    │    ├── ordering: +1 opt(42,43) [actual: +1]
- │    │         │    │    │    ├── select
+ │    │         │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
+ │    │         │    │    │    ├── ordering: +1
+ │    │         │    │    │    ├── scan cards
  │    │         │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
- │    │         │    │    │    │    ├── immutable
- │    │         │    │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0]
+ │    │         │    │    │    │    ├── stats: [rows=57000, distinct(1)=57000, null(1)=0, distinct(2)=39000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5700, null(6)=0]
  │    │         │    │    │    │    ├── key: (1)
  │    │         │    │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
- │    │         │    │    │    │    ├── ordering: +1
- │    │         │    │    │    │    ├── scan cards
- │    │         │    │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
- │    │         │    │    │    │    │    ├── stats: [rows=57000, distinct(1)=57000, null(1)=0, distinct(2)=39000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5700, null(6)=0]
- │    │         │    │    │    │    │    ├── key: (1)
- │    │         │    │    │    │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6)
- │    │         │    │    │    │    │    └── ordering: +1
- │    │         │    │    │    │    └── filters
- │    │         │    │    │    │         └── (name:2, setname:4, number:5) > ('Shock', '7E', 248) [outer=(2,4,5), immutable, constraints=(/2/4/5: [/'Shock'/'7E'/249 - ]; tight)]
- │    │         │    │    │    └── projections
- │    │         │    │    │         ├── false [as="lookup_join_const_col_@21":43]
- │    │         │    │    │         └── 1 [as="lookup_join_const_col_@20":42]
+ │    │         │    │    │    │    └── ordering: +1
+ │    │         │    │    │    └── filters
+ │    │         │    │    │         └── (name:2, setname:4, number:5) > ('Shock', '7E', 248) [outer=(2,4,5), immutable, constraints=(/2/4/5: [/'Shock'/'7E'/249 - ]; tight)]
  │    │         │    │    └── filters (true)
  │    │         │    └── filters (true)
  │    │         └── aggregations

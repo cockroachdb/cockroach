@@ -406,7 +406,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 					// because constructing a cross join with foundVals will
 					// increase the size of the input. As a result, non-matching
 					// input rows will show up more than once in the output,
-					// which is incorrect (see #59615 and #78685).
+					// which is incorrect (see #59615 and #78681).
 					shouldBuildMultiSpanLookupJoin = true
 					break
 				}
@@ -478,6 +478,9 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 
 			// Reset KeyCols since we're not using it anymore.
 			lookupJoin.KeyCols = opt.ColList{}
+			// Reset input since we don't need any constant values that may have
+			// been joined on the input above.
+			lookupJoin.Input = input
 		}
 
 		if len(lookupJoin.KeyCols) == 0 && len(lookupJoin.LookupExpr) == 0 {
@@ -935,11 +938,15 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 				return
 			}
 
-			if len(foundVals) > 1 && (joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp) {
-				// We cannot create an inverted join in this case, because constructing
-				// a cross join with foundVals will increase the size of the input. As a
-				// result, non-matching input rows will show up more than once in the
-				// output, which is incorrect (see #59615).
+			if len(foundVals) > 1 &&
+				(joinType == opt.LeftJoinOp || joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp) {
+				// We cannot create an inverted join in this case, because
+				// constructing a cross join with foundVals will increase the
+				// size of the input. As a result, matching input rows will show
+				// up more than once in the output of a semi-join, and
+				// non-matching input rows will show up more than once in the
+				// output of a left or anti join, which is incorrect (see #59615
+				// and #78681).
 				// TODO(rytaft,mgartner): find a way to create an inverted join for this
 				// case.
 				return
