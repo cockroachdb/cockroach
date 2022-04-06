@@ -570,9 +570,10 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 	} else {
 		// We have to allocate a new multimap but can reuse the old slices.
 		oldSlices := s.inputRowIdxToLookedUpRowIndices
-		s.inputRowIdxToLookedUpRowIndices = make([][]int, len(rows))
 		// Make sure to go up to the capacity to reuse all old slices.
-		for i := range oldSlices[:cap(oldSlices)] {
+		oldSlices = oldSlices[:cap(oldSlices)]
+		s.inputRowIdxToLookedUpRowIndices = make([][]int, len(rows))
+		for i := range oldSlices {
 			s.inputRowIdxToLookedUpRowIndices[i] = oldSlices[i][:0]
 		}
 	}
