@@ -15,6 +15,13 @@ import (
 	"github.com/jackc/pgproto3/v2"
 )
 
+// FrontendAdmitInfo contains the result of FrontendAdmit call.
+type FrontendAdmitInfo struct {
+	conn net.Conn
+	msg  *pgproto3.StartupMessage
+	err  error
+}
+
 // FrontendAdmit is the default implementation of a frontend admitter. It can
 // upgrade to an optional SSL connection, and will handle and verify the startup
 // message received from the PG SQL client. The connection returned should never
@@ -23,7 +30,7 @@ import (
 // TLS connection.
 var FrontendAdmit = func(
 	conn net.Conn, incomingTLSConfig *tls.Config,
-) (net.Conn, *pgproto3.StartupMessage, error) {
+) *FrontendAdmitInfo {
 	// `conn` could be replaced by `conn` embedded in a `tls.Conn` connection,
 	// hence it's important to close `conn` rather than `proxyConn` since closing
 	// the latter will not call `Close` method of `tls.Conn`.
@@ -32,7 +39,9 @@ var FrontendAdmit = func(
 	// Read first message from client.
 	m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
 	if err != nil {
-		return conn, nil, newErrorf(codeClientReadFailed, "while receiving startup message")
+		return &FrontendAdmitInfo{
+			conn: conn, err: newErrorf(codeClientReadFailed, "while receiving startup message"),
+		}
 	}
 
 	// CancelRequest is unencrypted and unauthenticated, regardless of whether
@@ -40,7 +49,7 @@ var FrontendAdmit = func(
 	// and send back a nil StartupMessage, which will cause the proxy to just
 	// close the connection in response.
 	if _, ok := m.(*pgproto3.CancelRequest); ok {
-		return conn, nil, nil
+		return &FrontendAdmitInfo{conn: conn}
 	}
 
 	// If we have an incoming TLS Config, require that the client initiates with
@@ -48,12 +57,12 @@ var FrontendAdmit = func(
 	if incomingTLSConfig != nil {
 		if _, ok := m.(*pgproto3.SSLRequest); !ok {
 			code := codeUnexpectedInsecureStartupMessage
-			return conn, nil, newErrorf(code, "unsupported startup message: %T", m)
+			return &FrontendAdmitInfo{conn: conn, err: newErrorf(code, "unsupported startup message: %T", m)}
 		}
 
 		_, err = conn.Write([]byte{pgAcceptSSLRequest})
 		if err != nil {
-			return conn, nil, newErrorf(codeClientWriteFailed, "acking SSLRequest: %v", err)
+			return &FrontendAdmitInfo{conn: conn, err: newErrorf(codeClientWriteFailed, "acking SSLRequest: %v", err)}
 		}
 
 		cfg := incomingTLSConfig.Clone()
@@ -67,7 +76,10 @@ var FrontendAdmit = func(
 		// Now that SSL is established, read the encrypted startup message.
 		m, err = pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
 		if err != nil {
-			return conn, nil, newErrorf(codeClientReadFailed, "receiving post-TLS startup message: %v", err)
+			return &FrontendAdmitInfo{
+				conn: conn,
+				err:  newErrorf(codeClientReadFailed, "receiving post-TLS startup message: %v", err),
+			}
 		}
 	}
 
@@ -81,15 +93,21 @@ var FrontendAdmit = func(
 		// The client is blocked from using session revival tokens; only the proxy
 		// itself can.
 		if _, ok := startup.Parameters[sessionRevivalTokenStartupParam]; ok {
-			return conn, nil, newErrorf(
-				codeUnexpectedStartupMessage,
-				"parameter %s is not allowed",
-				sessionRevivalTokenStartupParam,
-			)
+			return &FrontendAdmitInfo{
+				conn: conn,
+				err: newErrorf(
+					codeUnexpectedStartupMessage,
+					"parameter %s is not allowed",
+					sessionRevivalTokenStartupParam,
+				),
+			}
 		}
-		return conn, startup, nil
+		return &FrontendAdmitInfo{conn: conn, msg: startup}
 	}
 
 	code := codeUnexpectedStartupMessage
-	return conn, nil, newErrorf(code, "unsupported post-TLS startup message: %T", m)
+	return &FrontendAdmitInfo{
+		conn: conn,
+		err:  newErrorf(code, "unsupported post-TLS startup message: %T", m),
+	}
 }
