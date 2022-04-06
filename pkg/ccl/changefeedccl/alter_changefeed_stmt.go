@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -43,6 +44,10 @@ func alterChangefeedPlanHook(
 	alterChangefeedStmt, ok := stmt.(*tree.AlterChangefeed)
 	if !ok {
 		return nil, nil, nil, false, nil
+	}
+
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.EnableNewChangefeedOptions) {
+		return nil, nil, nil, false, errors.Newf("alteration of changefeeds are not supported until upgrade to version %s is finalized", clusterversion.EnableNewChangefeedOptions.String())
 	}
 
 	header := colinfo.ResultColumns{

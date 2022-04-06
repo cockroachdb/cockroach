@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -78,6 +79,10 @@ func changefeedPlanHook(
 	changefeedStmt, ok := stmt.(*tree.CreateChangefeed)
 	if !ok {
 		return nil, nil, nil, false, nil
+	}
+
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.EnableNewChangefeedOptions) {
+		return nil, nil, nil, false, errors.Newf("creation of changefeeds are not supported until upgrade to version %s is finalized", clusterversion.EnableNewChangefeedOptions.String())
 	}
 
 	var sinkURIFn func() (string, error)
