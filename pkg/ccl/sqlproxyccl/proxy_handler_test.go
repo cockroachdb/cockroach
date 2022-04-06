@@ -192,9 +192,9 @@ func TestUnexpectedError(t *testing.T) {
 	// non-codeError error.
 	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
-	) (net.Conn, *pgproto3.StartupMessage, error) {
+	) *FrontendAdmitInfo {
 		log.Infof(context.Background(), "frontend admitter returning unexpected error")
-		return conn, nil, errors.New("unexpected error")
+		return &FrontendAdmitInfo{conn: conn, err: errors.New("unexpected error")}
 	})()
 
 	stopper := stop.NewStopper()
@@ -358,7 +358,7 @@ func TestProxyTLSClose(t *testing.T) {
 	originalFrontendAdmit := FrontendAdmit
 	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
-	) (net.Conn, *pgproto3.StartupMessage, error) {
+	) *FrontendAdmitInfo {
 		proxyIncomingConn.Store(conn)
 		return originalFrontendAdmit(conn, incomingTLSConfig)
 	})()
@@ -483,8 +483,8 @@ func TestErroneousFrontend(t *testing.T) {
 
 	defer testutils.TestingHook(&FrontendAdmit, func(
 		conn net.Conn, incomingTLSConfig *tls.Config,
-	) (net.Conn, *pgproto3.StartupMessage, error) {
-		return conn, nil, errors.New(frontendError)
+	) *FrontendAdmitInfo {
+		return &FrontendAdmitInfo{conn: conn, err: errors.New(frontendError)}
 	})()
 
 	stopper := stop.NewStopper()
@@ -1365,7 +1365,8 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				originalParams[k] = v
 			}
 
-			outMsg, clusterName, tenantID, err := clusterNameAndTenantFromParams(ctx, msg)
+			fe := &FrontendAdmitInfo{msg: msg}
+			outMsg, clusterName, tenantID, err := clusterNameAndTenantFromParams(ctx, fe)
 			if tc.expectedError == "" {
 				require.NoErrorf(t, err, "failed test case\n%+v", tc)
 
