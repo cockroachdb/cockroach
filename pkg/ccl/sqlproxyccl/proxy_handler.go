@@ -262,27 +262,27 @@ func newProxyHandler(
 // handle is called by the proxy server to handle a single incoming client
 // connection.
 func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn) error {
-	conn, msg, err := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
-	defer func() { _ = conn.Close() }()
-	if err != nil {
-		SendErrToClient(conn, err)
-		return err
+	fe := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
+	defer func() { _ = fe.conn.Close() }()
+	if fe.err != nil {
+		SendErrToClient(fe.conn, fe.err)
+		return fe.err
 	}
 
 	// This currently only happens for CancelRequest type of startup messages
 	// that we don't support. Return nil to the server, which simply closes the
 	// connection.
-	if msg == nil {
+	if fe.msg == nil {
 		return nil
 	}
 
 	// NOTE: Errors returned from this function are user-facing errors so we
 	// should be careful with the details that we want to expose.
-	backendStartupMsg, clusterName, tenID, err := clusterNameAndTenantFromParams(ctx, msg)
+	backendStartupMsg, clusterName, tenID, err := clusterNameAndTenantFromParams(ctx, fe)
 	if err != nil {
 		clientErr := &codeError{codeParamsRoutingFailed, err}
 		log.Errorf(ctx, "unable to extract cluster name and tenant id: %s", err.Error())
-		updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
+		updateMetricsAndSendErrToClient(clientErr, fe.conn, handler.metrics)
 		return clientErr
 	}
 
@@ -291,11 +291,11 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 
 	// Use an empty string as the default port as we only care about the
 	// correctly parsing the IP address here.
-	ipAddr, _, err := addr.SplitHostPort(conn.RemoteAddr().String(), "")
+	ipAddr, _, err := addr.SplitHostPort(fe.conn.RemoteAddr().String(), "")
 	if err != nil {
 		clientErr := newErrorf(codeParamsRoutingFailed, "unexpected connection address")
 		log.Errorf(ctx, "could not parse address: %v", err.Error())
-		updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
+		updateMetricsAndSendErrToClient(clientErr, fe.conn, handler.metrics)
 		return clientErr
 	}
 
@@ -314,7 +314,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	if err != nil {
 		log.Errorf(ctx, "connection matched denylist: %v", err)
 		err = newErrorf(codeProxyRefusedConnection, "connection refused")
-		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
+		updateMetricsAndSendErrToClient(err, fe.conn, handler.metrics)
 		return err
 	}
 	defer removeListener()
@@ -324,7 +324,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	if err != nil {
 		log.Errorf(ctx, "throttler refused connection: %v", err.Error())
 		err = throttledError
-		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
+		updateMetricsAndSendErrToClient(err, fe.conn, handler.metrics)
 		return err
 	}
 
@@ -359,7 +359,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		}
 	}
 
-	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, conn,
+	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, fe.conn,
 		func(status throttler.AttemptStatus) error {
 			if err := handler.throttleService.ReportAttempt(
 				ctx, throttleTags, throttleTime, status,
@@ -375,7 +375,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		if sentToClient {
 			handler.metrics.updateForError(err)
 		} else {
-			updateMetricsAndSendErrToClient(err, conn, handler.metrics)
+			updateMetricsAndSendErrToClient(err, fe.conn, handler.metrics)
 		}
 		return err
 	}
@@ -390,7 +390,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}()
 
 	// Pass ownership of conn and crdbConn to the forwarder.
-	f, err := forward(ctx, connector, handler.metrics, conn, crdbConn)
+	f, err := forward(ctx, connector, handler.metrics, fe.conn, crdbConn)
 	if err != nil {
 		// Don't send to the client here for the same reason below.
 		handler.metrics.updateForError(err)
@@ -516,23 +516,23 @@ func (handler *proxyHandler) setupIncomingCert(ctx context.Context) error {
 //   through its command-line options, i.e. "-c NAME=VALUE", "-cNAME=VALUE", and
 //   "--NAME=VALUE".
 func clusterNameAndTenantFromParams(
-	ctx context.Context, msg *pgproto3.StartupMessage,
+	ctx context.Context, fe FrontendAdmitInfo,
 ) (*pgproto3.StartupMessage, string, roachpb.TenantID, error) {
-	clusterIdentifierDB, databaseName, err := parseDatabaseParam(msg.Parameters["database"])
+	clusterIdentifierDB, databaseName, err := parseDatabaseParam(fe.msg.Parameters["database"])
 	if err != nil {
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
-	clusterIdentifierOpt, newOptionsParam, err := parseOptionsParam(msg.Parameters["options"])
+	clusterIdentifierOpt, newOptionsParam, err := parseOptionsParam(fe.msg.Parameters["options"])
 	if err != nil {
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	// No cluster identifiers were specified.
 	if clusterIdentifierDB == "" && clusterIdentifierOpt == "" {
 		err := errors.New("missing cluster identifier")
 		err = errors.WithHint(err, clusterIdentifierHint)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	// Ambiguous cluster identifiers.
@@ -543,7 +543,7 @@ func clusterNameAndTenantFromParams(
 			"Is '%s' or '%s' the identifier for the cluster that you're connecting to?",
 			clusterIdentifierDB, clusterIdentifierOpt)
 		err = errors.WithHint(err, clusterIdentifierHint)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	if clusterIdentifierDB == "" {
@@ -557,7 +557,7 @@ func clusterNameAndTenantFromParams(
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
 		err = errors.WithHint(err, missingTenantIDHint)
 		err = errors.WithHint(err, clusterNameFormHint)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	clusterName, tenantIDStr := clusterIdentifierDB[:sepIdx], clusterIdentifierDB[sepIdx+1:]
@@ -567,7 +567,7 @@ func clusterNameAndTenantFromParams(
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
 		err = errors.WithHintf(err, "Is '%s' a valid cluster name?", clusterName)
 		err = errors.WithHint(err, clusterNameFormHint)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	// Tenant ID cannot be parsed.
@@ -578,7 +578,7 @@ func clusterNameAndTenantFromParams(
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
 		err = errors.WithHintf(err, "Is '%s' a valid tenant ID?", tenantIDStr)
 		err = errors.WithHint(err, clusterNameFormHint)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	// This case only happens if tenID is 0 or 1 (system tenant).
@@ -587,13 +587,13 @@ func clusterNameAndTenantFromParams(
 		log.Errorf(ctx, "%s contains an invalid tenant ID", clusterIdentifierDB)
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifierDB)
 		err = errors.WithHintf(err, "Tenant ID %d is invalid.", tenID)
-		return msg, "", roachpb.MaxTenantID, err
+		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
 	// Make and return a copy of the startup msg so the original is not modified.
 	// We will rewrite database and options in the new startup message.
 	paramsOut := map[string]string{}
-	for key, value := range msg.Parameters {
+	for key, value := range fe.msg.Parameters {
 		if key == "database" {
 			paramsOut[key] = databaseName
 		} else if key == "options" {
@@ -606,7 +606,7 @@ func clusterNameAndTenantFromParams(
 	}
 
 	outMsg := &pgproto3.StartupMessage{
-		ProtocolVersion: msg.ProtocolVersion,
+		ProtocolVersion: fe.msg.ProtocolVersion,
 		Parameters:      paramsOut,
 	}
 	return outMsg, clusterName, roachpb.MakeTenantID(tenID), nil
