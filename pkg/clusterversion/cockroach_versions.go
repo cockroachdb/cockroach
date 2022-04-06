@@ -336,6 +336,11 @@ const (
 	// SuperRegions enables the usage on super regions.
 	SuperRegions
 
+	// EnableNewChangefeedOptions enables the usage of new changefeed options
+	// such as end_time, initial_scan_only, and setting the value of initial_scan
+	// to 'yes|no|only'
+	EnableNewChangefeedOptions
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -569,6 +574,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SuperRegions,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 104},
+	},
+	{
+		Key:     EnableNewChangefeedOptions,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
 	},
 
 	// *************************************************

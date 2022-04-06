@@ -255,6 +255,14 @@ func createChangefeedJobRecord(
 	unspecifiedSink := changefeedStmt.SinkURI == nil
 
 	for key, value := range opts {
+		if clusterVersion, ok := changefeedbase.VersionGateOptions[key]; ok {
+			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterVersion) {
+				return nil, errors.Newf(
+					`option %s is not supported until upgrade to version %s or higher is finalized`,
+					key, clusterVersion.String(),
+				)
+			}
+		}
 		// if option is case insensitive then convert its value to lower case
 		if _, ok := changefeedbase.CaseInsensitiveOpts[key]; ok {
 			opts[key] = strings.ToLower(value)
