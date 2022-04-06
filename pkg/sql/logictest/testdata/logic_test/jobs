@@ -34,12 +34,16 @@ SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 query TTT
 SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name = 'root'
 ----
-AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                    root
 SCHEMA CHANGE                    updating version for users table                   root
 SCHEMA CHANGE                    updating version for role options table            root
 SCHEMA CHANGE                    updating privileges for database 104               root
 SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE GC                 GC for temporary index used during index backfill  root
+
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name = 'node'
+----
+AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                   node
 
 user testuser
 
@@ -79,7 +83,7 @@ SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
 user root
 
 query TTT
-SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name IN ('root', 'testuser')
+SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name IN ('root', 'testuser', 'node')
 ----
 SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE     updating version for role options table            root
@@ -90,9 +94,9 @@ SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)                  testuser
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
 
 query TTT
-SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name IN ('root', 'testuser')
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name IN ('root', 'testuser', 'node')
 ----
-AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                    root
+AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                    node
 SCHEMA CHANGE                    updating version for users table                   root
 SCHEMA CHANGE                    updating version for role options table            root
 SCHEMA CHANGE                    updating privileges for database 104               root
