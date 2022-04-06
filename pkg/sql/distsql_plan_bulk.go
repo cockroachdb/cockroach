@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -60,13 +59,6 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 			nodes = append(nodes, nodeID)
 		}
 	}
-	// Shuffle node order so that multiple IMPORTs done in parallel will not
-	// identically schedule CSV reading. For example, if there are 3 nodes and 4
-	// files, the first node will get 2 files while the other nodes will each get 1
-	// file. Shuffling will make that first node random instead of always the same.
-	rand.Shuffle(len(nodes), func(i, j int) {
-		nodes[i], nodes[j] = nodes[j], nodes[i]
-	})
 	return planCtx, nodes, nil
 }
 
@@ -88,13 +80,6 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	for i, pod := range pods {
 		sqlInstanceIDs[i] = pod.InstanceID
 	}
-	// Shuffle node order so that multiple IMPORTs done in parallel will not
-	// identically schedule CSV reading. For example, if there are 3 nodes and 4
-	// files, the first node will get 2 files while the other nodes will each get 1
-	// file. Shuffling will make that first node random instead of always the same.
-	rand.Shuffle(len(sqlInstanceIDs), func(i, j int) {
-		sqlInstanceIDs[i], sqlInstanceIDs[j] = sqlInstanceIDs[j], sqlInstanceIDs[i]
-	})
 	return planCtx, sqlInstanceIDs, nil
 }
 
