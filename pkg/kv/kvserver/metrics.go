@@ -746,12 +746,12 @@ of processing.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaRaftIncomingQueueProcessingBytes = metric.Metadata{
-		Name:        "raft.rcvd.processing_bytes",
-		Help:        "Number of bytes in messages that were dequeued but have not been processed yet",
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
+	//metaRaftIncomingQueueProcessingBytes = metric.Metadata{
+	//	Name:        "raft.rcvd.processing_bytes",
+	//	Help:        "Number of bytes in messages that were dequeued but have not been processed yet",
+	//	Measurement: "Bytes",
+	//	Unit:        metric.Unit_BYTES,
+	//}
 	metaRaftIncomingQueueLen = metric.Metadata{
 		Name:        "raft.rcvd.queue_len",
 		Help:        "Number of messages waiting for the raft scheduler",
@@ -1455,9 +1455,9 @@ type StoreMetrics struct {
 	RaftRcvdMessages   [maxRaftMsgType + 1]*metric.Counter
 	RaftRcvdMsgDropped *metric.Counter
 
-	RaftIncomingQueueBytes           *metric.Gauge
-	RaftIncomingQueueProcessingBytes *metric.Gauge
-	RaftIncomingQueueLen             *metric.Gauge
+	RaftIncomingQueueBytes *metric.Gauge
+	//RaftIncomingQueueProcessingBytes *metric.Gauge
+	RaftIncomingQueueLen *metric.Gauge
 
 	// Raft log metrics.
 	RaftLogFollowerBehindCount *metric.Gauge
@@ -1909,9 +1909,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		},
 		RaftRcvdMsgDropped: metric.NewCounter(metaRaftRcvdDropped),
 
-		RaftIncomingQueueBytes:           metric.NewGauge(metaRaftIncomingQueueBytes),
-		RaftIncomingQueueProcessingBytes: metric.NewGauge(metaRaftIncomingQueueProcessingBytes),
-		RaftIncomingQueueLen:             metric.NewGauge(metaRaftIncomingQueueLen),
+		RaftIncomingQueueBytes: metric.NewGauge(metaRaftIncomingQueueBytes),
+		//RaftIncomingQueueProcessingBytes: metric.NewGauge(metaRaftIncomingQueueProcessingBytes),
+		RaftIncomingQueueLen: metric.NewGauge(metaRaftIncomingQueueLen),
 
 		// Raft log metrics.
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),

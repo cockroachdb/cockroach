@@ -912,7 +912,8 @@ type Store struct {
 	// avoid reworking the locking in getOrCreateReplica which requires
 	// Replica.raftMu to be held while a replica is being inserted into
 	// Store.mu.replicas.
-	replicaQueues syncutil.IntMap // map[roachpb.RangeID]*raftRequestQueue
+	replicaQueues             syncutil.IntMap // map[roachpb.RangeID]*raftRequestQueue
+	replicaQueuesBoundAccount mon.BoundAccount
 
 	scheduler *raftScheduler
 
@@ -1932,6 +1933,19 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	if err != nil {
 		return err
+	}
+
+	{
+		rootMon := s.getRootMemoryMonitorForKV()
+		budget := int64(100 * (1 << 20))
+		raftIncomingQueueMonitor := mon.NewMonitorInheritWithLimit("raft-recv-queue",
+			budget, rootMon)
+		raftIncomingQueueMonitor.SetMetrics(s.metrics.RaftIncomingQueueBytes, nil /* maxHist */)
+		raftIncomingQueueMonitor.Start(ctx, rootMon, mon.MakeStandaloneBudget(budget))
+		s.replicaQueuesBoundAccount = raftIncomingQueueMonitor.MakeBoundAccount()
+		// TODO(tbg): need to be fairly sure that this mutex isn't going to hurt.
+		// It actually might.
+		s.replicaQueuesBoundAccount.Mu = &syncutil.Mutex{}
 	}
 
 	// Start Raft processing goroutines.

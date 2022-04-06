@@ -185,8 +185,11 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		return false
 	}
 	n := int64(req.Size())
+	if err := s.replicaQueuesBoundAccount.Grow(ctx, n); err != nil {
+		log.Warningf(ctx, "while queueing incoming raft message: %s", err)
+		return false
+	}
 	q.size += n
-	s.metrics.RaftIncomingQueueBytes.Inc(n)
 	s.metrics.RaftIncomingQueueLen.Inc(1)
 	q.infos = append(q.infos, raftRequestInfo{
 		req:        req,
@@ -458,10 +461,14 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	if !ok {
 		return false
 	}
-	s.metrics.RaftIncomingQueueBytes.Dec(n)
-	s.metrics.RaftIncomingQueueLen.Dec(int64(len(infos)))
-	s.metrics.RaftIncomingQueueProcessingBytes.Inc(n)
-	defer s.metrics.RaftIncomingQueueProcessingBytes.Dec(n)
+	// NB: count these entries as released only once we return from
+	// this method, as that is the earliest point at which the memory
+	// is realistically going to be releasable.
+	defer s.replicaQueuesBoundAccount.Shrink(ctx, n)
+	defer s.metrics.RaftIncomingQueueLen.Dec(int64(len(infos)))
+	//s.metrics.RaftIncomingQueueBytes.Dec(n)
+	//s.metrics.RaftIncomingQueueProcessingBytes.Inc(n)
+	//defer s.metrics.RaftIncomingQueueProcessingBytes.Dec(n)
 	defer q.recycle(infos)
 
 	var hadError bool
@@ -479,6 +486,8 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 				log.VEventf(ctx, 1, "error sending error: %s", err)
 			}
 		}
+		// TODO(tbg): should zero out infos[i] right here, as opposed to letting
+		// possibly large allocs hang around until we call `q.recycle()` in defer.
 	}
 
 	if hadError {
@@ -495,7 +504,11 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		if _, exists := s.mu.replicasByRangeID.Load(rangeID); !exists {
 			q.Lock()
 			if len(q.infos) == 0 {
-				// TODO(tbg): need to release bytes for metrics.
+				// NB: no need to release from bound account since the queue
+				// is empty.
+				// TODO(tbg): seems racy, someone else might be recreating it
+				// (an errant raft message seems enough). Need to be pretty
+				// sure that we're not leaking allocs here in the long run...
 				s.replicaQueues.Delete(int64(rangeID))
 			}
 			q.Unlock()

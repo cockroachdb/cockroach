@@ -299,7 +299,12 @@ func (s *Store) unlinkReplicaByRangeIDLocked(ctx context.Context, rangeID roachp
 	delete(s.unquiescedReplicas.m, rangeID)
 	s.unquiescedReplicas.Unlock()
 	delete(s.mu.uninitReplicas, rangeID)
-	s.replicaQueues.Delete(int64(rangeID))
+	if val, ok := s.replicaQueues.Load(int64(rangeID)); ok {
+		// TODO(tbg): this is too ad hoc.
+		_, n, _ := (*raftRequestQueue)(val).drain()
+		s.replicaQueuesBoundAccount.Shrink(ctx, n)
+		s.replicaQueues.Delete(int64(rangeID))
+	}
 	s.mu.replicasByRangeID.Delete(rangeID)
 	s.unregisterLeaseholderByID(ctx, rangeID)
 }
