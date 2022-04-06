@@ -498,6 +498,15 @@ ALL_TESTS = [
 # [2] https://docs.bazel.build/versions/master/be/common-definitions.html#common-attributes-tests
 
 test_suite(
+    name = "all_tests",
+    tags = [
+        "-broken_in_bazel",
+        "-integration",
+    ],
+    tests = ALL_TESTS,
+)
+
+test_suite(
     name = "small_tests",
     tags = [
         "-broken_in_bazel",

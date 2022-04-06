@@ -77,6 +77,16 @@ ALL_TESTS = [`)
 # [1] https://docs.bazel.build/versions/master/be/general.html#test_suite
 # [2] https://docs.bazel.build/versions/master/be/common-definitions.html#common-attributes-tests`)
 
+	fmt.Println(`
+test_suite(
+    name = "all_tests",
+    tags = [
+        "-broken_in_bazel",
+        "-integration",
+    ],
+    tests = ALL_TESTS,
+)`)
+
 	for _, size := range []string{"small", "medium", "large", "enormous"} {
 		fmt.Printf(`
 test_suite(

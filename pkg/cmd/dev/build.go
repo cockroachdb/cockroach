@@ -71,6 +71,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 
 // buildTargetMapping maintains shorthands that map 1:1 with bazel targets.
 var buildTargetMapping = map[string]string{
+	"all_tests":        "//pkg:all_tests",
 	"bazel-remote":     bazelRemoteTarget,
 	"buildifier":       "@com_github_bazelbuild_buildtools//buildifier:buildifier",
 	"buildozer":        "@com_github_bazelbuild_buildtools//buildozer:buildozer",
@@ -96,6 +97,7 @@ var buildTargetMapping = map[string]string{
 	"staticcheck":      "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
 	"stress":           stressTarget,
 	"swagger":          "@com_github_go_swagger_go_swagger//cmd/swagger:swagger",
+	"tests":            "//pkg:all_tests",
 	"workload":         "//pkg/cmd/workload:workload",
 }
 
@@ -322,7 +324,7 @@ func (d *dev) getBasicBuildArgs(
 				typ := fields[0]
 				args = append(args, fullTargetName)
 				buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, kind: typ})
-				if typ == "go_test" || typ == "go_transition_test" {
+				if typ == "go_test" || typ == "go_transition_test" || typ == "test_suite" {
 					shouldBuildWithTestConfig = true
 				}
 			}

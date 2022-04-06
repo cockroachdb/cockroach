@@ -1165,7 +1165,7 @@ func readLatestCheckpointFile(
 		checkpoint = strings.TrimSuffix(p, backupManifestChecksumSuffix)
 		checkpointFound = true
 		// We only want the first checkpoint so return an error that it is
-		// listing.
+		// done listing.
 		return cloud.ErrListingDone
 	})
 	// If the list failed because the storage used does not support listing,
