@@ -14,7 +14,10 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -24,7 +27,7 @@ import (
 // load metrics. These include user and system CPU time currently.
 // TODO(knz): this should probably include memory usage too somehow.
 func makeStatusLoadHandler(
-	ctx context.Context, rsr *status.RuntimeStatSampler,
+	ctx context.Context, rsr *status.RuntimeStatSampler, metricSource metricMarshaler,
 ) func(http.ResponseWriter, *http.Request) {
 	cpuUserNanos := metric.NewGauge(rsr.CPUUserNS.GetMetadata())
 	cpuSysNanos := metric.NewGauge(rsr.CPUSysNS.GetMetadata())
@@ -40,6 +43,13 @@ func makeStatusLoadHandler(
 		pm.ScrapeRegistry(registry, true)
 	}
 
+	// Exporter for the selected metrics that also show in /_status/vars.
+	exporter2 := metric.MakePrometheusExporterForSelectedMetrics(map[string]struct{}{
+		sql.MetaQueryExecuted.Name:       {},
+		pgwire.MetaConns.Name:            {},
+		jobs.MetaRunningNonIdleJobs.Name: {},
+	})
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
 		if err != nil {
@@ -47,6 +57,7 @@ func makeStatusLoadHandler(
 			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 		}
 
+		// The CPU metrics are updated on each call.
 		// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
 		utime := userTimeMillis * 1e6
 		stime := sysTimeMillis * 1e6
@@ -55,6 +66,12 @@ func makeStatusLoadHandler(
 		cpuNowNanos.Update(timeutil.Now().UnixNano())
 
 		if err := exporter.ScrapeAndPrintAsText(w, regScrape); err != nil {
+			log.Errorf(r.Context(), "%v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if err := exporter2.ScrapeAndPrintAsText(w, metricSource.ScrapeIntoPrometheus); err != nil {
 			log.Errorf(r.Context(), "%v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

@@ -155,7 +155,7 @@ func (s *httpServer) setupRoutes(
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(statusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings}.handleVars))
 	// Same for /_status/load.
-	s.mux.Handle(loadStatusVars, http.HandlerFunc(makeStatusLoadHandler(ctx, runtimeStatSampler)))
+	s.mux.Handle(loadStatusVars, http.HandlerFunc(makeStatusLoadHandler(ctx, runtimeStatSampler, metricSource)))
 
 	if apiServer != nil {
 		// The new "v2" HTTP API tree.
