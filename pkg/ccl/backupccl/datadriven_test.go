@@ -506,6 +506,36 @@ func TestDataDriven(t *testing.T) {
 				require.NoError(t, err)
 				return ""
 
+			case "new-schema-change":
+				server := lastCreatedServer
+				user := "root"
+				jobType := "NEW SCHEMA CHANGE"
+
+				// First, run the schema change.
+				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
+
+				// Tag the job.
+				if d.HasArg("tag") {
+					tagJob(t, server, user, jobType, ds, d)
+				}
+
+				// Check if the job must be run aost.
+				if d.HasArg("aost") {
+					var aost string
+					d.ScanArgs(t, "aost", &aost)
+				}
+
+				// Check if we expect a pausepoint error.
+				if d.HasArg("expect-pausepoint") {
+					expectPausepoint(t, err, jobType, server, user, ds)
+					ret := append(ds.noticeBuffer, "job paused at pausepoint")
+					return strings.Join(ret, "\n")
+				}
+
+				// All other errors are bad.
+				require.NoError(t, err)
+				return ""
+
 			case "schema-change":
 				server := lastCreatedServer
 				user := "root"

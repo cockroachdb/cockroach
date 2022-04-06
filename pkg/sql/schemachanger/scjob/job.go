@@ -59,7 +59,9 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	}
 	// TODO(ajwerner): Wait for leases on all descriptors before starting to
 	// avoid restarts.
-
+	if err := execCfg.JobRegistry.CheckPausepoint("newschemachanger.before.exec"); err != nil {
+		return err
+	}
 	payload := n.job.Payload()
 	deps := scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
