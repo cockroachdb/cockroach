@@ -8,7 +8,6 @@ go_library(
         "distinct.go",
         "fn_op.go",
         "ordinality.go",
-        "overloads_bin_util.go",
         "simple_project.go",
         ":gen-exec",  # keep
     ],
