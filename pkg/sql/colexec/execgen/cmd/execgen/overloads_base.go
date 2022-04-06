@@ -315,7 +315,7 @@ type twoArgsResolvedOverload struct {
 }
 
 // NeedsBinaryOverloadHelper returns true iff the overload is such that it needs
-// access to colexecbase.BinaryOverloadHelper.
+// access to colexecutils.BinaryOverloadHelper.
 func (o *twoArgsResolvedOverload) NeedsBinaryOverloadHelper() bool {
 	return o.kind == binaryOverload && o.Right.RetVecMethod == "Datum"
 }

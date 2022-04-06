@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -839,7 +838,7 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 
 type projBitandDatumConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -1747,7 +1746,7 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 
 type projBitorDatumConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -2655,7 +2654,7 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 
 type projBitxorDatumConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -3687,7 +3686,7 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 
 type projPlusInt16ConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg int16
 }
 
@@ -4277,7 +4276,7 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 
 type projPlusInt32ConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg int32
 }
 
@@ -4867,7 +4866,7 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 
 type projPlusInt64ConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg int64
 }
 
@@ -5381,7 +5380,7 @@ func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
 
 type projPlusIntervalConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg duration.Duration
 }
 
@@ -5515,7 +5514,7 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 
 type projPlusDatumConstIntervalOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -5647,7 +5646,7 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 
 type projPlusDatumConstInt16Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -5779,7 +5778,7 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 
 type projPlusDatumConstInt32Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -5911,7 +5910,7 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 
 type projPlusDatumConstInt64Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -6959,7 +6958,7 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 
 type projMinusInt16ConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg int16
 }
 
@@ -7549,7 +7548,7 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 
 type projMinusInt32ConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg int32
 }
 
@@ -8139,7 +8138,7 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 
 type projMinusInt64ConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg int64
 }
 
@@ -8645,7 +8644,7 @@ func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
 
 type projMinusIntervalConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg duration.Duration
 }
 
@@ -9187,7 +9186,7 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 
 type projMinusDatumConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -9303,7 +9302,7 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 
 type projMinusDatumConstIntervalOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -9435,7 +9434,7 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 
 type projMinusDatumConstBytesOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -9567,7 +9566,7 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 
 type projMinusDatumConstInt16Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -9699,7 +9698,7 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 
 type projMinusDatumConstInt32Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -9831,7 +9830,7 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 
 type projMinusDatumConstInt64Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -21995,7 +21994,7 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 
 type projConcatDatumConstDatumOp struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -23119,7 +23118,7 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 
 type projLShiftDatumConstInt16Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -23251,7 +23250,7 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 
 type projLShiftDatumConstInt32Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -23383,7 +23382,7 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 
 type projLShiftDatumConstInt64Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -24523,7 +24522,7 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 
 type projRShiftDatumConstInt16Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -24655,7 +24654,7 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 
 type projRShiftDatumConstInt32Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -24787,7 +24786,7 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 
 type projRShiftDatumConstInt64Op struct {
 	projConstOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	constArg interface{}
 }
 
@@ -26387,7 +26386,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -26487,7 +26486,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -26587,7 +26586,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -26678,7 +26677,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -26724,7 +26723,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -26771,7 +26770,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -26843,7 +26842,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -26861,7 +26860,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.IntFamily:
@@ -26871,14 +26870,14 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projPlusDatumConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
@@ -26886,7 +26885,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -26977,7 +26976,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int16),
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -27023,7 +27022,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int32),
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -27070,7 +27069,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -27142,7 +27141,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(duration.Duration),
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -27199,7 +27198,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.IntervalFamily:
@@ -27210,7 +27209,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.BytesFamily:
@@ -27221,7 +27220,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.IntFamily:
@@ -27231,14 +27230,14 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projMinusDatumConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
@@ -27246,7 +27245,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -28279,7 +28278,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -28378,14 +28377,14 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projLShiftDatumConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
@@ -28393,7 +28392,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -28492,14 +28491,14 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projRShiftDatumConstInt32Op{
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
@@ -28507,7 +28506,7 @@ func GetProjectionLConstOperator(
 								projConstOpBase: projConstOpBase,
 								constArg:        constArg,
 							}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
