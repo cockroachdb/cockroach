@@ -68,7 +68,6 @@ upsert descriptor #108
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - ABSENT
   +    - DROPPED
   +    - ABSENT
   +    - ABSENT
@@ -116,7 +115,6 @@ upsert descriptor #108
   +    - 19
   +    - 20
   +    - 21
-  +    - 22
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -141,14 +139,6 @@ upsert descriptor #108
   +          descriptorId: 108
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 108
-  +          userName: public
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -414,7 +404,6 @@ upsert descriptor #108
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - ABSENT
   -    - DROPPED
   -    - ABSENT
   -    - ABSENT
@@ -462,7 +451,6 @@ upsert descriptor #108
   -    - 19
   -    - 20
   -    - 21
-  -    - 22
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -487,14 +475,6 @@ upsert descriptor #108
   -          descriptorId: 108
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 108
-  -          userName: public
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -764,7 +744,6 @@ upsert descriptor #109
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - ABSENT
   +    - DROPPED
   +    - ABSENT
   +    - ABSENT
@@ -802,7 +781,6 @@ upsert descriptor #109
   +    - 13
   +    - 14
   +    - 15
-  +    - 16
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -827,14 +805,6 @@ upsert descriptor #109
   +          descriptorId: 109
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 109
-  +          userName: public
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -1004,7 +974,6 @@ upsert descriptor #109
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - ABSENT
   -    - DROPPED
   -    - ABSENT
   -    - ABSENT
@@ -1042,7 +1011,6 @@ upsert descriptor #109
   -    - 13
   -    - 14
   -    - 15
-  -    - 16
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -1067,14 +1035,6 @@ upsert descriptor #109
   -          descriptorId: 109
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 109
-  -          userName: public
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1

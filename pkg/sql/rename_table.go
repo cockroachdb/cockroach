@@ -169,7 +169,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 
 	// Ensure tables cannot be moved cross-database.
 	if oldTn.Catalog() != newTn.Catalog() {
-		// TODO(richardjcai): Remove this in 22.1. In 21.2, we allow moving tables
+		// TODO(richardjcai): Remove this in 22.2. In 21.2, we allow moving tables
 		// from one database's public schema to another database's public schema
 		// as a special case. However after 22.1 all public schemas will be backed
 		// by a descriptor and will be a regular UDS. We do not support moving
