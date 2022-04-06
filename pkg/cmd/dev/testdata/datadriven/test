@@ -77,7 +77,7 @@ bazel test pkg/server:all --test_env=GOTRACEBACK=all --test_filter=TestSpanStats
 exec
 dev test --short
 ----
-bazel test pkg/...:all --test_env=GOTRACEBACK=all --test_arg -test.short --test_output errors
+bazel test //pkg:all_tests --test_env=GOTRACEBACK=all --test_arg -test.short --test_output errors
 
 exec
 dev test pkg/kv/kvserver -f TestStoreRangeSplitMergeGeneration --test-args '-test.memprofile=mem.out'
