@@ -1047,7 +1047,7 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 			dryRun: dryRun,
 			// NB: This option means that the allocator is asked to not consider the
 			// current replica in its set of potential candidates.
-			checkTransferLeaseSource: false,
+			excludeLeaseRepl: true,
 		},
 	)
 	return transferred == transferOK, err
@@ -1368,10 +1368,10 @@ func (rq *replicateQueue) considerRebalance(
 		desc,
 		conf,
 		transferLeaseOptions{
-			goal:                     followTheWorkload,
-			checkTransferLeaseSource: true,
-			checkCandidateFullness:   true,
-			dryRun:                   dryRun,
+			goal:                   followTheWorkload,
+			excludeLeaseRepl:       false,
+			checkCandidateFullness: true,
+			dryRun:                 dryRun,
 		},
 	)
 	return false, err
@@ -1489,10 +1489,10 @@ const (
 
 type transferLeaseOptions struct {
 	goal transferLeaseGoal
-	// checkTransferLeaseSource, when false, tells `TransferLeaseTarget` to
-	// exclude the current leaseholder from consideration as a potential target
-	// (i.e. when the caller explicitly wants to shed its lease away).
-	checkTransferLeaseSource bool
+	// excludeLeaseRepl, when true, tells `TransferLeaseTarget` to exclude the
+	// current leaseholder from consideration as a potential target (i.e. when the
+	// caller explicitly wants to shed its lease away).
+	excludeLeaseRepl bool
 	// checkCandidateFullness, when false, tells `TransferLeaseTarget`
 	// to disregard the existing lease counts on candidates.
 	checkCandidateFullness bool
