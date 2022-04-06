@@ -1510,7 +1510,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						r,
 						desc,
 						conf,
-						transferLeaseOptions{},
+						transferLeaseOptions{excludeLeaseRepl: true},
 					)
 					duration := timeutil.Since(start).Microseconds()
 
