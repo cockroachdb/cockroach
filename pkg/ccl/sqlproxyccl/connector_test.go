@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
@@ -480,13 +481,19 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 func TestConnector_lookupAddr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	balancer, err := balancer.NewBalancer(ctx, stopper)
+	require.NoError(t, err)
 
 	t.Run("successful", func(t *testing.T) {
 		var lookupTenantPodsFnCount int
+
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
+			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -528,7 +535,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
+			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -595,7 +602,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
+			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -620,7 +627,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
+			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
@@ -645,7 +652,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		c := &connector{
 			ClusterName: "my-foo",
 			TenantID:    roachpb.MakeTenantID(10),
-			Balancer:    balancer.NewBalancer(),
+			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
