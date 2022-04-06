@@ -930,7 +930,11 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
-	sqlDB.Exec(t, "BACKUP INTO LATEST IN $4 WITH incremental_location = ($1, $2, $3)",
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) WITH incremental_location = ($4, $5, $6)",
+		append(collections, incrementals...)...)
+
+	sqlDB.ExpectErr(t, "the incremental_location option must contain the same number of locality",
+		"BACKUP INTO LATEST IN $4 WITH incremental_location = ($1, $2, $3)",
 		append(incrementals, collections[0])...)
 
 	// Find the subdirectory created by the full BACKUP INTO statement.
@@ -952,8 +956,8 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 				collections[0], collections[1], collections[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", "/subdir",
 				collections[0], collections[1], collections[2])},
-			{fmt.Sprintf("BACKUP INTO '%s' IN '%s' WITH incremental_location = ('%s', '%s', '%s')",
-				"/subdir", collections[0], incrementals[0],
+			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s') WITH incremental_location = ('%s', '%s', '%s')",
+				"/subdir", collections[0], collections[1], collections[2], incrementals[0],
 				incrementals[1], incrementals[2])},
 		},
 	)
