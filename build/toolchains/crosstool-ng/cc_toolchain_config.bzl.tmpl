@@ -168,7 +168,7 @@ def _impl(ctx):
         ctx = ctx,
         features = features,
         toolchain_identifier = "%{target}-cross-toolchain",
-        host_system_name = "%{target}",
+        host_system_name = "%{host}",
         target_system_name = "%{target}",
         target_cpu = "%{target}",
         target_libc = "glibc-2.14",

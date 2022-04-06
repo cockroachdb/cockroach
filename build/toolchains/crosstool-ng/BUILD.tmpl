@@ -5,7 +5,7 @@ load(":cc_toolchain_config.bzl", "cc_toolchain_config")
 cc_toolchain_suite(
     name = "suite",
     toolchains = {
-        "k8": ":toolchain",
+        "%{host}": ":toolchain",
     },
 )
 
