@@ -127,7 +127,11 @@ func calculatePlanGrowth(before, after *PhysicalPlan) (int, float64) {
 		}
 	}
 
-	return changed, float64(changed) / float64(len(beforeSpecs))
+	var frac float64
+	if changed > 0 {
+		frac = float64(changed) / float64(len(beforeSpecs))
+	}
+	return changed, frac
 }
 
 // PlanChangeDecision descrubes a function that decides if a plan has "changed"
@@ -166,14 +170,14 @@ func PhysicalPlanChangeChecker(
 	ctx context.Context,
 	initial *PhysicalPlan,
 	fn PhysicalPlanMaker,
-	execCtx JobExecContext,
+	execCtx interface{ DistSQLPlanner() *DistSQLPlanner },
 	decider PlanChangeDecision,
-	freq time.Duration,
+	freq func() time.Duration,
 ) (func(context.Context) error, func()) {
 	stop := make(chan struct{})
 
 	return func(ctx context.Context) error {
-		tick := time.NewTicker(freq)
+		tick := time.NewTicker(freq())
 		defer tick.Stop()
 		done := ctx.Done()
 		for {
