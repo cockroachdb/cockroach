@@ -1589,8 +1589,8 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
-// to from the provided list. It excludes the current lease holder replica
-// unless asked to do otherwise by the checkTransferLeaseSource parameter.
+// to from the provided list. It includes the current lease holder replica
+// unless asked to do otherwise by the excludeLeaseRepl parameter.
 //
 // Returns an empty descriptor if no target is found.
 //
@@ -1615,7 +1615,7 @@ func (a *Allocator) TransferLeaseTarget(
 	forceDecisionWithoutStats bool,
 	opts transferLeaseOptions,
 ) roachpb.ReplicaDescriptor {
-	excludeLeaseRepl := !opts.checkTransferLeaseSource
+	excludeLeaseRepl := opts.excludeLeaseRepl
 	if a.leaseholderShouldMoveDueToPreferences(ctx, conf, leaseRepl, existing) {
 		// Explicitly exclude the current leaseholder from the result set if it is
 		// in violation of lease preferences that can be satisfied by some other
