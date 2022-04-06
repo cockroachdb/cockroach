@@ -662,7 +662,10 @@ func (rq *replicateQueue) processOneChange(
 
 	case AllocatorRemoveLearner:
 		// TODO dry run
-		_, _ = repl.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, repl.Desc())
+		_, err := repl.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, repl.Desc())
+		if err != nil {
+			return false, err
+		}
 		return true, nil
 	case AllocatorConsiderRebalance:
 		return rq.considerRebalance(
