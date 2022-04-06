@@ -7992,6 +7992,43 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 	})
 }
 
+func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	st := cluster.MakeTestingClusterSettings()
+	storage, err := cloud.ExternalStorageFromURI(ctx,
+		"nodelocal://0/test",
+		base.ExternalIODirConfig{},
+		st,
+		blobs.TestBlobServiceClient(dir),
+		security.RootUserName(), nil, nil)
+	require.NoError(t, err)
+
+	m := mon.NewMonitor("test-monitor", mon.MemoryResource, nil, nil, 0, 0, st)
+	m.Start(ctx, nil, mon.MakeStandaloneBudget(128<<20))
+	mem := m.MakeBoundAccount()
+	encOpts := &jobspb.BackupEncryptionOptions{
+		Mode: jobspb.EncryptionMode_Passphrase,
+		Key:  storageccl.GenerateKey([]byte("passphrase"), []byte("sodium")),
+	}
+	desc := &BackupManifest{}
+	magic := 5500
+	for i := 0; i < magic; i++ {
+		desc.Files = append(desc.Files, BackupManifest_File{Path: fmt.Sprintf("%d-file-%d", i, i)})
+	}
+	require.NoError(t, writeBackupManifest(ctx, st, storage, "testmanifest", encOpts, desc))
+	_, sz, err := readBackupManifest(ctx, &mem, storage, "testmanifest", encOpts)
+	require.NoError(t, err)
+	mem.Shrink(ctx, sz)
+	mem.Close(ctx)
+}
+
 func TestManifestTooNew(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
