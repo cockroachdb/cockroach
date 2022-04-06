@@ -220,7 +220,7 @@ func distImport(
 	replanChecker, cancelReplanner := sql.PhysicalPlanChangeChecker(
 		ctx, p, makePlan, execCtx,
 		sql.ReplanOnChangedFraction(func() float64 { return replanThreshold.Get(&execCtx.ExecCfg().Settings.SV) }),
-		replanFrequency.Get(&execCtx.ExecCfg().Settings.SV),
+		func() time.Duration { return replanFrequency.Get(&execCtx.ExecCfg().Settings.SV) },
 	)
 
 	stopProgress := make(chan struct{})
