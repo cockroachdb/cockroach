@@ -1620,8 +1620,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
-	// Stores have been initialized, so Node can now provide Pebble metrics.
-	s.storeGrantCoords.SetPebbleMetricsProvider(s.node)
 
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(
@@ -1703,6 +1701,16 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//   the hazard described in Node.start, around initializing additional
 	//   stores)
 	s.node.waitForAdditionalStoreInit()
+
+	// Stores have been initialized, so Node can now provide Pebble metrics.
+	//
+	// Note that all existing stores will be operational before Pebble-level
+	// admission control is online. However, we won’t have started to heartbeat
+	// our liveness record until after we call SetPebbleMetricsProvider, so the
+	// existing stores shouldn’t be able to acquire leases yet. Although, below
+	// Raft commands like log application and snapshot application may be able
+	// to bypass admission control.
+	s.storeGrantCoords.SetPebbleMetricsProvider(s.node)
 
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
 		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
