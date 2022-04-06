@@ -549,6 +549,9 @@ native-tag := $(subst -,_,$(TARGET_TRIPLE))$(if $(use-stdmalloc),_stdmalloc)
 # encounters a given native tag or when the build signature changes (see
 # build/defs.mk.sig). These tags are unset when building with the Go toolchain
 # directly, so these files are only compiled when building with Make.
+#
+# NB: If you update the zcgo_flags.go generation below, make sure to make the
+# corresponding changes to `dev generate cgo`.
 CGO_PKGS := \
 	pkg/cli \
 	pkg/cli/clisqlshell \

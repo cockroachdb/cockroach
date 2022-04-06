@@ -11,8 +11,13 @@ configure_make(
         "--enable-prof",
     ] + select({
         "@io_bazel_rules_go//go/platform:windows": ["--host=x86_64-w64-mingw32"],
-        "@io_bazel_rules_go//go/platform:darwin_amd64": ["--host=x86_64-apple-darwin19"],
-        "@io_bazel_rules_go//go/platform:darwin_arm64": ["--host=aarch64-apple-darwin19"],
+        "@io_bazel_rules_go//go/platform:darwin_amd64": ["--host=x86_64-apple-darwin21.2"],
+        "@io_bazel_rules_go//go/platform:darwin_arm64": [
+            "--host=aarch64-apple-darwin21.2",
+            "--with-lg-page=16",
+        ],
+        "@io_bazel_rules_go//go/platform:linux_amd64": ["--host=x86_64-unknown-linux-gnu"],
+        "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
         # NB: Normally host detection is handled by configure, but the version
         # of jemalloc we have vendored is pretty ancient and can't handle some
         # of the newer M1 Macs. This arm of the select() can probably be deleted
@@ -21,7 +26,6 @@ configure_make(
             "--host=aarch64-apple-darwin19",
             "--build=aarch64-apple-darwin19",
         ],
-        "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
         "//conditions:default": [],
     }),
     env = select({
@@ -92,16 +96,24 @@ cmake(
         },
     }),
     data = select({
-        "//build/toolchains:is_cross_macos": [
-            "@toolchain_cross_x86_64-apple-darwin19//:bin/x86_64-apple-darwin19-install_name_tool",
-            "@toolchain_cross_x86_64-apple-darwin19//:bin/x86_64-apple-darwin19-otool",
+        "//build/toolchains:is_cross_macos_x86_64": [
+            "@cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-install_name_tool",
+            "@cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-otool",
+        ],
+        "//build/toolchains:is_cross_macos_arm64": [
+            "@cross_arm64_macos_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool",
+            "@cross_arm64_macos_toolchain//:bin/arm64-apple-darwin21.2-otool",
         ],
         "//conditions:default": [],
     }),
     env = select({
-        "//build/toolchains:is_cross_macos": {
-            "CMAKE_INSTALL_NAME_TOOL": "$(execpath @toolchain_cross_x86_64-apple-darwin19//:bin/x86_64-apple-darwin19-install_name_tool)",
-            "OTOOL": "$(execpath @toolchain_cross_x86_64-apple-darwin19//:bin/x86_64-apple-darwin19-otool)",
+        "//build/toolchains:is_cross_macos_x86_64": {
+            "CMAKE_INSTALL_NAME_TOOL": "$(execpath @cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-install_name_tool)",
+            "OTOOL": "$(execpath @cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-otool)",
+        },
+        "//build/toolchains:is_cross_macos_arm64": {
+            "CMAKE_INSTALL_NAME_TOOL": "$(execpath @cross_arm64_macos_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool)",
+            "OTOOL": "$(execpath @cross_arm64_macos_toolchain//:bin/arm64-apple-darwin21.2-otool)",
         },
         "//conditions:default": {},
     }),
@@ -160,13 +172,25 @@ configure_make(
     configure_options = [
         "--enable-static",
         "--disable-shared",
-    ],
+    ] + select({
+        "@io_bazel_rules_go//go/platform:linux_amd64": ["--host=x86_64-unknown-linux-gnu"],
+        "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
+        "//conditions:default": [],
+    }),
     # We specify -fcommon to get around duplicate definition errors in recent gcc.
     copts = ["-fcommon"],
     data = [":autom4te"],
-    env = {
-        "AUTOM4TE": "$(execpath :autom4te)",
-    },
+    env = select({
+        "//build/toolchains:cross": {
+            "AUTOM4TE": "$(execpath :autom4te)",
+            "krb5_cv_attr_constructor_destructor": "yes",
+            "ac_cv_func_regcomp": "yes",
+            "ac_cv_printf_positional": "yes",
+        },
+        "//conditions:default": {
+            "AUTOM4TE": "$(execpath :autom4te)",
+        },
+    }),
     lib_source = "@krb5//:all",
     out_static_libs = [
         "libgssapi_krb5.a",

@@ -390,10 +390,16 @@ load("//build/toolchains:REPOSITORIES.bzl", "toolchain_dependencies")
 toolchain_dependencies()
 
 register_toolchains(
-    "//build/toolchains:cross_linux_toolchain",
-    "//build/toolchains:cross_linux_arm_toolchain",
-    "//build/toolchains:cross_macos_toolchain",
-    "//build/toolchains:cross_windows_toolchain",
+    "//build/toolchains:cross_x86_64_linux_toolchain",
+    "//build/toolchains:cross_x86_64_linux_arm_toolchain",
+    "//build/toolchains:cross_x86_64_macos_toolchain",
+    "//build/toolchains:cross_x86_64_macos_arm_toolchain",
+    "//build/toolchains:cross_x86_64_windows_toolchain",
+    "//build/toolchains:cross_arm64_linux_toolchain",
+    "//build/toolchains:cross_arm64_linux_arm_toolchain",
+    "//build/toolchains:cross_arm64_windows_toolchain",
+    "//build/toolchains:cross_arm64_macos_toolchain",
+    "//build/toolchains:cross_arm64_macos_arm_toolchain",
     "//build/toolchains:dev_darwin_x86_64_toolchain",
 )
 

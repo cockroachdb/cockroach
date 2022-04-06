@@ -1310,6 +1310,13 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
 			return security.GetConfiguredPasswordHashMethod(evalCtx.Ctx(), &evalCtx.Settings.SV).String(), nil
 		},
+		SetWithPlanner: func(ctx context.Context, p *planner, local bool, val string) error {
+			method := security.GetConfiguredPasswordHashMethod(ctx, &p.ExecCfg().Settings.SV)
+			if val != method.String() {
+				return newCannotChangeParameterError("password_encryption")
+			}
+			return nil
+		},
 	},
 
 	// Supported for PG compatibility only.

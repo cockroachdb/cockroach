@@ -207,11 +207,14 @@ func (n *resetAllNode) startExec(params runParams) error {
 		if varName == "role" {
 			continue
 		}
-		_, defVal := getSessionVarDefaultString(
+		hasDefault, defVal := getSessionVarDefaultString(
 			varName,
 			v,
 			params.p.sessionDataMutatorIterator.sessionDataMutatorBase,
 		)
+		if !hasDefault {
+			continue
+		}
 		if err := params.p.SetSessionVar(params.ctx, varName, defVal, false /* isLocal */); err != nil {
 			return err
 		}

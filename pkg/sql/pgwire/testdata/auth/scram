@@ -60,7 +60,7 @@ host   all      abc2 all     password
 # Expect authn error.
 connect user=abc password=mistake
 ----
-ERROR: password authentication failed for user abc (SQLSTATE 28000)
+ERROR: password authentication failed for user abc (SQLSTATE 28P01)
 
 authlog 5
 .*client_connection_end
@@ -125,7 +125,7 @@ subtest only_scram/conn_scram
 # For now (testing), foo does not have SCRAM credentials.
 connect user=foo password=abc
 ----
-ERROR: password authentication failed for user foo (SQLSTATE 28000)
+ERROR: password authentication failed for user foo (SQLSTATE 28P01)
 
 authlog 7
 .*client_connection_end
@@ -142,7 +142,7 @@ authlog 7
 # Expect authn error.
 connect user=abc password=mistake
 ----
-ERROR: password authentication failed for user abc (SQLSTATE 28000)
+ERROR: password authentication failed for user abc (SQLSTATE 28P01)
 
 authlog 6
 .*client_connection_end
@@ -215,7 +215,7 @@ subtest scram_cert/scram
 
 connect user=foo password=abc
 ----
-ERROR: password authentication failed for user foo (SQLSTATE 28000)
+ERROR: password authentication failed for user foo (SQLSTATE 28P01)
 
 
 connect user=abc password=abc
