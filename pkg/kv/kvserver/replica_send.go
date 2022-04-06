@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
@@ -905,6 +906,8 @@ func (r *Replica) executeAdminBatch(
 			return nil, roachpb.NewError(err)
 		}
 	}
+
+	ctx = logtags.AddTag(ctx, ba.Requests[0].GetInner().Method().String(), "")
 
 	var resp roachpb.Response
 	var pErr *roachpb.Error
