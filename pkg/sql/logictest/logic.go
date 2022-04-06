@@ -1765,6 +1765,13 @@ func (t *logicTest) newCluster(
 		}
 	}
 
+	var randomWorkmem int
+	if t.rng.Float64() < 0.5 && !serverArgs.DisableWorkmemRandomization {
+		// Randomize sql.distsql.temp_storage.workmem cluster setting in
+		// [10KiB, 100KiB) range.
+		randomWorkmem = 10<<10 + t.rng.Intn(90<<10)
+	}
+
 	// Set cluster settings.
 	for _, conn := range connsForClusterSettingChanges {
 		if _, err := conn.Exec(
@@ -1827,6 +1834,14 @@ func (t *logicTest) newCluster(
 			"SET CLUSTER SETTING sql.crdb_internal.table_row_statistics.as_of_time = '-1µs'",
 		); err != nil {
 			t.Fatal(err)
+		}
+
+		if randomWorkmem != 0 {
+			query := fmt.Sprintf("SET CLUSTER SETTING sql.distsql.temp_storage.workmem = '%dB'", randomWorkmem)
+			if _, err := conn.Exec(query); err != nil {
+				t.Fatal(err)
+			}
+			t.outf("setting distsql_workmem='%dB';", randomWorkmem)
 		}
 	}
 
@@ -3893,6 +3908,8 @@ type TestServerArgs struct {
 	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
 	// to use the non-test value.
 	forceProductionBatchSizes bool
+	// If set, then sql.distsql.temp_storage.workmem is not randomized.
+	DisableWorkmemRandomization bool
 }
 
 // RunLogicTest is the main entry point for the logic test. The globs parameter
