@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -294,7 +295,7 @@ func NewDatumRowConverter(
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,
 	seqChunkProvider *SeqChunkProvider,
-	metrics *Metrics,
+	metrics *rowinfra.Metrics,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,

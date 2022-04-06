@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -51,7 +52,7 @@ func MakeInserter(
 	alloc *tree.DatumAlloc,
 	sv *settings.Values,
 	internal bool,
-	metrics *Metrics,
+	metrics *rowinfra.Metrics,
 ) (Inserter, error) {
 	ri := Inserter{
 		Helper: newRowHelper(
