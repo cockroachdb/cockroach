@@ -33,7 +33,7 @@
     "lodash": "^4.17.21",
     "long": "^4.0.0",
     "mini-create-react-context": "^0.3.2",
-    "moment": "^2.19.3",
+    "moment": "^2.29.2",
     "nvd3": "^1.8.5",
     "popper.js": "^1.14.4",
     "raw-loader": "^0.5.1",
