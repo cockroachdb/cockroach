@@ -71,3 +71,20 @@ message CapturedIndexUsageStats {
   bool is_unique = 10 [(gogoproto.jsontag) = ",omitempty"];
   bool is_inverted = 11 [(gogoproto.jsontag) = ",omitempty"];
 }
+
+// CreateChangefeed is an event for any CREATE CHANGEFEED query that
+// successfully starts running.  Failed CREATE statements will show up as
+// ChangefeedFailed events.
+message CreateChangefeed {
+  CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// ChangefeedFailed is an event for any Changefeed failure since the plan hook
+// was triggered.
+message ChangefeedFailed {
+  CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The reason / environment with which the changefeed failed (ex:
+  // connection_closed, changefeed_behind)
+  string failure_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+}
