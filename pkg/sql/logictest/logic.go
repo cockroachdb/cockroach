@@ -4204,17 +4204,11 @@ func RunLogicTestWithDefaultConfig(
 						!util.RaceEnabled &&
 						!cfg.useTenant &&
 						cfg.numNodes <= 5 {
-						// Skip parallelizing tests that use the kv-batch-size directive since
-						// the batch size is a global variable.
-						//
 						// We also cannot parallelise tests that use tenant servers
 						// because they change shared state in the logging configuration
 						// and there is an assertion against conflicting changes.
 						//
-						// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.
-						if filepath.Base(path) != "select_index_span_ranges" {
-							t.Parallel() // SAFE FOR TESTING (this comments satisfies the linter)
-						}
+						t.Parallel() // SAFE FOR TESTING (this comments satisfies the linter)
 					}
 					rng, _ := randutil.NewTestRand()
 					lt := logicTest{
