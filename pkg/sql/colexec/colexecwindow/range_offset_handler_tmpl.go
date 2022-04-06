@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -126,7 +125,7 @@ func newRangeOffsetHandler(
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
 						// {{end}}
-						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						// {{end}}
 						return op
 						// {{end}}
@@ -162,7 +161,7 @@ type rangeOffsetHandlerBase struct {
 type _OP_STRING struct {
 	rangeOffsetHandlerBase
 	// {{if eq .VecMethod "Datum"}}
-	overloadHelper colexecbase.BinaryOverloadHelper
+	overloadHelper colexecutils.BinaryOverloadHelper
 	// {{end}}
 	offset _OFFSET_GOTYPE
 }
@@ -195,7 +194,7 @@ func (h *_OP_STRING) getIdx(ctx context.Context, currRow, lastIdx int) (idx int)
 	// {{/*
 	//     In order to inline the templated code of the binary overloads
 	//     operating on datums, we need to have a `_overloadHelper` local
-	//     variable of type `colexecbase.BinaryOverloadHelper`. This is
+	//     variable of type `colexecutils.BinaryOverloadHelper`. This is
 	//     necessary when dealing with Time and TimeTZ columns since they aren't
 	//     yet handled natively.
 	// */}}

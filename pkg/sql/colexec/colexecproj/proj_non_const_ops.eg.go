@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -921,7 +920,7 @@ func (p projBitandInt64Int64Op) Next() coldata.Batch {
 
 type projBitandDatumDatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projBitandDatumDatumOp) Next() coldata.Batch {
@@ -1907,7 +1906,7 @@ func (p projBitorInt64Int64Op) Next() coldata.Batch {
 
 type projBitorDatumDatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projBitorDatumDatumOp) Next() coldata.Batch {
@@ -2893,7 +2892,7 @@ func (p projBitxorInt64Int64Op) Next() coldata.Batch {
 
 type projBitxorDatumDatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projBitxorDatumDatumOp) Next() coldata.Batch {
@@ -3995,7 +3994,7 @@ func (p projPlusInt16DecimalOp) Next() coldata.Batch {
 
 type projPlusInt16DatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projPlusInt16DatumOp) Next() coldata.Batch {
@@ -4623,7 +4622,7 @@ func (p projPlusInt32DecimalOp) Next() coldata.Batch {
 
 type projPlusInt32DatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projPlusInt32DatumOp) Next() coldata.Batch {
@@ -5251,7 +5250,7 @@ func (p projPlusInt64DecimalOp) Next() coldata.Batch {
 
 type projPlusInt64DatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projPlusInt64DatumOp) Next() coldata.Batch {
@@ -5803,7 +5802,7 @@ func (p projPlusIntervalIntervalOp) Next() coldata.Batch {
 
 type projPlusIntervalDatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projPlusIntervalDatumOp) Next() coldata.Batch {
@@ -5943,7 +5942,7 @@ func (p projPlusIntervalDatumOp) Next() coldata.Batch {
 
 type projPlusDatumIntervalOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projPlusDatumIntervalOp) Next() coldata.Batch {
@@ -6083,7 +6082,7 @@ func (p projPlusDatumIntervalOp) Next() coldata.Batch {
 
 type projPlusDatumInt16Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projPlusDatumInt16Op) Next() coldata.Batch {
@@ -6223,7 +6222,7 @@ func (p projPlusDatumInt16Op) Next() coldata.Batch {
 
 type projPlusDatumInt32Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projPlusDatumInt32Op) Next() coldata.Batch {
@@ -6363,7 +6362,7 @@ func (p projPlusDatumInt32Op) Next() coldata.Batch {
 
 type projPlusDatumInt64Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projPlusDatumInt64Op) Next() coldata.Batch {
@@ -7483,7 +7482,7 @@ func (p projMinusInt16DecimalOp) Next() coldata.Batch {
 
 type projMinusInt16DatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projMinusInt16DatumOp) Next() coldata.Batch {
@@ -8111,7 +8110,7 @@ func (p projMinusInt32DecimalOp) Next() coldata.Batch {
 
 type projMinusInt32DatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projMinusInt32DatumOp) Next() coldata.Batch {
@@ -8739,7 +8738,7 @@ func (p projMinusInt64DecimalOp) Next() coldata.Batch {
 
 type projMinusInt64DatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projMinusInt64DatumOp) Next() coldata.Batch {
@@ -9283,7 +9282,7 @@ func (p projMinusIntervalIntervalOp) Next() coldata.Batch {
 
 type projMinusIntervalDatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projMinusIntervalDatumOp) Next() coldata.Batch {
@@ -9861,7 +9860,7 @@ func (p projMinusJSONInt64Op) Next() coldata.Batch {
 
 type projMinusDatumDatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projMinusDatumDatumOp) Next() coldata.Batch {
@@ -9983,7 +9982,7 @@ func (p projMinusDatumDatumOp) Next() coldata.Batch {
 
 type projMinusDatumIntervalOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projMinusDatumIntervalOp) Next() coldata.Batch {
@@ -10123,7 +10122,7 @@ func (p projMinusDatumIntervalOp) Next() coldata.Batch {
 
 type projMinusDatumBytesOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projMinusDatumBytesOp) Next() coldata.Batch {
@@ -10261,7 +10260,7 @@ func (p projMinusDatumBytesOp) Next() coldata.Batch {
 
 type projMinusDatumInt16Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projMinusDatumInt16Op) Next() coldata.Batch {
@@ -10401,7 +10400,7 @@ func (p projMinusDatumInt16Op) Next() coldata.Batch {
 
 type projMinusDatumInt32Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projMinusDatumInt32Op) Next() coldata.Batch {
@@ -10541,7 +10540,7 @@ func (p projMinusDatumInt32Op) Next() coldata.Batch {
 
 type projMinusDatumInt64Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projMinusDatumInt64Op) Next() coldata.Batch {
@@ -23517,7 +23516,7 @@ func (p projConcatJSONJSONOp) Next() coldata.Batch {
 
 type projConcatDatumDatumOp struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projConcatDatumDatumOp) Next() coldata.Batch {
@@ -24719,7 +24718,7 @@ func (p projLShiftInt64Int64Op) Next() coldata.Batch {
 
 type projLShiftDatumInt16Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projLShiftDatumInt16Op) Next() coldata.Batch {
@@ -24859,7 +24858,7 @@ func (p projLShiftDatumInt16Op) Next() coldata.Batch {
 
 type projLShiftDatumInt32Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projLShiftDatumInt32Op) Next() coldata.Batch {
@@ -24999,7 +24998,7 @@ func (p projLShiftDatumInt32Op) Next() coldata.Batch {
 
 type projLShiftDatumInt64Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projLShiftDatumInt64Op) Next() coldata.Batch {
@@ -26219,7 +26218,7 @@ func (p projRShiftInt64Int64Op) Next() coldata.Batch {
 
 type projRShiftDatumInt16Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projRShiftDatumInt16Op) Next() coldata.Batch {
@@ -26359,7 +26358,7 @@ func (p projRShiftDatumInt16Op) Next() coldata.Batch {
 
 type projRShiftDatumInt32Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projRShiftDatumInt32Op) Next() coldata.Batch {
@@ -26499,7 +26498,7 @@ func (p projRShiftDatumInt32Op) Next() coldata.Batch {
 
 type projRShiftDatumInt64Op struct {
 	projOpBase
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 }
 
 func (p projRShiftDatumInt64Op) Next() coldata.Batch {
@@ -56277,7 +56276,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projBitandDatumDatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56347,7 +56346,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projBitorDatumDatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56417,7 +56416,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projBitxorDatumDatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56481,7 +56480,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projPlusInt16DatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56512,7 +56511,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projPlusInt32DatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56544,7 +56543,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projPlusInt64DatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56601,7 +56600,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projPlusIntervalDatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56616,23 +56615,23 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projPlusDatumIntervalOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
 							op := &projPlusDatumInt16Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projPlusDatumInt32Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
 							op := &projPlusDatumInt64Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56696,7 +56695,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projMinusInt16DatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56727,7 +56726,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projMinusInt32DatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56759,7 +56758,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projMinusInt64DatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56816,7 +56815,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projMinusIntervalDatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -56858,7 +56857,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projMinusDatumDatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.IntervalFamily:
@@ -56866,7 +56865,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projMinusDatumIntervalOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.BytesFamily:
@@ -56874,23 +56873,23 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projMinusDatumBytesOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
 							op := &projMinusDatumInt16Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projMinusDatumInt32Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
 							op := &projMinusDatumInt64Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -57617,7 +57616,7 @@ func GetProjectionOperator(
 						case -1:
 						default:
 							op := &projConcatDatumDatumOp{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -57686,16 +57685,16 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case 16:
 							op := &projLShiftDatumInt16Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projLShiftDatumInt32Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
 							op := &projLShiftDatumInt64Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
@@ -57764,16 +57763,16 @@ func GetProjectionOperator(
 						switch rightType.Width() {
 						case 16:
 							op := &projRShiftDatumInt16Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case 32:
 							op := &projRShiftDatumInt32Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						case -1:
 						default:
 							op := &projRShiftDatumInt64Op{projOpBase: projOpBase}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							return op, nil
 						}
 					}
