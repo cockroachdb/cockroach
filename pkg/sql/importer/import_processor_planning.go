@@ -13,6 +13,7 @@ package importer
 import (
 	"context"
 	"math"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -75,6 +76,17 @@ func distImport(
 		if err != nil {
 			return nil, nil, err
 		}
+
+		r := rand.New(rand.NewSource(int64(job.ID())))
+		// Shuffle node order so that multiple IMPORTs done in parallel will not
+		// identically schedule CSV reading. For example, if there are 3 nodes and 4
+		// files, the first node will get 2 files while the other nodes will each
+		// get 1 file. Shuffling will make that first node random instead of always
+		// the same. Doing so seeded with the job's ID makes this deterministic
+		// across re-plannings of this job.
+		r.Shuffle(len(sqlInstanceIDs), func(i, j int) {
+			sqlInstanceIDs[i], sqlInstanceIDs[j] = sqlInstanceIDs[j], sqlInstanceIDs[i]
+		})
 
 		inputSpecs := makeImportReaderSpecs(job, tables, typeDescs, from, format, sqlInstanceIDs, walltime,
 			execCtx.User(), procsPerNode)
