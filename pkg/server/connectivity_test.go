@@ -218,14 +218,14 @@ func TestClusterConnectivity(t *testing.T) {
 				// Wait to get a real cluster ID (doesn't always get populated
 				// right after bootstrap).
 				testutils.SucceedsSoon(t, func() error {
-					clusterID := tc.Server(bootstrapNode).ClusterID()
+					clusterID := tc.Server(bootstrapNode).StorageClusterID()
 					if clusterID.Equal(uuid.UUID{}) {
 						return errors.New("cluster ID still not recorded")
 					}
 					return nil
 				})
 
-				clusterID := tc.Server(bootstrapNode).ClusterID()
+				clusterID := tc.Server(bootstrapNode).StorageClusterID()
 				testutils.SucceedsSoon(t, func() error {
 					var nodeIDs []roachpb.NodeID
 					var storeIDs []roachpb.StoreID
@@ -234,7 +234,7 @@ func TestClusterConnectivity(t *testing.T) {
 					// network actually do (by checking they discover the right
 					// cluster ID). Also collect node/store IDs for below.
 					for i := 0; i < numNodes; i++ {
-						if got := tc.Server(i).ClusterID(); got != clusterID {
+						if got := tc.Server(i).StorageClusterID(); got != clusterID {
 							return errors.Newf("mismatched cluster IDs; %s (for node %d) != %s (for node %d)",
 								clusterID.String(), bootstrapNode, got.String(), i)
 						}
@@ -305,8 +305,8 @@ func TestJoinVersionGate(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < numNodes; i++ {
-			clusterID := tc.Server(0).ClusterID()
-			got := tc.Server(i).ClusterID()
+			clusterID := tc.Server(0).StorageClusterID()
+			got := tc.Server(i).StorageClusterID()
 
 			if got != clusterID {
 				return errors.Newf("mismatched cluster IDs; %s (for node %d) != %s (for node %d)", clusterID.String(), 0, got.String(), i)

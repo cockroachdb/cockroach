@@ -50,11 +50,16 @@ func (f *FloatSetting) EncodedDefault() string {
 
 // DecodeToString decodes and renders an encoded value.
 func (f *FloatSetting) DecodeToString(encoded string) (string, error) {
-	fv, err := strconv.ParseFloat(encoded, 64)
+	fv, err := f.DecodeValue(encoded)
 	if err != nil {
 		return "", err
 	}
 	return EncodeFloat(fv), nil
+}
+
+// DecodeValue decodes the value into a float.
+func (f *FloatSetting) DecodeValue(encoded string) (float64, error) {
+	return strconv.ParseFloat(encoded, 64)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.

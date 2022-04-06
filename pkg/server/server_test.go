@@ -81,7 +81,7 @@ func TestSelfBootstrap(t *testing.T) {
 	}
 	defer s.Stopper().Stop(context.Background())
 
-	if s.RPCContext().ClusterID.Get() == uuid.Nil {
+	if s.RPCContext().StorageClusterID.Get() == uuid.Nil {
 		t.Error("cluster ID failed to be set on the RPC context")
 	}
 }

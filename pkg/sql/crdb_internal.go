@@ -181,7 +181,7 @@ CREATE TABLE crdb_internal.node_build_info (
 		info := build.GetInfo()
 		for k, v := range map[string]string{
 			"Name":         "CockroachDB",
-			"ClusterID":    execCfg.ClusterID().String(),
+			"ClusterID":    execCfg.LogicalClusterID().String(),
 			"Organization": execCfg.Organization(),
 			"Build":        info.Short(),
 			"Version":      info.Tag,

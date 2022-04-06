@@ -10,6 +10,7 @@ package storageccl
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	crypto_rand "crypto/rand"
@@ -19,6 +20,8 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -185,12 +188,14 @@ func (e *encWriter) flush() error {
 // DecryptFile decrypts a file encrypted by EncryptFile, using the supplied key
 // and reading the IV from a prefix of the file. See comments on EncryptFile
 // for intended usage, and see DecryptFile
-func DecryptFile(ciphertext, key []byte) ([]byte, error) {
+func DecryptFile(
+	ctx context.Context, ciphertext, key []byte, mm *mon.BoundAccount,
+) ([]byte, error) {
 	r, err := decryptingReader(bytes.NewReader(ciphertext), key)
 	if err != nil {
 		return nil, err
 	}
-	return ioutil.ReadAll(r.(io.Reader))
+	return mon.ReadAll(ctx, ioctx.ReaderAdapter(r.(io.Reader)), mm)
 }
 
 type decryptReader struct {

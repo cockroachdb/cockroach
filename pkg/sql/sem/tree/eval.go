@@ -3609,11 +3609,16 @@ type EvalContext struct {
 	// a single statement.
 	TxnIsSingleStmt bool
 
-	Settings    *cluster.Settings
-	ClusterID   uuid.UUID
+	Settings *cluster.Settings
+	// ClusterID is the logical cluster ID for this tenant.
+	ClusterID uuid.UUID
+	// ClusterName is the security string used to secure the RPC layer.
 	ClusterName string
-	NodeID      *base.SQLIDContainer
-	Codec       keys.SQLCodec
+	// NodeID is either the SQL instance ID or KV Node ID, depending on
+	// circumstances.
+	// TODO(knz,radu): Split this into separate fields.
+	NodeID *base.SQLIDContainer
+	Codec  keys.SQLCodec
 
 	// Locality contains the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there

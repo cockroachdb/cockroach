@@ -209,13 +209,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	nodeTombStorage, checkPingFor := getPingCheckDecommissionFn(engines)
 
 	rpcCtxOpts := rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		NodeID:    cfg.IDContainer,
-		ClusterID: cfg.ClusterIDContainer,
-		Config:    cfg.Config,
-		Clock:     clock,
-		Stopper:   stopper,
-		Settings:  cfg.Settings,
+		TenantID:         roachpb.SystemTenantID,
+		NodeID:           cfg.IDContainer,
+		StorageClusterID: cfg.ClusterIDContainer,
+		Config:           cfg.Config,
+		Clock:            clock,
+		Stopper:          stopper,
+		Settings:         cfg.Settings,
 		OnOutgoingPing: func(ctx context.Context, req *rpc.PingRequest) error {
 			// Outgoing ping will block requests with codes.FailedPrecondition to
 			// notify caller that this replica is decommissioned but others could
@@ -279,7 +279,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	g := gossip.New(
 		cfg.AmbientCtx,
-		rpcContext.ClusterID,
+		rpcContext.StorageClusterID,
 		nodeIDContainer,
 		rpcContext,
 		grpcServer.Server,
@@ -637,13 +637,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	registry.AddMetricStruct(rpcContext.RemoteClocks.Metrics())
 
 	updates := &diagnostics.UpdateChecker{
-		StartTime:     timeutil.Now(),
-		AmbientCtx:    &cfg.AmbientCtx,
-		Config:        cfg.BaseConfig.Config,
-		Settings:      cfg.Settings,
-		ClusterID:     cfg.ClusterIDContainer.Get,
-		NodeID:        nodeIDContainer.Get,
-		SQLInstanceID: idContainer.SQLInstanceID,
+		StartTime:        timeutil.Now(),
+		AmbientCtx:       &cfg.AmbientCtx,
+		Config:           cfg.BaseConfig.Config,
+		Settings:         cfg.Settings,
+		StorageClusterID: rpcContext.StorageClusterID.Get,
+		LogicalClusterID: rpcContext.LogicalClusterID.Get,
+		NodeID:           nodeIDContainer.Get,
+		SQLInstanceID:    idContainer.SQLInstanceID,
 	}
 
 	if cfg.TestingKnobs.Server != nil {
@@ -856,9 +857,9 @@ func (s *Server) AnnotateCtxWithSpan(
 	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
-// ClusterID returns the ID of the cluster this server is a part of.
-func (s *Server) ClusterID() uuid.UUID {
-	return s.rpcContext.ClusterID.Get()
+// StorageClusterID returns the ID of the storage cluster this server is a part of.
+func (s *Server) StorageClusterID() uuid.UUID {
+	return s.rpcContext.StorageClusterID.Get()
 }
 
 // NodeID returns the ID of this node within its cluster.
@@ -1229,7 +1230,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	}
 
-	s.rpcContext.ClusterID.Set(ctx, state.clusterID)
+	s.rpcContext.StorageClusterID.Set(ctx, state.clusterID)
 	s.rpcContext.NodeID.Set(ctx, state.nodeID)
 
 	// TODO(irfansharif): Now that we have our node ID, we should run another
@@ -1336,9 +1337,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTags(map[string]string{
-			"cluster":         s.ClusterID().String(),
+			"cluster":         s.StorageClusterID().String(),
 			"node":            s.NodeID().String(),
-			"server_id":       fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
+			"server_id":       fmt.Sprintf("%s-%s", s.StorageClusterID().Short(), s.NodeID()),
 			"engine_type":     s.cfg.StorageEngine.String(),
 			"encrypted_store": strconv.FormatBool(encryptedStore),
 		})
