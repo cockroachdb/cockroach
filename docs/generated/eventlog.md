@@ -2382,6 +2382,55 @@ An event of type `captured_index_usage_stats`
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+### `changefeed_failed`
+
+An event of type `changefeed_failed`
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `FailureType` | The reason / environment with which the changefeed failed (ex: connection_closed, on_startup) | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `JobID` | The ID of the job that triggered the event. | no |
+| `JobType` | The type of the job that triggered the event. | no |
+| `Description` | A description of the job that triggered the event. Some jobs populate the description with an approximate representation of the SQL statement run to create the job. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorIDs` | The object descriptors affected by the job. Set to zero for operations that don't affect descriptors. | yes |
+| `Status` | The status of the job that triggered the event. This allows the job to indicate which phase execution it is in when the event is triggered. | no |
+
+### `create_changefeed_query`
+
+An event of type `create_changefeed_query`
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `Resolved` | The behavior of emitted resolved spans. | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `JobID` | The ID of the job that triggered the event. | no |
+| `JobType` | The type of the job that triggered the event. | no |
+| `Description` | A description of the job that triggered the event. Some jobs populate the description with an approximate representation of the SQL statement run to create the job. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorIDs` | The object descriptors affected by the job. Set to zero for operations that don't affect descriptors. | yes |
+| `Status` | The status of the job that triggered the event. This allows the job to indicate which phase execution it is in when the event is triggered. | no |
+
 ### `sampled_query`
 
 An event of type `sampled_query` is the SQL query event logged to the telemetry channel. It
