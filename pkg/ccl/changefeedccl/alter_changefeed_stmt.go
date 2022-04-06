@@ -317,8 +317,18 @@ func generateNewTargets(
 
 	for _, target := range AllTargets(prevDetails) {
 		k := targetKey{TableID: target.TableID, FamilyName: tree.Name(target.FamilyName)}
+		desc := descResolver.DescByID[target.TableID].(catalog.TableDescriptor)
+		tbName, err := getQualifiedTableNameObj(ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, desc)
+		if err != nil {
+			return nil, nil, hlc.Timestamp{}, err
+		}
+		tablePattern, err := tbName.NormalizeTablePattern()
+		if err != nil {
+			return nil, nil, hlc.Timestamp{}, err
+
+		}
 		newTargets[k] = tree.ChangefeedTarget{
-			TableName:  tree.NewUnresolvedName(target.StatementTimeName),
+			TableName:  tablePattern,
 			FamilyName: tree.Name(target.FamilyName),
 		}
 		newTableDescs[target.TableID] = descResolver.DescByID[target.TableID]
