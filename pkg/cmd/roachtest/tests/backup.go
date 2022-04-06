@@ -30,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -165,8 +167,76 @@ func registerBackupNodeShutdown(r registry.Registry) {
 }
 
 func registerBackupMixedVersion(r registry.Registry) {
+	loadBackupDataStep := func(c cluster.Cluster) versionStep {
+		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+			rows := rows3GiB
+			if c.IsLocal() {
+				rows = 100
+			}
+			runImportBankDataSplit(ctx, rows, 0 /* ranges */, t, u.c)
+		}
+	}
+
+	haltJobAdoptionOnNodesStep := func(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
+		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+			for _, nodeID := range nodeIDs {
+				result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID), "echo", "-n", "{store-dir}")
+				if err != nil {
+					t.L().Printf("Failed to retrieve store directory from node %d: %v\n", nodeID, err.Error())
+				}
+				storeDirectory := result.Stdout
+				disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
+				c.Run(ctx, nodeIDs, fmt.Sprintf("touch %s", disableJobAdoptionSentinelFilePath))
+
+				// Wait for no jobs to be running on the node that we have halted
+				// adoption on.
+				testutils.SucceedsSoon(t, func() error {
+					gatewayDB := c.Conn(ctx, t.L(), nodeID)
+					defer gatewayDB.Close()
+
+					row := gatewayDB.QueryRow(`SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running'`)
+					var count int
+					require.NoError(t, row.Scan(&count))
+					if count != 0 {
+						return errors.Newf("node is still running %d jobs", count)
+					}
+					return nil
+				})
+			}
+		}
+	}
+
+	clearDisableJobAdoptionFileFromNodesStep := func(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
+		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+			for _, nodeID := range nodeIDs {
+				result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID), "echo", "-n", "{store-dir}")
+				if err != nil {
+					t.L().Printf("Failed to retrieve store directory from node %d: %v\n", nodeID, err.Error())
+				}
+				storeDirectory := result.Stdout
+				disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
+				c.Run(ctx, nodeIDs, fmt.Sprintf("rm -f %s", disableJobAdoptionSentinelFilePath))
+			}
+		}
+	}
+
+	successfulBackupStep := func(c cluster.Cluster, nodeToPlanBackup option.NodeListOption, backupStmt string) versionStep {
+		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+			gatewayDB := c.Conn(ctx, t.L(), nodeToPlanBackup[0])
+			defer gatewayDB.Close()
+			t.Status("Running: ", backupStmt)
+			_, err := gatewayDB.ExecContext(ctx, backupStmt)
+			require.NoError(t, err)
+		}
+	}
+
+	// backup/mixed-version-basic tests different states of backup in a mixed
+	// version cluster.
+	//
+	// This test can serve as a template for more targeted testing of features
+	// that require careful consideration of mixed version states.
 	r.Add(registry.TestSpec{
-		Name:            "backup/mixed-version",
+		Name:            "backup/mixed-version-basic",
 		Owner:           registry.OwnerBulkIO,
 		Cluster:         r.MakeClusterSpec(4),
 		EncryptAtRandom: true,
@@ -175,47 +245,87 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// `cockroach` will be used.
 			const mainVersion = ""
 			roachNodes := c.All()
+			upgradedNodes := c.Nodes(1, 2)
+			oldNodes := c.Nodes(3, 4)
 			predV, err := PredecessorVersion(*t.BuildVersion())
 			require.NoError(t, err)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-			loadBackupDataStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-				rows := rows3GiB
-				if c.IsLocal() {
-					rows = 100
-				}
-				runImportBankDataSplit(ctx, rows, 0 /* ranges */, t, u.c)
-			}
-			successfulBackupStep := func(nodeID int, opts ...string) versionStep {
-				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-					backupOpts := ""
-					if len(opts) > 0 {
-						backupOpts = fmt.Sprintf("WITH %s", strings.Join(opts, ", "))
-					}
-					backupQuery := fmt.Sprintf("BACKUP bank.bank TO 'nodelocal://%d/%s' %s",
-						nodeID, destinationName(c), backupOpts)
-
-					gatewayDB := c.Conn(ctx, t.L(), nodeID)
-					defer gatewayDB.Close()
-					t.Status("Running: ", backupQuery)
-					_, err := gatewayDB.ExecContext(ctx, backupQuery)
-					require.NoError(t, err)
-				}
-			}
 			u := newVersionUpgradeTest(c,
 				uploadAndStartFromCheckpointFixture(roachNodes, predV),
 				waitForUpgradeStep(roachNodes),
 				preventAutoUpgradeStep(1),
-				loadBackupDataStep,
-				// Upgrade some of the nodes.
-				binaryUpgradeStep(c.Nodes(1, 2), mainVersion),
-				// Backup from new node should succeed.
-				successfulBackupStep(1),
-				// Backup from new node with revision history should succeed.
-				successfulBackupStep(2, "revision_history"),
-				// Backup from old node should succeed.
-				successfulBackupStep(3),
-				// Backup from old node with revision history should succeed.
-				successfulBackupStep(4, "revision_history"),
+				loadBackupDataStep(c),
+				// Upgrade some nodes.
+				binaryUpgradeStep(upgradedNodes, mainVersion),
+
+				// Let us first test planning and executing a backup on different node
+				// versions.
+				//
+				// NB: All backups in this test are writing to node 1's ExternalIODir
+				// for simplicity.
+
+				// Case 1: plan backup    -> old node
+				//         execute backup -> upgraded node
+				//
+				// Halt job execution on older nodes.
+				haltJobAdoptionOnNodesStep(c, oldNodes),
+
+				// Run a backup from an old node so that it is planned on the old node
+				// but the job is adopted on a new node.
+				successfulBackupStep(c, oldNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/plan-old-resume-new'`),
+
+				clearDisableJobAdoptionFileFromNodesStep(c, oldNodes),
+
+				// Case 2: plan backup    -> upgraded node
+				//         execute backup -> old node
+				//
+				// Halt job execution on upgraded nodes.
+				haltJobAdoptionOnNodesStep(c, upgradedNodes),
+
+				// Run a backup from a new node so that it is planned on the new node
+				// but the job is adopted on an old node.
+				successfulBackupStep(c, upgradedNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/plan-new-resume-old'`),
+
+				clearDisableJobAdoptionFileFromNodesStep(c, upgradedNodes),
+
+				// Now let us test building an incremental chain on top of a full backup
+				// created by a node of a different version.
+				//
+				// Case 1: full backup -> new nodes
+				//         inc backup  -> old nodes
+				haltJobAdoptionOnNodesStep(c, oldNodes),
+				// Plan and run a full backup on the new nodes.
+				successfulBackupStep(c, upgradedNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/new-node-full-backup'`),
+				// Set up the cluster so that only the old nodes plan and run the
+				// incremental backup.
+				clearDisableJobAdoptionFileFromNodesStep(c, oldNodes),
+				haltJobAdoptionOnNodesStep(c, upgradedNodes),
+
+				// Run an incremental (on old nodes) on top of a full backup taken by
+				// nodes on the upgraded version.
+				successfulBackupStep(c, oldNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO LATEST IN 'nodelocal://1/new-node-full-backup'`),
+
+				// Case 2: full backup -> old nodes
+				//         inc backup  -> new nodes
+
+				// Plan and run a full backup on the old nodes.
+				successfulBackupStep(c, oldNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/old-node-full-backup'`),
+
+				clearDisableJobAdoptionFileFromNodesStep(c, upgradedNodes),
+
+				// Allow all the nodes to now finalize their cluster version.
+				binaryUpgradeStep(oldNodes, mainVersion),
+				waitForUpgradeStep(roachNodes),
+
+				// Run an incremental on top of a full backup taken by nodes on the
+				// old version.
+				successfulBackupStep(c, roachNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO LATEST IN 'nodelocal://1/old-node-full-backup'`),
 			)
 			u.run(ctx, t)
 		},
