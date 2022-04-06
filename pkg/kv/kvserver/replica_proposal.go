@@ -424,7 +424,7 @@ func (r *Replica) leasePostApplyLocked(
 var addSSTPreApplyWarn = struct {
 	threshold time.Duration
 	log.EveryN
-}{30 * time.Second, log.Every(5 * time.Second)}
+}{1 * time.Second, log.Every(500 * time.Millisecond)}
 
 func addSSTablePreApply(
 	ctx context.Context,
@@ -433,6 +433,7 @@ func addSSTablePreApply(
 	sideloaded SideloadStorage,
 	term, index uint64,
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
+	// TODO(tbg) https://cockroachlabs.slack.com/archives/G01G8LK77DK/p1649272600181739?thread_ts=1649265898.341989&cid=G01G8LK77DK
 	limiter *rate.Limiter,
 ) bool {
 	checksum := util.CRC32(sst.Data)
