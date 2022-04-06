@@ -37,6 +37,8 @@ import { Search as IndexIcon } from "@cockroachlabs/icons";
 import { Link } from "react-router-dom";
 import classnames from "classnames/bind";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
+import { CircleFilled } from "../icon";
+import { performanceTuningRecipes } from "src/util/docs";
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
 
@@ -115,6 +117,12 @@ interface IndexStat {
   totalReads: number;
   lastUsed: Moment;
   lastUsedType: string;
+  indexRecommendations: IndexRecommendation[];
+}
+
+interface IndexRecommendation {
+  type: string;
+  reason: string;
 }
 
 interface Grant {
@@ -246,6 +254,53 @@ export class DatabaseTablePage extends React.Component<
     );
   }
 
+  private renderIndexRecommendations = (
+    indexStat: IndexStat,
+  ): React.ReactNode => {
+    const classname =
+      indexStat.indexRecommendations.length > 0
+        ? "index-recommendations-icon__exist"
+        : "index-recommendations-icon__none";
+
+    if (indexStat.indexRecommendations.length === 0) {
+      return (
+        <div>
+          <CircleFilled className={cx(classname)} />
+          <span>None</span>
+        </div>
+      );
+    }
+    return indexStat.indexRecommendations.map(recommendation => {
+      let text: string;
+      switch (recommendation.type) {
+        case "DROP_UNUSED":
+          text = "Drop unused index";
+      }
+      // TODO(thomas): using recommendation.type as the key seems not good.
+      //  - if it is possible for an index to have multiple recommendations of the same type
+      //  this could cause issues.
+      return (
+        <Tooltip
+          key={recommendation.type}
+          placement="bottom"
+          title={
+            <div className={cx("index-recommendations-text__tooltip-anchor")}>
+              {recommendation.reason}{" "}
+              <Anchor href={performanceTuningRecipes} target="_blank">
+                Learn more
+              </Anchor>
+            </div>
+          }
+        >
+          <CircleFilled className={cx(classname)} />
+          <span className={cx("index-recommendations-text__border")}>
+            {text}
+          </span>
+        </Tooltip>
+      );
+    });
+  };
+
   private indexStatsColumns: ColumnDescriptor<IndexStat>[] = [
     {
       name: "indexes",
@@ -278,7 +333,19 @@ export class DatabaseTablePage extends React.Component<
       cell: indexStat => this.getLastUsedString(indexStat),
       sort: indexStat => indexStat.lastUsed,
     },
-    // TODO(lindseyjin): add index recommendations column
+    {
+      name: "index recommendations",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title="Index recommendations will appear if the system detects improper index usage, such as the occurrence of unused indexes. Following index recommendations may help improve query performance."
+        >
+          Index recommendations
+        </Tooltip>
+      ),
+      cell: this.renderIndexRecommendations,
+      sort: indexStat => indexStat.indexRecommendations.length,
+    },
   ];
 
   private grantsColumns: ColumnDescriptor<Grant>[] = [
