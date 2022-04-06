@@ -2514,7 +2514,7 @@ func typeCheckSameTypedTupleExprs(
 	}
 
 	// All expressions within tuples at the same indexes must be the same type.
-	resTypes := types.MakeTuple(make([]*types.T, firstLen))
+	resTypes := types.MakeLabeledTuple(make([]*types.T, firstLen), first.Labels)
 	sameTypeExprs := make([]Expr, 0, len(exprs))
 	// We will be skipping nulls, so we need to keep track at which indices in
 	// exprs are the non-null tuples.
