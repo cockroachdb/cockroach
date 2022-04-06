@@ -668,7 +668,9 @@ func (rq *replicateQueue) processOneChange(
 		return rq.removeDead(ctx, repl, deadNonVoterReplicas, nonVoterTarget, dryRun)
 
 	case AllocatorRemoveLearner:
-		return rq.removeLearner(ctx, repl, dryRun)
+		// TODO dry run
+		_, _ = repl.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, repl.Desc())
+		return true, nil
 	case AllocatorConsiderRebalance:
 		return rq.considerRebalance(
 			ctx,
