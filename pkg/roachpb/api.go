@@ -556,6 +556,7 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 		}
 	}
 	h.Now.Forward(o.Now)
+	h.RangeInfos = append(h.RangeInfos, o.RangeInfos...)
 	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
 	return nil
 }
