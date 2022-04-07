@@ -85,13 +85,14 @@ inner-join (lookup abcd)
  │    ├── lookup expression
  │    │    └── filters
  │    │         ├── a:6 = m:1 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 > 2 [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
+ │    │         └── b:7 >= 3 [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
  │    ├── stats: [rows=33, distinct(1)=10, null(1)=0, avgsize(1)=2, distinct(6)=10, null(6)=0, avgsize(6)=4, distinct(7)=33, null(7)=0, avgsize(7)=4]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── stats: [rows=10, distinct(1)=10, null(1)=0, avgsize(1)=2]
- │    └── filters (true)
+ │    └── filters
+ │         └── b:7 > 2 [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
  └── filters (true)
 
 # Filter that can only be applied after the primary index join.
