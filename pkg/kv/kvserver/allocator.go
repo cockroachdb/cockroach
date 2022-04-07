@@ -1493,7 +1493,7 @@ func (a *Allocator) ShouldTransferLease(
 	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(conf.Constraints)
 	sl = sl.filter(conf.VoterConstraints)
-	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseRepl, sl)
+	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=s%d):\n%s", leaseRepl.StoreID(), sl)
 
 	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, source, existing, stats, nil, sl.candidateLeases.mean)
 	var result bool
