@@ -747,51 +747,20 @@ vectorized: true
 │           │ columns: (column3)
 │           │ estimated row count: 1 (missing stats)
 │           │
-│           └── • project
+│           └── • lookup join (semi)
 │               │ columns: (column1, column3)
 │               │ estimated row count: 1 (missing stats)
+│               │ table: uniq_enum@uniq_enum_pkey
+│               │ lookup condition: (column3 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+│               │ pred: column1 != r
 │               │
-│               └── • distinct
-│                   │ columns: (column1, column3, rownum)
-│                   │ estimated row count: 2 (missing stats)
-│                   │ distinct on: rownum
+│               └── • project
+│                   │ columns: (column1, column3)
+│                   │ estimated row count: 2
 │                   │
-│                   └── • project
-│                       │ columns: (column1, column3, rownum)
-│                       │
-│                       └── • project
-│                           │ columns: (r, i, column1, column3, rownum)
-│                           │ estimated row count: 7 (missing stats)
-│                           │
-│                           └── • lookup join (inner)
-│                               │ columns: ("lookup_join_const_col_@12", column1, column3, rownum, r, i)
-│                               │ table: uniq_enum@uniq_enum_pkey
-│                               │ equality: (lookup_join_const_col_@12, column3) = (r,i)
-│                               │ equality cols are key
-│                               │ pred: column1 != r
-│                               │
-│                               └── • cross join (inner)
-│                                   │ columns: ("lookup_join_const_col_@12", column1, column3, rownum)
-│                                   │ estimated row count: 6
-│                                   │
-│                                   ├── • values
-│                                   │     columns: ("lookup_join_const_col_@12")
-│                                   │     size: 1 column, 3 rows
-│                                   │     row 0, expr 0: 'us-east'
-│                                   │     row 1, expr 0: 'us-west'
-│                                   │     row 2, expr 0: 'eu-west'
-│                                   │
-│                                   └── • ordinality
-│                                       │ columns: (column1, column3, rownum)
-│                                       │ estimated row count: 2
-│                                       │
-│                                       └── • project
-│                                           │ columns: (column1, column3)
-│                                           │ estimated row count: 2
-│                                           │
-│                                           └── • scan buffer
-│                                                 columns: (column1, column2, column3, column4, check1)
-│                                                 label: buffer 1
+│                   └── • scan buffer
+│                         columns: (column1, column2, column3, column4, check1)
+│                         label: buffer 1
 │
 └── • constraint-check
     │
@@ -802,51 +771,20 @@ vectorized: true
             │ columns: (column2, column4)
             │ estimated row count: 1 (missing stats)
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (column1, column2, column3, column4)
                 │ estimated row count: 1 (missing stats)
+                │ table: uniq_enum@uniq_enum_r_s_j_key
+                │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ pred: (column1 != r) OR (column3 != i)
                 │
-                └── • distinct
-                    │ columns: (column1, column2, column3, column4, rownum)
-                    │ estimated row count: 0 (missing stats)
-                    │ distinct on: rownum
+                └── • project
+                    │ columns: (column1, column2, column3, column4)
+                    │ estimated row count: 2
                     │
-                    └── • project
-                        │ columns: (column1, column2, column3, column4, rownum)
-                        │
-                        └── • project
-                            │ columns: (r, s, i, j, column1, column2, column3, column4, rownum)
-                            │ estimated row count: 0 (missing stats)
-                            │
-                            └── • lookup join (inner)
-                                │ columns: ("lookup_join_const_col_@22", column1, column2, column3, column4, rownum, r, s, i, j)
-                                │ table: uniq_enum@uniq_enum_r_s_j_key
-                                │ equality: (lookup_join_const_col_@22, column2, column4) = (r,s,j)
-                                │ equality cols are key
-                                │ pred: (column1 != r) OR (column3 != i)
-                                │
-                                └── • cross join (inner)
-                                    │ columns: ("lookup_join_const_col_@22", column1, column2, column3, column4, rownum)
-                                    │ estimated row count: 6
-                                    │
-                                    ├── • values
-                                    │     columns: ("lookup_join_const_col_@22")
-                                    │     size: 1 column, 3 rows
-                                    │     row 0, expr 0: 'us-east'
-                                    │     row 1, expr 0: 'us-west'
-                                    │     row 2, expr 0: 'eu-west'
-                                    │
-                                    └── • ordinality
-                                        │ columns: (column1, column2, column3, column4, rownum)
-                                        │ estimated row count: 2
-                                        │
-                                        └── • project
-                                            │ columns: (column1, column2, column3, column4)
-                                            │ estimated row count: 2
-                                            │
-                                            └── • scan buffer
-                                                  columns: (column1, column2, column3, column4, check1)
-                                                  label: buffer 1
+                    └── • scan buffer
+                          columns: (column1, column2, column3, column4, check1)
+                          label: buffer 1
 
 # Test that we use the index when available for the insert checks. This uses
 # the default value for columns r and j.
@@ -902,51 +840,20 @@ vectorized: true
             │ columns: (column2)
             │ estimated row count: 1 (missing stats)
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (r_default, column2)
                 │ estimated row count: 1 (missing stats)
+                │ table: uniq_enum@uniq_enum_pkey
+                │ lookup condition: (column2 = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ pred: r_default != r
                 │
-                └── • distinct
-                    │ columns: (r_default, column2, rownum)
-                    │ estimated row count: 2 (missing stats)
-                    │ distinct on: rownum
+                └── • project
+                    │ columns: (r_default, column2)
+                    │ estimated row count: 2
                     │
-                    └── • project
-                        │ columns: (r_default, column2, rownum)
-                        │
-                        └── • project
-                            │ columns: (r, i, r_default, column2, rownum)
-                            │ estimated row count: 7 (missing stats)
-                            │
-                            └── • lookup join (inner)
-                                │ columns: ("lookup_join_const_col_@12", r_default, column2, rownum, r, i)
-                                │ table: uniq_enum@uniq_enum_pkey
-                                │ equality: (lookup_join_const_col_@12, column2) = (r,i)
-                                │ equality cols are key
-                                │ pred: r_default != r
-                                │
-                                └── • cross join (inner)
-                                    │ columns: ("lookup_join_const_col_@12", r_default, column2, rownum)
-                                    │ estimated row count: 6
-                                    │
-                                    ├── • values
-                                    │     columns: ("lookup_join_const_col_@12")
-                                    │     size: 1 column, 3 rows
-                                    │     row 0, expr 0: 'us-east'
-                                    │     row 1, expr 0: 'us-west'
-                                    │     row 2, expr 0: 'eu-west'
-                                    │
-                                    └── • ordinality
-                                        │ columns: (r_default, column2, rownum)
-                                        │ estimated row count: 2
-                                        │
-                                        └── • project
-                                            │ columns: (r_default, column2)
-                                            │ estimated row count: 2
-                                            │
-                                            └── • scan buffer
-                                                  columns: (r_default, column1, column2, j_default, check1)
-                                                  label: buffer 1
+                    └── • scan buffer
+                          columns: (r_default, column1, column2, j_default, check1)
+                          label: buffer 1
 
 # Test that we use the index when available for de-duplicating INSERT ON
 # CONFLICT DO NOTHING rows before inserting.
@@ -2219,51 +2126,20 @@ vectorized: true
 │           │ columns: (i_new)
 │           │ estimated row count: 3 (missing stats)
 │           │
-│           └── • project
+│           └── • lookup join (semi)
 │               │ columns: (r_new, i_new)
 │               │ estimated row count: 3 (missing stats)
+│               │ table: uniq_enum@uniq_enum_pkey
+│               │ lookup condition: (i_new = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+│               │ pred: r_new != r
 │               │
-│               └── • distinct
-│                   │ columns: (r_new, i_new, rownum)
+│               └── • project
+│                   │ columns: (r_new, i_new)
 │                   │ estimated row count: 9 (missing stats)
-│                   │ distinct on: rownum
 │                   │
-│                   └── • project
-│                       │ columns: (r_new, i_new, rownum)
-│                       │
-│                       └── • project
-│                           │ columns: (r, i, r_new, i_new, rownum)
-│                           │ estimated row count: 31 (missing stats)
-│                           │
-│                           └── • lookup join (inner)
-│                               │ columns: (r_new, i_new, rownum, "lookup_join_const_col_@17", r, i)
-│                               │ table: uniq_enum@uniq_enum_pkey
-│                               │ equality: (lookup_join_const_col_@17, i_new) = (r,i)
-│                               │ equality cols are key
-│                               │ pred: r_new != r
-│                               │
-│                               └── • cross join (inner)
-│                                   │ columns: (r_new, i_new, rownum, "lookup_join_const_col_@17")
-│                                   │ estimated row count: 28 (missing stats)
-│                                   │
-│                                   ├── • ordinality
-│                                   │   │ columns: (r_new, i_new, rownum)
-│                                   │   │ estimated row count: 9 (missing stats)
-│                                   │   │
-│                                   │   └── • project
-│                                   │       │ columns: (r_new, i_new)
-│                                   │       │ estimated row count: 9 (missing stats)
-│                                   │       │
-│                                   │       └── • scan buffer
-│                                   │             columns: (r, s, i, j, r_new, s_new, i_new, check1)
-│                                   │             label: buffer 1
-│                                   │
-│                                   └── • values
-│                                         columns: ("lookup_join_const_col_@17")
-│                                         size: 1 column, 3 rows
-│                                         row 0, expr 0: 'us-east'
-│                                         row 1, expr 0: 'us-west'
-│                                         row 2, expr 0: 'eu-west'
+│                   └── • scan buffer
+│                         columns: (r, s, i, j, r_new, s_new, i_new, check1)
+│                         label: buffer 1
 │
 └── • constraint-check
     │
@@ -2274,51 +2150,20 @@ vectorized: true
             │ columns: (s_new, j)
             │ estimated row count: 3 (missing stats)
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (r_new, s_new, i_new, j)
                 │ estimated row count: 3 (missing stats)
+                │ table: uniq_enum@uniq_enum_r_s_j_key
+                │ lookup condition: ((s_new = s) AND (j = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ pred: (r_new != r) OR (i_new != i)
                 │
-                └── • distinct
-                    │ columns: (r_new, s_new, i_new, j, rownum)
-                    │ estimated row count: 0 (missing stats)
-                    │ distinct on: rownum
+                └── • project
+                    │ columns: (r_new, s_new, i_new, j)
+                    │ estimated row count: 9 (missing stats)
                     │
-                    └── • project
-                        │ columns: (r_new, s_new, i_new, j, rownum)
-                        │
-                        └── • project
-                            │ columns: (r, s, i, j, r_new, s_new, i_new, j, rownum)
-                            │ estimated row count: 0 (missing stats)
-                            │
-                            └── • lookup join (inner)
-                                │ columns: (r_new, s_new, i_new, j, rownum, "lookup_join_const_col_@27", r, s, i, j)
-                                │ table: uniq_enum@uniq_enum_r_s_j_key
-                                │ equality: (lookup_join_const_col_@27, s_new, j) = (r,s,j)
-                                │ equality cols are key
-                                │ pred: (r_new != r) OR (i_new != i)
-                                │
-                                └── • cross join (inner)
-                                    │ columns: (r_new, s_new, i_new, j, rownum, "lookup_join_const_col_@27")
-                                    │ estimated row count: 28 (missing stats)
-                                    │
-                                    ├── • ordinality
-                                    │   │ columns: (r_new, s_new, i_new, j, rownum)
-                                    │   │ estimated row count: 9 (missing stats)
-                                    │   │
-                                    │   └── • project
-                                    │       │ columns: (r_new, s_new, i_new, j)
-                                    │       │ estimated row count: 9 (missing stats)
-                                    │       │
-                                    │       └── • scan buffer
-                                    │             columns: (r, s, i, j, r_new, s_new, i_new, check1)
-                                    │             label: buffer 1
-                                    │
-                                    └── • values
-                                          columns: ("lookup_join_const_col_@27")
-                                          size: 1 column, 3 rows
-                                          row 0, expr 0: 'us-east'
-                                          row 1, expr 0: 'us-west'
-                                          row 2, expr 0: 'eu-west'
+                    └── • scan buffer
+                          columns: (r, s, i, j, r_new, s_new, i_new, check1)
+                          label: buffer 1
 
 # None of the updated values have nulls.
 query T
@@ -3455,51 +3300,20 @@ vectorized: true
 │           │ columns: (upsert_i)
 │           │ estimated row count: 1 (missing stats)
 │           │
-│           └── • project
+│           └── • lookup join (semi)
 │               │ columns: (upsert_r, upsert_i)
 │               │ estimated row count: 1 (missing stats)
+│               │ table: uniq_enum@uniq_enum_pkey
+│               │ lookup condition: (upsert_i = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+│               │ pred: upsert_r != r
 │               │
-│               └── • distinct
-│                   │ columns: (upsert_r, upsert_i, rownum)
+│               └── • project
+│                   │ columns: (upsert_r, upsert_i)
 │                   │ estimated row count: 2 (missing stats)
-│                   │ distinct on: rownum
 │                   │
-│                   └── • project
-│                       │ columns: (upsert_r, upsert_i, rownum)
-│                       │
-│                       └── • project
-│                           │ columns: (r, i, upsert_r, upsert_i, rownum)
-│                           │ estimated row count: 7 (missing stats)
-│                           │
-│                           └── • lookup join (inner)
-│                               │ columns: ("lookup_join_const_col_@20", upsert_r, upsert_i, rownum, r, i)
-│                               │ table: uniq_enum@uniq_enum_pkey
-│                               │ equality: (lookup_join_const_col_@20, upsert_i) = (r,i)
-│                               │ equality cols are key
-│                               │ pred: upsert_r != r
-│                               │
-│                               └── • cross join (inner)
-│                                   │ columns: ("lookup_join_const_col_@20", upsert_r, upsert_i, rownum)
-│                                   │ estimated row count: 6 (missing stats)
-│                                   │
-│                                   ├── • values
-│                                   │     columns: ("lookup_join_const_col_@20")
-│                                   │     size: 1 column, 3 rows
-│                                   │     row 0, expr 0: 'us-east'
-│                                   │     row 1, expr 0: 'us-west'
-│                                   │     row 2, expr 0: 'eu-west'
-│                                   │
-│                                   └── • ordinality
-│                                       │ columns: (upsert_r, upsert_i, rownum)
-│                                       │ estimated row count: 2 (missing stats)
-│                                       │
-│                                       └── • project
-│                                           │ columns: (upsert_r, upsert_i)
-│                                           │ estimated row count: 2 (missing stats)
-│                                           │
-│                                           └── • scan buffer
-│                                                 columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
-│                                                 label: buffer 1
+│                   └── • scan buffer
+│                         columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
+│                         label: buffer 1
 │
 └── • constraint-check
     │
@@ -3510,51 +3324,20 @@ vectorized: true
             │ columns: (column2, column4)
             │ estimated row count: 1 (missing stats)
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (upsert_r, column2, upsert_i, column4)
                 │ estimated row count: 1 (missing stats)
+                │ table: uniq_enum@uniq_enum_r_s_j_key
+                │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ pred: (upsert_r != r) OR (upsert_i != i)
                 │
-                └── • distinct
-                    │ columns: (upsert_r, column2, upsert_i, column4, rownum)
-                    │ estimated row count: 0 (missing stats)
-                    │ distinct on: rownum
+                └── • project
+                    │ columns: (upsert_r, column2, upsert_i, column4)
+                    │ estimated row count: 2 (missing stats)
                     │
-                    └── • project
-                        │ columns: (upsert_r, column2, upsert_i, column4, rownum)
-                        │
-                        └── • project
-                            │ columns: (r, s, i, j, upsert_r, column2, upsert_i, column4, rownum)
-                            │ estimated row count: 0 (missing stats)
-                            │
-                            └── • lookup join (inner)
-                                │ columns: ("lookup_join_const_col_@30", upsert_r, column2, upsert_i, column4, rownum, r, s, i, j)
-                                │ table: uniq_enum@uniq_enum_r_s_j_key
-                                │ equality: (lookup_join_const_col_@30, column2, column4) = (r,s,j)
-                                │ equality cols are key
-                                │ pred: (upsert_r != r) OR (upsert_i != i)
-                                │
-                                └── • cross join (inner)
-                                    │ columns: ("lookup_join_const_col_@30", upsert_r, column2, upsert_i, column4, rownum)
-                                    │ estimated row count: 6 (missing stats)
-                                    │
-                                    ├── • values
-                                    │     columns: ("lookup_join_const_col_@30")
-                                    │     size: 1 column, 3 rows
-                                    │     row 0, expr 0: 'us-east'
-                                    │     row 1, expr 0: 'us-west'
-                                    │     row 2, expr 0: 'eu-west'
-                                    │
-                                    └── • ordinality
-                                        │ columns: (upsert_r, column2, upsert_i, column4, rownum)
-                                        │ estimated row count: 2 (missing stats)
-                                        │
-                                        └── • project
-                                            │ columns: (upsert_r, column2, upsert_i, column4)
-                                            │ estimated row count: 2 (missing stats)
-                                            │
-                                            └── • scan buffer
-                                                  columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
-                                                  label: buffer 1
+                    └── • scan buffer
+                          columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
+                          label: buffer 1
 
 # Test that we use the index when available for the ON CONFLICT checks.
 query T
@@ -3638,51 +3421,20 @@ vectorized: true
             │ columns: (upsert_i)
             │ estimated row count: 1 (missing stats)
             │
-            └── • project
+            └── • lookup join (semi)
                 │ columns: (upsert_r, upsert_i)
                 │ estimated row count: 1 (missing stats)
+                │ table: uniq_enum@uniq_enum_pkey
+                │ lookup condition: (upsert_i = i) AND (r IN ('us-east', 'us-west', 'eu-west'))
+                │ pred: upsert_r != r
                 │
-                └── • distinct
-                    │ columns: (upsert_r, upsert_i, rownum)
+                └── • project
+                    │ columns: (upsert_r, upsert_i)
                     │ estimated row count: 2 (missing stats)
-                    │ distinct on: rownum
                     │
-                    └── • project
-                        │ columns: (upsert_r, upsert_i, rownum)
-                        │
-                        └── • project
-                            │ columns: (r, i, upsert_r, upsert_i, rownum)
-                            │ estimated row count: 7 (missing stats)
-                            │
-                            └── • lookup join (inner)
-                                │ columns: ("lookup_join_const_col_@23", upsert_r, upsert_i, rownum, r, i)
-                                │ table: uniq_enum@uniq_enum_pkey
-                                │ equality: (lookup_join_const_col_@23, upsert_i) = (r,i)
-                                │ equality cols are key
-                                │ pred: upsert_r != r
-                                │
-                                └── • cross join (inner)
-                                    │ columns: ("lookup_join_const_col_@23", upsert_r, upsert_i, rownum)
-                                    │ estimated row count: 6 (missing stats)
-                                    │
-                                    ├── • values
-                                    │     columns: ("lookup_join_const_col_@23")
-                                    │     size: 1 column, 3 rows
-                                    │     row 0, expr 0: 'us-east'
-                                    │     row 1, expr 0: 'us-west'
-                                    │     row 2, expr 0: 'eu-west'
-                                    │
-                                    └── • ordinality
-                                        │ columns: (upsert_r, upsert_i, rownum)
-                                        │ estimated row count: 2 (missing stats)
-                                        │
-                                        └── • project
-                                            │ columns: (upsert_r, upsert_i)
-                                            │ estimated row count: 2 (missing stats)
-                                            │
-                                            └── • scan buffer
-                                                  columns: (column1, column2, column3, column4, r, s, i, j, upsert_i, r, check1, upsert_r)
-                                                  label: buffer 1
+                    └── • scan buffer
+                          columns: (column1, column2, column3, column4, r, s, i, j, upsert_i, r, check1, upsert_r)
+                          label: buffer 1
 
 # None of the upserted values have nulls.
 query T
