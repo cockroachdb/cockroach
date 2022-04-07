@@ -96,13 +96,14 @@ cmake(
         },
     }),
     data = select({
+        # TODO: This select needs 4 cases, not just these 2.
         "//build/toolchains:is_cross_macos_x86_64": [
             "@cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-install_name_tool",
             "@cross_x86_64_macos_toolchain//:bin/x86_64-apple-darwin21.2-otool",
         ],
         "//build/toolchains:is_cross_macos_arm64": [
-            "@cross_arm64_macos_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool",
-            "@cross_arm64_macos_toolchain//:bin/arm64-apple-darwin21.2-otool",
+            "@cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-install_name_tool",
+            "@cross_x86_64_macos_arm_toolchain//:bin/arm64-apple-darwin21.2-otool",
         ],
         "//conditions:default": [],
     }),
