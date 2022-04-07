@@ -714,7 +714,7 @@ project
       │    ├── ordering: -(3|15) opt(1,2,4,13,14) [actual: -3]
       │    ├── limit hint: 20.00
       │    ├── project
-      │    │    ├── columns: "lookup_join_const_col_@14":25!null "lookup_join_const_col_@13":24!null transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null
+      │    │    ├── columns: "lookup_join_const_col_@13":24!null "lookup_join_const_col_@14":25!null transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null sellprice:6!null buyprice:7!null
       │    │    ├── stats: [rows=478.6466]
       │    │    ├── key: (3,5)
       │    │    ├── fd: ()-->(1,2,4,24,25), (3,5)-->(6,7)
@@ -736,8 +736,8 @@ project
       │    │    │         ├── ordering: -3 opt(1,2,4) [actual: -3]
       │    │    │         └── limit hint: 100.00
       │    │    └── projections
-      │    │         ├── false [as="lookup_join_const_col_@14":25]
-      │    │         └── 1 [as="lookup_join_const_col_@13":24]
+      │    │         ├── 1 [as="lookup_join_const_col_@13":24]
+      │    │         └── false [as="lookup_join_const_col_@14":25]
       │    └── filters (true)
       └── 20
 
@@ -1102,39 +1102,19 @@ top-k
       │    ├── columns: quantity:17!null accountname:10!null
       │    ├── inner-join (lookup inventorydetails)
       │    │    ├── columns: id:6!null quantity:7!null dealerid:8!null cardid:9!null accountname:10!null inventorydetails.quantity:11!null
-      │    │    ├── key columns: [19 6 20] = [8 9 10]
-      │    │    ├── lookup columns are key
+      │    │    ├── lookup expression
+      │    │    │    └── filters
+      │    │    │         ├── cardid:9 = id:6 [outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
+      │    │    │         ├── dealerid:8 IN (1, 2, 3, 4, 5) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]; tight)]
+      │    │    │         └── accountname:10 IN ('account-1', 'account-2', 'account-3') [outer=(10), constraints=(/10: [/'account-1' - /'account-1'] [/'account-2' - /'account-2'] [/'account-3' - /'account-3']; tight)]
       │    │    ├── fd: (8-10)-->(11), (6)==(9), (9)==(6)
-      │    │    ├── inner-join (cross)
-      │    │    │    ├── columns: id:6!null quantity:7!null "lookup_join_const_col_@8":19!null "lookup_join_const_col_@10":20!null
-      │    │    │    ├── cardinality: [30 - 30]
-      │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
-      │    │    │    ├── inner-join (cross)
-      │    │    │    │    ├── columns: id:6!null quantity:7!null "lookup_join_const_col_@8":19!null
-      │    │    │    │    ├── cardinality: [10 - 10]
-      │    │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: "lookup_join_const_col_@8":19!null
-      │    │    │    │    │    ├── cardinality: [5 - 5]
-      │    │    │    │    │    ├── (1,)
-      │    │    │    │    │    ├── (2,)
-      │    │    │    │    │    ├── (3,)
-      │    │    │    │    │    ├── (4,)
-      │    │    │    │    │    └── (5,)
-      │    │    │    │    ├── values
-      │    │    │    │    │    ├── columns: id:6!null quantity:7!null
-      │    │    │    │    │    ├── cardinality: [2 - 2]
-      │    │    │    │    │    ├── (42948, 3)
-      │    │    │    │    │    └── (24924, 4)
-      │    │    │    │    └── filters (true)
-      │    │    │    ├── values
-      │    │    │    │    ├── columns: "lookup_join_const_col_@10":20!null
-      │    │    │    │    ├── cardinality: [3 - 3]
-      │    │    │    │    ├── ('account-1',)
-      │    │    │    │    ├── ('account-2',)
-      │    │    │    │    └── ('account-3',)
-      │    │    │    └── filters (true)
-      │    │    └── filters (true)
+      │    │    ├── values
+      │    │    │    ├── columns: id:6!null quantity:7!null
+      │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    ├── (42948, 3)
+      │    │    │    └── (24924, 4)
+      │    │    └── filters
+      │    │         └── ((((dealerid:8 = 1) OR (dealerid:8 = 2)) OR (dealerid:8 = 3)) OR (dealerid:8 = 4)) OR (dealerid:8 = 5) [outer=(8), constraints=(/8: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]; tight)]
       │    └── projections
       │         └── CASE WHEN quantity:7 < inventorydetails.quantity:11 THEN quantity:7 ELSE inventorydetails.quantity:11 END [as=quantity:17, outer=(7,11)]
       └── aggregations
