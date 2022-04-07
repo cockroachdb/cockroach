@@ -55,45 +55,6 @@ func (td *tableDeleter) row(
 	return td.rd.DeleteRow(ctx, td.b, values, pm, traceKV)
 }
 
-// deleteAllRows runs the kv operations necessary to delete all sql rows in the
-// table passed at construction, using the DelRange KV request to delete data
-// quickly.
-//
-// resume is the resume-span which should be used for the table deletion when
-// the table deletion is chunked. The first call to this method should use a
-// zero resume-span. After a chunk is deleted a new resume-span is returned.
-//
-// limit is a limit on the number of keys deleted in the operation.
-//
-// Note that this method leaves a RocksDB deletion tombstone on every key in the
-// table, resulting in substantial write amplification. When possible, the
-// schema changer avoids using a tableDeleter entirely in favor of the
-// ClearRange KV request, which uses RocksDB range deletion tombstones to avoid
-// write amplification.
-func (td *tableDeleter) deleteAllRows(
-	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
-) (roachpb.Span, error) {
-	if resume.Key == nil {
-		tablePrefix := td.rd.Helper.Codec.TablePrefix(uint32(td.tableDesc().GetID()))
-		// Delete rows and indexes starting with the table's prefix.
-		resume = roachpb.Span{
-			Key:    tablePrefix,
-			EndKey: tablePrefix.PrefixEnd(),
-		}
-	}
-
-	log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
-	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
-	td.b.Header.MaxSpanRequestKeys = limit
-	if err := td.finalize(ctx); err != nil {
-		return resume, err
-	}
-	if l := len(td.b.Results); l != 1 {
-		panic(errors.AssertionFailedf("%d results returned", l))
-	}
-	return td.b.Results[0].ResumeSpanAsValue(), nil
-}
-
 // deleteIndex runs the kv operations necessary to delete all kv entries in the
 // given index.
 //
