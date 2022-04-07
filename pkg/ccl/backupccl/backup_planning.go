@@ -604,6 +604,10 @@ func backupPlanHook(
 		if !backupStmt.Nested && len(incrementalStorage) > 0 {
 			return errors.New("incremental_location option not supported with `BACKUP TO` syntax")
 		}
+		if len(incrementalStorage) > 0 && (len(incrementalStorage) != len(to)) {
+			return errors.New("the incremental_location option must contain the same number of locality" +
+				" aware URIs as the full backup destination")
+		}
 
 		endTime := p.ExecCfg().Clock.Now()
 		if backupStmt.AsOf.Expr != nil {

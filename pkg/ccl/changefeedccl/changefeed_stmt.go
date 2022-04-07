@@ -581,10 +581,11 @@ func getTargetsAndTables(
 			}
 		}
 	}
+	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTarget)
 	for i, ct := range rawTargets {
 		desc, ok := targetDescs[ct.TableName]
 		if !ok {
-			return nil, nil, errors.Newf("could not match %v to a fetched descriptor. fetched were %v", ct.TableName, targetDescs)
+			return nil, nil, errors.Newf("could not match %v to a fetched descriptor. Fetched were %v", ct.TableName, targetDescs)
 		}
 		td, ok := desc.(catalog.TableDescriptor)
 		if !ok {
@@ -604,6 +605,13 @@ func getTargetsAndTables(
 			FamilyName:        string(ct.FamilyName),
 			StatementTimeName: tables[td.GetID()].StatementTimeName,
 		}
+		if dup, isDup := seen[targets[i]]; isDup {
+			return nil, nil, errors.Errorf(
+				"CHANGEFEED targets %s and %s are duplicates",
+				tree.AsString(&dup), tree.AsString(&ct),
+			)
+		}
+		seen[targets[i]] = ct
 	}
 	return targets, tables, nil
 }
