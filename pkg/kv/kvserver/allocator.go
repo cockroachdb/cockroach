@@ -1874,7 +1874,7 @@ func (a *Allocator) ShouldTransferLease(
 	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.excludeInvalid(conf.Constraints)
 	sl = sl.excludeInvalid(conf.VoterConstraints)
-	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseRepl, sl)
+	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=s%d):\n%s", leaseRepl.StoreID(), sl)
 
 	transferDec, _ := a.shouldTransferLeaseForAccessLocality(
 		ctx,
