@@ -2080,43 +2080,25 @@ SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │   │
 │   └── • error if rows
 │       │
-│       └── • limit
-│           │ count: 1
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
+│           │ lookup condition: (v_comp = v) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│           │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
 │           │
-│           └── • lookup join
-│               │ table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
-│               │ equality: (lookup_join_const_col_@30, v_comp) = (crdb_region,v)
-│               │ equality cols are key
-│               │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
-│               │
-│               └── • cross join
-│                   │
-│                   ├── • values
-│                   │     size: 1 column, 3 rows
-│                   │
-│                   └── • scan buffer
-│                         label: buffer 1
+│           └── • scan buffer
+│                 label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • limit
-            │ count: 1
+        └── • lookup join (semi)
+            │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
+            │ lookup condition: (crdb_internal_idx_expr_comp = crdb_internal_idx_expr) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+            │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
             │
-            └── • lookup join
-                │ table: regional_by_row_table_virt@regional_by_row_table_virt_expr_key
-                │ equality: (lookup_join_const_col_@44, crdb_internal_idx_expr_comp) = (crdb_region,crdb_internal_idx_expr)
-                │ equality cols are key
-                │ pred: (upsert_pk != pk) OR (upsert_crdb_region != crdb_region)
-                │
-                └── • cross join
-                    │
-                    ├── • values
-                    │     size: 1 column, 3 rows
-                    │
-                    └── • scan buffer
-                          label: buffer 1
+            └── • scan buffer
+                  label: buffer 1
 
 statement ok
 INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)

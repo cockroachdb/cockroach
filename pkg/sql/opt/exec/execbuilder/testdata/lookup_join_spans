@@ -915,27 +915,15 @@ vectorized: true
 │ columns: (s_i_id, ol_o_id)
 │ estimated row count: 196 (missing stats)
 │
-└── • project
+└── • lookup join (inner)
     │ columns: (s_i_id, ol_o_id, ol_i_id)
     │ estimated row count: 196 (missing stats)
+    │ table: order_line@ol_io
+    │ lookup condition: (s_i_id = ol_i_id) AND (ol_o_id IN (20, 21))
+    │ pred: (ol_o_id IN (19, 20, 21)) AND (ol_o_id >= 20)
     │
-    └── • lookup join (inner)
-        │ columns: (s_i_id, "lookup_join_const_col_@5", ol_o_id, ol_i_id)
-        │ table: order_line@ol_io
-        │ equality: (s_i_id, lookup_join_const_col_@5) = (ol_i_id,ol_o_id)
-        │
-        └── • cross join (inner)
-            │ columns: (s_i_id, "lookup_join_const_col_@5")
-            │ estimated row count: 2,000 (missing stats)
-            │
-            ├── • scan
-            │     columns: (s_i_id)
-            │     estimated row count: 1,000 (missing stats)
-            │     table: stock@stock_pkey
-            │     spans: FULL SCAN
-            │
-            └── • values
-                  columns: ("lookup_join_const_col_@5")
-                  size: 1 column, 2 rows
-                  row 0, expr 0: 20
-                  row 1, expr 0: 21
+    └── • scan
+          columns: (s_i_id)
+          estimated row count: 1,000 (missing stats)
+          table: stock@stock_pkey
+          spans: FULL SCAN
