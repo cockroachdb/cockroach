@@ -145,6 +145,35 @@ test          public      t           ·                   Exclusive       Repli
 
 user root
 
+query TTTTTTBB colnames,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE database_name='test'
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
+test          public      t           /Table/106/1/"b"/0  Exclusive       Replicated    true    true
+test          public      t           /Table/106/1/"b"/0  None            Replicated    false   true
+test          public      t           /Table/106/1/"c"/0  Exclusive       Replicated    true    false
+
+query TTTTTTBB colnames,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_id='t'::regclass::oid::int
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
+test          public      t           /Table/106/1/"b"/0  Exclusive       Replicated    true    true
+test          public      t           /Table/106/1/"b"/0  None            Replicated    false   true
+test          public      t           /Table/106/1/"c"/0  Exclusive       Replicated    true    false
+
+query TTTTTTBB colnames,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE contended=true
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
+test          public      t           /Table/106/1/"b"/0  Exclusive       Replicated    true    true
+test          public      t           /Table/106/1/"b"/0  None            Replicated    false   true
+
+query TTTTTTBB colnames,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE contended=false
+----
+database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
+test          public      t           /Table/106/1/"c"/0  Exclusive       Replicated    true    false
+
 query I
 SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 't'
 ----
