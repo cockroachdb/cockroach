@@ -18,7 +18,8 @@ upsert descriptor #104
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - DELETE_ONLY
   +    - ABSENT
@@ -112,7 +113,7 @@ begin transaction #3
 ## PostCommitPhase stage 1 of 4 with 3 MutationType ops
 upsert descriptor #104
   ...
-       authorization: {}
+         userName: root
        currentStatuses:
   -    - DELETE_ONLY
   +    - WRITE_ONLY
@@ -147,7 +148,8 @@ upsert descriptor #104
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
   -    - WRITE_ONLY
   -    - ABSENT
