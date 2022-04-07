@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -22,20 +23,35 @@ import (
 )
 
 // GetUserID returns id of the user if role exists
+// GetUserID returns 0 if the system.users table does not have a role id column
+// which is the case in CockroachDB versions prior to 22.2.
+// The caller of GetUserID must handle the case where the ID is 0 accordingly.
 func GetUserID(
 	ctx context.Context, executor *InternalExecutor, txn *kv.Txn, role security.SQLUsername,
 ) (oid.Oid, error) {
-
 	var userID oid.Oid
-	query := `SELECT user_id FROM system.users WHERE username=$1`
 
-	values, err := executor.QueryRowEx(ctx, "GetUserID", txn, sessiondata.InternalExecutorOverride{
+	values, err := executor.QueryRowEx(ctx, "get-system-users-columns", txn, sessiondata.InternalExecutorOverride{
+		User: security.RootUserName(),
+	}, `SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM system.users] WHERE column_name = 'user_id')`)
+	if err != nil {
+		return userID, err
+	}
+
+	// Return 0 as an oid if the column does not exist.
+	exists := tree.MustBeDBool(values[0])
+	if !exists {
+		return oid.Oid(0), nil
+	}
+
+	query := `SELECT user_id FROM system.users WHERE username=$1`
+	values, err = executor.QueryRowEx(ctx, "GetUserID", txn, sessiondata.InternalExecutorOverride{
 		User: security.RootUserName(),
 	},
 		query, role)
 
 	if err != nil {
-		return userID, errors.Wrapf(err, "error looking up user %s", role)
+		return userID, errors.Wrapf(errors.Wrapf(err, "error looking up user %s", role), string(debug.Stack()))
 	}
 
 	if values != nil {
