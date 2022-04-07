@@ -285,7 +285,7 @@ func TestStoreCoordinators(t *testing.T) {
 	mp.setMetricsForStores([]int32{10, 20}, metrics)
 	// Setting the metrics provider will cause the initialization of two
 	// GrantCoordinators for the two stores.
-	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp)
+	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp, nil)
 	// Now we have 1+2 = 3 KVWork requesters.
 	require.Equal(t, 3, len(requesters))
 	// Confirm that the store IDs are as expected.

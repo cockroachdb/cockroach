@@ -1272,7 +1272,7 @@ type StoreGrantCoordinators struct {
 // SetPebbleMetricsProvider sets a PebbleMetricsProvider and causes the load
 // on the various storage engines to be used for admission control.
 func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
-	startupCtx context.Context, pmp PebbleMetricsProvider,
+	startupCtx context.Context, pmp PebbleMetricsProvider, cpuSetter PebbleCpuSetter,
 ) {
 	if sgc.pebbleMetricsProvider != nil {
 		panic(errors.AssertionFailedf("SetPebbleMetricsProvider called more than once"))
@@ -1290,6 +1290,15 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 
 	// Attach tracer and log tags.
 	ctx := sgc.ambientCtx.AnnotateCtx(context.Background())
+
+	// TODO(bananabrick) : Should always pass in cpuSetter since the function is only called from one place.
+	if cpuSetter != nil {
+		err := cpuSetter.SetPebbleCPU(sgc.gcMap)
+		if err != nil {
+			log.Warningf(ctx,
+				"unable to set cpu setter for pebble %s", err.Error())
+		}
+	}
 
 	go func() {
 		var ticks int64
@@ -1558,6 +1567,10 @@ type sqlNodeCPUOverloadIndicator struct {
 // PebbleMetricsProvider provides the pebble.Metrics for all stores.
 type PebbleMetricsProvider interface {
 	GetPebbleMetrics() []StoreMetrics
+}
+
+type PebbleCpuSetter interface {
+	SetPebbleCPU(map[int32]*GrantCoordinator) error
 }
 
 // StoreMetrics are the metrics for a store.
@@ -1836,6 +1849,7 @@ type GranterMetrics struct {
 func (GranterMetrics) MetricStruct() {}
 
 func makeGranterMetrics() GranterMetrics {
+	// TODO(banannabrick): might want to add soft slots to the metrics
 	m := GranterMetrics{
 		KVTotalSlots:                metric.NewGauge(totalSlots),
 		KVUsedSlots:                 metric.NewGauge(addName(string(workKindString(KVWork)), usedSlots)),

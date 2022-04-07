@@ -779,6 +779,22 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 	return metrics
 }
 
+func (n *Node) SetPebbleCPU(gcMap map[int32]*admission.GrantCoordinator) error {
+	err := n.stores.VisitStores(func(s *kvserver.Store) error {
+		// TODO(bananabrick): It might be better to pass a map of the ssgs
+		// instead of passing a map of the grant coordinators, which seems
+		// overkill.
+		gc := gcMap[int32(s.StoreID())]
+		ssg, err := admission.MakeSoftSlotGranter(gc)
+		if err != nil {
+			return err
+		}
+		s.Engine().SetSoftSlotGranter(ssg)
+		return nil
+	})
+	return err
+}
+
 // GetTenantWeights implements kvserver.TenantWeightProvider.
 func (n *Node) GetTenantWeights() kvserver.TenantWeights {
 	weights := kvserver.TenantWeights{

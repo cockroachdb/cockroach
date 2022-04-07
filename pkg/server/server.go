@@ -1313,7 +1313,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 	// Stores have been initialized, so Node can now provide Pebble metrics.
-	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node)
+	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node, s.node)
 
 	log.Event(ctx, "started node")
 	if err := s.startPersistingHLCUpperBound(ctx, hlcUpperBoundExists); err != nil {

@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"io"
 	"io/ioutil"
 	"math"
@@ -1483,6 +1484,11 @@ func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 // Compact implements the Engine interface.
 func (p *Pebble) Compact() error {
 	return p.db.Compact(nil, EncodeMVCCKey(MVCCKeyMax), true /* parallel */)
+}
+
+// SetSoftSlotGranter implements the Engine interface.
+func (p *Pebble) SetSoftSlotGranter(ssg *admission.SoftSlotGranter) {
+	p.db.SetCPURequester(ssg)
 }
 
 // CompactRange implements the Engine interface.
