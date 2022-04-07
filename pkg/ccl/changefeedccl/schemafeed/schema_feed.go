@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -337,7 +339,7 @@ func (tf *schemaFeed) updateTableHistory(ctx context.Context, endTS hlc.Timestam
 	if endTS.LessEq(startTS) {
 		return nil
 	}
-	descs, err := tf.fetchDescriptorVersions(ctx, tf.leaseMgr.Codec(), tf.db, startTS, endTS)
+	descs, err := tf.fetchDescriptorVersions(ctx, startTS, endTS)
 	if err != nil {
 		return err
 	}
@@ -593,13 +595,20 @@ func (tf *schemaFeed) validateDescriptor(
 	}
 }
 
-func (tf *schemaFeed) fetchDescriptorVersions(
-	ctx context.Context, codec keys.SQLCodec, db *kv.DB, startTS, endTS hlc.Timestamp,
-) ([]catalog.Descriptor, error) {
-	if log.V(2) {
-		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
-	}
-	start := timeutil.Now()
+var highPriorityAfter = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.schema_feed.read_with_priority_after",
+	"retry with high priority if we were not able to read descriptors for too long; 0 disables",
+	time.Minute,
+).WithPublic()
+
+func fetchDescriptorsWithPriorityOverride(
+	ctx context.Context,
+	st *cluster.Settings,
+	sender kv.Sender,
+	codec keys.SQLCodec,
+	startTS, endTS hlc.Timestamp,
+) (roachpb.Response, error) {
 	span := roachpb.Span{Key: codec.TablePrefix(keys.DescriptorTableID)}
 	span.EndKey = span.Key.PrefixEnd()
 	header := roachpb.Header{Timestamp: endTS}
@@ -609,13 +618,55 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		ReturnSST:     true,
 	}
-	res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
-	if log.V(2) {
-		log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS, endTS, timeutil.Since(start))
+
+	fetchDescriptors := func(ctx context.Context) (roachpb.Response, error) {
+		resp, pErr := kv.SendWrappedWith(ctx, sender, header, req)
+		if pErr != nil {
+			err := pErr.GoError()
+			return nil, errors.Wrapf(err, `fetching changes for %s`, span)
+		}
+		return resp, nil
 	}
-	if pErr != nil {
-		err := pErr.GoError()
-		return nil, errors.Wrapf(err, `fetching changes for %s`, span)
+
+	priorityAfter := highPriorityAfter.Get(&st.SV)
+	if priorityAfter == 0 {
+		return fetchDescriptors(ctx)
+	}
+
+	var resp roachpb.Response
+	err := contextutil.RunWithTimeout(
+		ctx, "schema-feed", priorityAfter,
+		func(ctx context.Context) error {
+			var err error
+			resp, err = fetchDescriptors(ctx)
+			return err
+		},
+	)
+	if err == nil {
+		return resp, nil
+	}
+	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+		header.UserPriority = roachpb.MaxUserPriority
+		return fetchDescriptors(ctx)
+	}
+	return nil, err
+}
+
+func (tf *schemaFeed) fetchDescriptorVersions(
+	ctx context.Context, startTS, endTS hlc.Timestamp,
+) ([]catalog.Descriptor, error) {
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
+	}
+	codec := tf.leaseMgr.Codec()
+	start := timeutil.Now()
+	res, err := fetchDescriptorsWithPriorityOverride(
+		ctx, tf.settings, tf.db.NonTransactionalSender(), codec, startTS, endTS)
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.Infof(ctx, `fetched table descs (%s,%s] took %s err=%s`, startTS, endTS, timeutil.Since(start), err)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	tf.mu.Lock()
