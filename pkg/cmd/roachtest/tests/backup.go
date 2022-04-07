@@ -16,10 +16,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
 	cloudstorage "github.com/cockroachdb/cockroach/pkg/cloud"
@@ -177,6 +181,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 		}
 	}
 
+	// haltJobAdoptionOnNodesStep writes the sentinel file to prevent a node's
+	// registry from adopting a job.
 	haltJobAdoptionOnNodesStep := func(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 			for _, nodeID := range nodeIDs {
@@ -206,6 +212,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 		}
 	}
 
+	// clearDisableJobAdoptionFileFromNodesStep clears the sentinel file that
+	// prevents a node's registry from adopting a job.
 	clearDisableJobAdoptionFileFromNodesStep := func(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 			for _, nodeID := range nodeIDs {
@@ -220,13 +228,17 @@ func registerBackupMixedVersion(r registry.Registry) {
 		}
 	}
 
-	successfulBackupStep := func(c cluster.Cluster, nodeToPlanBackup option.NodeListOption, backupStmt string) versionStep {
+	successfulBackupStep := func(t test.Test, c cluster.Cluster, nodeToPlanBackup option.NodeListOption, backupStmt string) versionStep {
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 			gatewayDB := c.Conn(ctx, t.L(), nodeToPlanBackup[0])
 			defer gatewayDB.Close()
 			t.Status("Running: ", backupStmt)
-			_, err := gatewayDB.ExecContext(ctx, backupStmt)
+			var jobID jobspb.JobID
+			err := gatewayDB.QueryRow(backupStmt).Scan(&jobID)
 			require.NoError(t, err)
+
+			sqlRunner := sqlutils.MakeSQLRunner(gatewayDB)
+			jobutils.WaitForJobToSucceed(t.(testing.TB), sqlRunner, jobID)
 		}
 	}
 
@@ -240,6 +252,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		Owner:           registry.OwnerBulkIO,
 		Cluster:         r.MakeClusterSpec(4),
 		EncryptAtRandom: true,
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// An empty string means that the cockroach binary specified by flag
 			// `cockroach` will be used.
@@ -272,8 +285,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 
 				// Run a backup from an old node so that it is planned on the old node
 				// but the job is adopted on a new node.
-				successfulBackupStep(c, oldNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/plan-old-resume-new'`),
+				successfulBackupStep(t, c, oldNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/plan-old-resume-new' WITH detached`),
 
 				clearDisableJobAdoptionFileFromNodesStep(c, oldNodes),
 
@@ -285,8 +298,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 
 				// Run a backup from a new node so that it is planned on the new node
 				// but the job is adopted on an old node.
-				successfulBackupStep(c, upgradedNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/plan-new-resume-old'`),
+				successfulBackupStep(t, c, upgradedNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/plan-new-resume-old' WITH detached`),
 
 				clearDisableJobAdoptionFileFromNodesStep(c, upgradedNodes),
 
@@ -297,8 +310,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 				//         inc backup  -> old nodes
 				haltJobAdoptionOnNodesStep(c, oldNodes),
 				// Plan and run a full backup on the new nodes.
-				successfulBackupStep(c, upgradedNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/new-node-full-backup'`),
+				successfulBackupStep(t, c, upgradedNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/new-node-full-backup' WITH detached`),
 				// Set up the cluster so that only the old nodes plan and run the
 				// incremental backup.
 				clearDisableJobAdoptionFileFromNodesStep(c, oldNodes),
@@ -306,26 +319,27 @@ func registerBackupMixedVersion(r registry.Registry) {
 
 				// Run an incremental (on old nodes) on top of a full backup taken by
 				// nodes on the upgraded version.
-				successfulBackupStep(c, oldNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO LATEST IN 'nodelocal://1/new-node-full-backup'`),
+				successfulBackupStep(t, c, oldNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO LATEST IN 'nodelocal://1/new-node-full-backup' WITH detached`),
 
 				// Case 2: full backup -> old nodes
 				//         inc backup  -> new nodes
 
 				// Plan and run a full backup on the old nodes.
-				successfulBackupStep(c, oldNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/old-node-full-backup'`),
+				successfulBackupStep(t, c, oldNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/old-node-full-backup' WITH detached`),
 
 				clearDisableJobAdoptionFileFromNodesStep(c, upgradedNodes),
 
 				// Allow all the nodes to now finalize their cluster version.
 				binaryUpgradeStep(oldNodes, mainVersion),
+				allowAutoUpgradeStep(1),
 				waitForUpgradeStep(roachNodes),
 
 				// Run an incremental on top of a full backup taken by nodes on the
 				// old version.
-				successfulBackupStep(c, roachNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO LATEST IN 'nodelocal://1/old-node-full-backup'`),
+				successfulBackupStep(t, c, roachNodes.RandNode(),
+					`BACKUP DATABASE bank.bank INTO LATEST IN 'nodelocal://1/old-node-full-backup' WITH detached`),
 			)
 			u.run(ctx, t)
 		},
