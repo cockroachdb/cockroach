@@ -1506,7 +1506,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 type snapTruncationInfo struct {
 	index          uint64
 	recipientStore roachpb.StoreID
-	deadline       time.Time
+	completed      bool
 }
 
 func (r *Replica) addSnapshotLogTruncationConstraint(
@@ -1554,8 +1554,7 @@ func (r *Replica) completeSnapshotLogTruncationConstraint(
 		return
 	}
 
-	deadline := now.Add(RaftLogQueuePendingSnapshotGracePeriod)
-	item.deadline = deadline
+	item.completed = true
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
 }
 
@@ -1575,7 +1574,7 @@ func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
 	now time.Time, recipientStore roachpb.StoreID,
 ) (minSnapIndex uint64) {
 	for snapUUID, item := range r.mu.snapshotLogTruncationConstraints {
-		if item.deadline != (time.Time{}) && item.deadline.Before(now) {
+		if item.completed {
 			// The snapshot has finished and its grace period has passed.
 			// Ignore it when making truncation decisions.
 			delete(r.mu.snapshotLogTruncationConstraints, snapUUID)
