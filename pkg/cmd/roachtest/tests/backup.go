@@ -13,17 +13,14 @@ package tests
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 	"time"
 
 	cloudstorage "github.com/cockroachdb/cockroach/pkg/cloud"
@@ -35,9 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -170,6 +170,28 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 }
 
+func waitForJobToHaveStatus(t test.Test, db *sql.DB, jobID jobspb.JobID, expectedStatus jobs.Status) {
+	if err := retry.ForDuration(time.Minute*2, func() error {
+		var status string
+		var payloadBytes []byte
+		err := db.QueryRow(`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID).Scan(&status, &payloadBytes)
+		require.NoError(t, err)
+		if jobs.Status(status) == jobs.StatusFailed {
+			payload := &jobspb.Payload{}
+			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
+				t.Fatalf("job failed: %s", payload.Error)
+			}
+			t.Fatalf("job failed")
+		}
+		if e, a := expectedStatus, jobs.Status(status); e != a {
+			return errors.Errorf("expected job status %s, but got %s", e, a)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func registerBackupMixedVersion(r registry.Registry) {
 	loadBackupDataStep := func(c cluster.Cluster) versionStep {
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
@@ -236,9 +258,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			var jobID jobspb.JobID
 			err := gatewayDB.QueryRow(backupStmt).Scan(&jobID)
 			require.NoError(t, err)
-
-			sqlRunner := sqlutils.MakeSQLRunner(gatewayDB)
-			jobutils.WaitForJobToSucceed(t.(testing.TB), sqlRunner, jobID)
+			waitForJobToHaveStatus(t, gatewayDB, jobID, jobs.StatusSucceeded)
 		}
 	}
 
