@@ -223,7 +223,6 @@ Please perform the following steps:
 	}
 	if failedStampTestMsg != "" {
 		failedStampTestMsg = failedStampTestMsg + fmt.Sprintf(`
-This may be because your Bazel is not configured to "stamp" built executables.
 Make sure one of the following lines is in the file %s/.bazelrc.user:
 `, workspace)
 		if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
