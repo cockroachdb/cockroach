@@ -109,7 +109,7 @@ function getSessionAppFilterOptions(sessions: SessionInfo[]): string[] {
     ),
   );
 
-  return Array.from(uniqueAppNames);
+  return Array.from(uniqueAppNames).sort();
 }
 
 export class SessionsPage extends React.Component<

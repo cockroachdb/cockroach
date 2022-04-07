@@ -274,7 +274,7 @@ INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('eu-west', 'bar', 2, 2)
 # index, and the prefix of the index is an enum. This case uses the default
 # value for columns r and j.
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_i"\nDETAIL: Key \(i\)=\(1\) already exists\.
-INSERT INTO uniq_enum (s, i) VALUES ('foo', 1), ('bar', 2)
+INSERT INTO uniq_enum (s, i) VALUES ('foo', 1), ('bar', 3)
 
 query TTII colnames,rowsort
 SELECT * FROM uniq_enum

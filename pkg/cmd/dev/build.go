@@ -71,6 +71,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 
 // buildTargetMapping maintains shorthands that map 1:1 with bazel targets.
 var buildTargetMapping = map[string]string{
+	"all_tests":        "//pkg:all_tests",
 	"bazel-remote":     bazelRemoteTarget,
 	"buildifier":       "@com_github_bazelbuild_buildtools//buildifier:buildifier",
 	"buildozer":        "@com_github_bazelbuild_buildtools//buildozer:buildozer",
@@ -95,6 +96,8 @@ var buildTargetMapping = map[string]string{
 	"short":            "//pkg/cmd/cockroach-short:cockroach-short",
 	"staticcheck":      "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
 	"stress":           stressTarget,
+	"swagger":          "@com_github_go_swagger_go_swagger//cmd/swagger:swagger",
+	"tests":            "//pkg:all_tests",
 	"workload":         "//pkg/cmd/workload:workload",
 }
 
@@ -178,6 +181,20 @@ func (d *dev) crossBuild(
 			script.WriteString(fmt.Sprintf("echo \"Successfully built target %s at artifacts/%s\"\n", target.fullName, dirname))
 			continue
 		}
+		if target.kind == "go_binary" || target.kind == "go_test" {
+			if !bazelBinSet {
+				script.WriteString(fmt.Sprintf("BAZELBIN=$(bazel info bazel-bin %s)\n", shellescape.QuoteCommand(configArgs)))
+				bazelBinSet = true
+			}
+			output := bazelutil.OutputOfBinaryRule(target.fullName, strings.Contains(crossConfig, "windows"))
+			baseOutput := filepath.Base(output)
+			script.WriteString(fmt.Sprintf("cp -R $BAZELBIN/%s /artifacts\n", output))
+			script.WriteString(fmt.Sprintf("chmod a+w /artifacts/%s\n", baseOutput))
+			script.WriteString(fmt.Sprintf("echo \"Successfully built target %s at artifacts/%s\"\n", target.fullName, baseOutput))
+			continue
+		}
+		// Catch-all case: run the target being built under `realpath`
+		// to figure out where to copy the binary from.
 		// NB: For test targets, the `stdout` output from `bazel run` is
 		// going to have some extra garbage. We grep ^/ to select out
 		// only the filename we're looking for.
@@ -211,13 +228,13 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 		}
 		binaryPath := filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(target.fullName, runtime.GOOS == "windows"))
 		base := targetToBinBasename(target.fullName)
-		var symlinkPaths []string
+		var copyPaths []string
 		// Binaries beginning with the string "cockroach" go right at
 		// the top of the workspace; others go in the `bin` directory.
 		if strings.HasPrefix(base, "cockroach") {
-			symlinkPaths = append(symlinkPaths, filepath.Join(workspace, base))
+			copyPaths = append(copyPaths, filepath.Join(workspace, base))
 			if strings.HasPrefix(base, "cockroach-short") {
-				symlinkPaths = append(symlinkPaths, filepath.Join(workspace, "cockroach"))
+				copyPaths = append(copyPaths, filepath.Join(workspace, "cockroach"))
 			}
 		} else if base == "dev" {
 			buf, err := d.os.ReadFile(filepath.Join(workspace, "dev"))
@@ -234,23 +251,23 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 				return errors.New("could not find DEV_VERSION in top-level `dev` script")
 			}
 
-			symlinkPaths = append(symlinkPaths,
+			copyPaths = append(copyPaths,
 				filepath.Join(workspace, "bin", "dev-versions", fmt.Sprintf("dev.%s", devVersion)))
 		} else {
-			symlinkPaths = append(symlinkPaths, filepath.Join(workspace, "bin", base))
+			copyPaths = append(copyPaths, filepath.Join(workspace, "bin", base))
 		}
 
-		// Symlink from binaryPath -> symlinkPath, clear out detritus, if any.
-		for _, symlinkPath := range symlinkPaths {
-			if err := d.os.Remove(symlinkPath); err != nil && !os.IsNotExist(err) {
+		// Copy from binaryPath -> copyPath, clear out detritus, if any.
+		for _, copyPath := range copyPaths {
+			if err := d.os.Remove(copyPath); err != nil && !os.IsNotExist(err) {
 				return err
 			}
-			if err := d.os.Symlink(binaryPath, symlinkPath); err != nil {
+			if err := d.os.CopyFile(binaryPath, copyPath); err != nil {
 				return err
 			}
-			rel, err := filepath.Rel(workspace, symlinkPath)
+			rel, err := filepath.Rel(workspace, copyPath)
 			if err != nil {
-				rel = symlinkPath
+				rel = copyPath
 			}
 			log.Printf("Successfully built binary for target %s at %s", target.fullName, rel)
 		}
@@ -307,7 +324,7 @@ func (d *dev) getBasicBuildArgs(
 				typ := fields[0]
 				args = append(args, fullTargetName)
 				buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, kind: typ})
-				if typ == "go_test" || typ == "go_transition_test" {
+				if typ == "go_test" || typ == "go_transition_test" || typ == "test_suite" {
 					shouldBuildWithTestConfig = true
 				}
 			}

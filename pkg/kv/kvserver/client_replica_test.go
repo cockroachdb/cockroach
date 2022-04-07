@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1871,7 +1872,7 @@ func TestRemoveLeaseholder(t *testing.T) {
 	require.Equal(t, tc.Target(0), leaseHolder)
 
 	// Remove server 1.
-	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0))
+	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0), tc.Target(1))
 
 	// Check that the lease moved away from 1.
 	leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
@@ -3602,7 +3603,8 @@ func TestStrictGCEnforcement(t *testing.T) {
 				ptsReader := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().ProtectedTimestampReader
 				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
 				testutils.SucceedsSoon(t, func() error {
-					if err := verifyProtectionTimestampExistsOnSpans(ctx, t, tc, ptsReader, protectionTimestamp,
+					if err := ptutil.TestingVerifyProtectionTimestampExistsOnSpans(ctx, t, tc.Server(i),
+						ptsReader, protectionTimestamp,
 						[]roachpb.Span{span}); err != nil {
 						return errors.Newf("protection timestamp %s does not exist on span %s",
 							protectionTimestamp, span)

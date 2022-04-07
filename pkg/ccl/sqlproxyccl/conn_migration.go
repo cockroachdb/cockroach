@@ -122,6 +122,8 @@ var errTransferCannotStart = errors.New("transfer cannot be started")
 // future. That way, we could either transfer to another random SQL pod, or to
 // a specific SQL pod. If we do that, TransferConnection would take in some kind
 // of policy parameter(s).
+//
+// TransferConnection implements the balancer.ConnectionHandle interface.
 func (f *forwarder) TransferConnection() (retErr error) {
 	// A previous non-recoverable transfer would have closed the forwarder, so
 	// return right away.

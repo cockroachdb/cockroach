@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -178,33 +179,6 @@ func (h *ProcOutputHelper) Init(
 	}
 
 	return nil
-}
-
-// NeededColumns calculates the set of internal processor columns that are
-// actually used by the post-processing stage.
-func (h *ProcOutputHelper) NeededColumns() (colIdxs util.FastIntSet) {
-	if h.outputCols == nil && len(h.renderExprs) == 0 {
-		// No projection or rendering; all columns are needed.
-		colIdxs.AddRange(0, h.numInternalCols-1)
-		return colIdxs
-	}
-
-	// Add all explicit output columns.
-	for _, c := range h.outputCols {
-		colIdxs.Add(int(c))
-	}
-
-	for i := 0; i < h.numInternalCols; i++ {
-		// See if render expressions require this column.
-		for j := range h.renderExprs {
-			if h.renderExprs[j].Vars.IndexedVarUsed(i) {
-				colIdxs.Add(i)
-				break
-			}
-		}
-	}
-
-	return colIdxs
 }
 
 // EmitRow sends a row through the post-processing stage. The same row can be
@@ -954,7 +928,9 @@ func (pb *ProcessorBaseNoHelper) ConsumerClosed() {
 // NewMonitor is a utility function used by processors to create a new
 // memory monitor with the given name and start it. The returned monitor must
 // be closed.
-func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon.BytesMonitor {
+func NewMonitor(
+	ctx context.Context, parent *mon.BytesMonitor, name redact.RedactableString,
+) *mon.BytesMonitor {
 	monitor := mon.NewMonitorInheritWithLimit(name, 0 /* limit */, parent)
 	monitor.Start(ctx, parent, mon.BoundAccount{})
 	return monitor
@@ -967,7 +943,7 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon
 // ServerConfig.TestingKnobs.ForceDiskSpill is set or
 // ServerConfig.TestingKnobs.MemoryLimitBytes if not.
 func NewLimitedMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name string,
+	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name redact.RedactableString,
 ) *mon.BytesMonitor {
 	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(flowCtx), parent)
 	limitedMon.Start(ctx, parent, mon.BoundAccount{})
@@ -981,7 +957,7 @@ func NewLimitedMonitorNoFlowCtx(
 	parent *mon.BytesMonitor,
 	config *ServerConfig,
 	sd *sessiondata.SessionData,
-	name string,
+	name redact.RedactableString,
 ) *mon.BytesMonitor {
 	// Create a fake FlowCtx populating only the required fields.
 	flowCtx := &FlowCtx{

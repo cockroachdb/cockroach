@@ -49,7 +49,8 @@ func (r *Replica) executeReadOnlyBatch(
 	ui := uncertainty.ComputeInterval(&ba.Header, st, r.Clock().MaxOffset())
 
 	// Evaluate read-only batch command.
-	rec := NewReplicaEvalContext(r, g.LatchSpans())
+	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
+	defer rec.Release()
 
 	// TODO(irfansharif): It's unfortunate that in this read-only code path,
 	// we're stuck with a ReadWriter because of the way evaluateBatch is
@@ -59,6 +60,12 @@ func (r *Replica) executeReadOnlyBatch(
 		// This is not currently needed for correctness, but future optimizations
 		// may start relying on this, so we assert here.
 		panic("expected consistent iterators")
+	}
+	// Pin engine state eagerly so that all iterators created over this Reader are
+	// based off the state of the engine as of this point and are mutually
+	// consistent.
+	if err := rw.PinEngineStateForIterators(); err != nil {
+		return nil, g, roachpb.NewError(err)
 	}
 	if util.RaceEnabled {
 		rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
@@ -352,6 +359,9 @@ func (r *Replica) collectSpansRead(
 		}
 
 		switch t := resp.(type) {
+		case *roachpb.GetResponse:
+			// The request did not evaluate. Ignore it.
+			continue
 		case *roachpb.ScanResponse:
 			if header.Key.Equal(t.ResumeSpan.Key) {
 				// The request did not evaluate. Ignore it.

@@ -12,7 +12,6 @@ import React from "react";
 import { Col, Row, Tabs } from "antd";
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
-import _ from "lodash";
 import { Tooltip } from "antd";
 import { Heading } from "@cockroachlabs/ui-components";
 
@@ -35,10 +34,11 @@ import { commonStyles } from "src/common";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import moment, { Moment } from "moment";
 import { Search as IndexIcon } from "@cockroachlabs/icons";
-import { formatDate } from "antd/es/date-picker/utils";
 import { Link } from "react-router-dom";
 import classnames from "classnames/bind";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
+import { CircleFilled } from "../icon";
+import { performanceTuningRecipes } from "src/util/docs";
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
 
@@ -92,7 +92,7 @@ export interface DatabaseTablePageData {
   stats: DatabaseTablePageDataStats;
   indexStats: DatabaseTablePageIndexStats;
   showNodeRegionsSection?: boolean;
-  automaticStatsCollectionEnabled: boolean;
+  automaticStatsCollectionEnabled?: boolean;
 }
 
 export interface DatabaseTablePageDataDetails {
@@ -117,6 +117,12 @@ interface IndexStat {
   totalReads: number;
   lastUsed: Moment;
   lastUsedType: string;
+  indexRecommendations: IndexRecommendation[];
+}
+
+interface IndexRecommendation {
+  type: string;
+  reason: string;
 }
 
 interface Grant {
@@ -232,33 +238,68 @@ export class DatabaseTablePage extends React.Component<
       return "Last reset: Never";
     } else {
       return (
-        "Last reset: " +
-        formatDate(lastReset, "MMM DD, YYYY [at] h:mm A [(UTC)]")
+        "Last reset: " + lastReset.format("MMM DD, YYYY [at] h:mm A [(UTC)]")
       );
     }
   }
 
   private getLastUsedString(indexStat: IndexStat) {
-    const lastReset = this.props.indexStats.lastReset;
-    switch (indexStat.lastUsedType) {
-      case "read":
-        return formatDate(
-          indexStat.lastUsed,
-          "[Last read:] MMM DD, YYYY [at] h:mm A",
-        );
-      case "reset":
-      default:
-        // TODO(lindseyjin): replace default case with create time after it's added to table_indexes
-        if (lastReset.isSame(this.minDate)) {
-          return "Never";
-        } else {
-          return formatDate(
-            lastReset,
-            "[Last reset:] MMM DD, YYYY [at] h:mm A",
-          );
-        }
+    // This case only occurs when we have no reads, resets, or creation time on
+    // the index.
+    if (indexStat.lastUsed.isSame(this.minDate)) {
+      return "Never";
     }
+    return indexStat.lastUsed.format(
+      `[Last ${indexStat.lastUsedType}:] MMM DD, YYYY [at] h:mm A`,
+    );
   }
+
+  private renderIndexRecommendations = (
+    indexStat: IndexStat,
+  ): React.ReactNode => {
+    const classname =
+      indexStat.indexRecommendations.length > 0
+        ? "index-recommendations-icon__exist"
+        : "index-recommendations-icon__none";
+
+    if (indexStat.indexRecommendations.length === 0) {
+      return (
+        <div>
+          <CircleFilled className={cx(classname)} />
+          <span>None</span>
+        </div>
+      );
+    }
+    return indexStat.indexRecommendations.map(recommendation => {
+      let text: string;
+      switch (recommendation.type) {
+        case "DROP_UNUSED":
+          text = "Drop unused index";
+      }
+      // TODO(thomas): using recommendation.type as the key seems not good.
+      //  - if it is possible for an index to have multiple recommendations of the same type
+      //  this could cause issues.
+      return (
+        <Tooltip
+          key={recommendation.type}
+          placement="bottom"
+          title={
+            <div className={cx("index-recommendations-text__tooltip-anchor")}>
+              {recommendation.reason}{" "}
+              <Anchor href={performanceTuningRecipes} target="_blank">
+                Learn more
+              </Anchor>
+            </div>
+          }
+        >
+          <CircleFilled className={cx(classname)} />
+          <span className={cx("index-recommendations-text__border")}>
+            {text}
+          </span>
+        </Tooltip>
+      );
+    });
+  };
 
   private indexStatsColumns: ColumnDescriptor<IndexStat>[] = [
     {
@@ -292,7 +333,19 @@ export class DatabaseTablePage extends React.Component<
       cell: indexStat => this.getLastUsedString(indexStat),
       sort: indexStat => indexStat.lastUsed,
     },
-    // TODO(lindseyjin): add index recommendations column
+    {
+      name: "index recommendations",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title="Index recommendations will appear if the system detects improper index usage, such as the occurrence of unused indexes. Following index recommendations may help improve query performance."
+        >
+          Index recommendations
+        </Tooltip>
+      ),
+      cell: this.renderIndexRecommendations,
+      sort: indexStat => indexStat.indexRecommendations.length,
+    },
   ];
 
   private grantsColumns: ColumnDescriptor<Grant>[] = [
@@ -377,33 +430,34 @@ export class DatabaseTablePage extends React.Component<
                     {this.props.details.statsLastUpdated && (
                       <SummaryCardItem
                         label="Table Stats Last Updated"
-                        value={formatDate(
-                          this.props.details.statsLastUpdated,
+                        value={this.props.details.statsLastUpdated.format(
                           "MMM DD, YYYY [at] h:mm A [(UTC)]",
                         )}
                       />
                     )}
-                    <SummaryCardItemBoolSetting
-                      label="Auto Stats Collection"
-                      value={this.props.automaticStatsCollectionEnabled}
-                      toolTipText={
-                        <span>
-                          {" "}
-                          Automatic statistics can help improve query
-                          performance. Learn how to{" "}
-                          <Anchor
-                            href={tableStatsClusterSetting}
-                            target="_blank"
-                            className={booleanSettingCx(
-                              "crl-hover-text__link-text",
-                            )}
-                          >
-                            manage statistics collection
-                          </Anchor>
-                          .
-                        </span>
-                      }
-                    />
+                    {this.props.automaticStatsCollectionEnabled != null && (
+                      <SummaryCardItemBoolSetting
+                        label="Auto Stats Collection"
+                        value={this.props.automaticStatsCollectionEnabled}
+                        toolTipText={
+                          <span>
+                            {" "}
+                            Automatic statistics can help improve query
+                            performance. Learn how to{" "}
+                            <Anchor
+                              href={tableStatsClusterSetting}
+                              target="_blank"
+                              className={booleanSettingCx(
+                                "crl-hover-text__link-text",
+                              )}
+                            >
+                              manage statistics collection
+                            </Anchor>
+                            .
+                          </span>
+                        }
+                      />
+                    )}
                   </SummaryCard>
                 </Col>
 
@@ -421,7 +475,7 @@ export class DatabaseTablePage extends React.Component<
                     />
                     <SummaryCardItem
                       label="Indexes"
-                      value={_.join(this.props.details.indexNames, ", ")}
+                      value={this.props.details.indexNames.join(", ")}
                       className={cx("database-table-page__indexes--value")}
                     />
                   </SummaryCard>

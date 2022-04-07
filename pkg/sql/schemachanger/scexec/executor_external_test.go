@@ -175,7 +175,7 @@ CREATE TABLE db.t (
 	indexToAdd := descpb.IndexDescriptor{
 		ID:                2,
 		Name:              tabledesc.IndexNamePlaceholder(2),
-		Version:           descpb.PrimaryIndexWithStoredColumnsVersion,
+		Version:           descpb.LatestIndexDescriptorVersion,
 		CreatedExplicitly: true,
 		KeyColumnIDs:      []descpb.ColumnID{1},
 		KeyColumnNames:    []string{"i"},

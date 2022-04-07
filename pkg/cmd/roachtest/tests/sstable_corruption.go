@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/stretchr/testify/require"
+	"github.com/cockroachdb/errors"
 )
 
 func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -53,15 +54,19 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 	opts.RoachprodOpts.Wait = true
 	c.Stop(ctx, t.L(), opts, crdbNodes)
 
-	const findTablesCmd = "" +
+	const nTables = 6
+	var dumpManifestCmd = "" +
 		// Take the latest manifest file ...
 		"ls -tr {store-dir}/MANIFEST-* | tail -n1 | " +
 		// ... dump its contents ...
 		"xargs ./cockroach debug pebble manifest dump | " +
-		// ... shuffle the files to distribute corruption over the LSM.
+		// ... filter for SSTables that contain table data.
+		"grep -v added | grep -v deleted | grep '/Table/'"
+	var findTablesCmd = dumpManifestCmd + "| " +
+		// Shuffle the files to distribute corruption over the LSM ...
 		"shuf | " +
-		// ... filter for up to six SSTables that contain table data.
-		"grep -v added | grep -v deleted | grep '/Table/' | tail -n6"
+		// ... take a fixed number of tables.
+		fmt.Sprintf("tail -n %d", nTables)
 
 	for _, node := range corruptNodes {
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), findTablesCmd)
@@ -69,15 +74,45 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatalf("could not find tables to corrupt: %s\nstdout: %s\nstderr: %s", err, result.Stdout, result.Stderr)
 		}
 		tableSSTs := strings.Split(strings.TrimSpace(result.Stdout), "\n")
-		if len(tableSSTs) == 0 {
-			t.Fatal("expected at least one sst containing table keys only, got none")
+		if len(tableSSTs) != nTables {
+			// We couldn't find enough tables to corrupt. As there should be an
+			// abundance of tables, this warrants further investigation. To aid in
+			// such an investigation, print the contents of the data directory.
+			cmd := "ls -l {store-dir}"
+			result, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), cmd)
+			if err == nil {
+				t.Status("store dir contents:\n", result.Stdout)
+			}
+			// Fetch the MANIFEST files from this node.
+			result, err = c.RunWithDetailsSingleNode(
+				ctx, t.L(), c.Node(node),
+				"tar czf {store-dir}/manifests.tar.gz {store-dir}/MANIFEST-*",
+			)
+			if err != nil {
+				t.Fatalf("could not create manifest file archive: %s", err)
+			}
+			result, err = c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "echo", "-n", "{store-dir}")
+			if err != nil {
+				t.Fatalf("could not infer store directory: %s", err)
+			}
+			storeDirectory := result.Stdout
+			srcPath := filepath.Join(storeDirectory, "manifests.tar.gz")
+			dstPath := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("manifests.%d.tar.gz", node))
+			err = c.Get(ctx, t.L(), srcPath, dstPath, c.Node(node))
+			if err != nil {
+				t.Fatalf("could not fetch manifest archive: %s", err)
+			}
+			t.Fatalf(
+				"expected %d SSTables containing table keys, got %d: %s",
+				nTables, len(tableSSTs), tableSSTs,
+			)
 		}
 		// Corrupt the SSTs.
 		for _, sstLine := range tableSSTs {
 			sstLine = strings.TrimSpace(sstLine)
 			firstFileIdx := strings.Index(sstLine, ":")
 			if firstFileIdx < 0 {
-				t.Fatalf("unexpected format for sst line: %s", sstLine)
+				t.Fatalf("unexpected format for sst line: %q", sstLine)
 			}
 			_, err = strconv.Atoi(sstLine[:firstFileIdx])
 			if err != nil {
@@ -100,14 +135,42 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 		m := c.NewMonitor(ctx)
 		// Run a workload to try to get the node to notice corruption and crash.
 		m.Go(func(ctx context.Context) error {
-			_ = c.RunE(ctx, workloadNode,
-				fmt.Sprintf("./cockroach workload run tpcc --warehouses=100 --tolerate-errors --duration=%s", 2*time.Minute))
-			// Don't return an error from the workload. We want outcome of WaitE to be
-			// determined by the monitor noticing that a node died. The workload may
-			// also fail, despite --tolerate-errors, if a node crashes too early.
-			return nil
+			const timeout = 10 * time.Minute
+			ctx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
+			for {
+				err := errors.CombineErrors(
+					c.RunE(
+						ctx, workloadNode,
+						"./cockroach workload run tpcc --warehouses=100 --tolerate-errors",
+					),
+					errors.New("workload unexpectedly returned nil"),
+				)
+				// NOTE: the workload is fallible, however, we don't want to return the
+				// error to the caller of WaitE (below), as we want it to see any error
+				// caused due to a node death. The workload is just a means of surfacing
+				// the corruption. The workload could also return early with a nil
+				// error, which is unexpected. In both cases, simply log the error and
+				// determine whether to continue based on the context (timeout, or other
+				// context cancellation).
+				if err != nil {
+					t.L().Printf("workload failed: %s", err)
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(time.Second):
+					// Loop.
+				}
+			}
 		})
-		require.Error(t, m.WaitE())
+
+		t.L().Printf("waiting for monitor to observe error ...")
+		err := m.WaitE()
+		t.L().Printf("monitor observed error: %s", err)
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
 	}
 
 	// Exempt corrupted nodes from roachtest harness' post-test liveness checks.

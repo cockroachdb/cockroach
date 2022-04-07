@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -78,7 +79,11 @@ func alterChangefeedPlanHook(
 
 		newChangefeedStmt := &tree.CreateChangefeed{}
 
-		newOptions, newSinkURI, err := generateNewOpts(ctx, p, alterChangefeedStmt.Cmds, prevDetails)
+		prevOpts, err := getPrevOpts(job.Payload().Description, prevDetails.Opts)
+		if err != nil {
+			return err
+		}
+		newOptions, newSinkURI, err := generateNewOpts(ctx, p, alterChangefeedStmt.Cmds, prevOpts, prevDetails.SinkURI)
 		if err != nil {
 			return err
 		}
@@ -191,22 +196,11 @@ func generateNewOpts(
 	ctx context.Context,
 	p sql.PlanHookState,
 	alterCmds tree.AlterChangefeedCmds,
-	details jobspb.ChangefeedDetails,
+	prevOpts map[string]string,
+	prevSinkURI string,
 ) (map[string]string, string, error) {
-	sinkURI := details.SinkURI
-	newOptions := make(map[string]string, len(details.Opts))
-
-	// pull the options that are set for the existing changefeed.
-	for key, value := range details.Opts {
-		// There are some options (e.g. topics) that we set during the creation of
-		// a changefeed, but we do not allow these options to be set by the user.
-		// Hence, we can not include these options in our new CREATE CHANGEFEED
-		// statement.
-		if _, ok := changefeedbase.ChangefeedOptionExpectValues[key]; !ok {
-			continue
-		}
-		newOptions[key] = value
-	}
+	sinkURI := prevSinkURI
+	newOptions := prevOpts
 
 	for _, cmd := range alterCmds {
 		switch v := cmd.(type) {
@@ -231,7 +225,7 @@ func generateNewOpts(
 						return nil, ``, err
 					}
 
-					prevSinkURI, err := url.Parse(details.SinkURI)
+					prevSinkURI, err := url.Parse(sinkURI)
 					if err != nil {
 						return nil, ``, err
 					}
@@ -639,16 +633,31 @@ func fetchSpansForDescs(
 	statementTime hlc.Timestamp,
 	descs []catalog.Descriptor,
 ) ([]roachpb.Span, error) {
-	_, tables, err := getTargetsAndTables(ctx, p, descs, tree.ChangefeedTargets{}, opts)
+	targets := make([]jobspb.ChangefeedTargetSpecification, len(descs))
+	for i, d := range descs {
+		targets[i] = jobspb.ChangefeedTargetSpecification{TableID: d.GetID()}
+	}
+
+	spans, err := fetchSpansForTargets(ctx, p.ExecCfg(), targets, statementTime)
+
+	return spans, err
+}
+
+func getPrevOpts(prevDescription string, opts map[string]string) (map[string]string, error) {
+	prevStmt, err := parser.ParseOne(prevDescription)
 	if err != nil {
 		return nil, err
 	}
 
-	details := jobspb.ChangefeedDetails{
-		Tables: tables,
+	prevChangefeedStmt, ok := prevStmt.AST.(*tree.CreateChangefeed)
+	if !ok {
+		return nil, errors.Errorf(`could not parse job description`)
 	}
 
-	spans, err := fetchSpansForTargets(ctx, p.ExecCfg(), AllTargets(details), statementTime)
+	prevOpts := make(map[string]string, len(prevChangefeedStmt.Options))
+	for _, opt := range prevChangefeedStmt.Options {
+		prevOpts[opt.Key.String()] = opts[opt.Key.String()]
+	}
 
-	return spans, err
+	return prevOpts, nil
 }

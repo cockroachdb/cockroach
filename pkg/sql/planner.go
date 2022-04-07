@@ -12,9 +12,9 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -114,7 +115,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.SQLLivenessReader = execCfg.SQLLiveness
 	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
 	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
-	evalCtx.ClusterID = execCfg.ClusterID()
+	evalCtx.ClusterID = execCfg.LogicalClusterID()
 	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	evalCtx.NodeID = execCfg.NodeID
 	evalCtx.Locality = execCfg.Locality
@@ -123,6 +124,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.SQLStatusServer = execCfg.SQLStatusServer
 	evalCtx.DistSQLPlanner = execCfg.DistSQLPlanner
 	evalCtx.VirtualSchemas = execCfg.VirtualSchemas
+	evalCtx.KVStoresIterator = execCfg.KVStoresIterator
 }
 
 // copy returns a deep copy of ctx.
@@ -185,6 +187,8 @@ type planner struct {
 	preparedStatements preparedStatementsAccessor
 
 	sqlCursors sqlCursors
+
+	createdSequences createdSequences
 
 	// avoidLeasedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
@@ -296,6 +300,7 @@ func NewInternalPlanner(
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
 func newInternalPlanner(
+	// TODO(yuzefovich): make this redact.RedactableString.
 	opName string,
 	txn *kv.Txn,
 	user security.SQLUsername,
@@ -352,14 +357,19 @@ func newInternalPlanner(
 	p.isInternalPlanner = true
 
 	p.semaCtx = tree.MakeSemaContext()
+	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
+		p.semaCtx.IntervalStyleEnabled = true
+		p.semaCtx.DateStyleEnabled = true
+	} else {
+		p.semaCtx.IntervalStyleEnabled = sd.IntervalStyleEnabled
+		p.semaCtx.DateStyleEnabled = sd.DateStyleEnabled
+	}
 	p.semaCtx.SearchPath = sd.SearchPath
-	p.semaCtx.IntervalStyleEnabled = sd.IntervalStyleEnabled
-	p.semaCtx.DateStyleEnabled = sd.DateStyleEnabled
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
 
-	plannerMon := mon.NewMonitor(fmt.Sprintf("internal-planner.%s.%s", user, opName),
+	plannerMon := mon.NewMonitor(redact.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
 		-1, /* increment */
@@ -387,7 +397,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Tenant = p
 	p.extendedEvalCtx.Regions = p
 	p.extendedEvalCtx.JoinTokenCreator = p
-	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
+	p.extendedEvalCtx.ClusterID = execCfg.LogicalClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
@@ -403,6 +413,7 @@ func newInternalPlanner(
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
+	p.createdSequences = emptyCreatedSequences{}
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create
@@ -464,6 +475,7 @@ func internalExtendedEvalCtx(
 			SessionDataStack:          sds,
 			TxnReadOnly:               false,
 			TxnImplicit:               true,
+			TxnIsSingleStmt:           true,
 			Context:                   ctx,
 			Mon:                       plannerMon,
 			TestingKnobs:              evalContextTestingKnobs,
@@ -493,11 +505,6 @@ func (p *planner) SemaCtx() *tree.SemaContext {
 // Note: if the context will be modified, use ExtendedEvalContextCopy instead.
 func (p *planner) ExtendedEvalContext() *extendedEvalContext {
 	return &p.extendedEvalCtx
-}
-
-// IsAutoCommit implements the PlanHookState interface.
-func (p *planner) IsAutoCommit() bool {
-	return p.autoCommit
 }
 
 func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {

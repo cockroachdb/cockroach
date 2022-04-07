@@ -375,7 +375,11 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	tc.Server(3).DistSenderI().(*kvcoord.DistSender).DisableFirstRangeUpdates()
 	db3 := tc.ServerConn(3)
 	// Force the DistSQL on this connection.
-	_, err := db3.Exec(`SET CLUSTER SETTING sql.defaults.distsql = always; SET distsql = always`)
+	_, err := db3.Exec(`SET CLUSTER SETTING sql.defaults.distsql = always;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db3.Exec(`SET distsql = always`)
 	if err != nil {
 		t.Fatal(err)
 	}

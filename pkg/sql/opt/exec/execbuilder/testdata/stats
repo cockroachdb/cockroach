@@ -3,10 +3,6 @@
 # Tests that verify we retrieve the stats correctly. Note that we can't create
 # statistics if distsql mode is OFF.
 
-# Disable automatic stats to prevent flakes if auto stats run.
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
 statement ok
 CREATE TABLE uv (u INT, v INT, INDEX (u) STORING (v), INDEX (v) STORING (u));
 INSERT INTO uv VALUES (1, 1), (1, 2), (1, 3), (1, 4), (2, 4), (2, 5), (2, 6), (2, 7)

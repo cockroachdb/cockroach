@@ -182,7 +182,7 @@ func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
 		return err
 	}
 
-	err = r.localPlanner.updateZoneConfigsForTables(ctx, dbDesc, WithOnlyGlobalTables)
+	err = r.localPlanner.refreshZoneConfigsForTables(ctx, dbDesc, WithOnlyGlobalTables)
 	if err != nil {
 		return err
 	}

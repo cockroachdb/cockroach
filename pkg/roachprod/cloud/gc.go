@@ -312,11 +312,7 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 		}
 	}
 
-	// Send out notification to #roachprod-status.
 	client := makeSlackClient()
-	channel, _ := findChannel(client, "roachprod-status", "")
-	postStatus(l, client, channel, dryrun, &s, badVMs)
-
 	// Send out user notifications if any of the user's clusters are expired or
 	// will be destroyed.
 	for user, status := range users {
@@ -330,6 +326,7 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 		}
 	}
 
+	channel, _ := findChannel(client, "roachprod-status", "")
 	if !dryrun {
 		if len(badVMs) > 0 {
 			// Destroy bad VMs.

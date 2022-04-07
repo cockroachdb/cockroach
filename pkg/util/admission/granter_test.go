@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -273,9 +274,15 @@ func TestStoreCoordinators(t *testing.T) {
 	require.Equal(t, 3, len(requesters))
 	// Confirm that the store IDs are as expected.
 	var actualStores []int32
-	for s := range storeCoords.gcMap {
-		actualStores = append(actualStores, s)
-	}
+
+	storeCoords.gcMap.Range(func(s int64, _ unsafe.Pointer) bool {
+		// The int32 conversion is lossless since we only store int32s in the
+		// gcMap.
+		actualStores = append(actualStores, int32(s))
+		// true indicates that iteration should continue after the
+		// current entry has been processed.
+		return true
+	})
 	sort.Slice(actualStores, func(i, j int) bool { return actualStores[i] < actualStores[j] })
 	require.Equal(t, []int32{10, 20}, actualStores)
 	// Do tryGet on all requesters. The requester for the Regular
@@ -373,13 +380,14 @@ func TestIOLoadListener(t *testing.T) {
 					ioll.mu.Mutex = &syncutil.Mutex{}
 					ioll.mu.kvGranter = kvGranter
 				}
-				ioll.pebbleMetricsTick(ctx, metrics)
+				ioll.pebbleMetricsTick(ctx, &metrics)
 				// Do the ticks until just before next adjustment.
 				var buf strings.Builder
 				fmt.Fprintf(&buf, "admitted: %d, bytes: %d, added-bytes: %d,\nsmoothed-removed: %d, "+
-					"smoothed-admit: %d,\ntokens: %s, tokens-allocated: %s\n", ioll.admittedCount,
+					"smoothed-admit: %d, smoothed-bytes-added-per-work: %d,\ntokens: %s, tokens-allocated: %s\n", ioll.admittedCount,
 					ioll.l0Bytes, ioll.l0AddedBytes, ioll.smoothedBytesRemoved,
-					int64(ioll.smoothedNumAdmit), tokensForIntervalToString(ioll.totalTokens),
+					int64(ioll.smoothedNumAdmit), int64(ioll.smoothedBytesAddedPerWork),
+					tokensForIntervalToString(ioll.totalTokens),
 					tokensFor1sToString(ioll.tokensAllocated))
 				for i := 0; i < adjustmentInterval; i++ {
 					ioll.allocateTokensTick()
@@ -419,8 +427,8 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		Sublevels: 100,
 		NumFiles:  10000,
 	}
-	ioll.pebbleMetricsTick(ctx, m)
-	ioll.pebbleMetricsTick(ctx, m)
+	ioll.pebbleMetricsTick(ctx, &m)
+	ioll.pebbleMetricsTick(ctx, &m)
 	ioll.allocateTokensTick()
 }
 
@@ -458,7 +466,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 	ioll.mu.kvGranter = kvGranter
 	for i := 0; i < 100; i++ {
 		randomValues()
-		ioll.pebbleMetricsTick(ctx, m)
+		ioll.pebbleMetricsTick(ctx, &m)
 		for j := 0; j < adjustmentInterval; j++ {
 			ioll.allocateTokensTick()
 			require.LessOrEqual(t, int64(0), ioll.totalTokens)

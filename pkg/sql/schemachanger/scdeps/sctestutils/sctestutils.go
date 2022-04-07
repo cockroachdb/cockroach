@@ -70,7 +70,7 @@ func WithBuilderDependenciesFromTestServer(
 	// changer will allow non-fully implemented operations.
 	planner.SessionData().NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 	fn(scdeps.NewBuilderDependencies(
-		execCfg.ClusterID(),
+		execCfg.LogicalClusterID(),
 		execCfg.Codec,
 		planner.Txn(),
 		planner.Descriptors(),

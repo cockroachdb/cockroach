@@ -146,6 +146,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 			// conflicting unique index entry would still be rejected as its value
 			// would point to a different owning row.
 			DisallowShadowingBelow: writeTS,
+			WriteAtBatchTimestamp:  true,
 		},
 	)
 	if err != nil {

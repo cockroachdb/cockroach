@@ -31,10 +31,11 @@ func ingest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	streamAddress streamingccl.StreamAddress,
-	tenantID roachpb.TenantID,
+	oldTenantID roachpb.TenantID,
+	newTenantID roachpb.TenantID,
 	startTime hlc.Timestamp,
 	progress jobspb.Progress,
-	jobID jobspb.JobID,
+	ingestionJobID jobspb.JobID,
 ) error {
 	// Initialize a stream client and resolve topology.
 	client, err := streamclient.NewStreamClient(streamAddress)
@@ -43,7 +44,7 @@ func ingest(
 	}
 	ingestWithClient := func() error {
 		// TODO(dt): if there is an existing stream ID, reconnect to it.
-		streamID, err := client.Create(ctx, tenantID)
+		streamID, err := client.Create(ctx, oldTenantID)
 		if err != nil {
 			return err
 		}
@@ -73,14 +74,26 @@ func ingest(
 
 		// Construct stream ingestion processor specs.
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-			streamAddress, topology, sqlInstanceIDs, initialHighWater, jobID, streamID)
+			streamAddress, topology, sqlInstanceIDs, initialHighWater, ingestionJobID, streamID, oldTenantID, newTenantID)
 		if err != nil {
 			return err
 		}
 
 		// Plan and run the DistSQL flow.
-		return distStreamIngest(ctx, execCtx, sqlInstanceIDs, jobID, planCtx, dsp, streamIngestionSpecs,
-			streamIngestionFrontierSpec)
+		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, ingestionJobID, planCtx, dsp, streamIngestionSpecs,
+			streamIngestionFrontierSpec); err != nil {
+			return err
+		}
+
+		// A nil error is only possible if the job was signaled to cutover and the
+		// processors shut down gracefully, i.e stopped ingesting any additional
+		// events from the replication stream. At this point it is safe to revert to
+		// the cutoff time to leave the cluster in a consistent state.
+		if err = revertToCutoverTimestamp(ctx, execCtx, ingestionJobID); err != nil {
+			return err
+		}
+		// Completes the producer job in the source cluster.
+		return client.Complete(ctx, streamID)
 	}
 	return errors.CombineErrors(ingestWithClient(), client.Close())
 }
@@ -92,28 +105,18 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 
 	// Start ingesting KVs from the replication stream.
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	err := ingest(resumeCtx, p, streamAddress, details.TenantID, details.StartTime, s.job.Progress(), s.job.ID())
-	if err != nil {
-		return err
-	}
-
-	// A nil error is only possible if the job was signaled to cutover and the
-	// processors shut down gracefully, i.e stopped ingesting any additional
-	// events from the replication stream. At this point it is safe to revert to
-	// the cutoff time to leave the cluster in a consistent state.
-	// TODO: after this, we need to complete the producer job into "replication complete state" in the future.
-	return s.revertToCutoverTimestamp(resumeCtx, execCtx)
+	return ingest(resumeCtx, p, streamAddress, details.TenantID, details.NewTenantID, details.StartTime, s.job.Progress(), s.job.ID())
 }
 
 // revertToCutoverTimestamp reads the job progress for the cutover time and
 // issues a RevertRangeRequest with the target time set to that cutover time, to
 // bring the ingesting cluster to a consistent state.
-func (s *streamIngestionResumer) revertToCutoverTimestamp(
-	ctx context.Context, execCtx interface{},
+func revertToCutoverTimestamp(
+	ctx context.Context, execCtx interface{}, ingestionJobID jobspb.JobID,
 ) error {
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
-	j, err := p.ExecCfg().JobRegistry.LoadJob(ctx, s.job.ID())
+	j, err := p.ExecCfg().JobRegistry.LoadJob(ctx, ingestionJobID)
 	if err != nil {
 		return err
 	}
@@ -122,13 +125,13 @@ func (s *streamIngestionResumer) revertToCutoverTimestamp(
 	var ok bool
 	if sd, ok = details.(jobspb.StreamIngestionDetails); !ok {
 		return errors.Newf("unknown details type %T in stream ingestion job %d",
-			details, s.job.ID())
+			details, ingestionJobID)
 	}
 	progress := j.Progress()
 	var sp *jobspb.Progress_StreamIngest
 	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
 		return errors.Newf("unknown progress type %T in stream ingestion job %d",
-			j.Progress().Progress, s.job.ID())
+			j.Progress().Progress, ingestionJobID)
 	}
 
 	if sp.StreamIngest.CutoverTime.IsEmpty() {

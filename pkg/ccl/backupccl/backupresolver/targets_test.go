@@ -282,6 +282,12 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 				if !reflect.DeepEqual(test.expectedDBs, matchedDBNames) {
 					t.Fatalf("expected %q got %q", test.expectedDBs, matchedDBNames)
 				}
+				for _, p := range targets.Tables {
+					_, ok := matched.DescsByTablePattern[p]
+					if !ok {
+						t.Fatalf("no entry in %q for %q", matched.DescsByTablePattern, p)
+					}
+				}
 			}
 		})
 	}

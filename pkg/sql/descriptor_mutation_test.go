@@ -899,6 +899,10 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));

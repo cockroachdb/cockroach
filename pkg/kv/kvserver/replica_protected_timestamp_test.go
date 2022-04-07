@@ -54,6 +54,16 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 			},
 		},
 		{
+			name: "no PTS information is available",
+			test: func(t *testing.T, r *Replica, mp *manualPTSReader) {
+				mp.asOf = hlc.Timestamp{}
+				canGC, _, gcTimestamp, _, _, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(10))
+				require.NoError(t, err)
+				require.False(t, canGC)
+				require.Zero(t, gcTimestamp)
+			},
+		},
+		{
 			name: "have overlapping but new enough that it's okay",
 			test: func(t *testing.T, r *Replica, mp *manualPTSReader) {
 				ts := r.store.Clock().Now()

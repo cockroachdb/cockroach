@@ -31,7 +31,7 @@ import (
 type Registry struct {
 	syncutil.Mutex
 	labels  []*prometheusgo.LabelPair
-	tracked []Iterable
+	tracked map[string]Iterable
 }
 
 // Struct can be implemented by the types of members of a metric
@@ -44,7 +44,7 @@ type Struct interface {
 func NewRegistry() *Registry {
 	return &Registry{
 		labels:  []*prometheusgo.LabelPair{},
-		tracked: []Iterable{},
+		tracked: map[string]Iterable{},
 	}
 }
 
@@ -69,7 +69,7 @@ func (r *Registry) getLabels() []*prometheusgo.LabelPair {
 func (r *Registry) AddMetric(metric Iterable) {
 	r.Lock()
 	defer r.Unlock()
-	r.tracked = append(r.tracked, metric)
+	r.tracked[metric.GetName()] = metric
 	if log.V(2) {
 		log.Infof(context.TODO(), "added metric: %s (%T)", metric.GetName(), metric)
 	}
@@ -154,6 +154,20 @@ func (r *Registry) Each(f func(name string, val interface{})) {
 		metric.Inspect(func(v interface{}) {
 			f(metric.GetName(), v)
 		})
+	}
+}
+
+// Select calls the given closure for the selected metric names.
+func (r *Registry) Select(metrics map[string]struct{}, f func(name string, val interface{})) {
+	r.Lock()
+	defer r.Unlock()
+	for name := range metrics {
+		metric, found := r.tracked[name]
+		if found {
+			metric.Inspect(func(v interface{}) {
+				f(name, v)
+			})
+		}
 	}
 }
 

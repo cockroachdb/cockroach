@@ -66,11 +66,6 @@ func (o *notExprProjOp) Next() coldata.Batch {
 	inputVec, outputVec := batch.ColVec(o.inputIdx), batch.ColVec(o.outputIdx)
 	inputBools, inputNulls := inputVec.Bool(), inputVec.Nulls()
 	outputBools, outputNulls := outputVec.Bool(), outputVec.Nulls()
-	if outputNulls.MaybeHasNulls() {
-		// Unsetting any potential nulls in the output in case there are null
-		// values present beforehand.
-		outputNulls.UnsetNulls()
-	}
 	if inputNulls.MaybeHasNulls() {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]

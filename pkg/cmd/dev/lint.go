@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -76,5 +77,19 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		env = append(env, envvar)
 		return d.exec.CommandContextWithEnv(ctx, env, "bazel", args...)
 	}
-	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	if err != nil {
+		return err
+	}
+	if !short && filter == "" {
+		args := []string{"build", "//pkg/cmd/cockroach-short", "--//build/toolchains:nogo_flag"}
+		if numCPUs != 0 {
+			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+		}
+		logCommand("bazel", args...)
+		return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	} else if !short {
+		log.Printf("Skipping building cockroach-short with nogo due to provided test filter")
+	}
+	return nil
 }

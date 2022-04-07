@@ -99,7 +99,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 				KeyColumnNames:      []string{"a"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
-				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+				Version:             descpb.LatestIndexDescriptorVersion,
 				ConstraintID:        1,
 			},
 			Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),

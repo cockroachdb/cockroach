@@ -142,6 +142,7 @@ describe("Index Details Page", function() {
           totalReads: 0,
           lastRead: moment(),
           lastReset: moment(),
+          indexRecommendations: [],
         },
       },
       false,
@@ -193,6 +194,7 @@ describe("Index Details Page", function() {
         lastReset: util.TimestampToMoment(
           makeTimestamp("2021-11-12T20:18:22.167627Z"),
         ),
+        indexRecommendations: [],
       },
     });
   });

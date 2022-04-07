@@ -74,6 +74,11 @@ func (sc testStreamClient) Subscribe(
 	}, nil
 }
 
+// Complete implements the streamclient.Client interface.
+func (sc testStreamClient) Complete(ctx context.Context, streamID streaming.StreamID) error {
+	return nil
+}
+
 type testStreamSubscription struct {
 	eventCh chan streamingccl.Event
 }

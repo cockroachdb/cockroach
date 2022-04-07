@@ -6,8 +6,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/targz",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_afero//:afero",
     ],
 )
 

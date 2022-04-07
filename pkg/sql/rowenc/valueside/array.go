@@ -63,14 +63,18 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 }
 
 // decodeArray decodes the value encoding for an array.
-func decodeArray(a *tree.DatumAlloc, elementType *types.T, b []byte) (tree.Datum, []byte, error) {
+func decodeArray(a *tree.DatumAlloc, arrayType *types.T, b []byte) (tree.Datum, []byte, error) {
 	header, b, err := decodeArrayHeader(b)
 	if err != nil {
 		return nil, b, err
 	}
+	elementType := arrayType.ArrayContents()
 	result := tree.DArray{
 		Array:    make(tree.Datums, header.length),
 		ParamTyp: elementType,
+	}
+	if err = result.MaybeSetCustomOid(arrayType); err != nil {
+		return nil, b, err
 	}
 	var val tree.Datum
 	for i := uint64(0); i < header.length; i++ {

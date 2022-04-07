@@ -31,6 +31,7 @@ func TestRead(t *testing.T) {
 
 		// These fields are copied into the Reader
 		Comma              rune
+		Escape             rune
 		Comment            rune
 		UseFieldsPerRecord bool // false (default) means FieldsPerRecord is -1
 		FieldsPerRecord    int
@@ -388,6 +389,32 @@ x,,,
 		Comma:   'X',
 		Comment: 'X',
 		Error:   errInvalidDelim,
+	}, {
+		Name:   "EscapeText",
+		Escape: 'x',
+		Input:  `"x"",",","xxx"",x,"xxxx,"` + "\n",
+		Output: [][]string{{`"`, `,`, `x"`, `x`, `xx,`}},
+	}, {
+		Name:   "EscapeTextWithComma",
+		Escape: 'x',
+		Comma:  'x',
+		Input:  `"x""x,x"xxx""x"xx"x"xxxx,"` + "\n",
+		Output: [][]string{{`"`, `,`, `x"`, `x`, `xx,`}},
+	}, {
+		Name:   "EscapeTextWithNonEscapingCharacter",
+		Escape: 'x',
+		Input:  `"xxx,xa",",x,"` + "\n",
+		Output: [][]string{{`xx,xa`, `,x,`}},
+	}, {
+		Name:   "EscapeTextWithComma",
+		Escape: 'x',
+		Input:  `a,"""` + "\n",
+		Error:  &ParseError{StartLine: 1, Line: 1, Column: 3, Err: ErrQuote},
+	}, {
+		Name:   "EscapeTrailingQuote",
+		Escape: 'x',
+		Input:  `"x"` + "\n",
+		Error:  &ParseError{StartLine: 1, Line: 2, Column: 0, Err: ErrQuote},
 	}}
 
 	for _, tt := range tests {
@@ -396,6 +423,9 @@ x,,,
 
 			if tt.Comma != 0 {
 				r.Comma = tt.Comma
+			}
+			if tt.Escape != 0 {
+				r.Escape = tt.Escape
 			}
 			r.Comment = tt.Comment
 			if tt.UseFieldsPerRecord {
@@ -411,7 +441,7 @@ x,,,
 			if !reflect.DeepEqual(err, tt.Error) {
 				t.Errorf("ReadAll() error:\ngot  %v\nwant %v", err, tt.Error)
 			} else if !reflect.DeepEqual(out, tt.Output) {
-				t.Errorf("ReadAll() output:\ngot  %q\nwant %q", out, tt.Output)
+				t.Errorf("ReadAll() output:\ngot  %#v\nwant %#v", out, tt.Output)
 			}
 
 			// Check that the error can be rendered.

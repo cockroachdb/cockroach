@@ -5,6 +5,9 @@ INSERT INTO a VALUES (1, 2), (2, 3)
 statement error DECLARE CURSOR can only be used in transaction blocks
 DECLARE foo CURSOR FOR SELECT * FROM a
 
+statement error DECLARE CURSOR can only be used in transaction blocks
+SELECT 1; DECLARE foo CURSOR FOR SELECT * FROM a
+
 statement error cursor \"foo\" does not exist
 CLOSE foo
 

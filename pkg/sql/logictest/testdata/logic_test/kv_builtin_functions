@@ -1,0 +1,65 @@
+# LogicTest: !3node-tenant
+
+# Test crdb_internal.kv_set_queue_active commands that target all stores on the
+# gateway node.
+subtest kv_set_queue_active_all_stores
+
+query B
+SELECT crdb_internal.kv_set_queue_active('mvccGC', true);
+----
+true
+
+query B
+SELECT crdb_internal.kv_set_queue_active('merge', true);
+----
+true
+
+query B
+SELECT crdb_internal.kv_set_queue_active('split', false);
+----
+true
+
+query B
+SELECT crdb_internal.kv_set_queue_active('replicate', false);
+----
+true
+
+query B
+SELECT crdb_internal.kv_set_queue_active('replicaGC', false);
+----
+true
+
+query B
+SELECT crdb_internal.kv_set_queue_active('raftlog', false);
+----
+true
+
+query B
+SELECT crdb_internal.kv_set_queue_active('raftsnapshot', false);
+----
+true
+
+query B
+SELECT crdb_internal.kv_set_queue_active('consistencyChecker', false);
+----
+true
+
+query B
+SELECT crdb_internal.kv_set_queue_active('timeseriesMaintenance', false);
+----
+true
+
+query error pq: crdb_internal.kv_set_queue_active\(\): unknown queue "non-existent"
+SELECT crdb_internal.kv_set_queue_active('non-existent', true);
+
+# Test crdb_internal.kv_set_queue_active commands that target a named store on
+# the gateway node.
+subtest kv_set_queue_active_named_store
+
+query B
+SELECT crdb_internal.kv_set_queue_active('split', false, 1);
+----
+true
+
+query error pq: crdb_internal.kv_set_queue_active\(\): store 42 not found on this node
+SELECT crdb_internal.kv_set_queue_active('split', false, 42);

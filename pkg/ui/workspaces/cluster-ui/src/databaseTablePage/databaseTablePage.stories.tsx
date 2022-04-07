@@ -10,7 +10,6 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import _ from "lodash";
 
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import {
@@ -84,15 +83,13 @@ const withData: DatabaseTablePageProps = {
       )
     `,
     replicaCount: 7,
-    indexNames: _.map(Array(3), randomName),
-    grants: _.uniq(
-      _.map(Array(12), () => {
-        return {
-          user: randomRole(),
-          privilege: randomTablePrivilege(),
-        };
-      }),
-    ),
+    indexNames: Array(3).map(randomName),
+    grants: [
+      {
+        user: randomRole(),
+        privilege: randomTablePrivilege(),
+      },
+    ],
     statsLastUpdated: moment("0001-01-01T00:00:00Z"),
   },
   showNodeRegionsSection: true,
@@ -113,18 +110,34 @@ const withData: DatabaseTablePageProps = {
         lastUsed: moment("2021-10-11T11:29:00Z"),
         lastUsedType: "read",
         indexName: "primary",
+        indexRecommendations: [],
       },
       {
         totalReads: 3,
         lastUsed: moment("2021-11-10T16:29:00Z"),
         lastUsedType: "read",
         indexName: "primary",
+        indexRecommendations: [],
       },
       {
         totalReads: 2,
         lastUsed: moment("2021-09-04T13:55:00Z"),
         lastUsedType: "reset",
         indexName: "secondary",
+        indexRecommendations: [],
+      },
+      {
+        totalReads: 0,
+        lastUsed: moment("2022-03-12T14:31:00Z"),
+        lastUsedType: "created",
+        indexName: "secondary",
+        indexRecommendations: [
+          {
+            type: "DROP_UNUSED",
+            reason:
+              "This index has not been used and can be removed for better write performance.",
+          },
+        ],
       },
     ],
     lastReset: moment("2021-09-04T13:55:00Z"),

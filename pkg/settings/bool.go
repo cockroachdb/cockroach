@@ -10,7 +10,10 @@
 
 package settings
 
-import "context"
+import (
+	"context"
+	"strconv"
+)
 
 // BoolSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
@@ -39,6 +42,20 @@ func (b *BoolSetting) Encoded(sv *Values) string {
 // EncodedDefault returns the encoded value of the default value of the setting.
 func (b *BoolSetting) EncodedDefault() string {
 	return EncodeBool(b.defaultValue)
+}
+
+// DecodeToString decodes and renders an encoded value.
+func (b *BoolSetting) DecodeToString(encoded string) (string, error) {
+	bv, err := b.DecodeValue(encoded)
+	if err != nil {
+		return "", err
+	}
+	return EncodeBool(bv), nil
+}
+
+// DecodeValue decodes the value into a float.
+func (b *BoolSetting) DecodeValue(encoded string) (bool, error) {
+	return strconv.ParseBool(encoded)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.

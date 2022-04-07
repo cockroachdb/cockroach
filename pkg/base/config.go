@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/redact"
 )
 
 // Base config defaults.
@@ -599,7 +600,7 @@ func TempStorageConfigFromEnv(
 	maxSizeBytes int64,
 ) TempStorageConfig {
 	inMem := parentDir == "" && useStore.InMemory
-	var monitorName string
+	var monitorName redact.RedactableString
 	if inMem {
 		monitorName = "in-mem temp storage"
 	} else {

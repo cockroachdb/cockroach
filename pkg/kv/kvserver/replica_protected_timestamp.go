@@ -132,6 +132,17 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	if err != nil {
 		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, err
 	}
+
+	if read.readAt.IsEmpty() {
+		// We don't want to allow GC to proceed if no protected timestamp
+		// information is available. This can happen if the initial scan of the
+		// rangefeed established by the spanconfig.KVSubscriber hasn't completed
+		// yet.
+		log.VEventf(ctx, 1,
+			"not gc'ing replica %v because protected timestamp information is unavailable", r)
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil
+	}
+
 	gcTimestamp = read.readAt
 	if !read.earliestProtectionTimestamp.IsEmpty() {
 		// NB: we want to allow GC up to the timestamp preceding the earliest valid

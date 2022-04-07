@@ -455,6 +455,7 @@ crdb_internal       schema_changes
 crdb_internal       session_trace
 crdb_internal       session_variables
 crdb_internal       statement_statistics
+crdb_internal       super_regions
 crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       table_row_statistics
@@ -776,6 +777,7 @@ schema_changes
 session_trace
 session_variables
 statement_statistics
+super_regions
 table_columns
 table_indexes
 table_row_statistics
@@ -1136,6 +1138,7 @@ system         crdb_internal       schema_changes                         SYSTEM
 system         crdb_internal       session_trace                          SYSTEM VIEW  NO                  1
 system         crdb_internal       session_variables                      SYSTEM VIEW  NO                  1
 system         crdb_internal       statement_statistics                   SYSTEM VIEW  NO                  1
+system         crdb_internal       super_regions                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_columns                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_indexes                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_row_statistics                   SYSTEM VIEW  NO                  1
@@ -1601,6 +1604,7 @@ system              public             630200280_42_8_not_null                  
 system              public             630200280_42_9_not_null                                                                                         system         public        statement_statistics             CHECK            NO             NO
 system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  system         public        statement_statistics             CHECK            NO             NO
 system              public             primary                                                                                                         system         public        statement_statistics             PRIMARY KEY      NO             NO
+system              public             630200280_20_10_not_null                                                                                        system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_1_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_2_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_4_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
@@ -1608,7 +1612,6 @@ system              public             630200280_20_5_not_null                  
 system              public             630200280_20_6_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_7_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             630200280_20_8_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
-system              public             630200280_20_9_not_null                                                                                         system         public        table_statistics                 CHECK            NO             NO
 system              public             primary                                                                                                         system         public        table_statistics                 PRIMARY KEY      NO             NO
 system              public             630200280_50_1_not_null                                                                                         system         public        tenant_settings                  CHECK            NO             NO
 system              public             630200280_50_2_not_null                                                                                         system         public        tenant_settings                  CHECK            NO             NO
@@ -1693,6 +1696,7 @@ system              public             630200280_19_3_not_null                  
 system              public             630200280_19_4_not_null                                                                                         createdAt IS NOT NULL
 system              public             630200280_19_5_not_null                                                                                         expiresAt IS NOT NULL
 system              public             630200280_19_7_not_null                                                                                         lastUsedAt IS NOT NULL
+system              public             630200280_20_10_not_null                                                                                        avgSize IS NOT NULL
 system              public             630200280_20_1_not_null                                                                                         tableID IS NOT NULL
 system              public             630200280_20_2_not_null                                                                                         statisticID IS NOT NULL
 system              public             630200280_20_4_not_null                                                                                         columnIDs IS NOT NULL
@@ -1700,7 +1704,6 @@ system              public             630200280_20_5_not_null                  
 system              public             630200280_20_6_not_null                                                                                         rowCount IS NOT NULL
 system              public             630200280_20_7_not_null                                                                                         distinctCount IS NOT NULL
 system              public             630200280_20_8_not_null                                                                                         nullCount IS NOT NULL
-system              public             630200280_20_9_not_null                                                                                         avgSize IS NOT NULL
 system              public             630200280_21_1_not_null                                                                                         localityKey IS NOT NULL
 system              public             630200280_21_2_not_null                                                                                         localityValue IS NOT NULL
 system              public             630200280_21_3_not_null                                                                                         latitude IS NOT NULL
@@ -2150,11 +2153,11 @@ system         public        statement_statistics             plan              
 system         public        statement_statistics             plan_hash                                                                                                 4
 system         public        statement_statistics             statistics                                                                                                9
 system         public        statement_statistics             transaction_fingerprint_id                                                                                3
-system         public        table_statistics                 avgSize                                                                                                   9
+system         public        table_statistics                 avgSize                                                                                                   10
 system         public        table_statistics                 columnIDs                                                                                                 4
 system         public        table_statistics                 createdAt                                                                                                 5
 system         public        table_statistics                 distinctCount                                                                                             7
-system         public        table_statistics                 histogram                                                                                                 10
+system         public        table_statistics                 histogram                                                                                                 9
 system         public        table_statistics                 name                                                                                                      3
 system         public        table_statistics                 nullCount                                                                                                 8
 system         public        table_statistics                 rowCount                                                                                                  6
@@ -2729,6 +2732,7 @@ NULL     public   system         crdb_internal       schema_changes             
 NULL     public   system         crdb_internal       session_trace                          SELECT          NO            YES
 NULL     public   system         crdb_internal       session_variables                      SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
+NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NO            YES
@@ -3348,6 +3352,7 @@ NULL     public   system         crdb_internal       schema_changes             
 NULL     public   system         crdb_internal       session_trace                          SELECT          NO            YES
 NULL     public   system         crdb_internal       session_variables                      SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
+NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_row_statistics                   SELECT          NO            YES
@@ -4669,12 +4674,27 @@ test               pg_catalog        zh-Hant              NULL                  
 ## information_schema.session_variables
 subtest variables
 
-## excluding crdb_version and session_id variables as they are generated on each
-## commit/session; distsql, experimental_distsql_planning and vectorize as they
-## depend on distsql and vectorization turned on/off. Also excluding
-## use_declarative_schema_changer, which can be adjusted based on the mode.
+## Excluding crdb_version and session_id variables as they are generated on each
+## commit/session.; , experimental_distsql_planning and vectorize as they
+## depend on distsql and vectorization turned on/off. Also excluding distsql,
+## vectorize, experimental_distsql_planning, use_declarative_schema_changer,
+## and distsql_workmem which can be adjusted based on the logic test mode.
 query TT colnames
-SELECT * FROM information_schema.session_variables where variable not in ('crdb_version', 'session_id', 'distsql', 'vectorize', 'experimental_distsql_planning', 'use_declarative_schema_changer')
+SELECT
+  *
+FROM
+  information_schema.session_variables
+WHERE
+  variable
+  NOT IN (
+      'crdb_version',
+      'session_id',
+      'distsql',
+      'vectorize',
+      'experimental_distsql_planning',
+      'use_declarative_schema_changer',
+      'distsql_workmem'
+    );
 ----
 variable                                              value
 allow_prepare_as_opt_plan                             off
@@ -4689,7 +4709,7 @@ client_min_messages                                   notice
 cost_scans_with_default_col_size                      off
 database                                              test
 datestyle                                             ISO, MDY
-datestyle_enabled                                     off
+datestyle_enabled                                     on
 default_int_size                                      8
 default_table_access_method                           heap
 default_tablespace                                    ·
@@ -4702,7 +4722,6 @@ default_with_oids                                     off
 disable_partially_distributed_plans                   off
 disable_plan_gists                                    off
 disallow_full_table_scans                             off
-distsql_workmem                                       64 MiB
 enable_drop_enum_value                                on
 enable_experimental_alter_column_type_general         off
 enable_experimental_stream_replication                off
@@ -4714,6 +4733,7 @@ enable_seqscan                                        on
 enable_super_regions                                  off
 enable_zigzag_join                                    on
 escape_string_warning                                 on
+expect_and_ignore_not_visible_columns_in_copy         off
 experimental_computed_column_rewrites                 ·
 experimental_enable_auto_rehoming                     off
 experimental_enable_hash_sharded_indexes              on
@@ -4730,7 +4750,7 @@ index_recommendations_enabled                         off
 inject_retry_errors_enabled                           off
 integer_datetimes                                     on
 intervalstyle                                         postgres
-intervalstyle_enabled                                 off
+intervalstyle_enabled                                 on
 is_superuser                                          on
 join_reader_ordering_strategy_batch_size              10 KiB
 large_full_scan_rows                                  1000

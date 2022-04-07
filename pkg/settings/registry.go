@@ -109,6 +109,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.telemetry.query_sampling.sample_rate":                       {},
 	"diagnostics.sql_stat_reset.interval":                            {},
 	"changefeed.mem.pushback_enabled":                                {},
+	"sql.distsql.index_join_limit_hint.enabled":                      {},
 
 	// removed as of 22.1.
 	"sql.defaults.drop_enum_value.enabled":                             {},
@@ -123,6 +124,7 @@ var retiredSettings = map[string]struct{}{
 	"schemachanger.backfiller.max_sst_size":                            {},
 	"kv.bulk_ingest.buffer_increment":                                  {},
 	"schemachanger.backfiller.buffer_increment":                        {},
+	"kv.rangefeed.separated_intent_scan.enabled":                       {},
 }
 
 // register adds a setting to the registry.

@@ -39,15 +39,19 @@ func main() {
 		packagesToQuery = append(packagesToQuery, fmt.Sprintf("//pkg/%s/...", info.Name()))
 	}
 	allPackages := strings.Join(packagesToQuery, "+")
-	queryArgs := []string{"query", fmt.Sprintf("kind(go_test, %s)", allPackages), "--output=label"}
-	buf, err := exec.Command("bazel", queryArgs...).Output()
+	cmd := exec.Command(
+		"bazel", "query",
+		fmt.Sprintf(`kind("(go|sh)_test", %s)`, allPackages),
+		"--output=label",
+	)
+	buf, err := cmd.Output()
 	if err != nil {
 		log.Printf("Could not query Bazel tests: got error %v", err)
 		var cmderr *exec.ExitError
 		if errors.As(err, &cmderr) {
 			log.Printf("Got error output: %s", string(cmderr.Stderr))
 		} else {
-			log.Printf("Run `bazel %s` to reproduce the failure", shellescape.QuoteCommand(queryArgs))
+			log.Printf("Run `%s` to reproduce the failure", shellescape.QuoteCommand(cmd.Args))
 		}
 		os.Exit(1)
 	}
@@ -72,6 +76,16 @@ ALL_TESTS = [`)
 
 # [1] https://docs.bazel.build/versions/master/be/general.html#test_suite
 # [2] https://docs.bazel.build/versions/master/be/common-definitions.html#common-attributes-tests`)
+
+	fmt.Println(`
+test_suite(
+    name = "all_tests",
+    tags = [
+        "-broken_in_bazel",
+        "-integration",
+    ],
+    tests = ALL_TESTS,
+)`)
 
 	for _, size := range []string{"small", "medium", "large", "enormous"} {
 		fmt.Printf(`

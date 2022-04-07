@@ -45,6 +45,16 @@ func BuildStages(
 		c.isRevertibilityIgnored = false
 		stages = buildStages(c)
 	}
+	// Add job ops to the stages.
+	for i := range stages {
+		var cur, next *Stage
+		if i+1 < len(stages) {
+			next = &stages[i+1]
+		}
+		cur = &stages[i]
+		jobOps := c.computeExtraJobOps(cur, next)
+		cur.ExtraOps = jobOps
+	}
 	return decorateStages(stages)
 }
 
@@ -108,6 +118,7 @@ func buildStages(bc buildContext) (stages []Stage) {
 			bs.phase++
 		}
 	}
+
 	return stages
 }
 
@@ -420,8 +431,6 @@ func (sb stageBuilder) build() Stage {
 		}
 		s.EdgeOps = append(s.EdgeOps, e.Op()...)
 	}
-	jobOps := sb.computeExtraJobOps(s, after)
-	s.ExtraOps = jobOps
 	return s
 }
 
@@ -434,58 +443,55 @@ func (sb stageBuilder) build() Stage {
 // may prove to be a somewhat common pattern in other cases: consider the
 // intermediate index needed when adding and dropping columns as part of the
 // same transaction.
-func (sb stageBuilder) computeExtraJobOps(s Stage, after []scpb.Status) []scop.Op {
+func (bc buildContext) computeExtraJobOps(s, next *Stage) []scop.Op {
+	revertible := next != nil && next.Phase < scop.PostCommitNonRevertiblePhase
 	switch s.Phase {
 	case scop.PreCommitPhase:
 		// If this pre-commit stage is non-terminal, this means there will be at
 		// least one post-commit stage, so we need to create a schema changer job
 		// and update references for the affected descriptors.
-		if !sb.bc.isStateTerminal(after) {
+		if next != nil {
 			const initialize = true
-			return append(sb.bc.setJobStateOnDescriptorOps(initialize, after),
-				sb.bc.createSchemaChangeJobOp())
+			return append(bc.setJobStateOnDescriptorOps(initialize, revertible, s.After),
+				bc.createSchemaChangeJobOp(revertible))
 		}
 		return nil
 	case scop.PostCommitPhase, scop.PostCommitNonRevertiblePhase:
-		if sb.opType != scop.MutationType {
+		if s.Type() != scop.MutationType {
 			return nil
 		}
 		var ops []scop.Op
-		if sb.bc.isStateTerminal(after) {
+		if next == nil {
 			// The terminal mutation stage needs to remove references to the schema
 			// changer job in the affected descriptors.
-			ops = sb.bc.removeJobReferenceOps()
+			ops = bc.removeJobReferenceOps()
 		} else {
 			const initialize = false
-			ops = sb.bc.setJobStateOnDescriptorOps(initialize, after)
+			ops = bc.setJobStateOnDescriptorOps(initialize, revertible, s.After)
 		}
 		// If we just moved to a non-cancelable phase, we need to tell the job
 		// that it cannot be canceled. Ideally we'd do this just once.
-		//
-		// TODO(ajwerner): Track the previous stage's phase so we can know when
-		// we need to emit this op. Also, this is buggy, we need to mark the job
-		// as non-cancelable *before* we start to execute the first NonRevertible
-		// phase.
-		ops = append(ops, sb.bc.updateJobProgressOp(s.Phase > scop.PostCommitPhase))
+		ops = append(ops, bc.updateJobProgressOp(revertible))
 		return ops
 	default:
 		return nil
 	}
 }
 
-func (bc buildContext) createSchemaChangeJobOp() scop.Op {
+func (bc buildContext) createSchemaChangeJobOp(revertible bool) scop.Op {
 	return &scop.CreateSchemaChangerJob{
 		JobID:         bc.scJobIDSupplier(),
 		Statements:    bc.targetState.Statements,
 		Authorization: bc.targetState.Authorization,
 		DescriptorIDs: screl.AllTargetDescIDs(bc.targetState).Ordered(),
+		NonCancelable: !revertible,
 	}
 }
 
-func (bc buildContext) updateJobProgressOp(isNonCancellable bool) scop.Op {
+func (bc buildContext) updateJobProgressOp(revertible bool) scop.Op {
 	return &scop.UpdateSchemaChangerJob{
 		JobID:           bc.scJobIDSupplier(),
-		IsNonCancelable: isNonCancellable,
+		IsNonCancelable: !revertible,
 	}
 }
 
@@ -514,9 +520,11 @@ func (bc buildContext) nodes(current []scpb.Status) []*screl.Node {
 	return nodes
 }
 
-func (bc buildContext) setJobStateOnDescriptorOps(initialize bool, after []scpb.Status) []scop.Op {
+func (bc buildContext) setJobStateOnDescriptorOps(
+	initialize, revertible bool, after []scpb.Status,
+) []scop.Op {
 	descIDs, states := makeDescriptorStates(
-		bc.scJobIDSupplier(), bc.rollback, bc.targetState, after,
+		bc.scJobIDSupplier(), bc.rollback, revertible, bc.targetState, after,
 	)
 	ops := make([]scop.Op, 0, descIDs.Len())
 	descIDs.ForEach(func(descID descpb.ID) {
@@ -530,7 +538,7 @@ func (bc buildContext) setJobStateOnDescriptorOps(initialize bool, after []scpb.
 }
 
 func makeDescriptorStates(
-	jobID jobspb.JobID, inRollback bool, ts scpb.TargetState, statuses []scpb.Status,
+	jobID jobspb.JobID, inRollback, revertible bool, ts scpb.TargetState, statuses []scpb.Status,
 ) (catalog.DescriptorIDSet, map[descpb.ID]*scpb.DescriptorState) {
 	descIDs := screl.AllTargetDescIDs(ts)
 	states := make(map[descpb.ID]*scpb.DescriptorState, descIDs.Len())
@@ -538,6 +546,8 @@ func makeDescriptorStates(
 		states[id] = &scpb.DescriptorState{
 			Authorization: ts.Authorization,
 			JobID:         jobID,
+			InRollback:    inRollback,
+			Revertible:    revertible,
 		}
 	})
 	noteRelevantStatement := func(state *scpb.DescriptorState, stmtRank uint32) {
@@ -562,7 +572,6 @@ func makeDescriptorStates(
 		state.Targets = append(state.Targets, t)
 		state.TargetRanks = append(state.TargetRanks, uint32(i))
 		state.CurrentStatuses = append(state.CurrentStatuses, statuses[i])
-		state.InRollback = inRollback
 	}
 	return descIDs, states
 }

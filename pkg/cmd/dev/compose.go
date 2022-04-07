@@ -28,6 +28,7 @@ func makeComposeCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 	}
 	addCommonBuildFlags(composeCmd)
 	addCommonTestFlags(composeCmd)
+	composeCmd.Flags().Bool(noRebuildCockroachFlag, false, "set if it is unnecessary to rebuild cockroach (artifacts/cockroach must already exist, e.g. after being created by a previous `dev compose` run)")
 	composeCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
 	return composeCmd
 }
@@ -35,19 +36,22 @@ func makeComposeCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 func (d *dev) compose(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	var (
-		filter  = mustGetFlagString(cmd, filterFlag)
-		short   = mustGetFlagBool(cmd, shortFlag)
-		timeout = mustGetFlagDuration(cmd, timeoutFlag)
+		filter             = mustGetFlagString(cmd, filterFlag)
+		noRebuildCockroach = mustGetFlagBool(cmd, noRebuildCockroachFlag)
+		short              = mustGetFlagBool(cmd, shortFlag)
+		timeout            = mustGetFlagDuration(cmd, timeoutFlag)
 	)
 
-	crossArgs, targets, err := d.getBasicBuildArgs(ctx, []string{"//pkg/cmd/cockroach:cockroach", "//pkg/compose/compare/compare:compare_test"})
-	if err != nil {
-		return err
-	}
-	volume := mustGetFlagString(cmd, volumeFlag)
-	err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume)
-	if err != nil {
-		return err
+	if !noRebuildCockroach {
+		crossArgs, targets, err := d.getBasicBuildArgs(ctx, []string{"//pkg/cmd/cockroach:cockroach", "//pkg/compose/compare/compare:compare_test"})
+		if err != nil {
+			return err
+		}
+		volume := mustGetFlagString(cmd, volumeFlag)
+		err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume)
+		if err != nil {
+			return err
+		}
 	}
 
 	workspace, err := d.getWorkspace(ctx)

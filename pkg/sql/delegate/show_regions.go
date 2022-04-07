@@ -72,6 +72,7 @@ ORDER BY "primary" DESC, "region"`,
 			zonesClause,
 			lexbase.EscapeSQLString(dbName),
 		)
+
 		return parse(query)
 
 	case tree.ShowRegionsFromCluster:
@@ -127,6 +128,16 @@ ORDER BY zones_table.region
 `,
 			zonesClause,
 		)
+		return parse(query)
+	case tree.ShowSuperRegionsFromDatabase:
+		sqltelemetry.IncrementShowCounter(sqltelemetry.SuperRegions)
+
+		query := fmt.Sprintf(
+			`
+SELECT database_name, super_region_name, regions
+  FROM crdb_internal.super_regions
+ WHERE database_name = '%s'`, n.DatabaseName)
+
 		return parse(query)
 	}
 	return nil, errors.Newf("unhandled ShowRegionsFrom: %v", n.ShowRegionsFrom)

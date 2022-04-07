@@ -77,24 +77,25 @@ func (rc ReadConsistencyType) SupportsBatch(ba BatchRequest) error {
 type flag int
 
 const (
-	isAdmin                       flag = 1 << iota // admin cmds don't go through raft, but run on lease holder
-	isRead                                         // read-only cmds don't go through raft, but may run on lease holder
-	isWrite                                        // write cmds go through raft and must be proposed on lease holder
-	isTxn                                          // txn commands may be part of a transaction
-	isLocking                                      // locking cmds acquire locks for their transaction
-	isIntentWrite                                  // intent write cmds leave intents when they succeed
-	isRange                                        // range commands may span multiple keys
-	isReverse                                      // reverse commands traverse ranges in descending direction
-	isAlone                                        // requests which must be alone in a batch
-	isPrefix                                       // requests which, in a batch, must not be split from the following request
-	isUnsplittable                                 // range command that must not be split during sending
-	skipsLeaseCheck                                // commands which skip the check that the evaluating replica has a valid lease
-	appliesTSCache                                 // commands which apply the timestamp cache and closed timestamp
-	updatesTSCache                                 // commands which update the timestamp cache
-	updatesTSCacheOnErr                            // commands which make read data available on errors
-	needsRefresh                                   // commands which require refreshes to avoid serializable retries
-	canBackpressure                                // commands which deserve backpressure when a Range grows too large
-	bypassesReplicaCircuitBreaker                  // commands which bypass the replica circuit breaker, i.e. opt out of fail-fast
+	isAdmin                                  flag = 1 << iota // admin cmds don't go through raft, but run on lease holder
+	isRead                                                    // read-only cmds don't go through raft, but may run on lease holder
+	isWrite                                                   // write cmds go through raft and must be proposed on lease holder
+	isTxn                                                     // txn commands may be part of a transaction
+	isLocking                                                 // locking cmds acquire locks for their transaction
+	isIntentWrite                                             // intent write cmds leave intents when they succeed
+	isRange                                                   // range commands may span multiple keys
+	isReverse                                                 // reverse commands traverse ranges in descending direction
+	isAlone                                                   // requests which must be alone in a batch
+	isPrefix                                                  // requests which, in a batch, must not be split from the following request
+	isUnsplittable                                            // range command that must not be split during sending
+	skipsLeaseCheck                                           // commands which skip the check that the evaluating replica has a valid lease
+	appliesTSCache                                            // commands which apply the timestamp cache and closed timestamp
+	updatesTSCache                                            // commands which update the timestamp cache
+	updatesTSCacheOnErr                                       // commands which make read data available on errors
+	needsRefresh                                              // commands which require refreshes to avoid serializable retries
+	canBackpressure                                           // commands which deserve backpressure when a Range grows too large
+	bypassesReplicaCircuitBreaker                             // commands which bypass the replica circuit breaker, i.e. opt out of fail-fast
+	requiresClosedTSOlderThanStorageSnapshot                  // commands which read a replica's closed timestamp that is older than the state of the storage engine
 )
 
 // flagDependencies specifies flag dependencies, asserted by TestFlagCombinations.
@@ -1404,9 +1405,11 @@ func (r *RefreshRangeRequest) flags() flag {
 	return isRead | isTxn | isRange | updatesTSCache
 }
 
-func (*SubsumeRequest) flags() flag                { return isRead | isAlone | updatesTSCache }
-func (*RangeStatsRequest) flags() flag             { return isRead }
-func (*QueryResolvedTimestampRequest) flags() flag { return isRead | isRange }
+func (*SubsumeRequest) flags() flag    { return isRead | isAlone | updatesTSCache }
+func (*RangeStatsRequest) flags() flag { return isRead }
+func (*QueryResolvedTimestampRequest) flags() flag {
+	return isRead | isRange | requiresClosedTSOlderThanStorageSnapshot
+}
 func (*ScanInterleavedIntentsRequest) flags() flag { return isRead | isRange }
 func (*BarrierRequest) flags() flag                { return isWrite | isRange }
 
@@ -1676,6 +1679,7 @@ var _ = (*TenantConsumption).Equal
 // Add consumption from the given structure.
 func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.RU += other.RU
+	c.KVRU += other.KVRU
 	c.ReadRequests += other.ReadRequests
 	c.ReadBytes += other.ReadBytes
 	c.WriteRequests += other.WriteRequests
@@ -1690,6 +1694,12 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 		c.RU = 0
 	} else {
 		c.RU -= other.RU
+	}
+
+	if c.KVRU < other.KVRU {
+		c.KVRU = 0
+	} else {
+		c.KVRU -= other.KVRU
 	}
 
 	if c.ReadRequests < other.ReadRequests {

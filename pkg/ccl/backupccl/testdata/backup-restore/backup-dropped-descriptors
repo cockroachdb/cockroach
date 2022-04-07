@@ -1,4 +1,4 @@
-# backup-dropped-desctiprors tests backup and restore interaction with database, schema
+# backup-dropped-descriptors tests backup and restore interaction with database, schema
 # and type descriptors in the DROP state.
 subtest dropped-database-descriptors
 
@@ -7,12 +7,21 @@ new-server name=s1
 
 exec-sql
 SET use_declarative_schema_changer = 'off';
+----
+
+exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
+----
+
+exec-sql
 CREATE DATABASE d;
 CREATE TABLE d.foo (id INT);
+----
+
+schema-change expect-pausepoint
 DROP DATABASE d CASCADE;
 ----
-paused before it completed with reason: pause point "schemachanger.before.exec" hit
+job paused at pausepoint
 
 # At this point, we have a descriptor entry for `d` in a DROP state.
 query-sql
@@ -115,19 +124,25 @@ CREATE TABLE d2.s.t (id INT);
 
 exec-sql
 SET use_declarative_schema_changer = 'off';
+----
+
+exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
 ----
 
-exec-sql
+schema-change expect-pausepoint
 DROP SCHEMA d2.s CASCADE;
 ----
-paused before it completed with reason: pause point "schemachanger.before.exec" hit
+job paused at pausepoint
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'typeschemachanger.before.exec';
+----
+
+schema-change expect-pausepoint
 DROP TYPE d2.typ;
 ----
-paused before it completed with reason: pause point "typeschemachanger.before.exec" hit
+job paused at pausepoint
 
 query-sql
 WITH tbls AS (
@@ -183,14 +198,13 @@ USE d3;
 
 # We don't expect to see the dropped schema 's'.
 query-sql
-SELECT schema_name FROM [SHOW SCHEMAS];
+SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY 1;
 ----
-public
 crdb_internal
 information_schema
 pg_catalog
 pg_extension
-
+public
 
 query-sql
 SELECT schema_name, table_name FROM [SHOW TABLES];
@@ -207,13 +221,13 @@ USE d4;
 ----
 
 query-sql
-SELECT schema_name FROM [SHOW SCHEMAS];
+SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY 1;
 ----
-public
 crdb_internal
 information_schema
 pg_catalog
 pg_extension
+public
 
 query-sql
 SELECT schema_name, table_name FROM [SHOW TABLES];

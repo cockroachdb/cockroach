@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // sorter sorts the input rows according to the specified ordering.
@@ -44,7 +44,7 @@ func (s *sorterBase) init(
 	self execinfra.RowSource,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	processorName string,
+	processorName redact.RedactableString,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
@@ -60,7 +60,7 @@ func (s *sorterBase) init(
 
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will overflow to disk if this limit is not enough.
-	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, fmt.Sprintf("%s-limited", processorName))
+	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, redact.Sprintf("%s-limited", processorName))
 	if err := s.ProcessorBase.Init(
 		self, post, input.OutputTypes(), flowCtx, processorID, output, memMonitor, opts,
 	); err != nil {
@@ -68,7 +68,7 @@ func (s *sorterBase) init(
 		return err
 	}
 
-	s.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, fmt.Sprintf("%s-disk", processorName))
+	s.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, redact.Sprintf("%s-disk", processorName))
 	rc := rowcontainer.DiskBackedRowContainer{}
 	rc.Init(
 		ordering,

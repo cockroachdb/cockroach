@@ -83,7 +83,7 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 			}
 			return base.CheckEnterpriseEnabled(
 				execCfg.Settings,
-				execCfg.ClusterID(),
+				execCfg.LogicalClusterID(),
 				execCfg.Organization(),
 				"global_reads",
 			)
@@ -421,6 +421,14 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			return fmt.Errorf("partition %q does not exist on table %q", partitionName, table.GetName())
 		case 1:
 			n.zoneSpecifier.TableOrIndex.Index = tree.UnrestrictedName(indexes[0].GetName())
+		case 2:
+			// Temporary indexes create during backfill should always share the same
+			// zone configs as the corresponding new index.
+			if catalog.IsCorrespondingTemporaryIndex(indexes[1], indexes[0]) {
+				n.zoneSpecifier.TableOrIndex.Index = tree.UnrestrictedName(indexes[0].GetName())
+				break
+			}
+			fallthrough
 		default:
 			err := fmt.Errorf(
 				"partition %q exists on multiple indexes of table %q", partitionName, table.GetName())
@@ -486,6 +494,11 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		index, partition, err := resolveSubzone(&zs, table)
 		if err != nil {
 			return err
+		}
+
+		var tempIndex catalog.Index
+		if index != nil {
+			tempIndex = catalog.FindCorrespondingTemporaryIndexByID(table, index.GetID())
 		}
 
 		// Retrieve the partial zone configuration
@@ -729,6 +742,21 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 					PartitionName: partition,
 					Config:        finalZone,
 				})
+
+				// Also set the same zone configs for any corresponding temporary indexes.
+				if tempIndex != nil {
+					completeZone.SetSubzone(zonepb.Subzone{
+						IndexID:       uint32(tempIndex.GetID()),
+						PartitionName: partition,
+						Config:        newZone,
+					})
+
+					partialZone.SetSubzone(zonepb.Subzone{
+						IndexID:       uint32(tempIndex.GetID()),
+						PartitionName: partition,
+						Config:        finalZone,
+					})
+				}
 			}
 
 			// Finally revalidate everything. Validate only the completeZone config.
@@ -1040,7 +1068,7 @@ func prepareZoneConfigWrites(
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(
-			st, execCfg.ClusterID(), execCfg.Codec, table, zone.Subzones, hasNewSubzones)
+			st, execCfg.LogicalClusterID(), execCfg.Codec, table, zone.Subzones, hasNewSubzones)
 		if err != nil {
 			return nil, err
 		}
@@ -1154,10 +1182,6 @@ func RemoveIndexZoneConfigs(
 	tableDesc catalog.TableDescriptor,
 	indexIDs []uint32,
 ) error {
-	if !execCfg.Codec.ForSystemTenant() {
-		// Tenants are agnostic to zone configs.
-		return nil
-	}
 	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, tableDesc.GetID())
 	if err != nil {
 		return err

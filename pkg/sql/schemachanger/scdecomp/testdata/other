@@ -36,10 +36,6 @@ ElementState:
     privileges: 2
     userName: root
   Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 106
-    userName: public
-  Status: PUBLIC
 - SchemaParent:
     parentDatabaseId: 104
     schemaId: 106
@@ -232,10 +228,6 @@ ElementState:
     privileges: 2
     userName: root
   Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 112
-    userName: public
-  Status: PUBLIC
 - ObjectParent:
     objectId: 112
     parentSchemaId: 106
@@ -324,10 +316,6 @@ ElementState:
     descriptorId: 113
     privileges: 2
     userName: root
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 113
-    userName: public
   Status: PUBLIC
 - ObjectParent:
     objectId: 113

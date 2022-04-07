@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/redact"
 )
 
 // bufferNode consumes its input one row at a time, stores it in the buffer,
@@ -29,12 +30,13 @@ type bufferNode struct {
 	currentRow tree.Datums
 
 	// label is a string used to describe the node in an EXPLAIN plan.
+	// TODO(yuzefovich): make this redact.RedactableString.
 	label string
 }
 
 func (n *bufferNode) startExec(params runParams) error {
 	n.typs = planTypes(n.plan)
-	n.rows.Init(n.typs, params.extendedEvalCtx, n.label)
+	n.rows.Init(n.typs, params.extendedEvalCtx, redact.Sprint(n.label))
 	return nil
 }
 

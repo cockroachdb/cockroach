@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -372,6 +371,22 @@ func (f *jobFeed) Close() error {
 	// Already failed/or failing.
 	default:
 		// TODO(yevgeniy): Cancel job w/out producing spurious error messages in the logs.
+		if f.jobID == jobspb.InvalidJobID {
+			// Some tests may create a jobFeed without creating a new job. Hence, if
+			// the jobID is invalid, skip trying to cancel the job.
+			return nil
+		}
+		status, err := f.status()
+		if err != nil {
+			return err
+		}
+		if status == string(jobs.StatusSucceeded) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.mu.terminalErr = errors.New("changefeed completed")
+			close(f.shutdown)
+			return nil
+		}
 		if _, err := f.db.Exec(`CANCEL JOB $1`, f.jobID); err != nil {
 			log.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
 		}
@@ -947,6 +962,9 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 	}
 	topic = subs[5]
 
+	// cloud storage uses a different delimiter. Let tests be agnostic.
+	topic = strings.Replace(topic, `+`, `.`, -1)
+
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -1298,6 +1316,9 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
+	// required value
+	createStmt.Options = append(createStmt.Options, tree.KVOption{Key: changefeedbase.OptTopicInValue})
+
 	var sinkDest *cdctest.MockWebhookSink
 
 	cert, _, err := cdctest.NewCACertBase64Encoded()
@@ -1508,7 +1529,7 @@ type fakePubsubClient struct {
 
 var _ pubsubClient = (*fakePubsubClient)(nil)
 
-func (p *fakePubsubClient) openTopics() error {
+func (p *fakePubsubClient) init() error {
 	return nil
 }
 
@@ -1516,7 +1537,7 @@ func (p *fakePubsubClient) closeTopics() {
 }
 
 // sendMessage sends a message to the topic
-func (p *fakePubsubClient) sendMessage(m []byte, _ descpb.ID, _ string) error {
+func (p *fakePubsubClient) sendMessage(m []byte, _ string, _ string) error {
 	message := mockPubsubMessage{data: string(m)}
 	p.buffer.push(message)
 	return nil
@@ -1526,10 +1547,6 @@ func (p *fakePubsubClient) sendMessageToAllTopics(m []byte) error {
 	message := mockPubsubMessage{data: string(m)}
 	p.buffer.push(message)
 	return nil
-}
-
-func (p *fakePubsubClient) getTopicName(_ descpb.ID) string {
-	return ""
 }
 
 func (p *fakePubsubClient) flushTopics() {

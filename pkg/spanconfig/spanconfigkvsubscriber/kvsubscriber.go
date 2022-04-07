@@ -216,7 +216,7 @@ func (s *KVSubscriber) GetProtectionTimestamps(
 	defer s.mu.RUnlock()
 
 	if err := s.mu.internal.ForEachOverlappingSpanConfig(ctx, sp,
-		func(_ roachpb.Span, config roachpb.SpanConfig) error {
+		func(sp roachpb.Span, config roachpb.SpanConfig) error {
 			for _, protection := range config.GCPolicy.ProtectionPolicies {
 				// If the SpanConfig that applies to this span indicates that the span
 				// is going to be excluded from backup, and the protection policy was

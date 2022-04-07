@@ -1011,6 +1011,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 
 		b := txn.NewBatch()
 		scTable.SetDropped()
+		scTable.DropTime = timeutil.Now().UnixNano()
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, scTable, b); err != nil {
 			return err
 		}
@@ -2265,6 +2266,10 @@ func CreateGCJobRecord(
 type GCJobTestingKnobs struct {
 	RunBeforeResume    func(jobID jobspb.JobID) error
 	RunBeforePerformGC func(jobID jobspb.JobID) error
+	// RunAfterIsProtectedCheck is called after a successfully checking the
+	// protected timestamp status of a table or an index. The protection status is
+	// passed in along with the jobID.
+	RunAfterIsProtectedCheck func(jobID jobspb.JobID, isProtected bool)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -2434,7 +2439,7 @@ func createSchemaChangeEvalCtx(
 			Regions:            &faketreeeval.DummyRegionOperator{},
 			Settings:           execCfg.Settings,
 			TestingKnobs:       execCfg.EvalContextTestingKnobs,
-			ClusterID:          execCfg.ClusterID(),
+			ClusterID:          execCfg.LogicalClusterID(),
 			ClusterName:        execCfg.RPCContext.ClusterName(),
 			NodeID:             execCfg.NodeID,
 			Codec:              execCfg.Codec,
@@ -3066,7 +3071,7 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 					for _, shard := range splitAtShards {
 						keyPrefix := sc.execCfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(idx.GetID()))
 						splitKey := encoding.EncodeVarintAscending(keyPrefix, shard)
-						if _, err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
+						if err := splitAndScatter(ctx, sc.db, splitKey, hour); err != nil {
 							return err
 						}
 					}
@@ -3075,7 +3080,7 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 					for _, partPrefix := range partitionKeyPrefixes {
 						for _, shard := range splitAtShards {
 							splitKey := encoding.EncodeVarintAscending(partPrefix, shard)
-							if _, err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
+							if err := splitAndScatter(ctx, sc.db, splitKey, hour); err != nil {
 								return err
 							}
 						}
@@ -3096,6 +3101,16 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 	}
 
 	return nil
+}
+
+func splitAndScatter(
+	ctx context.Context, db *kv.DB, key roachpb.Key, expirationTime hlc.Timestamp,
+) error {
+	if err := db.AdminSplit(ctx, key, expirationTime); err != nil {
+		return err
+	}
+	_, err := db.AdminScatter(ctx, key, 0 /* maxSize */)
+	return err
 }
 
 // calculateSplitAtShards returns a slice of min(maxSplit, shardBucketCount)

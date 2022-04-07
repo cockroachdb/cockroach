@@ -79,8 +79,9 @@ func TestScanBatchSize(t *testing.T) {
 
 			// Create the table with disabled automatic table stats collection (so
 			// that we can control whether they are present or not).
-			_, err := conn.ExecContext(ctx, `
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false;
+			_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false;`)
+			assert.NoError(t, err)
+			_, err = conn.ExecContext(ctx, `
 CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS g(i)
 `)
 			assert.NoError(t, err)

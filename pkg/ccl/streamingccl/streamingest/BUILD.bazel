@@ -15,6 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/backupccl",
         "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/streamclient",
@@ -70,6 +71,7 @@ go_test(
     embed = [":streamingest"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/backupccl",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/kvccl/kvtenantccl",

@@ -86,7 +86,7 @@ subtest password_evaluated_before_remapping
 
 connect user=carl@cockroachlabs.com database=mydb password=doggo
 ----
-ERROR: password authentication failed for user carl@cockroachlabs.com (SQLSTATE 28000)
+ERROR: password authentication failed for user carl@cockroachlabs.com (SQLSTATE 28P01)
 
 # Since we're evaluating before remapping, the password extraction will fail
 # for user carl@cockroachlabs.com and we don't even get information about

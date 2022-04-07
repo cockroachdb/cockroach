@@ -1,0 +1,68 @@
+@import "src/core/index.module";
+
+.statement-select {
+  background: white;
+  box-shadow: 0px 1px 4px rgba(198, 214, 237, 0.15),
+    0px 0px 1px rgba(198, 214, 237, 0.415);
+  border-radius: 3px;
+  padding: 15px 20px;
+  margin-bottom: 10px;
+
+  .radio-group {
+    height: fit-content;
+  }
+}
+
+.select-options {
+  align-items: center;
+  display: flex;
+  height: fit-content;
+}
+
+.description-button {
+  height: fit-content;
+  display: inline-block;
+  margin-bottom: 0;
+  margin-left: auto;
+  min-width: 160px;
+  &:focus,
+  &:active {
+    outline: none;
+    border: none;
+  }
+}
+
+.description {
+  transition: 0.2s ease;
+  overflow: hidden;
+  display: block;
+  transform-origin: top;
+  max-height: 100px;
+  padding: 15px 8px 0px 8px;
+  transform: scaleY(1);
+}
+
+.collapsed {
+  max-height: 0;
+  padding: 0;
+  transform: scaleY(0);
+}
+
+:global(.ant-radio) {
+  top: 0;
+}
+
+:global(.ant-radio-checked .ant-radio-inner) {
+  background-color: $colors--link;
+  border-color: $colors--link;
+}
+
+:global(.ant-radio-checked .ant-radio-inner::after) {
+  background-color: white;
+  height: 6px;
+  width: 6px;
+  top: 4px;
+  left: 4px;
+  margin-left: 0;
+  margin-top: 0;
+}

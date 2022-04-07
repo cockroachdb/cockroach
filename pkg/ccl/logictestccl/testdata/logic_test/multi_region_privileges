@@ -25,7 +25,8 @@ ALTER DATABASE db SET PRIMARY REGION "us-east-1"
 user root
 
 statement ok
-GRANT CREATE ON TABLE db.t TO testuser
+GRANT CREATE ON TABLE db.t TO testuser;
+GRANT CREATE ON TABLE db.t2 TO testuser
 
 user testuser
 
@@ -232,7 +233,8 @@ ALTER DATABASE repartition_privs DROP REGION "us-east-1"
 user root
 
 statement ok
-GRANT CREATE ON repartition_privs.rbr TO testuser
+GRANT CREATE ON repartition_privs.rbr TO testuser;
+GRANT CREATE ON repartition_privs.rbr2 TO testuser
 
 user testuser
 

@@ -666,11 +666,11 @@ func (u *sqlSymUnion) kvOptions() []tree.KVOption {
 func (u *sqlSymUnion) backupOptions() *tree.BackupOptions {
   return u.val.(*tree.BackupOptions)
 }
-func (u *sqlSymUnion) replicationOptions() *tree.ReplicationOptions {
-  return u.val.(*tree.ReplicationOptions)
-}
 func (u *sqlSymUnion) copyOptions() *tree.CopyOptions {
   return u.val.(*tree.CopyOptions)
+}
+func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
+  return u.val.(tree.ShowBackupDetails)
 }
 func (u *sqlSymUnion) restoreOptions() *tree.RestoreOptions {
   return u.val.(*tree.RestoreOptions)
@@ -776,6 +776,9 @@ func (u *sqlSymUnion) cursorScrollOption() tree.CursorScrollOption {
 func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
     return u.val.(tree.CursorStmt)
 }
+func (u *sqlSymUnion) asTenantClause() tree.TenantID {
+    return u.val.(tree.TenantID)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -826,13 +829,13 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_ZIGZAG
-%token <str> FOREIGN FORWARD FROM FULL FUNCTION FUNCTIONS
+%token <str> FOREIGN FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GOAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HASH HIGH HISTOGRAM HOLD HOUR
+%token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE
@@ -869,7 +872,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
-%token <str> QUERIES QUERY
+%token <str> QUERIES QUERY QUOTE
 
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
@@ -988,6 +991,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <tree.Statement> alter_database_placement_stmt
 %type <tree.Statement> alter_database_set_stmt
 %type <tree.Statement> alter_database_add_super_region
+%type <tree.Statement> alter_database_alter_super_region
 %type <tree.Statement> alter_database_drop_super_region
 
 // ALTER INDEX
@@ -1035,7 +1039,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <tree.Statement> copy_from_stmt
 
 %type <tree.Statement> create_stmt
-%type <tree.Statement> create_changefeed_stmt create_replication_stream_stmt
+%type <tree.Statement> create_changefeed_stmt
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_extension_stmt
@@ -1181,6 +1185,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
 %type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
+%type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -1244,7 +1249,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
-%type <str> schema_name
+%type <str> schema_name opt_in_schema
 %type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name
 %type <tree.ObjectNamePrefixList> schema_name_list
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
@@ -1459,7 +1464,6 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <privilege.List> privileges
 %type <[]tree.KVOption> opt_role_options role_options
 %type <tree.AuditMode> audit_mode
-%type <*tree.ReplicationOptions> opt_with_replication_options replication_options replication_options_list
 
 %type <str> relocate_kw
 %type <tree.RelocateSubject> relocate_subject relocate_subject_nonlease
@@ -1484,6 +1488,7 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 %type <tree.NameList> opt_for_roles
 %type <tree.ObjectNamePrefixList>  opt_in_schemas
 %type <tree.AlterDefaultPrivilegesTargetObject> alter_default_privileges_target_object
+%type <tree.TenantID> opt_as_tenant_clause
 
 
 // Precedence: lowest to highest
@@ -1772,6 +1777,7 @@ alter_database_stmt:
 | alter_database_placement_stmt
 | alter_database_set_stmt
 | alter_database_add_super_region
+| alter_database_alter_super_region
 | alter_database_drop_super_region
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
@@ -1884,6 +1890,15 @@ alter_database_drop_super_region:
     }
   }
 
+alter_database_alter_super_region:
+  ALTER DATABASE database_name ALTER SUPER REGION name VALUES name_list
+  {
+    $$.val = &tree.AlterDatabaseAlterSuperRegion{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+      Regions: $9.nameList(),
+    }
+  }
 
 // %Help: ALTER RANGE - change the parameters of a range
 // %Category: DDL
@@ -3159,12 +3174,13 @@ restore_stmt:
       Options: *($9.restoreOptions()),
     }
   }
-| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause
+| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause opt_as_tenant_clause
   {
    $$.val = &tree.StreamIngestion{
      Targets: $2.targetList(),
      From: $7.stringOrPlaceholderOptList(),
      AsOf: $8.asOfClause(),
+     AsTenant: $9.asTenantClause(),
    }
   }
 | RESTORE error // SHOW HELP: RESTORE
@@ -3187,6 +3203,28 @@ list_of_string_or_placeholder_opt_list:
 | list_of_string_or_placeholder_opt_list ',' string_or_placeholder_opt_list
   {
     $$.val = append($1.listOfStringOrPlaceholderOptList(), $3.stringOrPlaceholderOptList())
+  }
+
+// Optional AS TENANT clause.
+opt_as_tenant_clause:
+  AS TENANT iconst64
+  {
+    tenID := uint64($3.int64())
+    if tenID == 0 {
+      return setErr(sqllex, errors.New("invalid tenant ID"))
+    }
+    $$.val = tree.TenantID{Specified: true, TenantID: roachpb.MakeTenantID(tenID)}
+  }
+| AS TENANT IDENT
+  {
+    if $3 != "_" {
+       return setErr(sqllex, errors.New("invalid syntax"))
+    }
+    $$.val = tree.TenantID{Specified: true}
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.TenantID{Specified: false}
   }
 
 // Optional restore options.
@@ -3300,29 +3338,19 @@ alter_unsupported_stmt:
 //        <format> <datafile>
 //        [ WITH <option> [= <value>] [, ...] ]
 //
-// -- Import using specific schema, use only table data from external file:
-// IMPORT TABLE <tablename>
-//        { ( <elements> ) | CREATE USING <schemafile> }
-//        <format>
-//        DATA ( <datafile> [, ...] )
-//        [ WITH <option> [= <value>] [, ...] ]
-//
 // Formats:
-//    CSV
-//    DELIMITED
 //    MYSQLDUMP
-//    PGCOPY
 //    PGDUMP
 //
 // Options:
 //    distributed = '...'
 //    sstsize = '...'
 //    temp = '...'
-//    delimiter = '...'      [CSV, PGCOPY-specific]
-//    nullif = '...'         [CSV, PGCOPY-specific]
-//    comment = '...'        [CSV-specific]
 //
-// %SeeAlso: CREATE TABLE
+// Use CREATE TABLE followed by IMPORT INTO to create and import into a table
+// from external files that only have table data.
+//
+// %SeeAlso: CREATE TABLE, WEBDOCS/import-into.html
 import_stmt:
  IMPORT import_format '(' string_or_placeholder ')' opt_with_options
   {
@@ -3519,6 +3547,42 @@ copy_options:
   {
     $$.val = &tree.CopyOptions{Null: $2.expr()}
   }
+| OIDS error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "oids")
+  }
+| FREEZE error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "freeze")
+  }
+| HEADER error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "header")
+  }
+| QUOTE SCONST
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "quote")
+  }
+| ESCAPE SCONST error
+  {
+    $$.val = &tree.CopyOptions{Escape: tree.NewStrVal($2)}
+  }
+| FORCE QUOTE error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "force quote")
+  }
+| FORCE NOT NULL error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "force not null")
+  }
+| FORCE NULL error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "force null")
+  }
+| ENCODING SCONST error
+  {
+    return unimplementedWithIssueDetail(sqllex, 41608, "encoding")
+  }
 
 // %Help: CANCEL
 // %Category: Group
@@ -3645,9 +3709,9 @@ comment_stmt:
   {
     $$.val = &tree.CommentOnDatabase{Name: tree.Name($4), Comment: $6.strPtr()}
   }
-| COMMENT ON SCHEMA schema_name IS comment_text
+| COMMENT ON SCHEMA qualifiable_schema_name IS comment_text
   {
-    $$.val = &tree.CommentOnSchema{Name: tree.Name($4), Comment: $6.strPtr()}
+    $$.val = &tree.CommentOnSchema{Name: $4.objectNamePrefix(), Comment: $6.strPtr()}
   }
 | COMMENT ON TABLE table_name IS comment_text
   {
@@ -3702,7 +3766,6 @@ create_stmt:
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | create_schedule_for_backup_stmt   // EXTEND WITH HELP: CREATE SCHEDULE FOR BACKUP
 | create_changefeed_stmt
-| create_replication_stream_stmt
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
@@ -3964,65 +4027,6 @@ opt_changefeed_sink:
   {
     /* SKIP DOC */
     $$.val = nil
-  }
-
-// %Help: CREATE REPLICATION STREAM - continuously replicate data
-// %Category: CCL
-// %Text:
-// CREATE REPLICATION STREAM FOR <targets> [INTO <sink>] [WITH <options>]
-//
-// Sink: Replication stream destination.
-// WITH <options>:
-//   Options specific to REPLICATION STREAM: See CHANGEFEED options
-//
-// %SeeAlso: CREATE CHANGEFEED
-create_replication_stream_stmt:
-  CREATE REPLICATION STREAM FOR targets opt_changefeed_sink opt_with_replication_options
-  {
-    $$.val = &tree.ReplicationStream{
-      Targets: $5.targetList(),
-      SinkURI: $6.expr(),
-      Options: *$7.replicationOptions(),
-    }
-  }
-
-// Optional replication stream options.
-opt_with_replication_options:
-  WITH replication_options_list
-  {
-    $$.val = $2.replicationOptions()
-  }
-| WITH OPTIONS '(' replication_options_list ')'
-  {
-    $$.val = $4.replicationOptions()
-  }
-| /* EMPTY */
-  {
-    $$.val = &tree.ReplicationOptions{}
-  }
-
-replication_options_list:
-  // Require at least one option
-  replication_options
-  {
-    $$.val = $1.replicationOptions()
-  }
-| replication_options_list ',' replication_options
-  {
-    if err := $1.replicationOptions().CombineWith($3.replicationOptions()); err != nil {
-      return setErr(sqllex, err)
-    }
-  }
-
-// List of valid replication stream options.
-replication_options:
-  CURSOR '=' a_expr
-  {
-    $$.val = &tree.ReplicationOptions{Cursor: $3.expr()}
-  }
-| DETACHED
-  {
-    $$.val = &tree.ReplicationOptions{Detached: true}
   }
 
 // %Help: DELETE - delete rows from a table
@@ -5704,81 +5708,76 @@ show_backup_stmt:
       InCollection:    $4.expr(),
     }
   }
-| SHOW BACKUP string_or_placeholder opt_with_options
-  {
-    $$.val = &tree.ShowBackup{
-      Details: tree.BackupDefaultDetails,
-      Path:    $3.expr(),
-      Options: $4.kvOptions(),
-    }
-  }
-| SHOW BACKUP string_or_placeholder IN string_or_placeholder opt_with_options
-  {
-    $$.val = &tree.ShowBackup{
-      Details: tree.BackupDefaultDetails,
-      Path:    $3.expr(),
-      InCollection: $5.expr(),
-      Options: $6.kvOptions(),
-    }
-  }
-| SHOW BACKUP SCHEMAS string_or_placeholder opt_with_options
-  {
-    $$.val = &tree.ShowBackup{
-      Details: tree.BackupDefaultDetails,
-      ShouldIncludeSchemas: true,
-      Path:    $4.expr(),
-      Options: $5.kvOptions(),
-    }
-  }
-| SHOW BACKUP SCHEMAS string_or_placeholder IN string_or_placeholder opt_with_options
+| SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder opt_with_options
 	{
 		$$.val = &tree.ShowBackup{
-			Details: tree.BackupDefaultDetails,
-			ShouldIncludeSchemas: true,
+			From:    true,
+			Details:    $3.showBackupDetails(),
+			Path:    $5.expr(),
+			InCollection: $7.expr(),
+			Options: $8.kvOptions(),
+		}
+	}
+| SHOW BACKUP string_or_placeholder IN string_or_placeholder opt_with_options
+	{
+		$$.val = &tree.ShowBackup{
+			Details:  tree.BackupDefaultDetails,
+			Path:    $3.expr(),
+			InCollection: $5.expr(),
+			Options: $6.kvOptions(),
+		}
+	}
+| SHOW BACKUP string_or_placeholder opt_with_options
+	{
+		$$.val = &tree.ShowBackup{
+		  Details:  tree.BackupDefaultDetails,
+			Path:    $3.expr(),
+			Options: $4.kvOptions(),
+		}
+	}
+| SHOW BACKUP SCHEMAS string_or_placeholder opt_with_options
+	{
+		$$.val = &tree.ShowBackup{
+		  Details:  tree.BackupSchemaDetails,
 			Path:    $4.expr(),
-			InCollection: $6.expr(),
-			Options: $7.kvOptions(),
+			Options: $5.kvOptions(),
+		}
+	}
+| SHOW BACKUP FILES string_or_placeholder opt_with_options
+	{
+		$$.val = &tree.ShowBackup{
+		  Details:  tree.BackupFileDetails,
+			Path:    $4.expr(),
+			Options: $5.kvOptions(),
 		}
 	}
 | SHOW BACKUP RANGES string_or_placeholder opt_with_options
-  {
-    /* SKIP DOC */
-    $$.val = &tree.ShowBackup{
-      Details: tree.BackupRangeDetails,
-      Path:    $4.expr(),
-      Options: $5.kvOptions(),
-    }
-  }
-| SHOW BACKUP RANGES string_or_placeholder IN string_or_placeholder opt_with_options
-  {
-		/* SKIP DOC */
-		$$.val = &tree.ShowBackup{
-			Details: tree.BackupRangeDetails,
-			Path:    $4.expr(),
-			InCollection: $6.expr(),
-			Options: $7.kvOptions(),
-		}
-  }
-| SHOW BACKUP FILES string_or_placeholder opt_with_options
-  {
-    /* SKIP DOC */
-    $$.val = &tree.ShowBackup{
-      Details: tree.BackupFileDetails,
-      Path:    $4.expr(),
-      Options: $5.kvOptions(),
-    }
-  }
-| SHOW BACKUP FILES string_or_placeholder IN string_or_placeholder opt_with_options
 	{
-		/* SKIP DOC */
 		$$.val = &tree.ShowBackup{
-			Details: tree.BackupFileDetails,
+		  Details:  tree.BackupRangeDetails,
 			Path:    $4.expr(),
-			InCollection: $6.expr(),
-			Options: $7.kvOptions(),
+			Options: $5.kvOptions(),
 		}
 	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
+
+show_backup_details:
+  /* EMPTY -- default */
+  {
+    $$.val = tree.BackupDefaultDetails
+  }
+| SCHEMAS
+  {
+    $$.val = tree.BackupSchemaDetails
+  }
+| FILES
+	{
+	$$.val = tree.BackupFileDetails
+	}
+| RANGES
+	{
+	$$.val = tree.BackupRangeDetails
+	}
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
 // %Category: Cfg
@@ -5880,14 +5879,16 @@ show_databases_stmt:
 // %Category: DDL
 // %Text: SHOW DEFAULT PRIVILEGES
 show_default_privileges_stmt:
-  SHOW DEFAULT PRIVILEGES opt_for_roles {
+  SHOW DEFAULT PRIVILEGES opt_for_roles opt_in_schema {
     $$.val = &tree.ShowDefaultPrivileges{
       Roles: $4.roleSpecList(),
+      Schema: tree.Name($5),
     }
   }
-| SHOW DEFAULT PRIVILEGES FOR ALL ROLES {
+| SHOW DEFAULT PRIVILEGES FOR ALL ROLES opt_in_schema {
     $$.val = &tree.ShowDefaultPrivileges{
       ForAllRoles: true,
+      Schema: tree.Name($7),
     }
   }
 | SHOW DEFAULT PRIVILEGES error // SHOW HELP: SHOW DEFAULT PRIVILEGES
@@ -6612,6 +6613,13 @@ show_regions_stmt:
       ShowRegionsFrom: tree.ShowRegionsFromDefault,
     }
   }
+| SHOW SUPER REGIONS FROM DATABASE database_name
+  {
+    $$.val = &tree.ShowRegions{
+      ShowRegionsFrom: tree.ShowSuperRegionsFromDatabase,
+      DatabaseName: tree.Name($6),
+    }
+  }
 | SHOW REGIONS error // SHOW HELP: SHOW REGIONS
 
 show_locality_stmt:
@@ -7074,12 +7082,12 @@ alter_schema_stmt:
 // Table elements:
 //    <name> <type> [<qualifiers...>]
 //    [UNIQUE | INVERTED] INDEX [<name>] ( <colname> [ASC | DESC] [, ...] )
-//                            [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [{STORING | INCLUDE | COVERING} ( <colnames...> )]
+//                            [USING HASH] [{STORING | INCLUDE | COVERING} ( <colnames...> )]
 //    FAMILY [<name>] ( <colnames...> )
 //    [CONSTRAINT <name>] <constraint>
 //
 // Table constraints:
-//    PRIMARY KEY ( <colnames...> ) [USING HASH WITH BUCKET_COUNT = <shard_buckets>]
+//    PRIMARY KEY ( <colnames...> ) [USING HASH]
 //    FOREIGN KEY ( <colnames...> ) REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
 //    UNIQUE ( <colnames...> ) [{STORING | INCLUDE | COVERING} ( <colnames...> )]
 //    CHECK ( <expr> )
@@ -8506,7 +8514,7 @@ enum_val_list:
 // %Text:
 // CREATE [UNIQUE | INVERTED] INDEX [CONCURRENTLY] [IF NOT EXISTS] [<idxname>]
 //        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
-//        [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [STORING ( <colnames...> )]
+//        [USING HASH] [STORING ( <colnames...> )]
 //        [PARTITION BY <partition params>]
 //        [WITH <storage_parameter_list] [WHERE <where_conds...>]
 //
@@ -9128,6 +9136,17 @@ opt_for_roles:
 | /* EMPTY */ {
    $$.val = tree.RoleSpecList(nil)
 }
+
+opt_in_schema:
+ IN SCHEMA schema_name
+ {
+   $$ = $3
+ }
+| /* EMPTY */
+ {
+   $$ = ""
+ }
+
 
 opt_in_schemas:
  IN SCHEMA schema_name_list
@@ -12017,7 +12036,19 @@ a_expr:
   {
     $$.val = &tree.IsNotNullExpr{Expr: $1.expr()}
   }
-| row OVERLAPS row { return unimplemented(sqllex, "overlaps") }
+| row OVERLAPS row
+  {
+   t1, t2 := $1.tuple(), $3.tuple()
+   if len(t1.Exprs) != 2 {
+     sqllex.Error("wrong number of parameters on left side of OVERLAPS expression")
+     return 1
+   }
+   if len(t2.Exprs) != 2 {
+     sqllex.Error("wrong number of parameters on right side of OVERLAPS expression")
+     return 1
+   }
+   $$.val = &tree.FuncExpr{Func: tree.WrapFunction("overlaps"), Exprs: tree.Exprs{t1.Exprs[0], t1.Exprs[1], t2.Exprs[0], t2.Exprs[1]}}
+  }
 | a_expr IS TRUE %prec IS
   {
     $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
@@ -14048,6 +14079,7 @@ unreserved_keyword:
 | FORCE_INDEX
 | FORCE_ZIGZAG
 | FORWARD
+| FREEZE
 | FUNCTION
 | FUNCTIONS
 | GENERATED
@@ -14063,6 +14095,7 @@ unreserved_keyword:
 | GRANTS
 | GROUPS
 | HASH
+| HEADER
 | HIGH
 | HISTOGRAM
 | HOLD
@@ -14198,6 +14231,7 @@ unreserved_keyword:
 | PUBLICATION
 | QUERIES
 | QUERY
+| QUOTE
 | RANGE
 | RANGES
 | READ

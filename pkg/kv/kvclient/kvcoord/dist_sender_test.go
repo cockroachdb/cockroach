@@ -3854,7 +3854,7 @@ func TestCanSendToFollower(t *testing.T) {
 			sentTo = roachpb.ReplicaDescriptor{}
 			canSend = c.canSendToFollower
 			ds := NewDistSender(cfg)
-			ds.clusterID = &base.ClusterIDContainer{}
+			ds.logicalClusterID = &base.ClusterIDContainer{}
 			// Make store 2 the leaseholder.
 			lease := roachpb.Lease{
 				Replica:  testUserRangeDescriptor3Replicas.InternalReplicas[1],

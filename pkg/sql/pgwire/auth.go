@@ -157,7 +157,10 @@ func (c *conn) handleAuthentication(
 
 	if !exists {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, nil)
-		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(security.NewErrPasswordUserAuthFailed(dbUser), pgcode.InvalidAuthorizationSpecification))
+		// If the user does not exist, we show the same error used for invalid
+		// passwords, to make it harder for an attacker to determine if a user
+		// exists.
+		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(security.NewErrPasswordUserAuthFailed(dbUser), pgcode.InvalidPassword))
 	}
 
 	if !canLoginSQL {
@@ -170,7 +173,12 @@ func (c *conn) handleAuthentication(
 	// implementation to complete the authentication.
 	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
-		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		if pErr := (*security.PasswordUserAuthError)(nil); errors.As(err, &pErr) {
+			err = pgerror.WithCandidateCode(err, pgcode.InvalidPassword)
+		} else {
+			err = pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification)
+		}
+		return connClose, c.sendError(ctx, execCfg, err)
 	}
 
 	// Add all the defaults to this session's defaults. If there is an

@@ -448,8 +448,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM foo JOIN bar ON b @> ARRAY[1,2]
 ----
-hash: 11584704012200057713
-plan-gist: AgFsAgABAAAAFmoEagQUAGoCAgEJAAAAAAAGCA==
+hash: 16294150205124361254
+plan-gist: AgFsAgABAAAAFmoEagQFAhQAagICAQkAAAAAAAYI
 explain(shape):
 • cross join
 │
@@ -466,10 +466,10 @@ explain(shape):
     │
     └── • zigzag join
           left table: foo@b_inverted_index
-          left columns: (a)
+          left columns: (a, b_inverted_key)
           left fixed values: 1 column
           right table: foo@b_inverted_index
-          right columns: ()
+          right columns: (a, b_inverted_key)
           right fixed values: 1 column
 explain(gist):
 • cross join
@@ -493,8 +493,8 @@ explain(gist):
 gist-explain-roundtrip
 SELECT * FROM abc WHERE b = 2 AND c = 3
 ----
-hash: 8337208311400991564
-plan-gist: AhZuBG4GBgY=
+hash: 17226082265909993113
+plan-gist: AhZuBG4GBQYGBg==
 explain(shape):
 • zigzag join
   pred: (b = _) AND (c = _)
@@ -502,7 +502,7 @@ explain(shape):
   left columns: (a, b)
   left fixed values: 1 column
   right table: abc@abc_c_idx
-  right columns: (c)
+  right columns: (a, c)
   right fixed values: 1 column
 explain(gist):
 • zigzag join

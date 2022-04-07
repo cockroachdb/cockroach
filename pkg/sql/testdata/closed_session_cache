@@ -1,0 +1,71 @@
+# Initialize a cache with a capacity of 4 members and a timeToLive of 10
+# seconds.
+init capacity=4 timeToLive=10
+----
+cache_size: 0
+
+# Add 6 (empty) sessions with ids ranging from 00 to 05, inclusive.
+addSession id=00
+----
+cache_size: 1
+
+addSession id=01
+----
+cache_size: 2
+
+addSession id=02
+----
+cache_size: 3
+
+addSession id=03
+----
+cache_size: 4
+
+addSession id=04
+----
+cache_size: 4
+
+addSession id=05
+----
+cache_size: 4
+
+# There have been 6 sessions added but the capacity is 4. The sessions with
+# id=00 an id=01 should have been evicted.
+show
+----
+id: 00000000000000000000000000000005 age: 0s session: {}
+id: 00000000000000000000000000000004 age: 0s session: {}
+id: 00000000000000000000000000000003 age: 0s session: {}
+id: 00000000000000000000000000000002 age: 0s session: {}
+
+# Wait for 15 seconds, enough time for all sessions in the cache to be evicted.
+wait seconds=15
+----
+ok
+
+# The cache should be empty now.
+show
+----
+empty
+
+# Once the cache is empty, add a session every 3 seconds for a total of 4
+# sessions and 12 seconds. The cache should be full.
+addSessionBatch startId=06 sessions=4 seconds=3
+----
+cache_size: 4
+
+# Wait 5 seconds so that that the oldest session is 17 seconds old and the
+# newest is 5 seconds old.
+wait seconds=5
+----
+ok
+
+# After 15 seconds, only sessions added in the last 10 seconds should be in the
+# cache, those with id=08 (8 seconds old) and id=09 (5 seconds old). Note that
+# the session with id=07 would be 11 seconds old, which is greater than the
+# allowed timeToLive so that session and all sessions added before that one
+# should have been evicted.
+show
+----
+id: 00000000000000000000000000000009 age: 5s session: {}
+id: 00000000000000000000000000000008 age: 8s session: {}

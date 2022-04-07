@@ -78,7 +78,7 @@ authlog 7
 
 connect user=root password=badpass sslmode=require sslcert= sslkey=
 ----
-ERROR: password authentication failed for user root (SQLSTATE 28000)
+ERROR: password authentication failed for user root (SQLSTATE 28P01)
 
 authlog 8
 .*client_connection_end
@@ -131,7 +131,7 @@ authlog 7
 
 connect user=userpw password=badpass
 ----
-ERROR: password authentication failed for user userpw (SQLSTATE 28000)
+ERROR: password authentication failed for user userpw (SQLSTATE 28P01)
 
 authlog 8
 .*client_connection_end
@@ -151,7 +151,7 @@ subtest conn_tls/no_password
 
 connect user=usernopw
 ----
-ERROR: password authentication failed for user usernopw (SQLSTATE 28000)
+ERROR: password authentication failed for user usernopw (SQLSTATE 28P01)
 
 authlog 8
 .*client_connection_end
@@ -190,7 +190,7 @@ authlog 5
 
 connect_unix user=root password=badpass
 ----
-ERROR: password authentication failed for user root (SQLSTATE 28000)
+ERROR: password authentication failed for user root (SQLSTATE 28P01)
 
 authlog 5
 .*client_connection_end
@@ -238,7 +238,7 @@ authlog 5
 
 connect_unix user=userpw password=badpass
 ----
-ERROR: password authentication failed for user userpw (SQLSTATE 28000)
+ERROR: password authentication failed for user userpw (SQLSTATE 28P01)
 
 authlog 5
 .*client_connection_end

@@ -50,11 +50,6 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 
 	sel := batch.Selection()
 	output := batch.ColVec(b.outputIdx)
-	if output.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		output.Nulls().UnsetNulls()
-	}
 	b.allocator.PerformOperation(
 		[]coldata.Vec{output},
 		func() {
@@ -120,15 +115,14 @@ func NewBuiltinFunctionOperator(
 	if overload.FnWithExprs != nil {
 		return nil, errors.New("builtins with FnWithExprs are not supported in the vectorized engine")
 	}
+	outputType := funcExpr.ResolvedType()
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	switch overload.SpecializedVecBuiltin {
 	case tree.SubstringStringIntInt:
-		input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.String, outputIdx)
 		return newSubstringOperator(
 			allocator, columnTypes, argumentCols, outputIdx, input,
 		), nil
 	default:
-		outputType := funcExpr.ResolvedType()
-		input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 		return &defaultBuiltinFuncOperator{
 			OneInputHelper:      colexecop.MakeOneInputHelper(input),
 			allocator:           allocator,

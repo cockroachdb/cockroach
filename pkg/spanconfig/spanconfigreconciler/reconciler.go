@@ -536,7 +536,9 @@ func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
 		}
 
 		if ptsUpdate.IsTenantsUpdate() {
-			if !ptsStateReader.ProtectionExistsForTenant(ptsUpdate.TenantTarget) {
+			noProtectionsOnTenant :=
+				len(ptsStateReader.GetProtectionsForTenant(ptsUpdate.TenantTarget)) == 0
+			if noProtectionsOnTenant {
 				missingSystemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID,
 					ptsUpdate.TenantTarget)
 				if err != nil {

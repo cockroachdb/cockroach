@@ -23,7 +23,15 @@ import (
 
 // ProcessSnapshot massages a trace snapshot to prepare it for presentation in
 // the UI.
-func ProcessSnapshot(snapshot tracing.SpansSnapshot) *ProcessedSnapshot {
+func ProcessSnapshot(
+	snapshot tracing.SpansSnapshot, registry *tracing.SpanRegistry,
+) *ProcessedSnapshot {
+	// Build a map of current spans.
+	currentSpans := make(map[tracingpb.SpanID]tracing.RecordingType, 1000)
+	registry.VisitSpans(func(sp tracing.RegistrySpan) {
+		currentSpans[sp.SpanID()] = sp.RecordingType()
+	})
+
 	// Flatten the recordings.
 	spans := make([]tracingpb.RecordedSpan, 0, len(snapshot.Traces)*3)
 	for _, r := range snapshot.Traces {
@@ -35,6 +43,7 @@ func ProcessSnapshot(snapshot tracing.SpansSnapshot) *ProcessedSnapshot {
 	processedSpans := make([]processedSpan, len(spans))
 	for i, s := range spans {
 		p := processSpan(s, snapshot)
+		p.CurrentRecordingMode, p.Current = currentSpans[s.SpanID]
 		ptr := &processedSpans[i]
 		*ptr = p
 		spansMap[p.SpanID] = &processedSpans[i]
@@ -104,6 +113,12 @@ type processedSpan struct {
 	Start                         time.Time
 	GoroutineID                   uint64
 	Tags                          []ProcessedTag
+	// Current is set if the span is currently present in the active spans
+	// registry.
+	Current bool
+	// CurrentRecordingMode indicates the spans's current recording mode. The
+	// field is not set if Current == false.
+	CurrentRecordingMode tracing.RecordingType
 }
 
 // ProcessedTag is a span tag that was processed and expanded by processTag.

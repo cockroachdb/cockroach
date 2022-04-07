@@ -81,7 +81,9 @@ export const selectApps = createSelector(sqlStatsSelector, sqlStatsState => {
       }
     },
   );
-  return [].concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
+  return []
+    .concat(sawBlank ? ["(unset)"] : [])
+    .concat(Object.keys(apps).sort());
 });
 
 // selectDatabases returns the array of all databases with statement statistics present
@@ -99,7 +101,9 @@ export const selectDatabases = createSelector(
           s.key.key_data.database ? s.key.key_data.database : "(unset)",
         ),
       ),
-    ).filter((dbName: string) => dbName !== null && dbName.length > 0);
+    )
+      .filter((dbName: string) => dbName !== null && dbName.length > 0)
+      .sort();
   },
 );
 

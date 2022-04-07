@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,6 +74,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 		return nil
 	}
 
+	mergeSerializeCh := make(chan struct{}, 1)
 	mergeChunk := 0
 	var seenKey roachpb.Key
 	checkStartingKey := func(key roachpb.Key) error {
@@ -110,7 +112,13 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 			SerializeIndexBackfillCreationAndIngestion: make(chan struct{}, 1),
 			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
 				PushesProgressEveryChunk: true,
-				RunBeforeMergeChunk:      checkStartingKey,
+				RunBeforeScanChunk:       checkStartingKey,
+				RunAfterScanChunk: func() {
+					<-mergeSerializeCh
+				},
+				RunAfterMergeChunk: func() {
+					mergeSerializeCh <- struct{}{}
+				},
 			},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
@@ -159,6 +167,94 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		}
 	})
 	require.True(t, mergeChunk > 3, fmt.Sprintf("mergeChunk: %d", mergeChunk))
+}
+
+func TestIndexBackfillFractionTracking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+
+	const (
+		rowCount  = 2000
+		chunkSize = rowCount / 10
+	)
+
+	var jobID jobspb.JobID
+	var sqlRunner *sqlutils.SQLRunner
+	var kvDB *kv.DB
+	var tc serverutils.TestClusterInterface
+
+	split := func(tableDesc catalog.TableDescriptor, idx catalog.Index) {
+		numSplits := 25
+		var sps []sql.SplitPoint
+		for i := 0; i < numSplits; i++ {
+			sps = append(sps, sql.SplitPoint{TargetNodeIdx: 0, Vals: []interface{}{((rowCount * 2) / numSplits) * i}})
+		}
+		require.NoError(t, splitIndex(tc, tableDesc, idx, sps))
+	}
+
+	var lastPercentage float32
+	assertFractionBetween := func(op string, min float32, max float32) {
+		var fraction float32
+		sqlRunner.QueryRow(t, "SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = $1", jobID).Scan(&fraction)
+		t.Logf("fraction during %s: %f", op, fraction)
+		assert.True(t, fraction >= min)
+		assert.True(t, fraction <= max)
+		assert.True(t, fraction >= lastPercentage)
+		lastPercentage = fraction
+	}
+
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+			RunBeforeResume: func(id jobspb.JobID) error {
+				jobID = id
+				tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
+				split(tableDesc, tableDesc.GetPrimaryIndex())
+				return nil
+			},
+			RunBeforeTempIndexMerge: func() {
+				for i := rowCount + 1; i < (rowCount*2)+1; i++ {
+					sqlRunner.Exec(t, "INSERT INTO t.test VALUES ($1, $1)", i)
+				}
+				tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
+				tempIdx, err := findCorrespondingTemporaryIndex(tableDesc, "new_idx")
+				require.NoError(t, err)
+				split(tableDesc, tempIdx)
+			},
+			AlwaysUpdateIndexBackfillDetails:  true,
+			AlwaysUpdateIndexBackfillProgress: true,
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			BulkAdderFlushesEveryBatch: true,
+			RunAfterBackfillChunk:      func() { assertFractionBetween("backfill", 0.0, 0.60) },
+			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+				PushesProgressEveryChunk: true,
+				RunBeforeScanChunk: func(_ roachpb.Key) error {
+					assertFractionBetween("merge", 0.60, 1.00)
+					return nil
+				},
+			},
+		},
+		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      params,
+	})
+	defer tc.Stopper().Stop(context.Background())
+	kvDB = tc.Server(0).DB()
+	sqlDB := tc.ServerConn(0)
+	sqlRunner = sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v INT)`)
+	sqlRunner.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = %d;`, chunkSize))
+	require.NoError(t, sqltestutils.BulkInsertIntoTable(sqlDB, rowCount))
+	sqlRunner.Exec(t, "CREATE INDEX new_idx ON t.test(v)")
 }
 
 // Test index backfill merges are not affected by various operations that run
@@ -232,7 +328,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: populateTempIndexWithWrites,
 			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
-				RunBeforeMergeChunk: func(key roachpb.Key) error {
+				RunBeforeScanChunk: func(key roachpb.Key) error {
 					notifyMerge()
 					return nil
 				},
@@ -603,4 +699,62 @@ func splitIndex(
 		}
 	}
 	return nil
+}
+
+// TestIndexMergeEveryChunkWrite tests the case where the workload
+// writes sequentially into the key space faster than the merger and
+// write.
+func TestIndexMergeEveryChunkWrite(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	chunkSize := 10
+	rowsPerWrite := 20
+	rowIdx := 0
+	mergeSerializeCh := make(chan struct{}, 1)
+
+	params, _ := tests.CreateTestServerParams()
+	var writeMore func() error
+	params.Knobs = base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+				RunBeforeScanChunk: func(key roachpb.Key) error {
+					return writeMore()
+				},
+				RunAfterScanChunk: func() {
+					<-mergeSerializeCh
+				},
+				RunAfterMergeChunk: func() {
+					mergeSerializeCh <- struct{}{}
+				},
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	var mu syncutil.Mutex
+	writeMore = func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		start := rowIdx
+		rowIdx += rowsPerWrite
+		for i := 1; i <= rowsPerWrite; i++ {
+			if _, err := sqlDB.Exec("UPSERT INTO t.test VALUES ($1, $2)", start+i, start+i); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if _, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.merge_batch_size = %d`, chunkSize)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v int);`)
+	require.NoError(t, err)
+	require.NoError(t, writeMore(), "initial insert")
+	_, err = sqlDB.Exec("CREATE INDEX ON t.test (v)")
+	require.NoError(t, err)
 }

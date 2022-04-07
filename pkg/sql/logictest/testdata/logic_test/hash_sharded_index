@@ -608,14 +608,14 @@ subtest test_table_indexes
 statement ok
 CREATE TABLE poor_t (a INT PRIMARY KEY, b INT, INDEX t_idx_b (b) USING HASH WITH (bucket_count=8))
 
-query ITITTBBB colnames
-SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_unique, is_inverted, is_sharded
+query ITITTBBBI colnames
+SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_unique, is_inverted, is_sharded, shard_bucket_count
   FROM crdb_internal.table_indexes
  WHERE descriptor_name = 'poor_t'
 ----
-descriptor_id  descriptor_name  index_id  index_name   index_type  is_unique  is_inverted  is_sharded
-127            poor_t           1         poor_t_pkey  primary     true       false        false
-127            poor_t           2         t_idx_b      secondary   false      false        true
+descriptor_id  descriptor_name  index_id  index_name   index_type  is_unique  is_inverted  is_sharded  shard_bucket_count
+127            poor_t           1         poor_t_pkey  primary     true       false        false       NULL
+127            poor_t           2         t_idx_b      secondary   false      false        true        8
 
 statement ok
 DROP TABLE poor_t

@@ -427,7 +427,6 @@ func (s *dummyStream) Send(ev *roachpb.RangeFeedEvent) error {
 // goes as far as actually losing quorum to verify this end-to-end.
 func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 76856, "flaky test")
 	defer log.Scope(t).Close(t)
 	tc := setupCircuitBreakerTest(t)
 	ctx := context.Background()
@@ -479,7 +478,19 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 	undo()
 	tc.SetSlowThreshold(10 * time.Millisecond)
 	tc.StopServer(n2)
-	tc.RequireIsBreakerOpen(t, tc.Write(n1))
+	// NB: this is essentially always a breaker error but we can also get
+	// NotLeaseholderError(heartbeat failed on epoch increment), so we retry
+	// until we see the breaker error.
+	testutils.SucceedsSoon(t, func() error {
+		err := tc.Write(n1)
+		if err == nil {
+			return errors.New("no error returned")
+		}
+		if !tc.IsBreakerOpen(err) {
+			return err
+		}
+		return nil
+	})
 
 	// Start another stream during the "outage" to make sure it isn't rejected by
 	// the breaker.
@@ -501,7 +512,9 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 	// return a circuit breaker error, but in theory it could also never have
 	// tried to acquire a lease, in which case it might return a value as well.
 	if err := readOneVal(ctx, stream2, testutils.DefaultSucceedsSoonDuration); err != nil {
-		tc.RequireIsBreakerOpen(t, err)
+		if !tc.IsBreakerOpen(err) && !errors.HasType(err, (*roachpb.RangeFeedRetryError)(nil)) {
+			t.Fatalf("%+v", err)
+		}
 	}
 }
 
@@ -930,14 +943,23 @@ func (cbt *circuitBreakerTest) sendViaDistSender(
 	return pErr.GoError()
 }
 
-func (*circuitBreakerTest) RequireIsBreakerOpen(t *testing.T, err error) {
+func (*circuitBreakerTest) IsBreakerOpen(err error) bool {
+	// NB: we will see AmbiguousResultError here when proposals are inflight while
+	// the breaker trips. These are wrapping errors, so the assertions below will
+	// look through them.
+	if !errors.Is(err, circuit.ErrBreakerOpen) {
+		return false
+	}
+	return errors.HasType(err, (*roachpb.ReplicaUnavailableError)(nil))
+}
+
+func (cbt *circuitBreakerTest) RequireIsBreakerOpen(t *testing.T, err error) {
 	t.Helper()
 	t.Log(err)
 	// NB: we will see AmbiguousResultError here when proposals are inflight while
 	// the breaker trips. These are wrapping errors, so the assertions below will
 	// look through them.
-	require.True(t, errors.Is(err, circuit.ErrBreakerOpen), "%+v", err)
-	require.True(t, errors.HasType(err, (*roachpb.ReplicaUnavailableError)(nil)), "%+v", err)
+	require.True(t, cbt.IsBreakerOpen(err), "%+v", err)
 }
 
 func (*circuitBreakerTest) RequireIsNotLeaseholderError(t *testing.T, err error) {
@@ -976,7 +998,7 @@ func (cbt *circuitBreakerTest) FollowerRead(idx int) error {
 	repl := cbt.repls[idx]
 	get := roachpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
 	ctx := context.Background()
-	ts := repl.GetClosedTimestamp(ctx)
+	ts := repl.GetCurrentClosedTimestamp(ctx)
 	return cbt.SendCtxTS(ctx, idx, get, ts)
 }
 

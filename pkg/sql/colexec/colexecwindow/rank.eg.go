@@ -109,11 +109,6 @@ func (r *rankNoPartitionOp) Next() coldata.Batch {
 	}
 	peersCol := batch.ColVec(r.peersColIdx).Bool()
 	rankVec := batch.ColVec(r.outputColIdx)
-	if rankVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		rankVec.Nulls().UnsetNulls()
-	}
 	rankCol := rankVec.Int64()
 	sel := batch.Selection()
 	if sel != nil {
@@ -180,11 +175,6 @@ func (r *rankWithPartitionOp) Next() coldata.Batch {
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	peersCol := batch.ColVec(r.peersColIdx).Bool()
 	rankVec := batch.ColVec(r.outputColIdx)
-	if rankVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		rankVec.Nulls().UnsetNulls()
-	}
 	rankCol := rankVec.Int64()
 	sel := batch.Selection()
 	if sel != nil {
@@ -268,11 +258,6 @@ func (r *denseRankNoPartitionOp) Next() coldata.Batch {
 	}
 	peersCol := batch.ColVec(r.peersColIdx).Bool()
 	rankVec := batch.ColVec(r.outputColIdx)
-	if rankVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		rankVec.Nulls().UnsetNulls()
-	}
 	rankCol := rankVec.Int64()
 	sel := batch.Selection()
 	if sel != nil {
@@ -337,11 +322,6 @@ func (r *denseRankWithPartitionOp) Next() coldata.Batch {
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	peersCol := batch.ColVec(r.peersColIdx).Bool()
 	rankVec := batch.ColVec(r.outputColIdx)
-	if rankVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		rankVec.Nulls().UnsetNulls()
-	}
 	rankCol := rankVec.Int64()
 	sel := batch.Selection()
 	if sel != nil {

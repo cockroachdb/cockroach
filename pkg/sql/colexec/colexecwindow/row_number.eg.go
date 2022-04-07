@@ -63,11 +63,6 @@ func (r *rowNumberNoPartitionOp) Next() coldata.Batch {
 	}
 
 	rowNumberVec := batch.ColVec(r.outputColIdx)
-	if rowNumberVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		rowNumberVec.Nulls().UnsetNulls()
-	}
 	rowNumberCol := rowNumberVec.Int64()
 	sel := batch.Selection()
 	if sel != nil {
@@ -101,11 +96,6 @@ func (r *rowNumberWithPartitionOp) Next() coldata.Batch {
 
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	rowNumberVec := batch.ColVec(r.outputColIdx)
-	if rowNumberVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		rowNumberVec.Nulls().UnsetNulls()
-	}
 	rowNumberCol := rowNumberVec.Int64()
 	sel := batch.Selection()
 	if sel != nil {

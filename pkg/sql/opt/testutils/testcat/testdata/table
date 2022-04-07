@@ -386,3 +386,32 @@ TABLE virtpk
  └── PRIMARY INDEX virtpk_pkey
       ├── v int not null as (a + 10) stored
       └── a int not null
+
+# Regression test for #76994. Only unique constraints with the same columns and
+# predicates should be deduplicated.
+exec-ddl
+CREATE TABLE t76994 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE WITHOUT INDEX (a) WHERE b < 0,
+  UNIQUE WITHOUT INDEX (a) WHERE b < 0,
+  UNIQUE WITHOUT INDEX (a) WHERE b > 0
+)
+----
+
+exec-ddl
+SHOW CREATE t76994
+----
+TABLE t76994
+ ├── k int not null
+ ├── a int
+ ├── b int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t76994_pkey
+ │    └── k int not null
+ ├── UNIQUE WITHOUT INDEX (a)
+ │    └── WHERE b < 0
+ └── UNIQUE WITHOUT INDEX (a)
+      └── WHERE b > 0

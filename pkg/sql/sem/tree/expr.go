@@ -1301,7 +1301,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	// particular. Do this by overriding the flags.
 	// TODO(thomas): when function names are correctly typed as FunctionDefinition
 	// remove FmtMarkRedactionNode from being overridden.
-	ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtMarkRedactionNode, func() {
+	ctx.WithFlags(ctx.flags&^FmtAnonymize&^FmtMarkRedactionNode|FmtBareIdentifiers, func() {
 		ctx.FormatNode(&node.Func)
 	})
 

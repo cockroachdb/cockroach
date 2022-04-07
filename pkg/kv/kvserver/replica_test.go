@@ -71,7 +71,7 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	raft "go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/raft/v3/tracker"
 	"golang.org/x/net/trace"
@@ -945,7 +945,9 @@ func TestReplicaLease(t *testing.T) {
 	} {
 		if _, err := batcheval.RequestLease(ctx, tc.store.Engine(),
 			batcheval.CommandArgs{
-				EvalCtx: NewReplicaEvalContext(tc.repl, allSpans()),
+				EvalCtx: NewReplicaEvalContext(
+					ctx, tc.repl, allSpans(), false, /* requiresClosedTSOlderThanStorageSnap */
+				),
 				Args: &roachpb.RequestLeaseRequest{
 					Lease: lease,
 				},
@@ -2765,115 +2767,123 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 func TestReplicaLatchingOptimisticEvaluation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// Split into two back-to-back scans for better test coverage.
-	sArgs1 := scanArgs([]byte("a"), []byte("c"))
-	sArgs2 := scanArgs([]byte("c"), []byte("e"))
-	baScan := roachpb.BatchRequest{}
-	baScan.Add(sArgs1, sArgs2)
-	// The state that will block a write while holding latches.
-	var blockKey, blockWriter atomic.Value
-	blockKey.Store(roachpb.Key("a"))
-	blockWriter.Store(false)
-	blockCh := make(chan struct{}, 1)
-	blockedCh := make(chan struct{}, 1)
-	// Setup filter to block the write.
-	tc := testContext{}
-	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
-			// Make sure the direct GC path doesn't interfere with this test.
-			if !filterArgs.Req.Header().Key.Equal(blockKey.Load().(roachpb.Key)) {
+	testutils.RunTrueAndFalse(t, "point-reads", func(t *testing.T, pointReads bool) {
+		var baRead roachpb.BatchRequest
+		if pointReads {
+			gArgs1, gArgs2 := getArgsString("a"), getArgsString("b")
+			gArgs3, gArgs4 := getArgsString("c"), getArgsString("d")
+			baRead.Add(gArgs1, gArgs2, gArgs3, gArgs4)
+		} else {
+			// Split into two back-to-back scans for better test coverage.
+			sArgs1 := scanArgsString("a", "c")
+			sArgs2 := scanArgsString("c", "e")
+			baRead.Add(sArgs1, sArgs2)
+		}
+		// The state that will block a write while holding latches.
+		var blockKey, blockWriter atomic.Value
+		blockKey.Store(roachpb.Key("a"))
+		blockWriter.Store(false)
+		blockCh := make(chan struct{}, 1)
+		blockedCh := make(chan struct{}, 1)
+		// Setup filter to block the write.
+		tc := testContext{}
+		tsc := TestStoreConfig(nil)
+		tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
+			func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
+				// Make sure the direct GC path doesn't interfere with this test.
+				if !filterArgs.Req.Header().Key.Equal(blockKey.Load().(roachpb.Key)) {
+					return nil
+				}
+				if filterArgs.Req.Method() == roachpb.Put && blockWriter.Load().(bool) {
+					blockedCh <- struct{}{}
+					<-blockCh
+				}
 				return nil
 			}
-			if filterArgs.Req.Method() == roachpb.Put && blockWriter.Load().(bool) {
-				blockedCh <- struct{}{}
-				<-blockCh
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+		// Write initial keys.
+		for _, k := range []string{"a", "b", "c", "d"} {
+			pArgs := putArgs([]byte(k), []byte("value"))
+			if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
+				t.Fatal(pErr)
 			}
-			return nil
 		}
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
-	// Write initial keys.
-	for _, k := range []string{"a", "b", "c", "d"} {
-		pArgs := putArgs([]byte(k), []byte("value"))
-		if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
-			t.Fatal(pErr)
+		testCases := []struct {
+			writeKey   string
+			limit      int64
+			interferes bool
+		}{
+			// No limit, so pessimistic latching.
+			{"a", 0, true},
+			{"b", 0, true},
+			{"c", 0, true},
+			{"d", 0, true},
+			{"e", 0, false}, // Only scanning from [a,e)
+			// Limited, with optimistic latching.
+			{"a", 1, true},
+			{"b", 1, false},
+			{"b", 2, true},
+			{"c", 2, false},
+			{"c", 3, true},
+			{"d", 3, false},
+			// Limited, with pessimistic latching since limit count is equal to number
+			// of keys in range.
+			{"d", 4, true},
+			{"e", 4, false}, // Only scanning from [a,e)
+			{"e", 5, false}, // Only scanning from [a,e)
 		}
-	}
-	testCases := []struct {
-		writeKey   string
-		limit      int64
-		interferes bool
-	}{
-		// No limit, so pessimistic latching.
-		{"a", 0, true},
-		{"b", 0, true},
-		{"c", 0, true},
-		{"d", 0, true},
-		{"e", 0, false}, // Only scanning from [a,e)
-		// Limited, with optimistic latching.
-		{"a", 1, true},
-		{"b", 1, false},
-		{"b", 2, true},
-		{"c", 2, false},
-		{"c", 3, true},
-		{"d", 3, false},
-		// Limited, with pessimistic latching since limit count is equal to number
-		// of keys in range.
-		{"d", 4, true},
-		{"e", 4, false}, // Only scanning from [a,e)
-		{"e", 5, false}, // Only scanning from [a,e)
-	}
-	for _, test := range testCases {
-		t.Run(fmt.Sprintf("%+v", test), func(t *testing.T) {
-			errCh := make(chan *roachpb.Error, 2)
-			pArgs := putArgs([]byte(test.writeKey), []byte("value"))
-			blockKey.Store(roachpb.Key(test.writeKey))
-			blockWriter.Store(true)
-			go func() {
-				_, pErr := tc.SendWrapped(&pArgs)
-				errCh <- pErr
-			}()
-			<-blockedCh
-			// Write is now blocked while holding latches.
-			blockWriter.Store(false)
-			baScanCopy := baScan
-			baScanCopy.MaxSpanRequestKeys = test.limit
-			go func() {
-				_, pErr := tc.Sender().Send(context.Background(), baScanCopy)
-				errCh <- pErr
-			}()
-			if test.interferes {
-				// Neither request should complete until the write is unblocked.
-				select {
-				case <-time.After(10 * time.Millisecond):
-					// Expected.
-				case pErr := <-errCh:
-					t.Fatalf("expected interference: got error %s", pErr)
-				}
-				// Unblock the write.
-				blockCh <- struct{}{}
-				// Both read and write should complete with no errors.
-				for j := 0; j < 2; j++ {
+		for _, test := range testCases {
+			t.Run(fmt.Sprintf("%+v", test), func(t *testing.T) {
+				errCh := make(chan *roachpb.Error, 2)
+				pArgs := putArgs([]byte(test.writeKey), []byte("value"))
+				blockKey.Store(roachpb.Key(test.writeKey))
+				blockWriter.Store(true)
+				go func() {
+					_, pErr := tc.SendWrapped(&pArgs)
+					errCh <- pErr
+				}()
+				<-blockedCh
+				// Write is now blocked while holding latches.
+				blockWriter.Store(false)
+				baReadCopy := baRead
+				baReadCopy.MaxSpanRequestKeys = test.limit
+				go func() {
+					_, pErr := tc.Sender().Send(context.Background(), baReadCopy)
+					errCh <- pErr
+				}()
+				if test.interferes {
+					// Neither request should complete until the write is unblocked.
+					select {
+					case <-time.After(10 * time.Millisecond):
+						// Expected.
+					case pErr := <-errCh:
+						t.Fatalf("expected interference: got error %s", pErr)
+					}
+					// Unblock the write.
+					blockCh <- struct{}{}
+					// Both read and write should complete with no errors.
+					for j := 0; j < 2; j++ {
+						if pErr := <-errCh; pErr != nil {
+							t.Errorf("error %d: unexpected error: %s", j, pErr)
+						}
+					}
+				} else {
+					// The read should complete first.
 					if pErr := <-errCh; pErr != nil {
-						t.Errorf("error %d: unexpected error: %s", j, pErr)
+						t.Errorf("unexpected error: %s", pErr)
+					}
+					// The write should complete next, after it is unblocked.
+					blockCh <- struct{}{}
+					if pErr := <-errCh; pErr != nil {
+						t.Errorf("unexpected error: %s", pErr)
 					}
 				}
-			} else {
-				// The read should complete first.
-				if pErr := <-errCh; pErr != nil {
-					t.Errorf("unexpected error: %s", pErr)
-				}
-				// The write should complete next, after it is unblocked.
-				blockCh <- struct{}{}
-				if pErr := <-errCh; pErr != nil {
-					t.Errorf("unexpected error: %s", pErr)
-				}
-			}
-		})
-	}
+			})
+		}
+	})
 }
 
 // TestReplicaUseTSCache verifies that write timestamps are upgraded based on
@@ -4976,7 +4986,9 @@ func TestEndTxnDirectGC(t *testing.T) {
 				var gr roachpb.GetResponse
 				if _, err := batcheval.Get(
 					ctx, tc.engine, batcheval.CommandArgs{
-						EvalCtx: NewReplicaEvalContext(tc.repl, allSpans()),
+						EvalCtx: NewReplicaEvalContext(
+							ctx, tc.repl, allSpans(), false, /* requiresClosedTSOlderThanStorageSnap */
+						),
 						Args: &roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{
 							Key: keys.TransactionKey(txn.Key, txn.ID),
 						}},
@@ -5359,7 +5371,8 @@ func TestAbortSpanError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := &SpanSetReplicaEvalContext{tc.repl, *allSpans()}
+	ec := newEvalContextImpl(ctx, tc.repl, false /* requireClosedTS */)
+	rec := &SpanSetReplicaEvalContext{ec, *allSpans()}
 	pErr := checkIfTxnAborted(ctx, rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
@@ -5769,7 +5782,12 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	// return args.PusherTxn.
 	h = roachpb.Header{Timestamp: tc.Clock().Now()}
 	var reply roachpb.PushTxnResponse
-	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{EvalCtx: tc.repl, Stats: &ms, Header: h, Args: &pa}, &reply); err != nil {
+	ec := newEvalContextImpl(
+		ctx,
+		tc.repl,
+		false, /* requireClosedTS */
+	)
+	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{EvalCtx: ec, Stats: &ms, Header: h, Args: &pa}, &reply); err != nil {
 		t.Fatal(err)
 	} else if reply.Txn != nil {
 		t.Fatalf("expected nil response txn, but got %s", reply.Txn)
@@ -8454,10 +8472,11 @@ func TestGCWithoutThreshold(t *testing.T) {
 			rw := spanset.NewBatch(batch, &spans)
 
 			var resp roachpb.GCResponse
-
 			if _, err := batcheval.GC(ctx, rw, batcheval.CommandArgs{
-				Args:    &gc,
-				EvalCtx: NewReplicaEvalContext(tc.repl, &spans),
+				Args: &gc,
+				EvalCtx: NewReplicaEvalContext(
+					ctx, tc.repl, &spans, false, /* requiresClosedTSOlderThanStorageSnap */
+				),
 			}, &resp); err != nil {
 				t.Fatal(err)
 			}

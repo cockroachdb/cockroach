@@ -81,7 +81,7 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *roachpb.B
 	}
 
 	requiredFrontier := ba.RequiredFrontier()
-	maxClosed := r.getClosedTimestampRLocked(ctx, requiredFrontier /* sufficient */)
+	maxClosed := r.getCurrentClosedTimestampLocked(ctx, requiredFrontier /* sufficient */)
 	canServeFollowerRead := requiredFrontier.LessEq(maxClosed)
 	tsDiff := requiredFrontier.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
@@ -106,13 +106,13 @@ func (r *Replica) canServeFollowerReadRLocked(ctx context.Context, ba *roachpb.B
 	return true
 }
 
-// getClosedTimestampRLocked is like maxClosed, except that it requires r.mu to be
-// rlocked. It also optionally takes a hint: if sufficient is not
-// empty, getClosedTimestampRLocked might return a timestamp that's lower than the
-// maximum closed timestamp that we know about, as long as the returned
-// timestamp is still >= sufficient. This is a performance optimization because
-// we can avoid consulting the ClosedTimestampReceiver.
-func (r *Replica) getClosedTimestampRLocked(
+// getCurrentClosedTimestampRLocked is like GetCurrentClosedTimestamp, except
+// that it requires r.mu to be RLocked. It also optionally takes a hint: if
+// sufficient is not empty, getClosedTimestampRLocked might return a timestamp
+// that's lower than the maximum closed timestamp that we know about, as long as
+// the returned timestamp is still >= sufficient. This is a performance
+// optimization because we can avoid consulting the ClosedTimestampReceiver.
+func (r *Replica) getCurrentClosedTimestampLocked(
 	ctx context.Context, sufficient hlc.Timestamp,
 ) hlc.Timestamp {
 	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
@@ -126,11 +126,10 @@ func (r *Replica) getClosedTimestampRLocked(
 	return maxClosed
 }
 
-// GetClosedTimestamp returns the maximum closed timestamp for this range.
-//
-// GetClosedTimestamp is part of the EvalContext interface.
-func (r *Replica) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
+// GetCurrentClosedTimestamp returns the current maximum closed timestamp for
+// this range.
+func (r *Replica) GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.getClosedTimestampRLocked(ctx, hlc.Timestamp{} /* sufficient */)
+	return r.getCurrentClosedTimestampLocked(ctx, hlc.Timestamp{} /* sufficient */)
 }

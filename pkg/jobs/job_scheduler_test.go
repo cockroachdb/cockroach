@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -93,10 +94,7 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 			// The job should not run -- it should be rescheduled `recheckJobAfter` time in the
 			// future.
 			s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
-			require.NoError(t,
-				h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-					return s.executeSchedules(ctx, allSchedules, txn)
-				}))
+			require.NoError(t, s.executeSchedules(ctx, allSchedules))
 
 			if wait == jobspb.ScheduleDetails_WAIT {
 				expectedRunTime = h.env.Now().Add(recheckRunningAfter)
@@ -150,10 +148,7 @@ func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
 
 			// Execute the job and verify it has the next run scheduled.
 			s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
-			require.NoError(t,
-				h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-					return s.executeSchedules(ctx, allSchedules, txn)
-				}))
+			require.NoError(t, s.executeSchedules(ctx, allSchedules))
 
 			expectedRunTime = cronMustParse(t, "@hourly").Next(h.env.Now())
 			loaded = h.loadSchedule(t, j.ScheduleID())
@@ -190,10 +185,7 @@ func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 
 	// Execute the job and verify it has the next run scheduled.
 	s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
-	require.NoError(t,
-		h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-			return s.executeSchedules(ctx, allSchedules, txn)
-		}))
+	require.NoError(t, s.executeSchedules(ctx, allSchedules))
 
 	expectedRunTime = cronMustParse(t, "@hourly").Next(h.env.Now())
 	loaded = h.loadSchedule(t, j.ScheduleID())
@@ -278,6 +270,7 @@ func (n *recordScheduleExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	sj *ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
@@ -455,8 +448,13 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 	daemon.runDaemon(ctx, stopper)
 
+	readyToRunStmt := fmt.Sprintf(
+		"SELECT count(*) FROM %s WHERE next_run < %s",
+		h.env.ScheduledJobsTableName(), h.env.NowExpr())
 	testutils.SucceedsSoon(t, func() error {
-		if ready := daemon.metrics.ReadyToRun.Value(); numJobs != ready {
+		var ready int
+		h.sqlDB.QueryRow(t, readyToRunStmt).Scan(&ready)
+		if ready != numJobs-jobsPerIteration {
 			return errors.Errorf("waiting for metric %d = %d", ready, numJobs)
 		}
 		return nil
@@ -502,6 +500,7 @@ func (e *returnErrorExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	sj *ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
@@ -532,10 +531,8 @@ func TestJobSchedulerToleratesBadSchedules(t *testing.T) {
 	}
 	h.env.SetTime(scheduleRunTime.Add(time.Second))
 	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
-	require.NoError(t,
-		h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-			return daemon.executeSchedules(ctx, numJobs, txn)
-		}))
+	require.NoError(t, daemon.executeSchedules(ctx, numJobs))
+
 	require.Equal(t, numJobs, ex.numCalls)
 }
 
@@ -576,10 +573,7 @@ func TestJobSchedulerRetriesFailed(t *testing.T) {
 			require.NoError(t, schedule.Update(ctx, h.cfg.InternalExecutor, nil))
 
 			h.env.SetTime(execTime)
-			require.NoError(t,
-				h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-					return daemon.executeSchedules(ctx, 1, txn)
-				}))
+			require.NoError(t, daemon.executeSchedules(ctx, 1))
 
 			loaded := h.loadSchedule(t, schedule.ScheduleID())
 			require.EqualValues(t, tc.nextRun, loaded.NextRun())
@@ -685,6 +679,7 @@ func (e *txnConflictExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	sj *ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
@@ -726,14 +721,9 @@ INSERT INTO defaultdb.foo VALUES(1, 1)
 	// Execute schedule on another thread.
 	g := ctxgroup.WithContext(context.Background())
 	ready := make(chan struct{})
-	g.Go(func() error {
-		return h.cfg.DB.Txn(context.Background(),
-			func(ctx context.Context, txn *kv.Txn) error {
-				<-ready
-				err := h.execSchedules(ctx, allSchedules, txn)
-				return err
-			},
-		)
+	g.GoCtx(func(ctx context.Context) error {
+		<-ready
+		return h.execSchedules(ctx, allSchedules)
 	})
 
 	require.NoError(t,
@@ -758,8 +748,7 @@ INSERT INTO defaultdb.foo VALUES(1, 1)
 			return nil
 		}))
 
-	err := g.Wait()
-	require.True(t, errors.HasType(err, &savePointError{}))
+	require.NoError(t, g.Wait())
 
 	// Reload schedule -- verify it doesn't have any errors in its status.
 	updated := h.loadSchedule(t, schedule.ScheduleID())
@@ -873,6 +862,7 @@ func (e *blockUntilCancelledExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	sj *ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {

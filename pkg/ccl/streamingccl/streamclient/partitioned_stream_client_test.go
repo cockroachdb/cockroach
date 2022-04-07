@@ -24,6 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -50,18 +53,22 @@ func (f *subscriptionFeedSource) Close(ctx context.Context) {}
 
 func TestPartitionedStreamReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 77916, "flaky test")
 	defer log.Scope(t).Close(t)
 
-	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		},
-	})
+	h, cleanup := streamingtest.NewReplicationHelper(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		}, serverutils.TestTenantID())
 	defer cleanup()
 
 	ctx := context.Background()
 	// Makes sure source cluster producer job does not time out within test timeout
-	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s'")
+	h.SysDB.Exec(t, `
+SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s';
+`)
 	h.Tenant.SQL.Exec(t, `
 CREATE DATABASE d;
 CREATE TABLE d.t1(i int primary key, a string, b string);
@@ -80,37 +87,41 @@ INSERT INTO d.t2 VALUES (2);
 			[][]string{{string(status)}})
 	}
 
-	id, err := client.Create(ctx, h.Tenant.ID)
+	streamID, err := client.Create(ctx, h.Tenant.ID)
 	require.NoError(t, err)
 	// We can create multiple replication streams for the same tenant.
 	_, err = client.Create(ctx, h.Tenant.ID)
 	require.NoError(t, err)
 
-	top, err := client.Plan(ctx, id)
+	top, err := client.Plan(ctx, streamID)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(top))
 	// Plan for a non-existent stream
 	_, err = client.Plan(ctx, 999)
-	require.Errorf(t, err, "Replication stream %d not found", 999)
+	require.True(t, testutils.IsError(err, fmt.Sprintf("job with ID %d does not exist", 999)), err)
 
-	expectStreamState(id, jobs.StatusRunning)
-	require.NoError(t, client.Heartbeat(ctx, id, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}))
+	expectStreamState(streamID, jobs.StatusRunning)
+	require.NoError(t, client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}))
 
 	// Pause the underlying producer job of the replication stream
-	h.SysDB.Exec(t, `PAUSE JOB $1`, id)
-	expectStreamState(id, jobs.StatusPaused)
-	require.Errorf(t, client.Heartbeat(ctx, id, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}),
-		"Replication stream %d is not running, status is STREAM_PAUSED", id)
+	h.SysDB.Exec(t, `PAUSE JOB $1`, streamID)
+	expectStreamState(streamID, jobs.StatusPaused)
+	err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.True(t, testutils.IsError(err,
+		fmt.Sprintf("replication stream %d is not running, status is STREAM_PAUSED", streamID)), err)
 
 	// Cancel the underlying producer job of the replication stream
-	h.SysDB.Exec(t, `CANCEL JOB $1`, id)
-	expectStreamState(id, jobs.StatusCanceled)
-	require.Errorf(t, client.Heartbeat(ctx, id, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}),
-		"Replication stream %d is not running, status is STREAM_INACTIVE", id)
+	h.SysDB.Exec(t, `CANCEL JOB $1`, streamID)
+	expectStreamState(streamID, jobs.StatusCanceled)
+
+	err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.True(t, testutils.IsError(err,
+		fmt.Sprintf("replication stream %d is not running, status is STREAM_INACTIVE", streamID)), err)
 
 	// Non-existent stream is not active in the source cluster.
-	require.Errorf(t, client.Heartbeat(ctx, 999, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}),
-		"Replication stream %d is not running, status is STREAM_INACTIVE", 999)
+	err = client.Heartbeat(ctx, 999, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.True(t, testutils.IsError(err,
+		fmt.Sprintf("replication stream %d is not running, status is STREAM_INACTIVE", 999)), err)
 
 	// Testing client.Subscribe()
 	makePartitionSpec := func(tables ...string) *streampb.StreamPartitionSpec {
@@ -145,7 +156,7 @@ INSERT INTO d.t2 VALUES (2);
 		require.NoError(t, subClient.Close())
 	}()
 	require.NoError(t, err)
-	sub, err := subClient.Subscribe(ctx, id, encodeSpec("t1"), hlc.Timestamp{})
+	sub, err := subClient.Subscribe(ctx, streamID, encodeSpec("t1"), hlc.Timestamp{})
 	require.NoError(t, err)
 
 	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
@@ -171,5 +182,19 @@ INSERT INTO d.t2 VALUES (2);
 
 	// Test if Subscribe can react to cancellation signal.
 	cancelFn()
-	require.Error(t, cg.Wait(), "context canceled")
+	require.ErrorIs(t, cg.Wait(), context.Canceled)
+
+	// Testing client.Complete()
+	err = client.Complete(ctx, streaming.StreamID(999))
+	require.True(t, testutils.IsError(err, fmt.Sprintf("job %d: not found in system.jobs table", 999)), err)
+
+	// Makes producer job exit quickly.
+	h.SysDB.Exec(t, `
+SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms';
+`)
+	streamID, err = client.Create(ctx, h.Tenant.ID)
+	require.NoError(t, err)
+	require.NoError(t, client.Complete(ctx, streamID))
+	h.SysDB.CheckQueryResultsRetry(t,
+		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", streamID), [][]string{{"succeeded"}})
 }

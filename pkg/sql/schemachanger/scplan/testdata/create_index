@@ -79,6 +79,7 @@ PostCommitPhase stage 4 of 4 with 4 MutationType ops
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 
 deps
@@ -173,6 +174,7 @@ PostCommitPhase stage 4 of 4 with 4 MutationType ops
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 
 deps

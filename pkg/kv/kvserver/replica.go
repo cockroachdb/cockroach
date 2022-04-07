@@ -703,8 +703,6 @@ type Replica struct {
 	}
 }
 
-var _ batcheval.EvalContext = &Replica{}
-
 // String returns the string representation of the replica using an
 // inconsistent copy of the range descriptor. Therefore, String does not
 // require a lock and its output may not be atomic with other ongoing work in
@@ -1232,7 +1230,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	// NB: this acquires an RLock(). Reentrant RLocks are deadlock prone, so do
 	// this first before RLocking below. Performance of this extra lock
 	// acquisition is not a concern.
-	ri.ActiveClosedTimestamp = r.GetClosedTimestamp(ctx)
+	ri.ActiveClosedTimestamp = r.GetCurrentClosedTimestamp(ctx)
 
 	// NB: numRangefeedRegistrations doesn't require Replica.mu to be locked.
 	// However, it does require coordination between multiple goroutines, so
@@ -2017,6 +2015,12 @@ func (r *Replica) GetResponseMemoryAccount() *mon.BoundAccount {
 	// Return an empty account, which places no limits. Places where a real
 	// account is needed use a wrapper for Replica as the EvalContext.
 	return nil
+}
+
+// GetEngineCapacity returns the store's underlying engine capacity; other
+// StoreCapacity fields not related to engine capacity are not populated.
+func (r *Replica) GetEngineCapacity() (roachpb.StoreCapacity, error) {
+	return r.store.Engine().Capacity()
 }
 
 func init() {

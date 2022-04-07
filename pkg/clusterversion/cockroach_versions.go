@@ -53,7 +53,7 @@ type Key int
 //     is as yet inactive. Consider the sender:
 //
 //      func invokeSomeRPC(req) {
-//	        if (specific-version is active) {
+//          if (specific-version is active) {
 //              // Like mentioned above, this implies that all nodes in the
 //              // cluster are running binaries that can handle this new
 //              // feature. We may have learned about this fact before the
@@ -63,9 +63,9 @@ type Key int
 //              // where that happens. Still, it's safe for us to enable the new
 //              // feature flags as we trust the recipient to know how to deal
 //              // with it.
-//		        req.NewFeatureFlag = true
-//	        }
-//	        send(req)
+//            req.NewFeatureFlag = true
+//          }
+//          send(req)
 //      }
 //
 //    And consider the recipient:
@@ -321,6 +321,25 @@ const (
 	// DateStyleIntervalStyleCastRewrite rewrites cast that cause inconsistencies
 	// when DateStyle/IntervalStyle is enabled.
 	DateStyleIntervalStyleCastRewrite
+	// EnableNewStoreRebalancer enables the new store rebalancer introduced in
+	// 22.1.
+	EnableNewStoreRebalancer
+	// ClusterLocksVirtualTable enables querying the crdb_internal.cluster_locks
+	// virtual table, which sends a QueryLocksRequest RPC to all cluster ranges.
+	ClusterLocksVirtualTable
+
+	// AutoStatsTableSettings is the version where we allow auto stats related
+	// table settings.
+	AutoStatsTableSettings
+	// ForecastStats enables statistics forecasting per table.
+	ForecastStats
+	// SuperRegions enables the usage on super regions.
+	SuperRegions
+
+	// EnableNewChangefeedOptions enables the usage of new changefeed options
+	// such as end_time, initial_scan_only, and setting the value of initial_scan
+	// to 'yes|no|only'
+	EnableNewChangefeedOptions
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -534,7 +553,31 @@ var versionsSingleton = keyedVersions{
 	},
 	{
 		Key:     DateStyleIntervalStyleCastRewrite,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 94},
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
+	},
+	{
+		Key:     EnableNewStoreRebalancer,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
+	},
+	{
+		Key:     ClusterLocksVirtualTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 98},
+	},
+	{
+		Key:     AutoStatsTableSettings,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 100},
+	},
+	{
+		Key:     ForecastStats,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 102},
+	},
+	{
+		Key:     SuperRegions,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 104},
+	},
+	{
+		Key:     EnableNewChangefeedOptions,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 106},
 	},
 
 	// *************************************************

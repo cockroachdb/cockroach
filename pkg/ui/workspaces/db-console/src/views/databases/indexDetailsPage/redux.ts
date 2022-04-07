@@ -27,6 +27,7 @@ import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { longToInt } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
 import TableIndexStatsRequest = cockroach.server.serverpb.TableIndexStatsRequest;
+const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 export const mapStateToProps = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
@@ -41,6 +42,17 @@ export const mapStateToProps = createSelector(
     const details = stats?.data?.statistics.filter(
       stat => stat.index_name === index, // index names must be unique for a table
     )[0];
+    const filteredIndexRecommendations =
+      stats?.data?.index_recommendations.filter(
+        indexRec => indexRec.index_id === details.statistics.key.index_id,
+      ) || [];
+    const indexRecommendations = filteredIndexRecommendations.map(indexRec => {
+      return {
+        type: RecommendationType[indexRec.type].toString(),
+        reason: indexRec.reason,
+      };
+    });
+
     return {
       databaseName: database,
       tableName: table,
@@ -53,6 +65,7 @@ export const mapStateToProps = createSelector(
           longToInt(details?.statistics?.stats?.total_read_count) || 0,
         lastRead: util.TimestampToMoment(details?.statistics?.stats?.last_read),
         lastReset: util.TimestampToMoment(stats?.data?.last_reset),
+        indexRecommendations,
       },
     };
   },

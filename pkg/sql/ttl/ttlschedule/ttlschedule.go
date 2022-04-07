@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -38,7 +40,6 @@ type rowLevelTTLExecutor struct {
 var _ jobs.ScheduledJobController = (*rowLevelTTLExecutor)(nil)
 
 type rowLevelTTLMetrics struct {
-	// TODO(#75189): add more useful metrics here
 	*jobs.ExecutorMetrics
 }
 
@@ -54,14 +55,68 @@ func (s rowLevelTTLExecutor) OnDrop(
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 ) error {
-	return errors.WithHint(
-		pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"cannot drop row level TTL schedule",
-		),
-		`use ALTER TABLE ... RESET (expire_after) instead`,
-	)
+
+	var args catpb.ScheduledRowLevelTTLArgs
+	if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, &args); err != nil {
+		return err
+	}
+
+	canDrop, err := canDropTTLSchedule(ctx, txn, descsCol, schedule, args)
+	if err != nil {
+		return err
+	}
+
+	if !canDrop {
+		tn, err := descs.GetTableNameByID(ctx, txn, descsCol, args.TableID)
+		if err != nil {
+			return err
+		}
+		f := tree.NewFmtCtx(tree.FmtSimple)
+		tn.Format(f)
+		return errors.WithHintf(
+			pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"cannot drop a row level TTL schedule",
+			),
+			`use ALTER TABLE %s RESET (ttl) instead`,
+			f.CloseAndGetString(),
+		)
+	}
+	return nil
+}
+
+// canDropTTLSchedule determines whether we can drop a given row-level TTL
+// schedule. This is intended to only be permitted for schedules which are not
+// valid.
+func canDropTTLSchedule(
+	ctx context.Context,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	schedule *jobs.ScheduledJob,
+	args catpb.ScheduledRowLevelTTLArgs,
+) (bool, error) {
+	desc, err := descsCol.GetImmutableTableByID(ctx, txn, args.TableID, tree.ObjectLookupFlags{})
+	if err != nil {
+		// If the descriptor does not exist we can drop this schedule.
+		if sqlerrors.IsUndefinedRelationError(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	if desc == nil {
+		return true, nil
+	}
+	// If there is no row-level TTL on the table we can drop this schedule.
+	if !desc.HasRowLevelTTL() {
+		return true, nil
+	}
+	// If there is a schedule id mismatch we can drop this schedule.
+	if desc.GetRowLevelTTL().ScheduleID != schedule.ScheduleID() {
+		return true, nil
+	}
+	return false, nil
 }
 
 // ExecuteJob implements the jobs.ScheduledJobController interface.
@@ -141,16 +196,21 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
-	schedule *jobs.ScheduledJob,
+	descsCol *descs.Collection,
+	sj *jobs.ScheduledJob,
 	ex sqlutil.InternalExecutor,
 ) (string, error) {
 	args := &catpb.ScheduledRowLevelTTLArgs{}
-	if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, args); err != nil {
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return "", err
 	}
-
-	// TODO(#76915): consider using table name instead - we would need to pass in descCol from the planner.
-	return fmt.Sprintf("ALTER TABLE [%d as T] WITH (expire_after = ...)", args.TableID), nil
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	tn, err := descs.GetTableNameByID(ctx, txn, descsCol, args.TableID)
+	if err != nil {
+		return "", err
+	}
+	f.FormatNode(tn)
+	return fmt.Sprintf(`ALTER TABLE %s WITH (ttl = 'on', ...)`, f.CloseAndGetString()), nil
 }
 
 func createRowLevelTTLJob(

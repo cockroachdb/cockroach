@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -391,14 +391,14 @@ func makeTenantSQLServerArgs(
 		rpcTestingKnobs = p.ContextTestingKnobs
 	}
 	rpcContext := rpc.NewContext(startupCtx, rpc.ContextOptions{
-		TenantID:  sqlCfg.TenantID,
-		NodeID:    baseCfg.IDContainer,
-		ClusterID: baseCfg.ClusterIDContainer,
-		Config:    baseCfg.Config,
-		Clock:     clock,
-		Stopper:   stopper,
-		Settings:  st,
-		Knobs:     rpcTestingKnobs,
+		TenantID:         sqlCfg.TenantID,
+		NodeID:           baseCfg.IDContainer,
+		StorageClusterID: baseCfg.ClusterIDContainer,
+		Config:           baseCfg.Config,
+		Clock:            clock,
+		Stopper:          stopper,
+		Settings:         st,
+		Knobs:            rpcTestingKnobs,
 	})
 
 	var dsKnobs kvcoord.ClientTestingKnobs
@@ -540,7 +540,8 @@ func makeTenantSQLServerArgs(
 			// Set instance ID to 0 and node ID to nil to indicate
 			// that the instance ID will be bound later during preStart.
 			nodeIDContainer:      instanceIDContainer,
-			spanConfigKVAccessor: spanconfigkvaccessor.IllegalKVAccessor,
+			spanConfigKVAccessor: tenantConnect,
+			kvStoresIterator:     kvserverbase.UnsupportedStoresIterator{},
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			tenantConnect: tenantConnect,

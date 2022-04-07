@@ -67,12 +67,10 @@ func newRowLevelTTLTestJobTestHelper(
 
 	knobs := &jobs.TestingKnobs{
 		JobSchedulerEnv: th.env,
-		TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
+		TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
 			th.executeSchedules = func() error {
 				defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-				return th.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-					return fn(ctx, 0 /* allSchedules */, txn)
-				})
+				return fn(context.Background(), 0 /* allSchedules */)
 			}
 		},
 
@@ -270,7 +268,7 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 			})
 			defer cleanupFunc()
 
-			th.sqlDB.Exec(t, tc.setup)
+			th.sqlDB.ExecMultiple(t, strings.Split(tc.setup, ";")...)
 
 			// Force the schedule to execute.
 			th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
@@ -498,7 +496,10 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				for i := 0; i < tc.numSplits; i++ {
 					var values []interface{}
 					var placeholders []string
-					for idx := 0; idx < tbDesc.GetPrimaryIndex().NumKeyColumns(); idx++ {
+
+					// Note we can split a PRIMARY KEY partially.
+					numKeyCols := 1 + rng.Intn(tbDesc.GetPrimaryIndex().NumKeyColumns())
+					for idx := 0; idx < numKeyCols; idx++ {
 						col, err := tbDesc.FindColumnWithID(tbDesc.GetPrimaryIndex().GetKeyColumnID(idx))
 						require.NoError(t, err)
 						placeholders = append(placeholders, fmt.Sprintf("$%d", idx+1))

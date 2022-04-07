@@ -1061,21 +1061,17 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 		indexes: []virtualIndex{
 			{
 				partial: includesIndexEntries,
-				populate: func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
+				populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
 					addRow func(...tree.Datum) error) (bool, error) {
 					var id descpb.ID
-					d := tree.UnwrapDatum(p.EvalContext(), constraint)
-					if d == tree.DNull {
-						return false, nil
-					}
-					switch t := d.(type) {
+					switch t := unwrappedConstraint.(type) {
 					case *tree.DOid:
 						id = descpb.ID(t.DInt)
 					case *tree.DInt:
 						id = descpb.ID(*t)
 					default:
 						return false, errors.AssertionFailedf("unexpected type %T for table id column in virtual table %s",
-							d, schemaDef)
+							unwrappedConstraint, schemaDef)
 					}
 					table, err := p.LookupTableByID(ctx, id)
 					if err != nil {
@@ -2989,12 +2985,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 	indexes: []virtualIndex{
 		{
 			partial: false,
-			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
 				addRow func(...tree.Datum) error) (bool, error) {
 
 				h := makeOidHasher()
 				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
-				coid := tree.MustBeDOid(constraint)
+				coid := tree.MustBeDOid(unwrappedConstraint)
 				ooid := oid.Oid(int(coid.DInt))
 
 				// Check if it is a predefined type.

@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "coldata",
@@ -35,7 +36,6 @@ go_test(
     srcs = [
         "batch_test.go",
         "bytes_test.go",
-        "dep_test.go",
         "main_test.go",
         "nulls_test.go",
         "vec_test.go",
@@ -47,7 +47,6 @@ go_test(
         "//pkg/sql/colconv",
         "//pkg/sql/randgen",
         "//pkg/sql/types",
-        "//pkg/testutils/buildutil",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -72,5 +71,13 @@ genrule(
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
+    ],
+)
+
+disallowed_imports_test(
+    "coldata",
+    [
+        "//pkg/sql/catalog",
+        "//pkg/sql/sem/tree",
     ],
 )

@@ -252,11 +252,6 @@ func (c *castOpNullAny) Next() coldata.Batch {
 	projVec := batch.ColVec(c.outputIdx)
 	vecNulls := vec.Nulls()
 	projNulls := projVec.Nulls()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over nulls values in the
-		// output vector.
-		projNulls.UnsetNulls()
-	}
 	if sel := batch.Selection(); sel != nil {
 		sel = sel[:n]
 		for _, i := range sel {
@@ -451,9 +446,6 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, true, false)
 				}
 			} else {
-				// We need to make sure that there are no left over null values
-				// in the output vector.
-				outputNulls.UnsetNulls()
 				if sel != nil {
 					castTuples(inputCol, inputNulls, outputCol, outputNulls, toType, n, sel, c.evalCtx, false, true)
 				} else {

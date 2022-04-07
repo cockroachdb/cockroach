@@ -32,19 +32,19 @@ const (
 	// doctorStatusVersion is the current "version" of the status checks performed
 	// by `dev doctor``. Increasing it will force doctor to be re-run before other
 	// dev commands can be run.
-	doctorStatusVersion = 2
+	doctorStatusVersion = 3
 
 	noCacheFlag = "no-cache"
 )
 
-func (d *dev) checkDoctorStatus(ctx context.Context) error {
-	if d.knobs.skipDoctorCheck {
-		return nil
-	}
-
+// getDoctorStatus returns the current doctor status number. This function only
+// returns an error in exceptional situations -- if the status file does not
+// already exist (as would be the case for a clean checkout), this function
+// simply returns 0, nil.
+func (d *dev) getDoctorStatus(ctx context.Context) (int, error) {
 	dir, err := d.getWorkspace(ctx)
 	if err != nil {
-		return err
+		return -1, err
 	}
 	statusFile := filepath.Join(dir, doctorStatusFile)
 	content, err := ioutil.ReadFile(statusFile)
@@ -52,20 +52,39 @@ func (d *dev) checkDoctorStatus(ctx context.Context) error {
 		if errors.Is(err, os.ErrNotExist) {
 			content = []byte("0")
 		} else {
-			return err
+			return -1, err
 		}
 	}
-	status, err := strconv.Atoi(strings.TrimSpace(string(content)))
+	return strconv.Atoi(strings.TrimSpace(string(content)))
+}
+
+// checkDoctorStatus returns an error iff the current doctor status is not the
+// latest.
+func (d *dev) checkDoctorStatus(ctx context.Context) error {
+	if d.knobs.skipDoctorCheck {
+		return nil
+	}
+
+	status, err := d.getDoctorStatus(ctx)
 	if err != nil {
 		return err
 	}
+
 	if status < doctorStatusVersion {
 		return errors.New("please run `dev doctor` to refresh dev status, then try again")
 	}
 	return nil
 }
 
-func (d *dev) writeDoctorStatus(ctx context.Context, ex *exec.Exec) error {
+func (d *dev) writeDoctorStatus(ctx context.Context) error {
+	prevStatus, err := d.getDoctorStatus(ctx)
+	if err != nil {
+		return err
+	}
+	if prevStatus <= 0 {
+		// In this case recommend the user `bazel clean --expunge`.
+		log.Println("It is recommended to run `bazel clean --expunge` to avoid any spurious failures now that your machine is set up. (You only have to do this once.)")
+	}
 	dir, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
@@ -204,7 +223,6 @@ Please perform the following steps:
 	}
 	if failedStampTestMsg != "" {
 		failedStampTestMsg = failedStampTestMsg + fmt.Sprintf(`
-This may be because your Bazel is not configured to "stamp" built executables.
 Make sure one of the following lines is in the file %s/.bazelrc.user:
 `, workspace)
 		if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
@@ -220,7 +238,26 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 		failures = append(failures, failedStampTestMsg)
 	}
 
-	if !noCache {
+	// Check whether linting during builds (nogo) is explicitly configured
+	// before we get started.
+	stdout, err = d.exec.CommandContextSilent(ctx, "bazel", "build", "//build/bazelutil:test_nogo_configured")
+	if err != nil {
+		failedNogoTestMsg := "Failed to run `bazel build //build/bazelutil:test_nogo_configured. " + `
+This may be because you haven't configured whether to run lints during builds.
+Put EXACTLY ONE of the following lines in your .bazelrc.user:
+    build --config lintonbuild
+        OR
+    build --config nolintonbuild
+The former will run lint checks while you build. This will make incremental builds
+slightly slower and introduce a noticeable delay in first-time build setup.`
+		failures = append(failures, failedNogoTestMsg)
+		log.Println(failedNogoTestMsg)
+		printStdoutAndErr(string(stdout), err)
+	}
+
+	// We want to make sure there are no other failures before trying to
+	// set up the cache.
+	if !noCache && len(failures) == 0 {
 		d.log.Println("doctor: setting up cache")
 		bazelRcLine, err := d.setUpCache(ctx)
 		if err != nil {
@@ -233,6 +270,8 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 		if msg != "" {
 			failures = append(failures, msg)
 		}
+	} else if !noCache {
+		log.Println("doctor: skipping cache set up due to previous failures")
 	}
 
 	if len(failures) > 0 {
@@ -243,7 +282,7 @@ Make sure one of the following lines is in the file %s/.bazelrc.user:
 		return errors.New("please address the errors described above and try again")
 	}
 
-	if err := d.writeDoctorStatus(ctx, d.exec); err != nil {
+	if err := d.writeDoctorStatus(ctx); err != nil {
 		return err
 	}
 	log.Println("You are ready to build :)")

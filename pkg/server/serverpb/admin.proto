@@ -93,6 +93,8 @@ message DatabaseDetailsResponse {
     // node_ids is the ordered list of node ids on which data is stored.
     repeated int32 node_ids = 4 [(gogoproto.customname) = "NodeIDs",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+    int32 num_index_recommendations = 5;
   }
 
   // grants are the results of SHOW GRANTS for this database.
@@ -213,6 +215,9 @@ message TableDetailsResponse {
   string configure_zone_statement = 9;
   // stats_last_created_at is the time at which statistics were last created.
   google.protobuf.Timestamp stats_last_created_at = 10 [(gogoproto.stdtime) = true];
+  // has_index_recommendations notifies if the there are index recommendations
+  // on this table.
+  bool has_index_recommendations = 11;
 }
 
 // TableStatsRequest is a request for detailed, computationally expensive
@@ -476,6 +481,8 @@ message DrainResponse {
 message DecommissionStatusRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // The number of decommissioning replicas to be reported.
+  int32 num_replica_report = 2;
 }
 
 // DecommissionRequest requests the server to set the membership status on
@@ -486,10 +493,18 @@ message DecommissionRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   kv.kvserver.liveness.livenesspb.MembershipStatus target_membership = 2;
+  // The number of decommissioning replicas to be reported.
+  int32 num_replica_report = 3;
 }
 
 // DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
 message DecommissionStatusResponse {
+  message Replica {
+    int32 replica_id = 1 [ (gogoproto.customname) = "ReplicaID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+    int32 range_id = 2 [ (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  }
   message Status {
     int32 node_id = 1 [ (gogoproto.customname) = "NodeID",
                         (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
@@ -499,6 +514,10 @@ message DecommissionStatusResponse {
     // The membership status of the given node.
     kv.kvserver.liveness.livenesspb.MembershipStatus membership = 4;
     bool draining = 5;
+    // Decommissioning replicas on the given node to be reported.
+    // How many replicas are reported is determined by what was specified in the
+    // request.
+    repeated Replica reported_replicas = 6;
   }
   // Status of all affected nodes.
   repeated Status status = 2 [(gogoproto.nullable) = false];
@@ -525,6 +544,7 @@ message SettingsResponse {
       string type = 2;
       string description = 3;
       bool public = 4;
+      google.protobuf.Timestamp last_updated = 5 [(gogoproto.nullable) = true, (gogoproto.stdtime) = true];
    }
    map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }
@@ -637,6 +657,10 @@ message JobResponse {
   // guaranteed to contain all execution failures and some execution failures
   // may not contain an error or end.
   repeated ExecutionFailure execution_failures = 20;
+
+  // coordinator_id identifies the node coordinating the job. This value will
+  // only be present for jobs that are currently running or recently ran.
+  int64 coordinator_id = 21 [(gogoproto.customname) = "CoordinatorID"];
 }
 
 // LocationsRequest requests system locality location information.
@@ -1167,9 +1191,15 @@ message TracingSpan {
   uint64 trace_id = 2 [(gogoproto.customname) = "TraceID"];
   uint64 span_id = 3 [(gogoproto.customname) = "SpanID"];
   uint64 parent_span_id = 4 [(gogoproto.customname) = "ParentSpanID"];
-  google.protobuf.Timestamp start = 5 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp start = 5 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
   uint64 goroutine_id = 6 [(gogoproto.customname) = "GoroutineID"];
   repeated SpanTag processed_tags = 7;
+  // current is set if the span is still alive (i.e. still present in the active
+  // spans registry).
+  bool current = 8;
+  // current_recording_mode represents the span's current recording mode. This is
+  // not set if current == false.
+  util.tracing.tracingpb.RecordingMode current_recording_mode = 9;
 }
 
 // SpanTag represents a tag on a tracing span, in a form processed for the use

@@ -308,7 +308,7 @@ func (o *routerOutputOp) cancel(ctx context.Context, err error) {
 }
 
 func (o *routerOutputOp) forwardErrLocked(err error) {
-	if err != nil {
+	if err != nil && o.mu.forwardedErr == nil {
 		o.mu.forwardedErr = err
 	}
 }

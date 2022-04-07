@@ -113,6 +113,7 @@ func makeFileTableStorage(
 	// cfg.User is already a normalized SQL username.
 	username := security.MakeSQLUsernameFromPreNormalizedString(cfg.User)
 	executor := filetable.MakeInternalFileToTableExecutor(args.InternalExecutor, args.DB)
+
 	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx,
 		cfg.QualifiedTableName, executor, username)
 	if err != nil {
@@ -262,7 +263,6 @@ func (f *fileTableStorage) List(
 
 	sort.Strings(res)
 	var prevPrefix string
-
 	for _, f := range res {
 		f = strings.TrimPrefix(f, dest)
 		if delim != "" {

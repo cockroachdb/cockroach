@@ -317,6 +317,12 @@ func DecodeDatum(
 	switch code {
 	case FormatText:
 		switch id {
+		case oid.T_record:
+			d, _, err := tree.ParseDTupleFromString(evalCtx, string(b), t)
+			if err != nil {
+				return nil, err
+			}
+			return d, nil
 		case oid.T_bool:
 			t, err := strconv.ParseBool(string(b))
 			if err != nil {

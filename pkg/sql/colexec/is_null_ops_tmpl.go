@@ -90,11 +90,6 @@ func (o *is_KINDNullProjOp) Next() coldata.Batch {
 	// {{end}}
 	projVec := batch.ColVec(o.outputIdx)
 	projCol := projVec.Bool()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
 	if nulls.MaybeHasNulls() {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]

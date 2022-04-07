@@ -235,7 +235,7 @@ func (l *DockerCluster) OneShot(
 	if err := l.oneshot.Start(ctx); err != nil {
 		return err
 	}
-	return l.oneshot.Wait(ctx, container.WaitConditionNextExit)
+	return l.oneshot.Wait(ctx, container.WaitConditionNotRunning)
 }
 
 // stopOnPanic is invoked as a deferred function in Start in order to attempt
@@ -372,7 +372,7 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 	// and it'll get in the way of future runs.
 	l.vols = c
 	maybePanic(c.Start(ctx))
-	maybePanic(c.Wait(ctx, container.WaitConditionNextExit))
+	maybePanic(c.Wait(ctx, container.WaitConditionNotRunning))
 }
 
 // cockroachEntryPoint returns the value to be used as

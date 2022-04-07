@@ -16,8 +16,8 @@ sed -E -f types_regex.tmp < $1 | \
 rm types_regex.tmp
 
 ret=$($4 -p sql -o $3 sql-gen.y); \
-  if expr "$$ret" : ".*conflicts" >/dev/null; then \
-    echo "$$ret"; exit 1; \
+  if expr "$ret" : ".*conflicts" >/dev/null; then \
+    echo "$ret"; exit 1; \
   fi;
 rm sql-gen.y
 $5 -w $3

@@ -129,6 +129,40 @@ func parsePositiveDuration(arg string) (time.Duration, error) {
 	return duration, nil
 }
 
+type keyFormat int
+
+const (
+	hexKey = iota
+	base64Key
+)
+
+func (f *keyFormat) Set(value string) error {
+	switch value {
+	case "hex":
+		*f = hexKey
+	case "base64":
+		*f = base64Key
+	default:
+		return errors.Errorf("unsupported format %s", value)
+	}
+	return nil
+}
+
+func (f *keyFormat) String() string {
+	switch *f {
+	case hexKey:
+		return "hex"
+	case base64Key:
+		return "base64"
+	default:
+		panic(errors.AssertionFailedf("invalid format value %d", *f))
+	}
+}
+
+func (f *keyFormat) Type() string {
+	return "hex|base64"
+}
+
 // OpenEngineOptions tunes the behavior of OpenEngine.
 type OpenEngineOptions struct {
 	ReadOnly                    bool
@@ -528,19 +562,34 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	})
 }
 
+var decodeKeyOptions struct {
+	encoding keyFormat
+}
+
 var debugDecodeKeyCmd = &cobra.Command{
 	Use:   "decode-key",
 	Short: "decode <key>",
 	Long: `
-Decode a hexadecimal-encoded key and pretty-print it. For example:
+Decode encoded keys provided as command arguments and pretty-print them.
+Key encoding type could be changed using encoding flag.
+For example:
 
-	$ decode-key BB89F902ADB43000151C2D1ED07DE6C009
+	$ cockroach debug decode-key BB89F902ADB43000151C2D1ED07DE6C009
 	/Table/51/1/44938288/1521140384.514565824,0
 `,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, arg := range args {
-			b, err := gohex.DecodeString(arg)
+			var b []byte
+			var err error
+			switch decodeKeyOptions.encoding {
+			case hexKey:
+				b, err = gohex.DecodeString(arg)
+			case base64Key:
+				b, err = base64.StdEncoding.DecodeString(arg)
+			default:
+				return errors.Errorf("unsupported key format %d", decodeKeyOptions.encoding)
+			}
 			if err != nil {
 				return err
 			}
@@ -1696,6 +1745,9 @@ func init() {
 		"log format of the input files")
 	f.Var(&debugMergeLogsOpts.useColor, "color",
 		"force use of TTY escape codes to colorize the output")
+
+	f = debugDecodeKeyCmd.Flags()
+	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")
 
 	f = debugDecodeProtoCmd.Flags()
 	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",

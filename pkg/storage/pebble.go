@@ -117,23 +117,114 @@ func EngineKeyCompare(a, b []byte) int {
 	// Compare the version part of the key. Note that when the version is a
 	// timestamp, the timestamp encoding causes byte comparison to be equivalent
 	// to timestamp comparison.
-	aTS := a[aSep:aEnd]
-	bTS := b[bSep:bEnd]
-	if len(aTS) == 0 {
-		if len(bTS) == 0 {
+	aVer := a[aSep:aEnd]
+	bVer := b[bSep:bEnd]
+	if len(aVer) == 0 {
+		if len(bVer) == 0 {
 			return 0
 		}
 		return -1
-	} else if len(bTS) == 0 {
+	} else if len(bVer) == 0 {
 		return 1
 	}
-	return bytes.Compare(bTS, aTS)
+	aVer = normalizeEngineKeyVersionForCompare(aVer)
+	bVer = normalizeEngineKeyVersionForCompare(bVer)
+	return bytes.Compare(bVer, aVer)
+}
+
+// EngineKeyEqual checks for equality of cockroach keys, including the version
+// (which could be MVCC timestamps).
+func EngineKeyEqual(a, b []byte) bool {
+	// NB: For performance, this routine manually splits the key into the
+	// user-key and version components rather than using DecodeEngineKey. In
+	// most situations, use DecodeEngineKey or GetKeyPartFromEngineKey or
+	// SplitMVCCKey instead of doing this.
+	aEnd := len(a) - 1
+	bEnd := len(b) - 1
+	if aEnd < 0 || bEnd < 0 {
+		// This should never happen unless there is some sort of corruption of
+		// the keys.
+		return bytes.Equal(a, b)
+	}
+
+	// Last byte is the version length + 1 when there is a version,
+	// else it is 0.
+	aVerLen := int(a[aEnd])
+	bVerLen := int(b[bEnd])
+
+	// Fast-path. If the key version is empty or contains only a walltime
+	// component then normalizeEngineKeyVersionForCompare is a no-op, so we don't
+	// need to split the "user key" from the version suffix before comparing to
+	// compute equality. Instead, we can check for byte equality immediately.
+	const withWall = mvccEncodedTimeSentinelLen + mvccEncodedTimeWallLen
+	if aVerLen <= withWall && bVerLen <= withWall {
+		return bytes.Equal(a, b)
+	}
+
+	// Compute the index of the separator between the key and the version. If the
+	// separator is found to be at -1 for both keys, then we are comparing bare
+	// suffixes without a user key part. Pebble requires bare suffixes to be
+	// comparable with the same ordering as if they had a common user key.
+	aSep := aEnd - aVerLen
+	bSep := bEnd - bVerLen
+	if aSep == -1 && bSep == -1 {
+		aSep, bSep = 0, 0 // comparing bare suffixes
+	}
+	if aSep < 0 || bSep < 0 {
+		// This should never happen unless there is some sort of corruption of
+		// the keys.
+		return bytes.Equal(a, b)
+	}
+
+	// Compare the "user key" part of the key.
+	if !bytes.Equal(a[:aSep], b[:bSep]) {
+		return false
+	}
+
+	// Compare the version part of the key.
+	aVer := a[aSep:aEnd]
+	bVer := b[bSep:bEnd]
+	aVer = normalizeEngineKeyVersionForCompare(aVer)
+	bVer = normalizeEngineKeyVersionForCompare(bVer)
+	return bytes.Equal(aVer, bVer)
+}
+
+var zeroLogical [mvccEncodedTimeLogicalLen]byte
+
+//gcassert:inline
+func normalizeEngineKeyVersionForCompare(a []byte) []byte {
+	// In general, the version could also be a non-timestamp version, but we know
+	// that engineKeyVersionLockTableLen+mvccEncodedTimeSentinelLen is a different
+	// constant than the above, so there is no danger here of stripping parts from
+	// a non-timestamp version.
+	const withWall = mvccEncodedTimeSentinelLen + mvccEncodedTimeWallLen
+	const withLogical = withWall + mvccEncodedTimeLogicalLen
+	const withSynthetic = withLogical + mvccEncodedTimeSyntheticLen
+	if len(a) == withSynthetic {
+		// Strip the synthetic bit component from the timestamp version. The
+		// presence of the synthetic bit does not affect key ordering or equality.
+		a = a[:withLogical]
+	}
+	if len(a) == withLogical {
+		// If the timestamp version contains a logical timestamp component that is
+		// zero, strip the component. encodeMVCCTimestampToBuf will typically omit
+		// the entire logical component in these cases as an optimization, but it
+		// does not guarantee to never include a zero logical component.
+		// Additionally, we can fall into this case after stripping off other
+		// components of the key version earlier on in this function.
+		if bytes.Equal(a[withWall:], zeroLogical[:]) {
+			a = a[:withWall]
+		}
+	}
+	return a
 }
 
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var EngineComparer = &pebble.Comparer{
 	Compare: EngineKeyCompare,
+
+	Equal: EngineKeyEqual,
 
 	AbbreviatedKey: func(k []byte) uint64 {
 		key, ok := GetKeyPartFromEngineKey(k)
@@ -1676,9 +1767,11 @@ type pebbleReadOnly struct {
 	normalIter       pebbleIterator
 	prefixEngineIter pebbleIterator
 	normalEngineIter pebbleIterator
-	iter             cloneableIter
-	durability       DurabilityRequirement
-	closed           bool
+
+	iter       cloneableIter
+	iterUnused bool
+	durability DurabilityRequirement
+	closed     bool
 }
 
 var _ ReadWriter = &pebbleReadOnly{}
@@ -1720,6 +1813,13 @@ func (p *pebbleReadOnly) Close() {
 		panic("closing an already-closed pebbleReadOnly")
 	}
 	p.closed = true
+	if p.iterUnused {
+		err := p.iter.Close()
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	// Setting iter to nil is sufficient since it will be closed by one of the
 	// subsequent destroy calls.
 	p.iter = nil
@@ -1838,11 +1938,12 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	if iter.iter != nil {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
-		iter.init(p.parent.db, p.iter, opts, p.durability)
+		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
+		p.iterUnused = false
 		iter.reusable = true
 	}
 
@@ -1873,11 +1974,12 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.iter != nil {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
-		iter.init(p.parent.db, p.iter, opts, p.durability)
+		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
+		p.iterUnused = false
 		iter.reusable = true
 	}
 
@@ -1910,6 +2012,10 @@ func (p *pebbleReadOnly) PinEngineStateForIterators() error {
 			o = &pebble.IterOptions{OnlyReadGuaranteedDurable: true}
 		}
 		p.iter = p.parent.db.NewIter(o)
+		// Since the iterator is being created just to pin the state of the engine
+		// for future iterators, we'll avoid cloning it the next time we want an
+		// iterator and instead just re-use what we created here.
+		p.iterUnused = true
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "sessioninit",
@@ -13,6 +13,7 @@ go_library(
         "//pkg/security",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/sem/tree",
@@ -23,5 +24,31 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",
         "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "sessioninit_test",
+    srcs = [
+        "cache_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        ":sessioninit",
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/sqlutil",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
     ],
 )

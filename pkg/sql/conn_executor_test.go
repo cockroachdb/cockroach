@@ -16,7 +16,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -91,40 +90,24 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 		t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
 	}
 
-	const expSafeRedactedMessage = `some error
-(1) while executing: INSERT INTO _(_, _) VALUES ('_', '_', __more2__)
-Wraps: (2) attached stack trace
-  -- stack trace:
-  | github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting
-  | 	...conn_executor_test.go:NN
-  | testing.tRunner
-  | 	...testing.go:NN
-  | runtime.goexit
-  | 	...asm_scrubbed.s:NN
-Wraps: (3) some error
-Error types: (1) *safedetails.withSafeDetails (2) *withstack.withStack (3) *errutil.leafError`
+	const expSafeRedactedMsgPrefix = `some error
+(1) while executing: INSERT INTO _(_, _) VALUES ('_', '_', __more2__)`
 
-	// Edit non-determinstic stack trace filenames from the message.
-	actSafeRedactedMessage := strings.ReplaceAll(strings.ReplaceAll(fileref.ReplaceAllString(
-		redact.Sprintf("%+v", safeErr).Redact().StripMarkers(), "...$2:NN"),
-		"asm_arm64", "asm_scrubbed"),
-		"asm_amd64", "asm_scrubbed")
+	actSafeRedactedMessage := string(redact.Sprintf("%+v", safeErr))
 
-	if actSafeRedactedMessage != expSafeRedactedMessage {
+	if !strings.HasPrefix(actSafeRedactedMessage, expSafeRedactedMsgPrefix) {
 		diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-			A:        difflib.SplitLines(expSafeRedactedMessage),
-			B:        difflib.SplitLines(actSafeRedactedMessage),
-			FromFile: "Expected",
+			A:        difflib.SplitLines(expSafeRedactedMsgPrefix),
+			B:        difflib.SplitLines(actSafeRedactedMessage[:len(expSafeRedactedMsgPrefix)]),
+			FromFile: "Expected Message Prefix",
 			FromDate: "",
-			ToFile:   "Actual",
+			ToFile:   "Actual Message Prefix",
 			ToDate:   "",
 			Context:  1,
 		})
 		t.Errorf("Diff:\n%s", diff)
 	}
 }
-
-var fileref = regexp.MustCompile(`((?:[a-zA-Z0-9\._@-]*/)*)([a-zA-Z0-9._@-]*\.(?:go|s)):\d+`)
 
 // Test that a connection closed abruptly while a SQL txn is in progress results
 // in that txn being rolled back.

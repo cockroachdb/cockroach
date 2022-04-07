@@ -207,3 +207,18 @@ func MinimumRotatedRectangle(g geo.Geometry) (geo.Geometry, error) {
 	}
 	return gm, nil
 }
+
+// CheckBoundingBoxInfiniteCoordinates checks if the bounding box of a Geometry
+// has infinite coordinate.
+func CheckBoundingBoxInfiniteCoordinates(g geo.Geometry) bool {
+	boundingBox := g.BoundingBoxRef()
+	if boundingBox == nil {
+		return false
+	}
+	for _, coord := range []float64{boundingBox.LoX, boundingBox.LoY, boundingBox.HiX, boundingBox.HiY} {
+		if math.IsInf(coord, 0) {
+			return true
+		}
+	}
+	return false
+}

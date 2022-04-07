@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/syncutil",

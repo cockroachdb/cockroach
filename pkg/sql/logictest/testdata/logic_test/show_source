@@ -23,7 +23,7 @@ UTF8                1
 query TT colnames
 SELECT *
 FROM [SHOW ALL]
-WHERE variable != 'optimizer' AND variable != 'crdb_version' AND variable != 'session_id'
+WHERE variable NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem')
 ----
 variable                                              value
 alter_primary_region_super_region_override            off
@@ -37,7 +37,7 @@ client_min_messages                                   notice
 cost_scans_with_default_col_size                      off
 database                                              test
 datestyle                                             ISO, MDY
-datestyle_enabled                                     off
+datestyle_enabled                                     on
 default_int_size                                      8
 default_table_access_method                           heap
 default_tablespace                                    ·
@@ -51,7 +51,6 @@ disable_partially_distributed_plans                   off
 disable_plan_gists                                    off
 disallow_full_table_scans                             off
 distsql                                               off
-distsql_workmem                                       64 MiB
 enable_experimental_alter_column_type_general         off
 enable_experimental_stream_replication                off
 enable_implicit_select_for_update                     on
@@ -62,6 +61,7 @@ enable_seqscan                                        on
 enable_super_regions                                  off
 enable_zigzag_join                                    on
 escape_string_warning                                 on
+expect_and_ignore_not_visible_columns_in_copy         off
 experimental_distsql_planning                         off
 experimental_enable_auto_rehoming                     off
 experimental_enable_implicit_column_partitioning      off
@@ -77,7 +77,7 @@ index_recommendations_enabled                         off
 inject_retry_errors_enabled                           off
 integer_datetimes                                     on
 intervalstyle                                         postgres
-intervalstyle_enabled                                 off
+intervalstyle_enabled                                 on
 is_superuser                                          on
 join_reader_ordering_strategy_batch_size              10 KiB
 large_full_scan_rows                                  1000

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/errors"
 )
@@ -22,9 +23,6 @@ var (
 	// NoopKVAccessor is a KVAccessor that simply no-ops (writing nothing,
 	// returning nothing).
 	NoopKVAccessor = dummyKVAccessor{error: nil}
-
-	// IllegalKVAccessor is a KVAccessor that only returns "illegal use" errors.
-	IllegalKVAccessor = dummyKVAccessor{error: errors.New("illegal use of kvaccessor")}
 
 	// DisabledKVAccessor is a KVAccessor that only returns "disabled" errors.
 	DisabledKVAccessor = dummyKVAccessor{error: errors.New("span configs disabled")}
@@ -50,6 +48,14 @@ func (k dummyKVAccessor) UpdateSpanConfigRecords(
 	context.Context, []spanconfig.Target, []spanconfig.Record,
 ) error {
 	return k.error
+}
+
+// GetAllSystemSpanConfigsThatApply is part of the spanconfig.KVAccessor
+// interface.
+func (k dummyKVAccessor) GetAllSystemSpanConfigsThatApply(
+	context.Context, roachpb.TenantID,
+) ([]roachpb.SpanConfig, error) {
+	return nil, k.error
 }
 
 func (k dummyKVAccessor) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {

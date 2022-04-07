@@ -1,10 +1,3 @@
-# Temporary disable declarative schema changer, since something shifts
-# the timing below to increase likelihood of transaction retries. Since we
-# are executing a select a result set is already sent to the client, so an
-# automatic retry isn't possible.
-statement ok
-SET use_declarative_schema_changer = 'off';
-
 statement ok
 CREATE TYPE t AS ENUM ()
 
@@ -597,6 +590,14 @@ enum_checks  CREATE TABLE public.enum_checks (
 # Ensure that we can add check constraints to tables with enums.
 statement ok
 DROP TABLE enum_checks;
+
+# Since the DROP and CREATE will be executed in a single statement, because of
+# that we can end up with the declarative schema changer executed and legacy
+# schema changers executed in a single statement. When this happens, certain
+# features are not fully compatible the CREATE below can fail, since descriptors
+# are only synthetically dropped in the new world. So, we intentionally, split
+# this from the statement above.
+statement ok
 CREATE TABLE enum_checks (x greeting);
 INSERT INTO enum_checks VALUES ('hi'), ('howdy');
 ALTER TABLE enum_checks ADD CHECK (x > 'hello')
@@ -1007,6 +1008,14 @@ hi
 
 statement ok
 DROP TABLE enum_data_type;
+
+# Since the DROP and CREATE will be executed in a single statement, because of
+# that we can end up with the declarative schema changer executed and legacy
+# schema changers executed in a single statement. When this happens, certain
+# features are not fully compatible the CREATE below can fail, since descriptors
+# are only synthetically dropped in the new world. So, we intentionally, split
+# this from the statement above.
+statement ok
 CREATE TABLE enum_data_type (x greeting);
 INSERT INTO enum_data_type VALUES ('hello'), ('howdy')
 
@@ -1027,6 +1036,14 @@ howdy
 # Convert an enum type into another with USING.
 statement ok
 DROP TABLE enum_data_type;
+
+# Since the DROP and CREATE will be executed in a single statement, because of
+# that we can end up with the declarative schema changer executed and legacy
+# schema changers executed in a single statement. When this happens, certain
+# features are not fully compatible the CREATE below can fail, since descriptors
+# are only synthetically dropped in the new world. So, we intentionally, split
+# this from the statement above.
+statement ok
 CREATE TABLE enum_data_type (x greeting);
 INSERT INTO enum_data_type VALUES ('hello'), ('hi')
 
@@ -1043,6 +1060,14 @@ postgres
 # Test when the conversion of string -> enum should fail.
 statement ok
 DROP TABLE enum_data_type;
+
+# Since the DROP and CREATE will be executed in a single statement, because of
+# that we can end up with the declarative schema changer executed and legacy
+# schema changers executed in a single statement. When this happens, certain
+# features are not fully compatible the CREATE below can fail, since descriptors
+# are only synthetically dropped in the new world. So, we intentionally, split
+# this from the statement above.
+statement ok
 CREATE TABLE enum_data_type (x STRING);
 INSERT INTO enum_data_type VALUES ('notagreeting')
 
@@ -1228,6 +1253,15 @@ USE to_drop;
 CREATE TYPE greeting AS ENUM ('hi');
 CREATE TABLE t(a greeting);
 USE defaultdb;
+
+# Since the DROP and CREATE will be executed in a single statement, because of
+# that we can end up with the declarative schema changer executed and legacy
+# schema changers executed in a single statement. When this happens, certain
+# features are not fully compatible the CREATE below can fail, since descriptors
+# are only synthetically dropped in the new world. So, we intentionally, split
+# this from the statement above. Note: This case can run into a hang when
+# we mix the two.
+statement ok
 DROP DATABASE to_drop CASCADE;
 
 # Before the bug-fix which introduced this test, this call would load all

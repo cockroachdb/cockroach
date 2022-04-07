@@ -107,6 +107,7 @@ var debugZipTablesPerCluster = []string{
 
 	"crdb_internal.regions",
 	"crdb_internal.schema_changes",
+	"crdb_internal.super_regions",
 	"crdb_internal.partitions",
 	"crdb_internal.zones",
 	"crdb_internal.invalid_objects",

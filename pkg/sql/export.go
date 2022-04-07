@@ -123,7 +123,7 @@ func (ef *execFactory) ConstructExport(
 		return nil, err
 	}
 
-	if !ef.planner.IsAutoCommit() {
+	if !ef.planner.ExtendedEvalContext().TxnIsSingleStmt {
 		return nil, errors.Errorf("EXPORT cannot be used inside a multi-statement transaction")
 	}
 

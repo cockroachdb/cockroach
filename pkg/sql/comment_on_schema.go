@@ -40,8 +40,12 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 		return nil, err
 	}
 
-	// Users can't create a schema without being connected to a DB.
-	dbName := p.CurrentDatabase()
+	var dbName string
+	if n.Name.ExplicitCatalog {
+		dbName = n.Name.Catalog()
+	} else {
+		dbName = p.CurrentDatabase()
+	}
 	if dbName == "" {
 		return nil, pgerror.New(pgcode.UndefinedDatabase,
 			"cannot comment schema without being connected to a database")
@@ -54,7 +58,7 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 	}
 
 	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn,
-		db.GetSchemaID(string(n.Name)), tree.SchemaLookupFlags{Required: true})
+		db.GetSchemaID(n.Name.Schema()), tree.SchemaLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}

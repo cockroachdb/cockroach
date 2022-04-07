@@ -93,21 +93,25 @@ func (r *Replica) updateTimestampCache(
 		txnID = ba.Txn.ID
 	}
 	for i, union := range ba.Requests {
-		args := union.GetInner()
-		if !roachpb.UpdatesTimestampCache(args) {
+		req := union.GetInner()
+		if !roachpb.UpdatesTimestampCache(req) {
 			continue
+		}
+		var resp roachpb.Response
+		if br != nil {
+			resp = br.Responses[i].GetInner()
 		}
 		// Skip update if there's an error and it's not for this index
 		// or the request doesn't update the timestamp cache on errors.
 		if pErr != nil {
-			if index := pErr.Index; !roachpb.UpdatesTimestampCacheOnError(args) ||
+			if index := pErr.Index; !roachpb.UpdatesTimestampCacheOnError(req) ||
 				index == nil || int32(i) != index.Index {
 				continue
 			}
 		}
-		header := args.Header()
+		header := req.Header()
 		start, end := header.Key, header.EndKey
-		switch t := args.(type) {
+		switch t := req.(type) {
 		case *roachpb.EndTxnRequest:
 			// EndTxn requests record a tombstone in the timestamp cache to ensure
 			// replays and concurrent requests aren't able to recreate the transaction
@@ -134,7 +138,7 @@ func (r *Replica) updateTimestampCache(
 			// Insert the timestamp of the batch, which we asserted during
 			// command evaluation was equal to or greater than the transaction's
 			// MinTimestamp.
-			recovered := br.Responses[i].GetInner().(*roachpb.RecoverTxnResponse).RecoveredTxn
+			recovered := resp.(*roachpb.RecoverTxnResponse).RecoveredTxn
 			if recovered.Status.IsFinalized() {
 				key := transactionTombstoneMarker(start, recovered.ID)
 				addToTSCache(key, nil, ts, recovered.ID)
@@ -155,7 +159,7 @@ func (r *Replica) updateTimestampCache(
 			// then we add a "tombstone" marker to the timestamp cache wth the
 			// pushee's minimum timestamp. This will prevent the creation of the
 			// transaction record entirely.
-			pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+			pushee := resp.(*roachpb.PushTxnResponse).PusheeTxn
 
 			var tombstone bool
 			switch pushee.Status {
@@ -207,23 +211,35 @@ func (r *Replica) updateTimestampCache(
 			if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); ok {
 				addToTSCache(start, end, ts, txnID)
 			}
+		case *roachpb.GetRequest:
+			if resume := resp.(*roachpb.GetResponse).ResumeSpan; resume != nil {
+				// The request did not evaluate. Ignore it.
+				continue
+			}
+			addToTSCache(start, end, ts, txnID)
 		case *roachpb.ScanRequest:
-			resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
-			if resp.ResumeSpan != nil {
+			if resume := resp.(*roachpb.ScanResponse).ResumeSpan; resume != nil {
+				if start.Equal(resume.Key) {
+					// The request did not evaluate. Ignore it.
+					continue
+				}
 				// Note that for forward scan, the resume span will start at
 				// the (last key read).Next(), which is actually the correct
 				// end key for the span to update the timestamp cache.
-				end = resp.ResumeSpan.Key
+				end = resume.Key
 			}
 			addToTSCache(start, end, ts, txnID)
 		case *roachpb.ReverseScanRequest:
-			resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
-			if resp.ResumeSpan != nil {
+			if resume := resp.(*roachpb.ReverseScanResponse).ResumeSpan; resume != nil {
+				if end.Equal(resume.EndKey) {
+					// The request did not evaluate. Ignore it.
+					continue
+				}
 				// Note that for reverse scans, the resume span's end key is
 				// an open interval. That means it was read as part of this op
 				// and won't be read on resume. It is the correct start key for
 				// the span to update the timestamp cache.
-				start = resp.ResumeSpan.EndKey
+				start = resume.EndKey
 			}
 			addToTSCache(start, end, ts, txnID)
 		case *roachpb.QueryIntentRequest:
@@ -245,7 +261,7 @@ func (r *Replica) updateTimestampCache(
 					missing = t.Reason == roachpb.RETRY_SERIALIZABLE
 				}
 			} else {
-				missing = !br.Responses[i].GetInner().(*roachpb.QueryIntentResponse).FoundIntent
+				missing = !resp.(*roachpb.QueryIntentResponse).FoundIntent
 			}
 			if missing {
 				// If the QueryIntent determined that the intent is missing
@@ -578,7 +594,7 @@ func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	// Forward the read summary by the range's closed timestamp, because any
 	// replica could have served reads below this time. We also return the
 	// closed timestamp separately, in case callers want it split out.
-	closedTS := r.GetClosedTimestamp(ctx)
+	closedTS := r.GetCurrentClosedTimestamp(ctx)
 	sum.Merge(rspb.FromTimestamp(closedTS))
 	return sum
 }

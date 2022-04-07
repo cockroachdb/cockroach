@@ -1881,9 +1881,9 @@ func TestStoreReadInconsistent(t *testing.T) {
 	}
 }
 
-// TestStoreScanResumeTSCache verifies that the timestamp cache is
-// properly updated when scans and reverse scans return partial
-// results and a resume span.
+// TestStoreScanResumeTSCache verifies that the timestamp cache is properly
+// updated when scans, reverse scan, and get requests return partial results
+// and a resume span.
 func TestStoreScanResumeTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1962,6 +1962,38 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	if a, lt := rTS, makeTS(t2.Nanoseconds(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"a\" set less than %s; got %s", lt, a)
 	}
+
+	// Scan the span using 3 Get requests at t3 with max keys and verify the
+	// expected resume spans. The two Get requests that are evaluated should be
+	// accounted for in the timestamp cache, but the third request which is not
+	// evaluated due to the key limit should not be accounted for.
+	t3 := 4 * time.Second
+	manualClock.Set(t3.Nanoseconds())
+	h.Timestamp = makeTS(t3.Nanoseconds(), 0)
+	ba := roachpb.BatchRequest{}
+	ba.Header = h
+	ba.Add(getArgsString("a"), getArgsString("b"), getArgsString("c"))
+	br, pErr := store.TestSender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	require.Len(t, br.Responses, 3)
+	for i, ru := range br.Responses {
+		resp := ru.GetGet()
+		if i < 2 {
+			require.NotNil(t, resp.Value)
+			require.Nil(t, resp.ResumeSpan)
+		} else {
+			require.Nil(t, resp.Value)
+			require.NotNil(t, resp.ResumeSpan)
+		}
+	}
+
+	// Verify the timestamp cache has been set for "a" and "b", but not for "c".
+	rTS, _ = store.tsCache.GetMax(roachpb.Key("a"), nil)
+	require.Equal(t, makeTS(t3.Nanoseconds(), 0), rTS)
+	rTS, _ = store.tsCache.GetMax(roachpb.Key("b"), nil)
+	require.Equal(t, makeTS(t3.Nanoseconds(), 0), rTS)
+	rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
+	require.Equal(t, makeTS(t2.Nanoseconds(), 0), rTS)
 }
 
 // TestStoreScanIntents verifies that a scan across 10 intents resolves
@@ -2346,6 +2378,10 @@ func (fq *fakeRangeQueue) Name() string {
 
 func (fq *fakeRangeQueue) NeedsLease() bool {
 	return false
+}
+
+func (fq *fakeRangeQueue) SetDisabled(disabled bool) {
+	// Do nothing.
 }
 
 // TestMaybeRemove tests that MaybeRemove is called when a range is removed.
@@ -2773,7 +2809,9 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		sp := &fakeStorePool{}
 		expectedErr := errors.New("")
 		c := fakeSnapshotStream{nil, expectedErr}
-		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
+		err := sendSnapshot(
+			ctx, st, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* bytesSentCounter */
+		)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
 		}
@@ -2789,7 +2827,9 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			Status: kvserverpb.SnapshotResponse_ERROR,
 		}
 		c := fakeSnapshotStream{resp, nil}
-		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
+		err := sendSnapshot(
+			ctx, st, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* bytesSentCounter */
+		)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
 		}

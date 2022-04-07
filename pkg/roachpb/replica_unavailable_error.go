@@ -37,7 +37,7 @@ var _ errors.Wrapper = (*ReplicaUnavailableError)(nil)
 
 // SafeFormatError implements errors.SafeFormatter.
 func (e *ReplicaUnavailableError) SafeFormatError(p errors.Printer) error {
-	p.Printf("replica %s unable to serve request to %s: %s", e.Replica, e.Desc, e.Unwrap())
+	p.Printf("replica unavailable: %s unable to serve request to %s: %s", e.Replica, e.Desc, e.Unwrap())
 	return nil
 }
 

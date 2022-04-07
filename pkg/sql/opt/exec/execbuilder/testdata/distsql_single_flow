@@ -1,9 +1,6 @@
 # LogicTest: 5node
 
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
-statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT)
 
 # Move the single range to a remote node.

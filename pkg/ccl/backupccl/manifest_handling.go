@@ -20,10 +20,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -35,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -96,7 +95,7 @@ const (
 
 	// latestHistoryDirectory is the directory where all 22.1 and beyond
 	// LATEST files will be stored as we no longer want to overwrite it.
-	latestHistoryDirectory = backupMetadataDirectory + "latest"
+	latestHistoryDirectory = backupMetadataDirectory + "/" + "latest"
 
 	// backupMetadataDirectory is the directory where metadata about a backup
 	// collection is stored. In v22.1 it contains the latest directory.
@@ -223,12 +222,37 @@ func decompressData(ctx context.Context, mem *mon.BoundAccount, descBytes []byte
 	return mon.ReadAll(ctx, ioctx.ReaderAdapter(r), mem)
 }
 
+// readBackupCheckpointManifest reads and unmarshals a BACKUP-CHECKPOINT
+// manifest from filename in the provided export store.
+func readBackupCheckpointManifest(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *jobspb.BackupEncryptionOptions,
+) (BackupManifest, int64, error) {
+	checkpointFile, err := readLatestCheckpointFile(ctx, exportStore, filename)
+	if err != nil {
+		return BackupManifest{}, 0, err
+	}
+	defer checkpointFile.Close(ctx)
+
+	// Look for a checksum, if one is not found it could be an older backup,
+	// but we want to continue anyway.
+	checksumFile, err := readLatestCheckpointFile(ctx, exportStore, filename+backupManifestChecksumSuffix)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return BackupManifest{}, 0, err
+		}
+		// Pass checksumFile as nil to indicate it was not found.
+		return readManifest(ctx, mem, exportStore, encryption, checkpointFile, nil)
+	}
+	defer checksumFile.Close(ctx)
+	return readManifest(ctx, mem, exportStore, encryption, checkpointFile, checksumFile)
+}
+
 // readBackupManifest reads and unmarshals a BackupManifest from filename in
-// the provided export store. If the passed bound account is not nil, the bytes
-// read are reserved from it as it is read and then the approximate in-memory
-// size (the total decompressed serialized byte size) is reserved as well before
-// deserialization and returned so that callers can then shrink the bound acct
-// by that amount when they release the returned manifest.
+// the provided export store.
 func readBackupManifest(
 	ctx context.Context,
 	mem *mon.BoundAccount,
@@ -236,39 +260,50 @@ func readBackupManifest(
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, int64, error) {
-	// The backup manifest should only be found in the base directory,
-	// unlike the checkpoints which can be found in both the base and
-	// progress directory depending on the version.
-	var r ioctx.ReadCloserCtx
-	var err error
-	if filename != backupManifestName {
-		if r, err = readLatestCheckpointFile(ctx, exportStore, filename); err != nil {
-			return BackupManifest{}, 0, err
-		}
-	} else {
-		if r, err = exportStore.ReadFile(ctx, filename); err != nil {
-			return BackupManifest{}, 0, err
-		}
+	manifestFile, err := exportStore.ReadFile(ctx, filename)
+	if err != nil {
+		return BackupManifest{}, 0, err
 	}
-	defer r.Close(ctx)
-	descBytes, err := mon.ReadAll(ctx, r, mem)
+	defer manifestFile.Close(ctx)
+
+	// Look for a checksum, if one is not found it could be an older backup,
+	// but we want to continue anyway.
+	checksumFile, err := exportStore.ReadFile(ctx, filename+backupManifestChecksumSuffix)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return BackupManifest{}, 0, err
+		}
+		// Pass checksumFile as nil to indicate it was not found.
+		return readManifest(ctx, mem, exportStore, encryption, manifestFile, nil)
+	}
+	defer checksumFile.Close(ctx)
+	return readManifest(ctx, mem, exportStore, encryption, manifestFile, checksumFile)
+}
+
+// readManifest reads and unmarshals a BackupManifest from filename in
+// the provided export store. If the passed bound account is not nil, the bytes
+// read are reserved from it as it is read and then the approximate in-memory
+// size (the total decompressed serialized byte size) is reserved as well before
+// deserialization and returned so that callers can then shrink the bound acct
+// by that amount when they release the returned manifest.
+func readManifest(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	exportStore cloud.ExternalStorage,
+	encryption *jobspb.BackupEncryptionOptions,
+	manifestReader ioctx.ReadCloserCtx,
+	checksumReader ioctx.ReadCloserCtx,
+) (BackupManifest, int64, error) {
+	descBytes, err := mon.ReadAll(ctx, manifestReader, mem)
 	if err != nil {
 		return BackupManifest{}, 0, err
 	}
 	defer func() {
 		mem.Shrink(ctx, int64(cap(descBytes)))
 	}()
-
-	var checksumFile ioctx.ReadCloserCtx
-	if filename != backupManifestName {
-		checksumFile, err = readLatestCheckpointFile(ctx, exportStore, filename+backupManifestChecksumSuffix)
-	} else {
-		checksumFile, err = exportStore.ReadFile(ctx, filename+backupManifestChecksumSuffix)
-	}
-	if err == nil {
+	if checksumReader != nil {
 		// If there is a checksum file present, check that it matches.
-		defer checksumFile.Close(ctx)
-		checksumFileData, err := ioctx.ReadAll(ctx, checksumFile)
+		checksumFileData, err := ioctx.ReadAll(ctx, checksumReader)
 		if err != nil {
 			return BackupManifest{}, 0, errors.Wrap(err, "reading checksum file")
 		}
@@ -280,11 +315,6 @@ func readBackupManifest(
 			return BackupManifest{}, 0, errors.Newf("checksum mismatch; expected %s, got %s",
 				hex.EncodeToString(checksumFileData), hex.EncodeToString(checksum))
 		}
-	} else {
-		// If we don't have a checksum file, carry on. This might be an old version.
-		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return BackupManifest{}, 0, err
-		}
 	}
 
 	var encryptionKey []byte
@@ -294,10 +324,12 @@ func readBackupManifest(
 		if err != nil {
 			return BackupManifest{}, 0, err
 		}
-		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
+		plaintextBytes, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
 		if err != nil {
 			return BackupManifest{}, 0, err
 		}
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = plaintextBytes
 	}
 
 	if isGZipped(descBytes) {
@@ -347,7 +379,6 @@ func readBackupManifest(
 			t.ModificationTime = hlc.Timestamp{WallTime: 1}
 		}
 	}
-
 	return backupManifest, approxMemSize, nil
 }
 
@@ -377,10 +408,12 @@ func readBackupPartitionDescriptor(
 		if err != nil {
 			return BackupPartitionDescriptor{}, 0, err
 		}
-		descBytes, err = storageccl.DecryptFile(descBytes, encryptionKey)
+		plaintextData, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
 		if err != nil {
 			return BackupPartitionDescriptor{}, 0, err
 		}
+		mem.Shrink(ctx, int64(cap(descBytes)))
+		descBytes = plaintextData
 	}
 
 	if isGZipped(descBytes) {
@@ -431,7 +464,7 @@ func readTableStatistics(
 		if err != nil {
 			return nil, err
 		}
-		statsBytes, err = storageccl.DecryptFile(statsBytes, encryptionKey)
+		statsBytes, err = storageccl.DecryptFile(ctx, statsBytes, encryptionKey, nil /* mm */)
 		if err != nil {
 			return nil, err
 		}
@@ -443,8 +476,6 @@ func readTableStatistics(
 	return &tableStats, err
 }
 
-// TODO (Aditya): Restructure manifest reading/writing so that checkpoint
-// manifest and actual manifests are no longer shared.
 func writeBackupManifest(
 	ctx context.Context,
 	settings *cluster.Settings,
@@ -476,17 +507,8 @@ func writeBackupManifest(
 		}
 	}
 
-	// The backup manifest should only be written to the base directory,
-	// unlike the checkpoints which can be written to both the base and
-	// progress directory depending on the version.
-	if filename != backupManifestName {
-		if err := writeNewCheckpointFile(ctx, settings, exportStore, filename, descBuf); err != nil {
-			return err
-		}
-	} else {
-		if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
-			return err
-		}
+	if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
+		return err
 	}
 
 	// Write the checksum file after we've successfully wrote the manifest.
@@ -495,14 +517,8 @@ func writeBackupManifest(
 		return errors.Wrap(err, "calculating checksum")
 	}
 
-	if filename != backupManifestName {
-		if err := writeNewCheckpointFile(ctx, settings, exportStore, filename+backupManifestChecksumSuffix, checksum); err != nil {
-			return errors.Wrap(err, "writing manifest checksum")
-		}
-	} else {
-		if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
-			return errors.Wrap(err, "writing manifest checksum")
-		}
+	if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+		return errors.Wrap(err, "writing manifest checksum")
 	}
 
 	return nil
@@ -517,45 +533,6 @@ func getChecksum(data []byte) ([]byte, error) {
 			`"It never returns an error." -- https://golang.org/pkg/hash`)
 	}
 	return hash.Sum(nil)[:checksumSizeBytes], nil
-}
-
-func getEncryptionKey(
-	ctx context.Context,
-	encryption *jobspb.BackupEncryptionOptions,
-	settings *cluster.Settings,
-	ioConf base.ExternalIODirConfig,
-) ([]byte, error) {
-	if encryption == nil {
-		return nil, errors.New("FileEncryptionOptions is nil when retrieving encryption key")
-	}
-	switch encryption.Mode {
-	case jobspb.EncryptionMode_Passphrase:
-		return encryption.Key, nil
-	case jobspb.EncryptionMode_KMS:
-		// Contact the selected KMS to derive the decrypted data key.
-		// TODO(pbardea): Add a check here if encryption.KMSInfo is unexpectedly nil
-		// here to avoid a panic, and return an error instead.
-		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
-			settings: settings,
-			conf:     &ioConf,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		defer func() {
-			_ = kms.Close()
-		}()
-
-		plaintextDataKey, err := kms.Decrypt(ctx, encryption.KMSInfo.EncryptedDataKey)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to decrypt data key")
-		}
-
-		return plaintextDataKey, nil
-	}
-
-	return nil, errors.New("invalid encryption mode")
 }
 
 // writeBackupPartitionDescriptor writes metadata (containing a locality KV and
@@ -1088,92 +1065,6 @@ func sanitizeLocalityKV(kv string) string {
 	return string(sanitizedKV)
 }
 
-// readEncryptionOptions takes in a backup location and tries to find
-// and return all encryption option files in the backup. A backup
-// normally only creates one encryption option file, but if the user
-// uses ALTER BACKUP to add new keys, a new encryption option file
-// will be placed side by side with the old one. Since the old file
-// is still valid, as we never want to modify or delete an existing
-// backup, we return both new and old files.
-func readEncryptionOptions(
-	ctx context.Context, src cloud.ExternalStorage,
-) ([]jobspb.EncryptionInfo, error) {
-	const encryptionReadErrorMsg = `could not find or read encryption information`
-
-	files, err := getEncryptionInfoFiles(ctx, src)
-	if err != nil {
-		return nil, errors.Mark(errors.Wrap(err, encryptionReadErrorMsg), errEncryptionInfoRead)
-	}
-	var encInfo []jobspb.EncryptionInfo
-	// The user is more likely to pass in a KMS URI that was used to
-	// encrypt the backup recently, so we iterate the ENCRYPTION-INFO
-	// files from latest to oldest.
-	for i := len(files) - 1; i >= 0; i-- {
-		r, err := src.ReadFile(ctx, files[i])
-		if err != nil {
-			return nil, errors.Wrap(err, encryptionReadErrorMsg)
-		}
-		defer r.Close(ctx)
-
-		encInfoBytes, err := ioctx.ReadAll(ctx, r)
-		if err != nil {
-			return nil, errors.Wrap(err, encryptionReadErrorMsg)
-		}
-		var currentEncInfo jobspb.EncryptionInfo
-		if err := protoutil.Unmarshal(encInfoBytes, &currentEncInfo); err != nil {
-			return nil, err
-		}
-		encInfo = append(encInfo, currentEncInfo)
-	}
-	return encInfo, nil
-}
-
-func getEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]string, error) {
-	var files []string
-	// Look for all files in dest that start with "/ENCRYPTION-INFO"
-	// and return them.
-	err := dest.List(ctx, "", "", func(p string) error {
-		paths := strings.Split(p, "/")
-		p = paths[len(paths)-1]
-		if match := strings.HasPrefix(p, backupEncryptionInfoFile); match {
-			files = append(files, p)
-		}
-
-		return nil
-	})
-	if len(files) < 1 {
-		return nil, errors.New("no ENCRYPTION-INFO files found")
-	}
-
-	return files, err
-}
-
-func writeEncryptionInfoIfNotExists(
-	ctx context.Context, opts *jobspb.EncryptionInfo, dest cloud.ExternalStorage,
-) error {
-	r, err := dest.ReadFile(ctx, backupEncryptionInfoFile)
-	if err == nil {
-		r.Close(ctx)
-		// If the file already exists, then we don't need to create a new one.
-		return nil
-	}
-
-	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-		return errors.Wrapf(err,
-			"returned an unexpected error when checking for the existence of %s file",
-			backupEncryptionInfoFile)
-	}
-
-	buf, err := protoutil.Marshal(opts)
-	if err != nil {
-		return err
-	}
-	if err := cloud.WriteFile(ctx, dest, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
-		return err
-	}
-	return nil
-}
-
 // RedactURIForErrorMessage redacts any storage secrets before returning a URI which is safe to
 // return to the client in an error message.
 func RedactURIForErrorMessage(uri string) string {
@@ -1259,38 +1150,65 @@ func readLatestCheckpointFile(
 	// First try reading from the progress directory. If the backup is from
 	// an older version, it may not exist there yet so try reading
 	// in the base directory if the first attempt fails.
-	r, err := exportStore.ReadFile(ctx, backupProgressDirectory+"/"+filename)
-	if err != nil {
-		r, err = exportStore.ReadFile(ctx, filename)
-		if err != nil {
-			return nil, errors.Wrapf(err, "%s could not be read in the base or progress directory", filename)
+	var checkpoint string
+	var checkpointFound bool
+	var r ioctx.ReadCloserCtx
+	var err error
+
+	// We name files such that the most recent checkpoint will always
+	// be at the top, so just grab the first filename.
+	err = exportStore.List(ctx, backupProgressDirectory, "", func(p string) error {
+		// The first file returned by List could be either the checkpoint or
+		// checksum file, but we are only concerned with the timestamped prefix.
+		// We resolve if it is a checkpoint or checksum file separately below.
+		p = strings.TrimPrefix(p, "/")
+		checkpoint = strings.TrimSuffix(p, backupManifestChecksumSuffix)
+		checkpointFound = true
+		// We only want the first checkpoint so return an error that it is
+		// done listing.
+		return cloud.ErrListingDone
+	})
+	// If the list failed because the storage used does not support listing,
+	// such as http we can try reading the non timestamped backup checkpoint
+	// directly. This can still fail if it is a mixed cluster and the
+	// checkpoint was written in the base directory.
+	if errors.Is(err, cloud.ErrListingUnsupported) {
+		r, err = exportStore.ReadFile(ctx, backupProgressDirectory+"/"+filename)
+		// If we found the checkpoint in progress, then don't bother reading
+		// from base, just return the reader.
+		if err == nil {
+			return r, nil
 		}
+	} else if err != nil && !errors.Is(err, cloud.ErrListingDone) {
+		return nil, err
+	}
+
+	if checkpointFound {
+		if strings.HasSuffix(filename, backupManifestChecksumSuffix) {
+			return exportStore.ReadFile(ctx, backupProgressDirectory+"/"+checkpoint+backupManifestChecksumSuffix)
+		}
+		return exportStore.ReadFile(ctx, backupProgressDirectory+"/"+checkpoint)
+	}
+
+	// If the checkpoint wasn't found in the progress directory, then try
+	// reading from the base directory instead.
+	r, err = exportStore.ReadFile(ctx, filename)
+
+	if err != nil {
+		return nil, errors.Wrapf(err, "%s could not be read in the base or progress directory", filename)
 	}
 	return r, nil
+
 }
 
-// writeNewCheckpointFile writes a new BACKUP-CHECKPOINT file to both the base
-// directory and latest-history directory, depending on cluster version.
-func writeNewCheckpointFile(
-	ctx context.Context,
-	settings *cluster.Settings,
-	exportStore cloud.ExternalStorage,
-	filename string,
-	descBuf []byte,
-) error {
-	// Incremental backups pass in the filename with a / appended, where
-	// full backups do not. Depending on the storage file used, double slashes
-	// may throw an error, so we just always strip the / in case.
-	filename = strings.TrimPrefix(filename, "/")
-	// If the cluster is still running on a mixed version, we want to write
-	// to the base directory as well the progress directory. That way if
-	// an old node resumes a backup, it doesn't have to start over.
-	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
-		err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
-		if err != nil {
-			return err
-		}
-	}
-
-	return cloud.WriteFile(ctx, exportStore, backupProgressDirectory+"/"+filename, bytes.NewReader(descBuf))
+// newTimestampedCheckpointFileName returns a string of a new checkpoint filename
+// with a suffixed version. It returns it in the format of BACKUP-CHECKPOINT-<version>
+// where version is a hex encoded one's complement of the timestamp.
+// This means that as long as the supplied timestamp is correct, the filenames
+// will adhere to a lexicographical/utf-8 ordering such that the most
+// recent file is at the top.
+func newTimestampedCheckpointFileName() string {
+	var buffer []byte
+	buffer = encoding.EncodeStringDescending(buffer, timeutil.Now().String())
+	return fmt.Sprintf("%s-%s", backupManifestCheckpointName, hex.EncodeToString(buffer))
 }

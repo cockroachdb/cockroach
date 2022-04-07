@@ -125,5 +125,6 @@ translate database=db
 ----
 /Table/106{-/2}                            num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
 /Table/106/{2-3}                           ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
-/Table/10{6/3-7}                           num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
+/Table/106/{3-4}                           ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
+/Table/10{6/4-7}                           num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
 /Table/10{7-8}                             num_replicas=7

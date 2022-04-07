@@ -9,6 +9,7 @@
 package streamingest
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -19,6 +20,7 @@ import (
 // used by stream ingestion to check for correctness.
 type streamClientValidator struct {
 	cdctest.StreamValidator
+	rekeyer *backupccl.KeyRewriter
 
 	mu syncutil.Mutex
 }
@@ -29,10 +31,11 @@ type streamClientValidator struct {
 // to utilize other Validator's.
 // The wrapper also allows querying the orderValidator to retrieve streamed
 // events from an in-memory store.
-func newStreamClientValidator() *streamClientValidator {
+func newStreamClientValidator(rekeyer *backupccl.KeyRewriter) *streamClientValidator {
 	ov := cdctest.NewStreamOrderValidator()
 	return &streamClientValidator{
 		StreamValidator: ov,
+		rekeyer:         rekeyer,
 	}
 }
 

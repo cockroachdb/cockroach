@@ -169,8 +169,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 					default:
 						srcCol := vec.Bytes()
 						outCol := o.outVecs.BytesCols[o.outVecs.ColsMap[i]]
-						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Copy(srcCol, outputIdx, srcRowIdx)
 					}
 				case types.DecimalFamily:
 					switch o.typs[i].Width() {
@@ -233,8 +232,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 					default:
 						srcCol := vec.JSON()
 						outCol := o.outVecs.JSONCols[o.outVecs.ColsMap[i]]
-						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Copy(srcCol, outputIdx, srcRowIdx)
 					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch o.typs[i].Width() {

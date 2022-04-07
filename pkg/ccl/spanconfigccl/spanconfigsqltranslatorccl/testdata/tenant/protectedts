@@ -91,6 +91,15 @@ CREATE INDEX idx ON db.t1(id);
 ALTER INDEX db.t1@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
 ----
 
+# We wait for running jobs to complete to ensure that index GC jobs
+# have completed. Index GC jobs are enqueued for temporary indexes
+# used by the mvcc-compatible index backfiller. If we didn't wait for
+# them to complete, our span configuration may still contain entries
+# for the temporary index.
+exec-sql
+SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])
+----
+
 protect record-id=5 ts=5
 descs 106
 ----

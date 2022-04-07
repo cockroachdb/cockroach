@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -483,6 +485,124 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		require.Equal(t, tc.curFingerprintCount, sqlStats.GetTotalFingerprintCount(),
 			"testCase: %+v", tc)
 	}
+}
+
+func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	type simulatedTxn struct {
+		stmtFingerprints               []string
+		expectedStatsCountWhenEnabled  int
+		expectedStatsCountWhenDisabled int
+	}
+
+	// The test will run these simulated txns serially, stopping to check
+	// the cumulative statement stats counts along the way.
+	simulatedTxns := []simulatedTxn{
+		{
+			stmtFingerprints: []string{
+				"BEGIN",
+				"SELECT _",
+				"COMMIT",
+			},
+			expectedStatsCountWhenEnabled:  3,
+			expectedStatsCountWhenDisabled: 3,
+		},
+		{
+			stmtFingerprints: []string{
+				"BEGIN",
+				"SELECT _",
+				"SELECT _, _",
+				"COMMIT",
+			},
+			expectedStatsCountWhenEnabled:  7, // All 4 fingerprints look new, since they belong to a new txn fingerprint.
+			expectedStatsCountWhenDisabled: 4, // Only the `SELECT _, _` looks new, since txn fingerprint doesn't matter.
+		},
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	updater := st.MakeUpdater()
+	monitor := mon.NewUnlimitedMonitor(
+		context.Background(),
+		"test",
+		mon.MemoryResource,
+		nil,
+		nil,
+		math.MaxInt64,
+		st,
+	)
+
+	testutils.RunTrueAndFalse(t, "enabled", func(t *testing.T, enabled bool) {
+		// Establish the cluster setting.
+		setting := sslocal.AssociateStmtWithTxnFingerprint
+		err := updater.Set(ctx, setting.Key(), settings.EncodedValue{
+			Value: settings.EncodeBool(enabled),
+			Type:  setting.Typ(),
+		})
+		require.NoError(t, err)
+
+		// Construct the SQL Stats machinery.
+		sqlStats := sslocal.New(
+			st,
+			sqlstats.MaxMemSQLStatsStmtFingerprints,
+			sqlstats.MaxMemSQLStatsTxnFingerprints,
+			nil,
+			nil,
+			monitor,
+			nil,
+			nil,
+		)
+		appStats := sqlStats.GetApplicationStats("" /* appName */)
+		statsCollector := sslocal.NewStatsCollector(
+			st,
+			appStats,
+			sessionphase.NewTimes(),
+			nil, /* knobs */
+		)
+
+		for _, txn := range simulatedTxns {
+			// Collect stats for the simulated transaction.
+			txnFingerprintIDHash := util.MakeFNV64()
+			statsCollector.StartExplicitTransaction()
+
+			for _, fingerprint := range txn.stmtFingerprints {
+				stmtFingerprintID, err := statsCollector.RecordStatement(
+					ctx,
+					roachpb.StatementStatisticsKey{Query: fingerprint},
+					sqlstats.RecordedStmtStats{},
+				)
+				require.NoError(t, err)
+				txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
+			}
+
+			transactionFingerprintID := roachpb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
+			statsCollector.EndExplicitTransaction(ctx, transactionFingerprintID)
+			err := statsCollector.RecordTransaction(ctx, transactionFingerprintID, sqlstats.RecordedTxnStats{})
+			require.NoError(t, err)
+
+			// Gather the collected stats so that we can assert on them.
+			var stats []*roachpb.CollectedStatementStatistics
+			err = statsCollector.IterateStatementStats(
+				ctx,
+				&sqlstats.IteratorOptions{},
+				func(_ context.Context, s *roachpb.CollectedStatementStatistics) error {
+					stats = append(stats, s)
+					return nil
+				},
+			)
+			require.NoError(t, err)
+
+			// Make sure we see the counts we expect.
+			expectedCount := txn.expectedStatsCountWhenEnabled
+			if !enabled {
+				expectedCount = txn.expectedStatsCountWhenDisabled
+			}
+			require.Equal(t, expectedCount, len(stats), "testCase: %+v, stats: %+v", txn, stats)
+		}
+	})
 }
 
 func TestTxnStatsDiscardedAfterPrematureStatementExecutionAbortion(t *testing.T) {

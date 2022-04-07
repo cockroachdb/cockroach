@@ -255,7 +255,7 @@ var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
-	descs := p.ExtendedEvalContext().Descs
+	descsCol := p.ExtendedEvalContext().Descs
 
 	if enabled := jobEnabled.Get(p.ExecCfg().SV()); !enabled {
 		return errors.Newf(
@@ -288,11 +288,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var ttlSettings catpb.RowLevelTTL
 	var pkColumns []string
 	var pkTypes []*types.T
-	var pkDirs []descpb.IndexDescriptor_Direction
 	var name string
 	var rangeSpan roachpb.Span
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := descs.GetImmutableTableByID(
+		desc, err := descsCol.GetImmutableTableByID(
 			ctx,
 			txn,
 			details.TableID,
@@ -318,7 +317,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			}
 			pkTypes = append(pkTypes, col.GetType())
 		}
-		pkDirs = desc.GetPrimaryIndex().IndexDesc().KeyColumnDirections
 
 		ttl := desc.GetRowLevelTTL()
 		if ttl == nil {
@@ -329,34 +327,11 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			return errors.Newf("ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
 		}
 
-		_, dbDesc, err := descs.GetImmutableDatabaseByID(
-			ctx,
-			txn,
-			desc.GetParentID(),
-			tree.CommonLookupFlags{
-				Required: true,
-			},
-		)
+		tn, err := descs.GetTableNameByDesc(ctx, txn, descsCol, desc)
 		if err != nil {
-			return err
-		}
-		schemaDesc, err := descs.GetImmutableSchemaByID(
-			ctx,
-			txn,
-			desc.GetParentSchemaID(),
-			tree.CommonLookupFlags{
-				Required: true,
-			},
-		)
-		if err != nil {
-			return err
+			return errors.Wrapf(err, "error fetching table name for TTL")
 		}
 
-		tn := tree.MakeTableNameWithSchema(
-			tree.Name(dbDesc.GetName()),
-			tree.Name(schemaDesc.GetName()),
-			tree.Name(desc.GetName()),
-		)
 		name = tn.FQString()
 		rangeSpan = desc.TableSpan(p.ExecCfg().Codec)
 		ttlSettings = *ttl
@@ -485,11 +460,11 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				}
 				rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
 				var nextRange rangeToProcess
-				nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, p.ExecCfg().Codec, pkTypes, pkDirs, &alloc)
+				nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, p.ExecCfg().Codec, pkTypes, &alloc)
 				if err != nil {
 					return err
 				}
-				nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, p.ExecCfg().Codec, pkTypes, pkDirs, &alloc)
+				nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, p.ExecCfg().Codec, pkTypes, &alloc)
 				if err != nil {
 					return err
 				}
@@ -723,33 +698,45 @@ func runTTLOnRange(
 
 // keyToDatums translates a RKey on a range for a table to the appropriate datums.
 func keyToDatums(
-	key roachpb.RKey,
-	codec keys.SQLCodec,
-	pkTypes []*types.T,
-	pkDirs []descpb.IndexDescriptor_Direction,
-	alloc *tree.DatumAlloc,
+	key roachpb.RKey, codec keys.SQLCodec, pkTypes []*types.T, alloc *tree.DatumAlloc,
 ) (tree.Datums, error) {
+	rKey := key.AsRawKey()
+
 	// If any of these errors, that means we reached an "empty" key, which
 	// symbolizes the start or end of a range.
-	if _, _, err := codec.DecodeTablePrefix(key.AsRawKey()); err != nil {
+	if _, _, err := codec.DecodeTablePrefix(rKey); err != nil {
 		return nil, nil //nolint:returnerrcheck
 	}
-	if _, _, _, err := codec.DecodeIndexPrefix(key.AsRawKey()); err != nil {
+	if _, _, _, err := codec.DecodeIndexPrefix(rKey); err != nil {
 		return nil, nil //nolint:returnerrcheck
 	}
-	encDatums := make([]rowenc.EncDatum, len(pkTypes))
-	if _, foundNull, err := rowenc.DecodeIndexKey(
-		codec,
-		pkTypes,
-		encDatums,
-		pkDirs,
-		key.AsRawKey(),
-	); err != nil {
+
+	// Decode the datums ourselves, instead of using rowenc.DecodeKeyVals.
+	// We cannot use rowenc.DecodeKeyVals because we may not have the entire PK
+	// as the key for the range (e.g. a PK (a, b) may only be split on (a)).
+	rKey, err := codec.StripTenantPrefix(key.AsRawKey())
+	if err != nil {
 		return nil, err
-	} else if foundNull {
-		return nil, nil
 	}
-	datums := make(tree.Datums, len(pkTypes))
+	rKey, _, _, err = rowenc.DecodePartialTableIDIndexID(key)
+	if err != nil {
+		return nil, err
+	}
+	encDatums := make([]rowenc.EncDatum, 0, len(pkTypes))
+	for len(rKey) > 0 && len(encDatums) < len(pkTypes) {
+		i := len(encDatums)
+		// We currently assume all PRIMARY KEY columns are ascending, and block
+		// creation otherwise.
+		enc := descpb.DatumEncoding_ASCENDING_KEY
+		var val rowenc.EncDatum
+		val, rKey, err = rowenc.EncDatumFromBuffer(pkTypes[i], enc, rKey)
+		if err != nil {
+			return nil, err
+		}
+		encDatums = append(encDatums, val)
+	}
+
+	datums := make(tree.Datums, len(encDatums))
 	for i, encDatum := range encDatums {
 		if err := encDatum.EnsureDecoded(pkTypes[i], alloc); err != nil {
 			return nil, err

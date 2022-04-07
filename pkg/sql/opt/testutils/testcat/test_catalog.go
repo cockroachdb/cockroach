@@ -350,7 +350,7 @@ func (tc *Catalog) ExecuteMultipleDDL(sql string) error {
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
 // catalog. This is used to test without spinning up a cluster.
 func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
-	return tc.ExecuteDDLWithIndexVersion(sql, descpb.PrimaryIndexWithStoredColumnsVersion)
+	return tc.ExecuteDDLWithIndexVersion(sql, descpb.LatestIndexDescriptorVersion)
 }
 
 // ExecuteDDLWithIndexVersion parses the given DDL SQL statement and creates
@@ -753,6 +753,11 @@ func (tt *Table) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 func (tt *Table) Zone() cat.Zone {
 	zone := zonepb.DefaultZoneConfig()
 	return cat.AsZone(&zone)
+}
+
+// IsPartitionAllBy is part of the cat.Table interface.
+func (tt *Table) IsPartitionAllBy() bool {
+	return false
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.

@@ -359,8 +359,8 @@ func startTestFullServer(
 		}
 	}()
 
-	_, err = db.ExecContext(ctx, serverSetupStatements)
-	require.NoError(t, err)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
 
 	if region := serverArgsRegion(args); region != "" {
 		_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER DATABASE d PRIMARY REGION "%s"`, region))
@@ -399,8 +399,8 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 			require.NoError(t, err)
 		}
 	}()
-	_, err = db.ExecContext(ctx, serverSetupStatements)
-	require.NoError(t, err)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
 
 	_, err = db.ExecContext(ctx, `ALTER DATABASE d PRIMARY REGION "us-east1"`)
 	return cluster, db, cleanupAndReset
@@ -409,8 +409,6 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 func startTestTenant(
 	t testing.TB, options feedTestOptions,
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
-	ctx := context.Background()
-
 	kvServer, _, cleanupCluster := startTestFullServer(t, options)
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
@@ -432,8 +430,8 @@ func startTestTenant(
 
 	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
 	// Re-run setup on the tenant as well
-	_, err := tenantDB.ExecContext(ctx, serverSetupStatements)
-	require.NoError(t, err)
+	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
+	tenantRunner.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
 
 	server := &testServerShim{tenantServer, kvServer}
 	// Log so that it is clear if a failed test happened

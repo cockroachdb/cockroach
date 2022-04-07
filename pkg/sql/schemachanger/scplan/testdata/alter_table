@@ -155,6 +155,7 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 106
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:
@@ -178,6 +179,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j defaultdb.footyp
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -327,6 +330,7 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
@@ -346,6 +350,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -545,6 +551,7 @@ PostCommitPhase stage 4 of 4 with 10 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
@@ -564,6 +571,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -703,6 +712,7 @@ PostCommitPhase stage 4 of 4 with 8 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
   transitions:
@@ -722,6 +732,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN a INT8 AS (i + 1) STORED
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
@@ -962,6 +974,7 @@ PostCommitPhase stage 4 of 4 with 15 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 107
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
 PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:
@@ -988,12 +1001,17 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
   ops:
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN a INT8
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 1
       TableID: 104
     *scop.CreateGcJobForIndex
       IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.bar ADD COLUMN b INT8
+        StatementID: 1
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 1

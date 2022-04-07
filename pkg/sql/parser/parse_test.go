@@ -399,6 +399,15 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`COMMENT ON EXTENSION a`, 74777, `comment on extension`, ``},
 		{`COMMENT ON FUNCTION f() is 'f'`, 17511, ``, ``},
+
+		{`COPY t FROM STDIN OIDS`, 41608, `oids`, ``},
+		{`COPY t FROM STDIN FREEZE`, 41608, `freeze`, ``},
+		{`COPY t FROM STDIN HEADER`, 41608, `header`, ``},
+		{`COPY t FROM STDIN ENCODING 'utf-8'`, 41608, `encoding`, ``},
+		{`COPY t FROM STDIN QUOTE 'x'`, 41608, `quote`, ``},
+		{`COPY t FROM STDIN FORCE QUOTE *`, 41608, `quote`, ``},
+		{`COPY t FROM STDIN FORCE NULL *`, 41608, `force null`, ``},
+		{`COPY t FROM STDIN FORCE NOT NULL *`, 41608, `force not null`, ``},
 		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
 
 		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
@@ -528,7 +537,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`, ``},
 
 		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`, ``},
-		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`, ``},
 		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`, ``},
 		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`, ``},
 		{`SELECT a(VARIADIC b)`, 0, `variadic`, ``},

@@ -64,26 +64,31 @@ send "\\demo restart 3\r"
 eexpect "node 3 has been restarted"
 eexpect "movr>"
 
-send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
-eexpect "1 |  false   |      false      | active"
-eexpect "2 |  false   |      false      | active"
-eexpect "3 |  false   |      false      | active"
-eexpect "4 |  false   |      false      | active"
-eexpect "5 |  false   |      false      | active"
-eexpect "movr>"
+# NB: this is flaky, sometimes n3 is still marked as draining due to
+# gossip propagation delays. See:
+# https://github.com/cockroachdb/cockroach/issues/76391
+# send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
+# eexpect "1 |  false   |      false      | active"
+# eexpect "2 |  false   |      false      | active"
+# eexpect "3 |  false   |      false      | active"
+# eexpect "4 |  false   |      false      | active"
+# eexpect "5 |  false   |      false      | active"
+# eexpect "movr>"
 
 # Try commissioning commands
 send "\\demo decommission 4\r"
 eexpect "node 4 has been decommissioned"
 eexpect "movr>"
 
-send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
-eexpect "1 |  false   |      false      | active"
-eexpect "2 |  false   |      false      | active"
-eexpect "3 |  false   |      false      | active"
-eexpect "4 |  false   |      true       | decommissioned"
-eexpect "5 |  false   |      false      | active"
-eexpect "movr>"
+# NB: skipping this out of an abundance of caution, see:
+# https://github.com/cockroachdb/cockroach/issues/76391
+# send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
+# eexpect "1 |  false   |      false      | active"
+# eexpect "2 |  false   |      false      | active"
+# eexpect "3 |  false   |      false      | active"
+# eexpect "4 |  false   |      true       | decommissioned"
+# eexpect "5 |  false   |      false      | active"
+# eexpect "movr>"
 
 send "\\demo recommission 4\r"
 eexpect "can only recommission a decommissioning node"
@@ -119,14 +124,16 @@ eexpect "node 6 has been shutdown"
 eexpect "movr>"
 
 # By now the node should have stabilized in gossip which allows us to query the more detailed information there.
-send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
-eexpect "1 |  false   |      false      | active"
-eexpect "2 |  false   |      false      | active"
-eexpect "3 |  false   |      false      | active"
-eexpect "4 |  false   |      true       | decommissioned"
-eexpect "5 |  false   |      false      | active"
-eexpect "6 |   true   |      false      | active"
-eexpect "movr>"
+# NB: skip this to avoid flakes, see:
+# https://github.com/cockroachdb/cockroach/issues/76391
+# send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
+# eexpect "1 |  false   |      false      | active"
+# eexpect "2 |  false   |      false      | active"
+# eexpect "3 |  false   |      false      | active"
+# eexpect "4 |  false   |      true       | decommissioned"
+# eexpect "5 |  false   |      false      | active"
+# eexpect "6 |   true   |      false      | active"
+# eexpect "movr>"
 
 send_eof
 eexpect eof

@@ -73,11 +73,6 @@ func (o *isNullProjOp) Next() coldata.Batch {
 	nulls := vec.Nulls()
 	projVec := batch.ColVec(o.outputIdx)
 	projCol := projVec.Bool()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
 	if nulls.MaybeHasNulls() {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
@@ -134,11 +129,6 @@ func (o *isTupleNullProjOp) Next() coldata.Batch {
 	datums := vec.Datum()
 	projVec := batch.ColVec(o.outputIdx)
 	projCol := projVec.Bool()
-	if projVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		projVec.Nulls().UnsetNulls()
-	}
 	if nulls.MaybeHasNulls() {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]

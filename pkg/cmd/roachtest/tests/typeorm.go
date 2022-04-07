@@ -24,7 +24,7 @@ import (
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedTypeORMRelease = "0.2.32"
+var supportedTypeORMRelease = "0.3.5"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
 func registerTypeORM(r registry.Registry) {
@@ -89,7 +89,7 @@ func registerTypeORM(r registry.Registry) {
 			c,
 			node,
 			"add nodesource repository",
-			`sudo apt install ca-certificates && curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -`,
+			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -154,14 +154,14 @@ func registerTypeORM(r registry.Registry) {
 			c,
 			node,
 			"building TypeORM",
-			`cd /mnt/data1/typeorm/ && sudo npm install --unsafe-perm=true --allow-root`,
+			`cd /mnt/data1/typeorm/ && npm install`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("running TypeORM test suite - approx 12 mins")
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
-			`cd /mnt/data1/typeorm/ && sudo npm test --unsafe-perm=true --allow-root`,
+			`cd /mnt/data1/typeorm/ && npm test`,
 		)
 		rawResults := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResults)

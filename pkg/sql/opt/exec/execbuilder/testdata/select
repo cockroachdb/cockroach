@@ -1827,6 +1827,8 @@ vectorized: true
 # values.
 statement ok
 CREATE TABLE nulls (x INT, y INT);
+
+statement ok
 ALTER TABLE nulls INJECT STATISTICS '[
     {
         "columns": [

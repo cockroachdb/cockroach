@@ -982,7 +982,7 @@ func (t *tenantStatusServer) TableIndexStats(
 	}
 
 	return getTableIndexUsageStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
-		t.sqlServer.internalExecutor)
+		t.sqlServer.internalExecutor, t.st, t.sqlServer.execCfg)
 }
 
 // Details returns information for a given instance ID such as

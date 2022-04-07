@@ -26,6 +26,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci test \
                                       --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'GO_TEST_JSON_OUTPUT_FILE=cat,XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' -maxtime 3h -maxfails 1 -stderr -p 1" \
                                       --test_arg -dir --test_arg $ARTIFACTS_DIR \
                                       --test_arg -ops --test_arg "uniform:5000-10000" \
+                                      --test_output streamed \
     || exit_status=$?
 
 BAZEL_SUPPORT_EXTRA_GITHUB_POST_ARGS=--formatter=pebble-metamorphic process_test_json \

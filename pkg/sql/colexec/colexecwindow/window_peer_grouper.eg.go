@@ -101,11 +101,6 @@ func (p *windowPeerGrouperNoPartitionOp) Next() coldata.Batch {
 	}
 	sel := b.Selection()
 	peersVec := b.ColVec(p.outputColIdx)
-	if peersVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		peersVec.Nulls().UnsetNulls()
-	}
 	peersCol := peersVec.Bool()
 	if sel != nil {
 		for _, i := range sel[:n] {
@@ -137,11 +132,6 @@ func (p *windowPeerGrouperWithPartitionOp) Next() coldata.Batch {
 	partitionCol := b.ColVec(p.partitionColIdx).Bool()
 	sel := b.Selection()
 	peersVec := b.ColVec(p.outputColIdx)
-	if peersVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		peersVec.Nulls().UnsetNulls()
-	}
 	peersCol := peersVec.Bool()
 	if sel != nil {
 		for _, i := range sel[:n] {
@@ -182,11 +172,6 @@ func (p *windowPeerGrouperAllPeersNoPartitionOp) Next() coldata.Batch {
 	}
 	sel := b.Selection()
 	peersVec := b.ColVec(p.outputColIdx)
-	if peersVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		peersVec.Nulls().UnsetNulls()
-	}
 	peersCol := peersVec.Bool()
 	if sel != nil {
 		for _, i := range sel[:n] {
@@ -220,11 +205,6 @@ func (p *windowPeerGrouperAllPeersWithPartitionOp) Next() coldata.Batch {
 	partitionCol := b.ColVec(p.partitionColIdx).Bool()
 	sel := b.Selection()
 	peersVec := b.ColVec(p.outputColIdx)
-	if peersVec.MaybeHasNulls() {
-		// We need to make sure that there are no left over null values in the
-		// output vector.
-		peersVec.Nulls().UnsetNulls()
-	}
 	peersCol := peersVec.Bool()
 	if sel != nil {
 		for _, i := range sel[:n] {

@@ -60,6 +60,7 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
       - 104
       - 105
       JobID: 1
+      NonCancelable: true
       Statements:
       - statement: DROP TYPE defaultdb.typ
         redactedstatement: DROP TYPE ‹defaultdb›.‹public›.‹typ›

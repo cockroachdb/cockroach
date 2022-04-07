@@ -70,10 +70,10 @@ func (js *JSONs) Window(start, end int) *JSONs {
 	}
 }
 
-// copy copies a single value from src at position srcIdx into position destIdx
+// Copy copies a single value from src at position srcIdx into position destIdx
 // of the receiver.
-func (js *JSONs) copy(src *JSONs, destIdx, srcIdx int) {
-	js.Bytes.copy(&src.Bytes, destIdx, srcIdx)
+func (js *JSONs) Copy(src *JSONs, destIdx, srcIdx int) {
+	js.Bytes.Copy(&src.Bytes, destIdx, srcIdx)
 }
 
 // CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive []byte values

@@ -50,7 +50,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 			Stopper:  stopper,
 			Settings: st,
 		})
-	rpcC.ClusterID.Set(context.Background(), uuid.MakeV4())
+	rpcC.StorageClusterID.Set(context.Background(), uuid.MakeV4())
 
 	// mrs := &dummyMultiRaftServer{}
 

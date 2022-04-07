@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -197,7 +198,7 @@ func (s *statusServer) TableIndexStats(
 		return nil, err
 	}
 	return getTableIndexUsageStats(ctx, req, s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
-		s.sqlServer.internalExecutor)
+		s.sqlServer.internalExecutor, s.st, s.sqlServer.execCfg)
 }
 
 // getTableIndexUsageStats is a helper function that reads the indexes
@@ -208,6 +209,8 @@ func getTableIndexUsageStats(
 	req *serverpb.TableIndexStatsRequest,
 	idxUsageStatsProvider *idxusage.LocalIndexUsageStats,
 	ie *sql.InternalExecutor,
+	st *cluster.Settings,
+	execConfig *sql.ExecutorConfig,
 ) (*serverpb.TableIndexStatsResponse, error) {
 	userName, err := userFromContext(ctx)
 	if err != nil {
@@ -254,6 +257,7 @@ func getTableIndexUsageStats(
 	}
 
 	var idxUsageStats []*serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics
+	var idxRecommendations []*serverpb.IndexRecommendation
 	var ok bool
 
 	// We have to make sure to close the iterator since we might return from the
@@ -306,14 +310,21 @@ func getTableIndexUsageStats(
 			CreatedAt:       createdAt,
 		}
 
+		statsRow := idxusage.IndexStatsRow{
+			Row:              idxStatsRow,
+			UnusedIndexKnobs: execConfig.UnusedIndexRecommendationsKnobs,
+		}
+		recommendations := statsRow.GetRecommendationsFromIndexStats(st)
+		idxRecommendations = append(idxRecommendations, recommendations...)
 		idxUsageStats = append(idxUsageStats, idxStatsRow)
 	}
 
 	lastReset := idxUsageStatsProvider.GetLastReset()
 
 	resp := &serverpb.TableIndexStatsResponse{
-		Statistics: idxUsageStats,
-		LastReset:  &lastReset,
+		Statistics:           idxUsageStats,
+		LastReset:            &lastReset,
+		IndexRecommendations: idxRecommendations,
 	}
 
 	return resp, nil
@@ -335,7 +346,10 @@ func getTableIDFromDatabaseAndTableName(
 		return 0, err
 	}
 	names := strings.Split(fqtName, ".")
-
+	// Strip quotations marks from db and table names.
+	for idx := range names {
+		names[idx] = strings.Trim(names[idx], "\"")
+	}
 	q := makeSQLQuery()
 	q.Append(`SELECT table_id FROM crdb_internal.tables WHERE database_name = $ `, names[0])
 

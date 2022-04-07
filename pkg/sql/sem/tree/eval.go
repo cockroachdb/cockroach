@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -3304,6 +3305,13 @@ type EvalPlanner interface {
 	// constraint on the table.
 	RevalidateUniqueConstraint(ctx context.Context, tableID int, constraintName string) error
 
+	// ValidateTTLScheduledJobsInCurrentDB checks scheduled jobs for each table
+	// in the database maps to a scheduled job.
+	ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error
+	// RepairTTLScheduledJob repairs the scheduled job for the given table if
+	// it is invalid.
+	RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error
+
 	// QueryRowEx executes the supplied SQL statement and returns a single row, or
 	// nil if no row is found, or an error if more that one row is returned.
 	//
@@ -3595,13 +3603,22 @@ type EvalContext struct {
 	TxnState string
 	// TxnReadOnly specifies if the current transaction is read-only.
 	TxnReadOnly bool
+	// TxnImplicit specifies if the current transaction is implicit.
 	TxnImplicit bool
+	// TxnIsSingleStmt specifies the current implicit transaction consists of only
+	// a single statement.
+	TxnIsSingleStmt bool
 
-	Settings    *cluster.Settings
-	ClusterID   uuid.UUID
+	Settings *cluster.Settings
+	// ClusterID is the logical cluster ID for this tenant.
+	ClusterID uuid.UUID
+	// ClusterName is the security string used to secure the RPC layer.
 	ClusterName string
-	NodeID      *base.SQLIDContainer
-	Codec       keys.SQLCodec
+	// NodeID is either the SQL instance ID or KV Node ID, depending on
+	// circumstances.
+	// TODO(knz,radu): Split this into separate fields.
+	NodeID *base.SQLIDContainer
+	Codec  keys.SQLCodec
 
 	// Locality contains the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there
@@ -3714,6 +3731,10 @@ type EvalContext struct {
 
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc
+
+	// KVStoresIterator is used by various crdb_internal builtins to directly
+	// access stores on this node.
+	KVStoresIterator kvserverbase.StoresIterator
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
@@ -4215,6 +4236,9 @@ func (expr *ColumnAccessExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if d == DNull {
+		return d, nil
 	}
 	return d.(*DTuple).D[expr.ColIndex], nil
 }

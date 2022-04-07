@@ -1640,13 +1640,25 @@ func (n *Node) GetSpanConfigs(
 	}, nil
 }
 
+// GetAllSystemSpanConfigsThatApply implements the roachpb.InternalServer
+// interface.
+func (n *Node) GetAllSystemSpanConfigsThatApply(
+	ctx context.Context, req *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
+	spanConfigs, err := n.spanConfigAccessor.GetAllSystemSpanConfigsThatApply(ctx, req.TenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &roachpb.GetAllSystemSpanConfigsThatApplyResponse{
+		SpanConfigs: spanConfigs,
+	}, nil
+}
+
 // UpdateSpanConfigs implements the roachpb.InternalServer interface.
 func (n *Node) UpdateSpanConfigs(
 	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
-	// TODO(irfansharif): We want to protect ourselves from tenants creating
-	// outlandishly large string buffers here and OOM-ing the host cluster. Is
-	// the maximum protobuf message size enough of a safeguard?
 	toUpsert, err := spanconfig.EntriesToRecords(req.ToUpsert)
 	if err != nil {
 		return nil, err

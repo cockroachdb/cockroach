@@ -5,6 +5,7 @@ go_library(
     name = "scop",
     srcs = [
         "backfill.go",
+        "metadata.go",
         "mutation.go",
         "ops.go",
         "phase.go",

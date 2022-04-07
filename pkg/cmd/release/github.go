@@ -80,11 +80,11 @@ func (c *githubClientImpl) openIssues(labels []string) ([]githubIssue, error) {
 		// TODO: This pagination pattern is a potential race condition: we may want to move to graphql api,
 		// which has cursor-based pagination. But for now, this is probably good enough, as issues don't
 		// change _that_ frequently.
-		issues, _, err := c.client.Issues.List(
+		issues, _, err := c.client.Issues.ListByRepo(
 			c.ctx,
-			true, /* all: true searches `/issues/`, false searches `/user/issues/` */
-			&github.IssueListOptions{
-				Filter: "all",
+			c.owner,
+			c.repo,
+			&github.IssueListByRepoOptions{
 				State:  "open",
 				Labels: labels,
 				ListOptions: github.ListOptions{

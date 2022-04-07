@@ -112,6 +112,15 @@ func registerNodeJSPostgres(r registry.Registry) {
 		)
 		require.NoError(t, err)
 
+		// The upstream repo hasn't updated its dependencies in light of
+		// https://github.blog/2021-09-01-improving-git-protocol-security-github/
+		// so we need this configuration.
+		err = repeatRunE(
+			ctx, t, c, node, "configure git to avoid unauthenticated protocol",
+			`cd /mnt/data1/node-postgres && sudo git config --global url."https://github".insteadOf "git://github"`,
+		)
+		require.NoError(t, err)
+
 		err = repeatRunE(
 			ctx,
 			t,

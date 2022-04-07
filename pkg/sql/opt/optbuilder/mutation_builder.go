@@ -60,6 +60,12 @@ type mutationBuilder struct {
 	// fetchScope contains the set of columns fetched from the target table.
 	fetchScope *scope
 
+	// insertExpr is the expression that produces the values which will be
+	// inserted into the target table. It is only populated for INSERT
+	// expressions. It is currently used to inline constant insert values into
+	// uniqueness checks.
+	insertExpr memo.RelExpr
+
 	// targetColList is an ordered list of IDs of the table columns into which
 	// values will be inserted, or which will be updated with new values. It is
 	// incrementally built as the mutation operator is built.
@@ -1304,27 +1310,31 @@ const (
 	checkInputScanFetchedVals
 )
 
-// buildCheckInputScan constructs a WithScan that iterates over the input to the
-// mutation operator. Used in expressions that generate rows for checking for FK
-// and uniqueness violations.
+// buildCheckInputScan constructs an expression that produces the new values of
+// rows during a mutation. It is used in expressions that generate rows for
+// checking for FK and uniqueness violations. It returns either a WithScan that
+// iterates over the input to the mutation operator, or a Values expression with
+// constant insert values inlined.
 //
-// The WithScan expression will scan either the new values or the fetched values
-// for the given table ordinals (which correspond to FK or unique columns).
+// If a WithScan expression is returned, it will scan either the new values or
+// the fetched values for the given table ordinals (which correspond to FK or
+// unique columns).
 //
-// Returns a scope containing the WithScan expression and the output columns
-// from the WithScan. The output columns map 1-to-1 to tabOrdinals. Also returns
-// the subset of these columns that can be assumed to be not null (either
-// because they are not null in the mutation input or because they are
+// Returns a scope containing the WithScan or Values expression and the output
+// columns from the WithScan. The output columns map 1-to-1 to tabOrdinals. Also
+// returns the subset of these columns that can be assumed to be not null
+// (either because they are not null in the mutation input or because they are
 // non-nullable table columns).
 //
+// isFK should be true when building inputs for FK checks, and false otherwise.
 func (mb *mutationBuilder) buildCheckInputScan(
-	typ checkInputScanType, tabOrdinals []int,
-) (withScanScope *scope, notNullOutCols opt.ColSet) {
+	typ checkInputScanType, tabOrdinals []int, isFK bool,
+) (outScope *scope, notNullOutCols opt.ColSet) {
 	// inputCols are the column IDs from the mutation input that we are scanning.
 	inputCols := make(opt.ColList, len(tabOrdinals))
 
-	withScanScope = mb.b.allocScope()
-	withScanScope.cols = make([]scopeColumn, len(inputCols))
+	outScope = mb.b.allocScope()
+	outScope.cols = make([]scopeColumn, len(inputCols))
 
 	for i, tabOrd := range tabOrdinals {
 		if typ == checkInputScanNewVals {
@@ -1339,11 +1349,11 @@ func (mb *mutationBuilder) buildCheckInputScan(
 		// Synthesize a new output column for the input column, using the name
 		// of the column in the underlying table. The table's column names are
 		// used because partial unique constraint checks must filter the
-		// WithScan rows with a predicate expression that references the table's
-		// columns.
+		// WithScan or Values rows with a predicate expression that references
+		// the table's columns.
 		tableCol := mb.b.factory.Metadata().Table(mb.tabID).Column(tabOrd)
 		outCol := mb.md.AddColumn(string(tableCol.ColName()), tableCol.DatumType())
-		withScanScope.cols[i] = scopeColumn{
+		outScope.cols[i] = scopeColumn{
 			id:   outCol,
 			name: scopeColName(tableCol.ColName()),
 			typ:  tableCol.DatumType(),
@@ -1358,11 +1368,46 @@ func (mb *mutationBuilder) buildCheckInputScan(
 		}
 	}
 
-	withScanScope.expr = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
+	// If the check is not an FK check, attempt to inline the insert values in
+	// the check input. This avoids buffering the mutation input and scanning it
+	// with a WithScan. The inlined values may allow for further optimization of
+	// the check.
+	//
+	// TODO(mgartner): We do not currently inline constants for FK checks
+	// because this would break the insert fast path. The fast path can
+	// currently only be planned when FK checks are built with WithScans.
+	if !isFK && mb.insertExpr != nil {
+		// Find the constant columns produced by the insert expression. All
+		// input columns must be constant in order to inline them.
+		constCols := memo.FindInlinableConstants(mb.insertExpr)
+		if inputCols.ToSet().SubsetOf(constCols) {
+			elems := make(memo.ScalarListExpr, len(inputCols))
+			colTypes := make([]*types.T, len(inputCols))
+			for i, colID := range inputCols {
+				elem := memo.ExtractColumnFromProjectOrValues(mb.insertExpr, colID)
+				elems[i] = elem
+				colTypes[i] = elem.DataType()
+			}
+
+			// Create a Values expression as the input to the check.
+			tupleTyp := types.MakeTuple(colTypes)
+			row := mb.b.factory.ConstructTuple(elems, tupleTyp)
+			outScope.expr = mb.b.factory.ConstructValues(memo.ScalarListExpr{row}, &memo.ValuesPrivate{
+				Cols: outScope.colList(),
+				ID:   mb.b.factory.Metadata().NextUniqueID(),
+			})
+
+			return outScope, notNullOutCols
+		}
+	}
+
+	mb.ensureWithID()
+	outScope.expr = mb.b.factory.ConstructWithScan(&memo.WithScanPrivate{
 		With:    mb.withID,
 		InCols:  inputCols,
-		OutCols: withScanScope.colList(),
+		OutCols: outScope.colList(),
 		ID:      mb.b.factory.Metadata().NextUniqueID(),
 	})
-	return withScanScope, notNullOutCols
+
+	return outScope, notNullOutCols
 }

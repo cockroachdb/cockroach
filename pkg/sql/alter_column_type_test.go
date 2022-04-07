@@ -80,9 +80,9 @@ INSERT INTO test2 VALUES ('hello');`)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		sqlDB.Exec(t, `
-SET enable_experimental_alter_column_type_general = true;
-ALTER TABLE test ALTER COLUMN x TYPE STRING;`)
+		sqlDB.ExecMultiple(t,
+			`SET enable_experimental_alter_column_type_general = true;`,
+			`ALTER TABLE test ALTER COLUMN x TYPE STRING;`)
 		wg.Done()
 	}()
 
@@ -156,9 +156,9 @@ INSERT INTO test2 VALUES (true);
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		sqlDB.Exec(t, `
-SET enable_experimental_alter_column_type_general = true;
-ALTER TABLE test ALTER COLUMN x TYPE BOOL USING (x > 0);`)
+		sqlDB.ExecMultiple(t,
+			`SET enable_experimental_alter_column_type_general = true;`,
+			`ALTER TABLE test ALTER COLUMN x TYPE BOOL USING (x > 0);`)
 		wg.Done()
 	}()
 
@@ -330,10 +330,10 @@ func TestSchemaChangeBeforeAlterColumnType(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(ctx)
-
+	sqlDB.ExecMultiple(t,
+		`SET use_declarative_schema_changer = 'off';`,
+		`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';`)
 	sqlDB.Exec(t, `
-SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
-SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT NOT NULL, y INT);
 `)
@@ -394,10 +394,10 @@ CREATE TABLE t.test (x INT);
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		sqlDB.Exec(t, `
-SET enable_experimental_alter_column_type_general = true;
-ALTER TABLE t.test ALTER COLUMN x TYPE STRING;
-`)
+		sqlDB.ExecMultiple(t,
+			`SET enable_experimental_alter_column_type_general = true;`,
+			`ALTER TABLE t.test ALTER COLUMN x TYPE STRING;`,
+		)
 		wg.Done()
 	}()
 

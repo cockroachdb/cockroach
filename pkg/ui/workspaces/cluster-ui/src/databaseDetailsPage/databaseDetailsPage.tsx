@@ -12,8 +12,6 @@ import React from "react";
 import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
-import _ from "lodash";
-
 import { Breadcrumbs } from "src/breadcrumbs";
 import { Dropdown, DropdownOption } from "src/dropdown";
 import { CaretRight } from "src/icon/caretRight";
@@ -37,7 +35,7 @@ import {
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
 import { Moment } from "moment";
-import { formatDate } from "antd/es/date-picker/utils";
+import { Caution } from "@cockroachlabs/icons";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -104,6 +102,7 @@ export interface DatabaseDetailsPageDataTableDetails {
   roles: string[];
   grants: string[];
   statsLastUpdated?: Moment;
+  hasIndexRecommendations: boolean;
 }
 
 export interface DatabaseDetailsPageDataTableStats {
@@ -203,7 +202,7 @@ export class DatabaseDetailsPage extends React.Component<
       return this.props.refreshDatabaseDetails(this.props.name);
     }
 
-    _.forEach(this.props.tables, table => {
+    this.props.tables.forEach(table => {
       if (!table.details.loaded && !table.details.loading) {
         return this.props.refreshTableDetails(this.props.name, table.name);
       }
@@ -333,7 +332,22 @@ export class DatabaseDetailsPage extends React.Component<
             Indexes
           </Tooltip>
         ),
-        cell: table => table.details.indexCount,
+        cell: table => {
+          if (table.details.hasIndexRecommendations) {
+            return (
+              <div className={cx("icon__container")}>
+                <Tooltip
+                  placement="bottom"
+                  title="This table has index recommendations. Click the table name to see more details."
+                >
+                  <Caution className={cx("icon--s", "icon--warning")} />
+                </Tooltip>
+                {table.details.indexCount}
+              </div>
+            );
+          }
+          return table.details.indexCount;
+        },
         sort: table => table.details.indexCount,
         className: cx("database-table__col-index-count"),
         name: "indexCount",
@@ -366,10 +380,7 @@ export class DatabaseDetailsPage extends React.Component<
         cell: table =>
           !table.details.statsLastUpdated
             ? "No table statistics found"
-            : formatDate(
-                table.details.statsLastUpdated,
-                "MMM DD, YYYY [at] h:mm A",
-              ),
+            : table.details.statsLastUpdated.format("MMM DD, YYYY [at] h:mm A"),
         sort: table => table.details.statsLastUpdated,
         className: cx("database-table__col--table-stats"),
         name: "tableStatsUpdated",
@@ -417,8 +428,8 @@ export class DatabaseDetailsPage extends React.Component<
             Roles
           </Tooltip>
         ),
-        cell: table => _.join(table.details.roles, ", "),
-        sort: table => _.join(table.details.roles, ", "),
+        cell: table => table.details.roles.join(", "),
+        sort: table => table.details.roles.join(", "),
         className: cx("database-table__col-roles"),
         name: "roles",
       },
@@ -428,8 +439,8 @@ export class DatabaseDetailsPage extends React.Component<
             Grants
           </Tooltip>
         ),
-        cell: table => _.join(table.details.grants, ", "),
-        sort: table => _.join(table.details.grants, ", "),
+        cell: table => table.details.grants.join(", "),
+        sort: table => table.details.grants.join(", "),
         className: cx("database-table__col-grants"),
         name: "grants",
       },

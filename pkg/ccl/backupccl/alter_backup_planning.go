@@ -9,20 +9,16 @@
 package backupccl
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"net/url"
 	"path"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -215,19 +211,6 @@ func doAlterBackupPlan(
 
 	// Write the new ENCRYPTION-INFO file.
 	return writeNewEncryptionInfoToBackup(ctx, encryptionInfo, baseStore, len(opts))
-}
-
-func writeNewEncryptionInfoToBackup(
-	ctx context.Context, opts *jobspb.EncryptionInfo, dest cloud.ExternalStorage, numFiles int,
-) error {
-	// New encryption-info file name is in the format "ENCRYPTION-INFO-<version number>"
-	newEncryptionInfoFile := fmt.Sprintf("%s-%d", backupEncryptionInfoFile, numFiles+1)
-
-	buf, err := protoutil.Marshal(opts)
-	if err != nil {
-		return err
-	}
-	return cloud.WriteFile(ctx, dest, newEncryptionInfoFile, bytes.NewReader(buf))
 }
 
 func init() {

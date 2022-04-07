@@ -182,7 +182,7 @@
 /pkg/cmd/reduce/             @cockroachdb/sql-queries
 /pkg/cmd/release/            @cockroachdb/dev-inf
 /pkg/cmd/returncheck/        @cockroachdb/dev-inf
-/pkg/cmd/roachprod/          @cockroachdb/dev-inf
+/pkg/cmd/roachprod/          @cockroachdb/test-eng
 /pkg/cmd/roachprod-stress/   @cockroachdb/test-eng
 /pkg/cmd/roachtest/          @cockroachdb/test-eng
 /pkg/cmd/label-merged-pr/    @cockroachdb/dev-inf
@@ -252,7 +252,7 @@
 /pkg/roachpb/testdata/ambi*  @cockroachdb/kv-prs
 /pkg/roachpb/testdata/repl*  @cockroachdb/kv-prs
 /pkg/roachpb/version*        @cockroachdb/unowned
-/pkg/roachprod/              @cockroachdb/dev-inf
+/pkg/roachprod/              @cockroachdb/test-eng
 /pkg/rpc/                    @cockroachdb/server-prs
 /pkg/scheduledjobs/          @cockroachdb/bulk-prs
 /pkg/security/               @cockroachdb/server-prs @cockroachdb/prodsec

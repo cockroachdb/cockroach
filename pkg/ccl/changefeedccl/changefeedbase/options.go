@@ -8,7 +8,10 @@
 
 package changefeedbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql"
+import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+)
 
 // EnvelopeType configures the information in the changefeed events for a row.
 type EnvelopeType string
@@ -31,11 +34,23 @@ type SchemaChangePolicy string
 // include virtual columns in an event
 type VirtualColumnVisibility string
 
+// InitialScanType configures whether the changefeed will perform an
+// initial scan, and the type of initial scan that it will perform
+type InitialScanType int
+
+// Constants for the initial scan types
+const (
+	InitialScan InitialScanType = iota
+	NoInitialScan
+	OnlyInitialScan
+)
+
 // Constants for the options.
 const (
 	OptAvroSchemaPrefix         = `avro_schema_prefix`
 	OptConfluentSchemaRegistry  = `confluent_schema_registry`
 	OptCursor                   = `cursor`
+	OptEndTime                  = `end_time`
 	OptEnvelope                 = `envelope`
 	OptFormat                   = `format`
 	OptFullTableName            = `full_table_name`
@@ -93,6 +108,8 @@ const (
 	OptNoInitialScan = `no_initial_scan`
 	// Sentinel value to indicate that all resolved timestamp events should be emitted.
 	OptEmitAllResolvedTimestamps = ``
+
+	OptInitialScanOnly = `initial_scan_only`
 
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
@@ -166,6 +183,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptAvroSchemaPrefix:         sql.KVStringOptRequireValue,
 	OptConfluentSchemaRegistry:  sql.KVStringOptRequireValue,
 	OptCursor:                   sql.KVStringOptRequireValue,
+	OptEndTime:                  sql.KVStringOptRequireValue,
 	OptEnvelope:                 sql.KVStringOptRequireValue,
 	OptFormat:                   sql.KVStringOptRequireValue,
 	OptFullTableName:            sql.KVStringOptRequireNoValue,
@@ -180,8 +198,9 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptSchemaChangeEvents:       sql.KVStringOptRequireValue,
 	OptSchemaChangePolicy:       sql.KVStringOptRequireValue,
 	OptSplitColumnFamilies:      sql.KVStringOptRequireNoValue,
-	OptInitialScan:              sql.KVStringOptRequireNoValue,
+	OptInitialScan:              sql.KVStringOptAny,
 	OptNoInitialScan:            sql.KVStringOptRequireNoValue,
+	OptInitialScanOnly:          sql.KVStringOptRequireNoValue,
 	OptProtectDataFromGCOnPause: sql.KVStringOptRequireNoValue,
 	OptKafkaSinkConfig:          sql.KVStringOptRequireValue,
 	OptWebhookSinkConfig:        sql.KVStringOptRequireValue,
@@ -201,14 +220,14 @@ func makeStringSet(opts ...string) map[string]struct{} {
 }
 
 // CommonOptions is options common to all sinks
-var CommonOptions = makeStringSet(OptCursor, OptEnvelope,
+var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptFormat, OptFullTableName,
 	OptKeyInValue, OptTopicInValue,
 	OptResolvedTimestamps, OptUpdatedTimestamps,
 	OptMVCCTimestamps, OptDiff, OptSplitColumnFamilies,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
-	OptInitialScan, OptNoInitialScan,
+	OptInitialScan, OptNoInitialScan, OptInitialScanOnly,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics)
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -241,8 +260,13 @@ var NoLongerExperimental = map[string]string{
 }
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
-// users to alter
-var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan, OptNoInitialScan)
+// users to alter.
+// TODO(sherman): At the moment we disallow altering both the initial_scan_only
+// and the end_time option. However, there are instances in which it should be
+// allowed to alter either of these options. We need to support the alteration
+// of these fields.
+var AlterChangefeedUnsupportedOptions = makeStringSet(OptCursor, OptInitialScan,
+	OptNoInitialScan, OptInitialScanOnly, OptEndTime)
 
 // AlterChangefeedOptionExpectValues is used to parse alter changefeed options
 // using PlanHookState.TypeAsStringOpts().
@@ -260,4 +284,12 @@ var AlterChangefeedOptionExpectValues = func() map[string]sql.KVStringOptValidat
 var AlterChangefeedTargetOptions = map[string]sql.KVStringOptValidate{
 	OptInitialScan:   sql.KVStringOptRequireNoValue,
 	OptNoInitialScan: sql.KVStringOptRequireNoValue,
+}
+
+// VersionGateOptions is a mapping between an option and its minimum supported
+// version.
+var VersionGateOptions = map[string]clusterversion.Key{
+	OptEndTime:         clusterversion.EnableNewChangefeedOptions,
+	OptInitialScanOnly: clusterversion.EnableNewChangefeedOptions,
+	OptInitialScan:     clusterversion.EnableNewChangefeedOptions,
 }

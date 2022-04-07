@@ -66,8 +66,27 @@ func (tc *Collection) getSchemaByName(
 	schemaName string,
 	flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
+	const alwaysLookupLeasedPublicSchema = false
+	return tc.getSchemaByNameMaybeLookingUpPublicSchema(
+		ctx, txn, db, schemaName, flags, alwaysLookupLeasedPublicSchema,
+	)
+}
+
+// Like getSchemaByName but with the optional flag to avoid trusting a
+// cache miss in the database descriptor for the ID of the public schema.
+//
+// TODO(ajwerner): Remove this split in 22.2.
+func (tc *Collection) getSchemaByNameMaybeLookingUpPublicSchema(
+	ctx context.Context,
+	txn *kv.Txn,
+	db catalog.DatabaseDescriptor,
+	schemaName string,
+	flags tree.SchemaLookupFlags,
+	alwaysLookupLeasedPublicSchema bool,
+) (catalog.SchemaDescriptor, error) {
 	found, desc, err := tc.getByName(
-		ctx, txn, db, nil, schemaName, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
+		ctx, txn, db, nil, schemaName, flags.AvoidLeased, flags.RequireMutable,
+		flags.AvoidSynthetic, alwaysLookupLeasedPublicSchema,
 	)
 	if err != nil {
 		return nil, err

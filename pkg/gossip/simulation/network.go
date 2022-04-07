@@ -87,7 +87,7 @@ func NewNetwork(
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	n.RPCContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
+	n.RPCContext.StorageClusterID.Set(context.TODO(), uuid.MakeV4())
 
 	for i := 0; i < nodeCount; i++ {
 		node, err := n.CreateNode(defaultZoneConfig)

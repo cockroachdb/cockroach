@@ -252,8 +252,7 @@ func (w *nthValueBytesWindow) processBatch(batch coldata.Batch, startIdx, endIdx
 			continue
 		}
 		col := vec.Bytes()
-		val := col.Get(idx)
-		outputCol.Set(i, val)
+		outputCol.Copy(col, i, idx)
 	}
 }
 
@@ -690,8 +689,7 @@ func (w *nthValueJSONWindow) processBatch(batch coldata.Batch, startIdx, endIdx 
 			continue
 		}
 		col := vec.JSON()
-		val := col.Get(idx)
-		outputCol.Set(i, val)
+		outputCol.Copy(col, i, idx)
 	}
 }
 

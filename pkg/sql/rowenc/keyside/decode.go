@@ -251,7 +251,7 @@ func Decode(
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		return a.NewDOid(tree.MakeDOid(tree.DInt(i))), rkey, err
+		return a.NewDOid(tree.MakeDOid(tree.DInt(i), valType)), rkey, err
 	case types.EnumFamily:
 		var r []byte
 		if dir == encoding.Ascending {

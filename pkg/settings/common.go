@@ -127,5 +127,6 @@ type internalSetting interface {
 // numericSetting is used for settings that can be set using an integer value.
 type numericSetting interface {
 	internalSetting
+	DecodeValue(value string) (int64, error)
 	set(ctx context.Context, sv *Values, value int64) error
 }

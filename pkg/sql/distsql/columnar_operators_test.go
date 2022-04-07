@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -273,7 +274,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 								for _, typ := range aggFnInputTypes {
 									hasJSONColumn = hasJSONColumn || typ.Family() == types.JsonFamily
 								}
-								if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggFnInputTypes...); err == nil {
+								if _, outputType, err := execinfra.GetAggregateInfo(aggFn, aggFnInputTypes...); err == nil {
 									outputTypes[i] = outputType
 									break
 								}
@@ -548,15 +549,15 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					sorterSpec := &execinfrapb.SorterSpec{
 						OutputOrdering: execinfrapb.Ordering{Columns: orderingCols},
 					}
-					var limit, offset uint64
+					var offset uint64
 					if topK > 0 {
 						offset = uint64(rng.Intn(int(topK)))
-						limit = topK - offset
+						sorterSpec.Limit = int64(topK - offset)
 					}
 					pspec := &execinfrapb.ProcessorSpec{
 						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 						Core:        execinfrapb.ProcessorCoreUnion{Sorter: sorterSpec},
-						Post:        execinfrapb.PostProcessSpec{Limit: limit, Offset: offset},
+						Post:        execinfrapb.PostProcessSpec{Offset: offset},
 						ResultTypes: inputTypes,
 					}
 					args := verifyColOperatorArgs{
@@ -1200,7 +1201,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 					}
 					windowerSpec.WindowFns[0].Frame = generateWindowFrame(t, rng, &ordering, inputTypes)
 
-					_, outputType, err := execinfrapb.GetWindowFunctionInfo(fun, argTypes...)
+					_, outputType, err := execinfra.GetWindowFunctionInfo(fun, argTypes...)
 					require.NoError(t, err)
 					pspec := &execinfrapb.ProcessorSpec{
 						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},

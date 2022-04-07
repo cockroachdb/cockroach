@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -109,7 +108,7 @@ func ingestionPlanHook(
 		defer span.Finish()
 
 		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
+			p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(),
 			"RESTORE FROM REPLICATION STREAM",
 		); err != nil {
 			return err
@@ -153,9 +152,8 @@ func ingestionPlanHook(
 		}
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
-
-		prefix := keys.MakeTenantPrefix(ingestionStmt.Targets.TenantID.TenantID)
-		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		// Empty start time indicates initial scan is enabled.
+		startTime := hlc.Timestamp{}
 		if ingestionStmt.AsOf.Expr != nil {
 			asOf, err := p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
 			if err != nil {
@@ -164,11 +162,24 @@ func ingestionPlanHook(
 			startTime = asOf.Timestamp
 		}
 
+		//TODO(casper): make target to be tenant-only.
+		oldTenantID := ingestionStmt.Targets.TenantID.TenantID
+		newTenantID := oldTenantID
+		if ingestionStmt.AsTenant.Specified {
+			newTenantID = ingestionStmt.AsTenant.TenantID
+		}
+		if oldTenantID == roachpb.SystemTenantID || newTenantID == roachpb.SystemTenantID {
+			return errors.Newf("either old tenant ID %d or the new tenant ID %d cannot be system tenant",
+				oldTenantID.ToUint64(), newTenantID.ToUint64())
+		}
+
+		prefix := keys.MakeTenantPrefix(newTenantID)
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress: string(streamAddress),
-			TenantID:      ingestionStmt.Targets.TenantID.TenantID,
+			TenantID:      oldTenantID,
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			StartTime:     startTime,
+			NewTenantID:   newTenantID,
 		}
 
 		jobDescription, err := streamIngestionJobDescription(p, ingestionStmt)
