@@ -5833,10 +5833,105 @@ CREATE TABLE crdb_internal.cluster_locks (
     durability          STRING,
     granted             BOOL,
     contended           BOOL,
-    duration            INTERVAL
+    duration            INTERVAL,
+    INDEX(table_id),
+    INDEX(database_name),
+    INDEX(table_name),
+    INDEX(contended)
 );`,
-	indexes: nil,
-	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+	indexes: []virtualIndex{
+		{
+			populate: func(
+				ctx context.Context,
+				unwrappedConstraint tree.Datum,
+				p *planner,
+				db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error,
+			) (matched bool, err error) {
+				var filters clusterLocksFilters
+				switch t := unwrappedConstraint.(type) {
+				case *tree.DInt:
+					filters.tableID = (*int64)(t)
+				default:
+					return false, errors.AssertionFailedf(
+						"unexpected type %T for table_id column in virtual table crdb_internal.cluster_locks", unwrappedConstraint)
+				}
+
+				return populateClusterLocksWithFilter(ctx, p, db, addRow, filters)
+			},
+		},
+		{
+			populate: func(
+				ctx context.Context,
+				unwrappedConstraint tree.Datum,
+				p *planner,
+				db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error,
+			) (matched bool, err error) {
+				var filters clusterLocksFilters
+				switch t := unwrappedConstraint.(type) {
+				case *tree.DString:
+					filters.databaseName = (*string)(t)
+				default:
+					return false, errors.AssertionFailedf(
+						"unexpected type %T for database_name column in virtual table crdb_internal.cluster_locks", unwrappedConstraint)
+				}
+				return populateClusterLocksWithFilter(ctx, p, db, addRow, filters)
+			},
+		},
+		{
+			populate: func(
+				ctx context.Context,
+				unwrappedConstraint tree.Datum,
+				p *planner,
+				db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error,
+			) (matched bool, err error) {
+				var filters clusterLocksFilters
+				switch t := unwrappedConstraint.(type) {
+				case *tree.DString:
+					filters.tableName = (*string)(t)
+				default:
+					return false, errors.AssertionFailedf(
+						"unexpected type %T for table_name column in virtual table crdb_internal.cluster_locks", unwrappedConstraint)
+				}
+				return populateClusterLocksWithFilter(ctx, p, db, addRow, filters)
+			},
+		},
+		{
+			populate: func(
+				ctx context.Context,
+				unwrappedConstraint tree.Datum,
+				p *planner,
+				db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error,
+			) (matched bool, err error) {
+				var filters clusterLocksFilters
+				switch t := unwrappedConstraint.(type) {
+				case *tree.DBool:
+					filters.contended = (*bool)(t)
+				default:
+					return false, errors.AssertionFailedf(
+						"unexpected type %T for contended column in virtual table crdb_internal.cluster_locks", unwrappedConstraint)
+				}
+				return populateClusterLocksWithFilter(ctx, p, db, addRow, filters)
+			},
+		},
+	},
+	generator: genClusterLocksGenerator(clusterLocksFilters{}),
+}
+
+type clusterLocksFilters struct {
+	tableID      *int64
+	databaseName *string
+	tableName    *string
+	contended    *bool
+}
+
+func genClusterLocksGenerator(
+	filters clusterLocksFilters,
+) func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+	return func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ClusterLocksVirtualTable) {
 			return nil, nil, pgerror.New(pgcode.FeatureNotSupported,
 				"table crdb_internal.cluster_locks is not supported on this version")
@@ -5885,6 +5980,15 @@ CREATE TABLE crdb_internal.cluster_locks (
 			}
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor:
+				if filters.tableName != nil && *filters.tableName != desc.GetName() {
+					continue
+				}
+				if filters.tableID != nil && descpb.ID(*filters.tableID) != desc.GetID() {
+					continue
+				}
+				if filters.databaseName != nil && *filters.databaseName != dbNames[uint32(desc.GetParentID())] {
+					continue
+				}
 				spansToQuery = append(spansToQuery, desc.TableSpan(p.execCfg.Codec))
 			}
 		}
@@ -5916,6 +6020,10 @@ CREATE TABLE crdb_internal.cluster_locks (
 				},
 				IncludeUncontended: true,
 			}
+			if filters.contended != nil && *filters.contended {
+				queryLocksRequest.IncludeUncontended = false
+			}
+
 			b.AddRawRequest(queryLocksRequest)
 
 			b.Header.MaxSpanRequestKeys = int64(rowinfra.ProductionKVBatchSize)
@@ -6050,5 +6158,32 @@ CREATE TABLE crdb_internal.cluster_locks (
 			}, nil
 
 		}, nil, nil
-	},
+	}
+}
+
+func populateClusterLocksWithFilter(
+	ctx context.Context,
+	p *planner,
+	db catalog.DatabaseDescriptor,
+	addRow func(...tree.Datum) error,
+	filters clusterLocksFilters,
+) (matched bool, err error) {
+	var rowGenerator virtualTableGenerator
+	generator := genClusterLocksGenerator(filters)
+	rowGenerator, _, err = generator(ctx, p, db, nil /* stopper */)
+	if err != nil {
+		return false, err
+	}
+	var row tree.Datums
+	row, err = rowGenerator()
+	for row != nil && err == nil {
+		err = addRow(row...)
+		if err != nil {
+			break
+		}
+		matched = true
+
+		row, err = rowGenerator()
+	}
+	return matched, err
 }
