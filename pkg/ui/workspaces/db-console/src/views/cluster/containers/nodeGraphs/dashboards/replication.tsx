@@ -193,6 +193,20 @@ export default function(props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
+    <LineGraph title="Snapshot Data Sent" sources={storeSources}>
+      <Axis label="bytes">
+        {_.map(nodeIDs, nid => (
+            <Metric
+                key={nid}
+                name="cr.store.range.snapshots.sent-bytes"
+                title={nodeDisplayName(nodesSummary, nid)}
+                sources={storeIDsForNode(nodesSummary, nid)}
+                nonNegativeRate
+            />
+        ))}
+      </Axis>
+    </LineGraph>,
+
     <LineGraph
       title="Circuit Breaker Tripped Replicas"
       tooltip={CircuitBreakerTrippedReplicasTooltip}
