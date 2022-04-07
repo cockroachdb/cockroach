@@ -404,7 +404,7 @@ var (
 	}
 	metaRdbNumSSTables = metric.Metadata{
 		Name:        "rocksdb.num-sstables",
-		Help:        "Number of rocksdb SSTables",
+		Help:        "Number of storage engine SSTables",
 		Measurement: "SSTables",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -413,6 +413,12 @@ var (
 		Help:        "Estimated pending compaction bytes",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
+	}
+	metaRdbMarkedForCompactionFiles = metric.Metadata{
+		Name:        "storage.marked-for-compaction-files",
+		Help:        "Count of SSTables marked for compaction",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
 	}
 	metaRdbL0Sublevels = metric.Metadata{
 		Name:        "storage.l0-sublevels",
@@ -1382,6 +1388,7 @@ type StoreMetrics struct {
 	RdbReadAmplification        *metric.Gauge
 	RdbNumSSTables              *metric.Gauge
 	RdbPendingCompaction        *metric.Gauge
+	RdbMarkedForCompactionFiles *metric.Gauge
 	RdbL0Sublevels              *metric.Gauge
 	RdbL0NumFiles               *metric.Gauge
 	RdbWriteStalls              *metric.Gauge
@@ -1827,6 +1834,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbReadAmplification:        metric.NewGauge(metaRdbReadAmplification),
 		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
 		RdbPendingCompaction:        metric.NewGauge(metaRdbPendingCompaction),
+		RdbMarkedForCompactionFiles: metric.NewGauge(metaRdbMarkedForCompactionFiles),
 		RdbL0Sublevels:              metric.NewGauge(metaRdbL0Sublevels),
 		RdbL0NumFiles:               metric.NewGauge(metaRdbL0NumFiles),
 		RdbWriteStalls:              metric.NewGauge(metaRdbWriteStalls),
@@ -2054,6 +2062,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbTableReadersMemEstimate.Update(m.TableCache.Size)
 	sm.RdbReadAmplification.Update(int64(m.ReadAmp()))
 	sm.RdbPendingCompaction.Update(int64(m.Compact.EstimatedDebt))
+	sm.RdbMarkedForCompactionFiles.Update(int64(m.Compact.MarkedFiles))
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
 	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)
 	sm.RdbNumSSTables.Update(m.NumSSTables())
