@@ -286,7 +286,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// Run a backup from an old node so that it is planned on the old node
 				// but the job is adopted on a new node.
 				successfulBackupStep(t, c, oldNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/plan-old-resume-new' WITH detached`),
+					`BACKUP TABLE bank.bank INTO 'nodelocal://1/plan-old-resume-new' WITH detached`),
 
 				clearDisableJobAdoptionFileFromNodesStep(c, oldNodes),
 
@@ -299,7 +299,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// Run a backup from a new node so that it is planned on the new node
 				// but the job is adopted on an old node.
 				successfulBackupStep(t, c, upgradedNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/plan-new-resume-old' WITH detached`),
+					`BACKUP TABLE bank.bank INTO 'nodelocal://1/plan-new-resume-old' WITH detached`),
 
 				clearDisableJobAdoptionFileFromNodesStep(c, upgradedNodes),
 
@@ -311,7 +311,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				haltJobAdoptionOnNodesStep(c, oldNodes),
 				// Plan and run a full backup on the new nodes.
 				successfulBackupStep(t, c, upgradedNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/new-node-full-backup' WITH detached`),
+					`BACKUP TABLE bank.bank INTO 'nodelocal://1/new-node-full-backup' WITH detached`),
 				// Set up the cluster so that only the old nodes plan and run the
 				// incremental backup.
 				clearDisableJobAdoptionFileFromNodesStep(c, oldNodes),
@@ -320,14 +320,14 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// Run an incremental (on old nodes) on top of a full backup taken by
 				// nodes on the upgraded version.
 				successfulBackupStep(t, c, oldNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO LATEST IN 'nodelocal://1/new-node-full-backup' WITH detached`),
+					`BACKUP TABLE bank.bank INTO LATEST IN 'nodelocal://1/new-node-full-backup' WITH detached`),
 
 				// Case 2: full backup -> old nodes
 				//         inc backup  -> new nodes
 
 				// Plan and run a full backup on the old nodes.
 				successfulBackupStep(t, c, oldNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO 'nodelocal://1/old-node-full-backup' WITH detached`),
+					`BACKUP TABLE bank.bank INTO 'nodelocal://1/old-node-full-backup' WITH detached`),
 
 				clearDisableJobAdoptionFileFromNodesStep(c, upgradedNodes),
 
@@ -339,7 +339,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// Run an incremental on top of a full backup taken by nodes on the
 				// old version.
 				successfulBackupStep(t, c, roachNodes.RandNode(),
-					`BACKUP DATABASE bank.bank INTO LATEST IN 'nodelocal://1/old-node-full-backup' WITH detached`),
+					`BACKUP TABLE bank.bank INTO LATEST IN 'nodelocal://1/old-node-full-backup' WITH detached`),
 			)
 			u.run(ctx, t)
 		},
