@@ -669,7 +669,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	assertMin := func(exp uint64, now time.Time) {
 		t.Helper()
 		const anyRecipientStore roachpb.StoreID = 0
-		if maxIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now, anyRecipientStore); maxIndex != exp {
+		if maxIndex := r.getSnapshotLogTruncationConstraintsLocked(anyRecipientStore); maxIndex != exp {
 			t.Fatalf("unexpected max index %d, wanted %d", maxIndex, exp)
 		}
 	}
@@ -684,20 +684,15 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 
 	now := timeutil.Now()
 	// The colliding snapshot comes back. Or the original, we can't tell.
-	r.completeSnapshotLogTruncationConstraint(ctx, id1, now)
+	r.completeSnapshotLogTruncationConstraint(id1)
 	// The index should show up when its deadline isn't hit.
-	assertMin(index1, now)
-	assertMin(index1, now.Add(RaftLogQueuePendingSnapshotGracePeriod))
-	assertMin(index1, now.Add(RaftLogQueuePendingSnapshotGracePeriod))
-	// Once we're over deadline, the index returned so far disappears.
-	assertMin(index2, now.Add(RaftLogQueuePendingSnapshotGracePeriod+1))
-	assertMin(index2, time.Time{})
-	assertMin(index2, now.Add(10*RaftLogQueuePendingSnapshotGracePeriod))
-
-	r.completeSnapshotLogTruncationConstraint(ctx, id2, now)
 	assertMin(index2, now)
-	assertMin(index2, now.Add(RaftLogQueuePendingSnapshotGracePeriod))
-	assertMin(0, now.Add(2*RaftLogQueuePendingSnapshotGracePeriod))
+	assertMin(index2, now.Add(1))
+	assertMin(index2, time.Time{})
+
+	r.completeSnapshotLogTruncationConstraint(id2)
+	assertMin(0, now)
+	assertMin(0, now.Add(2))
 
 	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, map[uuid.UUID]snapTruncationInfo(nil))
 }

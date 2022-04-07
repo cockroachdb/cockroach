@@ -416,8 +416,6 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	require.NoError(t, err)
 	require.NotNil(t, leaseholderRepl)
 
-	time.Sleep(kvserver.RaftLogQueuePendingSnapshotGracePeriod)
-
 	if drainReceivingNode {
 		// Draining nodes shouldn't reject raft snapshots, so this should have no
 		// effect on the outcome of this test.
