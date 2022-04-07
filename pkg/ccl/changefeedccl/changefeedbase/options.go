@@ -8,7 +8,10 @@
 
 package changefeedbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql"
+import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+)
 
 // EnvelopeType configures the information in the changefeed events for a row.
 type EnvelopeType string
@@ -281,4 +284,12 @@ var AlterChangefeedOptionExpectValues = func() map[string]sql.KVStringOptValidat
 var AlterChangefeedTargetOptions = map[string]sql.KVStringOptValidate{
 	OptInitialScan:   sql.KVStringOptRequireNoValue,
 	OptNoInitialScan: sql.KVStringOptRequireNoValue,
+}
+
+// VersionGateOptions is a mapping between an option and its minimum supported
+// version.
+var VersionGateOptions = map[string]clusterversion.Key{
+	OptEndTime:         clusterversion.EnableNewChangefeedOptions,
+	OptInitialScanOnly: clusterversion.EnableNewChangefeedOptions,
+	OptInitialScan:     clusterversion.EnableNewChangefeedOptions,
 }
