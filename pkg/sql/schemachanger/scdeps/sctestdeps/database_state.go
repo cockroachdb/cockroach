@@ -144,7 +144,7 @@ func ReadCurrentDatabaseFromDB(t *testing.T, tdb *sqlutils.SQLRunner) (db string
 // allows the caller to modify it with the passed function.
 func ReadSessionDataFromDB(
 	t *testing.T, tdb *sqlutils.SQLRunner, override func(sd *sessiondata.SessionData),
-) (sd sessiondata.SessionData) {
+) sessiondata.SessionData {
 	hexSessionData := tdb.QueryStr(t, `SELECT encode(crdb_internal.serialize_session(), 'hex')`)
 	if len(hexSessionData) == 0 {
 		t.Fatal("Empty session data query results.")
@@ -153,16 +153,16 @@ func ReadSessionDataFromDB(
 	if err != nil {
 		t.Fatal(err)
 	}
-	sessionDataProto := sessiondatapb.SessionData{}
-	err = protoutil.Unmarshal(sessionDataBytes, &sessionDataProto)
+	var m sessiondatapb.MigratableSession
+	err = protoutil.Unmarshal(sessionDataBytes, &m)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sessionData, err := sessiondata.UnmarshalNonLocal(sessionDataProto)
+	sd, err := sessiondata.UnmarshalNonLocal(m.SessionData)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sd = *sessionData
-	override(&sd)
-	return sd
+	sd.SessionData = m.SessionData
+	override(sd)
+	return *sd
 }

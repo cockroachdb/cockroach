@@ -28,7 +28,8 @@ upsert descriptor #105
    type:
      arrayTypeId: 107
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    jobId: "1"
      enumMembers:
      - logicalRepresentation: us-east1
@@ -46,7 +47,8 @@ upsert descriptor #107
        family: ArrayFamily
        oid: 100107
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    jobId: "1"
      id: 107
      kind: ALIAS
@@ -62,7 +64,8 @@ upsert descriptor #108
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -370,7 +373,8 @@ upsert descriptor #105
    type:
      arrayTypeId: 107
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    jobId: "1"
      enumMembers:
      - logicalRepresentation: us-east1
@@ -384,7 +388,8 @@ upsert descriptor #107
        family: ArrayFamily
        oid: 100107
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    jobId: "1"
      id: 107
      kind: ALIAS
@@ -398,7 +403,8 @@ upsert descriptor #108
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
   -    - ABSENT
   -    - ABSENT
@@ -720,7 +726,8 @@ upsert descriptor #105
    type:
      arrayTypeId: 107
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    jobId: "1"
      enumMembers:
      - logicalRepresentation: us-east1
@@ -738,7 +745,8 @@ upsert descriptor #109
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -954,7 +962,8 @@ upsert descriptor #105
    type:
      arrayTypeId: 107
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    jobId: "1"
      enumMembers:
      - logicalRepresentation: us-east1
@@ -968,7 +977,8 @@ upsert descriptor #109
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      userName: root
   -    currentStatuses:
   -    - ABSENT
   -    - ABSENT
@@ -1192,7 +1202,8 @@ delete object namespace entry {104 106 _crdb_internal_region} -> 107
 upsert descriptor #104
    database:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1306,7 +1317,8 @@ upsert descriptor #105
    type:
      arrayTypeId: 107
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1403,7 +1415,8 @@ upsert descriptor #105
 upsert descriptor #106
    schema:
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
@@ -1510,7 +1523,8 @@ upsert descriptor #107
        family: ArrayFamily
        oid: 100107
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      userName: root
   +    currentStatuses:
   +    - ABSENT
   +    - ABSENT
