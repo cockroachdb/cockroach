@@ -1424,10 +1424,10 @@ func TestPrimaryKeyChangeZoneConfigs(t *testing.T) {
 
 	// Write a table with some partitions into the database,
 	// and change its primary key.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-USE t;
-CREATE TABLE t (
+	for _, stmt := range []string{
+		`CREATE DATABASE t`,
+		`USE t`,
+		`CREATE TABLE t (
   x INT PRIMARY KEY,
   y INT NOT NULL,
   z INT,
@@ -1435,18 +1435,20 @@ CREATE TABLE t (
   INDEX i1 (z),
   INDEX i2 (w),
   FAMILY (x, y, z, w)
-);
-ALTER INDEX t@i1 PARTITION BY LIST (z) (
+)`,
+		`ALTER INDEX t@i1 PARTITION BY LIST (z) (
   PARTITION p1 VALUES IN (1)
-);
-ALTER INDEX t@i2 PARTITION BY LIST (w) (
+)`,
+		`ALTER INDEX t@i2 PARTITION BY LIST (w) (
   PARTITION p2 VALUES IN (3)
-);
-ALTER PARTITION p1 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15210;
-ALTER PARTITION p2 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15213;
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
-`); err != nil {
-		t.Fatal(err)
+)`,
+		`ALTER PARTITION p1 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15210`,
+		`ALTER PARTITION p2 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15213`,
+		`ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)`,
+	} {
+		if _, err := sqlDB.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Get the zone config corresponding to the table.
