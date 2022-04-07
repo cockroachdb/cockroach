@@ -309,13 +309,6 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
 	r.mu.RUnlock()
 
-	if pr, ok := raftStatus.Progress[raftStatus.Lead]; ok {
-		// TODO(tschottdorf): remove this line once we have picked up
-		// https://github.com/etcd-io/etcd/pull/10279
-		pr.State = tracker.StateReplicate
-		raftStatus.Progress[raftStatus.Lead] = pr
-	}
-
 	input := truncateDecisionInput{
 		RaftStatus:           *raftStatus,
 		LogSize:              raftLogSize,
