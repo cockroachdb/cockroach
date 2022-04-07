@@ -187,6 +187,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	n := int64(req.Size())
 	if err := s.replicaQueuesBoundAccount.Grow(ctx, n); err != nil {
 		log.Warningf(ctx, "while queueing incoming raft message: %s", err)
+		s.metrics.RaftRcvdMsgDropped.Inc(1)
 		return false
 	}
 	q.size += n
