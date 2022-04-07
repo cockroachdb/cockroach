@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
@@ -114,9 +113,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
 			return nil
 		}
-		if index := repl.getAndGCSnapshotLogTruncationConstraints(
-			timeutil.Now(), repDesc.StoreID,
-		); index > 0 {
+		if index := repl.getSnapshotLogTruncationConstraints(repDesc.StoreID); index > 0 {
 			// There is a snapshot being transferred. It's probably an INITIAL snap,
 			// so bail for now and try again later.
 			err := errors.Errorf(

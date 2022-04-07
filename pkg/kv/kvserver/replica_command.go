@@ -1812,9 +1812,8 @@ func (r *Replica) lockLearnerSnapshot(
 		r.addSnapshotLogTruncationConstraint(ctx, lockUUID, 1, addition.StoreID)
 	}
 	return func() {
-		now := timeutil.Now()
 		for _, lockUUID := range lockUUIDs {
-			r.completeSnapshotLogTruncationConstraint(ctx, lockUUID, now)
+			r.completeSnapshotLogTruncationConstraint(lockUUID)
 		}
 	}
 }
