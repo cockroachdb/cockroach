@@ -115,9 +115,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
 			return nil
 		}
-		if index := repl.getAndGCSnapshotLogTruncationConstraints(
-			timeutil.Now(), repDesc.StoreID, false, /* onlyInFlight */
-		); index > 0 {
+		if index := repl.getAndGCSnapshotLogTruncationConstraints(timeutil.Now(), repDesc.StoreID); index > 0 {
 			// There is a snapshot being transferred. It's probably an INITIAL snap,
 			// so bail for now and try again later.
 			err := errors.Errorf(

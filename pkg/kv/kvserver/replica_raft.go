@@ -1506,7 +1506,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 type snapTruncationInfo struct {
 	index          uint64
 	recipientStore roachpb.StoreID
-	completedAt    time.Time
+	completed      bool
 }
 
 func (r *Replica) addSnapshotLogTruncationConstraint(
@@ -1558,7 +1558,7 @@ func (r *Replica) completeSnapshotLogTruncationConstraint(
 		return
 	}
 
-	item.completedAt = now
+	item.completed = true
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
 }
 
@@ -1577,11 +1577,7 @@ func (r *Replica) hasOutstandingLearnerSnapshotInFlight() bool {
 // hasOutstandingSnapshotInFlightToStore returns true if there is a snapshot in
 // flight from this replica to the store with the given ID.
 func (r *Replica) hasOutstandingSnapshotInFlightToStore(storeID roachpb.StoreID) bool {
-	return r.getAndGCSnapshotLogTruncationConstraints(
-		// NB: We do not want to consider truncation constraints that have been
-		// marked completed but have not expired.
-		timeutil.Now(), storeID, true, /* onlyInFlight */
-	) > 0
+	return r.getAndGCSnapshotLogTruncationConstraints(timeutil.Now(), storeID) > 0
 }
 
 // getAndGCSnapshotLogTruncationConstraints returns the minimum index of any
@@ -1594,37 +1590,24 @@ func (r *Replica) hasOutstandingSnapshotInFlightToStore(storeID roachpb.StoreID)
 // constraints that have been marked completed (but have not expired their grace
 // period yet) are not returned.
 func (r *Replica) getAndGCSnapshotLogTruncationConstraints(
-	now time.Time, recipientStore roachpb.StoreID, onlyInFlight bool,
+	now time.Time, recipientStore roachpb.StoreID,
 ) (minSnapIndex uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.getAndGCSnapshotLogTruncationConstraintsLocked(now, recipientStore, onlyInFlight)
+	return r.getAndGCSnapshotLogTruncationConstraintsLocked(now, recipientStore)
 }
 
 func (r *Replica) getAndGCSnapshotLogTruncationConstraintsLocked(
-	now time.Time, recipientStore roachpb.StoreID, onlyInFlight bool,
+	now time.Time, recipientStore roachpb.StoreID,
 ) (minSnapIndex uint64) {
-	constraintGCThreshold := now.Add(-RaftLogQueuePendingSnapshotGracePeriod)
 	for snapUUID, item := range r.mu.snapshotLogTruncationConstraints {
-		if item.completedAt != (time.Time{}) && item.completedAt.Before(constraintGCThreshold) {
+		if item.completed {
 			// The snapshot has finished and its grace period has passed.
 			// Ignore it when making truncation decisions.
 			delete(r.mu.snapshotLogTruncationConstraints, snapUUID)
 			continue
 		}
 		if recipientStore != 0 && item.recipientStore != recipientStore {
-			continue
-		}
-		// NB: `completedAt` is only assigned to truncation constraints that
-		// correspond to snapshots that have been transmitted to the recipient.
-		// Above, we allow for a grace period before GC-ing a truncation constraint
-		// after its snapshot has been marked completed in order to avoid ill-timed
-		// log truncations where the recipient has received the snapshot, but hasn't
-		// yet applied it.
-		//
-		// Ignore such completed constraints if the caller only cares about
-		// in-flight snapshots.
-		if item.completedAt != (time.Time{}) && onlyInFlight {
 			continue
 		}
 		if minSnapIndex == 0 || minSnapIndex > item.index {
