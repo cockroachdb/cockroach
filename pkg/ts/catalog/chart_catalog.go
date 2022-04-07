@@ -2270,6 +2270,12 @@ var charts = []sectionDescription{
 				AxisLabel: "Latency",
 			},
 			{
+				Title: "Connection Failures",
+				Metrics: []string{
+					"sql.conn.failures",
+				},
+			},
+			{
 				Title: "Open Transactions",
 				Metrics: []string{
 					"sql.txns.open",
