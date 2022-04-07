@@ -3454,6 +3454,39 @@ func TestRefreshNoFalsePositive(t *testing.T) {
 	require.NoError(t, txn.Commit(ctx))
 }
 
+func TestExplicitRangeInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, db := startNoSplitMergeServer(t)
+	defer s.Stopper().Stop(ctx)
+
+	require.NoError(t, setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f", "g", "h"))
+	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3", "g1", "g2", "h1"} {
+		require.NoError(t, db.Put(ctx, key, "value"))
+	}
+
+	b := &kv.Batch{}
+	b.Header.ClientRangeInfo.ExplicitlyRequested = true
+
+	spans := [][]string{{"a", "c"}, {"c", "e"}, {"g", "h"}}
+	for _, span := range spans {
+		b.Scan(span[0], span[1])
+	}
+	require.NoError(t, db.Run(ctx, b))
+	require.Equal(t, 4, len(b.RawResponse().Responses))                       // 3 scans + end req
+	require.Equal(t, 5, len(b.RawResponse().BatchResponse_Header.RangeInfos)) // ranges a, b, c, d, g
+
+	*b = kv.Batch{}
+	for _, span := range spans {
+		b.Scan(span[0], span[1])
+	}
+	require.NoError(t, db.Run(ctx, b))
+	require.Equal(t, 4, len(b.RawResponse().Responses))
+	require.Equal(t, 0, len(b.RawResponse().BatchResponse_Header.RangeInfos))
+
+}
+
 func BenchmarkReturnOnRangeBoundary(b *testing.B) {
 	const (
 		Ranges                = 10   // number of ranges to create
