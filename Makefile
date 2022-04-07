@@ -865,11 +865,12 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/colexecjoin/mergejoiner_rightanti.eg.go \
   pkg/sql/colexec/colexecjoin/mergejoiner_rightouter.eg.go \
   pkg/sql/colexec/colexecjoin/mergejoiner_rightsemi.eg.go \
-  pkg/sql/colexec/colexecproj/default_cmp_proj_ops.eg.go \
-  pkg/sql/colexec/colexecproj/proj_const_left_ops.eg.go \
-  pkg/sql/colexec/colexecproj/proj_const_right_ops.eg.go \
-  pkg/sql/colexec/colexecproj/proj_like_ops.eg.go \
+  pkg/sql/colexec/colexecproj/default_cmp_proj_op.eg.go \
   pkg/sql/colexec/colexecproj/proj_non_const_ops.eg.go \
+  pkg/sql/colexec/colexecprojconst/default_cmp_proj_const_op.eg.go \
+  pkg/sql/colexec/colexecprojconst/proj_const_left_ops.eg.go \
+  pkg/sql/colexec/colexecprojconst/proj_const_right_ops.eg.go \
+  pkg/sql/colexec/colexecprojconst/proj_like_ops.eg.go \
   pkg/sql/colexec/colexecsel/default_cmp_sel_ops.eg.go \
   pkg/sql/colexec/colexecsel/selection_ops.eg.go \
   pkg/sql/colexec/colexecsel/sel_like_ops.eg.go \

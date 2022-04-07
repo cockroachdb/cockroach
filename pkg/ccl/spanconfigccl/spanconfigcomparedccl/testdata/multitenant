@@ -117,6 +117,7 @@ diff offset=48
 +/Tenant/11/Table/43                        database system (tenant)
 +/Tenant/11/Table/44                        database system (tenant)
 +/Tenant/11/Table/46                        database system (tenant)
++/Tenant/11/Table/50                        database system (tenant)
 +/Tenant/11/Table/106                       ttl_seconds=1000 num_replicas=42
 +/Tenant/11/Table/107                       range default
 

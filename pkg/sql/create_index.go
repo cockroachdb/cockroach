@@ -689,7 +689,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	index := n.tableDesc.Mutations[mutationIdx].GetIndex()
 	indexName := index.Name
 
-	mutationID := n.tableDesc.ClusterVersion.NextMutationID
+	mutationID := n.tableDesc.ClusterVersion().NextMutationID
 	if err := params.p.writeSchemaChange(
 		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {

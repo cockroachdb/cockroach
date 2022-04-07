@@ -16,7 +16,7 @@ import (
 	"text/template"
 )
 
-const projConstOpsTmpl = "pkg/sql/colexec/colexecproj/proj_const_ops_tmpl.go"
+const projConstOpsTmpl = "pkg/sql/colexec/colexecprojconst/proj_const_ops_tmpl.go"
 
 // replaceProjTmplVariables replaces template variables used in the templates
 // for projection operators. It should only be used within this file.

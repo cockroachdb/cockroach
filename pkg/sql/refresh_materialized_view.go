@@ -118,7 +118,7 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	return params.p.writeSchemaChange(
 		params.ctx,
 		n.desc,
-		n.desc.ClusterVersion.NextMutationID,
+		n.desc.ClusterVersion().NextMutationID,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 }

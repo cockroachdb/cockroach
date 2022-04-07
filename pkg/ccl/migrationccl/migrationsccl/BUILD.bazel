@@ -4,6 +4,7 @@ go_test(
     name = "migrationsccl_test",
     srcs = [
         "main_test.go",
+        "seed_span_counts_external_test.go",
         "seed_tenant_span_configs_external_test.go",
     ],
     deps = [
@@ -15,7 +16,9 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

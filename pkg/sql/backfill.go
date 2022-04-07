@@ -2061,7 +2061,8 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 	}); err != nil {
 		return err
 	}
-	tableDesc := tabledesc.NewBuilder(&tbl.ClusterVersion).BuildImmutableTable()
+	clusterVersion := tbl.ClusterVersion()
+	tableDesc := tabledesc.NewBuilder(&clusterVersion).BuildImmutableTable()
 	if err := sc.distIndexMerge(ctx, tableDesc, addingIndexes, temporaryIndexes, fractionScaler); err != nil {
 		return err
 	}
@@ -2425,7 +2426,7 @@ func validateCheckInTxn(
 	checkExpr string,
 ) error {
 	var syntheticDescs []catalog.Descriptor
-	if tableDesc.Version > tableDesc.ClusterVersion.Version {
+	if tableDesc.Version > tableDesc.ClusterVersion().Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
 	ie := ief(ctx, sessionData)
@@ -2456,7 +2457,7 @@ func validateFkInTxn(
 	fkName string,
 ) error {
 	var syntheticTable catalog.TableDescriptor
-	if srcTable.Version > srcTable.ClusterVersion.Version {
+	if srcTable.Version > srcTable.ClusterVersion().Version {
 		syntheticTable = srcTable
 	}
 	var fk *descpb.ForeignKeyConstraint
@@ -2507,7 +2508,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 	constraintName string,
 ) error {
 	var syntheticDescs []catalog.Descriptor
-	if tableDesc.Version > tableDesc.ClusterVersion.Version {
+	if tableDesc.Version > tableDesc.ClusterVersion().Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
 

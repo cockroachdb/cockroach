@@ -82,8 +82,15 @@ func (s *Tenant) updateTimestampAfterLastSQLChange() {
 // the execution timestamp for subsequent use.
 func (s *Tenant) Exec(query string, args ...interface{}) {
 	s.db.Exec(s.t, query, args...)
-
 	s.updateTimestampAfterLastSQLChange()
+}
+
+// ExecWithErr is like Exec but returns the error, if any. It records the
+// execution timestamp for subsequent use.
+func (s *Tenant) ExecWithErr(query string, args ...interface{}) error {
+	_, err := s.db.DB.ExecContext(context.Background(), query, args...)
+	s.updateTimestampAfterLastSQLChange()
+	return err
 }
 
 // TimestampAfterLastSQLChange returns a timestamp after the last time Exec was

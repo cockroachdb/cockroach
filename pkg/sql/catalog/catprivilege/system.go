@@ -63,6 +63,7 @@ var (
 		catconstants.SQLInstancesTableName,
 		catconstants.SpanConfigurationsTableName,
 		catconstants.TenantSettingsTableName,
+		catconstants.SpanCountTableName,
 	}
 
 	systemSuperuserPrivileges = func() map[descpb.NameInfo]privilege.List {

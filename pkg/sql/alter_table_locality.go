@@ -445,7 +445,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	return params.p.writeSchemaChange(
 		params.ctx,
 		n.tableDesc,
-		n.tableDesc.ClusterVersion.NextMutationID,
+		n.tableDesc.ClusterVersion().NextMutationID,
 		tree.AsStringWithFQNames(&n.n, params.Ann()),
 	)
 }

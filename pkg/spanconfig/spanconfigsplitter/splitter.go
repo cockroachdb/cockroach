@@ -15,6 +15,7 @@ package spanconfigsplitter
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -106,6 +107,10 @@ func New(codec keys.SQLCodec, knobs *spanconfig.TestingKnobs) *Splitter {
 //      descriptors that refer to them. This interface is used near by this GC
 //      activity, so type information is not always available.
 func (s *Splitter) Splits(ctx context.Context, table catalog.TableDescriptor) (int, error) {
+	if isNil(table) {
+		return 0, nil // nothing to do
+	}
+
 	if s.knobs.ExcludeDroppedDescriptorsFromLookup && table.Dropped() {
 		return 0, nil // we're excluding this descriptor; nothing to do here
 	}
@@ -196,4 +201,9 @@ type partition struct {
 	table catalog.TableDescriptor // table the partition is part of
 	index catalog.Index           // index being partitioned
 	level int                     // recursion level, used only for test-logging
+}
+
+func isNil(table catalog.TableDescriptor) bool {
+	vTable := reflect.ValueOf(table)
+	return vTable.Kind() == reflect.Ptr && vTable.IsNil() || table == nil
 }
