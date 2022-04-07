@@ -234,7 +234,7 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 	case types.TupleFamily:
 		return encoding.Tuple, nil
 	default:
-		return 0, errors.AssertionFailedf("no known encoding type for %s", t)
+		return 0, errors.AssertionFailedf("no known encoding type for %s", errors.Safe(t.String()))
 	}
 }
 func checkElementType(paramType *types.T, elemType *types.T) error {
