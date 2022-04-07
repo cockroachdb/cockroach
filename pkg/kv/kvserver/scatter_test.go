@@ -57,7 +57,7 @@ func TestAdminScatterWithDrainingNodes(t *testing.T) {
 
 	client, err := tc.GetAdminClient(ctx, t, drainingServerIdx)
 	require.NoError(t, err)
-	drain(ctx, t, client, drainingNodeID)
+	drain(ctx, t, client)
 
 	nonDrainingStore := tc.GetFirstStoreFromServer(t, 0)
 	drainingStore := tc.GetFirstStoreFromServer(t, drainingServerIdx)
