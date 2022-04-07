@@ -86,6 +86,7 @@ disallowed_imports_test(
         "//pkg/sql/colexec/colexechash",
         "//pkg/sql/colexec/colexecjoin",
         "//pkg/sql/colexec/colexecproj",
+        "//pkg/sql/colexec/colexecprojconst",
         "//pkg/sql/colexec/colexecwindow",
     ],
 )

@@ -19,7 +19,7 @@
 //
 // */}}
 
-package colexecproj
+package colexecprojconst
 
 import (
 	"github.com/cockroachdb/apd/v3"

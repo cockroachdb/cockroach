@@ -161,7 +161,7 @@ func (tdb *tableDescriptorBuilder) BuildExistingMutableTable() *Mutable {
 			TableDescriptor: *tdb.maybeModified,
 			changes:         tdb.changes,
 		},
-		ClusterVersion: *tdb.original,
+		original: makeImmutable(tdb.original),
 	}
 }
 
