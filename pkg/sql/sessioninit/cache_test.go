@@ -81,8 +81,8 @@ func TestCacheInvalidation(t *testing.T) {
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			s.DB(),
 			s.CollectionFactory().(*descs.CollectionFactory),
-			security.TestUserName(),
-			func(ctx context.Context, ie sqlutil.InternalExecutor, username security.SQLUsername) (sessioninit.AuthInfo, error) {
+			security.TestUserInfo(),
+			func(ctx context.Context, ie sqlutil.InternalExecutor, username security.SQLUserInfo) (sessioninit.AuthInfo, error) {
 				didReadFromSystemTable = true
 				return sessioninit.AuthInfo{}, nil
 			})
@@ -206,7 +206,7 @@ func TestCacheSingleFlight(t *testing.T) {
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	c := s.ExecutorConfig().(sql.ExecutorConfig).SessionInitCache
 
-	testuser := security.MakeSQLUsernameFromPreNormalizedString("test")
+	testuser := security.MakeSQLUserInfoFromPreNormalizedString("test", 5)
 
 	// Test concurrent table update with read.
 	// Outdated data is written back to the cache, verify that the cache is
@@ -224,7 +224,7 @@ func TestCacheSingleFlight(t *testing.T) {
 		_, err := c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
 			ctx context.Context,
 			ie sqlutil.InternalExecutor,
-			username security.SQLUsername,
+			username security.SQLUserInfo,
 		) (sessioninit.AuthInfo, error) {
 			wgFirstGetAuthInfoCallInProgress.Done()
 			wgForConcurrentReadWrite.Wait()
@@ -248,7 +248,7 @@ func TestCacheSingleFlight(t *testing.T) {
 			_, err := c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
 				ctx context.Context,
 				ie sqlutil.InternalExecutor,
-				username security.SQLUsername,
+				username security.SQLUserInfo,
 			) (sessioninit.AuthInfo, error) {
 				didReadFromSystemTable = true
 				return sessioninit.AuthInfo{}, nil
@@ -269,7 +269,7 @@ func TestCacheSingleFlight(t *testing.T) {
 	_, err = c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
 		ctx context.Context,
 		ie sqlutil.InternalExecutor,
-		username security.SQLUsername,
+		username security.SQLUserInfo,
 	) (sessioninit.AuthInfo, error) {
 		didReadFromSystemTable = true
 		return sessioninit.AuthInfo{}, nil

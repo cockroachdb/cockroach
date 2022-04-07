@@ -2417,13 +2417,13 @@ func isMemberOfRole(
 		}
 	}
 	// Superusers have every privilege and are part of every role.
-	if isSuper, err := ctx.Planner.UserHasAdminRole(ctx.Context, security.SQLUserInfo{user, userID}); err != nil {
+	if isSuper, err := ctx.Planner.UserHasAdminRole(ctx.Context, security.SQLUserInfo{Username: user, UserID: userID}); err != nil {
 		return tree.HasNoPrivilege, err
 	} else if isSuper {
 		return tree.HasPrivilege, nil
 	}
 
-	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, security.SQLUserInfo{user, userID})
+	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, security.SQLUserInfo{Username: user, UserID: userID})
 	if err != nil {
 		return tree.HasNoPrivilege, err
 	}
@@ -2474,7 +2474,7 @@ func isAdminOfRole(
 		}
 	}
 
-	if isSuper, err := ctx.Planner.UserHasAdminRole(ctx.Context, security.SQLUserInfo{user, userID}); err != nil {
+	if isSuper, err := ctx.Planner.UserHasAdminRole(ctx.Context, security.SQLUserInfo{Username: user, UserID: userID}); err != nil {
 		return tree.HasNoPrivilege, err
 	} else if isSuper {
 		return tree.HasPrivilege, nil

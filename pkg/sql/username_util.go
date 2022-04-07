@@ -12,24 +12,22 @@ package sql
 
 import (
 	"context"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
 // GetUserIDWithCache returns id of the user if role exists
 func GetUserIDWithCache(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	descsCol *descs.Collection,
-	executor *InternalExecutor,
-	txn *kv.Txn,
-	role security.SQLUsername,
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, role security.SQLUsername,
 ) (oid.Oid, error) {
 	if role == security.RootUserName() {
 		return security.RootUserInfo().UserID, nil
@@ -43,57 +41,59 @@ func GetUserIDWithCache(
 	if role == security.PublicRoleName() {
 		return security.PublicRoleInfo().UserID, nil
 	}
-	//debug.PrintStack()
 
-	//fmt.Print(role)
-	//var userID oid.Oid
-	//roleMembersCache := execCfg.RoleMemberCache
-	//
-	//// Lookup table version.
-	//_, tableDesc, err := descsCol.GetImmutableTableByName(
-	//	ctx,
-	//	txn,
-	//	&roleMembersTableName,
-	//	tree.ObjectLookupFlagsWithRequired(),
-	//)
-	//if err != nil {
-	//	return userID, err
-	//}
-	//
-	//tableVersion := tableDesc.GetVersion()
-	//if tableDesc.IsUncommittedVersion() {
-	//	return GetUserID(ctx, executor, txn, role)
-	//}
+	roleIDCache := execCfg.RoleIDCache
+	roleIDCache.Mutex.Lock()
+	defer roleIDCache.Unlock()
+	// First try to consult cache.
+	var usersTableDesc catalog.TableDescriptor
+	var err error
+	err = execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		_, usersTableDesc, err = descriptors.GetImmutableTableByName(
+			ctx,
+			txn,
+			sessioninit.UsersTableName,
+			tree.ObjectLookupFlagsWithRequired(),
+		)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
 
-	//userID, found := func() (oid.Oid, bool) {
-	//	roleMembersCache.Lock()
-	//	defer roleMembersCache.Unlock()
-	//	if roleMembersCache.tableVersion != tableVersion {
-	//		// Update version and drop the map.
-	//		roleMembersCache.tableVersion = tableVersion
-	//		roleMembersCache.userCache = make(map[oid.Oid]userRoleMembership)
-	//		roleMembersCache.userIDCache = make(map[security.SQLUsername]oid.Oid)
-	//		roleMembersCache.boundAccount.Empty(ctx)
-	//	}
-	//	userMapping, ok := roleMembersCache.userIDCache[role]
-	//	return userMapping, ok
-	//}()
-	//
-	//if found {
-	//	// Found: return.
-	//	return userID, nil
-	//}
-	//fmt.Println("Get user id start")
-	// Lookup memberships outside the lock.
-	userID, err := GetUserID(ctx, executor, txn, role)
-	//fmt.Println("Get user id end")
+	usersTableVersion := usersTableDesc.GetVersion()
 
-	//if err != nil {
-	//fmt.Println(userID, err)
-	return userID, err
+	if usersTableVersion > roleIDCache.tableVersion {
+		// Clear cache.
+		roleIDCache.roleIDMap = make(map[security.SQLUsername]oid.Oid)
+		roleID, err := GetUserID(ctx, execCfg.InternalExecutor, txn, role)
+		if err != nil {
+			return 0, err
+		}
+
+		roleIDCache.tableVersion = usersTableVersion
+		roleIDCache.roleIDMap[role] = roleID
+	}
+
+	// Cache is valid, do a lookup.
+	roleID, found := roleIDCache.roleIDMap[role]
+	if !found {
+		roleID, err = GetUserID(ctx, execCfg.InternalExecutor, txn, role)
+		if err != nil {
+			return 0, err
+		}
+		roleIDCache.roleIDMap[role] = roleID
+	}
+
+	return roleID, nil
 }
 
 // GetUserID returns id of the user if role exists
+// GetUserID returns 0 if the system.users table does not have a role id column
+// which is the case in CockroachDB versions prior to 22.2.
+// The caller of GetUserID must handle the case where the ID is 0 accordingly.
 func GetUserID(
 	ctx context.Context, executor *InternalExecutor, txn *kv.Txn, role security.SQLUsername,
 ) (oid.Oid, error) {
@@ -111,15 +111,16 @@ func GetUserID(
 	}
 
 	var userID oid.Oid
-	query := `SELECT user_id FROM system.users WHERE username=$1`
 
+	query := `SELECT user_id FROM system.users WHERE username=$1`
 	values, err := executor.QueryRowEx(ctx, "GetUserID", txn, sessiondata.InternalExecutorOverride{
 		User: security.RootUserName(),
 	},
 		query, role)
 
 	if err != nil {
-		return userID, errors.Wrapf(err, "error looking up user %s", role)
+		//panic(err)
+		return userID, errors.Wrapf(err, "error looking up user %s", role, string(debug.Stack()))
 	}
 
 	if values != nil {
@@ -128,12 +129,14 @@ func GetUserID(
 		}
 	}
 	return userID, nil
-
 }
 
 // PublicRoleInfo is the SQLUsername for PublicRole.
 func PublicRoleInfo(ctx context.Context, p *planner) security.SQLUserInfo {
-	id, _ := GetUserID(ctx, p.execCfg.InternalExecutor, nil, security.PublicRoleName())
+	id, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, security.PublicRoleName())
+	if err != nil {
+		panic(err)
+	}
 	return security.SQLUserInfo{
 		Username: security.PublicRoleName(),
 		UserID:   id,
@@ -169,7 +172,7 @@ func GetSQLUserInfo(
 ) (security.SQLUserInfo, error) {
 
 	userInfo := security.SQLUserInfo{Username: user}
-	userID, err := GetUserIDWithCache(ctx, execCfg, descsCol, executor, txn, user)
+	userID, err := GetUserIDWithCache(ctx, execCfg, txn, user)
 	if err != nil {
 		return userInfo, err
 	}

@@ -740,6 +740,10 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 	format := details.Format
 
 	owner := r.job.Payload().UsernameProto.Decode()
+	ownerID, err := sql.GetUserID(ctx, p.ExecCfg().InternalExecutor, nil, owner)
+	if err != nil {
+		return err
+	}
 
 	p.SessionDataMutatorIterator().SetSessionDefaultIntSize(details.DefaultIntSize)
 
@@ -776,11 +780,6 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		var tableDescs []*tabledesc.Mutable
 		var err error
 		walltime := p.ExecCfg().Clock.Now().WallTime
-
-		ownerID, err := sql.GetUserID(ctx, p.ExecCfg().InternalExecutor, nil, owner)
-		if err != nil {
-			return err
-		}
 
 		if tableDescs, schemaDescs, err = parseAndCreateBundleTableDescs(
 			ctx, p, details, seqVals, skipFKs, dbDesc, files, format, walltime, security.SQLUserInfo{Username: owner, UserID: ownerID},

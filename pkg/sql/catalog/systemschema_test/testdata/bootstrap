@@ -12,10 +12,13 @@ CREATE TABLE public.users (
 	username STRING NOT NULL,
 	"hashedPassword" BYTES NULL,
 	"isRole" BOOL NOT NULL DEFAULT false,
+	user_id OID NOT NULL DEFAULT oid(nextval('system.user_id_seq':::STRING) + 100:::INT8),
 	CONSTRAINT "primary" PRIMARY KEY (username ASC),
+	INDEX users_user_id_idx (user_id ASC),
 	FAMILY "primary" (username),
 	FAMILY "fam_2_hashedPassword" ("hashedPassword"),
-	FAMILY "fam_3_isRole" ("isRole")
+	FAMILY "fam_3_isRole" ("isRole"),
+	FAMILY fam_4_user_id (user_id)
 );
 CREATE TABLE public.zones (
 	id INT8 NOT NULL,
@@ -38,6 +41,7 @@ CREATE TABLE public.tenants (
 	info BYTES NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC)
 );
+CREATE SEQUENCE public.user_id_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 100;
 CREATE TABLE public.lease (
 	"descID" INT8 NOT NULL,
 	version INT8 NOT NULL,
@@ -146,10 +150,12 @@ CREATE TABLE public.role_members (
 	"role" STRING NOT NULL,
 	member STRING NOT NULL,
 	"isAdmin" BOOL NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY ("role" ASC, member ASC),
-	INDEX role_members_role_idx ("role" ASC),
-	INDEX role_members_member_idx (member ASC),
-	FAMILY "primary" ("role", member),
+	role_id OID NOT NULL,
+	member_id OID NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY ("role" ASC, member ASC, role_id ASC, member_id ASC),
+	INDEX role_members_role_role_id_idx ("role" ASC, role_id ASC),
+	INDEX role_members_member_member_id_idx (member ASC, member_id ASC),
+	FAMILY "primary" ("role", member, role_id, member_id),
 	FAMILY "fam_3_isAdmin" ("isAdmin")
 );
 CREATE TABLE public.comments (
@@ -227,7 +233,8 @@ CREATE TABLE public.role_options (
 	username STRING NOT NULL,
 	option STRING NOT NULL,
 	value STRING NULL,
-	CONSTRAINT "primary" PRIMARY KEY (username ASC, option ASC)
+	user_id OID NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (username ASC, option ASC, user_id ASC)
 );
 CREATE TABLE public.statement_bundle_chunks (
 	id INT8 NOT NULL DEFAULT unique_rowid(),
@@ -323,7 +330,8 @@ CREATE TABLE public.database_role_settings (
 	database_id OID NOT NULL,
 	role_name STRING NOT NULL,
 	settings STRING[] NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (database_id ASC, role_name ASC)
+	role_id OID NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (database_id ASC, role_name ASC, role_id ASC)
 );
 CREATE TABLE public.tenant_usage (
 	tenant_id INT8 NOT NULL,

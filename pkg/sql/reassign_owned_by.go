@@ -88,7 +88,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	// the current user is a member of both the new roles and all the
 	// old roles.
 	if !hasAdminRole {
-		userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, p.User())
+		userID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, p.User())
 		if err != nil {
 			return nil, err
 		}

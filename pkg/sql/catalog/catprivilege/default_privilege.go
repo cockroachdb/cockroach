@@ -12,7 +12,6 @@ package catprivilege
 
 import (
 	"fmt"
-	"github.com/lib/pq/oid"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/lib/pq/oid"
 )
 
 var _ catalog.DefaultPrivilegeDescriptor = &immutable{}
@@ -475,7 +475,7 @@ func applyDefaultPrivileges(
 			userPriv.WithGrantOption |= grantBits
 		}
 	}
-	p.UserPrivileges[user.UserID] = *userPriv
+	p.UserPrivileges[user.UserID] = userPriv
 }
 
 func setRoleHasAllOnTargetObject(

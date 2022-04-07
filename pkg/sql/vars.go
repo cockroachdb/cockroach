@@ -2085,7 +2085,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				userID, err := GetUserIDWithCache(ctx, p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, u)
+				userID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, u)
 				if err != nil {
 					return err
 				}

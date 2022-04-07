@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/lib/pq/oid"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
@@ -427,7 +427,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 
 	var roleID oid.Oid
 	var deleteQuery, upsertQuery string
-	roleID, err = GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.extendedEvalCtx.Txn, roleName)
+	roleID, err = GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Txn, roleName)
 	if err != nil {
 		return err
 	}

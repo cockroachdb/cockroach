@@ -131,7 +131,7 @@ initial-keys tenant=system
 
 initial-keys tenant=5
 ----
-75 keys:
+77 keys:
  /Tenant/5/Table/3/1/1/2/1
  /Tenant/5/Table/3/1/3/2/1
  /Tenant/5/Table/3/1/4/2/1
@@ -214,7 +214,7 @@ initial-keys tenant=5
 
 initial-keys tenant=999
 ----
-75 keys:
+77 keys:
  /Tenant/999/Table/3/1/1/2/1
  /Tenant/999/Table/3/1/3/2/1
  /Tenant/999/Table/3/1/4/2/1

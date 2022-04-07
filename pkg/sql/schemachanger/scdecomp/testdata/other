@@ -29,12 +29,14 @@ ElementState:
 - UserPrivileges:
     descriptorId: 106
     privileges: 2
-    userName: admin
+    userId: 1
+    userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 106
     privileges: 2
-    userName: root
+    userId: 2
+    userName: admin
   Status: PUBLIC
 - SchemaParent:
     parentDatabaseId: 104
@@ -66,16 +68,19 @@ ElementState:
 - UserPrivileges:
     descriptorId: 105
     privileges: 2
-    userName: admin
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 105
-    privileges: 2
+    userId: 1
     userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
+    privileges: 2
+    userId: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
     privileges: 516
+    userId: 3
     userName: public
   Status: PUBLIC
 - SchemaParent:
@@ -108,16 +113,19 @@ ElementState:
 - UserPrivileges:
     descriptorId: 104
     privileges: 2
-    userName: admin
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 104
-    privileges: 2
+    userId: 1
     userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
+    privileges: 2
+    userId: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
     privileges: 2048
+    userId: 3
     userName: public
   Status: PUBLIC
 - DatabaseRoleSetting:
@@ -152,16 +160,19 @@ ElementState:
 - UserPrivileges:
     descriptorId: 110
     privileges: 2
-    userName: admin
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 110
-    privileges: 2
+    userId: 1
     userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
+    privileges: 2
+    userId: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
     privileges: 512
+    userId: 3
     userName: public
   Status: PUBLIC
 - ObjectParent:
@@ -222,12 +233,14 @@ ElementState:
 - UserPrivileges:
     descriptorId: 112
     privileges: 2
-    userName: admin
+    userId: 1
+    userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 112
     privileges: 2
-    userName: root
+    userId: 2
+    userName: admin
   Status: PUBLIC
 - ObjectParent:
     objectId: 112
@@ -313,12 +326,14 @@ ElementState:
 - UserPrivileges:
     descriptorId: 113
     privileges: 2
-    userName: admin
+    userId: 1
+    userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 113
     privileges: 2
-    userName: root
+    userId: 2
+    userName: admin
   Status: PUBLIC
 - ObjectParent:
     objectId: 113

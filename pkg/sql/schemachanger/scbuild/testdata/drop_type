@@ -57,29 +57,35 @@ DROP TYPE defaultdb.typ
   details:
     descriptorId: 104
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
     privileges: 512
+    userId: 3
     userName: public
 - [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 105
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 105
     privileges: 512
+    userId: 3
     userName: public
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 105
     privileges: 2
+    userId: 1
     userName: root

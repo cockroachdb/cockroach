@@ -969,7 +969,7 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             4,
+				Version:             3,
 			},
 		))
 

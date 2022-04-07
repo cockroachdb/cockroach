@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -68,9 +69,24 @@ func NewMembershipCache(account mon.BoundAccount, stopper *stop.Stopper) *Member
 // userRoleMembership is a mapping of "rolename" -> "with admin option".
 //type userRoleMembership map[security.SQLUsername]bool
 
+type sqlUsernameToRoleID map[security.SQLUsername]oid.Oid
+
+// RoleIDCache is used to cache username -> user_ids conversions
+type RoleIDCache struct {
+	syncutil.Mutex
+	tableVersion descpb.DescriptorVersion
+	roleIDMap    sqlUsernameToRoleID
+	//boundAccount mon.BoundAccount
+}
+
+// NewRoleIDCache initializes a new RoleIDCache.
+func NewRoleIDCache(account mon.BoundAccount, stopper *stop.Stopper) *RoleIDCache {
+	return &RoleIDCache{}
+}
+
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
 type AuthorizationAccessor interface {
-	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
+	// CheckPrivilegeForUser verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
 		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user security.SQLUserInfo,
 	) error
@@ -126,7 +142,7 @@ func (p *planner) CheckPrivilegeForUser(
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
 	if p.txn == nil || !p.txn.IsOpen() {
-		return errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
+		return errors.Wrapf(errors.AssertionFailedf("cannot use CheckPrivilege without a txn"), "%s, %v", p.txn.String(), p.txn.IsOpen())
 	}
 
 	// Test whether the object is being audited, and if so, record an
@@ -205,12 +221,12 @@ func (p *planner) CheckGrantOptionsForUser(
 	if privList.Len() > 1 {
 		return pgerror.Newf(
 			code, "user %s missing WITH GRANT OPTION privilege on one or more of %s",
-			user, privList.String(),
+			user.Username, privList.String(),
 		)
 	}
 	return pgerror.Newf(
 		code, "user %s missing WITH GRANT OPTION privilege on %s",
-		user, privList.String(),
+		user.Username, privList.String(),
 	)
 }
 
@@ -390,7 +406,9 @@ func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 
 // MemberOfWithAdminOption is a wrapper around the MemberOfWithAdminOption
 // method.
-func (p *planner) MemberOfWithAdminOption(ctx context.Context, member security.SQLUserInfo) (map[security.SQLUserInfo]bool, error) {
+func (p *planner) MemberOfWithAdminOption(
+	ctx context.Context, member security.SQLUserInfo,
+) (map[security.SQLUserInfo]bool, error) {
 
 	return MemberOfWithAdminOption(
 		ctx,
@@ -406,7 +424,14 @@ func (p *planner) MemberOfWithAdminOption(ctx context.Context, member security.S
 // returns a map of "role" -> "isAdmin".
 // The "isAdmin" flag applies to both direct and indirect members.
 // Requires a valid transaction to be open.
-func MemberOfWithAdminOption(ctx context.Context, execCfg *ExecutorConfig, ie sqlutil.InternalExecutor, descsCol *descs.Collection, txn *kv.Txn, member security.SQLUserInfo) (map[security.SQLUserInfo]bool, error) {
+func MemberOfWithAdminOption(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	ie sqlutil.InternalExecutor,
+	descsCol *descs.Collection,
+	txn *kv.Txn,
+	member security.SQLUserInfo,
+) (map[security.SQLUserInfo]bool, error) {
 	if txn == nil || !txn.IsOpen() {
 		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
 	}
@@ -524,7 +549,13 @@ var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
 ).WithPublic()
 
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
-func resolveMemberOfWithAdminOption(ctx context.Context, member security.SQLUserInfo, execCfg *ExecutorConfig, txn *kv.Txn, singleQuery bool) (map[security.SQLUserInfo]bool, error) {
+func resolveMemberOfWithAdminOption(
+	ctx context.Context,
+	member security.SQLUserInfo,
+	execCfg *ExecutorConfig,
+	txn *kv.Txn,
+	singleQuery bool,
+) (map[security.SQLUserInfo]bool, error) {
 	ie := execCfg.InternalExecutor
 	ret := map[security.SQLUserInfo]bool{}
 	if singleQuery {
@@ -624,7 +655,10 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 	}
 	var hasRolePrivilege tree.Datums
 
-	roleID, _ := GetUserID(ctx, p.ExecCfg().InternalExecutor, nil, user)
+	roleID, err := GetUserIDWithCache(ctx, p.ExecCfg(), p.txn, user)
+	if err != nil {
+		return false, err
+	}
 
 	hasRolePrivilege, err = p.ExecCfg().InternalExecutor.QueryRowEx(
 		ctx, "has-role-option", p.Txn(),

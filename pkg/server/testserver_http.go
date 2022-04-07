@@ -143,11 +143,11 @@ func (ts *httpTestServer) createAuthUser(userName security.SQLUsername, isAdmin 
 	if isAdmin {
 		// We can't use the GRANT statement here because we don't want
 		// to rely on CCL code.
-		adminID, err := sql.GetUserID(context.TODO(), ts.t.sqlServer.internalExecutor, nil, security.AdminRoleName())
+		adminID, err := sql.GetUserID(context.TODO(), ts.t.sqlServer.execCfg.InternalExecutor, nil, security.AdminRoleName())
 		if err != nil {
 			return err
 		}
-		userID, err := sql.GetUserID(context.TODO(), ts.t.sqlServer.internalExecutor, nil, userName)
+		userID, err := sql.GetUserID(context.TODO(), ts.t.sqlServer.execCfg.InternalExecutor, nil, userName)
 		if err != nil {
 			return err
 		}

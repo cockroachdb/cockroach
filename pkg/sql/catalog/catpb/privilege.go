@@ -12,7 +12,6 @@ package catpb
 
 import (
 	"fmt"
-	github_com_lib_pq_oid "github.com/lib/pq/oid"
 	"sort"
 	"strings"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
+	github_com_lib_pq_oid "github.com/lib/pq/oid"
 )
 
 // PrivilegeDescVersion is a custom type for PrivilegeDescriptor versions.
@@ -85,9 +85,11 @@ func (p *PrivilegeDescriptor) FindOrCreateUser(user security.SQLUserInfo) *UserP
 	//	return &userPriv
 	//}
 	if p.UserPrivileges == nil {
-		p.UserPrivileges = make(map[github_com_lib_pq_oid.Oid]UserPrivileges)
+		p.UserPrivileges = make(map[github_com_lib_pq_oid.Oid]*UserPrivileges)
 	}
-	p.UserPrivileges[user.UserID] = UserPrivileges{UserProto: user.Username.EncodeProto(), UserId: user.UserID}
+	if _, ok := p.UserPrivileges[user.UserID]; ok {
+		p.UserPrivileges[user.UserID] = &UserPrivileges{UserProto: user.Username.EncodeProto(), UserId: user.UserID}
+	}
 	//userPriv := p.UserPrivileges[user.UserID]
 	//return &(userPriv)
 
@@ -142,7 +144,7 @@ func NewCustomSuperuserPrivilegeDescriptor(
 		},
 		Version: Version21_2,
 		OwnerId: owner.UserID,
-		UserPrivileges: map[github_com_lib_pq_oid.Oid]UserPrivileges{security.AdminRoleInfo().UserID: {
+		UserPrivileges: map[github_com_lib_pq_oid.Oid]*UserPrivileges{security.AdminRoleInfo().UserID: {
 			UserProto:       security.AdminRoleName().EncodeProto(),
 			Privileges:      priv.ToBitField(),
 			WithGrantOption: priv.ToBitField(),
@@ -204,7 +206,7 @@ func NewPrivilegeDescriptor(
 		},
 		Version: Version21_2,
 		OwnerId: owner.UserID,
-		UserPrivileges: map[github_com_lib_pq_oid.Oid]UserPrivileges{user.UserID: {
+		UserPrivileges: map[github_com_lib_pq_oid.Oid]*UserPrivileges{user.UserID: {
 			UserProto:       user.Username.EncodeProto(),
 			Privileges:      priv.ToBitField(),
 			WithGrantOption: grantOption.ToBitField(),
@@ -269,7 +271,7 @@ func (p *PrivilegeDescriptor) CheckGrantOptions(
 			return false
 		}
 	}
-	p.UserPrivileges[user.UserID] = *userPriv
+	p.UserPrivileges[user.UserID] = userPriv
 	return true
 }
 
@@ -301,7 +303,7 @@ func (p *PrivilegeDescriptor) Grant(
 		if withGrantOption {
 			userPriv.WithGrantOption = privilege.ALL.Mask()
 		}
-		p.UserPrivileges[user.UserID] = *userPriv
+		p.UserPrivileges[user.UserID] = userPriv
 		return
 	}
 
@@ -309,7 +311,7 @@ func (p *PrivilegeDescriptor) Grant(
 		userPriv.WithGrantOption |= bits
 	}
 	userPriv.Privileges |= bits
-	p.UserPrivileges[user.UserID] = *userPriv
+	p.UserPrivileges[user.UserID] = userPriv
 }
 
 // Revoke removes privileges from this descriptor for a given list of users.
@@ -337,7 +339,7 @@ func (p *PrivilegeDescriptor) Revoke(
 			// fold sub-privileges into ALL
 			userPriv.Privileges = privilege.ALL.Mask()
 		}
-		p.UserPrivileges[user.UserID] = *userPriv
+		p.UserPrivileges[user.UserID] = userPriv
 		return
 	}
 
@@ -376,7 +378,7 @@ func (p *PrivilegeDescriptor) Revoke(
 			p.RemoveUser(user)
 		}
 	}
-	p.UserPrivileges[user.UserID] = *userPriv
+	p.UserPrivileges[user.UserID] = userPriv
 }
 
 // GrantPrivilegeToGrantOptions adjusts a user's grant option bits based on whether the GRANT or ALL
@@ -388,18 +390,19 @@ func (p *PrivilegeDescriptor) GrantPrivilegeToGrantOptions(
 	user security.SQLUserInfo, isGrant bool,
 ) {
 	var userPriv *UserPrivileges
+	var ok bool
 	if isGrant {
 		userPriv = p.FindOrCreateUser(user)
 		userPriv.WithGrantOption = userPriv.Privileges
 	} else {
-		userPriv, ok := p.FindUser(user)
+		userPriv, ok = p.FindUser(user)
 		if !ok || userPriv.Privileges == 0 {
 			// Removing privileges from a user without privileges is a no-op.
 			return
 		}
 		userPriv.WithGrantOption = 0
 	}
-	p.UserPrivileges[user.UserID] = *userPriv
+	p.UserPrivileges[user.UserID] = userPriv
 }
 
 // ValidateSuperuserPrivileges ensures that superusers have exactly the maximum
@@ -429,7 +432,7 @@ func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
 		if !ok {
 			return fmt.Errorf(
 				"user %s does not have privileges over %s",
-				user,
+				user.Username,
 				privilegeObject(parentID, objectType, objectName),
 			)
 		}
@@ -438,7 +441,7 @@ func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
 		if superPriv.Privileges != allowedSuperuserPrivileges.ToBitField() {
 			return fmt.Errorf(
 				"user %s must have exactly %s privileges on %s",
-				user,
+				user.Username,
 				allowedSuperuserPrivileges,
 				privilegeObject(parentID, objectType, objectName),
 			)
@@ -532,6 +535,9 @@ type UserPrivilege struct {
 func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivilege {
 	ret := make([]UserPrivilege, 0, len(p.Users))
 	for _, userPriv := range p.Users {
+		if userPriv.UserId == 0 && (userPriv.UserProto.Decode() == security.RootUserName() || userPriv.UserProto.Decode() == security.AdminRoleName()) {
+			continue
+		}
 		privileges := privilege.PrivilegesFromBitFields(userPriv.Privileges, userPriv.WithGrantOption, objectType)
 		sort.Slice(privileges, func(i, j int) bool {
 			return strings.Compare(privileges[i].Kind.String(), privileges[j].Kind.String()) < 0

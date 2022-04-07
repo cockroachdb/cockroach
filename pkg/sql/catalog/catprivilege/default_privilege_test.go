@@ -176,7 +176,7 @@ func TestGrantDefaultPrivileges(t *testing.T) {
 		for _, grantee := range tc.grantees {
 			for _, privilege := range tc.privileges {
 				if !newPrivileges.CheckPrivilege(grantee, privilege) {
-					t.Errorf("expected %s to have %s privilege", grantee, privilege)
+					t.Errorf("expected %s to have %s privilege", grantee.Username, privilege)
 				}
 			}
 		}
@@ -296,7 +296,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 		for _, grantee := range tc.grantees {
 			for _, privilege := range tc.expectedPrivileges {
 				if !newPrivileges.CheckPrivilege(grantee, privilege) {
-					t.Errorf("expected %s to have %s privilege", grantee, privilege)
+					t.Errorf("expected %s to have %s privilege", grantee.Username, privilege)
 				}
 			}
 		}
@@ -320,7 +320,7 @@ func TestRevokeDefaultPrivilegesFromEmptyList(t *testing.T) {
 	)
 
 	if newPrivileges.AnyPrivilege(fooUser) {
-		t.Errorf("expected %s to not have any privileges", fooUser)
+		t.Errorf("expected %s to not have any privileges", fooUser.Username)
 	}
 }
 
@@ -525,7 +525,7 @@ func TestDefaultPrivileges(t *testing.T) {
 					grants: privilege.List{privilege.SELECT},
 				},
 				{
-					user:   security.MakeSQLUserInfoFromPreNormalizedString("foo", 51),
+					user:   security.MakeSQLUserInfoFromPreNormalizedString("bar", 52),
 					grants: privilege.List{privilege.ALL},
 				},
 			},
@@ -701,7 +701,7 @@ func TestDefaultPrivileges(t *testing.T) {
 		for _, userAndGrant := range tc.expectedGrantsOnObject {
 			for _, grant := range userAndGrant.grants {
 				if !createdPrivileges.CheckPrivilege(userAndGrant.user, grant) {
-					t.Errorf("expected to find %s privilege for %s", grant.String(), userAndGrant.user)
+					t.Errorf("expected to find %s privilege for %s", grant.String(), userAndGrant.user.Username)
 				}
 			}
 		}

@@ -1946,7 +1946,7 @@ func TestPrimaryKeyCannotBeVirtualBefore22_1(t *testing.T) {
 				NextColumnID: 4,
 				NextFamilyID: 1,
 				NextIndexID:  5,
-				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 			},
 		},
 		{
@@ -2029,13 +2029,13 @@ func TestPrimaryKeyCannotBeVirtualBefore22_1(t *testing.T) {
 				NextColumnID: 4,
 				NextFamilyID: 1,
 				NextIndexID:  5,
-				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 			},
 		},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
-			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(security.RootUserName())
+			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(security.RootUserInfo())
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
 			err := validate.Self(clusterversion.ClusterVersion{Version: clusterversion.ByKey(clusterversion.V21_2)}, desc)

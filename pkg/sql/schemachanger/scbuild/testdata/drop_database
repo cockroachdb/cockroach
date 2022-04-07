@@ -831,161 +831,193 @@ DROP DATABASE db1 CASCADE
   details:
     descriptorId: 104
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
     privileges: 2048
+    userId: 3
     userName: public
 - [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 105
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 105
     privileges: 516
+    userId: 3
     userName: public
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 105
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 106
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 106
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 107
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 107
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 108
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 108
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 109
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 109
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 110
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 110
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 111
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 111
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 112
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 112
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 113
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 113
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 114
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 114
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 115
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 115, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 115
     privileges: 512
+    userId: 3
     userName: public
 - [[UserPrivileges:{DescID: 115, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 115
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 116
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 116, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 116
     privileges: 512
+    userId: 3
     userName: public
 - [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 116
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 117
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 117
     privileges: 2
+    userId: 1
     userName: root
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   details:

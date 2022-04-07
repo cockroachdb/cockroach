@@ -137,7 +137,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 		)
 	}
 	sdUsername := sd.User()
-	sessionUserID, err := GetUserIDWithCache(evalCtx.Ctx(), p.execCfg, p.Descriptors(), p.execCfg.InternalExecutor, p.txn, sdUsername)
+	sessionUserID, err := GetUserIDWithCache(evalCtx.Ctx(), p.execCfg, p.txn, sdUsername)
 	if err != nil {
 		return nil, err
 	}

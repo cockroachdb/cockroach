@@ -158,10 +158,10 @@ func TestFixPrivileges(t *testing.T) {
 		for u, p := range testCase.output {
 			outputUser, ok := desc.FindUser(u)
 			if !ok {
-				t.Fatalf("#%d: expected user %s in output, but not found (%v)", num, u, desc.Users)
+				t.Fatalf("#%d: expected user %s in output, but not found (%v)", num, u.Username, desc.Users)
 			}
 			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
-				t.Errorf("#%d: user %s: expected privileges %v, got %v", num, u, e, a)
+				t.Errorf("#%d: user %s: expected privileges %v, got %v", num, u.Username, e, a)
 			}
 		}
 	}
@@ -386,12 +386,12 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 			outputUser, ok := desc.FindUser(u)
 			if !ok {
 				t.Errorf("#%d: expected user %s in output, but not found (%v)\n%s",
-					num, u, desc.Users, tc.description,
+					num, u.Username, desc.Users, tc.description,
 				)
 			}
 			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
 				t.Errorf("#%d: user %s: expected privileges %v, got %v\n%s",
-					num, u, e, a, tc.description,
+					num, u.Username, e, a, tc.description,
 				)
 			}
 
@@ -495,12 +495,12 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 			outputUser, ok := desc.FindUser(u)
 			if !ok {
 				t.Errorf("#%d: expected user %s in output, but not found (%v)",
-					num, u, desc.Users,
+					num, u.Username, desc.Users,
 				)
 			}
 			if a, e := privilege.ListFromBitField(outputUser.Privileges, privilege.Any), p; a.ToBitField() != e.ToBitField() {
 				t.Errorf("#%d: user %s: expected privileges %v, got %v",
-					num, u, e, a,
+					num, u.Username, e, a,
 				)
 			}
 

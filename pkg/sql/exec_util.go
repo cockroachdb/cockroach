@@ -1221,6 +1221,9 @@ type ExecutorConfig struct {
 	// Role membership cache.
 	RoleMemberCache *MembershipCache
 
+	// Role ID cache.
+	RoleIDCache *RoleIDCache
+
 	// SessionInitCache cache; contains information used during authentication
 	// and per-role default settings.
 	SessionInitCache *sessioninit.Cache

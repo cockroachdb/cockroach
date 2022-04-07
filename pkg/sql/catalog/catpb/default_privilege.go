@@ -11,13 +11,13 @@
 package catpb
 
 import (
-	github_com_lib_pq_oid "github.com/lib/pq/oid"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
+	github_com_lib_pq_oid "github.com/lib/pq/oid"
 )
 
 // DefaultPrivilegesRole represents the creator role that the default privileges
@@ -153,9 +153,7 @@ func InitDefaultPrivilegesForRole(
 
 // RemoveUser looks for a given user in the list and removes it if present.
 func (p *DefaultPrivilegeDescriptor) RemoveUser(role DefaultPrivilegesRole) {
-	if _, ok := p.DefaultPrivilegesMap[role.Role.UserID]; ok {
-		delete(p.DefaultPrivilegesMap, role.Role.UserID)
-	}
+	delete(p.DefaultPrivilegesMap, role.Role.UserID)
 	idx := p.FindUserIndex(role)
 	if idx == -1 {
 		// Not found.

@@ -220,7 +220,7 @@ func TestCheckPrivilege(t *testing.T) {
 	for tcNum, tc := range testCases {
 		if found := tc.pd.CheckPrivilege(tc.user, tc.priv); found != tc.exp {
 			t.Errorf("#%d: CheckPrivilege(%s, %v) for descriptor %+v = %t, expected %t",
-				tcNum, tc.user, tc.priv, tc.pd, found, tc.exp)
+				tcNum, tc.user.Username, tc.priv, tc.pd, found, tc.exp)
 		}
 	}
 }
@@ -255,7 +255,7 @@ func TestAnyPrivilege(t *testing.T) {
 	for tcNum, tc := range testCases {
 		if found := tc.pd.AnyPrivilege(tc.user); found != tc.exp {
 			t.Errorf("#%d: AnyPrivilege(%s) for descriptor %+v = %t, expected %t",
-				tcNum, tc.user, tc.pd, found, tc.exp)
+				tcNum, tc.user.Username, tc.pd, found, tc.exp)
 		}
 	}
 }

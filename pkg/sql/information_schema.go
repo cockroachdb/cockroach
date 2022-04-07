@@ -236,7 +236,7 @@ https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 func populateRoleHierarchy(
 	ctx context.Context, p *planner, addRow func(...tree.Datum) error, onlyIsAdmin bool,
 ) error {
-	userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, p.User())
+	userID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, p.User())
 	if err != nil {
 		return err
 	}
@@ -588,7 +588,7 @@ https://www.postgresql.org/docs/9.5/infoschema-enabled-roles.html`,
 	schema: vtable.InformationSchemaEnabledRoles,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User()
-		userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, currentUser)
+		userID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, currentUser)
 		if err != nil {
 			return err
 		}

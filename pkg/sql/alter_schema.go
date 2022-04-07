@@ -125,7 +125,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		newOwnerID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, newOwner)
+		newOwnerID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.p.txn, newOwner)
 		if err != nil {
 			return err
 		}

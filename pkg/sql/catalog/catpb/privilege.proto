@@ -37,8 +37,7 @@ message PrivilegeDescriptor {
                               (gogoproto.casttype) = "PrivilegeDescVersion"];
   optional uint32 owner_id = 4 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/lib/pq/oid.Oid"];
-  map<uint32, UserPrivileges> user_privileges = 5 [(gogoproto.nullable) = false,
-    (gogoproto.castkey) = "github.com/lib/pq/oid.Oid"];
+  map<uint32, UserPrivileges> user_privileges = 5 [(gogoproto.castkey) = "github.com/lib/pq/oid.Oid"];
 }
 
 // DefaultPrivilegesForRole contains the default privileges for a role.

@@ -142,6 +142,7 @@ upsert descriptor #108
   +        userPrivileges:
   +          descriptorId: 108
   +          privileges: 2
+  +          userId: 2
   +          userName: admin
   +      metadata:
   +        sourceElementId: 1
@@ -151,6 +152,7 @@ upsert descriptor #108
   +        userPrivileges:
   +          descriptorId: 108
   +          privileges: 2
+  +          userId: 1
   +          userName: root
   +      metadata:
   +        sourceElementId: 1
@@ -485,6 +487,7 @@ upsert descriptor #108
   -        userPrivileges:
   -          descriptorId: 108
   -          privileges: 2
+  -          userId: 2
   -          userName: admin
   -      metadata:
   -        sourceElementId: 1
@@ -494,6 +497,7 @@ upsert descriptor #108
   -        userPrivileges:
   -          descriptorId: 108
   -          privileges: 2
+  -          userId: 1
   -          userName: root
   -      metadata:
   -        sourceElementId: 1
@@ -822,6 +826,7 @@ upsert descriptor #109
   +        userPrivileges:
   +          descriptorId: 109
   +          privileges: 2
+  +          userId: 2
   +          userName: admin
   +      metadata:
   +        sourceElementId: 1
@@ -831,6 +836,7 @@ upsert descriptor #109
   +        userPrivileges:
   +          descriptorId: 109
   +          privileges: 2
+  +          userId: 1
   +          userName: root
   +      metadata:
   +        sourceElementId: 1
@@ -1057,6 +1063,7 @@ upsert descriptor #109
   -        userPrivileges:
   -          descriptorId: 109
   -          privileges: 2
+  -          userId: 2
   -          userName: admin
   -      metadata:
   -        sourceElementId: 1
@@ -1066,6 +1073,7 @@ upsert descriptor #109
   -        userPrivileges:
   -          descriptorId: 109
   -          privileges: 2
+  -          userId: 1
   -          userName: root
   -      metadata:
   -        sourceElementId: 1
@@ -1267,6 +1275,7 @@ upsert descriptor #104
   +        userPrivileges:
   +          descriptorId: 104
   +          privileges: 2
+  +          userId: 2
   +          userName: admin
   +      metadata:
   +        sourceElementId: 1
@@ -1276,6 +1285,7 @@ upsert descriptor #104
   +        userPrivileges:
   +          descriptorId: 104
   +          privileges: 2048
+  +          userId: 3
   +          userName: public
   +      metadata:
   +        sourceElementId: 1
@@ -1285,6 +1295,7 @@ upsert descriptor #104
   +        userPrivileges:
   +          descriptorId: 104
   +          privileges: 2
+  +          userId: 1
   +          userName: root
   +      metadata:
   +        sourceElementId: 1
@@ -1380,6 +1391,7 @@ upsert descriptor #105
   +        userPrivileges:
   +          descriptorId: 105
   +          privileges: 2
+  +          userId: 2
   +          userName: admin
   +      metadata:
   +        sourceElementId: 3
@@ -1389,6 +1401,7 @@ upsert descriptor #105
   +        userPrivileges:
   +          descriptorId: 105
   +          privileges: 512
+  +          userId: 3
   +          userName: public
   +      metadata:
   +        sourceElementId: 3
@@ -1398,6 +1411,7 @@ upsert descriptor #105
   +        userPrivileges:
   +          descriptorId: 105
   +          privileges: 2
+  +          userId: 1
   +          userName: root
   +      metadata:
   +        sourceElementId: 3
@@ -1479,6 +1493,7 @@ upsert descriptor #106
   +        userPrivileges:
   +          descriptorId: 106
   +          privileges: 2
+  +          userId: 2
   +          userName: admin
   +      metadata:
   +        sourceElementId: 2
@@ -1488,6 +1503,7 @@ upsert descriptor #106
   +        userPrivileges:
   +          descriptorId: 106
   +          privileges: 516
+  +          userId: 3
   +          userName: public
   +      metadata:
   +        sourceElementId: 2
@@ -1497,6 +1513,7 @@ upsert descriptor #106
   +        userPrivileges:
   +          descriptorId: 106
   +          privileges: 2
+  +          userId: 1
   +          userName: root
   +      metadata:
   +        sourceElementId: 2
@@ -1586,6 +1603,7 @@ upsert descriptor #107
   +        userPrivileges:
   +          descriptorId: 107
   +          privileges: 2
+  +          userId: 2
   +          userName: admin
   +      metadata:
   +        sourceElementId: 4
@@ -1595,6 +1613,7 @@ upsert descriptor #107
   +        userPrivileges:
   +          descriptorId: 107
   +          privileges: 512
+  +          userId: 3
   +          userName: public
   +      metadata:
   +        sourceElementId: 4
@@ -1604,6 +1623,7 @@ upsert descriptor #107
   +        userPrivileges:
   +          descriptorId: 107
   +          privileges: 2
+  +          userId: 1
   +          userName: root
   +      metadata:
   +        sourceElementId: 4

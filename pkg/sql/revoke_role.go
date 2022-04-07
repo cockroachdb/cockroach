@@ -52,7 +52,6 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 		return nil, err
 	}
 	// check permissions on each role.
-	//userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, p.User())
 	if err != nil {
 		return nil, err
 	}

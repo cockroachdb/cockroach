@@ -407,31 +407,37 @@ DROP TABLE defaultdb.shipments CASCADE;
   details:
     descriptorId: 109
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 109
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 110
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 110
     privileges: 2
+    userId: 1
     userName: root
 - [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 111
     privileges: 2
+    userId: 2
     userName: admin
 - [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 111
     privileges: 2
+    userId: 1
     userName: root
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   details:

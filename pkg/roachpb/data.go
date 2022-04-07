@@ -20,6 +20,7 @@ import (
 	"hash/crc32"
 	"math"
 	"math/rand"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"sync"
@@ -1213,6 +1214,10 @@ func (t *Transaction) Update(o *Transaction) {
 			// have incremented the txn's epoch without realizing that it was
 			// aborted.
 			t.Status = ABORTED
+			fmt.Println("txn aborted")
+			fmt.Println(t.Name)
+			fmt.Println(t.String())
+			debug.PrintStack()
 		case COMMITTED:
 			log.Warningf(context.Background(), "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
 		}

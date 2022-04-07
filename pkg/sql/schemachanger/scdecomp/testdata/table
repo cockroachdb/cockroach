@@ -84,12 +84,14 @@ ElementState:
 - UserPrivileges:
     descriptorId: 104
     privileges: 2
-    userName: admin
+    userId: 1
+    userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: 2
-    userName: root
+    userId: 2
+    userName: admin
   Status: PUBLIC
 - ObjectParent:
     objectId: 104
@@ -270,12 +272,14 @@ ElementState:
 - UserPrivileges:
     descriptorId: 105
     privileges: 2
-    userName: admin
+    userId: 1
+    userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
     privileges: 2
-    userName: root
+    userId: 2
+    userName: admin
   Status: PUBLIC
 - ObjectParent:
     objectId: 105
@@ -394,12 +398,14 @@ ElementState:
 - UserPrivileges:
     descriptorId: 104
     privileges: 2
-    userName: admin
+    userId: 1
+    userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: 2
-    userName: root
+    userId: 2
+    userName: admin
   Status: PUBLIC
 - ObjectParent:
     objectId: 104
@@ -523,12 +529,14 @@ ElementState:
 - UserPrivileges:
     descriptorId: 108
     privileges: 2
-    userName: admin
+    userId: 1
+    userName: root
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
     privileges: 2
-    userName: root
+    userId: 2
+    userName: admin
   Status: PUBLIC
 - ObjectParent:
     objectId: 108

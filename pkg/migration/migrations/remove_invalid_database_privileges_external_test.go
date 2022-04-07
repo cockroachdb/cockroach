@@ -88,8 +88,8 @@ func TestConvertIncompatibleDatabasePrivilegesToDefaultPrivileges(t *testing.T) 
 	var desc descpb.Descriptor
 	require.NoError(t, protoutil.Unmarshal(encoded, &desc))
 
-	testuser := security.MakeSQLUserInfoFromPreNormalizedString("testuser", 55)
-	testuser2 := security.MakeSQLUserInfoFromPreNormalizedString("testuser2", 56)
+	testuser := security.MakeSQLUserInfoFromPreNormalizedString("testuser", 0)
+	testuser2 := security.MakeSQLUserInfoFromPreNormalizedString("testuser2", 0)
 	_, dbDesc, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, hlc.Timestamp{WallTime: 1})
 	privilegesForTestuser := dbDesc.Privileges.FindOrCreateUser(testuser)
 	privilegesForTestuser2 := dbDesc.Privileges.FindOrCreateUser(testuser2)

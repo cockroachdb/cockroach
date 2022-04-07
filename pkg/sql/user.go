@@ -255,7 +255,7 @@ func retrieveAuthInfo(
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getHashedPassword, username.Username)
 	if err != nil {
-		return aInfo, errors.Wrapf(err, "error looking up user %s", username)
+		return aInfo, errors.Wrapf(err, "error looking up user %s", username.Username)
 	}
 	var hashedPassword []byte
 	if values != nil {
@@ -286,7 +286,7 @@ func retrieveAuthInfo(
 		username.Username,
 	)
 	if err != nil {
-		return aInfo, errors.Wrapf(err, "error looking up user %s", username)
+		return aInfo, errors.Wrapf(err, "error looking up user %s", username.Username)
 	}
 	// We have to make sure to close the iterator since we might return from
 	// the for loop early (before Next() returns false).
@@ -683,10 +683,7 @@ func MaybeUpgradeStoredPasswordHash(
 }
 
 func updateUserPasswordHash(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	user security.SQLUserInfo,
-	prevHash, newHash []byte,
+	ctx context.Context, execCfg *ExecutorConfig, user security.SQLUserInfo, prevHash, newHash []byte,
 ) error {
 	runFn := getUserInfoRunFn(execCfg, user, "set-hash-timeout")
 
