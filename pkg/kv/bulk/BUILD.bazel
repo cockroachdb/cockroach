@@ -8,6 +8,7 @@ go_library(
         "kv_buf.go",
         "setting.go",
         "sst_batcher.go",
+        "stats.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/bulk",
     visibility = ["//visibility:public"],
@@ -30,6 +31,7 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
