@@ -54,7 +54,7 @@ func (s *Store) FindTargetAndTransferLease(
 	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
 ) (bool, error) {
 	transferStatus, err := s.replicateQueue.shedLease(
-		ctx, repl, desc, conf, transferLeaseOptions{},
+		ctx, repl, desc, conf, transferLeaseOptions{excludeLeaseRepl: true},
 	)
 	return transferStatus == transferOK, err
 }
