@@ -668,6 +668,14 @@ func validateSink(
 		return err
 	}
 	if sink, ok := canarySink.(SinkWithTopics); ok {
+		_, resolved := opts[changefeedbase.OptResolvedTimestamps]
+		_, split := opts[changefeedbase.OptSplitColumnFamilies]
+		if resolved && split {
+			return errors.Newf("Resolved timestamps are not currently supported with %s for this sink"+
+				" as the set of topics to fan them out to may change. Instead, use TABLE tablename FAMILY familyname"+
+				" to specify individual families to watch.", changefeedbase.OptSplitColumnFamilies)
+		}
+
 		topics := sink.Topics()
 		for _, topic := range topics {
 			p.BufferClientNotice(ctx, pgnotice.Newf(`changefeed will emit to topic %s`, topic))
