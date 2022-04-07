@@ -25,7 +25,7 @@ import (
 )
 
 var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var libPQSupportedTag = "v1.10.0"
+var libPQSupportedTag = "v1.10.4"
 
 func registerLibPQ(r registry.Registry) {
 	runLibPQ := func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -134,7 +134,7 @@ func registerLibPQ(r registry.Registry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "lib/pq" /* ormName */, []byte(resultsPath),
-			blocklistName, expectedFailures, ignoreList, version, latestTag,
+			blocklistName, expectedFailures, ignoreList, version, libPQSupportedTag,
 		)
 	}
 

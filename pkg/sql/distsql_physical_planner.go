@@ -1149,6 +1149,9 @@ func (dsp *DistSQLPlanner) partitionSpansTenant(
 	if err != nil {
 		return nil, err
 	}
+	if len(instances) == 0 {
+		return nil, errors.New("no healthy sql instances available for planning")
+	}
 	// Randomize the order in which we assign partitions, so that work is
 	// allocated fairly across queries.
 	rand.Shuffle(len(instances), func(i, j int) {
@@ -1190,13 +1193,6 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(sqlInstanceID base.SQLInstanc
 	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
 
-func getIndexIdx(index catalog.Index, desc catalog.TableDescriptor) (uint32, error) {
-	if index.Public() {
-		return uint32(index.Ordinal()), nil
-	}
-	return 0, errors.Errorf("invalid index %v (table %s)", index, desc.GetName())
-}
-
 // initTableReaderSpecTemplate initializes a TableReaderSpec/PostProcessSpec
 // that corresponds to a scanNode, except for the following fields:
 //  - Spans
@@ -1232,15 +1228,6 @@ func initTableReaderSpecTemplate(
 		s.LimitHint = n.softLimit
 	}
 	return s, post, nil
-}
-
-// tableOrdinal returns the index of a column with the given ID.
-func tableOrdinal(desc catalog.TableDescriptor, colID descpb.ColumnID) int {
-	col, _ := desc.FindColumnWithID(colID)
-	if col == nil {
-		panic(errors.AssertionFailedf("column %d not in desc.Columns", colID))
-	}
-	return col.Ordinal()
 }
 
 // convertOrdering maps the columns in props.ordering to the output columns of a
@@ -1926,7 +1913,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 					for j, c := range e.ColIdx {
 						argTypes[j] = inputTypes[c]
 					}
-					_, outputType, err := execinfrapb.GetAggregateInfo(localFunc, argTypes...)
+					_, outputType, err := execinfra.GetAggregateInfo(localFunc, argTypes...)
 					if err != nil {
 						return err
 					}
@@ -1978,7 +1965,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 							// the current aggregation e.
 							argTypes[i] = intermediateTypes[argIdxs[i]]
 						}
-						_, outputType, err := execinfrapb.GetAggregateInfo(finalInfo.Fn, argTypes...)
+						_, outputType, err := execinfra.GetAggregateInfo(finalInfo.Fn, argTypes...)
 						if err != nil {
 							return err
 						}
@@ -2133,7 +2120,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		}
 		copy(argTypes[len(agg.ColIdx):], info.argumentsColumnTypes[i])
 		var err error
-		_, returnTyp, err := execinfrapb.GetAggregateInfo(agg.Func, argTypes...)
+		_, returnTyp, err := execinfra.GetAggregateInfo(agg.Func, argTypes...)
 		if err != nil {
 			return err
 		}
@@ -2249,6 +2236,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
+		LimitHint:         int64(n.limitHint),
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.cols))
@@ -2317,6 +2305,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		LeftJoinWithPairedJoiner:          n.isSecondJoinInPairedJoiner,
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 		LookupBatchBytesLimit:             dsp.distSQLSrv.TestingKnobs.JoinReaderBatchBytesLimit,
+		LimitHint:                         int64(n.limitHint),
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
@@ -2562,82 +2551,55 @@ func (dsp *DistSQLPlanner) planZigzagJoin(
 ) (plan *PhysicalPlan, err error) {
 
 	plan = planCtx.NewPhysicalPlan()
-	tables := make([]descpb.TableDescriptor, len(pi.sides))
-	indexOrdinals := make([]uint32, len(pi.sides))
-	cols := make([]execinfrapb.Columns, len(pi.sides))
-	fixedValues := make([]*execinfrapb.ValuesCoreSpec, len(pi.sides))
 
+	sides := make([]execinfrapb.ZigzagJoinerSpec_Side, len(pi.sides))
 	for i, side := range pi.sides {
-		tables[i] = *side.desc.TableDesc()
-		indexOrdinals[i], err = getIndexIdx(side.index, side.desc)
+		s := &sides[i]
+		fetchColIDs := make([]descpb.ColumnID, len(side.cols))
+		for i := range side.cols {
+			fetchColIDs[i] = side.cols[i].GetID()
+		}
+		if err := rowenc.InitIndexFetchSpec(
+			&s.FetchSpec,
+			planCtx.ExtendedEvalCtx.Codec,
+			side.desc,
+			side.index,
+			fetchColIDs,
+		); err != nil {
+			return nil, err
+		}
 		if err != nil {
 			return nil, err
 		}
 
-		cols[i].Columns = make([]uint32, len(side.eqCols))
+		s.EqColumns.Columns = make([]uint32, len(side.eqCols))
 		for j, col := range side.eqCols {
-			cols[i].Columns[j] = uint32(col)
+			s.EqColumns.Columns[j] = uint32(col)
 		}
-		fixedValues[i] = side.fixedValues
+		s.FixedValues = *side.fixedValues
 	}
 
 	// The zigzag join node only represents inner joins, so hardcode Type to
 	// InnerJoin.
 	zigzagJoinerSpec := execinfrapb.ZigzagJoinerSpec{
-		Tables:        tables,
-		EqColumns:     cols,
-		IndexOrdinals: indexOrdinals,
-		FixedValues:   fixedValues,
-		Type:          descpb.InnerJoin,
-	}
-
-	// The internal schema of the zigzag joiner is:
-	//    <side 1 table columns> ... <side 2 table columns> ...
-	// with only the columns in the specified index populated.
-	//
-	// The schema of the zigzagJoinNode is:
-	//    <side 1 index columns> ... <side 2 index columns> ...
-	// so the planToStreamColMap has to basically map index ordinals
-	// to table ordinals.
-	post := execinfrapb.PostProcessSpec{Projection: true}
-	numOutCols := len(pi.columns)
-	post.OutputColumns = make([]uint32, numOutCols)
-	types := make([]*types.T, numOutCols)
-	planToStreamColMap := makePlanToStreamColMap(numOutCols)
-	colOffset := 0
-	i := 0
-
-	// Populate post.OutputColumns (the implicit projection), result types,
-	// and the planToStreamColMap for index columns from all sides.
-	for _, side := range pi.sides {
-		// Note that the side's scanNode only contains the columns from that
-		// index that are also in n.columns. This is because we generated
-		// colCfg.wantedColumns for only the necessary columns in
-		// opt/exec/execbuilder/relational_builder.go, similar to lookup joins.
-		for _, col := range side.cols {
-			ord := tableOrdinal(side.desc, col.GetID())
-			post.OutputColumns[i] = uint32(colOffset + ord)
-			types[i] = col.GetType()
-			planToStreamColMap[i] = i
-			i++
-		}
-		colOffset += len(side.desc.PublicColumns())
+		Sides: sides,
+		Type:  descpb.InnerJoin,
 	}
 
 	// Set the ON condition.
 	if pi.onCond != nil {
-		// Note that the ON condition refers to the *internal* columns of the
-		// processor (before the OutputColumns projection).
-		indexVarMap := makePlanToStreamColMap(len(pi.columns))
-		for i := 0; i < len(pi.columns); i++ {
-			indexVarMap[i] = int(post.OutputColumns[i])
-		}
 		zigzagJoinerSpec.OnExpr, err = physicalplan.MakeExpression(
-			pi.onCond, planCtx, indexVarMap,
+			pi.onCond, planCtx, nil, /* indexVarMap */
 		)
 		if err != nil {
 			return nil, err
 		}
+	}
+	// The internal schema of the zigzag joiner matches the zigzagjoinNode columns:
+	//    <side 1 columns> ... <side 2 columns> ...
+	types := make([]*types.T, len(pi.columns))
+	for i := range types {
+		types[i] = pi.columns[i].Typ
 	}
 
 	// Figure out the node where this zigzag joiner goes.
@@ -2651,8 +2613,8 @@ func (dsp *DistSQLPlanner) planZigzagJoin(
 		Core:          execinfrapb.ProcessorCoreUnion{ZigzagJoiner: &zigzagJoinerSpec},
 	}}
 
-	plan.AddNoInputStage(corePlacement, post, types, execinfrapb.Ordering{})
-	plan.PlanToStreamColMap = planToStreamColMap
+	plan.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, types, execinfrapb.Ordering{})
+	plan.PlanToStreamColMap = identityMap(nil /* buf */, len(pi.columns))
 
 	return plan, nil
 }

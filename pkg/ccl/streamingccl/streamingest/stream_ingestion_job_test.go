@@ -10,7 +10,9 @@ package streamingest
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,7 +58,7 @@ func TestTenantStreaming(t *testing.T) {
 	source, sourceDB, _ := serverutils.StartServer(t, args)
 	defer source.Stopper().Stop(ctx)
 
-	// Start tenant server in the srouce cluster.
+	// Start tenant server in the source cluster.
 	tenantID := serverutils.TestTenantID()
 	_, tenantConn := serverutils.StartTenant(t, source, base.TestTenantArgs{TenantID: tenantID})
 	defer tenantConn.Close()
@@ -67,26 +69,28 @@ func TestTenantStreaming(t *testing.T) {
 	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
 	defer resetFreq()
 	// Set required cluster settings.
-	_, err := sourceDB.Exec(`
+	sourceDBRunner := sqlutils.MakeSQLRunner(sourceDB)
+	sourceDBRunner.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
-`)
-	require.NoError(t, err)
+`,
+		";")...)
 
 	// Start the destination server.
-	hDest, cleanupDest := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
+	hDest, cleanupDest := streamingtest.NewReplicationHelper(t, base.TestServerArgs{}, roachpb.MakeTenantID(20))
 	defer cleanupDest()
 	// destSQL refers to the system tenant as that's the one that's running the
 	// job.
 	destSQL := hDest.SysDB
-	destSQL.Exec(t, `
+	destSQL.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '2s';
 SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '5us';
 SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
 SET enable_experimental_stream_replication = true;
-`)
+`,
+		";")...)
 
 	// Sink to read data from.
 	pgURL, cleanupSink := sqlutils.PGUrl(t, source.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
@@ -95,8 +99,12 @@ SET enable_experimental_stream_replication = true;
 	var ingestionJobID int
 	var startTime string
 	sourceSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
+
+	destSQL.ExpectErr(t, "pq: either old tenant ID 10 or the new tenant ID 1 cannot be system tenant",
+		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime+` AS TENANT `+fmt.Sprintf("%d", roachpb.SystemTenantID.ToUint64()),
+		pgURL.String())
 	destSQL.QueryRow(t,
-		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime,
+		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime+` AS TENANT 20`,
 		pgURL.String(),
 	).Scan(&ingestionJobID)
 

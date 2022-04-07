@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -80,7 +81,7 @@ func TestSelfBootstrap(t *testing.T) {
 	}
 	defer s.Stopper().Stop(context.Background())
 
-	if s.RPCContext().ClusterID.Get() == uuid.Nil {
+	if s.RPCContext().StorageClusterID.Get() == uuid.Nil {
 		t.Error("cluster ID failed to be set on the RPC context")
 	}
 }
@@ -829,8 +830,6 @@ func TestServeIndexHTML(t *testing.T) {
 			window.dataFromServer = %s;
 		</script>
 
-		<script src="protos.dll.js" type="text/javascript"></script>
-		<script src="vendor.dll.js" type="text/javascript"></script>
 		<script src="bundle.js" type="text/javascript"></script>
 	</body>
 </html>
@@ -955,6 +954,84 @@ Binary built without web UI.
 				respString := string(respBytes)
 				expected := fmt.Sprintf(htmlTemplate, testCase.json)
 				require.Equal(t, expected, respString)
+			})
+		}
+	})
+
+	t.Run("Client-side caching", func(t *testing.T) {
+		linkInFakeUI()
+		defer unlinkFakeUI()
+
+		// Set up fake asset FS
+		mapfs := fstest.MapFS{
+			"bundle.js": &fstest.MapFile{
+				Data: []byte("console.log('hello world');"),
+			},
+		}
+		fsys, err := mapfs.Sub(".")
+		require.NoError(t, err)
+		ui.Assets = fsys
+
+		// Clear fake asset FS when we're done
+		defer func() {
+			ui.Assets = nil
+		}()
+
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
+		tsrv := s.(*TestServer)
+
+		loggedInClient, err := tsrv.GetAdminHTTPClient()
+		require.NoError(t, err)
+		loggedOutClient, err := tsrv.GetUnauthenticatedHTTPClient()
+		require.NoError(t, err)
+
+		cases := []struct {
+			desc   string
+			client http.Client
+		}{
+			{
+				desc:   "unauthenticated user",
+				client: loggedOutClient,
+			},
+			{
+				desc:   "authenticated user",
+				client: loggedInClient,
+			},
+		}
+
+		for _, testCase := range cases {
+			t.Run(fmt.Sprintf("bundle caching for %s", testCase.desc), func(t *testing.T) {
+				// Request bundle.js without an If-None-Match header first, to simulate the initial load
+				uncachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/bundle.js", nil)
+				require.NoError(t, err)
+
+				uncachedResp, err := testCase.client.Do(uncachedReq)
+				require.NoError(t, err)
+				defer uncachedResp.Body.Close()
+				require.Equal(t, 200, uncachedResp.StatusCode)
+
+				etag := uncachedResp.Header.Get("ETag")
+				require.NotEmpty(t, etag, "Server must provide ETag response header with asset responses")
+
+				// Use that ETag header on the next request to simulate a client reload
+				cachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/bundle.js", nil)
+				require.NoError(t, err)
+				cachedReq.Header.Add("If-None-Match", etag)
+
+				cachedResp, err := testCase.client.Do(cachedReq)
+				require.NoError(t, err)
+				defer cachedResp.Body.Close()
+				require.Equal(t, 304, cachedResp.StatusCode)
+
+				respBytes, err := ioutil.ReadAll(cachedResp.Body)
+				require.NoError(t, err)
+				require.Empty(t, respBytes, "Server must provide empty body for cached response")
+
+				etagFromEmptyResp := cachedResp.Header.Get("ETag")
+				require.NotEmpty(t, etag, "Server must provide ETag response header with asset responses")
+
+				require.Equal(t, etag, etagFromEmptyResp, "Server must provide consistent ETag response headers")
 			})
 		}
 	})

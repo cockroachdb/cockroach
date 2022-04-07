@@ -569,7 +569,7 @@ update_trade_submitted AS (
 )
 SELECT * FROM request_list;
 ----
-with &2 (update_last_trade)
+with &1 (update_last_trade)
  ├── columns: tr_t_id:139!null tr_bid_price:140!null tr_tt_id:141!null tr_qty:142!null
  ├── volatile, mutations
  ├── key: (139)
@@ -609,7 +609,7 @@ with &2 (update_last_trade)
  │    │              └── '2020-06-15 22:27:42.148484' [as=lt_dts_new:17]
  │    └── projections
  │         └── NULL [as="?column?":19]
- └── with &3 (request_list)
+ └── with &2 (request_list)
       ├── columns: tr_t_id:139!null tr_bid_price:140!null tr_tt_id:141!null tr_qty:142!null
       ├── volatile, mutations
       ├── key: (139)
@@ -639,7 +639,7 @@ with &2 (update_last_trade)
       │    │         └── (((trade_request.tr_tt_id:21 = 'TMB') AND (trade_request.tr_bid_price:24 >= 1E+2)) OR ((trade_request.tr_tt_id:21 = 'TMS') AND (trade_request.tr_bid_price:24 <= 1E+2))) OR ((trade_request.tr_tt_id:21 = 'TLS') AND (trade_request.tr_bid_price:24 >= 1E+2)) [outer=(21,24), immutable, constraints=(/21: [/'TLS' - /'TLS'] [/'TMB' - /'TMB'] [/'TMS' - /'TMS']; /24: (/NULL - ])]
       │    └── projections
       │         └── trade_request.tr_bid_price:24::FLOAT8 [as=tr_bid_price:28, outer=(24), immutable]
-      └── with &4 (delete_trade_request)
+      └── with &3 (delete_trade_request)
            ├── columns: tr_t_id:139!null tr_bid_price:140!null tr_tt_id:141!null tr_qty:142!null
            ├── volatile, mutations
            ├── key: (139)
@@ -668,7 +668,7 @@ with &2 (update_last_trade)
            │    │         │         ├── lookup columns are key
            │    │         │         ├── key: (45)
            │    │         │         ├── fd: (37)-->(38,39,42), (37)==(45), (45)==(37)
-           │    │         │         ├── with-scan &3 (request_list)
+           │    │         │         ├── with-scan &2 (request_list)
            │    │         │         │    ├── columns: tr_t_id:45!null
            │    │         │         │    ├── mapping:
            │    │         │         │    │    └──  trade_request.tr_t_id:20 => tr_t_id:45
@@ -678,7 +678,7 @@ with &2 (update_last_trade)
            │    │              └── trade_request.tr_tt_id:38 IN ('TLB', 'TLS', 'TSL') [as=partial_index_del1:49, outer=(38)]
            │    └── projections
            │         └── NULL [as="?column?":50]
-           └── with &6 (insert_trade_history)
+           └── with &5 (insert_trade_history)
                 ├── columns: tr_t_id:139!null tr_bid_price:140!null tr_tt_id:141!null tr_qty:142!null
                 ├── volatile, mutations
                 ├── key: (139)
@@ -693,7 +693,7 @@ with &2 (update_last_trade)
                 │    │    │    ├── tr_t_id:56 => trade_history.th_t_id:51
                 │    │    │    ├── timestamp:61 => th_dts:52
                 │    │    │    └── th_st_id_cast:62 => trade_history.th_st_id:53
-                │    │    ├── input binding: &5
+                │    │    ├── input binding: &4
                 │    │    ├── volatile, mutations
                 │    │    ├── key: (51)
                 │    │    ├── fd: ()-->(53)
@@ -701,7 +701,7 @@ with &2 (update_last_trade)
                 │    │    │    ├── columns: th_st_id_cast:62!null timestamp:61!null tr_t_id:56!null
                 │    │    │    ├── key: (56)
                 │    │    │    ├── fd: ()-->(61,62)
-                │    │    │    ├── with-scan &3 (request_list)
+                │    │    │    ├── with-scan &2 (request_list)
                 │    │    │    │    ├── columns: tr_t_id:56!null
                 │    │    │    │    ├── mapping:
                 │    │    │    │    │    └──  trade_request.tr_t_id:20 => tr_t_id:56
@@ -716,7 +716,7 @@ with &2 (update_last_trade)
                 │    │         │         ├── key columns: [63] = [64]
                 │    │         │         ├── lookup columns are key
                 │    │         │         ├── key: (63)
-                │    │         │         ├── with-scan &5
+                │    │         │         ├── with-scan &4
                 │    │         │         │    ├── columns: th_t_id:63!null
                 │    │         │         │    ├── mapping:
                 │    │         │         │    │    └──  tr_t_id:56 => th_t_id:63
@@ -728,7 +728,7 @@ with &2 (update_last_trade)
                 │    │                   ├── key columns: [81] = [82]
                 │    │                   ├── lookup columns are key
                 │    │                   ├── fd: ()-->(81)
-                │    │                   ├── with-scan &5
+                │    │                   ├── with-scan &4
                 │    │                   │    ├── columns: th_st_id:81!null
                 │    │                   │    ├── mapping:
                 │    │                   │    │    └──  th_st_id_cast:62 => th_st_id:81
@@ -736,7 +736,7 @@ with &2 (update_last_trade)
                 │    │                   └── filters (true)
                 │    └── projections
                 │         └── NULL [as="?column?":86]
-                └── with &8 (update_trade_submitted)
+                └── with &7 (update_trade_submitted)
                      ├── columns: tr_t_id:139!null tr_bid_price:140!null tr_tt_id:141!null tr_qty:142!null
                      ├── volatile, mutations
                      ├── key: (139)
@@ -751,7 +751,7 @@ with &2 (update_last_trade)
                      │    │    ├── update-mapping:
                      │    │    │    ├── t_dts_new:126 => t_dts:88
                      │    │    │    └── t_st_id_cast:127 => trade.t_st_id:89
-                     │    │    ├── input binding: &7
+                     │    │    ├── input binding: &6
                      │    │    ├── volatile, mutations
                      │    │    ├── key: (87)
                      │    │    ├── project
@@ -768,7 +768,7 @@ with &2 (update_last_trade)
                      │    │    │    │         ├── lookup columns are key
                      │    │    │    │         ├── key: (121)
                      │    │    │    │         ├── fd: (104)-->(105-116,118), (104)==(121), (121)==(104)
-                     │    │    │    │         ├── with-scan &3 (request_list)
+                     │    │    │    │         ├── with-scan &2 (request_list)
                      │    │    │    │         │    ├── columns: tr_t_id:121!null
                      │    │    │    │         │    ├── mapping:
                      │    │    │    │         │    │    └──  trade_request.tr_t_id:20 => tr_t_id:121
@@ -784,7 +784,7 @@ with &2 (update_last_trade)
                      │    │                   ├── key columns: [133] = [134]
                      │    │                   ├── lookup columns are key
                      │    │                   ├── fd: ()-->(133)
-                     │    │                   ├── with-scan &7
+                     │    │                   ├── with-scan &6
                      │    │                   │    ├── columns: t_st_id:133!null
                      │    │                   │    ├── mapping:
                      │    │                   │    │    └──  t_st_id_cast:127 => t_st_id:133
@@ -792,7 +792,7 @@ with &2 (update_last_trade)
                      │    │                   └── filters (true)
                      │    └── projections
                      │         └── NULL [as="?column?":138]
-                     └── with-scan &3 (request_list)
+                     └── with-scan &2 (request_list)
                           ├── columns: tr_t_id:139!null tr_bid_price:140!null tr_tt_id:141!null tr_qty:142!null
                           ├── mapping:
                           │    ├──  trade_request.tr_t_id:20 => tr_t_id:139
@@ -4060,34 +4060,31 @@ project
  │    │    ├── fd: ()-->(1,8,27,30,31,45-47), (48)-->(49,50), (31)==(47), (47)==(31), (8)==(45), (45)==(8)
  │    │    ├── limit hint: 1.00
  │    │    ├── inner-join (lookup commission_rate)
- │    │    │    ├── columns: c_id:1!null c_tier:8!null cr_c_tier:45!null cr_tt_id:46!null cr_ex_id:47!null cr_from_qty:48!null cr_to_qty:49!null commission_rate.cr_rate:50!null
- │    │    │    ├── key columns: [8 57] = [45 46]
- │    │    │    ├── key: (47,48)
- │    │    │    ├── fd: ()-->(1,8,45,46), (47,48)-->(49,50), (8)==(45), (45)==(8)
- │    │    │    ├── project
- │    │    │    │    ├── columns: "lookup_join_const_col_@46":57!null c_id:1!null c_tier:8!null
+ │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null cr_c_tier:45!null cr_tt_id:46!null cr_ex_id:47!null cr_from_qty:48!null cr_to_qty:49!null commission_rate.cr_rate:50!null
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── cr_ex_id:47 = s_ex_id:31 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
+ │    │    │    │         ├── cr_c_tier:45 IN (1, 2, 3) [outer=(45), constraints=(/45: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    │    │    │         ├── cr_tt_id:46 = 'TLS' [outer=(46), constraints=(/46: [/'TLS' - /'TLS']; tight), fd=()-->(46)]
+ │    │    │    │         └── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
+ │    │    │    ├── key: (45,48)
+ │    │    │    ├── fd: ()-->(27,30,31,46,47), (45,48)-->(49,50), (31)==(47), (47)==(31)
+ │    │    │    ├── scan security
+ │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(1,8,57)
- │    │    │    │    ├── scan customer
- │    │    │    │    │    ├── columns: c_id:1!null c_tier:8!null
- │    │    │    │    │    ├── constraint: /1: [/0 - /0]
- │    │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── fd: ()-->(1,8)
- │    │    │    │    └── projections
- │    │    │    │         └── 'TLS' [as="lookup_join_const_col_@46":57]
+ │    │    │    │    └── fd: ()-->(27,30,31)
  │    │    │    └── filters
- │    │    │         ├── cr_from_qty:48 <= 100 [outer=(48), constraints=(/48: (/NULL - /100]; tight)]
  │    │    │         └── cr_to_qty:49 >= 200 [outer=(49), constraints=(/49: [/200 - ]; tight)]
- │    │    ├── scan security
- │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
- │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
+ │    │    ├── scan customer
+ │    │    │    ├── columns: c_id:1!null c_tier:8!null
+ │    │    │    ├── constraint: /1: [/0 - /0]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    └── fd: ()-->(27,30,31)
+ │    │    │    └── fd: ()-->(1,8)
  │    │    └── filters
- │    │         └── cr_ex_id:47 = s_ex_id:31 [outer=(31,47), constraints=(/31: (/NULL - ]; /47: (/NULL - ]), fd=(31)==(47), (47)==(31)]
+ │    │         └── cr_c_tier:45 = c_tier:8 [outer=(8,45), constraints=(/8: (/NULL - ]; /45: (/NULL - ]), fd=(8)==(45), (45)==(8)]
  │    └── 1
  └── projections
       └── commission_rate.cr_rate:50::FLOAT8 [as=cr_rate:53, outer=(50), immutable]
@@ -4128,32 +4125,25 @@ project
  │    │    ├── key: (48)
  │    │    ├── fd: ()-->(1,8,27,30,31,45-47), (48)-->(49,50), (8)==(45), (45)==(8), (31)==(47), (47)==(31)
  │    │    ├── limit hint: 1.00
- │    │    ├── project
- │    │    │    ├── columns: "lookup_join_const_col_@46":54!null c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null
  │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(1,8,27,30,31,54)
- │    │    │    ├── inner-join (cross)
- │    │    │    │    ├── columns: c_id:1!null c_tier:8!null s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    │    ├── fd: ()-->(1,8,27,30,31)
+ │    │    │    ├── scan customer
+ │    │    │    │    ├── columns: c_id:1!null c_tier:8!null
+ │    │    │    │    ├── constraint: /1: [/0 - /0]
  │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(1,8,27,30,31)
- │    │    │    │    ├── scan customer
- │    │    │    │    │    ├── columns: c_id:1!null c_tier:8!null
- │    │    │    │    │    ├── constraint: /1: [/0 - /0]
- │    │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── fd: ()-->(1,8)
- │    │    │    │    ├── scan security
- │    │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
- │    │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
- │    │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    │    ├── key: ()
- │    │    │    │    │    └── fd: ()-->(27,30,31)
- │    │    │    │    └── filters (true)
- │    │    │    └── projections
- │    │    │         └── 'TLS' [as="lookup_join_const_col_@46":54]
+ │    │    │    │    └── fd: ()-->(1,8)
+ │    │    │    ├── scan security
+ │    │    │    │    ├── columns: s_symb:27!null s_name:30!null s_ex_id:31!null
+ │    │    │    │    ├── constraint: /27: [/'ROACH' - /'ROACH']
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    └── fd: ()-->(27,30,31)
+ │    │    │    └── filters (true)
  │    │    └── filters
  │    │         └── cr_to_qty:49 >= 200 [outer=(49), constraints=(/49: [/200 - ]; tight)]
  │    └── 1
@@ -4248,7 +4238,7 @@ with &2 (update_trade_commission)
  │    │                   └── filters (true)
  │    └── projections
  │         └── 1 [as="?column?":52]
- └── with &4 (update_broker_commission)
+ └── with &3 (update_broker_commission)
       ├── columns: "?column?":104!null
       ├── cardinality: [1 - 1]
       ├── volatile, mutations
@@ -4288,7 +4278,7 @@ with &2 (update_trade_commission)
       │    │              └── b_num_trades:63 + 1 [as=b_num_trades_new:68, outer=(63), immutable]
       │    └── projections
       │         └── 1 [as="?column?":70]
-      └── with &6 (insert_trade_history)
+      └── with &5 (insert_trade_history)
            ├── columns: "?column?":104!null
            ├── cardinality: [1 - 1]
            ├── volatile, mutations
@@ -4306,7 +4296,7 @@ with &2 (update_trade_commission)
            │    │    │    ├── column1:76 => trade_history.th_t_id:71
            │    │    │    ├── column2:77 => th_dts:72
            │    │    │    └── th_st_id_cast:79 => trade_history.th_st_id:73
-           │    │    ├── input binding: &5
+           │    │    ├── input binding: &4
            │    │    ├── cardinality: [1 - 1]
            │    │    ├── volatile, mutations
            │    │    ├── key: ()
@@ -4326,7 +4316,7 @@ with &2 (update_trade_commission)
            │    │         │         ├── cardinality: [0 - 1]
            │    │         │         ├── key: ()
            │    │         │         ├── fd: ()-->(80)
-           │    │         │         ├── with-scan &5
+           │    │         │         ├── with-scan &4
            │    │         │         │    ├── columns: th_t_id:80!null
            │    │         │         │    ├── mapping:
            │    │         │         │    │    └──  column1:76 => th_t_id:80
@@ -4342,7 +4332,7 @@ with &2 (update_trade_commission)
            │    │                   ├── cardinality: [0 - 1]
            │    │                   ├── key: ()
            │    │                   ├── fd: ()-->(98)
-           │    │                   ├── with-scan &5
+           │    │                   ├── with-scan &4
            │    │                   │    ├── columns: th_st_id:98!null
            │    │                   │    ├── mapping:
            │    │                   │    │    └──  th_st_id_cast:79 => th_st_id:98

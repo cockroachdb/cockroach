@@ -60,9 +60,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -120,6 +122,7 @@ var (
 type metricMarshaler interface {
 	json.Marshaler
 	PrintAsText(io.Writer) error
+	ScrapeIntoPrometheus(pm *metric.PrometheusExporter)
 }
 
 func propagateGatewayMetadata(ctx context.Context) context.Context {
@@ -1407,11 +1410,8 @@ func (s *statusServer) Nodes(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	// The node status contains details about the command line, network
-	// addresses, env vars etc which are admin-only.
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
-		// NB: not using serverError() here since the priv checker
-		// already returns a proper gRPC error status.
+	err := s.privilegeChecker.requireViewActivityPermission(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1428,9 +1428,14 @@ func (s *statusServer) NodesUI(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	_, isAdmin, err := s.privilegeChecker.getUserAndRole(ctx)
+	hasViewActivity := false
+	err := s.privilegeChecker.requireViewActivityPermission(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		if !grpcutil.IsAuthError(err) {
+			return nil, err
+		}
+	} else {
+		hasViewActivity = true
 	}
 
 	internalResp, _, err := s.nodesHelper(ctx, 0 /* limit */, 0 /* offset */)
@@ -1442,13 +1447,13 @@ func (s *statusServer) NodesUI(
 		LivenessByNodeID: internalResp.LivenessByNodeID,
 	}
 	for i, nodeStatus := range internalResp.Nodes {
-		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, isAdmin)
+		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, hasViewActivity)
 	}
 
 	return resp, nil
 }
 
-func nodeStatusToResp(n *statuspb.NodeStatus, isAdmin bool) serverpb.NodeResponse {
+func nodeStatusToResp(n *statuspb.NodeStatus, hasViewActivity bool) serverpb.NodeResponse {
 	tiers := make([]serverpb.Tier, len(n.Desc.Locality.Tiers))
 	for j, t := range n.Desc.Locality.Tiers {
 		tiers[j] = serverpb.Tier{
@@ -1504,7 +1509,7 @@ func nodeStatusToResp(n *statuspb.NodeStatus, isAdmin bool) serverpb.NodeRespons
 			sfsprops := &roachpb.FileStoreProperties{
 				FsType: fsprops.FsType,
 			}
-			if isAdmin {
+			if hasViewActivity {
 				sfsprops.Path = fsprops.Path
 				sfsprops.BlockDevice = fsprops.BlockDevice
 				sfsprops.MountPoint = fsprops.MountPoint
@@ -1529,7 +1534,7 @@ func nodeStatusToResp(n *statuspb.NodeStatus, isAdmin bool) serverpb.NodeRespons
 		NumCpus:           n.NumCpus,
 	}
 
-	if isAdmin {
+	if hasViewActivity {
 		resp.Args = n.Args
 		resp.Env = n.Env
 		resp.Desc.Attrs = n.Desc.Attrs

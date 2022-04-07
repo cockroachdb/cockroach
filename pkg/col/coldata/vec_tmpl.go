@@ -210,7 +210,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 							m.nulls.SetNull(i + args.DestIdx)
 						} else {
 							// {{if .IsBytesLike}}
-							toCol.copy(fromCol, i+args.DestIdx, selIdx)
+							toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 							// {{else}}
 							v := fromCol.Get(selIdx)
 							// {{if .Sliceable}}
@@ -238,7 +238,7 @@ func (m *memColumn) Copy(args SliceArgs) {
 					//gcassert:bce
 					selIdx := sel[i]
 					// {{if .IsBytesLike}}
-					toCol.copy(fromCol, i+args.DestIdx, selIdx)
+					toCol.Copy(fromCol, i+args.DestIdx, selIdx)
 					// {{else}}
 					v := fromCol.Get(selIdx)
 					// {{if .Sliceable}}
@@ -284,8 +284,8 @@ func _COPY_WITH_REORDERED_SOURCE(_SRC_HAS_NULLS bool) { // */}}
 		} else
 		// {{end}}
 		{
-			// {{if .IsBytesLike}}
-			toCol.copy(fromCol, destIdx, srcIdx)
+			// {{if .Global.IsBytesLike}}
+			toCol.Copy(fromCol, destIdx, srcIdx)
 			// {{else}}
 			v := fromCol.Get(srcIdx)
 			toCol.Set(destIdx, v)

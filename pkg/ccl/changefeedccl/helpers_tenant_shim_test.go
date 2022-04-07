@@ -55,7 +55,7 @@ func (t *testServerShim) Stopper() *stop.Stopper                { panic(unsuppor
 func (t *testServerShim) Start(context.Context) error           { panic(unsupportedShimMethod) }
 func (t *testServerShim) Node() interface{}                     { panic(unsupportedShimMethod) }
 func (t *testServerShim) NodeID() roachpb.NodeID                { panic(unsupportedShimMethod) }
-func (t *testServerShim) ClusterID() uuid.UUID                  { panic(unsupportedShimMethod) }
+func (t *testServerShim) StorageClusterID() uuid.UUID           { panic(unsupportedShimMethod) }
 func (t *testServerShim) ServingRPCAddr() string                { panic(unsupportedShimMethod) }
 func (t *testServerShim) RPCAddr() string                       { panic(unsupportedShimMethod) }
 func (t *testServerShim) DB() *kv.DB                            { panic(unsupportedShimMethod) }

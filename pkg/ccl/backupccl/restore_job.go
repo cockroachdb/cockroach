@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -156,6 +155,10 @@ func restoreWithRetry(
 		)
 		if err == nil {
 			break
+		}
+
+		if errors.HasType(err, &roachpb.InsufficientSpaceError{}) {
+			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 
 		if joberror.IsPermanentBulkJobError(err) {
@@ -1226,6 +1229,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_load_descriptors_from_backup"); err != nil {
+		return err
+	}
+
 	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
 		ctx, &mem, p, details, details.Encryption,
 	)
@@ -1271,13 +1278,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	if !backupCodec.TenantPrefix().Equal(p.ExecCfg().Codec.TenantPrefix()) {
-		// Disallow cluster restores until values like jobs are relocatable.
-		if details.DescriptorCoverage == tree.AllDescriptors {
-			return unimplemented.NewWithIssuef(62277,
-				"cannot cluster RESTORE backups taken from different tenant: %s",
-				backupTenantID.String())
-		}
-
 		// Ensure old processors fail if this is a previously unsupported restore of
 		// a tenant backup by the system tenant, which the old rekey processor would
 		// mishandle since it assumed the system tenant always restored tenant keys
@@ -1348,6 +1348,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 
 		p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint(
+			"restore.after_publishing_descriptors"); err != nil {
+			return err
+		}
 		if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
 			if err := fn(); err != nil {
 				return err
@@ -1484,6 +1488,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 	}
 
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
+		"restore.after_publishing_descriptors"); err != nil {
+		return err
+	}
 	if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
 		if err := fn(); err != nil {
 			return err
@@ -1715,6 +1723,11 @@ func (r *restoreResumer) publishDescriptors(
 	if details.DescriptorsPublished {
 		return nil
 	}
+
+	if err := execCfg.JobRegistry.CheckPausepoint("restore.before_publishing_descriptors"); err != nil {
+		return err
+	}
+
 	if fn := r.testingKnobs.beforePublishingDescriptors; fn != nil {
 		if err := fn(); err != nil {
 			return err
@@ -1932,6 +1945,8 @@ func emitRestoreJobEvent(
 // change stuff to delete the keys in the background.
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
+	r.execCfg = p.ExecCfg()
+
 	// Emit to the event log that the job has started reverting.
 	emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
 

@@ -51,9 +51,7 @@ type replicatedCmd struct {
 	// Replica's proposal map.
 	proposal *ProposalData
 
-	// ctx is a context that follows from the proposal's context if it was
-	// proposed locally. Otherwise, it will follow from the context passed to
-	// ApplyCommittedEntries.
+	// ctx is a non-cancelable context used to apply the command.
 	ctx context.Context
 	// sp is the tracing span corresponding to ctx. It is closed in
 	// finishTracingSpan. This span "follows from" the proposer's span (even

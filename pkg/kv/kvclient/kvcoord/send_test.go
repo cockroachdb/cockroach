@@ -85,6 +85,12 @@ func (n Node) GetSpanConfigs(
 	panic("unimplemented")
 }
 
+func (n Node) GetAllSystemSpanConfigsThatApply(
+	_ context.Context, _ *roachpb.GetAllSystemSpanConfigsThatApplyRequest,
+) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
+	panic("unimplemented")
+}
+
 func (n Node) UpdateSpanConfigs(
 	_ context.Context, _ *roachpb.UpdateSpanConfigsRequest,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {

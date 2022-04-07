@@ -189,14 +189,14 @@ func DecodeUntaggedDatum(
 		return a.NewDJSON(tree.DJSON{JSON: j}), b, nil
 	case types.OidFamily:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
-		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
+		return a.NewDOid(tree.MakeDOid(tree.DInt(data), t)), b, err
 	case types.ArrayFamily:
 		// Skip the encoded data length.
 		b, _, _, err := encoding.DecodeNonsortingUvarint(buf)
 		if err != nil {
 			return nil, nil, err
 		}
-		return decodeArray(a, t.ArrayContents(), b)
+		return decodeArray(a, t, b)
 	case types.TupleFamily:
 		return decodeTuple(a, t, buf)
 	case types.EnumFamily:

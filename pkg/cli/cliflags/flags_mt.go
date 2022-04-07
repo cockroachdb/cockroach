@@ -55,15 +55,13 @@ var (
 	}
 
 	RoutingRule = FlagInfo{
-		Name: "routing-rule",
-		Description: `
-Routing rule for incoming connections. Use '{{clusterName}}' for substitution.
-This rule must include the port of the SQL pod.`,
+		Name:        "routing-rule",
+		Description: "Routing rule for incoming connections. This rule must include the port of the SQL pod.",
 	}
 
 	DirectoryAddr = FlagInfo{
 		Name:        "directory",
-		Description: "Directory address of the service doing resolution from backend id to IP.",
+		Description: "Directory address of the service doing resolution of tenants to their IP addresses.",
 	}
 
 	// TODO(chrisseto): Remove skip-verify as a CLI option. It should only be

@@ -772,13 +772,24 @@ func (r *Replica) requestLeaseLocked(
 	// trying to move leases away elsewhere). But if we're the leader, we don't
 	// really have a choice and we take the lease - there might not be any other
 	// replica available to take this lease (perhaps they're all draining).
-	if r.store.IsDraining() && (r.raftBasicStatusRLocked().RaftState != raft.StateLeader) {
-		// TODO(andrei): If we start refusing to take leases on followers elsewhere,
-		// this code can go away.
-		log.VEventf(ctx, 2, "refusing to take the lease because we're draining")
-		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(
-			newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
-				"refusing to take the lease; node is draining")))
+	if r.store.IsDraining() {
+		// NB: Replicas that are not the Raft leader will not take leases anyway
+		// (see the check inside propBuf.FlushLockedWithRaftGroup()), so we don't
+		// really need any special behavior for draining nodes here. This check
+		// serves mostly as a means to get more granular logging and as a defensive
+		// precaution.
+		if r.raftBasicStatusRLocked().RaftState != raft.StateLeader {
+			log.VEventf(ctx, 2, "refusing to take the lease because we're draining")
+			return r.mu.pendingLeaseRequest.newResolvedHandle(
+				roachpb.NewError(
+					newNotLeaseHolderError(
+						roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
+						"refusing to take the lease; node is draining",
+					),
+				),
+			)
+		}
+		log.Info(ctx, "trying to take the lease while we're draining since we're the raft leader")
 	}
 
 	// Propose a Raft command to get a lease for this replica.

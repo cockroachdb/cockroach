@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -74,6 +75,9 @@ type streamIngestionProcessor struct {
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.StreamIngestionDataSpec
 	output  execinfra.RowReceiver
+	rekeyer *backupccl.KeyRewriter
+	// rewriteToDiffKey Indicates whether we are rekeying a key into a different key.
+	rewriteToDiffKey bool
 
 	// curBatch temporarily batches MVCC Keys so they can be
 	// sorted before ingestion.
@@ -163,7 +167,12 @@ func newStreamIngestionDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-
+	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
+		nil /* tableRekeys */, []execinfrapb.TenantRekey{spec.TenantRekey},
+		true /* restoreTenantFromStream */)
+	if err != nil {
+		return nil, err
+	}
 	sip := &streamIngestionProcessor{
 		flowCtx:             flowCtx,
 		spec:                spec,
@@ -173,8 +182,9 @@ func newStreamIngestionDataProcessor(
 		maxFlushRateTimer:   timeutil.NewTimer(),
 		cutoverCh:           make(chan struct{}),
 		closePoller:         make(chan struct{}),
+		rekeyer:             rekeyer,
+		rewriteToDiffKey:    spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 	}
-
 	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
@@ -537,11 +547,25 @@ func (sip *streamIngestionProcessor) bufferKV(event partitionEvent) error {
 	// TODO: In addition to flushing when receiving a checkpoint event, we
 	// should also flush when we've buffered sufficient KVs. A buffering adder
 	// would save us here.
-
 	kv := event.GetKV()
 	if kv == nil {
 		return errors.New("kv event expected to have kv")
 	}
+
+	rekey, ok, err := sip.rekeyer.RewriteKey(kv.Key)
+	if !ok {
+		return errors.New("every key is expected to match tenant prefix")
+	}
+	if err != nil {
+		return err
+	}
+	kv.Key = rekey
+
+	if sip.rewriteToDiffKey {
+		kv.Value.ClearChecksum()
+		kv.Value.InitChecksum(kv.Key)
+	}
+
 	mvccKey := storage.MVCCKey{
 		Key:       kv.Key,
 		Timestamp: kv.Value.Timestamp,
@@ -573,7 +597,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 
 	totalSize := 0
 	for _, kv := range sip.curBatch {
-		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil {
+		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil { // problem is here
 			return nil, errors.Wrapf(err, "adding key %+v", kv)
 		}
 		totalSize += len(kv.Key.Key) + len(kv.Value)

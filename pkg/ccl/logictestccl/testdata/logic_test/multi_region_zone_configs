@@ -1,7 +1,5 @@
+# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
-
-statement ok
-SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true
 
 query TTTT
 SHOW REGIONS
@@ -36,7 +34,7 @@ ALTER DATABASE drop_region_db DROP REGION "ap-southeast-2"
 statement ok
 ALTER DATABASE drop_region_db DROP REGION "ca-central-1"
 
-query TT colnames
+query TT colnames,rowsort
 SELECT table_name, locality FROM [SHOW TABLES]
 ----
 table_name                  locality

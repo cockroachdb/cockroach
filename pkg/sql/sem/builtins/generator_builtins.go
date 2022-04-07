@@ -461,8 +461,8 @@ The output can be used to recreate a database.'
 			},
 			decodePlanGistGeneratorType,
 			makeDecodePlanGistGenerator,
-			`Returns rows of output similar to EXPLAIN from a gist created by EXPLAIN (GIST)
-`,
+			`Returns rows of output similar to EXPLAIN from a gist such as those found in planGists element of the statistics column of the statement_statistics table.
+			`,
 			tree.VolatilityVolatile,
 		),
 	),

@@ -55,8 +55,10 @@ type SemaContext struct {
 	TableNameResolver QualifiedNameResolver
 
 	// IntervalStyleEnabled determines whether IntervalStyle is enabled.
+	// TODO(sql-exp): remove this field in 22.2, since it will always be true.
 	IntervalStyleEnabled bool
 	// DateStyleEnabled determines whether DateStyle is enabled.
+	// TODO(sql-exp): remove this field in 22.2, since it will always be true.
 	DateStyleEnabled bool
 
 	Properties SemaProperties
@@ -2512,7 +2514,7 @@ func typeCheckSameTypedTupleExprs(
 	}
 
 	// All expressions within tuples at the same indexes must be the same type.
-	resTypes := types.MakeTuple(make([]*types.T, firstLen))
+	resTypes := types.MakeLabeledTuple(make([]*types.T, firstLen), first.Labels)
 	sameTypeExprs := make([]Expr, 0, len(exprs))
 	// We will be skipping nulls, so we need to keep track at which indices in
 	// exprs are the non-null tuples.
@@ -2570,7 +2572,10 @@ func typeCheckSameTypedTupleExprs(
 func checkAllExprsAreTuplesOrNulls(ctx context.Context, semaCtx *SemaContext, exprs []Expr) error {
 	for _, expr := range exprs {
 		_, isTuple := expr.(*Tuple)
-		isNull := expr == DNull
+		isNull, err := isNullOrAnnotatedNullTuple(ctx, semaCtx, expr)
+		if err != nil {
+			return err
+		}
 		if !(isTuple || isNull) {
 			// We avoid calling TypeCheck on Tuple exprs since that causes the
 			// types to be resolved, which we only want to do later in type-checking.
@@ -2605,6 +2610,28 @@ func checkTupleHasLength(t *Tuple, expectedLen int) error {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected tuple %v to have a length of %d", t, expectedLen)
 	}
 	return nil
+}
+
+// isNullOrAnnotatedNullTuple returns true if the given expression is a DNull or
+// a DNull that is wrapped by an AnnotateTypeExpr with a type identical to
+// AnyTuple (e.g., NULL:::RECORD). An AnnotateTypeExpr should never have a tuple
+// type not identical to AnyTuple, because other tuple types could only be
+// expressed as composite types, and these are not yet supported. If the
+// AnnotateTypeExpr has a non-tuple type, the function returns false.
+func isNullOrAnnotatedNullTuple(
+	ctx context.Context, semaCtx *SemaContext, expr Expr,
+) (bool, error) {
+	if expr == DNull {
+		return true, nil
+	}
+	if annotate, ok := expr.(*AnnotateTypeExpr); ok && annotate.Expr == DNull {
+		annotateType, err := ResolveType(ctx, annotate.Type, semaCtx.GetTypeResolver())
+		if err != nil {
+			return false, err
+		}
+		return annotateType.Identical(types.AnyTuple), nil
+	}
+	return false, nil
 }
 
 type placeholderAnnotationVisitor struct {

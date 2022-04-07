@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -53,6 +54,18 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	}()
 
 	execCtx := execCtxI.(sql.JobExecContext)
+	if !execCtx.ExecCfg().LogicalClusterID().Equal(r.job.Payload().CreationClusterID) {
+		// When restoring a cluster, we don't want to end up with two instances of
+		// the singleton reconciliation job.
+		//
+		// TODO(irfansharif): We could instead give the reconciliation job a fixed
+		// ID; comparing cluster IDs during restore doesn't help when we're
+		// restoring into the same cluster the backup was run from.
+		log.Infof(ctx, "duplicate restored job (source-cluster-id=%s, dest-cluster-id=%s); exiting",
+			r.job.Payload().CreationClusterID, execCtx.ExecCfg().LogicalClusterID())
+		return nil
+	}
+
 	rc := execCtx.SpanConfigReconciler()
 	stopper := execCtx.ExecCfg().DistSQLSrv.Stopper
 
@@ -91,18 +104,25 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	// timestamp.
 
 	settingValues := &execCtx.ExecCfg().Settings.SV
-	persistCheckpoints := util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+	persistCheckpointsMu := struct {
+		syncutil.Mutex
+		util.EveryN
+	}{}
+	persistCheckpointsMu.EveryN = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+
 	reconciliationJobCheckpointInterval.SetOnChange(settingValues, func(ctx context.Context) {
-		persistCheckpoints = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+		persistCheckpointsMu.Lock()
+		defer persistCheckpointsMu.Unlock()
+		persistCheckpointsMu.EveryN = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
 	})
 
-	shouldPersistCheckpoint := true
+	checkpointingDisabled := false
 	shouldSkipRetry := false
 	var onCheckpointInterceptor func() error
 
 	if knobs := execCtx.ExecCfg().SpanConfigTestingKnobs; knobs != nil {
 		if knobs.JobDisablePersistingCheckpoints {
-			shouldPersistCheckpoint = false
+			checkpointingDisabled = true
 		}
 		shouldSkipRetry = knobs.JobDisableInternalRetry
 		onCheckpointInterceptor = knobs.JobOnCheckpointInterceptor
@@ -125,10 +145,14 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 				}
 			}
 
-			if !shouldPersistCheckpoint {
+			if checkpointingDisabled {
 				return nil
 			}
-			if !persistCheckpoints.ShouldProcess(timeutil.Now()) {
+
+			persistCheckpointsMu.Lock()
+			shouldPersistCheckpoint := persistCheckpointsMu.ShouldProcess(timeutil.Now())
+			persistCheckpointsMu.Unlock()
+			if !shouldPersistCheckpoint {
 				return nil
 			}
 

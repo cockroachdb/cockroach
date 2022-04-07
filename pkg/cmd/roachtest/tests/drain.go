@@ -212,14 +212,13 @@ func prepareCluster(
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	waitPhasesSettingStmt := fmt.Sprintf(
-		"SET CLUSTER SETTING server.shutdown.drain_wait = '%fs'; "+
-			"SET CLUSTER SETTING server.shutdown.connection_wait = '%fs';"+
-			"SET CLUSTER SETTING server.shutdown.query_wait = '%fs';",
-		drainWait.Seconds(),
-		connectionWait.Seconds(),
-		queryWait.Seconds(),
-	)
-	_, err = db.ExecContext(ctx, waitPhasesSettingStmt)
-	require.NoError(t, err, "cannot set cluster setting")
+	waitPhasesSettingStmts := []string{
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.drain_wait = '%fs';", drainWait.Seconds()),
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.query_wait = '%fs'", queryWait.Seconds()),
+		fmt.Sprintf("SET CLUSTER SETTING server.shutdown.connection_wait = '%fs'", connectionWait.Seconds()),
+	}
+	for _, stmt := range waitPhasesSettingStmts {
+		_, err = db.ExecContext(ctx, stmt)
+		require.NoError(t, err, "cannot set cluster setting")
+	}
 }

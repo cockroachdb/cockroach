@@ -112,8 +112,12 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		c.nulls[dstVecIdx].SetNull(dstIdx)
 	} else {
 		c.nulls[dstVecIdx].UnsetNull(dstIdx)
+		// {{if .IsBytesLike}}
+		c.vecs[dstVecIdx].Copy(c.vecs[srcVecIdx], dstIdx, srcIdx)
+		// {{else}}
 		v := c.vecs[srcVecIdx].Get(srcIdx)
 		c.vecs[dstVecIdx].Set(dstIdx, v)
+		// {{end}}
 	}
 }
 

@@ -76,7 +76,7 @@ const withData: DatabasesPageProps = {
     ascending: false,
     columnTitle: "name",
   },
-  databases: _.map(Array(42), _item => {
+  databases: Array(42).map(() => {
     return {
       loading: false,
       loaded: true,
@@ -87,6 +87,7 @@ const withData: DatabasesPageProps = {
       missingTables: [],
       nodesByRegionString:
         "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
+      numIndexRecommendations: 0,
     };
   }),
   onSortingChange: () => {},

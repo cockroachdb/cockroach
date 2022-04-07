@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -244,6 +245,22 @@ func TestForward(t *testing.T) {
 	})
 }
 
+func TestForwarder_Context(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := logtags.AddTag(context.Background(), "foo", "bar")
+
+	p1, p2 := net.Pipe()
+	f, err := forward(ctx, nil /* connector */, nil /* metrics */, p1, p2)
+	require.NoError(t, err)
+	defer f.Close()
+
+	// Check that the right context was returned.
+	b := logtags.FromContext(f.Context())
+	require.NotNil(t, b)
+	require.Equal(t, "foo=bar", b.String())
+}
+
 func TestForwarder_Close(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -256,6 +273,17 @@ func TestForwarder_Close(t *testing.T) {
 
 	f.Close()
 	require.EqualError(t, f.ctx.Err(), context.Canceled.Error())
+}
+
+func TestForwarder_ServerRemoteAddr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	p1, p2 := net.Pipe()
+	f, err := forward(context.Background(), nil /* connector */, nil /* metrics */, p1, p2)
+	require.NoError(t, err)
+	defer f.Close()
+
+	require.Equal(t, "pipe", f.ServerRemoteAddr())
 }
 
 func TestForwarder_tryReportError(t *testing.T) {

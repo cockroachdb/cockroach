@@ -106,7 +106,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		opts = append(opts,
 			rangefeed.WithInitialScan(func(ctx context.Context) {}),
 			rangefeed.WithScanRetryBehavior(rangefeed.ScanRetryRemaining),
-
+			rangefeed.WithRowTimestampInInitialScan(true),
 			rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
 				// TODO(yevgeniy): Update metrics
 				return false
@@ -430,10 +430,10 @@ func streamPartition(
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
-	return &eventStream{
+	return tree.MakeStreamingValueGenerator(&eventStream{
 		streamID: streamID,
 		spec:     spec,
 		execCfg:  execCfg,
 		mon:      evalCtx.Mon,
-	}, nil
+	}), nil
 }

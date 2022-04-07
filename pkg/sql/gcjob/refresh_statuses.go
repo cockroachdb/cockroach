@@ -22,10 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -52,6 +54,7 @@ func refreshTables(
 		tableHasExpiredElem, tableIsMissing, deadline := updateStatusForGCElements(
 			ctx,
 			execCfg,
+			jobID,
 			tableID,
 			tableDropTimes, indexDropTimes,
 			progress,
@@ -80,6 +83,7 @@ func refreshTables(
 func updateStatusForGCElements(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
+	jobID jobspb.JobID,
 	tableID descpb.ID,
 	tableDropTimes map[descpb.ID]int64,
 	indexDropTimes map[descpb.IndexID]int64,
@@ -106,7 +110,7 @@ func updateStatusForGCElements(
 
 		// Update the status of the table if the table was dropped.
 		if table.Dropped() {
-			deadline := updateTableStatus(ctx, execCfg, int64(tableTTL), protectedtsCache, table, tableDropTimes, progress)
+			deadline := updateTableStatus(ctx, execCfg, jobID, int64(tableTTL), table, tableDropTimes, progress)
 			if timeutil.Until(deadline) < 0 {
 				expired = true
 			} else if deadline.Before(earliestDeadline) {
@@ -115,7 +119,9 @@ func updateStatusForGCElements(
 		}
 
 		// Update the status of any indexes waiting for GC.
-		indexesExpired, deadline := updateIndexesStatus(ctx, execCfg, tableTTL, table, protectedtsCache, zoneCfg, indexDropTimes, progress)
+		indexesExpired, deadline := updateIndexesStatus(
+			ctx, execCfg, jobID, tableTTL, table, protectedtsCache, zoneCfg, indexDropTimes, progress,
+		)
 		if indexesExpired {
 			expired = true
 		}
@@ -142,8 +148,8 @@ func updateStatusForGCElements(
 func updateTableStatus(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
+	jobID jobspb.JobID,
 	ttlSeconds int64,
-	protectedtsCache protectedts.Cache,
 	table catalog.TableDescriptor,
 	tableDropTimes map[descpb.ID]int64,
 	progress *jobspb.SchemaChangeGCProgress,
@@ -159,9 +165,26 @@ func updateTableStatus(
 
 		deadlineNanos := tableDropTimes[t.ID] + ttlSeconds*time.Second.Nanoseconds()
 		deadline = timeutil.Unix(0, deadlineNanos)
-		if isProtected(ctx, protectedtsCache, tableDropTimes[t.ID], sp) {
+		isProtected, err := isProtected(
+			ctx,
+			jobID,
+			tableDropTimes[t.ID],
+			execCfg,
+			execCfg.SpanConfigKVAccessor,
+			execCfg.ProtectedTimestampProvider,
+			sp,
+		)
+		if err != nil {
+			log.Errorf(ctx, "error checking protection status %v", err)
+			// We don't want to make GC decisions if we can't validate the protection
+			// status of a table. We don't change the status of the table to DELETING
+			// and simply return a high deadline value; The GC job will be retried
+			// automatically up the stack.
+			return maxDeadline
+		}
+		if isProtected {
 			log.Infof(ctx, "a timestamp protection delayed GC of table %d", t.ID)
-			return deadline
+			return maxDeadline
 		}
 
 		lifetime := timeutil.Until(deadline)
@@ -188,6 +211,7 @@ func updateTableStatus(
 func updateIndexesStatus(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
+	jobID jobspb.JobID,
 	tableTTL int32,
 	table catalog.TableDescriptor,
 	protectedtsCache protectedts.Cache,
@@ -209,7 +233,20 @@ func updateIndexesStatus(
 
 		deadlineNanos := indexDropTimes[idxProgress.IndexID] + int64(ttlSeconds)*time.Second.Nanoseconds()
 		deadline := timeutil.Unix(0, deadlineNanos)
-		if isProtected(ctx, protectedtsCache, indexDropTimes[idxProgress.IndexID], sp) {
+		isProtected, err := isProtected(
+			ctx,
+			jobID,
+			indexDropTimes[idxProgress.IndexID],
+			execCfg,
+			execCfg.SpanConfigKVAccessor,
+			protectedtsCache,
+			sp,
+		)
+		if err != nil {
+			log.Errorf(ctx, "error checking protection status %v", err)
+			continue
+		}
+		if isProtected {
 			log.Infof(ctx, "a timestamp protection delayed GC of index %d from table %d", idxProgress.IndexID, table.GetID())
 			continue
 		}
@@ -253,11 +290,91 @@ func getTableTTL(defTTL int32, zoneCfg *zonepb.ZoneConfig) int32 {
 	return ttlSeconds
 }
 
+// isProtected returns true if the supplied span is considered protected, and
+// thus exempt from GC-ing, given the wall time at which it was dropped.
+//
+// This function is intended for table/index spans -- for spans that cover a
+// secondary tenant's keyspace, checkout `isTenantProtected` instead.
+func isProtected(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	droppedAtTime int64,
+	execCfg *sql.ExecutorConfig,
+	kvAccessor spanconfig.KVAccessor,
+	ptsCache protectedts.Cache,
+	sp roachpb.Span,
+) (bool, error) {
+	// Wrap this in a closure sp we can pass the protection status to the testing
+	// knob.
+	isProtected, err := func() (bool, error) {
+		// We check the old protected timestamp subsystem for protected timestamps
+		// if this is the GC job of the system tenant.
+		if execCfg.Codec.ForSystemTenant() &&
+			deprecatedIsProtected(ctx, ptsCache, droppedAtTime, sp) {
+			return true, nil
+		}
+
+		spanConfigRecords, err := kvAccessor.GetSpanConfigRecords(ctx, spanconfig.Targets{
+			spanconfig.MakeTargetFromSpan(sp),
+		})
+		if err != nil {
+			return false, err
+		}
+
+		_, tenID, err := keys.DecodeTenantPrefix(execCfg.Codec.TenantPrefix())
+		if err != nil {
+			return false, err
+		}
+		systemSpanConfigs, err := kvAccessor.GetAllSystemSpanConfigsThatApply(ctx, tenID)
+		if err != nil {
+			return false, err
+		}
+
+		// Collect all protected timestamps that apply to the given span; both by
+		// virtue of span configs and system span configs.
+		var protectedTimestamps []hlc.Timestamp
+		collectProtectedTimestamps := func(configs ...roachpb.SpanConfig) {
+			for _, config := range configs {
+				for _, protectionPolicy := range config.GCPolicy.ProtectionPolicies {
+					// We don't consider protected timestamps written by backups if the span
+					// is indicated as "excluded from backup". Checkout the field
+					// descriptions for more details about this coupling.
+					if config.ExcludeDataFromBackup && protectionPolicy.IgnoreIfExcludedFromBackup {
+						continue
+					}
+					protectedTimestamps = append(protectedTimestamps, protectionPolicy.ProtectedTimestamp)
+				}
+			}
+		}
+		for _, record := range spanConfigRecords {
+			collectProtectedTimestamps(record.GetConfig())
+		}
+		collectProtectedTimestamps(systemSpanConfigs...)
+
+		for _, protectedTimestamp := range protectedTimestamps {
+			if protectedTimestamp.WallTime < droppedAtTime {
+				return true, nil
+			}
+		}
+
+		return false, nil
+	}()
+	if err != nil {
+		return false, err
+	}
+
+	if fn := execCfg.GCJobTestingKnobs.RunAfterIsProtectedCheck; fn != nil {
+		fn(jobID, isProtected)
+	}
+
+	return isProtected, nil
+}
+
 // Returns whether or not a key in the given spans is protected.
 // TODO(pbardea): If the TTL for this index/table expired and we're only blocked
 // on a protected timestamp, this may be useful information to surface to the
 // user.
-func isProtected(
+func deprecatedIsProtected(
 	ctx context.Context, protectedtsCache protectedts.Cache, atTime int64, sp roachpb.Span,
 ) bool {
 	protected := false
@@ -275,6 +392,51 @@ func isProtected(
 	return protected
 }
 
+// isTenantProtected returns true if there exist any protected timestamp records
+// written by the system tenant, that targets the tenant with tenantID.
+func isTenantProtected(
+	ctx context.Context, atTime hlc.Timestamp, tenantID roachpb.TenantID, execCfg *sql.ExecutorConfig,
+) (bool, error) {
+	if !execCfg.Codec.ForSystemTenant() {
+		return false, errors.AssertionFailedf("isTenantProtected incorrectly invoked by secondary tenant")
+	}
+
+	isProtected := false
+	ptsProvider := execCfg.ProtectedTimestampProvider
+	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		ptsState, err := ptsProvider.GetState(ctx, txn)
+		if err != nil {
+			return errors.Wrap(err, "failed to get protectedts State")
+		}
+		ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
+
+		// First check if the system tenant has any cluster level protections that protect
+		// all secondary tenants.
+		clusterProtections := ptsStateReader.GetProtectionPoliciesForCluster()
+		for _, p := range clusterProtections {
+			if p.ProtectedTimestamp.Less(atTime) {
+				isProtected = true
+				return nil
+			}
+		}
+
+		// Now check if the system tenant has any protections that target the
+		// tenantID's keyspace.
+		protectionsOnTenant := ptsStateReader.GetProtectionsForTenant(tenantID)
+		for _, p := range protectionsOnTenant {
+			if p.ProtectedTimestamp.Less(atTime) {
+				isProtected = true
+				return nil
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return false, err
+	}
+	return isProtected, nil
+}
+
 // refreshTenant updates the status of tenant that is waiting to be GC'd. It
 // returns whether or the tenant has expired or the duration until it expires.
 func refreshTenant(
@@ -283,13 +445,15 @@ func refreshTenant(
 	dropTime int64,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
-) (expired bool, deadline time.Time) {
+) (expired bool, _ time.Time, _ error) {
 	if progress.Tenant.Status != jobspb.SchemaChangeGCProgress_WAITING_FOR_GC {
-		return true, time.Time{}
+		return true, time.Time{}, nil
 	}
-	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
+
+	// Read the tenant's GC TTL to check if the tenant's data has expired.
 	tenID := details.Tenant.ID
 	cfg := execCfg.SystemConfig.GetSystemConfig()
+	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
 	zoneCfg, err := cfg.GetZoneConfigForObject(keys.MakeSQLCodec(roachpb.MakeTenantID(tenID)), 0)
 	if err == nil {
 		tenantTTLSeconds = zoneCfg.GC.TTLSeconds
@@ -298,9 +462,25 @@ func refreshTenant(
 	}
 
 	deadlineNanos := dropTime + int64(tenantTTLSeconds)*time.Second.Nanoseconds()
+	deadlineUnix := timeutil.Unix(0, deadlineNanos)
 	if timeutil.Now().UnixNano() >= deadlineNanos {
+		// If the tenant's GC TTL has elapsed, check if there are any protected timestamp records
+		// that apply to the tenant keyspace.
+		atTime := hlc.Timestamp{WallTime: dropTime}
+		isProtected, err := isTenantProtected(ctx, atTime, roachpb.MakeTenantID(tenID), execCfg)
+		if err != nil {
+			return false, time.Time{}, err
+		}
+
+		if isProtected {
+			log.Infof(ctx, "GC TTL for dropped tenant %d has expired, but protected timestamp "+
+				"record(s) on the tenant keyspace are preventing GC", tenID)
+			return false, deadlineUnix, nil
+		}
+
+		// At this point, the tenant's keyspace is ready for GC.
 		progress.Tenant.Status = jobspb.SchemaChangeGCProgress_DELETING
-		return true, time.Time{}
+		return true, deadlineUnix, nil
 	}
-	return false, timeutil.Unix(0, deadlineNanos)
+	return false, deadlineUnix, nil
 }

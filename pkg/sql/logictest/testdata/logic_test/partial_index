@@ -1036,9 +1036,10 @@ DELETE from u
 subtest join
 
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 CREATE TABLE join_small (m INT, n INT);
 CREATE TABLE join_large (i INT, s STRING, INDEX (i) WHERE s IN ('foo', 'bar', 'baz'));
+
+statement ok
 ALTER TABLE join_small INJECT STATISTICS '[
   {
     "columns": ["m"],
@@ -1047,6 +1048,8 @@ ALTER TABLE join_small INJECT STATISTICS '[
     "distinct_count": 20
   }
 ]';
+
+statement ok
 ALTER TABLE join_large INJECT STATISTICS '[
   {
     "columns": ["i"],
@@ -1061,6 +1064,8 @@ ALTER TABLE join_large INJECT STATISTICS '[
     "distinct_count": 50
   }
 ]';
+
+statement ok
 INSERT INTO join_small VALUES (1, 1), (2, 2), (3, 3);
 INSERT INTO join_large VALUES (1, 'foo'), (2, 'not'), (3, 'bar'), (4, 'not');
 

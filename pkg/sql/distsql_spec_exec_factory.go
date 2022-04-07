@@ -349,8 +349,8 @@ func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
 	projection := make([]uint32, len(cols))
-	for i := range cols {
-		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
+	for i, col := range cols {
+		projection[i] = uint32(physPlan.PlanToStreamColMap[col])
 	}
 	newColMap := identityMap(physPlan.PlanToStreamColMap, len(cols))
 	physPlan.AddProjection(
@@ -370,8 +370,8 @@ func (e *distSQLSpecExecFactory) ConstructSerializingProject(
 	physPlan, plan := getPhysPlan(n)
 	physPlan.EnsureSingleStreamOnGateway()
 	projection := make([]uint32, len(cols))
-	for i := range cols {
-		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
+	for i, col := range cols {
+		projection[i] = uint32(physPlan.PlanToStreamColMap[col])
 	}
 	physPlan.AddProjection(projection, execinfrapb.Ordering{})
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.GetResultTypes(), physPlan.ResultColumns)
@@ -640,6 +640,7 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 	keyCols []exec.NodeColumnOrdinal,
 	tableCols exec.TableColumnOrdinalSet,
 	reqOrdering exec.OutputOrdering,
+	limitHint int,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: index join")
 }
@@ -659,6 +660,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	isSecondJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 	locking *tree.LockingItem,
+	limitHint int,
 ) (exec.Node, error) {
 	// TODO (rohany): Implement production of system columns by the underlying scan here.
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: lookup join")
@@ -688,10 +690,13 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 	eqCols []exec.TableColumnOrdinal,
 ) (zigzagPlanningSide, error) {
 	desc := table.(*optTable).desc
-	colCfg := scanColumnsConfig{wantedColumns: make([]tree.ColumnID, 0, wantedCols.Len())}
-	for c, ok := wantedCols.Next(0); ok; c, ok = wantedCols.Next(c + 1) {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, desc.PublicColumns()[c].GetID())
+	colCfg := makeScanColumnsConfig(table, wantedCols)
+
+	eqColOrdinals, err := tableToScanOrdinals(wantedCols, eqCols)
+	if err != nil {
+		return zigzagPlanningSide{}, err
 	}
+
 	cols, err := initColsForScan(desc, colCfg)
 	if err != nil {
 		return zigzagPlanningSide{}, err
@@ -711,7 +716,7 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 		desc:        desc,
 		index:       index.(*optIndex).idx,
 		cols:        cols,
-		eqCols:      convertTableOrdinalsToInts(eqCols),
+		eqCols:      eqColOrdinals,
 		fixedValues: valuesSpec,
 	}, nil
 }

@@ -424,7 +424,8 @@ func (r *Replica) evaluateWriteBatch(
 	}
 
 	ms := new(enginepb.MVCCStats)
-	rec := NewReplicaEvalContext(r, g.LatchSpans())
+	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
+	defer rec.Release()
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
 		ctx, idKey, rec, ms, ba, ui, g, nil /* deadline */)
 	return batch, *ms, br, res, pErr
@@ -489,7 +490,8 @@ func (r *Replica) evaluate1PC(
 	// Is this relying on the batch being write-only?
 	ui := uncertainty.Interval{}
 
-	rec := NewReplicaEvalContext(r, g.LatchSpans())
+	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
+	defer rec.Release()
 	var br *roachpb.BatchResponse
 	var res result.Result
 	var pErr *roachpb.Error

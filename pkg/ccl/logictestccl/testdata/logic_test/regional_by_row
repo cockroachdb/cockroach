@@ -1,3 +1,4 @@
+# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant
 
 statement ok
@@ -151,7 +152,7 @@ CREATE TABLE regional_by_row_table (
   j JSON,
   INDEX (a),
   UNIQUE (b),
-  INVERTED INDEX (j),
+  INVERTED INDEX (j ASC),
   FAMILY (pk, pk2, a, b)
 ) LOCALITY REGIONAL BY ROW
 
@@ -188,7 +189,7 @@ CREATE TABLE public.regional_by_row_table (
                             CONSTRAINT regional_by_row_table_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_table_a_idx (a ASC),
                             UNIQUE INDEX regional_by_row_table_b_key (b ASC),
-                            INVERTED INDEX regional_by_row_table_j_idx (j),
+                            INVERTED INDEX regional_by_row_table_j_idx (j ASC),
                             FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
 ) LOCALITY REGIONAL BY ROW
 
@@ -271,7 +272,6 @@ public       regional_by_row_table_explicit_crdb_region_column  table  root   0 
 
 # Add a gc.ttlseconds to a partition and ensure it displays.
 statement ok
-SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true;
 ALTER PARTITION "us-east-1" OF INDEX public.regional_by_row_table@regional_by_row_table_a_idx
 CONFIGURE ZONE USING gc.ttlseconds = 10
 
@@ -288,7 +288,7 @@ CREATE TABLE public.regional_by_row_table (
   CONSTRAINT regional_by_row_table_pkey PRIMARY KEY (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
-  INVERTED INDEX regional_by_row_table_j_idx (j),
+  INVERTED INDEX regional_by_row_table_j_idx (j ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
 ) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@regional_by_row_table_a_idx CONFIGURE ZONE USING "gc.ttlseconds" = 10
@@ -331,7 +331,7 @@ CREATE TABLE public.regional_by_row_table (
   CONSTRAINT regional_by_row_table_pkey PRIMARY KEY (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
-  INVERTED INDEX regional_by_row_table_j_idx (j),
+  INVERTED INDEX regional_by_row_table_j_idx (j ASC),
   UNIQUE INDEX regional_by_row_table_unique_col_key (unique_col ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region, unique_col)
 ) LOCALITY REGIONAL BY ROW;
@@ -536,7 +536,7 @@ CREATE TABLE public.regional_by_row_table (
   UNIQUE INDEX regional_by_row_table_pk_key (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
-  INVERTED INDEX regional_by_row_table_j_idx (j),
+  INVERTED INDEX regional_by_row_table_j_idx (j ASC),
   UNIQUE INDEX uniq_idx (a ASC) WHERE b > 0:::INT8,
   UNIQUE INDEX unique_b_a (b ASC, a ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)

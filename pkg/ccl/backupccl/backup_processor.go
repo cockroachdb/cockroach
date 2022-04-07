@@ -409,14 +409,10 @@ func runBackupProcessor(
 					admissionHeader := roachpb.AdmissionHeader{
 						// Export requests are currently assigned NormalPri.
 						//
-						// TODO(bulkio): the priority should vary based on the urgency of
-						// these background requests. These exports should get LowPri,
-						// unless they are being retried and need to be completed in a
-						// timely manner for compliance with RPO and data retention
-						// policies. Consider deriving this from the UserPriority field.
-						Priority:                 int32(admission.NormalPri),
+						// TODO(dt): Consider linking this to/from the UserPriority field.
+						Priority:                 int32(admission.BulkNormalPri),
 						CreateTime:               timeutil.Now().UnixNano(),
-						Source:                   roachpb.AdmissionHeader_ROOT_KV,
+						Source:                   roachpb.AdmissionHeader_FROM_SQL,
 						NoMemoryReservedAtSource: true,
 					}
 					log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s)",

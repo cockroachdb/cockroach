@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -71,13 +70,11 @@ func newTestHelper(t *testing.T) (helper *testHelper, cleanup func()) {
 
 	knobs := jobs.NewTestingKnobsWithShortIntervals()
 	knobs.JobSchedulerEnv = helper.env
-	knobs.TakeOverJobsScheduling = func(fn func(ctx context.Context, maxSchedules int64, txn *kv.Txn) error) {
+	knobs.TakeOverJobsScheduling = func(fn func(ctx context.Context, maxSchedules int64) error) {
 		helper.executeSchedules = func() error {
 			defer helper.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-			return helper.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-				// maxSchedules = 0 means there's no limit.
-				return fn(ctx, 0 /* maxSchedules */, txn)
-			})
+			// maxSchedules = 0 means there's no limit.
+			return fn(context.Background(), 0 /* maxSchedules */)
 		}
 	}
 	knobs.CaptureJobExecutionConfig = func(config *scheduledjobs.JobExecutionConfig) {

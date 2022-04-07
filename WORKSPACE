@@ -203,6 +203,10 @@ yarn_install(
     package_json = "//pkg/ui:package.json",
     strict_visibility = False,
     yarn_lock = "//pkg/ui:yarn.lock",
+    links = {
+      "@cockroachlabs/crdb-protobuf-client": "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+      "@cockroachlabs/cluster-ui": "//pkg/ui/workspaces/cluster-ui:cluster-ui",
+    },
 )
 
 #################################
@@ -386,10 +390,16 @@ load("//build/toolchains:REPOSITORIES.bzl", "toolchain_dependencies")
 toolchain_dependencies()
 
 register_toolchains(
-    "//build/toolchains:cross_linux_toolchain",
-    "//build/toolchains:cross_linux_arm_toolchain",
-    "//build/toolchains:cross_macos_toolchain",
-    "//build/toolchains:cross_windows_toolchain",
+    "//build/toolchains:cross_x86_64_linux_toolchain",
+    "//build/toolchains:cross_x86_64_linux_arm_toolchain",
+    "//build/toolchains:cross_x86_64_macos_toolchain",
+    "//build/toolchains:cross_x86_64_macos_arm_toolchain",
+    "//build/toolchains:cross_x86_64_windows_toolchain",
+    "//build/toolchains:cross_arm64_linux_toolchain",
+    "//build/toolchains:cross_arm64_linux_arm_toolchain",
+    "//build/toolchains:cross_arm64_windows_toolchain",
+    "//build/toolchains:cross_arm64_macos_toolchain",
+    "//build/toolchains:cross_arm64_macos_arm_toolchain",
     "//build/toolchains:dev_darwin_x86_64_toolchain",
 )
 

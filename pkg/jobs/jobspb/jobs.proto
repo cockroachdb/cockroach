@@ -16,6 +16,7 @@ import "errorspb/errors.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/tenant.proto";
@@ -90,7 +91,9 @@ message StreamIngestionDetails {
   reserved 5;
   roachpb.TenantID tenant_id = 6 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
 
-  // NEXT ID: 7.
+  // Stream of tenant data will be ingested as a new tenant with 'new_tenant_id'.
+  roachpb.TenantID new_tenant_id = 7 [(gogoproto.customname) = "NewTenantID", (gogoproto.nullable) = false];
+  // NEXT ID: 8.
 }
 
 message StreamIngestionProgress {
@@ -125,6 +128,9 @@ message StreamReplicationDetails {
 message StreamReplicationProgress {
   // Expiration timestamp of consumer heartbeat
   google.protobuf.Timestamp expiration = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // If the ingestion side has been cut over.
+  bool ingestion_cut_over = 2;
 }
 
 message SchedulePTSChainingRecord {
@@ -761,6 +767,7 @@ message ChangefeedDetails {
   // time of the changefeed, which is no longer the case. We should rename this
   // field to ScanTime instead.
   util.hlc.Timestamp statement_time = 7 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end_time = 9 [(gogoproto.nullable) = false];
   repeated ChangefeedTargetSpecification target_specifications = 8 [(gogoproto.nullable) = false];
 
   reserved 1, 2, 5;
@@ -957,7 +964,19 @@ message Payload {
   // the jobs.execution_errors.max_entries cluster setting.
   repeated RetriableExecutionFailure retriable_execution_failure_log = 32;
 
-  // NEXT ID: 34.
+  // CreationClusterID is populated at creation with the ClusterID, in case a
+  // job resuming later, needs to use this information, e.g. to determine if it
+  // has been restored into a different cluster, which might mean it should
+  // terminate, pause or update some other state.
+  bytes creation_cluster_id = 35 [(gogoproto.nullable) = false, (gogoproto.customname) = "CreationClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+
+  // CreationClusterVersion is populated at creation time with the then-active
+  // cluster version, in case a job resuming later needs to use this information
+  // to migrate or update the job.
+  roachpb.Version creation_cluster_version = 36 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 37.
 }
 
 message Progress {

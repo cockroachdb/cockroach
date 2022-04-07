@@ -159,9 +159,11 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		sqlServer.StartDiagnostics(ctx)
 	}
 
+	tenantClusterID := sqlServer.LogicalClusterID()
+
 	// Report the server identifiers and other server details
 	// in the same format as 'cockroach start'.
-	if err := reportServerInfo(ctx, tBegin, &serverCfg, st, false /* isHostNode */, false /* initialStart */); err != nil {
+	if err := reportServerInfo(ctx, tBegin, &serverCfg, st, false /* isHostNode */, false /* initialStart */, tenantClusterID); err != nil {
 		return err
 	}
 

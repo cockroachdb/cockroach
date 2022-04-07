@@ -457,6 +457,17 @@ func runDecommissionNodeImpl(
 		MaxBackoff:     20 * time.Second,
 	}
 
+	// Log verbosity is increased when there is possibly a decommission stall.
+	// If the number of decommissioning replicas does not decrease after some time
+	// (i.e. the decommission status has not changed after
+	// sameStatusThreshold iterations), verbosity is automatically set.
+	// Some decommissioning replicas will be reported to the operator.
+	const sameStatusThreshold = 15
+	var (
+		numReplicaReport = 0
+		sameStatusCount  = 0
+	)
+
 	// Decommissioning a node is driven by a three-step process.
 	// 1) Mark each node as 'decommissioning'. In doing so, all replicas are
 	// slowly moved off of these nodes.
@@ -472,6 +483,7 @@ func runDecommissionNodeImpl(
 		req := &serverpb.DecommissionRequest{
 			NodeIDs:          nodeIDs,
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+			NumReplicaReport: int32(numReplicaReport),
 		}
 		resp, err := c.Decommission(ctx, req)
 		if err != nil {
@@ -479,14 +491,33 @@ func runDecommissionNodeImpl(
 			return errors.Wrap(err, "while trying to mark as decommissioning")
 		}
 
+		if numReplicaReport > 0 {
+			printDecommissionReplicas(*resp)
+		}
+
 		if !reflect.DeepEqual(&prevResponse, resp) {
 			fmt.Fprintln(stderr)
-			if err := printDecommissionStatus(*resp); err != nil {
+			if err = printDecommissionStatus(*resp); err != nil {
 				return err
 			}
 			prevResponse = *resp
+
+			// The decommissioning status changed. Set `sameStatusCount` back to zero.
+			sameStatusCount = 0
+			numReplicaReport = 0
 		} else {
+			// Print a marker indicating that there has been no progress,
+			// instead of printing the same status.
 			fmt.Fprintf(stderr, ".")
+
+			// Report decommissioning replicas if there's been significant time of
+			// no progress.
+			if sameStatusCount >= sameStatusThreshold && numReplicaReport == 0 {
+				// Configure a number of replicas to report.
+				numReplicaReport = 5
+			} else {
+				sameStatusCount++
+			}
 		}
 
 		anyActive := false
@@ -589,6 +620,21 @@ signaling the affected nodes to participate in the cluster again.
 func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
 	return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, decommissionNodesColumnHeaders,
 		clisqlexec.NewRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
+}
+
+func printDecommissionReplicas(resp serverpb.DecommissionStatusResponse) {
+	fmt.Fprintln(stderr, "\npossible decommission stall detected")
+
+	for _, nodeStatus := range resp.Status {
+		for _, replica := range nodeStatus.ReportedReplicas {
+			fmt.Fprintf(stderr,
+				"n%d still has replica id %d for range r%d\n",
+				nodeStatus.NodeID,
+				replica.ReplicaID,
+				replica.RangeID,
+			)
+		}
+	}
 }
 
 func runRecommissionNode(cmd *cobra.Command, args []string) error {

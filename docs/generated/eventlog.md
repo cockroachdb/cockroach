@@ -327,6 +327,33 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
+### `set_tenant_cluster_setting`
+
+An event of type `set_tenant_cluster_setting` is recorded when a cluster setting override
+is changed, either for another tenant or for all tenants.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `SettingName` | The name of the affected cluster setting. | no |
+| `Value` | The new value of the cluster setting. | yes |
+| `TenantId` | The target Tenant ID. Empty if targeting all tenants. | no |
+| `AllTenants` | Whether the override applies to all tenants. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
 ## SQL Access Audit Events
 
 Events in this category are generated when a table has been
@@ -2263,6 +2290,30 @@ An event of type `drop_role` is recorded when a role is dropped.
 | Field | Description | Sensitive |
 |--|--|--|
 | `RoleName` | The name of the affected user/role. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. Application names starting with a dollar sign (`$`) are not considered sensitive. | depends |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
+### `grant_role`
+
+An event of type `grant_role` is recorded when a role is granted.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `GranteeRoles` | The roles being granted to. | yes |
+| `Members` | The roles being granted. | yes |
 
 
 #### Common fields

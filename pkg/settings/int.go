@@ -12,6 +12,7 @@ package settings
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cockroachdb/errors"
 )
@@ -44,6 +45,20 @@ func (i *IntSetting) Encoded(sv *Values) string {
 // EncodedDefault returns the encoded value of the default value of the setting.
 func (i *IntSetting) EncodedDefault() string {
 	return EncodeInt(i.defaultValue)
+}
+
+// DecodeToString decodes and renders an encoded value.
+func (i *IntSetting) DecodeToString(encoded string) (string, error) {
+	iv, err := i.DecodeValue(encoded)
+	if err != nil {
+		return "", err
+	}
+	return EncodeInt(iv), nil
+}
+
+// DecodeValue decodes the value into an integer.
+func (i *IntSetting) DecodeValue(value string) (int64, error) {
+	return strconv.ParseInt(value, 10, 64)
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.

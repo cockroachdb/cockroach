@@ -115,7 +115,6 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Schema:{DescID: 106}, ABSENT], TXN_DROPPED] -> DROPPED
     [[SchemaParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -123,7 +122,6 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
@@ -131,7 +129,6 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 110, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 110}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
@@ -156,7 +153,6 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 108, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
@@ -164,7 +160,6 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 109}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
@@ -189,7 +184,6 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
@@ -201,7 +195,6 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 112}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
@@ -217,7 +210,6 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 113}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 113, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 113}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
@@ -233,7 +225,6 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 114, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 114}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
@@ -263,7 +254,6 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
     [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 117}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 117, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 117}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
@@ -574,6 +564,7 @@ PreCommitPhase stage 1 of 1 with 84 MutationType ops
       - 116
       - 117
       JobID: 1
+      NonCancelable: true
       Statements:
       - statement: DROP DATABASE db1 CASCADE
         redactedstatement: DROP DATABASE ‹db1› CASCADE
@@ -627,6 +618,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForDatabase
       DatabaseID: 104
+      StatementForDropJob:
+        Statement: DROP DATABASE db1 CASCADE
     *scop.DeleteDescriptor
       DescriptorID: 104
     *scop.LogEvent
@@ -671,6 +664,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP DATABASE db1 CASCADE
       TableID: 107
     *scop.LogEvent
       Authorization:
@@ -685,6 +680,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP DATABASE db1 CASCADE
       TableID: 108
     *scop.LogEvent
       Authorization:
@@ -742,8 +739,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SourceElementID: 8
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      TableID: 111
+    *scop.DeleteDescriptor
+      DescriptorID: 111
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 111
@@ -761,8 +758,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SourceElementID: 9
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      TableID: 112
+    *scop.DeleteDescriptor
+      DescriptorID: 112
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 112
@@ -784,8 +781,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SourceElementID: 10
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      TableID: 113
+    *scop.DeleteDescriptor
+      DescriptorID: 113
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 113
@@ -806,8 +803,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SourceElementID: 10
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      TableID: 114
+    *scop.DeleteDescriptor
+      DescriptorID: 114
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 114
@@ -831,8 +828,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SourceElementID: 12
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      TableID: 117
+    *scop.DeleteDescriptor
+      DescriptorID: 117
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 117
@@ -855,6 +852,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP DATABASE db1 CASCADE
       TableID: 110
     *scop.MakeColumnAbsent
       ColumnID: 1
@@ -878,6 +877,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
+      StatementForDropJob:
+        Statement: DROP DATABASE db1 CASCADE
       TableID: 109
     *scop.MakeColumnAbsent
       ColumnID: 1
@@ -1861,19 +1862,11 @@ DROP DATABASE db1 CASCADE
   to:   [Schema:{DescID: 106}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 106, Name: public}, ABSENT]
-  to:   [Schema:{DescID: 106}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
   to:   [Schema:{DescID: 106}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
-  to:   [Sequence:{DescID: 107}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 107, Name: public}, ABSENT]
   to:   [Sequence:{DescID: 107}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -1885,19 +1878,11 @@ DROP DATABASE db1 CASCADE
   to:   [Sequence:{DescID: 108}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 108, Name: public}, ABSENT]
-  to:   [Sequence:{DescID: 108}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
   to:   [Sequence:{DescID: 108}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 109, Name: admin}, ABSENT]
-  to:   [Table:{DescID: 109}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 109, Name: public}, ABSENT]
   to:   [Table:{DescID: 109}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -1909,19 +1894,11 @@ DROP DATABASE db1 CASCADE
   to:   [Table:{DescID: 110}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 110, Name: public}, ABSENT]
-  to:   [Table:{DescID: 110}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 110, Name: root}, ABSENT]
   to:   [Table:{DescID: 110}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 111, Name: admin}, ABSENT]
-  to:   [View:{DescID: 111}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 111, Name: public}, ABSENT]
   to:   [View:{DescID: 111}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -1933,10 +1910,6 @@ DROP DATABASE db1 CASCADE
   to:   [View:{DescID: 112}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 112, Name: public}, ABSENT]
-  to:   [View:{DescID: 112}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 112, Name: root}, ABSENT]
   to:   [View:{DescID: 112}, DROPPED]
   kind: Precedence
@@ -1945,19 +1918,11 @@ DROP DATABASE db1 CASCADE
   to:   [View:{DescID: 113}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 113, Name: public}, ABSENT]
-  to:   [View:{DescID: 113}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 113, Name: root}, ABSENT]
   to:   [View:{DescID: 113}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 114, Name: admin}, ABSENT]
-  to:   [View:{DescID: 114}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 114, Name: public}, ABSENT]
   to:   [View:{DescID: 114}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -1990,10 +1955,6 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: dependent element removal before descriptor drop
 - from: [UserPrivileges:{DescID: 117, Name: admin}, ABSENT]
-  to:   [View:{DescID: 117}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 117, Name: public}, ABSENT]
   to:   [View:{DescID: 117}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop

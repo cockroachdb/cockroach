@@ -22,6 +22,7 @@ export const {
   databaseAttr,
   databaseNameAttr,
   fingerprintIDAttr,
+  executionIdAttr,
   implicitTxnAttr,
   nodeIDAttr,
   nodeQueryString,
@@ -31,5 +32,6 @@ export const {
   tabAttr,
   tableNameAttr,
   txnFingerprintIdAttr,
+  viewAttr,
   REMOTE_DEBUGGING_ERROR_TEXT,
 } = util;

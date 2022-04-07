@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -50,6 +48,7 @@ func distImport(
 	format roachpb.IOFileFormat,
 	walltime int64,
 	alwaysFlushProgress bool,
+	procsPerNode int,
 ) (roachpb.BulkOpSummary, error) {
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
@@ -71,14 +70,14 @@ func distImport(
 	accumulatedBulkSummary.Unlock()
 
 	inputSpecs := makeImportReaderSpecs(job, tables, typeDescs, from, format, sqlInstanceIDs, walltime,
-		execCtx.User())
+		execCtx.User(), procsPerNode)
 
 	p := planCtx.NewPhysicalPlan()
 
 	// Setup a one-stage plan with one proc per input spec.
 	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(inputSpecs))
 	for i := range inputSpecs {
-		corePlacement[i].SQLInstanceID = sqlInstanceIDs[i]
+		corePlacement[i].SQLInstanceID = sqlInstanceIDs[i%len(sqlInstanceIDs)]
 		corePlacement[i].Core.ReadImport = inputSpecs[i]
 	}
 	p.AddNoInputStage(
@@ -240,16 +239,17 @@ func makeImportReaderSpecs(
 	sqlInstanceIDs []base.SQLInstanceID,
 	walltime int64,
 	user security.SQLUsername,
+	procsPerNode int,
 ) []*execinfrapb.ReadImportDataSpec {
 	details := job.Details().(jobspb.ImportDetails)
 	// For each input file, assign it to a node.
-	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, len(sqlInstanceIDs))
+	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, len(sqlInstanceIDs)*procsPerNode)
 	progress := job.Progress()
 	importProgress := progress.GetImport()
 	for i, input := range from {
-		// Round robin assign CSV files to sqlInstanceIDs. Files 0 through len(sqlInstanceIDs)-1
+		// Round robin assign CSV files to processors. Files 0 through len(specs)-1
 		// creates the spec. Future files just add themselves to the Uris.
-		if i < len(sqlInstanceIDs) {
+		if i < cap(inputSpecs) {
 			spec := &execinfrapb.ReadImportDataSpec{
 				JobID:  int64(job.ID()),
 				Tables: tables,
@@ -268,7 +268,7 @@ func makeImportReaderSpecs(
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
-		n := i % len(sqlInstanceIDs)
+		n := i % len(inputSpecs)
 		inputSpecs[n].Uri[int32(i)] = input
 		if importProgress.ResumePos != nil {
 			inputSpecs[n].ResumePos[int32(i)] = importProgress.ResumePos[int32(i)]
@@ -298,14 +298,6 @@ func presplitTableBoundaries(
 		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
 			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err
-			}
-
-			log.VEventf(ctx, 1, "scattering index range %s", span.Key)
-			scatterReq := &roachpb.AdminScatterRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(span),
-			}
-			if _, pErr := kv.SendWrapped(ctx, cfg.DB.NonTransactionalSender(), scatterReq); pErr != nil {
-				log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
 			}
 		}
 	}

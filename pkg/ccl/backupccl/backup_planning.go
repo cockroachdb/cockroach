@@ -9,11 +9,11 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
-	"crypto"
-	cryptorand "crypto/rand"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -106,51 +107,6 @@ type (
 		m map[hashedMasterKeyID][]byte
 	}
 )
-
-func newEncryptedDataKeyMap() *encryptedDataKeyMap {
-	return &encryptedDataKeyMap{make(map[hashedMasterKeyID][]byte)}
-}
-
-func newEncryptedDataKeyMapFromProtoMap(protoDataKeyMap map[string][]byte) *encryptedDataKeyMap {
-	encMap := &encryptedDataKeyMap{make(map[hashedMasterKeyID][]byte)}
-	for k, v := range protoDataKeyMap {
-		encMap.m[hashedMasterKeyID(k)] = v
-	}
-
-	return encMap
-}
-
-func (e *encryptedDataKeyMap) addEncryptedDataKey(
-	masterKeyID plaintextMasterKeyID, encryptedDataKey []byte,
-) {
-	// Hash the master key ID before writing to the map.
-	hasher := crypto.SHA256.New()
-	hasher.Write([]byte(masterKeyID))
-	hash := hasher.Sum(nil)
-	e.m[hashedMasterKeyID(hash)] = encryptedDataKey
-}
-
-func (e *encryptedDataKeyMap) getEncryptedDataKey(
-	masterKeyID plaintextMasterKeyID,
-) ([]byte, error) {
-	// Hash the master key ID before reading from the map.
-	hasher := crypto.SHA256.New()
-	hasher.Write([]byte(masterKeyID))
-	hash := hasher.Sum(nil)
-	var encDataKey []byte
-	var ok bool
-	if encDataKey, ok = e.m[hashedMasterKeyID(hash)]; !ok {
-		return nil, errors.New("could not find an entry in the encryptedDataKeyMap")
-	}
-
-	return encDataKey, nil
-}
-
-func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID, dataKey []byte)) {
-	for k, v := range e.m {
-		fn(k, v)
-	}
-}
 
 // getPublicIndexTableSpans returns all the public index spans of the
 // provided table.
@@ -430,54 +386,6 @@ func backupJobDescription(
 	return tree.AsStringWithFQNames(b, ann), nil
 }
 
-// validateKMSURIsAgainstFullBackup ensures that the KMS URIs provided to an
-// incremental BACKUP are a subset of those used during the full BACKUP. It does
-// this by ensuring that the KMS master key ID of each KMS URI specified during
-// the incremental BACKUP can be found in the map written to `encryption-info`
-// during a base BACKUP.
-//
-// The method also returns the KMSInfo to be used for all subsequent
-// encryption/decryption operations during this BACKUP. By default it is the
-// first KMS URI passed during the incremental BACKUP.
-func validateKMSURIsAgainstFullBackup(
-	kmsURIs []string, kmsMasterKeyIDToDataKey *encryptedDataKeyMap, kmsEnv cloud.KMSEnv,
-) (*jobspb.BackupEncryptionOptions_KMSInfo, error) {
-	var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
-	for _, kmsURI := range kmsURIs {
-		kms, err := cloud.KMSFromURI(kmsURI, kmsEnv)
-		if err != nil {
-			return nil, err
-		}
-
-		defer func() {
-			_ = kms.Close()
-		}()
-
-		// Depending on the KMS specific implementation, this may or may not contact
-		// the remote KMS.
-		id, err := kms.MasterKeyID()
-		if err != nil {
-			return nil, err
-		}
-
-		encryptedDataKey, err := kmsMasterKeyIDToDataKey.getEncryptedDataKey(plaintextMasterKeyID(id))
-		if err != nil {
-			return nil,
-				errors.Wrap(err,
-					"one of the provided URIs was not used when encrypting the base BACKUP")
-		}
-
-		if defaultKMSInfo == nil {
-			defaultKMSInfo = &jobspb.BackupEncryptionOptions_KMSInfo{
-				Uri:              kmsURI,
-				EncryptedDataKey: encryptedDataKey,
-			}
-		}
-	}
-
-	return defaultKMSInfo, nil
-}
-
 // annotatedBackupStatement is a tree.Backup, optionally
 // annotated with the scheduling information.
 type annotatedBackupStatement struct {
@@ -567,7 +475,7 @@ func checkPrivilegesForBackup(
 
 func requireEnterprise(execCfg *sql.ExecutorConfig, feature string) error {
 	if err := utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings, execCfg.ClusterID(), execCfg.Organization(),
+		execCfg.Settings, execCfg.LogicalClusterID(), execCfg.Organization(),
 		fmt.Sprintf("BACKUP with %s", feature),
 	); err != nil {
 		return err
@@ -665,7 +573,7 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if !(p.IsAutoCommit() || backupStmt.Options.Detached) {
+		if !(p.ExtendedEvalContext().TxnIsSingleStmt || backupStmt.Options.Detached) {
 			return errors.Errorf("BACKUP cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
@@ -740,7 +648,7 @@ func backupPlanHook(
 		switch backupStmt.Coverage() {
 		case tree.RequestedDescriptors:
 			var err error
-			targetDescs, completeDBs, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+			targetDescs, completeDBs, _, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 			if err != nil {
 				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 			}
@@ -921,7 +829,7 @@ func backupPlanHook(
 		}
 
 		lic := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "",
+			p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(), "",
 		) != nil
 
 		if err := protectTimestampForBackup(
@@ -940,7 +848,7 @@ func backupPlanHook(
 			}
 
 			if err := writeBackupManifestCheckpoint(
-				ctx, jobID, backupDetails, &backupManifest, p.ExecCfg(), p.User(),
+				ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
 			); err != nil {
 				return err
 			}
@@ -965,8 +873,9 @@ func backupPlanHook(
 			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
 				return err
 			}
+
 			if err := writeBackupManifestCheckpoint(
-				ctx, jobID, backupDetails, &backupManifest, p.ExecCfg(), p.User(),
+				ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
 			); err != nil {
 				return err
 			}
@@ -1077,26 +986,114 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	return sj, args, nil
 }
 
+// writeBackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST
+// and CHECKSUM file. If it is a pure v22.1 cluster or later, it will write
+// a timestamped BACKUP-CHECKPOINT to the /progress directory.
+// If it is a mixed cluster version, it will write a non timestamped BACKUP-CHECKPOINT
+// to the base directory in order to not break backup jobs that resume
+// on a v21.2 node.
 func writeBackupManifestCheckpoint(
 	ctx context.Context,
-	jobID jobspb.JobID,
-	backupDetails jobspb.BackupDetails,
-	backupManifest *BackupManifest,
+	storageURI string,
+	encryption *jobspb.BackupEncryptionOptions,
+	desc *BackupManifest,
 	execCfg *sql.ExecutorConfig,
 	user security.SQLUsername,
 ) error {
-	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, backupDetails.URI, user)
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, storageURI, user)
 	if err != nil {
 		return err
 	}
 	defer defaultStore.Close()
 
-	if err := writeBackupManifest(
-		ctx, execCfg.Settings, defaultStore, tempCheckpointFileNameForJob(jobID),
-		backupDetails.EncryptionOptions, backupManifest,
-	); err != nil {
-		return errors.Wrapf(err, "writing checkpoint file")
+	sort.Sort(BackupFileDescriptors(desc.Files))
+
+	descBuf, err := protoutil.Marshal(desc)
+	if err != nil {
+		return err
 	}
+
+	descBuf, err = compressData(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "compressing backup manifest")
+	}
+
+	if encryption != nil {
+		encryptionKey, err := getEncryptionKey(ctx, encryption, execCfg.Settings, defaultStore.ExternalIOConf())
+		if err != nil {
+			return err
+		}
+		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	// If the cluster is still running on a mixed version, we want to write
+	// to the base directory instead of the progress directory. That way if
+	// an old node resumes a backup, it doesn't have to start over.
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
+		// We want to overwrite the latest checkpoint in the base directory,
+		// just write to the non versioned BACKUP-CHECKPOINT file.
+		err = cloud.WriteFile(ctx, defaultStore, backupManifestCheckpointName, bytes.NewReader(descBuf))
+		if err != nil {
+			return err
+		}
+
+		checksum, err := getChecksum(descBuf)
+		if err != nil {
+			return err
+		}
+
+		return cloud.WriteFile(ctx, defaultStore, backupManifestCheckpointName+backupManifestChecksumSuffix, bytes.NewReader(checksum))
+	}
+
+	// We timestamp the checkpoint files in order to enforce write once backups.
+	// When the job goes to read these timestamped files, it will List
+	// the checkpoints and pick the file whose name is lexicographically
+	// sorted to the top. This will be the last checkpoint we write, for
+	// details refer to newTimestampedCheckpointFileName.
+	filename := newTimestampedCheckpointFileName()
+
+	// HTTP storage does not support listing and so we cannot rely on the
+	// above-mentioned List method to return us the latest checkpoint file.
+	// Instead, we will write a checkpoint once with a well-known filename,
+	// and teach the job to always reach for that filename in the face of
+	// a resume. We may lose progress, but this is a cost we are willing
+	// to pay to uphold write-once semantics.
+	if defaultStore.Conf().Provider == roachpb.ExternalStorageProvider_http {
+		// TODO (darryl): We should do this only for file not found or directory
+		// does not exist errors. As of right now we only specifically wrap
+		// ReadFile errors for file not found so this is not possible yet.
+		if r, err := defaultStore.ReadFile(ctx, backupProgressDirectory+"/"+backupManifestCheckpointName); err != nil {
+			// Since we did not find the checkpoint file this is the first time
+			// we are going to write a checkpoint, so write it with the well
+			// known filename.
+			filename = backupManifestCheckpointName
+		} else {
+			err = r.Close(ctx)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	err = cloud.WriteFile(ctx, defaultStore, backupProgressDirectory+"/"+filename, bytes.NewReader(descBuf))
+	if err != nil {
+		return errors.Wrap(err, "calculating checksum")
+	}
+
+	// Write the checksum file after we've successfully wrote the checkpoint.
+	checksum, err := getChecksum(descBuf)
+	if err != nil {
+		return errors.Wrap(err, "calculating checksum")
+	}
+
+	err = cloud.WriteFile(ctx, defaultStore, backupProgressDirectory+"/"+filename+backupManifestChecksumSuffix, bytes.NewReader(checksum))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -1253,53 +1250,6 @@ func getReintroducedSpans(
 	return tableSpans, nil
 }
 
-func makeNewEncryptionOptions(
-	ctx context.Context, encryptionParams jobspb.BackupEncryptionOptions, kmsEnv cloud.KMSEnv,
-) (*jobspb.BackupEncryptionOptions, *jobspb.EncryptionInfo, error) {
-	var encryptionOptions *jobspb.BackupEncryptionOptions
-	var encryptionInfo *jobspb.EncryptionInfo
-	switch encryptionParams.Mode {
-	case jobspb.EncryptionMode_Passphrase:
-		salt, err := storageccl.GenerateSalt()
-		if err != nil {
-			return nil, nil, err
-		}
-
-		encryptionInfo = &jobspb.EncryptionInfo{Salt: salt}
-		encryptionOptions = &jobspb.BackupEncryptionOptions{
-			Mode: jobspb.EncryptionMode_Passphrase,
-			Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), salt),
-		}
-	case jobspb.EncryptionMode_KMS:
-		// Generate a 32 byte/256-bit crypto-random number which will serve as
-		// the data key for encrypting the BACKUP data and manifest files.
-		plaintextDataKey := make([]byte, 32)
-		_, err := cryptorand.Read(plaintextDataKey)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to generate DataKey")
-		}
-
-		encryptedDataKeyByKMSMasterKeyID, defaultKMSInfo, err :=
-			getEncryptedDataKeyByKMSMasterKeyID(ctx, encryptionParams.RawKmsUris, plaintextDataKey, kmsEnv)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		encryptedDataKeyMapForProto := make(map[string][]byte)
-		encryptedDataKeyByKMSMasterKeyID.rangeOverMap(
-			func(masterKeyID hashedMasterKeyID, dataKey []byte) {
-				encryptedDataKeyMapForProto[string(masterKeyID)] = dataKey
-			})
-
-		encryptionInfo = &jobspb.EncryptionInfo{EncryptedDataKeyByKMSMasterKeyID: encryptedDataKeyMapForProto}
-		encryptionOptions = &jobspb.BackupEncryptionOptions{
-			Mode:    jobspb.EncryptionMode_KMS,
-			KMSInfo: defaultKMSInfo,
-		}
-	}
-	return encryptionOptions, encryptionInfo, nil
-}
-
 func getProtectedTimestampTargetForBackup(backupManifest BackupManifest) *ptpb.Target {
 	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
 		return ptpb.MakeClusterTarget()
@@ -1368,74 +1318,6 @@ func protectTimestampForBackup(
 		}
 	}
 	return nil
-}
-
-func getEncryptedDataKeyFromURI(
-	ctx context.Context, plaintextDataKey []byte, kmsURI string, kmsEnv cloud.KMSEnv,
-) (string, []byte, error) {
-	kms, err := cloud.KMSFromURI(kmsURI, kmsEnv)
-	if err != nil {
-		return "", nil, err
-	}
-
-	defer func() {
-		_ = kms.Close()
-	}()
-
-	kmsURL, err := url.ParseRequestURI(kmsURI)
-	if err != nil {
-		return "", nil, errors.Wrap(err, "cannot parse KMSURI")
-	}
-	encryptedDataKey, err := kms.Encrypt(ctx, plaintextDataKey)
-	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to encrypt data key for KMS scheme %s",
-			kmsURL.Scheme)
-	}
-
-	masterKeyID, err := kms.MasterKeyID()
-	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to get master key ID for KMS scheme %s",
-			kmsURL.Scheme)
-	}
-
-	return masterKeyID, encryptedDataKey, nil
-}
-
-// getEncryptedDataKeyByKMSMasterKeyID constructs a mapping {MasterKeyID :
-// EncryptedDataKey} for each KMS URI provided during a full BACKUP. The
-// MasterKeyID is hashed before writing it to the map.
-//
-// The method also returns the KMSInfo to be used for all subsequent
-// encryption/decryption operations during this BACKUP. By default it is the
-// first KMS URI.
-func getEncryptedDataKeyByKMSMasterKeyID(
-	ctx context.Context, kmsURIs []string, plaintextDataKey []byte, kmsEnv cloud.KMSEnv,
-) (*encryptedDataKeyMap, *jobspb.BackupEncryptionOptions_KMSInfo, error) {
-	encryptedDataKeyByKMSMasterKeyID := newEncryptedDataKeyMap()
-	// The coordinator node contacts every KMS and records the encrypted data
-	// key for each one.
-	var kmsInfo *jobspb.BackupEncryptionOptions_KMSInfo
-	for _, kmsURI := range kmsURIs {
-		masterKeyID, encryptedDataKey, err := getEncryptedDataKeyFromURI(ctx,
-			plaintextDataKey, kmsURI, kmsEnv)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// By default we use the first KMS URI and encrypted data key for subsequent
-		// encryption/decryption operation during a BACKUP.
-		if kmsInfo == nil {
-			kmsInfo = &jobspb.BackupEncryptionOptions_KMSInfo{
-				Uri:              kmsURI,
-				EncryptedDataKey: encryptedDataKey,
-			}
-		}
-
-		encryptedDataKeyByKMSMasterKeyID.addEncryptedDataKey(plaintextMasterKeyID(masterKeyID),
-			encryptedDataKey)
-	}
-
-	return encryptedDataKeyByKMSMasterKeyID, kmsInfo, nil
 }
 
 // checkForNewDatabases returns an error if any new complete databases were
@@ -1524,36 +1406,10 @@ func getBackupDetailAndManifest(
 	user security.SQLUsername,
 ) (jobspb.BackupDetails, BackupManifest, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
-
-	mvccFilter := MVCCFilter_Latest
-	if initialDetails.RevisionHistory {
-		mvccFilter = MVCCFilter_All
-	}
-	endTime := initialDetails.EndTime
-	var targetDescs []catalog.Descriptor
-	var descriptorProtos []descpb.Descriptor
-	if initialDetails.FullCluster {
-		var err error
-		targetDescs, _, err = fullClusterTargetsBackup(ctx, execCfg, endTime)
-		if err != nil {
-			return jobspb.BackupDetails{}, BackupManifest{}, err
-		}
-		descriptorProtos = make([]descpb.Descriptor, len(targetDescs))
-		for i, desc := range targetDescs {
-			descriptorProtos[i] = *desc.DescriptorProto()
-		}
-	} else {
-		descriptorProtos = initialDetails.ResolvedTargets
-		targetDescs = make([]catalog.Descriptor, len(descriptorProtos))
-		for i := range descriptorProtos {
-			targetDescs[i] = descbuilder.NewBuilder(&descriptorProtos[i]).BuildExistingMutable()
-		}
-	}
-
 	// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
 	// backupDestination struct.
 	collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
-		resolveDest(ctx, user, initialDetails.Destination, endTime, initialDetails.IncrementalFrom, execCfg)
+		resolveDest(ctx, user, initialDetails.Destination, initialDetails.EndTime, initialDetails.IncrementalFrom, execCfg)
 	if err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
@@ -1575,6 +1431,7 @@ func getBackupDetailAndManifest(
 
 	prevBackups, encryptionOptions, memSize, err := fetchPreviousBackups(ctx, &mem, user,
 		makeCloudStorage, prevs, *initialDetails.EncryptionOptions, kmsEnv)
+
 	if err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
@@ -1588,15 +1445,123 @@ func getBackupDetailAndManifest(
 			!initialDetails.FullCluster {
 			return jobspb.BackupDetails{}, BackupManifest{}, errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
 		}
-	}
 
-	var startTime hlc.Timestamp
-	if len(prevBackups) > 0 {
 		if err := requireEnterprise(execCfg, "incremental"); err != nil {
 			return jobspb.BackupDetails{}, BackupManifest{}, err
 		}
-		startTime = prevBackups[len(prevBackups)-1].EndTime
 	}
+
+	for i := range prevBackups {
+		// IDs are how we identify tables, and those are only meaningful in the
+		// context of their own cluster, so we need to ensure we only allow
+		// incremental previous backups that we created.
+		if fromCluster := prevBackups[i].ClusterID; !fromCluster.Equal(execCfg.LogicalClusterID()) {
+			return jobspb.BackupDetails{}, BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
+		}
+	}
+
+	// updatedDetails and backupManifest should be treated as read-only after
+	// they're returned from their respective functions. Future changes to those
+	// objects should be made within those functions.
+	updatedDetails, err := updateBackupDetails(
+		ctx,
+		initialDetails,
+		collectionURI,
+		defaultURI,
+		resolvedSubdir,
+		urisByLocalityKV,
+		prevBackups,
+		encryptionOptions,
+		kmsEnv)
+	if err != nil {
+		return jobspb.BackupDetails{}, BackupManifest{}, err
+	}
+
+	backupManifest, err := createBackupManifest(
+		ctx,
+		execCfg,
+		txn,
+		updatedDetails,
+		prevBackups)
+	if err != nil {
+		return jobspb.BackupDetails{}, BackupManifest{}, err
+	}
+
+	return updatedDetails, backupManifest, nil
+}
+
+func getTenantInfo(
+	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, jobDetails jobspb.BackupDetails,
+) ([]roachpb.Span, []descpb.TenantInfoWithUsage, error) {
+	var spans []roachpb.Span
+	var tenants []descpb.TenantInfoWithUsage
+	var err error
+	if jobDetails.FullCluster && execCfg.Codec.ForSystemTenant() {
+		// Include all tenants.
+		tenants, err = retrieveAllTenantsMetadata(
+			ctx, execCfg.InternalExecutor, txn,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else if len(jobDetails.SpecificTenantIds) > 0 {
+		for _, id := range jobDetails.SpecificTenantIds {
+			tenantInfo, err := retrieveSingleTenantMetadata(
+				ctx, execCfg.InternalExecutor, txn, id,
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+			tenants = append(tenants, tenantInfo)
+		}
+	}
+	if len(tenants) > 0 && jobDetails.RevisionHistory {
+		return spans, tenants, errors.UnimplementedError(
+			errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/47896"},
+			"can not backup tenants with revision history",
+		)
+	}
+	for i := range tenants {
+		prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenants[i].ID))
+		spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+	}
+	return spans, tenants, nil
+}
+
+func createBackupManifest(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	jobDetails jobspb.BackupDetails,
+	prevBackups []BackupManifest,
+) (BackupManifest, error) {
+	mvccFilter := MVCCFilter_Latest
+	if jobDetails.RevisionHistory {
+		mvccFilter = MVCCFilter_All
+	}
+	endTime := jobDetails.EndTime
+	var targetDescs []catalog.Descriptor
+	var descriptorProtos []descpb.Descriptor
+	var err error
+	if jobDetails.FullCluster {
+		var err error
+		targetDescs, _, err = fullClusterTargetsBackup(ctx, execCfg, endTime)
+		if err != nil {
+			return BackupManifest{}, err
+		}
+		descriptorProtos = make([]descpb.Descriptor, len(targetDescs))
+		for i, desc := range targetDescs {
+			descriptorProtos[i] = *desc.DescriptorProto()
+		}
+	} else {
+		descriptorProtos = jobDetails.ResolvedTargets
+		targetDescs = make([]catalog.Descriptor, len(descriptorProtos))
+		for i := range descriptorProtos {
+			targetDescs[i] = descbuilder.NewBuilder(&descriptorProtos[i]).BuildExistingMutable()
+		}
+	}
+
+	startTime := jobDetails.StartTime
 
 	var tables []catalog.TableDescriptor
 	statsFiles := make(map[descpb.ID]string)
@@ -1610,69 +1575,33 @@ func getBackupDetailAndManifest(
 		}
 	}
 
-	clusterID := execCfg.ClusterID()
-	for i := range prevBackups {
-		// IDs are how we identify tables, and those are only meaningful in the
-		// context of their own cluster, so we need to ensure we only allow
-		// incremental previous backups that we created.
-		if fromCluster := prevBackups[i].ClusterID; !fromCluster.Equal(clusterID) {
-			return jobspb.BackupDetails{}, BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
-		}
-	}
-
 	var newSpans roachpb.Spans
-
 	var priorIDs map[descpb.ID]descpb.ID
 
 	var revs []BackupManifest_DescriptorRevision
 	if mvccFilter == MVCCFilter_All {
 		priorIDs = make(map[descpb.ID]descpb.ID)
 		revs, err = getRelevantDescChanges(ctx, execCfg, startTime, endTime, targetDescs,
-			initialDetails.ResolvedCompleteDbs, priorIDs, initialDetails.FullCluster)
+			jobDetails.ResolvedCompleteDbs, priorIDs, jobDetails.FullCluster)
 		if err != nil {
-			return jobspb.BackupDetails{}, BackupManifest{}, err
+			return BackupManifest{}, err
 		}
 	}
 
 	var spans []roachpb.Span
 	var tenants []descpb.TenantInfoWithUsage
-
-	if initialDetails.FullCluster && execCfg.Codec.ForSystemTenant() {
-		// Include all tenants.
-		tenants, err = retrieveAllTenantsMetadata(
-			ctx, execCfg.InternalExecutor, txn,
-		)
-		if err != nil {
-			return jobspb.BackupDetails{}, BackupManifest{}, err
-		}
-	} else if len(initialDetails.SpecificTenantIds) > 0 {
-		for _, id := range initialDetails.SpecificTenantIds {
-			tenantInfo, err := retrieveSingleTenantMetadata(
-				ctx, execCfg.InternalExecutor, txn, id,
-			)
-			if err != nil {
-				return jobspb.BackupDetails{}, BackupManifest{}, err
-			}
-			tenants = append(tenants, tenantInfo)
-		}
+	tenantSpans, tenantInfos, err := getTenantInfo(
+		ctx, execCfg, txn, jobDetails,
+	)
+	if err != nil {
+		return BackupManifest{}, err
 	}
-
-	if len(tenants) > 0 {
-		if initialDetails.RevisionHistory {
-			return jobspb.BackupDetails{}, BackupManifest{}, errors.UnimplementedError(
-				errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/47896"},
-				"can not backup tenants with revision history",
-			)
-		}
-		for i := range tenants {
-			prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenants[i].ID))
-			spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
-		}
-	}
+	spans = append(spans, tenantSpans...)
+	tenants = append(tenants, tenantInfos...)
 
 	tableSpans, err := spansForAllTableIndexes(execCfg, tables, revs)
 	if err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
+		return BackupManifest{}, err
 	}
 	spans = append(spans, tableSpans...)
 
@@ -1689,14 +1618,14 @@ func getBackupDetailAndManifest(
 			dbsInPrev[d] = struct{}{}
 		}
 
-		if !initialDetails.FullCluster {
+		if !jobDetails.FullCluster {
 			if err := checkForNewTables(ctx, execCfg.Codec, execCfg.DB, targetDescs, tablesInPrev, dbsInPrev, priorIDs, startTime, endTime); err != nil {
-				return jobspb.BackupDetails{}, BackupManifest{}, err
+				return BackupManifest{}, err
 			}
 			// Let's check that we're not widening the scope of this backup to an
 			// entire database, even if no tables were created in the meantime.
-			if err := checkForNewCompleteDatabases(targetDescs, initialDetails.ResolvedCompleteDbs, dbsInPrev); err != nil {
-				return jobspb.BackupDetails{}, BackupManifest{}, err
+			if err := checkForNewCompleteDatabases(targetDescs, jobDetails.ResolvedCompleteDbs, dbsInPrev); err != nil {
+				return BackupManifest{}, err
 			}
 		}
 
@@ -1704,7 +1633,7 @@ func getBackupDetailAndManifest(
 
 		tableSpans, err := getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
 		if err != nil {
-			return jobspb.BackupDetails{}, BackupManifest{}, err
+			return BackupManifest{}, err
 		}
 		newSpans = append(newSpans, tableSpans...)
 	}
@@ -1717,7 +1646,7 @@ func getBackupDetailAndManifest(
 	// of requiring full backups after schema changes remains.
 
 	coverage := tree.RequestedDescriptors
-	if initialDetails.FullCluster {
+	if jobDetails.FullCluster {
 		coverage = tree.AllDescriptors
 	}
 
@@ -1728,43 +1657,58 @@ func getBackupDetailAndManifest(
 		Descriptors:         descriptorProtos,
 		Tenants:             tenants,
 		DescriptorChanges:   revs,
-		CompleteDbs:         initialDetails.ResolvedCompleteDbs,
+		CompleteDbs:         jobDetails.ResolvedCompleteDbs,
 		Spans:               spans,
 		IntroducedSpans:     newSpans,
 		FormatVersion:       BackupFormatDescriptorTrackingVersion,
 		BuildInfo:           build.GetInfo(),
 		ClusterVersion:      execCfg.Settings.Version.ActiveVersion(ctx).Version,
-		ClusterID:           execCfg.ClusterID(),
+		ClusterID:           execCfg.LogicalClusterID(),
 		StatisticsFilenames: statsFiles,
 		DescriptorCoverage:  coverage,
 	}
+	if err := checkCoverage(ctx, backupManifest.Spans, append(prevBackups, backupManifest)); err != nil {
+		return BackupManifest{}, errors.Wrap(err, "new backup would not cover expected time")
+	}
+	return backupManifest, nil
+}
 
-	// Verify this backup on its prior chain cover its spans up to its end time,
-	// as restore would do if it tried to restore this backup.
-	if err := checkCoverage(ctx, spans, append(prevBackups, backupManifest)); err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, errors.Wrap(err, "new backup would not cover expected time")
+func updateBackupDetails(
+	ctx context.Context,
+	details jobspb.BackupDetails,
+	collectionURI string,
+	defaultURI string,
+	resolvedSubdir string,
+	urisByLocalityKV map[string]string,
+	prevBackups []BackupManifest,
+	encryptionOptions *jobspb.BackupEncryptionOptions,
+	kmsEnv *backupKMSEnv,
+) (jobspb.BackupDetails, error) {
+	var err error
+	var startTime hlc.Timestamp
+	if len(prevBackups) > 0 {
+		startTime = prevBackups[len(prevBackups)-1].EndTime
 	}
 
 	// If we didn't load any prior backups from which get encryption info, we
 	// need to generate encryption specific data.
 	var encryptionInfo *jobspb.EncryptionInfo
 	if encryptionOptions == nil {
-		encryptionOptions, encryptionInfo, err = makeNewEncryptionOptions(ctx, *initialDetails.EncryptionOptions, kmsEnv)
+		encryptionOptions, encryptionInfo, err = makeNewEncryptionOptions(ctx, *details.EncryptionOptions, kmsEnv)
 		if err != nil {
-			return jobspb.BackupDetails{}, BackupManifest{}, err
+			return jobspb.BackupDetails{}, err
 		}
 	}
 
-	return jobspb.BackupDetails{
-		Destination:       jobspb.BackupDetails_Destination{Subdir: resolvedSubdir},
-		StartTime:         startTime,
-		EndTime:           endTime,
-		URI:               defaultURI,
-		URIsByLocalityKV:  urisByLocalityKV,
-		EncryptionOptions: encryptionOptions,
-		EncryptionInfo:    encryptionInfo,
-		CollectionURI:     collectionURI,
-	}, backupManifest, nil
+	details.Destination = jobspb.BackupDetails_Destination{Subdir: resolvedSubdir}
+	details.StartTime = startTime
+	details.URI = defaultURI
+	details.URIsByLocalityKV = urisByLocalityKV
+	details.EncryptionOptions = encryptionOptions
+	details.EncryptionInfo = encryptionInfo
+	details.CollectionURI = collectionURI
+
+	return details, nil
 }
 
 func init() {

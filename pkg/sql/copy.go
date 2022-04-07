@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/csv"
 	"io"
 	"strconv"
 	"strings"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -55,11 +55,13 @@ type copyMachineInterface interface {
 // See: https://www.postgresql.org/docs/current/static/sql-copy.html
 // and: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
 type copyMachine struct {
-	table         tree.TableExpr
-	columns       tree.NameList
-	resultColumns colinfo.ResultColumns
-	format        tree.CopyFormat
-	delimiter     byte
+	table                    tree.TableExpr
+	columns                  tree.NameList
+	resultColumns            colinfo.ResultColumns
+	expectedHiddenColumnIdxs []int
+	format                   tree.CopyFormat
+	csvEscape                rune
+	delimiter                byte
 	// textDelim is delimiter converted to a []byte so that we don't have to do that per row.
 	textDelim   []byte
 	null        string
@@ -174,6 +176,24 @@ func newCopyMachine(
 			return nil, err
 		}
 	}
+	if n.Options.Escape != nil {
+		s := n.Options.Escape.RawString()
+		if len(s) != 1 {
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"ESCAPE must be a single rune",
+			)
+		}
+
+		if c.format != tree.CopyFormatCSV {
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"ESCAPE can only be specified for CSV",
+			)
+		}
+
+		c.csvEscape, _ = utf8.DecodeRuneInString(s)
+	}
 
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
 	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, &c.p, &n.Table, flags)
@@ -195,6 +215,16 @@ func newCopyMachine(
 			Typ:            col.GetType(),
 			TableID:        tableDesc.GetID(),
 			PGAttributeNum: col.GetPGAttributeNum(),
+		}
+	}
+	// If there are no column specifiers and we expect non-visible columns
+	// to have field data then we have to populate the expectedHiddenColumnIdxs
+	// field with the columns indexes we expect to be hidden.
+	if c.p.SessionData().ExpectAndIgnoreNotVisibleColumnsInCopy && len(n.Columns) == 0 {
+		for i, col := range tableDesc.PublicColumns() {
+			if col.IsHidden() {
+				c.expectedHiddenColumnIdxs = append(c.expectedHiddenColumnIdxs, i)
+			}
 		}
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
@@ -249,7 +279,10 @@ func (c *copyMachine) run(ctx context.Context) error {
 		c.csvReader = csv.NewReader(&c.csvInput)
 		c.csvReader.Comma = rune(c.delimiter)
 		c.csvReader.ReuseRecord = true
-		c.csvReader.FieldsPerRecord = len(c.resultColumns)
+		c.csvReader.FieldsPerRecord = len(c.resultColumns) + len(c.expectedHiddenColumnIdxs)
+		if c.csvEscape != 0 {
+			c.csvReader.Escape = c.csvEscape
+		}
 	}
 
 Loop:
@@ -452,11 +485,26 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 	return false, err
 }
 
-func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
-	if len(record) != len(c.resultColumns) {
-		return pgerror.Newf(pgcode.BadCopyFileFormat,
-			"expected %d values, got %d", len(c.resultColumns), len(record))
+func (c *copyMachine) maybeIgnoreHiddenColumnsStr(in []string) []string {
+	if len(c.expectedHiddenColumnIdxs) == 0 {
+		return in
 	}
+	ret := in[:0]
+	nextStartIdx := 0
+	for _, toIdx := range c.expectedHiddenColumnIdxs {
+		ret = append(ret, in[nextStartIdx:toIdx]...)
+		nextStartIdx = toIdx + 1
+	}
+	ret = append(ret, in[nextStartIdx:]...)
+	return ret
+}
+
+func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
+	if expected := len(c.resultColumns) + len(c.expectedHiddenColumnIdxs); expected != len(record) {
+		return pgerror.Newf(pgcode.BadCopyFileFormat,
+			"expected %d values, got %d", expected, len(record))
+	}
+	record = c.maybeIgnoreHiddenColumnsStr(record)
 	exprs := make(tree.Exprs, len(record))
 	for i, s := range record {
 		if s == c.null {
@@ -484,6 +532,12 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
 }
 
 func (c *copyMachine) readBinaryData(ctx context.Context, final bool) (brk bool, err error) {
+	if len(c.expectedHiddenColumnIdxs) > 0 {
+		return false, pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"expect_and_ignore_not_visible_columns_in_copy not supported in binary mode",
+		)
+	}
 	switch c.binaryState {
 	case binaryStateNeedSignature:
 		if readSoFar, err := c.readBinarySignature(); err != nil {
@@ -696,12 +750,27 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 	return nil
 }
 
+func (c *copyMachine) maybeIgnoreHiddenColumnsBytes(in [][]byte) [][]byte {
+	if len(c.expectedHiddenColumnIdxs) == 0 {
+		return in
+	}
+	ret := in[:0]
+	nextStartIdx := 0
+	for _, toIdx := range c.expectedHiddenColumnIdxs {
+		ret = append(ret, in[nextStartIdx:toIdx]...)
+		nextStartIdx = toIdx + 1
+	}
+	ret = append(ret, in[nextStartIdx:]...)
+	return ret
+}
+
 func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 	parts := bytes.Split(line, c.textDelim)
-	if len(parts) != len(c.resultColumns) {
+	if expected := len(c.resultColumns) + len(c.expectedHiddenColumnIdxs); expected != len(parts) {
 		return pgerror.Newf(pgcode.BadCopyFileFormat,
-			"expected %d values, got %d", len(c.resultColumns), len(parts))
+			"expected %d values, got %d", expected, len(parts))
 	}
+	parts = c.maybeIgnoreHiddenColumnsBytes(parts)
 	exprs := make(tree.Exprs, len(parts))
 	for i, part := range parts {
 		s := string(part)

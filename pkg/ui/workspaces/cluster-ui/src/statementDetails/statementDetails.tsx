@@ -186,7 +186,7 @@ function AppLink(props: { app: string }) {
 
   return (
     <Link
-      className={cx("app-name")}
+      className={cx("text-link")}
       to={`/sql-activity?tab=Statements&${searchParams.toString()}`}
     >
       {props.app}
@@ -197,7 +197,7 @@ function AppLink(props: { app: string }) {
 function NodeLink(props: { node: string }) {
   return (
     <Link
-      className={cx("app-name")}
+      className={cx("text-link")}
       to={`/node/${encodeURIComponent(props.node)}`}
     >
       N{props.node}
@@ -373,7 +373,7 @@ export class StatementDetails extends React.Component<
   };
 
   backToStatementsClick = (): void => {
-    this.props.history.push("/sql-activity?tab=Statements");
+    this.props.history.push("/sql-activity?tab=Statements&view=fingerprints");
     if (this.props.onBackToStatementsClick) {
       this.props.onBackToStatementsClick();
     }
@@ -750,6 +750,15 @@ export class StatementDetails extends React.Component<
             </Col>
           </Row>
         </TabPane>
+        <TabPane tab="Explain Plans" key="explain-plan">
+          <Row gutter={24}>
+            <Col className="gutter-row" span={24}>
+              <SqlBox value={formatted_query} size={SqlBoxSize.small} />
+            </Col>
+          </Row>
+          <p className={summaryCardStylesCx("summary--card__divider")} />
+          <PlanDetails plans={statement_statistics_per_plan_hash} />
+        </TabPane>
         {!isTenant && !hasViewActivityRedactedRole && (
           <TabPane
             tab={`Diagnostics ${
@@ -772,15 +781,6 @@ export class StatementDetails extends React.Component<
             />
           </TabPane>
         )}
-        <TabPane tab="Explain Plan" key="explain-plan">
-          <Row gutter={24}>
-            <Col className="gutter-row" span={24}>
-              <SqlBox value={formatted_query} size={SqlBoxSize.small} />
-            </Col>
-          </Row>
-          <p className={summaryCardStylesCx("summary--card__divider")} />
-          <PlanDetails plans={statement_statistics_per_plan_hash} />
-        </TabPane>
         <TabPane
           tab="Execution Stats"
           key="execution-stats"

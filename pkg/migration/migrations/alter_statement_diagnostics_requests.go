@@ -26,14 +26,14 @@ import (
 const (
 	addColsToStmtDiagReqs = `
 ALTER TABLE system.statement_diagnostics_requests
-  ADD COLUMN min_execution_latency INTERVAL NULL,
-  ADD COLUMN expires_at TIMESTAMPTZ NULL`
+  ADD COLUMN min_execution_latency INTERVAL NULL FAMILY "primary",
+  ADD COLUMN expires_at TIMESTAMPTZ NULL FAMILY "primary"`
 
 	createCompletedIdxV2 = `
 CREATE INDEX completed_idx_v2 ON system.statement_diagnostics_requests (completed, ID)
   STORING (statement_fingerprint, min_execution_latency, expires_at)`
 
-	dropCompletedIdx = `DROP INDEX IF EXISTS completed_idx`
+	dropCompletedIdx = `DROP INDEX IF EXISTS system.statement_diagnostics_requests@completed_idx`
 )
 
 // alterSystemStmtDiagReqs changes the schema of the

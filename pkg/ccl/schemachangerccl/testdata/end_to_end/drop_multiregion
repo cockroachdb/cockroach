@@ -68,7 +68,6 @@ upsert descriptor #108
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - ABSENT
   +    - DROPPED
   +    - ABSENT
   +    - ABSENT
@@ -116,7 +115,6 @@ upsert descriptor #108
   +    - 19
   +    - 20
   +    - 21
-  +    - 22
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -141,14 +139,6 @@ upsert descriptor #108
   +          descriptorId: 108
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 108
-  +          userName: public
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -367,7 +357,7 @@ upsert descriptor #108
   -  version: "1"
   +  version: "2"
 delete all comments for table descriptors [108]
-create job #1: "schema change job"
+create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [105 107 108]
 # end PreCommitPhase
 commit transaction #1
@@ -410,7 +400,6 @@ upsert descriptor #108
   -  declarativeSchemaChangerState:
   -    authorization: {}
   -    currentStatuses:
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -462,7 +451,6 @@ upsert descriptor #108
   -    - 19
   -    - 20
   -    - 21
-  -    - 22
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -487,14 +475,6 @@ upsert descriptor #108
   -          descriptorId: 108
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 108
-  -          userName: public
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -710,10 +690,9 @@ upsert descriptor #108
   -  version: "2"
   +  version: "3"
 write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
-create job #2: "GC for dropping descriptor 108"
+create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [108]
 update progress of schema change job #1
-set schema change job #1 to non-cancellable
 commit transaction #3
 # end PostCommitPhase
 
@@ -765,7 +744,6 @@ upsert descriptor #109
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
-  +    - ABSENT
   +    - DROPPED
   +    - ABSENT
   +    - ABSENT
@@ -803,7 +781,6 @@ upsert descriptor #109
   +    - 13
   +    - 14
   +    - 15
-  +    - 16
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -828,14 +805,6 @@ upsert descriptor #109
   +          descriptorId: 109
   +          privileges: 2
   +          userName: admin
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 109
-  +          userName: public
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -972,7 +941,7 @@ upsert descriptor #109
   -  version: "1"
   +  version: "2"
 delete all comments for table descriptors [109]
-create job #1: "schema change job"
+create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
   descriptor IDs: [105 109]
 # end PreCommitPhase
 commit transaction #1
@@ -1001,7 +970,6 @@ upsert descriptor #109
   -  declarativeSchemaChangerState:
   -    authorization: {}
   -    currentStatuses:
-  -    - ABSENT
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
@@ -1043,7 +1011,6 @@ upsert descriptor #109
   -    - 13
   -    - 14
   -    - 15
-  -    - 16
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -1068,14 +1035,6 @@ upsert descriptor #109
   -          descriptorId: 109
   -          privileges: 2
   -          userName: admin
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 109
-  -          userName: public
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -1209,10 +1168,9 @@ upsert descriptor #109
   -  version: "2"
   +  version: "3"
 write *eventpb.DropTable to event log for descriptor #109: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
-create job #2: "GC for dropping descriptor 109"
+create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
   descriptor IDs: [109]
 update progress of schema change job #1
-set schema change job #1 to non-cancellable
 commit transaction #3
 # end PostCommitPhase
 
@@ -1660,7 +1618,7 @@ upsert descriptor #107
 delete comment for descriptor #104 of type DatabaseCommentType
 delete comment for descriptor #106 of type SchemaCommentType
 delete role settings for database on #104
-create job #1: "schema change job"
+create job #1 (non-cancelable: true): "DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [104 105 106 107]
 # end PreCommitPhase
 commit transaction #1
@@ -1676,6 +1634,5 @@ delete descriptor #107
 deleting zone config for #104
 write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹multi_region_test_db› CASCADE
 update progress of schema change job #1
-set schema change job #1 to non-cancellable
 commit transaction #3
 # end PostCommitPhase

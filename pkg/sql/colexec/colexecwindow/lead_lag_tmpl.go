@@ -209,6 +209,9 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 				continue
 			}
 			// {{end}}
+			// {{if .IsBytesLike}}
+			leadLagCol.Copy(defaultCol, i, i)
+			// {{else}}
 			// {{if .Sliceable}}
 			//gcassert:bce
 			// {{end}}
@@ -217,6 +220,7 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 			//gcassert:bce
 			// {{end}}
 			leadLagCol.Set(i, val)
+			// {{end}}
 			continue
 		}
 		vec, idx, _ := w.buffer.GetVecWithTuple(w.Ctx, 0 /* colIdx */, requestedIdx)
@@ -225,11 +229,15 @@ func _PROCESS_BATCH(_OFFSET_HAS_NULLS bool, _DEFAULT_HAS_NULLS bool) { // */}}
 			continue
 		}
 		col := vec.TemplateType()
+		// {{if .IsBytesLike}}
+		leadLagCol.Copy(col, i, idx)
+		// {{else}}
 		val := col.Get(idx)
 		// {{if .Sliceable}}
 		//gcassert:bce
 		// {{end}}
 		leadLagCol.Set(i, val)
+		// {{end}}
 	}
 	// {{end}}
 	// {{/*

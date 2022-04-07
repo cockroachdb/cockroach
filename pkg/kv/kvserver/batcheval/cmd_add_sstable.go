@@ -13,11 +13,13 @@ package batcheval
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -36,7 +38,19 @@ func init() {
 	// could instead iterate over the SST and take out point latches/locks, but
 	// the cost is likely not worth it since AddSSTable is often used with
 	// unpopulated spans.
-	RegisterReadWriteCommand(roachpb.AddSSTable, DefaultDeclareIsolatedKeys, EvalAddSSTable)
+	RegisterReadWriteCommand(roachpb.AddSSTable, declareKeysAddSSTable, EvalAddSSTable)
+}
+
+func declareKeysAddSSTable(
+	rs ImmutableRangeState,
+	header *roachpb.Header,
+	req roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
+	maxOffset time.Duration,
+) {
+	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	// We look up the range descriptor key to return its span.
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 }
 
 // AddSSTableRewriteConcurrency sets the concurrency of a single SST rewrite.
@@ -58,12 +72,21 @@ var AddSSTableRequireAtRequestTimestamp = settings.RegisterBoolSetting(
 	false,
 )
 
+// addSSTableCapacityRemainingLimit is the fraction of remaining store capacity
+// under which addsstable requests are rejected.
+var addSSTableCapacityRemainingLimit = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.bulk_io_write.min_capacity_remaining_fraction",
+	"remaining store capacity fraction below which an addsstable request is rejected",
+	0.05,
+)
+
 var forceRewrite = util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)
 
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
 // on AddSSTableRequest.
 func EvalAddSSTable(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header
@@ -77,6 +100,22 @@ func EvalAddSSTable(
 	ctx, span = tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", start.Key, end.Key))
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
+
+	if min := addSSTableCapacityRemainingLimit.Get(&cArgs.EvalCtx.ClusterSettings().SV); min > 0 {
+		cap, err := cArgs.EvalCtx.GetEngineCapacity()
+		if err != nil {
+			return result.Result{}, err
+		}
+		if remaining := float64(cap.Available) / float64(cap.Capacity); remaining < min {
+			return result.Result{}, &roachpb.InsufficientSpaceError{
+				StoreID:   cArgs.EvalCtx.StoreID(),
+				Op:        "ingest data",
+				Available: cap.Available,
+				Capacity:  cap.Capacity,
+				Required:  min,
+			}
+		}
+	}
 
 	// Reject AddSSTable requests not writing at the request timestamp if requested.
 	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.MVCCAddSSTable) &&
@@ -247,6 +286,32 @@ func EvalAddSSTable(
 	if sstToReqTS.IsEmpty() {
 		mvccHistoryMutation = &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
 			Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
+		}
+	}
+
+	reply := resp.(*roachpb.AddSSTableResponse)
+	reply.RangeSpan = cArgs.EvalCtx.Desc().KeySpan().AsRawSpanWithNoLocals()
+	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes() - cArgs.EvalCtx.GetMVCCStats().Total() - stats.Total()
+
+	// If requested, locate and return the start of the span following the file
+	// span which may be non-empty, that is, the first key after the file's end
+	// at which there may be existing data in the range. "May" is operative here:
+	// it allows us to avoid consistency/isolation promises and thus avoid needing
+	// to latch the entire remainder of the range and/or look through intents in
+	// addition, and instead just use this key-only iterator. If a caller actually
+	// needs to know what data is there, it must issue its own real Scan.
+	if args.ReturnFollowingLikelyNonEmptySpanStart {
+		existingIter := spanset.DisableReaderAssertions(readWriter).NewMVCCIterator(
+			storage.MVCCKeyIterKind, // don't care if it is committed or not, just that it isn't empty.
+			storage.IterOptions{UpperBound: reply.RangeSpan.EndKey},
+		)
+		defer existingIter.Close()
+		existingIter.SeekGE(end)
+		ok, err = existingIter.Valid()
+		if err != nil {
+			return result.Result{}, errors.Wrap(err, "error while searching for non-empty span start")
+		} else if ok {
+			reply.FollowingLikelyNonEmptySpanStart = existingIter.Key().Key
 		}
 	}
 

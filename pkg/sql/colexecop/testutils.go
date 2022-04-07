@@ -108,8 +108,9 @@ func (s *RepeatableBatchSource) Next() coldata.Batch {
 	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
 		return coldata.ZeroBatch
 	}
-	s.output.SetSelection(s.sel != nil)
+	s.output.ResetInternalBatch()
 	if s.sel != nil {
+		s.output.SetSelection(true)
 		copy(s.output.Selection()[:s.batchLen], s.sel[:s.batchLen])
 	}
 	for i, colVec := range s.colVecs {

@@ -31,6 +31,13 @@ type CurrentState struct {
 	// flipped already.
 	//
 	InRollback bool
+
+	// Revertible captures whether the schema change, in the current state
+	// can be reverted (i.e. enter rollback). In general, InRollback implies
+	// that Revertible is false. Note that the value here maps to the
+	// NonCancelable property of the job; if a schema change is no longer
+	// Revertible, the job must be NonCancelable.
+	Revertible bool
 }
 
 // DeepCopy returns a deep copy of the receiver.
@@ -38,6 +45,8 @@ func (s CurrentState) DeepCopy() CurrentState {
 	return CurrentState{
 		TargetState: *protoutil.Clone(&s.TargetState).(*TargetState),
 		Current:     append(make([]Status, 0, len(s.Current)), s.Current...),
+		InRollback:  s.InRollback,
+		Revertible:  s.Revertible,
 	}
 }
 
@@ -115,14 +124,20 @@ func (m *DescriptorState) Clone() *DescriptorState {
 func MakeCurrentStateFromDescriptors(descriptorStates []*DescriptorState) (CurrentState, error) {
 	var s CurrentState
 	var targetRanks []uint32
-	var rollback bool
+	var rollback, revertible bool
 	stmts := make(map[uint32]Statement)
 	for i, cs := range descriptorStates {
 		if i == 0 {
 			rollback = cs.InRollback
+			revertible = cs.Revertible
 		} else if rollback != cs.InRollback {
 			return CurrentState{}, errors.AssertionFailedf(
 				"job %d: conflicting rollback statuses between descriptors",
+				cs.JobID,
+			)
+		} else if revertible != cs.Revertible {
+			return CurrentState{}, errors.AssertionFailedf(
+				"job %d: conflicting revertability statuses between descriptors",
 				cs.JobID,
 			)
 		}
@@ -154,6 +169,7 @@ func MakeCurrentStateFromDescriptors(descriptorStates []*DescriptorState) (Curre
 	sort.Sort(&sr)
 	s.Statements = sr.stmts
 	s.InRollback = rollback
+	s.Revertible = revertible
 	return s, nil
 }
 

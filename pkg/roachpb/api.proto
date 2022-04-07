@@ -1572,6 +1572,10 @@ message ExportResponse {
 message AdminScatterRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool randomize_leases = 2;
+
+  // max_size, if > 0, specifies a range's size above with it should reject
+  // this scatter request, allowing a "scatter-if-not-full" conditional request.
+  int64 max_size = 3;
 }
 
 // ScatterResponse is the response to a Scatter() operation.
@@ -1758,11 +1762,38 @@ message AddSSTableRequest {
   // the usual write pipeline (on-disk raft log, WAL, etc).
   // TODO(dt): https://github.com/cockroachdb/cockroach/issues/34579#issuecomment-544627193
   bool ingest_as_writes = 5;
+
+  // ReturnFollowingLikelyNonEmptySpanStart controls whether the request should
+  // also find and return the key at which the span after the added file span
+  // is likely non-empty. See AddSSTableResponse.FollowingLikelyNonEmptySpanStart.
+  bool return_following_likely_non_empty_span_start = 9;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
 message AddSSTableResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // RangeSpan is the span of the range which just added this sstable. It is 
+  // included in the reply along with AvailableBytes so that callers can tell if
+  // a file they are about to send would be sent to the same range as a file
+  // sent previously (i.e. if it intersects with this span as sent then), and if
+  // so, if its size would fit within the size remaining in this range.
+  Span range_span = 2 [(gogoproto.nullable) = false];
+
+  // AvailableBytes indicates how many bytes remain before the range into which
+  // this request added will be considered "full". This is for use by callers to
+  // check if they should keep sending additional SSTs to this range or if they
+  // should split first. Such callers can use RangeSpan to see if the file they
+  // would be sending would also add to this range.
+  int64 available_bytes = 3;
+
+  // FollowingLikelyNonEmptySpanStart if requested contains a key that is likely
+  // to be the first key greater than the end of the added file at which there
+  // is existing data in the range. It is not guarenteed however that there is
+  // not data before that key, or that that key actually exists; it may be
+  // picked using cheaper, inconsistentent reads so it should be used only for
+  // estimations of how ingested data and spans may overlap.
+  bytes following_likely_non_empty_span_start = 4 [(gogoproto.casttype) = "Key"];
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no
@@ -2776,6 +2807,7 @@ message TenantSetting {
 // tenant, which directly factors into their bill.
 message TenantConsumption {
   double r_u = 1;
+  double kv_r_u = 8 [(gogoproto.customname) = "KVRU"];
   uint64 read_requests = 2;
   uint64 read_bytes = 3;
   uint64 write_requests = 4;
@@ -2901,6 +2933,10 @@ service Internal {
   // GetSpanConfigs is used to fetch the span configurations over a given
   // keyspan.
   rpc GetSpanConfigs (GetSpanConfigsRequest) returns (GetSpanConfigsResponse) { }
+
+  // GetAllSystemSpanConfigsThatApply is used to fetch all system span
+  // configurations that apply over a tenant's ranges.
+  rpc GetAllSystemSpanConfigsThatApply (GetAllSystemSpanConfigsThatApplyRequest) returns (GetAllSystemSpanConfigsThatApplyResponse) {}
 
   // UpdateSpanConfigs is used to update the span configurations over given
   // keyspans.

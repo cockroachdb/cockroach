@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "colflow",
@@ -50,6 +51,7 @@ go_library(
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_marusama_semaphore//:semaphore",
         "@io_opentelemetry_go_otel//attribute",
     ],
@@ -60,7 +62,7 @@ go_test(
     size = "medium",
     srcs = [
         "colbatch_scan_test.go",
-        "dep_test.go",
+        "draining_test.go",
         "main_test.go",
         "routers_test.go",
         "stats_test.go",
@@ -108,7 +110,6 @@ go_test(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",
-        "//pkg/testutils/buildutil",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/distsqlutils",
         "//pkg/testutils/serverutils",
@@ -129,5 +130,13 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    "colflow",
+    [
+        "//pkg/sql/distsql",
+        "//pkg/sql/rowflow",
     ],
 )

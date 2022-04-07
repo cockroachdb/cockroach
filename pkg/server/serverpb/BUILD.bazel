@@ -9,6 +9,7 @@ proto_library(
     srcs = [
         "admin.proto",
         "authentication.proto",
+        "index_recommendations.proto",
         "init.proto",
         "migration.proto",
         "status.proto",

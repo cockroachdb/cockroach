@@ -181,7 +181,7 @@ message PartitioningDescriptor {
   // This occurs if a user specifies a PARTITION BY which is not a prefix of the given index,
   // in which case the ColumnIDs are added in front of the index and this field denotes
   // the number of columns added as a prefix.
-  // If NumImplicitColumns is 0, there are no implicit columns defined for the index."
+  // If NumImplicitColumns is 0, there are no implicit columns defined for the index.
   optional uint32 num_implicit_columns = 4 [(gogoproto.nullable)=false];
 
   // Exactly one of List or Range is required to be non-empty if NumColumns is
@@ -216,4 +216,19 @@ message RowLevelTTL {
   // LabelMetrics is true if metrics for the TTL job should add a label containing
   // the relation name.
   optional bool label_metrics = 10 [(gogoproto.nullable) = false];
+}
+
+// AutoStatsSettings represents settings related to automatic statistics
+// collection specified at the table level, as indicated in the `WITH` clause
+// output of `SHOW CREATE TABLE`.
+// Each setting is nullable so queries of the descriptor in JSON form
+// only list values which have been set. Protobuf type double is float64 in Go.
+message AutoStatsSettings {
+  option (gogoproto.equal) = true;
+  // sql.stats.automatic_collection.enabled
+  optional bool enabled = 1;
+  // sql.stats.automatic_collection.min_stale_rows
+  optional int64 min_stale_rows = 2;
+  // sql.stats.automatic_collection.fraction_stale_rows
+  optional double fraction_stale_rows = 3;
 }

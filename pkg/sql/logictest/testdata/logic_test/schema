@@ -710,32 +710,6 @@ SELECT * FROM testuser.test_table
 ----
 a
 
-# Ensure that when we create a schema, it inherits privileges from its parent
-# database, but only those which are valid for schemas.
-subtest create_schema_inherits_db_privileges
-
-user root
-
-statement ok
-CREATE DATABASE d54662;
-GRANT CREATE ON DATABASE d54662 TO testuser;
-USE d54662;
-CREATE SCHEMA s
-
-query T
-SELECT privilege_type FROM [SHOW GRANTS ON schema s FOR testuser]
-----
-CREATE
-
-statement ok
-GRANT USAGE ON SCHEMA s TO testuser
-
-query T rowsort
-SELECT privilege_type FROM [SHOW GRANTS ON schema s FOR testuser]
-----
-CREATE
-USAGE
-
 # Verify that a table can be renamed with a schema prefixes
 subtest alter_table_rename
 
@@ -754,13 +728,13 @@ ALTER TABLE sch.table_to_rename RENAME TO renamed_table;
 statement ok
 ALTER TABLE sch.renamed_table RENAME TO sch.renamed_table_2;
 
-statement error pq: relation "d54662.sch.table_exists" already exists
+statement error pq: relation "new_db.sch.table_exists" already exists
 ALTER TABLE sch.renamed_table_2 RENAME TO sch.table_exists;
 
 statement ok
 ALTER TABLE public_table_to_rename RENAME TO public.renamed_public_table;
 
-statement error pq: relation "d54662.public.public_table_exists" already exists
+statement error pq: relation "new_db.public.public_table_exists" already exists
 ALTER TABLE renamed_public_table RENAME TO public_table_exists;
 
 subtest show_tables
@@ -854,10 +828,18 @@ statement ok
 CREATE DATABASE comment_db
 
 statement ok
-USE comment_db
+CREATE SCHEMA comment_db.foo
 
 statement ok
-CREATE SCHEMA foo
+COMMENT ON SCHEMA comment_db.foo IS 'foo'
+
+query T
+SELECT comment FROM system.comments LIMIT 1
+----
+foo
+
+statement ok
+USE comment_db
 
 statement ok
 COMMENT ON SCHEMA foo IS 'bar'

@@ -87,12 +87,14 @@ type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
 type CreateGcJobForTable struct {
 	mutationOp
 	TableID descpb.ID
+	StatementForDropJob
 }
 
 // CreateGcJobForDatabase creates a GC job for a given database.
 type CreateGcJobForDatabase struct {
 	mutationOp
 	DatabaseID descpb.ID
+	StatementForDropJob
 }
 
 // CreateGcJobForIndex creates a GC job for a given table index.
@@ -100,6 +102,7 @@ type CreateGcJobForIndex struct {
 	mutationOp
 	TableID descpb.ID
 	IndexID descpb.IndexID
+	StatementForDropJob
 }
 
 // MarkDescriptorAsDroppedSynthetically marks a descriptor as dropped within
@@ -403,6 +406,10 @@ type CreateSchemaChangerJob struct {
 	Authorization scpb.Authorization
 	Statements    []scpb.Statement
 	DescriptorIDs []descpb.ID
+
+	// NonCancelable maps to the job's property, but in the schema changer can
+	// be thought of as !Revertible.
+	NonCancelable bool
 }
 
 // RemoveAllTableComments is used to delete all comments associated with a

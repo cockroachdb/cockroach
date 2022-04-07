@@ -43,6 +43,18 @@ func (e *EnumSetting) String(sv *Values) string {
 	return fmt.Sprintf("unknown(%d)", enumID)
 }
 
+// DecodeToString decodes and renders an encoded value.
+func (e *EnumSetting) DecodeToString(encoded string) (string, error) {
+	v, err := e.DecodeValue(encoded)
+	if err != nil {
+		return "", err
+	}
+	if str, ok := e.enumValues[v]; ok {
+		return str, nil
+	}
+	return encoded, nil
+}
+
 // ParseEnum returns the enum value, and a boolean that indicates if it was parseable.
 func (e *EnumSetting) ParseEnum(raw string) (int64, bool) {
 	rawLower := strings.ToLower(raw)

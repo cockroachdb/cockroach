@@ -1304,7 +1304,7 @@ func (cf *cFetcher) finalizeBatch() {
 			// Note that we don't need to update the memory accounting because
 			// oids are fixed length values and have already been accounted for
 			// when finalizing each row.
-			cf.machine.tableoidCol.Set(i, cf.table.da.NewDOid(tree.MakeDOid(tree.DInt(id))))
+			cf.machine.tableoidCol.Set(i, cf.table.da.NewDOid(tree.MakeDOid(tree.DInt(id), types.Oid)))
 		}
 	}
 	cf.machine.batch.SetLength(cf.machine.rowIdx)
