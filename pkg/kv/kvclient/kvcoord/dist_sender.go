@@ -2056,6 +2056,8 @@ func (ds *DistSender) sendToReplicas(
 			// doesn't have info. Like above, this asks the server to return an
 			// update.
 			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(),
+
+			ExplicitlyRequested: ba.ClientRangeInfo.ExplicitlyRequested,
 		}
 		br, err = transport.SendNext(ctx, ba)
 		ds.maybeIncrementErrCounters(br, err)
@@ -2152,9 +2154,11 @@ func (ds *DistSender) sendToReplicas(
 				if len(br.RangeInfos) > 0 {
 					log.VEventf(ctx, 2, "received updated range info: %s", br.RangeInfos)
 					routing.EvictAndReplace(ctx, br.RangeInfos...)
-					// The field is cleared by the DistSender because it refers
-					// routing information not exposed by the KV API.
-					br.RangeInfos = nil
+					if !ba.Header.ClientRangeInfo.ExplicitlyRequested {
+						// The field is cleared by the DistSender because it refers
+						// routing information not exposed by the KV API.
+						br.RangeInfos = nil
+					}
 				}
 				return br, nil
 			}

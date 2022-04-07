@@ -301,7 +301,8 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 	// than the replica in case this is a follower.
 	cri := &ba.ClientRangeInfo
 	ri := r.GetRangeInfo(ctx)
-	needInfo := (cri.DescriptorGeneration < ri.Desc.Generation) ||
+	needInfo := cri.ExplicitlyRequested ||
+		(cri.DescriptorGeneration < ri.Desc.Generation) ||
 		(cri.LeaseSequence < ri.Lease.Sequence) ||
 		(cri.ClosedTimestampPolicy != ri.ClosedTimestampPolicy)
 	if !needInfo {

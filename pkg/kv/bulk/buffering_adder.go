@@ -96,6 +96,7 @@ func MakeBulkAdder(
 			disallowShadowingBelow: opts.DisallowShadowingBelow,
 			batchTS:                opts.BatchTimestamp,
 			writeAtBatchTS:         opts.WriteAtBatchTimestamp,
+			stats:                  ingestionPerformanceStats{sendWaitByStore: make(map[roachpb.StoreID]time.Duration)},
 		},
 		timestamp:      timestamp,
 		maxBufferLimit: opts.MaxBufferSize,
@@ -132,6 +133,9 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 	if log.V(1) {
 		if b.sink.stats.bufferFlushes > 0 {
 			b.sink.stats.LogTimings(ctx, b.name, "closing")
+			if log.V(3) {
+				b.sink.stats.LogPerStoreTimings(ctx, b.name)
+			}
 			b.sink.stats.LogFlushes(ctx, b.name, "closing", sz(b.memAcc.Used()))
 		} else {
 			log.Infof(ctx, "%s adder closing; ingested nothing", b.name)
@@ -294,6 +298,9 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 
 	if log.V(2) {
 		b.sink.stats.LogTimings(ctx, b.name, "flushed")
+		if log.V(3) {
+			b.sink.stats.LogPerStoreTimings(ctx, b.name)
+		}
 	}
 
 	if log.V(3) {

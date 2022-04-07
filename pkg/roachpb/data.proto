@@ -751,6 +751,9 @@ message ClientRangeInfo {
   int64 descriptor_generation = 1 [(gogoproto.casttype) = "RangeGeneration"];
   int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
+  // ExplicitlyRequested causes range info to be returned even if other fields
+  // are up-to-date.
+  bool explicitly_requested = 4;
 }
 
 // RangeInfo describes a range which executed a request. It contains the range
