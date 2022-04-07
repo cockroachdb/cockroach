@@ -449,8 +449,7 @@ func (r *Replica) GetSnapshot(
 	r.raftMu.Unlock()
 
 	release := func() {
-		now := timeutil.Now()
-		r.completeSnapshotLogTruncationConstraint(ctx, snapUUID, now)
+		r.completeSnapshotLogTruncationConstraint(snapUUID)
 	}
 
 	defer func() {
