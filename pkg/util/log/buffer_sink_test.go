@@ -192,6 +192,35 @@ func TestBufferForceSync(t *testing.T) {
 	atomic.StoreInt32(&marker, 1)
 }
 
+func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancel := context.WithCancel(context.Background())
+	ctrl := gomock.NewController(t)
+	mock := NewMockLogSink(ctrl)
+	sink := newBufferSink(ctx, mock, 0 /*maxStaleness*/, 0 /*sizeTrigger*/, 2 /* maxInFlight */, nil /*errCallback*/)
+	defer ctrl.Finish()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	defer wg.Wait()
+
+	// With no sizeTrigger, all 3 of the buffered calls to `sink.output()` after
+	// this will be concatenated and flushed as a single string to the underlying
+	// mock sink. This single call to `mock.output()` occurs when we signal on the
+	// `ctx.Done()` channel with the `cancel()` function.
+	//
+	// Expect this call, and signal the wait group once it happens. We use the
+	// wait group because flushing to the mock sink happens asynchronously.
+	mock.EXPECT().
+		output(gomock.Eq([]byte("test1\ntest2\ntest3")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
+		Do(addArgs(wg.Done))
+
+	require.NoError(t, sink.output([]byte("test1"), sinkOutputOptions{}))
+	require.NoError(t, sink.output([]byte("test2"), sinkOutputOptions{}))
+	require.NoError(t, sink.output([]byte("test3"), sinkOutputOptions{}))
+	cancel()
+}
+
 type sinkOutputOptionsMatcher struct {
 	extraFlush   gomock.Matcher
 	ignoreErrors gomock.Matcher

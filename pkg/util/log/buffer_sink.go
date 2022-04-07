@@ -133,18 +133,19 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 		case <-timer:
 			flush = true
 		case <-ctx.Done():
-			// Do one last non-blocking read on messageCh, so messages don't get dropped.
-			//
-			// TODO(knz): this seems incomplete: there may be multiple
-			// goroutines writing to messageCh concurrently, and so multiple
-			// messages might be queued when Done() signals termination.
-			// See: https://github.com/cockroachdb/cockroach/issues/72455
-			select {
-			case m := <-bs.messageCh:
-				appendMessage(m)
-			default:
+			// Finally, drain all remaining messages on messageCh, so messages don't
+			// get dropped.
+			for {
+				select {
+				case m := <-bs.messageCh:
+					appendMessage(m)
+				default:
+					b.done = true
+				}
+				if b.done {
+					break
+				}
 			}
-			b.done = true
 			flush = true
 		case m := <-bs.messageCh:
 			appendMessage(m)
