@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "scrun",
@@ -14,6 +14,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scop",
@@ -22,5 +23,22 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "scrun_test",
+    size = "small",
+    srcs = ["make_state_test.go"],
+    embed = [":scrun"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
     ],
 )

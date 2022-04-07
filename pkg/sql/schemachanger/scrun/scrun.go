@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -89,7 +90,15 @@ func RunSchemaChangesInJob(
 	descriptorIDs []descpb.ID,
 	rollback bool,
 ) error {
-	state, err := makeState(ctx, deps, descriptorIDs, rollback)
+	state, err := makeState(ctx, jobID, descriptorIDs, rollback, func(
+		ctx context.Context, f withCatalogFunc,
+	) error {
+		return deps.WithTxnInJob(ctx, func(
+			ctx context.Context, txnDeps scexec.Dependencies,
+		) error {
+			return f(ctx, txnDeps.Catalog())
+		})
+	})
 	if err != nil {
 		return errors.Wrapf(err, "failed to construct state for job %d", jobID)
 	}
@@ -170,14 +179,27 @@ func executeStage(
 	return nil
 }
 
+type (
+	withCatalogFunc = func(context.Context, scexec.Catalog) error
+	catalogTxnFunc  = func(context.Context, withCatalogFunc) error
+)
+
 func makeState(
-	ctx context.Context, deps JobRunDependencies, descriptorIDs []descpb.ID, rollback bool,
+	ctx context.Context,
+	jobID jobspb.JobID,
+	descriptorIDs []descpb.ID,
+	rollback bool,
+	catalogTxn catalogTxnFunc,
 ) (scpb.CurrentState, error) {
+	descError := func(desc catalog.Descriptor, err error) error {
+		return errors.Wrapf(err, "descriptor %q (%d)", desc.GetName(), desc.GetID())
+	}
 	var descriptorStates []*scpb.DescriptorState
-	if err := deps.WithTxnInJob(ctx, func(ctx context.Context, txnDeps scexec.Dependencies) error {
+	var authorization scpb.Authorization
+	if err := catalogTxn(ctx, func(ctx context.Context, cat scexec.Catalog) error {
 		descriptorStates = nil
 		// Reset for restarts.
-		descs, err := txnDeps.Catalog().MustReadImmutableDescriptors(ctx, descriptorIDs...)
+		descs, err := cat.MustReadImmutableDescriptors(ctx, descriptorIDs...)
 		if err != nil {
 			// TODO(ajwerner): It seems possible that a descriptor could be deleted
 			// and the schema change is in a happy place. Ideally we'd enforce that
@@ -186,13 +208,29 @@ func makeState(
 			return err
 		}
 		for _, desc := range descs {
-			// TODO(ajwerner): Verify that the job ID matches on all of the
-			// descriptors. Also verify that the Authorization matches.
 			cs := desc.GetDeclarativeSchemaChangerState()
 			if cs == nil {
-				return errors.Errorf(
-					"descriptor %q (%d) does not contain schema changer state", desc.GetName(), desc.GetID(),
-				)
+				return descError(desc, errors.New("missing schema changer state"))
+			}
+			switch {
+			case cs.JobID == jobspb.InvalidJobID:
+				return descError(desc, errors.New("missing job ID in schema changer state"))
+			case jobID != cs.JobID:
+				return descError(desc, errors.Errorf(
+					"job ID mismatch: expected %d, got %d",
+					jobID, cs.JobID,
+				))
+			}
+			switch {
+			case cs.Authorization == (scpb.Authorization{}):
+				return descError(desc, errors.New("missing authorization in schema changer state"))
+			case authorization == (scpb.Authorization{}):
+				authorization = cs.Authorization
+			case authorization != cs.Authorization:
+				return descError(desc, errors.Errorf(
+					"authorization mismatch: expected %v, got %v",
+					authorization, cs.Authorization,
+				))
 			}
 			descriptorStates = append(descriptorStates, cs)
 		}
