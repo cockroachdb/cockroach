@@ -12,6 +12,9 @@ package bulk
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -41,6 +44,8 @@ type ingestionPerformanceStats struct {
 	splitWait   time.Duration // time spent splitting.
 	scatterWait time.Duration // time spent scattering.
 	commitWait  time.Duration // time spent waiting for commit timestamps.
+
+	sendWaitByStore map[roachpb.StoreID]time.Duration
 
 	// span tracks the total span into which this batcher has flushed. It is
 	// only maintained if log.V(1), so if vmodule is upped mid-ingest it may be
@@ -83,6 +88,30 @@ func (s ingestionPerformanceStats) LogFlushes(ctx context.Context, name, action 
 		s.batchesDueToSize,
 		s.splitRetries,
 	)
+}
+
+func (s ingestionPerformanceStats) LogPerStoreTimings(ctx context.Context, name string) {
+	if len(s.sendWaitByStore) == 0 {
+		return
+	}
+	ids := make(roachpb.StoreIDSlice, 0, len(s.sendWaitByStore))
+	for i := range s.sendWaitByStore {
+		ids = append(ids, i)
+	}
+	sort.Sort(ids)
+
+	var sb strings.Builder
+	for i, id := range ids {
+		// Hack: fill the map with placeholder stores if we haven't seen the store
+		// with ID below K for all but lowest K, so that next time we print a zero.
+		if i > 0 && ids[i-1] != id-1 {
+			s.sendWaitByStore[id-1] = 0
+			fmt.Fprintf(&sb, "%d: %s;", id-1, timing(0))
+		}
+		fmt.Fprintf(&sb, "%d: %s;", id, timing(s.sendWaitByStore[id]))
+
+	}
+	log.Infof(ctx, "%s waited on sending to: %s", name, redact.Safe(sb.String()))
 }
 
 type sz int64

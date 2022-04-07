@@ -142,6 +142,7 @@ func MakeSSTBatcher(
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
 		disableSplits:          !splitFilledRanges,
+		stats: ingestionPerformanceStats{sendWaitByStore: make(map[roachpb.StoreID]time.Duration),
 	}
 	err := b.Reset(ctx)
 	return b, err
@@ -152,7 +153,7 @@ func MakeSSTBatcher(
 func MakeStreamSSTBatcher(
 	ctx context.Context, db *kv.DB, settings *cluster.Settings,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, ingestAll: true}
+	b := &SSTBatcher{db: db, settings: settings, ingestAll: true, stats: ingestionPerformanceStats{sendWaitByStore: make(map[roachpb.StoreID]time.Duration)}}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -545,7 +546,7 @@ func (b *SSTBatcher) addSSTable(
 				}
 
 				ba := roachpb.BatchRequest{
-					Header: roachpb.Header{Timestamp: b.batchTS},
+					Header: roachpb.Header{Timestamp: b.batchTS, ClientRangeInfo: roachpb.ClientRangeInfo{ExplicitlyRequested: true}},
 					AdmissionHeader: roachpb.AdmissionHeader{
 						Priority:                 int32(admission.BulkNormalPri),
 						CreateTime:               timeutil.Now().UnixNano(),
@@ -558,6 +559,12 @@ func (b *SSTBatcher) addSSTable(
 				br, pErr := b.db.NonTransactionalSender().Send(ctx, ba)
 				sendTime := timeutil.Since(beforeSend)
 				b.stats.sendWait += sendTime
+
+				if br != nil && len(br.BatchResponse_Header.RangeInfos) > 0 {
+					for i := range br.BatchResponse_Header.RangeInfos {
+						b.stats.sendWaitByStore[br.BatchResponse_Header.RangeInfos[i].Lease.Replica.StoreID] += sendTime
+					}
+				}
 
 				if pErr == nil {
 					resp := br.Responses[0].GetInner().(*roachpb.AddSSTableResponse)
