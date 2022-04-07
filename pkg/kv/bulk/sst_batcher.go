@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -53,26 +52,6 @@ var (
 		settings.NonNegativeDuration,
 	)
 )
-
-type sz int64
-
-func (b sz) String() string { return string(humanizeutil.IBytes(int64(b))) }
-func (b sz) SafeValue()     {}
-
-type timing time.Duration
-
-func (t timing) String() string { return time.Duration(t).Round(time.Second).String() }
-func (t timing) SafeValue()     {}
-
-type sorted bool
-
-func (t sorted) String() string {
-	if t {
-		return "sorted"
-	}
-	return "unsorted"
-}
-func (t sorted) SafeValue() {}
 
 // SSTBatcher is a helper for bulk-adding many KVs in chunks via AddSSTable. An
 // SSTBatcher can be handed KVs repeatedly and will make them into SSTs that are
@@ -118,22 +97,8 @@ type SSTBatcher struct {
 	// The rest of the fields accumulated state as opposed to configuration. Some,
 	// like totalRows, are accumulated _across_ batches and are not reset between
 	// batches when Reset() is called.
-	totalRows   roachpb.BulkOpSummary
-	flushCounts struct {
-		total      int
-		dueToRange int
-		dueToSize  int
-		files      int // a single flush might create multiple files.
-
-		splits, scatters int
-		scatterMoved     sz
-
-		flushWait   time.Duration
-		sendWait    time.Duration
-		splitWait   time.Duration
-		scatterWait time.Duration
-		commitWait  time.Duration
-	}
+	totalRows     roachpb.BulkOpSummary
+	stats         ingestionPerformanceStats
 	disableSplits bool
 
 	maxWriteTS hlc.Timestamp
@@ -337,7 +302,7 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 			if err := b.db.Clock().SleepUntil(ctx, b.maxWriteTS); err != nil {
 				return err
 			}
-			b.flushCounts.commitWait += timeutil.Since(now.GoTime())
+			b.stats.commitWait += timeutil.Since(now.GoTime())
 		}
 		b.maxWriteTS.Reset()
 	}
@@ -350,7 +315,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	}
 	beforeFlush := timeutil.Now()
 
-	b.flushCounts.total++
+	b.stats.batches++
 
 	if delay := ingestDelay.Get(&b.settings.SV); delay != 0 {
 		if delay > time.Second || log.V(1) {
@@ -376,10 +341,10 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 
 	if reason == sizeFlush {
 		log.VEventf(ctx, 3, "%s flushing %s SST due to size > %s", b.name, size, sz(ingestFileSize(b.settings)))
-		b.flushCounts.dueToSize++
+		b.stats.batchesDueToSize++
 	} else if reason == rangeFlush {
 		log.VEventf(ctx, 3, "%s flushing %s SST due to range boundary %s", b.name, size, b.flushKey)
-		b.flushCounts.dueToRange++
+		b.stats.batchesDueToRange++
 	}
 
 	shouldSplit := false
@@ -392,7 +357,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			log.VEventf(ctx, 2, "%s batcher splitting full range %s before adding file starting at %s",
 				b.name, b.lastRange.span, start)
 			shouldSplit = true
-		} else if reason == sizeFlush && !b.initialSplitDone && b.flushCounts.total == 1 {
+		} else if reason == sizeFlush && !b.initialSplitDone && b.stats.batches == 1 {
 			// If we didn't make initial splits, and this is our first flush and is due
 			// to filling the buffer, then we may have our own span and should drop a
 			// split at the first key to separate it out.
@@ -418,11 +383,11 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			} else {
 				beforeSplit := timeutil.Now()
 				err := b.db.AdminSplit(ctx, splitAbove, expire)
-				b.flushCounts.splitWait += timeutil.Since(beforeSplit)
+				b.stats.splitWait += timeutil.Since(beforeSplit)
 				if err != nil {
 					log.Warningf(ctx, "%s failed to split-above: %v", b.name, err)
 				} else {
-					b.flushCounts.splits++
+					b.stats.splits++
 				}
 			}
 		}
@@ -433,26 +398,26 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		} else {
 			beforeSplit := timeutil.Now()
 			err := b.db.AdminSplit(ctx, splitAt, expire)
-			b.flushCounts.splitWait += timeutil.Since(beforeSplit)
+			b.stats.splitWait += timeutil.Since(beforeSplit)
 			if err != nil {
 				log.Warningf(ctx, "%s failed to split: %v", b.name, err)
 			} else {
-				b.flushCounts.splits++
+				b.stats.splits++
 
 				// Now scatter the RHS before we proceed to ingest into it. We know it
 				// should be empty since we split above if there was a nextExistingKey.
 				beforeScatter := timeutil.Now()
 				resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize)
-				b.flushCounts.scatterWait += timeutil.Since(beforeScatter)
+				b.stats.scatterWait += timeutil.Since(beforeScatter)
 				if err != nil {
 					// err could be a max size violation, but this is unexpected since we
 					// split before, so a warning is probably ok.
 					log.Warningf(ctx, "%s failed to scatter	: %v", b.name, err)
 				} else {
-					b.flushCounts.scatters++
+					b.stats.scatters++
 					if resp.MVCCStats != nil {
 						moved := sz(resp.MVCCStats.Total())
-						b.flushCounts.scatterMoved += moved
+						b.stats.scatterMoved += moved
 						if moved > 0 {
 							log.VEventf(ctx, 1, "%s split scattered %s in non-empty range %s", b.name, moved, resp.RangeInfos[0].Desc.KeySpan().AsRawSpanWithNoLocals())
 						}
@@ -474,7 +439,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 
 	b.rowCounter.DataSize += b.sstWriter.DataSize
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
-	b.flushCounts.flushWait += timeutil.Since(beforeFlush)
+	b.stats.batchWait += timeutil.Since(beforeFlush)
+	b.stats.dataSize += sz(b.sstWriter.DataSize)
 	return nil
 }
 
@@ -574,7 +540,7 @@ func (b *SSTBatcher) addSSTable(
 				beforeSend := timeutil.Now()
 				br, pErr := b.db.NonTransactionalSender().Send(ctx, ba)
 				sendTime := timeutil.Since(beforeSend)
-				b.flushCounts.sendWait += sendTime
+				b.stats.sendWait += sendTime
 
 				if pErr == nil {
 					resp := br.Responses[0].GetInner().(*roachpb.AddSSTableResponse)
@@ -635,7 +601,7 @@ func (b *SSTBatcher) addSSTable(
 		// top level SST which is kept around to iterate over.
 		item.sstBytes = nil
 	}
-	b.flushCounts.files += files
+	b.stats.splitRetries += files - 1
 	log.VEventf(ctx, 3, "AddSSTable [%v, %v) added %d files and took %v", start, end, files, timeutil.Since(sendStart))
 	return nil
 }
