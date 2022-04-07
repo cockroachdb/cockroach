@@ -1,12 +1,14 @@
 # Define a set up flag aliases, so people can use `--cross` instead of the
 # longer `//build/toolchains:cross_flag`.
 build --flag_alias=crdb_test=//build/toolchains:crdb_test_flag
+build --flag_alias=crdb_test_off=//build/toolchains:crdb_test_off_flag
 build --flag_alias=cross=//build/toolchains:cross_flag
 build --flag_alias=dev=//build/toolchains:dev_flag
 build --flag_alias=lintonbuild=//build/toolchains:nogo_flag
 build --flag_alias=nolintonbuild=//build/toolchains:nonogo_explicit_flag
 build --flag_alias=with_ui=//pkg/ui:with_ui_flag
 
+build:crdb_test_off --crdb_test_off
 build:cross --cross
 build:dev --dev
 build:lintonbuild --lintonbuild

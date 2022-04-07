@@ -66,12 +66,9 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 }
 
 // TODO(irfansharif): Add grouping shorthands like "all" or "bins", etc.
-// TODO(irfansharif): Make sure all the relevant binary targets are defined
-// above, and in usage docs.
 
 // buildTargetMapping maintains shorthands that map 1:1 with bazel targets.
 var buildTargetMapping = map[string]string{
-	"all_tests":        "//pkg:all_tests",
 	"bazel-remote":     bazelRemoteTarget,
 	"buildifier":       "@com_github_bazelbuild_buildtools//buildifier:buildifier",
 	"buildozer":        "@com_github_bazelbuild_buildtools//buildozer:buildozer",
@@ -337,7 +334,11 @@ func (d *dev) getBasicBuildArgs(
 		}
 
 		args = append(args, aliased)
-		buildTargets = append(buildTargets, buildTarget{fullName: aliased, kind: "go_binary"})
+		if aliased == "//pkg:all_tests" {
+			buildTargets = append(buildTargets, buildTarget{fullName: aliased, kind: "test_suite"})
+		} else {
+			buildTargets = append(buildTargets, buildTarget{fullName: aliased, kind: "go_binary"})
+		}
 	}
 
 	// Add --config=with_ui iff we're building a target that needs it.

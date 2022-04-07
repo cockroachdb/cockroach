@@ -1008,13 +1008,29 @@ func (p *planner) getTableAndIndex(
 	}
 	optIdx := idx.(*optIndex)
 
-	// Resolve the object name for logging if
-	// its missing.
+	// Set the object name for logging if it's missing.
 	if tableWithIndex.Table.ObjectName == "" {
-		tableWithIndex.Table = tree.MakeTableNameFromPrefix(qualifiedName.ObjectNamePrefix, qualifiedName.ObjectName)
+		tableWithIndex.Table = tree.MakeTableNameFromPrefix(
+			qualifiedName.ObjectNamePrefix, qualifiedName.ObjectName,
+		)
 	}
 
-	return tabledesc.NewBuilder(optIdx.tab.desc.TableDesc()).BuildExistingMutableTable(), optIdx.idx, nil
+	// Use the descriptor collection to get a proper handle to the mutable
+	// descriptor for the relevant table and use that mutable object to
+	// get a handle to the corresponding index.
+	tableID := optIdx.tab.desc.GetID()
+	mut, err := p.Descriptors().GetMutableTableVersionByID(ctx, tableID, p.Txn())
+	if err != nil {
+		return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
+			"failed to re-resolve table %d for index %s", tableID, tableWithIndex)
+	}
+	retIdx, err := mut.FindIndexWithID(optIdx.idx.GetID())
+	if err != nil {
+		return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
+			"retrieving index %s (%d) from table which was known to already exist for table %d",
+			tableWithIndex, optIdx.idx.GetID(), tableID)
+	}
+	return mut, retIdx, nil
 }
 
 // expandTableGlob expands pattern into a list of objects represented
