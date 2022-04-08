@@ -1247,7 +1247,9 @@ func (c *CustomFuncs) findComputedColJoinEquality(
 	if !ok {
 		return nil, false
 	}
-	if !c.OuterCols(expr).SubsetOf(eqCols) {
+	var sharedProps props.Shared
+	memo.BuildSharedProps(expr, &sharedProps, c.e.evalCtx)
+	if !sharedProps.OuterCols.SubsetOf(eqCols) {
 		return nil, false
 	}
 	return expr, true
