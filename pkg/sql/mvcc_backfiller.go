@@ -70,7 +70,7 @@ func (im *IndexBackfillerMergePlanner) plan(
 		if err != nil {
 			return err
 		}
-		p, err = im.execCfg.DistSQLPlanner.createIndexBackfillerMergePhysicalPlan(planCtx, spec, todoSpanList)
+		p, err = im.execCfg.DistSQLPlanner.createIndexBackfillerMergePhysicalPlan(ctx, planCtx, spec, todoSpanList)
 		return err
 	}); err != nil {
 		return nil, err
@@ -92,6 +92,7 @@ func (im *IndexBackfillerMergePlanner) plan(
 		defer recv.Release()
 		evalCtxCopy := evalCtx
 		im.execCfg.DistSQLPlanner.Run(
+			ctx,
 			planCtx,
 			nil, /* txn - the processors manage their own transactions */
 			p, recv, &evalCtxCopy,

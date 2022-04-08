@@ -57,7 +57,7 @@ func StartDistChangefeed(
 	} else {
 		// All other feeds get a ChangeAggregator local on the leaseholder.
 		var err error
-		spanPartitions, err = dsp.PartitionSpans(planCtx, trackedSpans)
+		spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
 		if err != nil {
 			return err
 		}
@@ -150,7 +150,7 @@ func StartDistChangefeed(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)()
+	dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)()
 	return resultRows.Err()
 }
 

@@ -180,7 +180,7 @@ func (ib *IndexBackfillPlanner) plan(
 		if err != nil {
 			return err
 		}
-		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, sourceSpans)
+		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, sourceSpans)
 		return err
 	}); err != nil {
 		return nil, err
@@ -201,7 +201,7 @@ func (ib *IndexBackfillPlanner) plan(
 		)
 		defer recv.Release()
 		evalCtxCopy := evalCtx
-		ib.execCfg.DistSQLPlanner.Run(planCtx, nil, p, recv, &evalCtxCopy, nil)()
+		ib.execCfg.DistSQLPlanner.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, nil)()
 		return cbw.Err()
 	}, nil
 }
