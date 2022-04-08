@@ -25,10 +25,12 @@ go_test(
     srcs = ["region_config_test.go"],
     deps = [
         ":multiregion",
+        "//pkg/config/zonepb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_protobuf//proto",
     ],
 )
