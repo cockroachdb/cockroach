@@ -3579,6 +3579,16 @@ type IndexUsageStatsController interface {
 	ResetIndexUsageStats(ctx context.Context) error
 }
 
+// StmtDiagnosticsRequestInsertFunc is an interface embedded in EvalCtx that can
+// be used by the builtins to insert statement diagnostics request. This
+// interface is introduced to avoid circular dependency.
+type StmtDiagnosticsRequestInsertFunc func(
+	ctx context.Context,
+	stmtFingerprint string,
+	minExecutionLatency time.Duration,
+	expiresAfter time.Duration,
+) error
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
@@ -3735,6 +3745,8 @@ type EvalContext struct {
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
 	KVStoresIterator kvserverbase.StoresIterator
+
+	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.

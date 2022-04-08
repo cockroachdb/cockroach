@@ -6876,6 +6876,55 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+
+	"crdb_internal.request_statement_bundle": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"stmtFingerprint", types.String},
+				{"minExecutionLatency", types.Interval},
+				{"expiresAfter", types.Interval},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasRoleOption(
+					evalCtx.Ctx(), roleoption.VIEWACTIVITYREDACTED)
+				if err != nil {
+					return nil, err
+				}
+
+				hasViewActivity, err := evalCtx.SessionAccessor.HasRoleOption(
+					evalCtx.Ctx(), roleoption.VIEWACTIVITY)
+				if err != nil {
+					return nil, err
+				}
+
+				if !hasViewActivity && !hasViewActivityRedacted {
+					return nil, errors.New("requesting statement bundle requires either " +
+						"VIEWACTIVITY or VIEWACTIVITYREDACTED option")
+				}
+
+				stmtFingerprint := string(tree.MustBeDString(args[0]))
+				minExecutionLatency := time.Duration(tree.MustBeDInterval(args[1]).Nanos())
+				expiresAfter := time.Duration(tree.MustBeDInterval(args[2]).Nanos())
+
+				if err := evalCtx.StmtDiagnosticsRequestInserter(
+					evalCtx.Ctx(),
+					stmtFingerprint,
+					minExecutionLatency,
+					expiresAfter,
+				); err != nil {
+					return nil, err
+				}
+
+				return tree.DBoolTrue, nil
+			},
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {

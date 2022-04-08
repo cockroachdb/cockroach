@@ -2728,25 +2728,40 @@ func TestCreateStatementDiagnosticsReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	req := &serverpb.CreateStatementDiagnosticsReportRequest{
-		StatementFingerprint: "INSERT INTO test VALUES (_)",
-	}
-	var resp serverpb.CreateStatementDiagnosticsReportResponse
-	if err := postStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("http", func(t *testing.T) {
+		req := &serverpb.CreateStatementDiagnosticsReportRequest{
+			StatementFingerprint: "INSERT INTO test VALUES (_)",
+		}
+		var resp serverpb.CreateStatementDiagnosticsReportResponse
+		if err := postStatusJSONProto(s, "stmtdiagreports", req, &resp); err != nil {
+			t.Fatal(err)
+		}
 
-	var respGet serverpb.StatementDiagnosticsReportsResponse
-	if err := getStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
-		t.Fatal(err)
-	}
+		var respGet serverpb.StatementDiagnosticsReportsResponse
+		if err := getStatusJSONProto(s, "stmtdiagreports", &respGet); err != nil {
+			t.Fatal(err)
+		}
 
-	if respGet.Reports[0].StatementFingerprint != req.StatementFingerprint {
-		t.Fatal("statement diagnostics request was not persisted")
-	}
+		if respGet.Reports[0].StatementFingerprint != req.StatementFingerprint {
+			t.Fatal("statement diagnostics request was not persisted")
+		}
+	})
+
+	t.Run("builtin", func(t *testing.T) {
+		sqlConn := sqlutils.MakeSQLRunner(conn)
+		sqlConn.CheckQueryResults(t,
+			"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::INTERVAL, 0::INTERVAL)",
+			[][]string{{"true"}})
+
+		sqlConn.CheckQueryResults(t, `
+      SELECT count(*)
+      FROM system.statement_diagnostics_requests
+      WHERE statement_fingerprint = 'SELECT _'
+`, [][]string{{"1"}})
+	})
 }
 
 func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
