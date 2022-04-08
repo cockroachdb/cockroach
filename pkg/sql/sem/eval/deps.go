@@ -490,6 +490,16 @@ type IndexUsageStatsController interface {
 	ResetIndexUsageStats(ctx context.Context) error
 }
 
+// StmtDiagnosticsRequestInsertFunc is an interface embedded in EvalCtx that can
+// be used by the builtins to insert statement diagnostics request. This
+// interface is introduced to avoid circular dependency.
+type StmtDiagnosticsRequestInsertFunc func(
+	ctx context.Context,
+	stmtFingerprint string,
+	minExecutionLatency time.Duration,
+	expiresAfter time.Duration,
+) error
+
 // AsOfSystemTime represents the result from the evaluation of AS OF SYSTEM TIME
 // clause.
 type AsOfSystemTime struct {

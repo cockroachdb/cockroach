@@ -203,6 +203,11 @@ type Context struct {
 
 	// RangeProber is used in calls to crdb_internal.probe_ranges.
 	RangeProber RangeProber
+
+	// StmtDiagnosticsRequestInserter is used by the
+	// crdb_internal.request_statement_bundle builtin to insert statement bundle
+	// request.
+	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
 }
 
 var _ tree.ParseTimeContext = &Context{}

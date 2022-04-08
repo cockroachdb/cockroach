@@ -6968,6 +6968,69 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: volatility.Volatile,
 		},
 	),
+
+	"crdb_internal.request_statement_bundle": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"stmtFingerprint", types.String},
+				{"minExecutionLatency", types.Interval},
+				{"expiresAfter", types.Interval},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+				if err != nil {
+					return nil, err
+				}
+
+				hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasRoleOption(
+					evalCtx.Ctx(), roleoption.VIEWACTIVITYREDACTED)
+				if err != nil {
+					return nil, err
+				}
+
+				hasViewActivity, err := evalCtx.SessionAccessor.HasRoleOption(
+					evalCtx.Ctx(), roleoption.VIEWACTIVITY)
+				if err != nil {
+					return nil, err
+				}
+
+				if !hasViewActivity {
+					return nil, errors.New("requesting statement bundle requires " +
+						"VIEWACTIVITY option")
+				}
+
+				if !isAdmin && hasViewActivityRedacted {
+					return nil, errors.New("VIEWACTIVITYREDACTED role option cannot request " +
+						"statement bundle")
+				}
+
+				stmtFingerprint := string(tree.MustBeDString(args[0]))
+				minExecutionLatency := time.Duration(tree.MustBeDInterval(args[1]).Nanos())
+				expiresAfter := time.Duration(tree.MustBeDInterval(args[2]).Nanos())
+
+				if err := evalCtx.StmtDiagnosticsRequestInserter(
+					evalCtx.Ctx(),
+					stmtFingerprint,
+					minExecutionLatency,
+					expiresAfter,
+				); err != nil {
+					return nil, err
+				}
+
+				return tree.DBoolTrue, nil
+			},
+			Volatility: volatility.Volatile,
+			Info: `Used to request statement bundle for a given statement fingerprint
+that has execution latency than the 'minExecutionLatency'. If the 'expiresAfter'
+argument is empty, then the statement bundle request never expires until the 
+statement bundle is collected`,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
