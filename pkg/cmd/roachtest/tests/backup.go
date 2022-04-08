@@ -170,6 +170,13 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 }
 
+// removeJobClaimesForNodes removes the `claim_session_id` for rows in the
+// `system.jobs` with `claim_instance_id` belonging ot nodes that shouldn't have
+// claimed jobs in the first place.
+//
+// TODO(adityamaru): Delete once
+// https://github.com/cockroachdb/cockroach/pull/79666 is backported to 21.2 and
+// the roachtest version map is updated.
 func removeJobClaimsForNodes(
 	ctx context.Context, t test.Test, db *sql.DB, nodes option.NodeListOption, jobID jobspb.JobID,
 ) {
@@ -178,11 +185,10 @@ func removeJobClaimsForNodes(
 	removeClaimQuery := `
 UPDATE system.jobs
    SET claim_session_id = NULL
-WHERE claim_instance_id IN ($1)
-AND id = $2
+WHERE claim_instance_id IN (%s)
+AND id = $1
 `
-	log.Infof(ctx, "this the remove query %s", nodesStr)
-	_, err := db.ExecContext(ctx, removeClaimQuery, nodesStr, jobID)
+	_, err := db.ExecContext(ctx, fmt.Sprintf(removeClaimQuery, nodesStr), jobID)
 	require.NoError(t, err)
 }
 
@@ -294,10 +300,30 @@ func registerBackupMixedVersion(r registry.Registry) {
 			var jobID jobspb.JobID
 			err := gatewayDB.QueryRow(backupStmt).Scan(&jobID)
 			require.NoError(t, err)
+
+			// TODO(adityamaru): This is unfortunate and can be deleted once
+			// https://github.com/cockroachdb/cockroach/pull/79666 is backported to
+			// 21.2 and the mixed version map for roachtests is bumped to the 21.2
+			// patch release with the backport.
+			//
+			// The bug above means that nodes for which we have disabled adoption may
+			// still lay claim on the job, and then not clear their claim on realizing
+			// that adoption is disabled. To get around this we set the env variable
+			// to disable the registries from even laying claim on the jobs.
 			if len(nodesThatShouldNotClaim) != 0 {
+				for _, node := range nodesThatShouldNotClaim {
+					_, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD = 0")
+					require.NoError(t, err)
+				}
 				removeJobClaimsForNodes(ctx, t, gatewayDB, nodesThatShouldNotClaim, jobID)
 			}
 			waitForJobToHaveStatus(t, gatewayDB, jobID, jobs.StatusSucceeded)
+
+			// Reset the env variable.
+			for _, node := range nodesThatShouldNotClaim {
+				_, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD = 10")
+				require.NoError(t, err)
+			}
 		}
 	}
 
