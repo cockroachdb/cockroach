@@ -236,7 +236,7 @@ func getReplicationStreamSpec(
 	for _, span := range replicatedSpans {
 		spans = append(spans, *span)
 	}
-	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
+	spanPartitions, err := dsp.PartitionSpans(evalCtx.Ctx(), planCtx, spans)
 	if err != nil {
 		return nil, err
 	}
