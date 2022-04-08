@@ -983,7 +983,7 @@ func reportServerInfo(
 		buf.Printf("cluster name:\t%s\n", baseCfg.ClusterName)
 	}
 	clusterID := serverCfg.BaseConfig.ClusterIDContainer.Get()
-	if clusterID.Equal(tenantClusterID) {
+	if tenantClusterID.Equal(uuid.Nil) {
 		buf.Printf("clusterID:\t%s\n", clusterID)
 	} else {
 		buf.Printf("storage clusterID:\t%s\n", clusterID)
