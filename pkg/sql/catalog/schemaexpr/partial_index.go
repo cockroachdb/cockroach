@@ -16,11 +16,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // ValidatePartialIndexPredicate verifies that an expression is a valid partial
@@ -34,15 +37,17 @@ import (
 //   - It does not include subqueries.
 //   - It does not include non-immutable, aggregate, window, or set returning
 //     functions.
+//   - It does not reference a column which is in the process of being added
+//     or removed.
 //
 func ValidatePartialIndexPredicate(
 	ctx context.Context,
-	desc catalog.TableDescriptor,
+	desc catalog.MutableTableDescriptor,
 	e tree.Expr,
 	tn *tree.TableName,
 	semaCtx *tree.SemaContext,
 ) (string, error) {
-	expr, _, _, err := DequalifyAndValidateExpr(
+	expr, _, cols, err := DequalifyAndValidateExpr(
 		ctx,
 		desc,
 		e,
@@ -55,8 +60,36 @@ func ValidatePartialIndexPredicate(
 	if err != nil {
 		return "", err
 	}
-
+	if !desc.IsNew() {
+		if err := validatePartialIndexExprColsArePublic(desc, cols); err != nil {
+			return "", err
+		}
+	}
 	return expr, nil
+}
+
+func validatePartialIndexExprColsArePublic(
+	desc catalog.TableDescriptor, cols catalog.TableColSet,
+) (err error) {
+	cols.ForEach(func(colID descpb.ColumnID) {
+		if err != nil {
+			return
+		}
+		var col catalog.Column
+		col, err = desc.FindColumnWithID(colID)
+		if err != nil {
+			return
+		}
+		if col.Public() {
+			return
+		}
+		err = pgerror.WithCandidateCode(errors.Errorf(
+			"cannot create partial index on column %q (%d) which is not public",
+			col.GetName(), col.GetID()),
+			pgcode.FeatureNotSupported,
+		)
+	})
+	return err
 }
 
 // MakePartialIndexExprs returns a map of predicate expressions for each

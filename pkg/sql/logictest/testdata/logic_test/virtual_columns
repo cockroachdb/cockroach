@@ -891,28 +891,22 @@ DROP INDEX v_idx
 statement ok
 ALTER TABLE sc DROP COLUMN v
 
-# Add a column and a partial index using that column in the predicate in the
-# same transaction.
+# Adding a column and a partial index using that column in the predicate in the
+# same transaction is not allowed.
 statement ok
 BEGIN
 
 statement ok
 ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
 
-statement ok
+statement error pgcode 0A000 cannot create partial index on column "v" \(10\) which is not public
 CREATE INDEX partial_idx ON sc(b) WHERE v > 20
 
 statement ok
 END
 
-query I rowsort
-SELECT a FROM sc@partial_idx WHERE v > 20
-----
-2
-3
-
 statement ok
-DROP INDEX partial_idx
+ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
 
 # Create a partial index on the virtual column and which uses the virtual column in the predicate.
 statement ok
