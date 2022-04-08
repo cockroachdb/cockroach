@@ -23,7 +23,7 @@ import (
 
 func testSmallTrace2(t *testing.T) {
 	s := GetSmallTrace(2)
-	if !strings.Contains(string(s), "‹smalltrace_test.go›:‹1002›:‹util.testSmallTrace2›,‹smalltrace_test.go›:‹1009›:‹util.testSmallTrace›,‹smalltrace_test.go›:‹1013›:‹util.TestGenerateSmallTrace›") {
+	if !strings.Contains(string(s), "smalltrace_test.go:‹1002›:util.testSmallTrace2,smalltrace_test.go:‹1009›:util.testSmallTrace,smalltrace_test.go:‹1013›:util.TestGenerateSmallTrace") {
 		t.Fatalf("trace not generated properly: %q", s)
 	}
 }
