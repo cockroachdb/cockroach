@@ -198,7 +198,7 @@ func MakeWorkload(pkgDir string) error {
 
 // MakeRelease makes the release binary and associated files.
 func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
-	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//c-deps:libgeos"}
+	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//c-deps:libgeos", "//pkg/cmd/cockroach-sql"}
 	targetTriple := TargetTripleFromPlatform(platform)
 	if opts.Release {
 		if opts.BuildTag == "" {
@@ -228,6 +228,10 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		return err
 	}
 	if err := stageBinary("//pkg/cmd/cockroach", platform, bazelBin, pkgDir); err != nil {
+		return err
+	}
+	// TODO: strip the bianry
+	if err := stageBinary("//pkg/cmd/cockroach-sql", platform, bazelBin, pkgDir); err != nil {
 		return err
 	}
 	if err := stageLibraries(platform, bazelBin, filepath.Join(pkgDir, "lib")); err != nil {
@@ -283,7 +287,7 @@ type S3Putter interface {
 
 // S3KeyRelease extracts the target archive base and archive
 // name for the given parameters.
-func S3KeyRelease(platform Platform, versionStr string) (string, string) {
+func S3KeyRelease(platform Platform, versionStr string, binaryPrefix string) (string, string) {
 	suffix := SuffixFromPlatform(platform)
 	targetSuffix, hasExe := TrimDotExe(suffix)
 	// TODO(tamird): remove this weirdness. Requires updating
@@ -293,7 +297,7 @@ func S3KeyRelease(platform Platform, versionStr string) (string, string) {
 		targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
 	}
 
-	archiveBase := fmt.Sprintf("cockroach-%s", versionStr)
+	archiveBase := fmt.Sprintf("%s-%s", binaryPrefix, versionStr)
 	targetArchiveBase := archiveBase + targetSuffix
 	if hasExe {
 		return targetArchiveBase, targetArchiveBase + ".zip"
@@ -435,10 +439,9 @@ type ArchiveFile struct {
 }
 
 // MakeCRDBBinaryArchiveFile generates the ArchiveFile object for a CRDB binary.
-func MakeCRDBBinaryArchiveFile(localAbsolutePath string) ArchiveFile {
+func MakeCRDBBinaryArchiveFile(localAbsolutePath string, path string) ArchiveFile {
 	base := filepath.Base(localAbsolutePath)
 	_, hasExe := TrimDotExe(base)
-	path := "cockroach"
 	if hasExe {
 		path += ".exe"
 	}
@@ -477,13 +480,14 @@ type PutReleaseOptions struct {
 	VersionStr string
 
 	// Files are all the files to be included in the archive.
-	Files []ArchiveFile
+	Files      []ArchiveFile
+	ExtraFiles []ArchiveFile
 }
 
 // PutRelease uploads a compressed archive containing the release
 // files and a checksum file of the archive to S3.
 func PutRelease(svc S3Putter, o PutReleaseOptions) {
-	targetArchiveBase, targetArchive := S3KeyRelease(o.Platform, o.VersionStr)
+	targetArchiveBase, targetArchive := S3KeyRelease(o.Platform, o.VersionStr, "cockroach")
 	var body bytes.Buffer
 
 	if strings.HasSuffix(targetArchive, ".zip") {
@@ -584,6 +588,29 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 	}
 	if _, err := svc.PutObject(&putObjectInputChecksum); err != nil {
 		log.Fatalf("s3 upload %s: %s", targetChecksum, err)
+	}
+	for _, f := range o.ExtraFiles {
+		keyBase, hasExe := TrimDotExe(f.ArchiveFilePath)
+		targetKey, _ := S3KeyRelease(o.Platform, o.VersionStr, keyBase)
+		if hasExe {
+			targetKey += ".exe"
+		}
+		log.Printf("Uploading to s3://%s/%s", o.BucketName, targetKey)
+		handle, err := os.Open(f.LocalAbsolutePath)
+		if err != nil {
+			log.Fatalf("failed to open %s: %s", f.LocalAbsolutePath, err)
+		}
+		putObjectInput := s3.PutObjectInput{
+			Bucket: &o.BucketName,
+			Key:    &targetKey,
+			Body:   handle,
+		}
+		if o.NoCache {
+			putObjectInput.CacheControl = &NoCache
+		}
+		if _, err := svc.PutObject(&putObjectInput); err != nil {
+			log.Fatalf("s3 upload %s: %s", targetKey, err)
+		}
 	}
 }
 
