@@ -94,7 +94,8 @@ func (ie *InternalExecutor) WithSyntheticDescriptors(
 	return run()
 }
 
-// MakeInternalExecutor creates an InternalExecutor.
+// MakeInternalExecutor creates an InternalExecutor. If the executor is
+// short-lived, then it must be closed explicitly.
 func MakeInternalExecutor(
 	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
 ) InternalExecutor {
@@ -112,6 +113,13 @@ func MakeInternalExecutor(
 		s:          s,
 		mon:        monitor,
 		memMetrics: memMetrics,
+	}
+}
+
+func (ie *InternalExecutor) Close(ctx context.Context) {
+	if ie.mon != nil {
+		ie.mon.Stop(ctx)
+		ie.mon = nil
 	}
 }
 
