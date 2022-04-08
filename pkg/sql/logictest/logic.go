@@ -3350,11 +3350,14 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 		}
 		t.pendingStatements[stmt.statementName] = pending
 
+		startedChan := make(chan struct{})
 		go func() {
+			startedChan <- struct{}{}
 			res, err := t.db.Exec(execSQL)
 			pending.resultChan <- pendingExecResult{execSQL, res, err}
 		}()
 
+		<-startedChan
 		return true, nil
 	}
 
