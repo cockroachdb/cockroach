@@ -121,6 +121,10 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	resetEnvVar()
 	cfg.readEnvironmentVariables()
+
+	// Temp storage disk monitors will have slightly different names, so we
+	// override them to point to the same one.
+	cfgExpected.TempStorageConfig.Mon = cfg.TempStorageConfig.Mon
 	require.Equal(t, cfgExpected, cfg)
 
 	// Set all the environment variables to valid values and ensure they are set
