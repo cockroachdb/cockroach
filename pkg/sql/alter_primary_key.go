@@ -86,7 +86,7 @@ func (p *planner) AlterPrimaryKey(
 	// Ensure that other schema changes on this table are not currently
 	// executing, and that other schema changes have not been performed
 	// in the current transaction.
-	currentMutationID := tableDesc.ClusterVersion.NextMutationID
+	currentMutationID := tableDesc.ClusterVersion().NextMutationID
 	for i := range tableDesc.Mutations {
 		mut := &tableDesc.Mutations[i]
 		if mut.MutationID == currentMutationID {
