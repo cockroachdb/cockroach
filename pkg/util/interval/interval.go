@@ -223,6 +223,39 @@ type Tree interface {
 	Clone() Tree
 }
 
+// LLRBTree is a left-leaning red black tree.
+type LLRBTree interface {
+	Tree
+	// DeleteMin deletes the leftmost interval.
+	DeleteMin(fast bool)
+	// DeleteMax deletes the rightmost interval.
+	DeleteMax(fast bool)
+	// Min returns the leftmost interval stored in the tree.
+	Min() Interface
+	// Max returns the rightmost interval stored in the tree.
+	Max() Interface
+	// Floor returns the largest value equal to or less than the query q according
+	// to q.Range().Start.Compare(), with ties broken by comparison of q.ID()
+	// values.
+	Floor(q Interface) (o Interface, err error)
+	// Ceil returns the smallest value equal to or greater than the query q
+	// according to q.Range().Start.Compare(), with ties broken by comparison of
+	// q.ID() values.
+	Ceil(q Interface) (o Interface, err error)
+	// DoReverse performs fn on all intervals stored in the tree, but in reverse
+	// of sort order. A boolean is returned indicating whether the Do traversal
+	// was interrupted by an Operation returning true. If fn alters stored
+	// intervals' sort relationships, future tree operation behaviors are
+	// undefined.
+	DoReverse(fn Operation) bool
+	// DoMatchingReverse performs fn on all intervals stored in the tree that
+	// overlaps r. The traversal is done in the decreasing order of interval
+	// start. A boolean is returned indicating whether the traversal was
+	// interrupted by an Operation returning true. If fn alters stored intervals'
+	// sort relationships, future tree operation behaviors are undefined.
+	DoMatchingReverse(fn Operation, r Range) bool
+}
+
 // TreeIterator iterates over all intervals stored in the interval tree, in-order.
 type TreeIterator interface {
 	// Next returns the current interval stored in the interval tree	and moves
@@ -234,10 +267,17 @@ type TreeIterator interface {
 var useBTreeImpl = envutil.EnvOrDefaultBool("COCKROACH_INTERVAL_BTREE", false)
 
 // NewTree creates a new interval tree with the given overlapper function. It
-// uses the augmented Left-Leaning Red Black tree implementation.
+// uses the augmented Left-Leaning Red Black tree implementation unless the
+// envvar COCKROACH_INTERVAL_BTREE is set.
 func NewTree(overlapper Overlapper) Tree {
 	if useBTreeImpl {
 		return newBTree(overlapper)
 	}
+	return newLLRBTree(overlapper)
+}
+
+// NewLLRBTree creates a new interval tree with the given overlapper function,
+// using an augmented Left-Leaning Red Black Tree implementation,
+func NewLLRBTree(overlapper Overlapper) LLRBTree {
 	return newLLRBTree(overlapper)
 }

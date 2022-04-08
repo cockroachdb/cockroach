@@ -16,6 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -23,25 +25,56 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// tenantCoalesceAdjacentSetting is a hidden cluster setting that controls
+// whether we coalesce adjacent ranges in the tenant keyspace if they have the
+// same span config.
+var tenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"spanconfig.tenant_coalesce_adjacent.enabled",
+	`collapse adjacent ranges with the same span configs`,
+	true,
+)
+
+// hostCoalesceAdjacentSetting is a hidden cluster setting that controls
+// whether we coalesce adjacent ranges in the host tenant keyspace if they have
+// the same span config.
+var hostCoalesceAdjacentSetting = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"spanconfig.host_coalesce_adjacent.enabled",
+	`collapse adjacent ranges with the same span configs`,
+	false,
+)
+
 // spanConfigStore is an in-memory data structure to store and retrieve
 // SpanConfigs associated with a single span. Internally it makes use of an
 // interval tree to store non-overlapping span configurations. It isn't safe for
 // concurrent use.
 type spanConfigStore struct {
-	tree    interval.Tree
+	tree    interval.LLRBTree
 	idAlloc int64
+
+	settings *cluster.Settings
+	knobs    *spanconfig.TestingKnobs
 }
 
 // newSpanConfigStore constructs and returns a new spanConfigStore.
-func newSpanConfigStore() *spanConfigStore {
-	s := &spanConfigStore{}
-	s.tree = interval.NewTree(interval.ExclusiveOverlapper)
+func newSpanConfigStore(
+	settings *cluster.Settings, knobs *spanconfig.TestingKnobs,
+) *spanConfigStore {
+	if knobs == nil {
+		knobs = &spanconfig.TestingKnobs{}
+	}
+	s := &spanConfigStore{
+		settings: settings,
+		knobs:    knobs,
+		tree:     interval.NewLLRBTree(interval.ExclusiveOverlapper),
+	}
 	return s
 }
 
 // copy returns a copy of the spanConfigStore.
 func (s *spanConfigStore) copy(ctx context.Context) *spanConfigStore {
-	clone := newSpanConfigStore()
+	clone := newSpanConfigStore(s.settings, s.knobs)
 	_ = s.forEachOverlapping(keys.EverythingSpan, func(entry spanConfigEntry) error {
 		record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(entry.span), entry.config)
 		if err != nil {
@@ -76,7 +109,9 @@ func (s *spanConfigStore) forEachOverlapping(sp roachpb.Span, f func(spanConfigE
 
 // computeSplitKey returns the first key we should split on because of the
 // presence a span config given a start and end key pair.
-func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) roachpb.RKey {
+func (s *spanConfigStore) computeSplitKey(
+	ctx context.Context, start, end roachpb.RKey,
+) roachpb.RKey {
 	sp := roachpb.Span{Key: start.AsRawKey(), EndKey: end.AsRawKey()}
 
 	// We don't want to split within the system config span while we're still
@@ -91,19 +126,95 @@ func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) roachpb.RKey 
 		return roachpb.RKey(keys.SystemConfigSpan.EndKey)
 	}
 
-	idx := 0
-	var splitKey roachpb.RKey = nil
+	// Generally split keys are going to be the start keys of span config entries.
+	// When computing a split key over ['b', 'z'), 'b' is not a valid split key;
+	// in the iteration below we'll find all entries overlapping with the given
+	// span but skipping over any start keys <= the given start key. In our
+	// example this could be ['a', 'x') or ['b', 'y').
+	var match spanConfigEntry
 	s.tree.DoMatching(func(i interval.Interface) (done bool) {
-		if idx > 0 {
-			splitKey = roachpb.RKey(i.(*spanConfigStoreEntry).span.Key)
-			return true // we found our split key, we're done
+		entry := i.(*spanConfigStoreEntry).spanConfigEntry
+		if entry.span.Key.Compare(sp.Key) <= 0 {
+			return false // more
 		}
-
-		idx++
-		return false // more
+		match = i.(*spanConfigStoreEntry).spanConfigEntry
+		return true // we found our split key, we're done
 	}, sp.AsRange())
+	if match.isEmpty() {
+		return nil // no overlapping entries == no split key
+	}
 
-	return splitKey
+	if s.knobs.StoreDisableCoalesceAdjacent {
+		return roachpb.RKey(match.span.Key)
+	}
+
+	rem, matchTenID, err := keys.DecodeTenantPrefix(match.span.Key)
+	if err != nil {
+		log.Fatalf(ctx, "%v", err)
+	}
+
+	if !s.knobs.StoreIgnoreCoalesceAdjacentExceptions {
+		if matchTenID.IsSystem() {
+			systemTableUpperBound := keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)
+			if roachpb.Key(rem).Compare(systemTableUpperBound) < 0 ||
+				!hostCoalesceAdjacentSetting.Get(&s.settings.SV) {
+				return roachpb.RKey(match.span.Key)
+			}
+		} else {
+			if !tenantCoalesceAdjacentSetting.Get(&s.settings.SV) {
+				return roachpb.RKey(match.span.Key)
+			}
+		}
+	}
+
+	// We're looking to coalesce adjacent spans with the same configs as long
+	// they don't straddle across tenant boundaries. We'll first peek backwards to
+	// find the entry with the same start key as our query span (exactly what we
+	// skipped over above). If this entry has a different config or belongs to a
+	// different tenant prefix from our original match, our original match key is
+	// the split point we're interested in. If such an entry does not exist, then
+	// too our original match key is the right split point.
+	var firstMatch spanConfigEntry
+	preSplitKeySp := roachpb.Span{Key: sp.Key, EndKey: match.span.Key}
+	s.tree.DoMatchingReverse(func(i interval.Interface) (done bool) {
+		firstMatch = i.(*spanConfigStoreEntry).spanConfigEntry
+		return true // we're done
+	}, preSplitKeySp.AsRange())
+	if firstMatch.isEmpty() {
+		return roachpb.RKey(match.span.Key)
+	}
+	_, firstMatchTenID, err := keys.DecodeTenantPrefix(firstMatch.span.Key)
+	if err != nil {
+		log.Fatalf(ctx, "%v", err)
+	}
+	if !firstMatch.config.Equal(match.config) || !firstMatchTenID.Equal(matchTenID) {
+		return roachpb.RKey(match.span.Key)
+	}
+
+	// At least the first two entries with the given span have the same configs
+	// and part of the same tenant range. Keep seeking ahead until we find a
+	// different config or a different tenant.
+	var lastMatch spanConfigEntry
+	postSplitKeySp := roachpb.Span{Key: match.span.EndKey, EndKey: sp.EndKey}
+	s.tree.DoMatching(func(i interval.Interface) (done bool) {
+		nextEntry := i.(*spanConfigStoreEntry).spanConfigEntry
+		_, entryTenID, err := keys.DecodeTenantPrefix(nextEntry.span.Key)
+		if err != nil {
+			log.Fatalf(ctx, "%v", err)
+		}
+		if !nextEntry.config.Equal(match.config) || !entryTenID.Equal(matchTenID) {
+			lastMatch = nextEntry
+			return true // we're done
+		}
+		return false // more
+	}, postSplitKeySp.AsRange())
+	if !lastMatch.isEmpty() {
+		return roachpb.RKey(lastMatch.span.Key)
+	}
+
+	// All entries within the given span have the same config and part of the same
+	// tenant. There are no split points here.
+	return nil
 }
 
 // getSpanConfigForKey returns the span config corresponding to the supplied
@@ -247,7 +358,7 @@ func (s *spanConfigStore) apply(
 //           add {span=carried-over.span, conf=carried-over.conf} if non-empty
 //
 //       for entry in store.overlapping(update.span):
-//          if entry.overlap(processed):
+//          if entry.overlap(carried-over):
 //               continue # already processed
 //
 //           union, intersection = union(update.span, entry), intersection(update.span, entry)

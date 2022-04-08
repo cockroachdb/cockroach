@@ -70,15 +70,15 @@ compute-split span=[b,h)
 key=c
 
 apply
-set [b,g):A
+set [b,g):B
 ----
 deleted [b,c)
 deleted [c,d)
-added [b,g):A
+added [b,g):B
 
 overlapping span=[b,h)
 ----
-[b,g):A
+[b,g):B
 [g,h):A
 
 needs-split span=[b,h)
