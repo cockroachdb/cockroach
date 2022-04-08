@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -86,7 +85,7 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 type _OP_CONST_NAME struct {
 	projConstOpBase
 	// {{if .NeedsBinaryOverloadHelper}}
-	colexecbase.BinaryOverloadHelper
+	colexecutils.BinaryOverloadHelper
 	// {{end}}
 	// {{if _IS_CONST_LEFT}}
 	constArg _L_GO_TYPE
@@ -100,7 +99,7 @@ func (p _OP_CONST_NAME) Next() coldata.Batch {
 	// {{/*
 	//     In order to inline the templated code of the binary overloads
 	//     operating on datums, we need to have a `_overloadHelper` local
-	//     variable of type `colexecbase.BinaryOverloadHelper`.
+	//     variable of type `colexecutils.BinaryOverloadHelper`.
 	// */}}
 	_overloadHelper := p.BinaryOverloadHelper
 	// {{end}}
@@ -311,7 +310,7 @@ func GetProjection_CONST_SIDEConstOperator(
 								// {{end}}
 							}
 							// {{if .NeedsBinaryOverloadHelper}}
-							op.BinaryOverloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
+							op.BinaryOverloadHelper = colexecutils.BinaryOverloadHelper{BinFn: binFn, EvalCtx: evalCtx}
 							// {{end}}
 							return op, nil
 							// {{end}}
