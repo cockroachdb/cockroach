@@ -1110,13 +1110,14 @@ func (l *lockState) collectLockStateInfo(
 // REQUIRES: l.mu is locked.
 func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 	var txnHolder *enginepb.TxnMeta
+
 	durability := lock.Unreplicated
 	if l.holder.locked {
-		if l.holder.holder[lock.Unreplicated].txn != nil {
-			txnHolder = l.holder.holder[lock.Unreplicated].txn
-		} else {
-			txnHolder = l.holder.holder[lock.Replicated].txn
+		if l.holder.holder[lock.Replicated].txn != nil {
 			durability = lock.Replicated
+			txnHolder = l.holder.holder[lock.Replicated].txn
+		} else if l.holder.holder[lock.Unreplicated].txn != nil {
+			txnHolder = l.holder.holder[lock.Unreplicated].txn
 		}
 	}
 
