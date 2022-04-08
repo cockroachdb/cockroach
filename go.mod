@@ -369,3 +369,5 @@ replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-0
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
 replace github.com/maruel/panicparse/v2 => github.com/cockroachdb/panicparse/v2 v2.0.0-20211103220158-604c82a44f1e
+
+replace github.com/lib/pq => github.com/cockroachdb/pq v0.0.0-20220408053752-c3ffc8d4376f
