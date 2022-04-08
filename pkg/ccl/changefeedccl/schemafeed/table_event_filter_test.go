@@ -17,11 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTableEventIsRegionalByRowChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
@@ -67,6 +70,8 @@ func TestTableEventIsRegionalByRowChange(t *testing.T) {
 }
 
 func TestTableEventIsPrimaryIndexChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
@@ -147,6 +152,8 @@ func TestTableEventIsPrimaryIndexChange(t *testing.T) {
 }
 
 func TestTableEventIsOnlyPrimaryIndexChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
@@ -227,6 +234,8 @@ func TestTableEventIsOnlyPrimaryIndexChange(t *testing.T) {
 }
 
 func TestTableEventFilterErrorsWithIncompletePolicy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
@@ -256,6 +265,8 @@ func TestTableEventFilterErrorsWithIncompletePolicy(t *testing.T) {
 }
 
 func TestTableEventFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
