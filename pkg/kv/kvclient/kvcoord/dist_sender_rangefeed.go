@@ -472,7 +472,7 @@ func (ds *DistSender) singleRangeFeed(
 					if !t.ResolvedTS.IsEmpty() && catchupRes != nil {
 						finishCatchupScan()
 					}
-					args.Timestamp.Forward(t.ResolvedTS)
+					args.Timestamp.Forward(t.ResolvedTS.Next())
 				}
 			case *roachpb.RangeFeedError:
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
