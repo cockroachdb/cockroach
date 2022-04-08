@@ -1,0 +1,80 @@
+query T
+SELECT show_trgm(str) FROM (VALUES
+    (''),
+    ('a'),
+    ('ab'),
+    ('abc'),
+    ('abcd'),
+    (NULL)
+  ) tbl(str)
+----
+{}
+{"  a"," a "}
+{"  a"," ab","ab "}
+{"  a"," ab",abc,"bc "}
+{"  a"," ab",abc,bcd,"cd "}
+NULL
+
+# Test that we sort the output trigrams.
+query T
+SELECT show_trgm('dcba')
+----
+{"  d"," dc","ba ",cba,dcb}
+
+# Test that we downcase the input string.
+query T
+SELECT show_trgm('Foo')
+----
+{"  f"," fo",foo,"oo "}
+
+# Test that we de-duplicate the output trigrams.
+query T
+SELECT show_trgm('aaaa')
+----
+{"  a"," aa","aa ",aaa}
+
+# Test that we split at word boundaries.
+query T
+SELECT show_trgm('a b,c|d_e3 bl  ')
+----
+{"  a","  b","  c","  d","  e"," a "," b "," bl"," c "," d "," e3","bl ","e3 "}
+
+# Test the similarity builtin.
+query F
+SELECT similarity(a, b) FROM (VALUES
+    ('foo', 'bar'),
+    ('foo', 'far'),
+    ('foo', 'for'),
+    ('foo', 'foo')
+  ) tbl(a, b)
+----
+0
+0.142857142857143
+0.333333333333333
+1
+
+query F
+SELECT similarity(a, b) FROM (VALUES
+    ('f', 'bfr'),
+    ('foo', 'foobar'),
+    ('', 'blah'),
+    ('blah', '')
+  ) tbl(a, b)
+----
+0
+0.375
+0
+0
+
+query F
+SELECT similarity(a, b) FROM (VALUES
+    ('FOO', 'foo'),
+    ('foobar', 'foo'),
+    ('foobar', 'barfoo'),
+    ('blorp', 'z')
+  ) tbl(a, b)
+----
+1
+0.375
+0.166666666666667
+0
