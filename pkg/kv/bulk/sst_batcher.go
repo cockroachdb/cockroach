@@ -522,6 +522,10 @@ type sstSpan struct {
 func (b *SSTBatcher) addSSTable(
 	ctx context.Context, start, end roachpb.Key, sstBytes []byte,
 ) error {
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second * 60):
+	}
 	sendStart := timeutil.Now()
 	iter, err := storage.NewMemSSTIterator(sstBytes, true)
 	if err != nil {
