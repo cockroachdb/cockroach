@@ -53,7 +53,7 @@ interface DropdownButtonProps {
   customProps?: Partial<ButtonProps>;
 }
 
-const DropdownButton: React.FC<DropdownButtonProps> = ({
+export const DropdownButton: React.FC<DropdownButtonProps> = ({
   children,
   customProps = {},
 }) => {

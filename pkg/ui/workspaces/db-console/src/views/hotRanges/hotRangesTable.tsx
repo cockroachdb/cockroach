@@ -18,12 +18,18 @@ import {
   ResultsPerPageLabel,
   SortSetting,
   Anchor,
+  EmptyTable,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
 import { round } from "lodash";
 import styles from "./hotRanges.module.styl";
 import { cockroach } from "src/js/protos";
-import { readsAndWritesOverviewPage, uiDebugPages } from "src/util/docs";
+import {
+  performanceBestPracticesHotSpots,
+  readsAndWritesOverviewPage,
+  uiDebugPages,
+} from "src/util/docs";
+import emptyTableResultsImg from "assets/emptyState/empty-table-results.svg";
 
 const PAGE_SIZE = 50;
 const cx = classNames.bind(styles);
@@ -32,12 +38,14 @@ interface HotRangesTableProps {
   hotRangesList: cockroach.server.serverpb.HotRangesResponseV2.IHotRange[];
   lastUpdate?: string;
   nodeIdToLocalityMap: Map<number, string>;
+  clearFilterContainer: React.ReactNode;
 }
 
 const HotRangesTable = ({
   hotRangesList,
   nodeIdToLocalityMap,
   lastUpdate,
+  clearFilterContainer,
 }: HotRangesTableProps) => {
   const [pagination, setPagination] = useState({
     pageSize: PAGE_SIZE,
@@ -48,9 +56,6 @@ const HotRangesTable = ({
     columnTitle: "qps",
   });
 
-  if (hotRangesList.length === 0) {
-    return <div>No hot ranges</div>;
-  }
   const columns: ColumnDescriptor<
     cockroach.server.serverpb.HotRangesResponseV2.IHotRange
   >[] = [
@@ -218,8 +223,9 @@ const HotRangesTable = ({
               ...pagination,
               total: hotRangesList.length,
             }}
-            pageName="hot ranges"
+            pageName="results"
           />
+          {clearFilterContainer}
         </h4>
         <h4 className="cl-count-title">
           {lastUpdate && `Last update: ${lastUpdate}`}
@@ -237,6 +243,17 @@ const HotRangesTable = ({
           })
         }
         pagination={pagination}
+        renderNoResult={
+          <EmptyTable
+            title="No hot ranges"
+            icon={emptyTableResultsImg}
+            footer={
+              <Anchor href={performanceBestPracticesHotSpots} target="_blank">
+                Learn more about hot ranges
+              </Anchor>
+            }
+          />
+        }
       />
       <Pagination
         pageSize={PAGE_SIZE}
