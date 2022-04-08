@@ -19,27 +19,6 @@ import (
 	"github.com/google/btree"
 )
 
-// LoadEvent represent a kv operation such as a read or write.
-// TODO(lidor): support batches in the initial implementation.
-type LoadEvent struct {
-}
-
-// WorkloadGenerator generates workload where each op contains: key,
-// op type (e.g., read/write), size.
-type WorkloadGenerator interface {
-	// GetNext returns a LoadEvent which happens before maxTime, if exists.
-	GetNext(maxTime time.Time) (done bool, event LoadEvent)
-}
-
-// RandomWorkloadGenerator generates random operations within some limits.
-type RandomWorkloadGenerator struct {
-}
-
-// GetNext is part of the WorkloadGenerator interface.
-func (rwg *RandomWorkloadGenerator) GetNext(maxTime time.Time) (done bool, event LoadEvent) {
-	return true, LoadEvent{}
-}
-
 // ConfigEvent can be, for example, adding or removing a node in a region.
 type ConfigEvent struct {
 }
