@@ -1,0 +1,105 @@
+sql admin
+{
+  "database": "system",
+  "statements": [{"sql": "SELECT username FROM users where username = $1", "arguments": ["admin"]}]
+}
+----
+{"num_statements":1,"request":{"timeout":"5s","max_result_size":10000,"database":"system","application_name":"$ api-v2-sql","execute":false,"statements":[{"sql":"SELECT username FROM users WHERE username = $1","arguments":["admin"]}]}}
+
+
+sql admin
+{
+  "database": "system",
+  "execute": true,
+  "statements": [{"sql": "SELECT username FROM users where username = $1", "arguments": ["admin"]}]
+}
+----
+{"num_statements":1,"execution":{"txn_results":[{"statement":1,"tag":"SELECT","start":"1970-01-01T00:00:00Z","end":"1970-01-01T00:00:00Z","rows_affected":0,"columns":{"name":"username","type":"STRING","oid":25},"rows":[{"username":"admin"}]}]}}
+
+
+sql non-admin expect-error
+{
+  "database": "system",
+  "execute": true,
+  "statements": [{"sql": "SELECT username FROM users where username = 'admin'"}]
+}
+----
+42501|executing stmt 1: run-query-via-api: user authentic_user_noadmin does not have SELECT privilege on relation users
+
+
+sql admin
+{
+  "database": "system",
+  "execute": true,
+  "statements": [
+    {"sql": "SELECT username FROM users where username = 'admin'"},
+    {"sql": "SELECT \"eventType\" FROM eventlog where \"eventType\" = 'node_restart'"}
+  ]
+}
+----
+{"num_statements":2,"execution":{"txn_results":[{"statement":1,"tag":"SELECT","start":"1970-01-01T00:00:00Z","end":"1970-01-01T00:00:00Z","rows_affected":0,"columns":{"name":"username","type":"STRING","oid":25},"rows":[{"username":"admin"}]},{"statement":2,"tag":"SELECT","start":"1970-01-01T00:00:00Z","end":"1970-01-01T00:00:00Z","rows_affected":0,"columns":{"name":"eventType","type":"STRING","oid":25}}]}}
+
+
+sql admin
+{
+  "database": "mydb",
+  "execute": true,
+  "statements": [
+    {"sql": "CREATE database mydb"},
+    {"sql": "CREATE table mydb.test (id int)"},
+    {"sql": "INSERT INTO test VALUES (1)"}
+  ]
+}
+----
+{"num_statements":3,"execution":{"txn_results":[{"statement":1,"tag":"CREATE DATABASE","start":"1970-01-01T00:00:00Z","end":"1970-01-01T00:00:00Z","rows_affected":0,"columns":{"name":"rows_affected","type":"INT8","oid":20}},{"statement":2,"tag":"CREATE TABLE","start":"1970-01-01T00:00:00Z","end":"1970-01-01T00:00:00Z","rows_affected":0,"columns":{"name":"rows_affected","type":"INT8","oid":20}},{"statement":3,"tag":"INSERT","start":"1970-01-01T00:00:00Z","end":"1970-01-01T00:00:00Z","rows_affected":1,"columns":{"name":"rows_affected","type":"INT8","oid":20}}]}}
+
+
+sql admin expect-error
+{
+  "statements": [
+    {"sql": "INSERT INTO WHERE"}
+  ]
+}
+----
+42601|parsing statement 1: at or near "where": syntax error
+
+
+sql admin expect-error
+{
+  "timeout": "abcdef",
+  "statements": [
+    {"sql": "INSERT INTO WHERE"}
+  ]
+}
+----
+XXUUU|time: invalid duration "abcdef"
+
+
+sql admin expect-error
+{
+  "statements": [
+    {"sql": "SELECT username FROM users where username = 'admin'; SELECT username FROM users where username = 'admin'"}
+  ]
+}
+----
+XXUUU|parsing statement 1: expecting 1 statement, found 2
+
+
+sql admin expect-error
+{
+  "statements": [
+    {"sql": "SELECT username FROM users where username = $1"}
+  ]
+}
+----
+XXUUU|parsing statement 1: expected 1 placeholder(s), got 0
+
+
+sql admin expect-error
+{
+  "statements": [
+    {"sql": "SELECT username FROM users where username = $1", "arguments": ["blah", "blah"]}
+  ]
+}
+----
+XXUUU|parsing statement 1: expected 1 placeholder(s), got 2
