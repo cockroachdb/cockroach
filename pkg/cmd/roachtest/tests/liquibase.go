@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-var supportedLiquibaseHarnessCommit = "05a91da4869b68f9e3a47c033f856acfb9f01106"
+var supportedLiquibaseHarnessCommit = "1790ddef2d0339c5c96839ac60ac424c130dadd8"
 
 // This test runs the Liquibase test harness against a single cockroach node.
 func registerLiquibase(r registry.Registry) {

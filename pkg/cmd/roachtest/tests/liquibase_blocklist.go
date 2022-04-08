@@ -17,7 +17,9 @@ var liquibaseBlocklists = blocklistsForVersion{
 }
 
 var liquibaseBlocklist21_2 = blocklist{
-	"liquibase.harness.change.ChangeObjectTests.apply addDefaultValueSequenceNext against cockroachdb 20.2; verify generated SQL and DB snapshot": "",
+	"liquibase.harness.change.ChangeObjectTests.apply addCheckConstraint against cockroachdb 20.2":  "unknown",
+	"liquibase.harness.change.ChangeObjectTests.apply createPackage against cockroachdb 20.2":       "unknown",
+	"liquibase.harness.change.ChangeObjectTests.apply dropCheckConstraint against cockroachdb 20.2": "unknown",
 }
 
 var liquibaseBlocklist21_1 = liquibaseBlocklist20_2
