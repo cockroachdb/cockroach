@@ -991,3 +991,35 @@ CREATE TABLE t74729 AS SELECT g % 2 = 1 AS _bool FROM generate_series(1, 5) AS g
 
 statement ok
 SELECT CASE WHEN _bool THEN (1, ('a', 2)) ELSE (3, NULL) END FROM t74729
+
+# Regression test for #78159. Column access of NULL should not cause an internal
+# error.
+subtest 78159
+
+statement ok
+CREATE TABLE t78159 (b BOOL)
+
+statement ok
+INSERT INTO t78159 VALUES (false)
+
+query B
+SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
+----
+NULL
+
+# Regression test for #78515. Propagate tuple labels when type-checking
+# expressions with multiple matching tuple types.
+subtest 78515
+
+statement ok
+SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS a) END).a;
+
+# The label of the first tuple is used in the type of the CASE expression. This
+# is similar to Postgres, but not exactly the same - Postgres uses the labels of
+# the last tuple. This difference should be addressed in the future when we try
+# to adhere more closely to Postgres's type conversion behavior (see #75101).
+statement ok
+SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS b) END).a;
+
+statement error could not identify column \"b\" in tuple{int AS a}
+SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS b) END).b;
