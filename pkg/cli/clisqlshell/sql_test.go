@@ -112,7 +112,6 @@ func Example_sql() {
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
 	// x
 	// sql -e copy t.f from stdin
-	// ERROR: -e: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// sql -e select 1/(@1-2) from generate_series(1,3)
 	// ?column?
 	// -1.0000000000000000000

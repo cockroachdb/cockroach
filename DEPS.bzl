@@ -5059,10 +5059,10 @@ def go_deps():
         name = "com_github_lib_pq",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lib/pq",
-        sha256 = "0f50cfc8d4ed4bbb39767aacc04d6b23e1105d2fa50dcb8e4ae204b2c90018f0",
-        strip_prefix = "github.com/lib/pq@v1.10.2",
+        sha256 = "a5e7f8973a5370999678a82a452ec35d4004ec19b3089dc1af387c0082550688",
+        strip_prefix = "github.com/cockroachdb/pq@v0.0.0-20220408053752-c3ffc8d4376f",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lib/pq/com_github_lib_pq-v1.10.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pq/com_github_cockroachdb_pq-v0.0.0-20220408053752-c3ffc8d4376f.zip",
         ],
     )
     go_repository(
