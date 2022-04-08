@@ -422,3 +422,33 @@ func (f *Factory) ConstructConstVal(d tree.Datum, t *types.T) opt.ScalarExpr {
 	}
 	return f.ConstructConst(d, t)
 }
+
+// ----------------------------------------------------------------------
+//
+// Convenience functions.
+//
+// ----------------------------------------------------------------------
+
+// RemapCols remaps columns IDs in the input ScalarExpr by replacing occurrences
+// of the keys of colMap with the corresponding values. If column IDs are
+// encountered in the input ScalarExpr that are not keys in colMap, they are not
+// remapped.
+func (f *Factory) RemapCols(scalar opt.ScalarExpr, colMap opt.ColMap) opt.ScalarExpr {
+	// Recursively walk the scalar sub-tree looking for references to columns
+	// that need to be replaced and then replace them appropriately.
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			dstCol, ok := colMap.Get(int(t.Col))
+			if !ok {
+				// The column ID is not in colMap so no replacement is required.
+				return e
+			}
+			return f.ConstructVariable(opt.ColumnID(dstCol))
+		}
+		return f.Replace(e, replace)
+	}
+
+	return replace(scalar).(opt.ScalarExpr)
+}
