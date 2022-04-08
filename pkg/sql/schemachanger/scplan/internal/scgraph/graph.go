@@ -11,6 +11,8 @@
 package scgraph
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -48,7 +50,7 @@ type Graph struct {
 
 	// noOpOpEdges that are marked optimized out, and will not generate
 	// any operations.
-	noOpOpEdges map[*OpEdge]bool
+	noOpOpEdges map[*OpEdge]map[string]struct{}
 
 	edges []Edge
 
@@ -75,7 +77,7 @@ func New(cs scpb.CurrentState) (*Graph, error) {
 	g := Graph{
 		targetIdxMap: map[*scpb.Target]int{},
 		opEdgesFrom:  map[*screl.Node]*OpEdge{},
-		noOpOpEdges:  map[*OpEdge]bool{},
+		noOpOpEdges:  map[*OpEdge]map[string]struct{}{},
 		opToOpEdge:   map[scop.Op]*OpEdge{},
 		entities:     db,
 	}
@@ -112,7 +114,7 @@ func (g *Graph) ShallowClone() *Graph {
 		opToOpEdge:   g.opToOpEdge,
 		edges:        g.edges,
 		entities:     g.entities,
-		noOpOpEdges:  make(map[*OpEdge]bool),
+		noOpOpEdges:  make(map[*OpEdge]map[string]struct{}),
 	}
 	// Any decorations for mutations will be copied.
 	for edge, noop := range g.noOpOpEdges {
@@ -239,13 +241,34 @@ func (g *Graph) AddDepEdge(
 
 // MarkAsNoOp marks an edge as no-op, so that no operations are emitted from
 // this edge during planning.
-func (g *Graph) MarkAsNoOp(edge *OpEdge) {
-	g.noOpOpEdges[edge] = true
+func (g *Graph) MarkAsNoOp(edge *OpEdge, rule ...string) {
+	m := make(map[string]struct{})
+	for _, r := range rule {
+		m[r] = struct{}{}
+	}
+	g.noOpOpEdges[edge] = m
 }
 
 // IsNoOp checks if an edge is marked as an edge that should emit no operations.
 func (g *Graph) IsNoOp(edge *OpEdge) bool {
-	return len(edge.op) == 0 || g.noOpOpEdges[edge]
+	if len(edge.op) == 0 {
+		return true
+	}
+	_, isNoOp := g.noOpOpEdges[edge]
+	return isNoOp
+}
+
+// NoOpRules returns the rules which caused the edge to not emit any operations.
+func (g *Graph) NoOpRules(edge *OpEdge) (rules []string) {
+	if !g.IsNoOp(edge) {
+		return nil
+	}
+	m := g.noOpOpEdges[edge]
+	for rule := range m {
+		rules = append(rules, rule)
+	}
+	sort.Strings(rules)
+	return rules
 }
 
 // Order returns the number of nodes in this graph.

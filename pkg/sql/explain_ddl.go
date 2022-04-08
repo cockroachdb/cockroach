@@ -72,18 +72,18 @@ func (n *explainDDLNode) startExec(params runParams) error {
 	if err != nil {
 		return errors.WithAssertionFailure(err)
 	}
-	var vizURL string
-	if n.options.Flags[tree.ExplainFlagDeps] {
-		if vizURL, err = sc.DependenciesURL(); err != nil {
-			return errors.WithAssertionFailure(err)
-		}
+	var info string
+	if n.options.Flags[tree.ExplainFlagVerbose] {
+		info, err = sc.ExplainVerbose()
 	} else {
-		if vizURL, err = sc.StagesURL(); err != nil {
-			return errors.WithAssertionFailure(err)
-		}
+		info, err = sc.ExplainCompact()
+	}
+
+	if err != nil {
+		return errors.WithAssertionFailure(err)
 	}
 	n.values = tree.Datums{
-		tree.NewDString(vizURL),
+		tree.NewDString(info),
 	}
 	return nil
 }
