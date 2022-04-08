@@ -156,6 +156,8 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption},
 		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption},
 		{"rules/", a.listRules, false, regularRole, noOption},
+
+		{"sql/", a.execSQL, true, regularRole, noOption},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
