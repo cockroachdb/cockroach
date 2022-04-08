@@ -233,18 +233,6 @@ func registerBackupMixedVersion(r registry.Registry) {
 				disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
 				c.Run(ctx, nodeIDs, fmt.Sprintf("touch %s", disableJobAdoptionSentinelFilePath))
 
-				// TODO(adityamaru): This is unfortunate and can be deleted once
-				// https://github.com/cockroachdb/cockroach/pull/79666 is backported to
-				// 21.2 and the mixed version map for roachtests is bumped to the 21.2
-				// patch release with the backport.
-				//
-				// The bug above means that nodes for which we have disabled adoption may
-				// still lay claim on the job, and then not clear their claim on realizing
-				// that adoption is disabled. To get around this we set the env variable
-				// to disable the registries from even laying claim on the jobs.
-				_, err = c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=0")
-				require.NoError(t, err)
-
 				// Wait for no jobs to be running on the node that we have halted
 				// adoption on.
 				testutils.SucceedsSoon(t, func() error {
@@ -260,6 +248,18 @@ func registerBackupMixedVersion(r registry.Registry) {
 					return nil
 				})
 			}
+
+			// TODO(adityamaru): This is unfortunate and can be deleted once
+			// https://github.com/cockroachdb/cockroach/pull/79666 is backported to
+			// 21.2 and the mixed version map for roachtests is bumped to the 21.2
+			// patch release with the backport.
+			//
+			// The bug above means that nodes for which we have disabled adoption may
+			// still lay claim on the job, and then not clear their claim on realizing
+			// that adoption is disabled. To get around this we set the env variable
+			// to disable the registries from even laying claim on the jobs.
+			_, err := c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=0")
+			require.NoError(t, err)
 		}
 	}
 
@@ -277,12 +277,12 @@ func registerBackupMixedVersion(r registry.Registry) {
 				storeDirectory := result.Stdout
 				disableJobAdoptionSentinelFilePath := filepath.Join(storeDirectory, jobs.PreventAdoptionFile)
 				c.Run(ctx, nodeIDs, fmt.Sprintf("rm -f %s", disableJobAdoptionSentinelFilePath))
-
-				// Reset the env variable that controls how many jobs are claimed by the
-				// registry.
-				_, err = c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=10")
-				require.NoError(t, err)
 			}
+
+			// Reset the env variable that controls how many jobs are claimed by the
+			// registry.
+			_, err := c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=10")
+			require.NoError(t, err)
 		}
 	}
 
