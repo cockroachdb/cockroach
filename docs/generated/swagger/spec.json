@@ -574,6 +574,193 @@
         }
       }
     },
+    "/sql/": {
+      "post": {
+        "description": "Executes one or more SQL statements.\n\nIf the execute parameter is not specified, only check the SQL\nsyntax.\n\nIf only one SQL statement is specified, it is executed using an\nimplicit transaction.\n\nIf multiple SQL statements are specified and the multi_statement\noption is set, the SQL statements are executed using a common\ntransaction. This means that the client cannot use\nBEGIN/COMMIT/ROLLBACK. If any statement encounters a non-retriable\nerror, the transaction is aborted and execution stops.\n\nOnly a single SQL statement is allowed if the multi_statement\noption is  not set, as a form of protection against SQL injection\nattacks.\n\nThere is no session state shared across the statements. For example,\nSET statements are ineffective.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "Execute one or more SQL statements",
+        "operationId": "execSQL",
+        "parameters": [
+          {
+            "name": "request",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "required": [
+                "statements"
+              ],
+              "properties": {
+                "application_name": {
+                  "description": "The SQL application_name parameter.",
+                  "type": "string"
+                },
+                "database": {
+                  "description": "The current database for the execution. Defaults to defaultdb.",
+                  "type": "string"
+                },
+                "max_result_size": {
+                  "description": "Max size in bytes for the execution field in the response. Execution stops with an error if the results do not fit.",
+                  "type": "integer"
+                },
+                "statements": {
+                  "description": "The SQL statement(s) to run.",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "sql"
+                    ],
+                    "properties": {
+                      "arguments": {
+                        "description": "Placeholder parameter values.",
+                        "type": "array"
+                      },
+                      "sql": {
+                        "description": "SQL syntax for one statement.",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "timeout": {
+                  "description": "Max time budget for the execution, using Go duration syntax. Default to 5 seconds.",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Query results and optional execution error.",
+            "schema": {
+              "type": "object",
+              "required": [
+                "num_statements",
+                "execution"
+              ],
+              "properties": {
+                "execution": {
+                  "type": "object",
+                  "required": [
+                    "retries",
+                    "txn_results"
+                  ],
+                  "properties": {
+                    "retries": {
+                      "description": "The number of times the transaction was retried.",
+                      "type": "integer"
+                    },
+                    "txn_results": {
+                      "description": "The result sets, one per SQL statement.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "statement",
+                          "tag",
+                          "start",
+                          "end"
+                        ],
+                        "properties": {
+                          "columns": {
+                            "description": "The list of columns in the result rows.",
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "name",
+                                "type",
+                                "oid"
+                              ],
+                              "properties": {
+                                "name": {
+                                  "description": "The column name.",
+                                  "type": "string"
+                                },
+                                "oid": {
+                                  "description": "The PostgreSQL OID for the column type.",
+                                  "type": "integer"
+                                },
+                                "type": {
+                                  "description": "The SQL type of the column.",
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "end": {
+                            "description": "End timestamp, encoded as RFC3339.",
+                            "type": "string"
+                          },
+                          "rows": {
+                            "description": "The result rows.",
+                            "type": "array",
+                            "items": {}
+                          },
+                          "rows_affected": {
+                            "description": "The number of rows affected.",
+                            "type": "integer"
+                          },
+                          "start": {
+                            "description": "Start timestamp, encoded as RFC3339.",
+                            "type": "string"
+                          },
+                          "statement": {
+                            "description": "The statement index in the SQL input.",
+                            "type": "integer"
+                          },
+                          "tag": {
+                            "description": "The short statement tag.",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "num_statements": {
+                  "description": "The number of statements in the input SQL.",
+                  "type": "integer"
+                },
+                "txn_error": {
+                  "description": "The details of the error, if an error was encountered.",
+                  "type": "object",
+                  "required": [
+                    "message",
+                    "code"
+                  ],
+                  "properties": {
+                    "code": {
+                      "description": "The SQLSTATE 5-character code of the error.",
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. Bad input encoding, missing SQL or invalid parameter."
+          },
+          "405": {
+            "description": "Bad method. Only the POST method is supported."
+          },
+          "500": {
+            "description": "Internal error encountered."
+          }
+        }
+      }
+    },
     "/users/": {
       "get": {
         "description": "List SQL users on this cluster.",
