@@ -118,7 +118,7 @@ func (ef *execFactory) ConstructScan(
 	}
 	scan.reqOrdering = ReqOrdering(reqOrdering)
 	scan.estimatedRowCount = uint64(params.EstimatedRowCount)
-	if params.Locking != nil {
+	if params.Locking.IsLocking() {
 		scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
 		scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	}
@@ -654,7 +654,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	isFirstJoinInPairedJoiner bool,
 	isSecondJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
-	locking *tree.LockingItem,
+	locking opt.Locking,
 	limitHint int64,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
@@ -671,7 +671,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	}
 
 	tableScan.index = idx
-	if locking != nil {
+	if locking.IsLocking() {
 		tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	}
