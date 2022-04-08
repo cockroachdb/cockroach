@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/exec",
         "//pkg/sql/opt/invertedexpr",  # keep
+        "//pkg/sql/opt/props/physical",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",

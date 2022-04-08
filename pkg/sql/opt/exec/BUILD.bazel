@@ -16,6 +16,7 @@ go_library(
         "//pkg/sql/opt",  # keep
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/props/physical",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",

@@ -73,9 +73,8 @@ define ScanPrivate {
     # leave this unset (Strength = ForNone), which indicates that no row-level
     # locking will be performed while scanning the table. Stronger locking modes
     # are used by SELECT .. FOR [KEY] UPDATE/SHARE statements and by the initial
-    # row retrieval of DELETE and UPDATE statements. The locking item's Targets
-    # list will always be empty when part of a ScanPrivate.
-    Locking LockingItem
+    # row retrieval of DELETE and UPDATE statements.
+    Locking Locking
 
     # LocalityOptimized is true if this scan is a child of a
     # LocalityOptimizedSearch operator, indicating that it either contains all

@@ -679,7 +679,7 @@ func (s *ScanPrivate) IsVirtualTable(md *opt.Metadata) bool {
 // a SELECT .. FOR [KEY] UPDATE/SHARE clause or because the Scan was configured
 // as part of the row retrieval of a DELETE or UPDATE statement.
 func (s *ScanPrivate) IsLocking() bool {
-	return s.Locking != nil
+	return s.Locking.IsLocking()
 }
 
 // PartialIndexPredicate returns the FiltersExpr representing the predicate of
