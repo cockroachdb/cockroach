@@ -11,7 +11,7 @@ GO_TEST_JSON_OUTPUT_FILE=/artifacts/test.json.txt
 exit_status=0
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci --config=crdb_test_off \
     test //pkg/sql/logictest:logictest_test -- \
-    --test_arg -bigtest --test_arg -flex-types --test_arg -parallel=4 \
+    --test_arg -bigtest --test_arg -flex-types --test_arg -test.parallel=4 \
     --test_timeout 86400 --test_filter '^TestSqlLiteLogic$|^TestTenantSQLLiteLogic$' \
     --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE || exit_status=$?
 process_test_json \
