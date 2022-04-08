@@ -435,7 +435,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 
 				// Project the computed column expression, mapping all columns
 				// in rightEq to corresponding columns in leftEq.
-				projection := c.e.f.ConstructProjectionsItem(c.RemapCols(expr, eqColMap), compEqCol)
+				projection := c.e.f.ConstructProjectionsItem(c.e.f.RemapCols(expr, eqColMap), compEqCol)
 				inputProjections = append(inputProjections, projection)
 				lookupJoin.KeyCols = append(lookupJoin.KeyCols, compEqCol)
 				rightSideCols = append(rightSideCols, idxCol)
@@ -1175,11 +1175,11 @@ func (c *CustomFuncs) mapInvertedJoin(
 	srcColsToDstCols.Set(int(invertedSourceCol), int(newInvertedSourceCol))
 
 	invertedJoin.Table = newTabID
-	invertedJoin.InvertedExpr = c.RemapCols(invertedJoin.InvertedExpr, srcColsToDstCols)
+	invertedJoin.InvertedExpr = c.e.f.RemapCols(invertedJoin.InvertedExpr, srcColsToDstCols)
 	invertedJoin.Cols = invertedJoin.Cols.Difference(indexCols).Union(newIndexCols)
-	constFilters := c.RemapCols(&invertedJoin.ConstFilters, srcColsToDstCols).(*memo.FiltersExpr)
+	constFilters := c.e.f.RemapCols(&invertedJoin.ConstFilters, srcColsToDstCols).(*memo.FiltersExpr)
 	invertedJoin.ConstFilters = *constFilters
-	on := c.RemapCols(&invertedJoin.On, srcColsToDstCols).(*memo.FiltersExpr)
+	on := c.e.f.RemapCols(&invertedJoin.On, srcColsToDstCols).(*memo.FiltersExpr)
 	invertedJoin.On = *on
 }
 
