@@ -16,3 +16,24 @@ bazel info workspace --color=no
 export COCKROACH_BAZEL_CAN_MIRROR=1
 export COCKROACH_BAZEL_FORCE_GENERATE=1
 crdb-checkout/build/bazelutil/bazel-generate.sh
+
+exec
+dev generate go
+----
+bazel run //pkg/gen:code
+
+exec
+dev generate docs
+----
+bazel run //pkg/gen:docs
+bazel info workspace --color=no
+crdb-checkout/build/bazelutil/generate_redact_safe.sh
+echo "" > crdb-checkout/docs/generated/redact_safe.md
+
+exec
+dev gen go docs
+----
+bazel run //pkg/gen
+bazel info workspace --color=no
+crdb-checkout/build/bazelutil/generate_redact_safe.sh
+echo "" > crdb-checkout/docs/generated/redact_safe.md
