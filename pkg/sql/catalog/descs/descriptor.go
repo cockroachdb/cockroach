@@ -172,6 +172,25 @@ func (tc *Collection) getDescriptorsByID(
 		return nil, err
 	}
 	for j, desc := range kvDescs {
+		// Callers expect the descriptors to come back hydrated.
+		// In practice, array types here are not hydrated, and that's a bummer.
+		// Nobody presently is upset about it, but it's not a good thing.
+		// Ideally we'd have a clearer contract regarding hydration and the values
+		// stored in the various maps inside the collection. One might want to
+		// store only hydrated values in the various maps. This turns out to be
+		// somewhat tricky because we'd need to make sure to properly re-hydrate
+		// all the relevant descriptors when a type descriptor change. Leased
+		// descriptors are at least as tricky, plus, there we have a cache that
+		// works relatively well.
+		//
+		// TODO(ajwerner): Sort out the hydration mess; define clearly what is
+		// hydrated where and test the API boundary accordingly.
+		if table, isTable := desc.(catalog.TableDescriptor); isTable {
+			desc, err = tc.hydrateTypesInTableDesc(ctx, txn, table)
+			if err != nil {
+				return nil, err
+			}
+		}
 		descs[indexes[j]] = desc
 	}
 	return descs, nil

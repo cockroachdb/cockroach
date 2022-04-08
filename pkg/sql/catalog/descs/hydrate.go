@@ -97,8 +97,13 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			return name, desc, nil
 		})
 
-		// Utilize the cache of hydrated tables if we have one.
-		if tc.hydratedTables != nil {
+		// Utilize the cache of hydrated tables if we have one and this descriptor
+		// was leased.
+		// TODO(ajwerner): Consider surfacing the mechanism used to retrieve the
+		// descriptor up to this layer.
+		if tc.hydratedTables != nil &&
+			tc.uncommitted.descs.GetByID(desc.GetID()) == nil &&
+			tc.synthetic.descs.GetByID(desc.GetID()) == nil {
 			hydrated, err := tc.hydratedTables.GetHydratedTableDescriptor(ctx, t, getType)
 			if err != nil {
 				return nil, err
