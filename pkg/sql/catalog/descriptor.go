@@ -680,6 +680,12 @@ type TableDescriptor interface {
 	GetStorageParams(spaceBetweenEqual bool) []string
 }
 
+// MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.
+type MutableTableDescriptor interface {
+	TableDescriptor
+	MutableDescriptor
+}
+
 // TypeDescriptor will eventually be called typedesc.Descriptor.
 // It is implemented by (Imm|M)utableTypeDescriptor.
 type TypeDescriptor interface {
