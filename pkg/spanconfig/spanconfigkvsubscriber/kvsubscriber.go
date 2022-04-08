@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -78,6 +79,7 @@ import (
 type KVSubscriber struct {
 	fallback roachpb.SpanConfig
 	knobs    *spanconfig.TestingKnobs
+	settings *cluster.Settings
 
 	rfc *rangefeedcache.Watcher
 
@@ -111,8 +113,12 @@ func New(
 	spanConfigurationsTableID uint32,
 	bufferMemLimit int64,
 	fallback roachpb.SpanConfig,
+	settings *cluster.Settings,
 	knobs *spanconfig.TestingKnobs,
 ) *KVSubscriber {
+	if knobs == nil {
+		knobs = &spanconfig.TestingKnobs{}
+	}
 	spanConfigTableStart := keys.SystemSQLCodec.IndexPrefix(
 		spanConfigurationsTableID,
 		keys.SpanConfigurationsTablePrimaryKeyIndexID,
@@ -121,13 +127,11 @@ func New(
 		Key:    spanConfigTableStart,
 		EndKey: spanConfigTableStart.PrefixEnd(),
 	}
-	spanConfigStore := spanconfigstore.New(fallback)
-	if knobs == nil {
-		knobs = &spanconfig.TestingKnobs{}
-	}
+	spanConfigStore := spanconfigstore.New(fallback, settings, knobs)
 	s := &KVSubscriber{
 		fallback: fallback,
 		knobs:    knobs,
+		settings: settings,
 	}
 	var rfCacheKnobs *rangefeedcache.TestingKnobs
 	if knobs != nil {
@@ -247,7 +251,7 @@ func (s *KVSubscriber) handleUpdate(ctx context.Context, u rangefeedcache.Update
 func (s *KVSubscriber) handleCompleteUpdate(
 	ctx context.Context, ts hlc.Timestamp, events []rangefeedbuffer.Event,
 ) {
-	freshStore := spanconfigstore.New(s.fallback)
+	freshStore := spanconfigstore.New(s.fallback, s.settings, s.knobs)
 	for _, ev := range events {
 		freshStore.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 	}

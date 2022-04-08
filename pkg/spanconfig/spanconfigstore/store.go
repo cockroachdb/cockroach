@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -51,17 +52,28 @@ type Store struct {
 	// key is within the tenant's keyspace. We'd have to thread that through the
 	// KVAccessor interface by reserving special keys for these default configs.
 
+	settings *cluster.Settings
 	// fallback is the span config we'll fall back on in the absence of
 	// something more specific.
 	fallback roachpb.SpanConfig
+	knobs    *spanconfig.TestingKnobs
 }
 
 var _ spanconfig.Store = &Store{}
 
 // New instantiates a span config store with the given fallback.
-func New(fallback roachpb.SpanConfig) *Store {
-	s := &Store{fallback: fallback}
-	s.mu.spanConfigStore = newSpanConfigStore()
+func New(
+	fallback roachpb.SpanConfig, settings *cluster.Settings, knobs *spanconfig.TestingKnobs,
+) *Store {
+	if knobs == nil {
+		knobs = &spanconfig.TestingKnobs{}
+	}
+	s := &Store{
+		settings: settings,
+		fallback: fallback,
+		knobs:    knobs,
+	}
+	s.mu.spanConfigStore = newSpanConfigStore(settings, s.knobs)
 	s.mu.systemSpanConfigStore = newSystemSpanConfigStore()
 	return s
 }
@@ -72,11 +84,11 @@ func (s *Store) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
 }
 
 // ComputeSplitKey is part of the spanconfig.StoreReader interface.
-func (s *Store) ComputeSplitKey(_ context.Context, start, end roachpb.RKey) roachpb.RKey {
+func (s *Store) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.mu.spanConfigStore.computeSplitKey(start, end)
+	return s.mu.spanConfigStore.computeSplitKey(ctx, start, end)
 }
 
 // GetSpanConfigForKey is part of the spanconfig.StoreReader interface.
@@ -135,7 +147,7 @@ func (s *Store) Copy(ctx context.Context) *Store {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	clone := New(s.fallback)
+	clone := New(s.fallback, s.settings, s.knobs)
 	clone.mu.spanConfigStore = s.mu.spanConfigStore.copy(ctx)
 	clone.mu.systemSpanConfigStore = s.mu.systemSpanConfigStore.copy()
 	return clone

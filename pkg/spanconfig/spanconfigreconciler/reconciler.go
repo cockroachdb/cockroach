@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
@@ -40,10 +41,11 @@ type Reconciler struct {
 	sqlTranslatorFactory *spanconfigsqltranslator.Factory
 	kvAccessor           spanconfig.KVAccessor
 
-	execCfg *sql.ExecutorConfig
-	codec   keys.SQLCodec
-	tenID   roachpb.TenantID
-	knobs   *spanconfig.TestingKnobs
+	execCfg  *sql.ExecutorConfig
+	codec    keys.SQLCodec
+	tenID    roachpb.TenantID
+	settings *cluster.Settings
+	knobs    *spanconfig.TestingKnobs
 
 	mu struct {
 		syncutil.RWMutex
@@ -61,6 +63,7 @@ func New(
 	execCfg *sql.ExecutorConfig,
 	codec keys.SQLCodec,
 	tenID roachpb.TenantID,
+	settings *cluster.Settings,
 	knobs *spanconfig.TestingKnobs,
 ) *Reconciler {
 	if knobs == nil {
@@ -71,10 +74,11 @@ func New(
 		sqlTranslatorFactory: sqlTranslatorFactory,
 		kvAccessor:           kvAccessor,
 
-		execCfg: execCfg,
-		codec:   codec,
-		tenID:   tenID,
-		knobs:   knobs,
+		settings: settings,
+		execCfg:  execCfg,
+		codec:    codec,
+		tenID:    tenID,
+		knobs:    knobs,
 	}
 }
 
@@ -152,6 +156,7 @@ func (r *Reconciler) Reconcile(
 		sqlTranslatorFactory: r.sqlTranslatorFactory,
 		kvAccessor:           r.kvAccessor,
 		session:              session,
+		settings:             r.settings,
 		execCfg:              r.execCfg,
 		codec:                r.codec,
 		tenID:                r.tenID,
@@ -205,10 +210,11 @@ type fullReconciler struct {
 	kvAccessor           spanconfig.KVAccessor
 	session              sqlliveness.Session
 
-	execCfg *sql.ExecutorConfig
-	codec   keys.SQLCodec
-	tenID   roachpb.TenantID
-	knobs   *spanconfig.TestingKnobs
+	settings *cluster.Settings
+	execCfg  *sql.ExecutorConfig
+	codec    keys.SQLCodec
+	tenID    roachpb.TenantID
+	knobs    *spanconfig.TestingKnobs
 }
 
 // reconcile runs the full reconciliation process, returning:
@@ -345,7 +351,7 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		targets = append(targets,
 			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeAllTenantKeyspaceTargetsSet(f.tenID)))
 	}
-	store := spanconfigstore.New(roachpb.SpanConfig{})
+	store := spanconfigstore.New(roachpb.SpanConfig{}, f.settings, f.knobs)
 	{
 		// Fully populate the store with KVAccessor contents.
 		records, err := f.kvAccessor.GetSpanConfigRecords(ctx, targets)
