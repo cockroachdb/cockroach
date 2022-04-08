@@ -92,6 +92,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 	tenKVAccessor := tenantState.SpanConfigKVAccessor().(spanconfig.KVAccessor)
 	tenSQLTranslatorFactory := tenantState.SpanConfigSQLTranslatorFactory().(*spanconfigsqltranslator.Factory)
 	tenSQLWatcher := tenantState.SpanConfigSQLWatcher().(spanconfig.SQLWatcher)
+	tenSettings := tenantState.ClusterSettings()
 
 	// TODO(irfansharif): We don't always care about these recordings -- should
 	// it be optional?
@@ -103,6 +104,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 		&tenExecCfg,
 		tenExecCfg.Codec,
 		tenID,
+		tenSettings,
 		tenKnobs,
 	)
 

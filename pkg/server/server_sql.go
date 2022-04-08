@@ -985,6 +985,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			execCfg,
 			codec,
 			cfg.TenantID,
+			cfg.Settings,
 			spanConfigKnobs,
 		)
 		spanConfig.manager = spanconfigmanager.New(

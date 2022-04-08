@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -31,6 +32,35 @@ func (s *Store) TestingApplyInternal(
 	dryrun bool, updates ...spanconfig.Update,
 ) (deleted []spanconfig.Target, added []spanconfig.Record, err error) {
 	return s.applyInternal(dryrun, updates...)
+}
+
+// TestingSplitKeys returns the computed list of range split points between
+// [start, end).
+func (s *Store) TestingSplitKeys(ctx context.Context, start, end roachpb.RKey) []roachpb.RKey {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.mu.spanConfigStore.TestingSplitKeys(ctx, start, end)
+}
+
+// TestingSplitKeys returns the computed list of range split points between
+// [start, end).
+func (s *spanConfigStore) TestingSplitKeys(
+	ctx context.Context, start, end roachpb.RKey,
+) []roachpb.RKey {
+	var splitKeys []roachpb.RKey
+	computeStart := start
+	for {
+		splitKey := s.computeSplitKey(ctx, computeStart, end)
+		if splitKey == nil {
+			break
+		}
+
+		splitKeys = append(splitKeys, splitKey)
+		computeStart = splitKey
+	}
+
+	return splitKeys
 }
 
 // TestDataDriven runs datadriven tests against the Store interface.
@@ -60,6 +90,10 @@ func (s *Store) TestingApplyInternal(
 // 		----
 // 		key=c
 //
+// 		split-keys span=[b,h)
+// 		----
+// 		key=c
+//
 // 		overlapping span=[b,h)
 // 		----
 // 		[b,d):A
@@ -75,7 +109,13 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
-		store := New(spanconfigtestutils.ParseConfig(t, "FALLBACK"))
+		store := New(
+			spanconfigtestutils.ParseConfig(t, "FALLBACK"),
+			cluster.MakeTestingClusterSettings(),
+			&spanconfig.TestingKnobs{
+				StoreIgnoreCoalesceAdjacentExceptions: true,
+			},
+		)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var spanStr, keyStr string
 			switch d.Cmd {
@@ -119,7 +159,22 @@ func TestDataDriven(t *testing.T) {
 				span := spanconfigtestutils.ParseSpan(t, spanStr)
 				start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
 				splitKey := store.ComputeSplitKey(ctx, start, end)
+				if splitKey == nil {
+					return "n/a"
+				}
 				return fmt.Sprintf("key=%s", string(splitKey))
+
+			case "split-keys":
+				d.ScanArgs(t, "span", &spanStr)
+				span := spanconfigtestutils.ParseSpan(t, spanStr)
+
+				start, end := roachpb.RKey(span.Key), roachpb.RKey(span.EndKey)
+				splitKeys := store.TestingSplitKeys(ctx, start, end)
+				var b strings.Builder
+				for _, splitKey := range splitKeys {
+					b.WriteString(fmt.Sprintf("key=%s\n", string(splitKey)))
+				}
+				return b.String()
 
 			case "overlapping":
 				d.ScanArgs(t, "span", &spanStr)
@@ -190,7 +245,7 @@ func TestStoreClone(t *testing.T) {
 		),
 	}
 
-	original := New(roachpb.TestingDefaultSpanConfig())
+	original := New(roachpb.TestingDefaultSpanConfig(), cluster.MakeClusterSettings(), nil)
 	original.Apply(ctx, false, updates...)
 	clone := original.Copy(ctx)
 
@@ -213,5 +268,44 @@ func TestStoreClone(t *testing.T) {
 		)
 		originalConfig := originalRecords[i].GetConfig()
 		require.True(t, originalConfig.Equal(clonedRecords[i].GetConfig()))
+	}
+}
+
+func BenchmarkStoreComputeSplitKey(b *testing.B) {
+	ctx := context.Background()
+	for _, numEntries := range []int{10_000, 100_000, 1_000_000} {
+		b.Run(fmt.Sprintf("num-entries=%d", numEntries), func(b *testing.B) {
+			store := New(
+				roachpb.SpanConfig{},
+				cluster.MakeClusterSettings(),
+				&spanconfig.TestingKnobs{
+					StoreIgnoreCoalesceAdjacentExceptions: true,
+				},
+			)
+			for i := 0; i < numEntries; i++ {
+				updates := spanconfigtestutils.ParseStoreApplyArguments(b,
+					fmt.Sprintf("set [%08d,%08d):X", i, i+1))
+				deleted, added := store.Apply(ctx, false, updates...)
+				require.Len(b, deleted, 0)
+				require.Len(b, added, 1)
+			}
+
+			query := spanconfigtestutils.ParseSpan(b,
+				fmt.Sprintf("[%08d, %08d)", 0, numEntries))
+
+			overlapping := 0
+			require.NoError(b, store.ForEachOverlappingSpanConfig(ctx, query,
+				func(_ roachpb.Span, _ roachpb.SpanConfig) error {
+					overlapping++
+					return nil
+				},
+			))
+			require.Equal(b, overlapping, numEntries)
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = store.ComputeSplitKey(ctx, roachpb.RKey(query.Key), roachpb.RKey(query.EndKey))
+			}
+		})
 	}
 }

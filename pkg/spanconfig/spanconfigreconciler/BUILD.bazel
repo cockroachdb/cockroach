@@ -9,6 +9,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigsqltranslator",
         "//pkg/spanconfig/spanconfigstore",
