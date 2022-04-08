@@ -751,14 +751,17 @@ func (desc *immutable) validateMultiRegion(
 	if err != nil {
 		vea.Report(err)
 	}
-
-	err = multiregion.ValidateSuperRegions(superRegions, dbDesc.GetRegionConfig().SurvivalGoal, regionNames, func(err error) error {
+	multiregion.ValidateSuperRegions(superRegions, dbDesc.GetRegionConfig().SurvivalGoal, regionNames, func(err error) {
 		vea.Report(err)
-		return nil
 	})
+
+	zoneCfgExtensions, err := desc.ZoneConfigExtensions()
 	if err != nil {
 		vea.Report(err)
 	}
+	multiregion.ValidateZoneConfigExtensions(regionNames, zoneCfgExtensions, func(err error) {
+		vea.Report(err)
+	})
 }
 
 // ValidateTxnCommit implements the catalog.Descriptor interface.

@@ -13,12 +13,14 @@ package multiregion_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestValidateRegionConfig(t *testing.T) {
@@ -82,6 +84,23 @@ func TestValidateRegionConfig(t *testing.T) {
 				descpb.DataPlacement_RESTRICTED,
 				nil,
 				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			err: "region region_d has REGIONAL IN zone config extension, but is not a region in the database",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				nil,
+				descpb.ZoneConfigExtensions{
+					RegionalIn: map[catpb.RegionName]zonepb.ZoneConfig{
+						"region_b": {NumReplicas: proto.Int32(7)},
+						"region_d": {NumReplicas: proto.Int32(8)},
+					},
+				},
 			),
 		},
 	}
