@@ -99,7 +99,7 @@ const (
 	AdoptQuery                     = claimQuery
 	CancelQuery                    = pauseAndCancelUpdate
 	GcQuery                        = expiredJobsQuery
-	RemoveClaimsQuery              = removeClaimsQuery
+	RemoveClaimsQuery              = removeClaimsForDeadSessionsQuery
 	ProcessJobsQuery               = processQueryWithBackoff
 	IntervalBaseSettingKey         = intervalBaseSettingKey
 	AdoptIntervalSettingKey        = adoptIntervalSettingKey
