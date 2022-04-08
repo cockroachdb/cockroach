@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -37,7 +38,11 @@ import (
 func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	spanConfigStore := spanconfigstore.New(roachpb.TestingDefaultSpanConfig())
+	spanConfigStore := spanconfigstore.New(
+		roachpb.TestingDefaultSpanConfig(),
+		cluster.MakeTestingClusterSettings(),
+		nil,
+	)
 	mockSubscriber := newMockSpanConfigSubscriber(spanConfigStore)
 
 	ctx := context.Background()

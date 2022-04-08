@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -80,6 +81,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		keys.SpanConfigurationsTableID,
 		1<<20, /* 1 MB */
 		roachpb.SpanConfig{},
+		cluster.MakeTestingClusterSettings(),
 		nil,
 	)
 	m := &manualStore{

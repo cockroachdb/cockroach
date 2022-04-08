@@ -31,25 +31,9 @@ diff offset=50
 reconcile tenant=11
 ----
 
-# As soon as tenant-11 starts reconciling, we should observe more fine-grained
-# span configs within its keyspan. This isn't true for the legacy system.
-
-configs version=current offset=43 limit=5
-----
-...
-/Table/50                                  database system (host)
-/Tenant/10                                 database system (tenant)
-/Tenant/11                                 database system (tenant)
-/Tenant/11/Table/4                         database system (tenant)
-/Tenant/11/Table/5                         database system (tenant)
-...
-
-configs version=legacy offset=43
-----
-...
-/Table/50                                  range system
-/Tenant/10                                 database system (tenant)
-/Tenant/11                                 database system (tenant)
+# Even after tenant-11 starts reconciling, we shouldn't observe fine-grained
+# span configs within its keyspan. tenant-11 only has system tables, so
+# everything will be just within the one range.
 
 diff offset=48 limit=10
 ----
@@ -58,23 +42,23 @@ diff offset=48 limit=10
 ...
  /Tenant/10                                 database system (tenant)
  /Tenant/11                                 database system (tenant)
-+/Tenant/11/Table/4                         database system (tenant)
-+/Tenant/11/Table/5                         database system (tenant)
-+/Tenant/11/Table/6                         database system (tenant)
-+/Tenant/11/Table/7                         database system (tenant)
-+/Tenant/11/Table/11                        database system (tenant)
-+/Tenant/11/Table/12                        database system (tenant)
-+/Tenant/11/Table/13                        database system (tenant)
-+/Tenant/11/Table/14                        database system (tenant)
- ...
 
-# Sanity check that new tenant tables show up correctly.
+# Once tenant-11 starts adding user tables however (with different configs), we
+# should see finer-grained splits). With 10 tables, all with 'range default',
+# we should see a single coalesced range for the user tables.
 
 exec-sql tenant=11
 CREATE DATABASE db;
+CREATE TABLE db.t0();
 CREATE TABLE db.t1();
 CREATE TABLE db.t2();
-ALTER TABLE db.t1 CONFIGURE ZONE using num_replicas = 42, gc.ttlseconds = 1000;
+CREATE TABLE db.t3();
+CREATE TABLE db.t4();
+CREATE TABLE db.t5();
+CREATE TABLE db.t6();
+CREATE TABLE db.t7();
+CREATE TABLE db.t8();
+CREATE TABLE db.t9();
 ----
 
 diff offset=48
@@ -84,41 +68,104 @@ diff offset=48
 ...
  /Tenant/10                                 database system (tenant)
  /Tenant/11                                 database system (tenant)
-+/Tenant/11/Table/4                         database system (tenant)
-+/Tenant/11/Table/5                         database system (tenant)
-+/Tenant/11/Table/6                         database system (tenant)
-+/Tenant/11/Table/7                         database system (tenant)
-+/Tenant/11/Table/11                        database system (tenant)
-+/Tenant/11/Table/12                        database system (tenant)
-+/Tenant/11/Table/13                        database system (tenant)
-+/Tenant/11/Table/14                        database system (tenant)
-+/Tenant/11/Table/15                        database system (tenant)
-+/Tenant/11/Table/19                        database system (tenant)
-+/Tenant/11/Table/20                        database system (tenant)
-+/Tenant/11/Table/21                        database system (tenant)
-+/Tenant/11/Table/23                        database system (tenant)
-+/Tenant/11/Table/24                        database system (tenant)
-+/Tenant/11/Table/25                        database system (tenant)
-+/Tenant/11/Table/26                        database system (tenant)
-+/Tenant/11/Table/27                        database system (tenant)
-+/Tenant/11/Table/28                        database system (tenant)
-+/Tenant/11/NamespaceTable/30               database system (tenant)
-+/Tenant/11/NamespaceTable/Max              database system (tenant)
-+/Tenant/11/Table/32                        database system (tenant)
-+/Tenant/11/Table/33                        database system (tenant)
-+/Tenant/11/Table/34                        database system (tenant)
-+/Tenant/11/Table/35                        database system (tenant)
-+/Tenant/11/Table/36                        database system (tenant)
-+/Tenant/11/Table/37                        database system (tenant)
-+/Tenant/11/Table/39                        database system (tenant)
-+/Tenant/11/Table/40                        database system (tenant)
-+/Tenant/11/Table/41                        database system (tenant)
-+/Tenant/11/Table/42                        database system (tenant)
-+/Tenant/11/Table/43                        database system (tenant)
-+/Tenant/11/Table/44                        database system (tenant)
-+/Tenant/11/Table/46                        database system (tenant)
-+/Tenant/11/Table/50                        database system (tenant)
-+/Tenant/11/Table/106                       ttl_seconds=1000 num_replicas=42
-+/Tenant/11/Table/107                       range default
++/Tenant/11/Table/106                       range default
+
+
+# If installing a unique zone config for a table in the middle, we should
+# observe three splits (before, the table itself, and after).
+
+exec-sql tenant=11
+ALTER TABLE db.t5 CONFIGURE ZONE using num_replicas = 42;
+----
+
+diff offset=48
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+ /Tenant/10                                 database system (tenant)
+ /Tenant/11                                 database system (tenant)
++/Tenant/11/Table/106                       range default
++/Tenant/11/Table/111                       num_replicas=42
++/Tenant/11/Table/112                       range default
+
+
+# If adjacent tables also add the same config, they should be merged into one.
+
+exec-sql tenant=11
+ALTER TABLE db.t6 CONFIGURE ZONE using num_replicas = 42;
+----
+
+diff offset=48
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+ /Tenant/10                                 database system (tenant)
+ /Tenant/11                                 database system (tenant)
++/Tenant/11/Table/106                       range default
++/Tenant/11/Table/111                       num_replicas=42
++/Tenant/11/Table/113                       range default
+
+exec-sql tenant=11
+ALTER TABLE db.t4 CONFIGURE ZONE using num_replicas = 42;
+----
+
+diff offset=48
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+ /Tenant/10                                 database system (tenant)
+ /Tenant/11                                 database system (tenant)
++/Tenant/11/Table/106                       range default
++/Tenant/11/Table/110                       num_replicas=42
++/Tenant/11/Table/113                       range default
+
+# Dropping tables should drop the corresponding split point, picking the next
+# applicable ones (if any).
+
+exec-sql tenant=11
+DROP TABLE db.t5;
+----
+
+diff offset=48
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+ /Tenant/10                                 database system (tenant)
+ /Tenant/11                                 database system (tenant)
++/Tenant/11/Table/106                       range default
++/Tenant/11/Table/110                       num_replicas=42
++/Tenant/11/Table/113                       range default
+
+exec-sql tenant=11
+DROP TABLE db.t4;
+----
+
+diff offset=48
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+ /Tenant/10                                 database system (tenant)
+ /Tenant/11                                 database system (tenant)
++/Tenant/11/Table/106                       range default
++/Tenant/11/Table/112                       num_replicas=42
++/Tenant/11/Table/113                       range default
+
+exec-sql tenant=11
+DROP TABLE db.t6;
+----
+
+diff offset=48
+----
+--- gossiped system config span (legacy)
++++ span config infrastructure (current)
+...
+ /Tenant/10                                 database system (tenant)
+ /Tenant/11                                 database system (tenant)
++/Tenant/11/Table/106                       range default
 
 # vim:ft=diff

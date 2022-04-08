@@ -54,6 +54,10 @@ func TestTenantStatusAPI(t *testing.T) {
 	ctx := context.Background()
 
 	knobs := tests.CreateTestingKnobs()
+	knobs.SpanConfig = &spanconfig.TestingKnobs{
+		// Some of these subtests expect multiple (uncoalesced) tenant ranges.
+		StoreDisableCoalesceAdjacent: true,
+	}
 
 	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
 	defer testHelper.cleanup(ctx, t)

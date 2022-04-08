@@ -108,6 +108,15 @@ type TestingKnobs struct {
 	// LimiterLimitOverride, if set, allows tests to dynamically override the span
 	// config limit.
 	LimiterLimitOverride func() int64
+
+	// StoreDisableCoalesceAdjacent, if set, disables coalescing of
+	// adjacent-and-identical span configs.
+	StoreDisableCoalesceAdjacent bool
+
+	// StoreIgnoreCoalesceAdjacentExceptions, if set, ignores the cluster settings
+	// spanconfig.{host,tenant}_coalesce_adjacent.enabled. It also allows
+	// coalescing system database ranges for the host tenant.
+	StoreIgnoreCoalesceAdjacentExceptions bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
