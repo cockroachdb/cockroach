@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1106,4 +1108,58 @@ func TestJobIdleness(t *testing.T) {
 		}
 	})
 
+}
+
+type alwaysAliveSession string
+
+func (f alwaysAliveSession) ID() sqlliveness.SessionID                              { return sqlliveness.SessionID(f) }
+func (f alwaysAliveSession) Expiration() hlc.Timestamp                              { return hlc.MaxTimestamp }
+func (f alwaysAliveSession) RegisterCallbackForSessionExpiry(func(context.Context)) {}
+
+// TestDisablingJobAdoptionClearsClaimSessionID tests that jobs adopted by a
+// registry for which job adoption has been disabled, have their
+// claim_session_id cleared prior to having their context cancelled. This will
+// allow other job registries in the cluster to claim and run this job.
+func TestDisablingJobAdoptionClearsClaimSessionID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	intervalOverride := time.Millisecond
+	testSession := alwaysAliveSession("known-test-session")
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: &TestingKnobs{
+				DisableAdoptions: true,
+				IntervalOverrides: TestingIntervalOverrides{
+					Adopt:  &intervalOverride,
+					Cancel: &intervalOverride,
+				},
+			},
+			SQLLivenessKnobs: &sqlliveness.TestingKnobs{
+				SessionOverride: func(_ context.Context) (sqlliveness.Session, error) {
+					return testSession, nil
+				},
+			},
+		},
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Insert a running job with a `claim_session_id` equal to our overridden test
+	// session.
+	tdb.Exec(t,
+		"INSERT INTO system.jobs (id, status, created, payload, claim_session_id) values ($1, $2, $3, 'test'::bytes, $4)",
+		1, StatusRunning, timeutil.Now(), testSession.ID(),
+	)
+
+	// We expect the adopt loop to clear the claim session since job adoption is
+	// disabled on this registry.
+	expected := [][]string{{"NULL"}}
+	testutils.SucceedsSoon(t, func() error {
+		rows := tdb.QueryStr(t, `SELECT claim_session_id FROM system.jobs WHERE id = 1`)
+		if !reflect.DeepEqual(rows, expected) {
+			return errors.Newf("expected claim session id to be reset but found %+v", rows)
+		}
+		return nil
+	})
 }
