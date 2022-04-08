@@ -664,7 +664,7 @@ func (r *Registry) UpdateJobWithTxn(
 // TODO (sajjad): make maxAdoptionsPerLoop a cluster setting.
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
 
-const removeClaimsQuery = `
+const removeClaimsForDeadSessionsQuery = `
 UPDATE system.jobs
    SET claim_session_id = NULL
  WHERE claim_session_id in (
@@ -674,6 +674,14 @@ SELECT claim_session_id
    AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)
  FETCH FIRST $2 ROWS ONLY)
 `
+const removeClaimsForSessionQuery = `
+UPDATE system.jobs
+   SET claim_session_id = NULL
+ WHERE claim_session_id in (
+SELECT claim_session_id
+ WHERE claim_session_id = $1
+   AND status IN ` + claimableStatusTupleString + `
+)`
 
 type withSessionFunc func(ctx context.Context, s sqlliveness.Session)
 
@@ -712,7 +720,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			_, err := r.ex.ExecEx(
 				ctx, "expire-sessions", nil,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-				removeClaimsQuery,
+				removeClaimsForDeadSessionsQuery,
 				s.ID().UnsafeBytes(),
 				cancellationsUpdateLimitSetting.Get(&r.settings.SV),
 			)
@@ -737,17 +745,44 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// claimJobs iterates the set of jobs which are not currently claimed and
 	// claims jobs up to maxAdoptionsPerLoop.
 	claimJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
+		if r.adoptionDisabled(ctx) {
+			log.Warningf(ctx, "job adoption is disabled, registry will not claim any jobs")
+			return
+		}
 		r.metrics.AdoptIterations.Inc(1)
 		if err := r.claimJobs(ctx, s); err != nil {
 			log.Errorf(ctx, "error claiming jobs: %s", err)
 		}
 	})
+	// removeClaimsFromJobs queries the jobs table for non-terminal jobs and
+	// nullifies their claims if the claims are owned by the current session.
+	removeClaimsFromSession := func(ctx context.Context, s sqlliveness.Session) {
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Run the expiration transaction at low priority to ensure that it does
+			// not contend with foreground reads. Note that the adoption and cancellation
+			// queries also use low priority so they will interact nicely.
+			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
+				return errors.WithAssertionFailure(err)
+			}
+			_, err := r.ex.ExecEx(
+				ctx, "remove-claims-for-session", nil,
+				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+				removeClaimsForSessionQuery, s.ID().UnsafeBytes(),
+			)
+			return err
+		}); err != nil {
+			log.Errorf(ctx, "error expiring job sessions: %s", err)
+		}
+	}
 	// processClaimedJobs iterates the jobs claimed by the current node that
 	// are in the running or reverting state, and then it starts those jobs if
 	// they are not already running.
 	processClaimedJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
+		// If job adoption is disabled for the registry then we remove our claim on
+		// all adopted job, and cancel them.
 		if r.adoptionDisabled(ctx) {
-			log.Warningf(ctx, "canceling all adopted jobs due to liveness failure")
+			log.Warningf(ctx, "job adoptions is disabled, canceling all adopted jobs due to liveness failure")
+			removeClaimsFromSession(ctx, s)
 			r.cancelAllAdoptedJobs()
 			return
 		}
