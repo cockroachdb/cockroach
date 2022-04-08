@@ -71,12 +71,28 @@ func init() {
 	)
 }
 
+type annotatedChangefeedStatement struct {
+	*tree.CreateChangefeed
+	originalSpecs map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification
+}
+
+func getChangefeedStatement(stmt tree.Statement) *annotatedChangefeedStatement {
+	switch changefeed := stmt.(type) {
+	case *annotatedChangefeedStatement:
+		return changefeed
+	case *tree.CreateChangefeed:
+		return &annotatedChangefeedStatement{CreateChangefeed: changefeed}
+	default:
+		return nil
+	}
+}
+
 // changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
-	changefeedStmt, ok := stmt.(*tree.CreateChangefeed)
-	if !ok {
+	changefeedStmt := getChangefeedStatement(stmt)
+	if changefeedStmt == nil {
 		return nil, nil, nil, false, nil
 	}
 
@@ -246,7 +262,7 @@ func changefeedPlanHook(
 func createChangefeedJobRecord(
 	ctx context.Context,
 	p sql.PlanHookState,
-	changefeedStmt *tree.CreateChangefeed,
+	changefeedStmt *annotatedChangefeedStatement,
 	sinkURI string,
 	opts map[string]string,
 	jobID jobspb.JobID,
@@ -277,7 +293,7 @@ func createChangefeedJobRecord(
 		// Still serialize the experimental_ form for backwards compatibility
 	}
 
-	jobDescription, err := changefeedJobDescription(p, changefeedStmt, sinkURI, opts)
+	jobDescription, err := changefeedJobDescription(p, changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +344,7 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 
-	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets, opts)
+	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets, changefeedStmt.originalSpecs, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -561,27 +577,13 @@ func getTargetsAndTables(
 	p sql.PlanHookState,
 	targetDescs map[tree.TablePattern]catalog.Descriptor,
 	rawTargets tree.ChangefeedTargets,
+	originalSpecs map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification,
 	opts map[string]string,
 ) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
 	tables := make(jobspb.ChangefeedTargets, len(targetDescs))
 	targets := make([]jobspb.ChangefeedTargetSpecification, len(rawTargets))
-
-	for _, desc := range targetDescs {
-		if table, isTable := desc.(catalog.TableDescriptor); isTable {
-			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-				return nil, nil, err
-			}
-			_, qualified := opts[changefeedbase.OptFullTableName]
-			name, err := getChangefeedTargetName(ctx, table, p.ExecCfg(), p.ExtendedEvalContext().Txn, qualified)
-			if err != nil {
-				return nil, nil, err
-			}
-			tables[table.GetID()] = jobspb.ChangefeedTargetTable{
-				StatementTimeName: name,
-			}
-		}
-	}
 	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTarget)
+
 	for i, ct := range rawTargets {
 		desc, ok := targetDescs[ct.TableName]
 		if !ok {
@@ -591,19 +593,48 @@ func getTargetsAndTables(
 		if !ok {
 			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(&ct))
 		}
-		typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
-		if ct.FamilyName != "" {
-			typ = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
-		} else {
-			if td.NumFamilies() > 1 {
-				typ = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
-			}
+
+		if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
+			return nil, nil, err
 		}
-		targets[i] = jobspb.ChangefeedTargetSpecification{
-			Type:              typ,
-			TableID:           td.GetID(),
-			FamilyName:        string(ct.FamilyName),
-			StatementTimeName: tables[td.GetID()].StatementTimeName,
+
+		if spec, ok := originalSpecs[ct]; ok {
+			targets[i] = spec
+			if table, ok := tables[td.GetID()]; ok {
+				if table.StatementTimeName != spec.StatementTimeName {
+					return nil, nil, errors.Errorf(
+						`table with id %d is referenced with multiple statement time names: %q and %q`, td.GetID(),
+						table.StatementTimeName, spec.StatementTimeName)
+				}
+			} else {
+				tables[td.GetID()] = jobspb.ChangefeedTargetTable{
+					StatementTimeName: spec.StatementTimeName,
+				}
+			}
+		} else {
+			_, qualified := opts[changefeedbase.OptFullTableName]
+			name, err := getChangefeedTargetName(ctx, td, p.ExecCfg(), p.ExtendedEvalContext().Txn, qualified)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			tables[td.GetID()] = jobspb.ChangefeedTargetTable{
+				StatementTimeName: name,
+			}
+			typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
+			if ct.FamilyName != "" {
+				typ = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
+			} else {
+				if td.NumFamilies() > 1 {
+					typ = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+				}
+			}
+			targets[i] = jobspb.ChangefeedTargetSpecification{
+				Type:              typ,
+				TableID:           td.GetID(),
+				FamilyName:        string(ct.FamilyName),
+				StatementTimeName: tables[td.GetID()].StatementTimeName,
+			}
 		}
 		if dup, isDup := seen[targets[i]]; isDup {
 			return nil, nil, errors.Errorf(
