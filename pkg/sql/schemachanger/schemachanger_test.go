@@ -890,7 +890,6 @@ func TestNewSchemaChangerVersionGating(t *testing.T) {
 		results := tdb.QueryStr(t, "EXPLAIN (DDL) DROP TABLE db.t;")
 		require.Equal(t, len(results), 1)
 		require.Equal(t, len(results[0]), 1)
-		require.Contains(t, results[0][0], "https://cockroachdb.github.io/scplan/viz.html")
 	})
 
 	t.Run("new_schema_changer_version_disabled", func(t *testing.T) {

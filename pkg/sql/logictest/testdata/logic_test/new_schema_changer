@@ -14,11 +14,282 @@ EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
 statement ok
 SET use_declarative_schema_changer = 'unsafe'
 
-statement ok
-EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
-
-statement ok
-EXPLAIN (DDL, DEPS) ALTER TABLE foo ADD COLUMN j INT
+query T
+EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
+----
+• Schema change plan for ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8;
+│
+├── • PreCommitPhase
+│   │
+│   └── • Stage 1 of 1 in PreCommitPhase
+│       │
+│       ├── • 3 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • Column:{DescID: 106, ColumnID: 2}
+│       │   │     ABSENT → DELETE_ONLY
+│       │   │
+│       │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column type set right after column existence"
+│       │   │
+│       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2}
+│       │       │ ABSENT → DELETE_ONLY
+│       │       │
+│       │       └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │             rule: "column existence precedes index existence"
+│       │
+│       └── • 6 Mutation operations
+│           │
+│           ├── • MakeAddedColumnDeleteOnly
+│           │     Column:
+│           │       ColumnID: 2
+│           │       TableID: 106
+│           │
+│           ├── • LogEvent
+│           │     Authorization:
+│           │       UserName: root
+│           │     Element:
+│           │       Column:
+│           │         columnId: 2
+│           │         tableId: 106
+│           │     Statement: ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8
+│           │     StatementTag: ALTER TABLE
+│           │     TargetMetadata:
+│           │       SourceElementID: 1
+│           │       SubWorkID: 1
+│           │     TargetStatus: 2
+│           │
+│           ├── • SetAddedColumnType
+│           │     ColumnType:
+│           │       ColumnID: 2
+│           │       IsNullable: true
+│           │       TableID: 106
+│           │       TypeT:
+│           │         Type:
+│           │           family: IntFamily
+│           │           oid: 20
+│           │           width: 64
+│           │
+│           ├── • MakeAddedIndexDeleteOnly
+│           │     Index:
+│           │       IndexID: 2
+│           │       IsUnique: true
+│           │       KeyColumnDirections:
+│           │       - 0
+│           │       KeyColumnIDs:
+│           │       - 1
+│           │       SourceIndexID: 1
+│           │       StoringColumnIDs:
+│           │       - 2
+│           │       TableID: 106
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 106
+│           │     Initialize: true
+│           │
+│           └── • CreateSchemaChangerJob
+│                 Authorization:
+│                   UserName: root
+│                 DescriptorIDs:
+│                 - 106
+│                 JobID: 1
+│                 Statements:
+│                 - statement: ALTER TABLE foo ADD COLUMN j INT8
+│                   redactedstatement: ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8
+│                   statementtag: ALTER TABLE
+│
+├── • PostCommitPhase
+│   │
+│   ├── • Stage 1 of 4 in PostCommitPhase
+│   │   │
+│   │   ├── • 2 elements transitioning toward PUBLIC
+│   │   │   │
+│   │   │   ├── • Column:{DescID: 106, ColumnID: 2}
+│   │   │   │   │ DELETE_ONLY → WRITE_ONLY
+│   │   │   │   │
+│   │   │   │   └── • Precedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2}
+│   │   │   │         rule: "column depends on primary index"
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2}
+│   │   │         DELETE_ONLY → WRITE_ONLY
+│   │   │
+│   │   └── • 4 Mutation operations
+│   │       │
+│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       │     IndexID: 2
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • MakeAddedColumnDeleteAndWriteOnly
+│   │       │     ColumnID: 2
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • SetJobStateOnDescriptor
+│   │       │     DescriptorID: 106
+│   │       │
+│   │       └── • UpdateSchemaChangerJob
+│   │             JobID: 1
+│   │
+│   ├── • Stage 2 of 4 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2}
+│   │   │         WRITE_ONLY → BACKFILLED
+│   │   │
+│   │   └── • 1 Backfill operation
+│   │       │
+│   │       └── • BackfillIndex
+│   │             IndexID: 2
+│   │             SourceIndexID: 1
+│   │             TableID: 106
+│   │
+│   ├── • Stage 3 of 4 in PostCommitPhase
+│   │   │
+│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   │   │
+│   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2}
+│   │   │         BACKFILLED → VALIDATED
+│   │   │
+│   │   └── • 1 Validation operation
+│   │       │
+│   │       └── • ValidateUniqueIndex
+│   │             IndexID: 2
+│   │             TableID: 106
+│   │
+│   └── • Stage 4 of 4 in PostCommitPhase
+│       │
+│       ├── • 2 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 1}
+│       │   │     PUBLIC → VALIDATED
+│       │   │
+│       │   └── • IndexName:{DescID: 106, Name: foo_pkey, IndexID: 1}
+│       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1}
+│       │             rule: "dependents removed after index no longer public"
+│       │
+│       ├── • 4 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • Column:{DescID: 106, ColumnID: 2}
+│       │   │   │ WRITE_ONLY → PUBLIC
+│       │   │   │
+│       │   │   ├── • SameStagePrecedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   │   │     rule: "column named right before column becomes public"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 2}
+│       │   │         rule: "column depends on primary index"
+│       │   │
+│       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2}
+│       │   │   │ VALIDATED → PUBLIC
+│       │   │   │
+│       │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1}
+│       │   │   │     rule: "primary index swap"
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 106, Name: foo_pkey, IndexID: 2}
+│       │   │         rule: "index named right before index becomes public"
+│       │   │
+│       │   └── • IndexName:{DescID: 106, Name: foo_pkey, IndexID: 2}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2}
+│       │             rule: "index existence precedes index dependents"
+│       │
+│       └── • 8 Mutation operations
+│           │
+│           ├── • MakeDroppedPrimaryIndexDeleteAndWriteOnly
+│           │     IndexID: 1
+│           │     TableID: 106
+│           │
+│           ├── • SetIndexName
+│           │     IndexID: 1
+│           │     Name: crdb_internal_index_1_name_placeholder
+│           │     TableID: 106
+│           │
+│           ├── • SetIndexName
+│           │     IndexID: 2
+│           │     Name: foo_pkey
+│           │     TableID: 106
+│           │
+│           ├── • MakeAddedPrimaryIndexPublic
+│           │     IndexID: 2
+│           │     TableID: 106
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 2
+│           │     Name: j
+│           │     TableID: 106
+│           │
+│           ├── • MakeColumnPublic
+│           │     ColumnID: 2
+│           │     TableID: 106
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 106
+│           │
+│           └── • UpdateSchemaChangerJob
+│                 IsNonCancelable: true
+│                 JobID: 1
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
+    │   │
+    │   ├── • 1 element transitioning toward ABSENT
+    │   │   │
+    │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 1}
+    │   │         VALIDATED → DELETE_ONLY
+    │   │
+    │   └── • 3 Mutation operations
+    │       │
+    │       ├── • MakeDroppedIndexDeleteOnly
+    │       │     IndexID: 1
+    │       │     TableID: 106
+    │       │
+    │       ├── • SetJobStateOnDescriptor
+    │       │     DescriptorID: 106
+    │       │
+    │       └── • UpdateSchemaChangerJob
+    │             IsNonCancelable: true
+    │             JobID: 1
+    │
+    └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
+        │
+        ├── • 1 element transitioning toward ABSENT
+        │   │
+        │   └── • PrimaryIndex:{DescID: 106, IndexID: 1}
+        │       │ DELETE_ONLY → ABSENT
+        │       │
+        │       └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: foo_pkey, IndexID: 1}
+        │             rule: "dependents removed before index"
+        │
+        └── • 4 Mutation operations
+            │
+            ├── • CreateGcJobForIndex
+            │     IndexID: 1
+            │     StatementForDropJob:
+            │       Statement: ALTER TABLE test.public.foo ADD COLUMN j INT8
+            │     TableID: 106
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 1
+            │     TableID: 106
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 106
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  IsNonCancelable: true
+                  JobID: 1
 
 statement ok
 ALTER TABLE foo ADD COLUMN j INT
@@ -207,8 +478,199 @@ CREATE TABLE blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('sq1'), ti
 statement error pq: cannot drop sequence sq1 because other objects depend on it
 EXPLAIN (DDL) DROP SEQUENCE sq1;
 
-statement ok
-EXPLAIN (DDL) DROP SEQUENCE sq1 CASCADE;
+query T
+EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
+----
+• Schema change plan for DROP SEQUENCE ‹test›.public.‹sq1› CASCADE;
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│       │
+│       ├── • 1 element transitioning toward ABSENT
+│       │   │
+│       │   └── • Sequence:{DescID: 113}
+│       │         PUBLIC → TXN_DROPPED
+│       │
+│       └── • 1 Mutation operation
+│           │
+│           └── • MarkDescriptorAsDroppedSynthetically
+│                 DescID: 113
+│
+├── • PreCommitPhase
+│   │
+│   └── • Stage 1 of 1 in PreCommitPhase
+│       │
+│       ├── • 9 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • Namespace:{DescID: 113, Name: sq1, ReferencedDescID: 104}
+│       │   │     PUBLIC → ABSENT
+│       │   │
+│       │   ├── • Owner:{DescID: 113}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 113, Name: admin}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 113, Name: root}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • Sequence:{DescID: 113}
+│       │   │   │ TXN_DROPPED → DROPPED
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 113, Name: sq1, ReferencedDescID: 104}
+│       │   │   │     rule: "dependent element removal before descriptor drop"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 113}
+│       │   │   │     rule: "dependent element removal before descriptor drop"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 113, Name: admin}
+│       │   │   │     rule: "dependent element removal before descriptor drop"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 113, Name: root}
+│       │   │   │     rule: "dependent element removal before descriptor drop"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ObjectParent:{DescID: 113, ReferencedDescID: 105}
+│       │   │   │     rule: "dependent element removal before descriptor drop"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT TableComment:{DescID: 113}
+│       │   │   │     rule: "dependent element removal before descriptor drop"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 114, ColumnID: 2}
+│       │   │   │     rule: "column DEFAULT removed before dropping dependent types and sequences"
+│       │   │   │
+│       │   │   └── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 115, ColumnID: 2}
+│       │   │         rule: "column DEFAULT removed before dropping dependent types and sequences"
+│       │   │
+│       │   ├── • ObjectParent:{DescID: 113, ReferencedDescID: 105}
+│       │   │     PUBLIC → ABSENT
+│       │   │
+│       │   ├── • TableComment:{DescID: 113}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip table comment removal ops on descriptor drop"
+│       │   │
+│       │   ├── • ColumnDefaultExpression:{DescID: 114, ColumnID: 2}
+│       │   │     PUBLIC → ABSENT
+│       │   │
+│       │   └── • ColumnDefaultExpression:{DescID: 115, ColumnID: 2}
+│       │         PUBLIC → ABSENT
+│       │
+│       └── • 11 Mutation operations
+│           │
+│           ├── • DrainDescriptorName
+│           │     Namespace:
+│           │       DatabaseID: 104
+│           │       DescriptorID: 113
+│           │       Name: sq1
+│           │       SchemaID: 105
+│           │
+│           ├── • RemoveColumnDefaultExpression
+│           │     ColumnID: 2
+│           │     TableID: 114
+│           │
+│           ├── • UpdateBackReferencesInSequences
+│           │     BackReferencedColumnID: 2
+│           │     BackReferencedTableID: 114
+│           │     SequenceIDs:
+│           │     - 113
+│           │
+│           ├── • RemoveColumnDefaultExpression
+│           │     ColumnID: 2
+│           │     TableID: 115
+│           │
+│           ├── • UpdateBackReferencesInSequences
+│           │     BackReferencedColumnID: 2
+│           │     BackReferencedTableID: 115
+│           │     SequenceIDs:
+│           │     - 113
+│           │
+│           ├── • MarkDescriptorAsDropped
+│           │     DescID: 113
+│           │
+│           ├── • RemoveAllTableComments
+│           │     TableID: 113
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 113
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 114
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 115
+│           │     Initialize: true
+│           │
+│           └── • CreateSchemaChangerJob
+│                 Authorization:
+│                   UserName: root
+│                 DescriptorIDs:
+│                 - 113
+│                 - 114
+│                 - 115
+│                 JobID: 1
+│                 NonCancelable: true
+│                 Statements:
+│                 - statement: DROP SEQUENCE sq1 CASCADE
+│                   redactedstatement: DROP SEQUENCE ‹test›.public.‹sq1› CASCADE
+│                   statementtag: DROP SEQUENCE
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
+        │
+        ├── • 1 element transitioning toward ABSENT
+        │   │
+        │   └── • Sequence:{DescID: 113}
+        │         DROPPED → ABSENT
+        │
+        └── • 6 Mutation operations
+            │
+            ├── • LogEvent
+            │     Authorization:
+            │       UserName: root
+            │     Element:
+            │       Sequence:
+            │         sequenceId: 113
+            │     Statement: DROP SEQUENCE ‹test›.public.‹sq1› CASCADE
+            │     StatementTag: DROP SEQUENCE
+            │     TargetMetadata:
+            │       SourceElementID: 1
+            │       SubWorkID: 1
+            │     TargetStatus: 1
+            │
+            ├── • CreateGcJobForTable
+            │     StatementForDropJob:
+            │       Statement: DROP SEQUENCE test.public.sq1 CASCADE
+            │     TableID: 113
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 113
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 114
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 115
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  IsNonCancelable: true
+                  JobID: 1
 
 # Success with cascade
 statement ok
@@ -388,8 +850,147 @@ CREATE VIEW v3Dep AS (SELECT name, n1 FROM v1Dep, v2Dep);
 statement ok
 CREATE VIEW v4Dep AS (SELECT n2, n1 FROM v2Dep);
 
-statement ok
-explain (DDL, DEPS) DROP VIEW v1Dep CASCADE;
+query T
+EXPLAIN (DDL) DROP VIEW v1Dep CASCADE;
+----
+Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 4 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → TXN_DROPPED View:{DescID: 147}
+ │         │    ├── PUBLIC → TXN_DROPPED View:{DescID: 148}
+ │         │    ├── PUBLIC → TXN_DROPPED View:{DescID: 149}
+ │         │    └── PUBLIC → TXN_DROPPED View:{DescID: 150}
+ │         └── 4 Mutation operations
+ │              ├── MarkDescriptorAsDroppedSynthetically {"DescID":147}
+ │              ├── MarkDescriptorAsDroppedSynthetically {"DescID":148}
+ │              ├── MarkDescriptorAsDroppedSynthetically {"DescID":149}
+ │              └── MarkDescriptorAsDroppedSynthetically {"DescID":150}
+ ├── PreCommitPhase
+ │    └── Stage 1 of 1 in PreCommitPhase
+ │         ├── 56 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 147, Name: v1dep, ReferencedDescID: 104}
+ │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 147}
+ │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 147, Name: admin}
+ │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 147, Name: root}
+ │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 147}
+ │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 147, ReferencedDescID: 105}
+ │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 147}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 147, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 147, Name: name, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 147, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 147, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 148, Name: v2dep, ReferencedDescID: 104}
+ │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 148}
+ │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 148, Name: admin}
+ │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 148, Name: root}
+ │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 148}
+ │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 148, ReferencedDescID: 105}
+ │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 148}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 148, Name: n1, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 148, ColumnID: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 148, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 148, Name: n2, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 148, ColumnFamilyID: 0, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 148, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 149, Name: v3dep, ReferencedDescID: 104}
+ │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 149}
+ │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 149, Name: admin}
+ │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 149, Name: root}
+ │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 149}
+ │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 149, ReferencedDescID: 105}
+ │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 149}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 149, Name: name, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 149, ColumnID: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 149, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 149, Name: n1, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 149, ColumnFamilyID: 0, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 149, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     Namespace:{DescID: 150, Name: v4dep, ReferencedDescID: 104}
+ │         │    ├── PUBLIC      → ABSENT     Owner:{DescID: 150}
+ │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 150, Name: admin}
+ │         │    ├── PUBLIC      → ABSENT     UserPrivileges:{DescID: 150, Name: root}
+ │         │    ├── TXN_DROPPED → DROPPED    View:{DescID: 150}
+ │         │    ├── PUBLIC      → ABSENT     ObjectParent:{DescID: 150, ReferencedDescID: 105}
+ │         │    ├── PUBLIC      → ABSENT     TableComment:{DescID: 150}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 150, Name: n2, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC      → ABSENT     ColumnComment:{DescID: 150, ColumnID: 1}
+ │         │    ├── PUBLIC      → WRITE_ONLY Column:{DescID: 150, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnName:{DescID: 150, Name: n1, ColumnID: 2}
+ │         │    ├── PUBLIC      → ABSENT     ColumnType:{DescID: 150, ColumnFamilyID: 0, ColumnID: 2}
+ │         │    └── PUBLIC      → ABSENT     ColumnComment:{DescID: 150, ColumnID: 2}
+ │         └── 29 Mutation operations
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":147,"Name":"v1dep","SchemaID":105}}
+ │              ├── RemoveDroppedColumnType {"ColumnID":1,"TableID":147}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":148,"Name":"v2dep","SchemaID":105}}
+ │              ├── RemoveDroppedColumnType {"ColumnID":1,"TableID":148}
+ │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":148}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":149,"Name":"v3dep","SchemaID":105}}
+ │              ├── RemoveDroppedColumnType {"ColumnID":1,"TableID":149}
+ │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":149}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":150,"Name":"v4dep","SchemaID":105}}
+ │              ├── RemoveDroppedColumnType {"ColumnID":1,"TableID":150}
+ │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":150}
+ │              ├── MarkDescriptorAsDropped {"DescID":149}
+ │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":149}
+ │              ├── RemoveAllTableComments {"TableID":149}
+ │              ├── MarkDescriptorAsDropped {"DescID":150}
+ │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":150}
+ │              ├── RemoveAllTableComments {"TableID":150}
+ │              ├── MarkDescriptorAsDropped {"DescID":148}
+ │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":148}
+ │              ├── RemoveAllTableComments {"TableID":148}
+ │              ├── MarkDescriptorAsDropped {"DescID":147}
+ │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":147}
+ │              ├── RemoveAllTableComments {"TableID":147}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":146,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":147,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":148,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":149,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":150,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true}
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 11 elements transitioning toward ABSENT
+           │    ├── DROPPED    → ABSENT View:{DescID: 147}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 147, ColumnID: 1}
+           │    ├── DROPPED    → ABSENT View:{DescID: 148}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 1}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 148, ColumnID: 2}
+           │    ├── DROPPED    → ABSENT View:{DescID: 149}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 1}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 149, ColumnID: 2}
+           │    ├── DROPPED    → ABSENT View:{DescID: 150}
+           │    ├── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 1}
+           │    └── WRITE_ONLY → ABSENT Column:{DescID: 150, ColumnID: 2}
+           └── 21 Mutation operations
+                ├── LogEvent {"Statement":"DROP VIEW ‹test›...","StatementTag":"DROP VIEW","TargetStatus":1}
+                ├── DeleteDescriptor {"DescriptorID":147}
+                ├── MakeColumnAbsent {"ColumnID":1,"TableID":147}
+                ├── LogEvent {"Statement":"DROP VIEW ‹test›...","StatementTag":"DROP VIEW","TargetStatus":1}
+                ├── DeleteDescriptor {"DescriptorID":148}
+                ├── MakeColumnAbsent {"ColumnID":1,"TableID":148}
+                ├── MakeColumnAbsent {"ColumnID":2,"TableID":148}
+                ├── LogEvent {"Statement":"DROP VIEW ‹test›...","StatementTag":"DROP VIEW","TargetStatus":1}
+                ├── DeleteDescriptor {"DescriptorID":149}
+                ├── MakeColumnAbsent {"ColumnID":1,"TableID":149}
+                ├── MakeColumnAbsent {"ColumnID":2,"TableID":149}
+                ├── LogEvent {"Statement":"DROP VIEW ‹test›...","StatementTag":"DROP VIEW","TargetStatus":1}
+                ├── DeleteDescriptor {"DescriptorID":150}
+                ├── MakeColumnAbsent {"ColumnID":1,"TableID":150}
+                ├── MakeColumnAbsent {"ColumnID":2,"TableID":150}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":146}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":147}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":148}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":149}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":150}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true}
 
 statement error pq: cannot drop relation "v1dep" because view "v3dep" depends on it
 DROP VIEW v1Dep RESTRICT;
