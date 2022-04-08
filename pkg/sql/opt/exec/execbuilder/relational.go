@@ -570,7 +570,7 @@ func (b *Builder) scanParams(
 	}
 
 	// Raise error if row-level locking is part of a read-only transaction.
-	if locking != nil && locking.Strength > tree.ForNone && b.evalCtx.TxnReadOnly {
+	if locking.IsLocking() && b.evalCtx.TxnReadOnly {
 		return exec.ScanParams{}, opt.ColMap{}, pgerror.Newf(pgcode.ReadOnlySQLTransaction,
 			"cannot execute %s in a read-only transaction", locking.Strength.String())
 	}
@@ -1811,7 +1811,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
 
-	var locking *tree.LockingItem
+	var locking opt.Locking
 	if b.forceForUpdateLocking {
 		locking = forUpdateLocking
 	}

@@ -462,7 +462,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			tp.Child(b.String())
 		}
-		if private.Locking != nil {
+		if private.Locking.IsLocking() {
 			strength := ""
 			switch private.Locking.Strength {
 			case tree.ForNone:
