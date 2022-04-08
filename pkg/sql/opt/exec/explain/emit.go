@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -939,10 +940,7 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 	return sp.String()
 }
 
-func (e *emitter) emitLockingPolicy(locking *tree.LockingItem) {
-	if locking == nil {
-		return
-	}
+func (e *emitter) emitLockingPolicy(locking opt.Locking) {
 	strength := descpb.ToScanLockingStrength(locking.Strength)
 	waitPolicy := descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	if strength != descpb.ScanLockingStrength_FOR_NONE {
