@@ -177,6 +177,11 @@ type InternalRows interface {
 	// invalidate it).
 	Cur() tree.Datums
 
+	// RowsAffected() returns the count of rows affected by the statement.
+	// This is only guaranteed to be accurate after Next() has returned
+	// false (no more rows).
+	RowsAffected() int
+
 	// Close closes this iterator, releasing any resources it held open. Close
 	// is idempotent and *must* be called once the caller is done with the
 	// iterator.
