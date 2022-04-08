@@ -42,7 +42,7 @@ func GetSmallTrace(skip int) redact.RedactableString {
 		if index := strings.LastIndexByte(file, '/'); index >= 0 {
 			file = file[index+1:]
 		}
-		callers.Printf("%s%s:%d:%s", callerPrefix, file, f.Line, function)
+		callers.Printf("%s%s:%d:%s", callerPrefix, redact.SafeString(file), f.Line, redact.SafeString(function))
 		callerPrefix = ","
 		if !more {
 			break
