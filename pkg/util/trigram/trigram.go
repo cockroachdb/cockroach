@@ -1,0 +1,71 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package trigram
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+)
+
+// MakeTrigramsDatum returns the output of MakeTrigrams in a string array Datum.
+func MakeTrigramsDatum(s string) tree.Datum {
+	arr := MakeTrigrams(s, true /* pad */)
+	ret := tree.NewDArray(types.String)
+	ret.Array = make(tree.Datums, len(arr))
+	for i := range arr {
+		ret.Array[i] = tree.NewDString(arr[i])
+	}
+	return ret
+}
+
+// MakeTrigrams returns the downcased, sorted and de-duplicated trigrams for an
+// input string. If pad is true, the string will be padded with 2 spaces at the
+// front and 1 at the back, producing 3 extra trigrams.
+func MakeTrigrams(s string, pad bool) []string {
+	if len(s) == 0 {
+		return nil
+	}
+
+	// Downcase the initial string.
+	s = strings.ToLower(s)
+
+	if pad {
+		s = fmt.Sprintf("  %s ", s)
+	}
+	n := len(s) - 2
+	output := make([]string, n)
+
+	for i := range output {
+		output[i] = s[i : i+3]
+	}
+
+	// Sort the array and deduplicate.
+	sort.Strings(output)
+
+	// Then distinct: (wouldn't it be nice if Go had generics?)
+	lastUniqueIdx := 0
+	for i := 1; i < len(output); i++ {
+		if output[i] != output[lastUniqueIdx] {
+			// We found a unique entry, at index i. The last unique entry in the array
+			// was at lastUniqueIdx, so set the entry after that one to our new unique
+			// entry, and bump lastUniqueIdx for the next loop iteration.
+			lastUniqueIdx++
+			output[lastUniqueIdx] = output[i]
+		}
+	}
+	output = output[:lastUniqueIdx+1]
+
+	return output
+}

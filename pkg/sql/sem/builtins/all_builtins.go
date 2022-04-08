@@ -36,6 +36,7 @@ func init() {
 	initWindowBuiltins()
 	initGeneratorBuiltins()
 	initGeoBuiltins()
+	initTrigramBuiltins()
 	initPGBuiltins()
 	initMathBuiltins()
 	initOverlapsBuiltins()
