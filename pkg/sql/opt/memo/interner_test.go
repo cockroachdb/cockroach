@@ -447,26 +447,26 @@ func TestInterner(t *testing.T) {
 
 		// PhysProps hash/isEqual methods are tested in TestInternerPhysProps.
 
-		{hashFn: in.hasher.HashLockingItem, eqFn: in.hasher.IsLockingItemEqual, variations: []testVariation{
-			{val1: (*tree.LockingItem)(nil), val2: (*tree.LockingItem)(nil), equal: true},
+		{hashFn: in.hasher.HashLocking, eqFn: in.hasher.IsLockingEqual, variations: []testVariation{
+			{val1: opt.Locking{}, val2: opt.Locking{}, equal: true},
 			{
-				val1:  (*tree.LockingItem)(nil),
-				val2:  &tree.LockingItem{Strength: tree.ForUpdate},
+				val1:  opt.Locking{},
+				val2:  opt.Locking{Strength: tree.ForUpdate},
 				equal: false,
 			},
 			{
-				val1:  &tree.LockingItem{Strength: tree.ForShare},
-				val2:  &tree.LockingItem{Strength: tree.ForUpdate},
+				val1:  opt.Locking{Strength: tree.ForShare},
+				val2:  opt.Locking{Strength: tree.ForUpdate},
 				equal: false,
 			},
 			{
-				val1:  &tree.LockingItem{WaitPolicy: tree.LockWaitSkip},
-				val2:  &tree.LockingItem{WaitPolicy: tree.LockWaitError},
+				val1:  opt.Locking{WaitPolicy: tree.LockWaitSkip},
+				val2:  opt.Locking{WaitPolicy: tree.LockWaitError},
 				equal: false,
 			},
 			{
-				val1:  &tree.LockingItem{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
-				val2:  &tree.LockingItem{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
+				val1:  opt.Locking{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
+				val2:  opt.Locking{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
 				equal: true,
 			},
 		}},

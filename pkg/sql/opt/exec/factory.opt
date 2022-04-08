@@ -284,7 +284,7 @@ define LookupJoin {
     IsFirstJoinInPairedJoiner bool
     IsSecondJoinInPairedJoiner bool
     ReqOrdering exec.OutputOrdering
-    Locking *tree.LockingItem
+    Locking opt.Locking
     LimitHint int64
 }
 

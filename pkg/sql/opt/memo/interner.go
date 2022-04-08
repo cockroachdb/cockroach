@@ -635,11 +635,9 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	}
 }
 
-func (h *hasher) HashLockingItem(val *tree.LockingItem) {
-	if val != nil {
-		h.HashByte(byte(val.Strength))
-		h.HashByte(byte(val.WaitPolicy))
-	}
+func (h *hasher) HashLocking(val opt.Locking) {
+	h.HashByte(byte(val.Strength))
+	h.HashByte(byte(val.WaitPolicy))
 }
 
 func (h *hasher) HashInvertedSpans(val inverted.Spans) {
@@ -1039,11 +1037,8 @@ func (h *hasher) IsPhysPropsEqual(l, r *physical.Required) bool {
 	return l.Equals(r)
 }
 
-func (h *hasher) IsLockingItemEqual(l, r *tree.LockingItem) bool {
-	if l == nil || r == nil {
-		return l == r
-	}
-	return l.Strength == r.Strength && l.WaitPolicy == r.WaitPolicy
+func (h *hasher) IsLockingEqual(l, r opt.Locking) bool {
+	return l == r
 }
 
 func (h *hasher) IsInvertedSpansEqual(l, r inverted.Spans) bool {

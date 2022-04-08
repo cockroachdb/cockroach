@@ -7,6 +7,7 @@ go_library(
         "column_meta.go",
         "constants.go",
         "doc.go",
+        "locking.go",
         "metadata.go",
         "operator.go",
         "ordering.go",

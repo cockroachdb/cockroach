@@ -244,7 +244,7 @@ func constructVirtualScan(
 	if params.NeededCols.Contains(0) {
 		return nil, errors.Errorf("use of %s column not allowed.", table.Column(0).ColName())
 	}
-	if params.Locking != nil {
+	if params.Locking.IsLocking() {
 		// We shouldn't have allowed SELECT FOR UPDATE for a virtual table.
 		return nil, errors.AssertionFailedf("locking cannot be used with virtual table")
 	}
