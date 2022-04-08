@@ -242,7 +242,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// still lay claim on the job, and then not clear their claim on realizing
 				// that adoption is disabled. To get around this we set the env variable
 				// to disable the registries from even laying claim on the jobs.
-				_, err = c.RunWithDetailsSingleNode(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=0")
+				_, err = c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=0")
 				require.NoError(t, err)
 
 				// Wait for no jobs to be running on the node that we have halted
@@ -280,7 +280,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 
 				// Reset the env variable that controls how many jobs are claimed by the
 				// registry.
-				_, err = c.RunWithDetailsSingleNode(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=10")
+				_, err = c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=10")
 				require.NoError(t, err)
 			}
 		}
