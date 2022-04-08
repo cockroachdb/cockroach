@@ -31,22 +31,14 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 		Use:     "generate [target..]",
 		Aliases: []string{"gen"},
 		Short:   `Generate the specified files`,
-		Long: `Generate the specified files.
-` + "`dev generate bazel`" + ` updates BUILD.bazel files and other Bazel files like DEPS.bzl.
-Use the --mirror option if vendoring a new dependency that needs to be mirrored.
-` + "`dev generate go`" + ` populates the workspace with generated code.
-` + "`dev generate docs`" + ` updates generated documentation.
-` + "`dev generate go+docs`" + ` does the same as ` + "`dev generate go docs`" + `, but slightly faster.
-` + "`dev generate cgo`" + ` populates the workspace with a few zcgo_flags.go files that can prepare non-Bazel build systems to link in our C dependencies.
-` + "`dev generate protobuf`" + ` generates a subset of the code that ` + "`dev generate go`" + ` does, specifically the .pb.go files.`,
+		Long:    `Generate the specified files.`,
 		Example: `
         dev generate
-        dev generate bazel
-        dev generate docs
-        dev generate go
-        dev generate protobuf
-        dev generate cgo
-        dev generate go+docs
+        dev generate bazel     # DEPS.bzl and BUILD.bazel files
+        dev generate cgo       # files that help non-Bazel systems (IDEs, go) link to our C dependencies
+        dev generate docs      # generates documentation
+        dev generate go        # generates go code (execgen, stringer, protobufs, etc.)
+        dev generate protobuf  # *.pb.go files (subset of 'dev generate go')
 `,
 		Args: cobra.MinimumNArgs(0),
 		// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
@@ -54,7 +46,7 @@ Use the --mirror option if vendoring a new dependency that needs to be mirrored.
 		// (especially considering we've SilenceErrors-ed things away).
 		RunE: runE,
 	}
-	generateCmd.Flags().Bool(mirrorFlag, false, "mirror new dependencies to cloud storage")
+	generateCmd.Flags().Bool(mirrorFlag, false, "mirror new dependencies to cloud storage (use if vendoring)")
 	generateCmd.Flags().Bool(forceFlag, false, "force regeneration even if relevant files are unchanged from upstream")
 	return generateCmd
 }
@@ -66,14 +58,27 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		"docs":     d.generateDocs,
 		"go":       d.generateGo,
 		"protobuf": d.generateProtobuf,
-		"go+docs":  d.generateGoAndDocs,
 	}
 
 	if len(targets) == 0 {
-		targets = append(targets, "bazel", "go+docs")
+		targets = append(targets, "bazel", "go", "docs", "cgo")
 	}
 
+	targetsMap := make(map[string]struct{})
 	for _, target := range targets {
+		targetsMap[target] = struct{}{}
+	}
+	_, includesGo := targetsMap["go"]
+	_, includesDocs := targetsMap["docs"]
+	if includesGo && includesDocs {
+		delete(targetsMap, "go")
+		delete(targetsMap, "docs")
+		if err := d.generateGoAndDocs(cmd); err != nil {
+			return err
+		}
+	}
+
+	for target := range targetsMap {
 		generator, ok := generatorTargetMapping[target]
 		if !ok {
 			return fmt.Errorf("unrecognized target: %s", target)
