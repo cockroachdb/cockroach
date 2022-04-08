@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
@@ -87,7 +88,7 @@ func MakeUpdater(
 	alloc *tree.DatumAlloc,
 	sv *settings.Values,
 	internal bool,
-	metrics *Metrics,
+	metrics *rowinfra.Metrics,
 ) (Updater, error) {
 	if requestedCols == nil {
 		return Updater{}, errors.AssertionFailedf("requestedCols is nil in MakeUpdater")

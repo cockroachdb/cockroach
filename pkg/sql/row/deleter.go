@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -47,7 +48,7 @@ func MakeDeleter(
 	requestedCols []catalog.Column,
 	sv *settings.Values,
 	internal bool,
-	metrics *Metrics,
+	metrics *rowinfra.Metrics,
 ) Deleter {
 	indexes := tableDesc.DeletableNonPrimaryIndexes()
 
