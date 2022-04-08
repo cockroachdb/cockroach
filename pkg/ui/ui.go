@@ -22,6 +22,7 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -113,6 +114,10 @@ type Config struct {
 // including index.html, which has some login-related variables
 // templated into it, as well as static assets.
 func Handler(cfg Config) http.Handler {
+	// assetsFsys is an io/fs instance rooted at `./assets`, relative to the Assets embedded in
+	// the CRDB binary.
+	assetsFsys, _ := fs.Sub(Assets, "assets")
+
 	// etags is used to provide a unique per-file checksum for each served file,
 	// which enables client-side caching using Cache-Control and ETag headers.
 	etags := make(map[string]string)
@@ -128,7 +133,7 @@ func Handler(cfg Config) http.Handler {
 	fileHandlerChain := httputil.EtagHandler(
 		etags,
 		http.FileServer(
-			http.FS(Assets),
+			http.FS(assetsFsys),
 		),
 	)
 	buildInfo := build.GetInfo()
