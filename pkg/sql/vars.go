@@ -2050,6 +2050,24 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// TODO(michae2): Remove this when #70731 is fixed.
+	// CockroachDB extension.
+	`enable_multiple_modifications_of_table`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_multiple_modifications_of_table`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_multiple_modifications_of_table", s)
+			if err != nil {
+				return err
+			}
+			m.SetMultipleModificationsOfTable(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().MultipleModificationsOfTable), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// CockroachDB extension.
 	`show_primary_key_constraint_on_not_visible_columns`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`show_primary_key_constraint_on_not_visible_columns`),

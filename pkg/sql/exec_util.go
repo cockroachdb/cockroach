@@ -3211,6 +3211,10 @@ func (m *sessionDataMutator) SetExpectAndIgnoreNotVisibleColumnsInCopy(val bool)
 	m.data.ExpectAndIgnoreNotVisibleColumnsInCopy = val
 }
 
+func (m *sessionDataMutator) SetMultipleModificationsOfTable(val bool) {
+	m.data.MultipleModificationsOfTable = val
+}
+
 func (m *sessionDataMutator) SetShowPrimaryKeyConstraintOnNotVisibleColumns(val bool) {
 	m.data.ShowPrimaryKeyConstraintOnNotVisibleColumns = val
 }

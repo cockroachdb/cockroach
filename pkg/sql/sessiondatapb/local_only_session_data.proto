@@ -246,10 +246,14 @@ message LocalOnlySessionData {
   // (with no column name specifiers) to expect and ignore not visible column
   // fields.
   bool expect_and_ignore_not_visible_columns_in_copy = 67;
+  // MultipleModificationsOfTable allows statements containing multiple INSERT
+  // ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table,
+  // at the risk of data corruption if the same row is modified multiple times.
+  bool multiple_modifications_of_table = 68;
   // ShowPrimaryKeyConstraintOnNotVisibleColumns controls whether SHOW
   // CONSTRAINTS and pg_catalog.pg_constraint will include primary key
   // constraints that only include hidden columns.
-  bool show_primary_key_constraint_on_not_visible_columns = 68;
+  bool show_primary_key_constraint_on_not_visible_columns = 69;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
