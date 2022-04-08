@@ -197,6 +197,7 @@ type NodeLiveness struct {
 	heartbeatToken       chan struct{}
 	metrics              Metrics
 	onNodeDecommissioned func(livenesspb.Liveness) // noop if nil
+	tracer               *tracing.Tracer
 
 	mu struct {
 		syncutil.RWMutex
@@ -274,6 +275,7 @@ type NodeLivenessOptions struct {
 	// idempotent as it may be invoked multiple times and defaults to a
 	// noop.
 	OnNodeDecommissioned func(livenesspb.Liveness)
+	Tracer               *tracing.Tracer
 }
 
 // NewNodeLiveness returns a new instance of NodeLiveness configured
@@ -291,6 +293,7 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		otherSem:             make(chan struct{}, 1),
 		heartbeatToken:       make(chan struct{}, 1),
 		onNodeDecommissioned: opts.OnNodeDecommissioned,
+		tracer:               opts.Tracer,
 	}
 	nl.metrics = Metrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
@@ -739,6 +742,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 			}
 			// Give the context a timeout approximately as long as the time we
 			// have left before our liveness entry expires.
+			var trace tracing.Recording
 			if err := contextutil.RunWithTimeout(ctx, "node liveness heartbeat", nl.renewalDuration,
 				func(ctx context.Context) error {
 					// Retry heartbeat in the event the conditional put fails.
@@ -756,11 +760,14 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 							}
 							oldLiveness = liveness
 						}
-						if err := nl.heartbeatInternal(ctx, oldLiveness, incrementEpoch); err != nil {
+						traceCtx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, nl.tracer, "liveness")
+						defer collectAndFinish()
+						if err := nl.heartbeatInternal(traceCtx, oldLiveness, incrementEpoch); err != nil {
 							if errors.Is(err, ErrEpochIncremented) {
 								log.Infof(ctx, "%s; retrying", err)
 								continue
 							}
+							trace = collectAndFinish()
 							return err
 						}
 						incrementEpoch = false // don't increment epoch after first heartbeat
@@ -769,6 +776,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 					return nil
 				}); err != nil {
 				log.Warningf(ctx, heartbeatFailureLogFormat, err)
+				log.Warningf(ctx, "%s", trace.String())
 			}
 
 			nl.heartbeatToken <- struct{}{}

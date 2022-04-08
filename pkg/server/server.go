@@ -517,6 +517,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		LivenessThreshold:       nlActive,
 		RenewalDuration:         nlRenewal,
 		Settings:                st,
+		Tracer:                  cfg.AmbientCtx.Tracer,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		OnNodeDecommissioned: func(liveness livenesspb.Liveness) {
 			if knobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {

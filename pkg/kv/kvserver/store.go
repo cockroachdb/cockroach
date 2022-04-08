@@ -272,6 +272,7 @@ func newRaftConfig(
 		MaxInflightMsgs:           storeCfg.RaftMaxInflightMsgs,
 		Storage:                   strg,
 		Logger:                    logger,
+		CheckQuorum:               true,
 
 		PreVote: true,
 	}

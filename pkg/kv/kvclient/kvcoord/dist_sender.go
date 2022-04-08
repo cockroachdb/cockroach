@@ -2049,7 +2049,7 @@ func (ds *DistSender) sendToReplicas(
 			// replica into the cache, but without a leaseholder (and taking into
 			// account that the local node can't be down) it won't take long until we
 			// talk to a replica that tells us who the leaseholder is.
-			if ctx.Err() == nil {
+			if true || ctx.Err() == nil {
 				if lh := routing.Leaseholder(); lh != nil && *lh == curReplica {
 					routing.EvictLease(ctx)
 				}

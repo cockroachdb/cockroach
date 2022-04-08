@@ -15,8 +15,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"os/signal"
 	"sort"
 	"sync/atomic"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -33,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
+	atomic2 "go.uber.org/atomic"
 	"google.golang.org/grpc"
 )
 
@@ -289,17 +293,56 @@ func (t *RaftTransport) queuedMessageCount() int64 {
 	return n
 }
 
+type doNothing struct{}
+
+func (d *doNothing) HandleRaftRequest(
+	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
+) *roachpb.Error {
+	log.Warningf(ctx, "dropping incoming raft messages")
+	return nil
+}
+
+func (d *doNothing) HandleRaftResponse(ctx context.Context, _ *RaftMessageResponse) error {
+	log.Warningf(ctx, "dropping incoming raft messages")
+	return nil
+}
+
+func (d *doNothing) HandleSnapshot(
+	ctx context.Context, header *SnapshotRequest_Header, respStream SnapshotResponseStream,
+) error {
+	log.Warningf(ctx, "dropping incoming raft messages")
+	return nil
+}
+
 func (t *RaftTransport) getHandler(storeID roachpb.StoreID) (RaftMessageHandler, bool) {
+	if weDead.Load() == 1 {
+		return &doNothing{}, true
+	}
 	if value, ok := t.handlers.Load(int64(storeID)); ok {
 		return *(*RaftMessageHandler)(value), true
 	}
 	return nil, false
 }
 
+var sigCh = func() chan os.Signal {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGHUP)
+	return ch
+}()
+
+var weDead atomic2.Int32
+
 // handleRaftRequest proxies a request to the listening server interface.
 func (t *RaftTransport) handleRaftRequest(
 	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *roachpb.Error {
+	select {
+	case <-sigCh:
+		log.Warningf(ctx, "time to drop incoming raft messages for range")
+		weDead.Store(1)
+	default:
+	}
+
 	handler, ok := t.getHandler(req.ToReplica.StoreID)
 	if !ok {
 		log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",

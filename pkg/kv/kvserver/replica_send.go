@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -118,6 +119,17 @@ func (r *Replica) sendWithRangeID(
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
 
+	if r.RangeID == 2 {
+		traceCtx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, r.Tracer, "blah")
+		ctx = traceCtx
+		now := time.Now()
+		defer func() {
+			if time.Now().Sub(now) > time.Second {
+				log.Warningf(ctx, "%s", collectAndFinish().String())
+			}
+			collectAndFinish()
+		}()
+	}
 	// If the internal Raft group is not initialized, create it and wake the leader.
 	r.maybeInitializeRaftGroup(ctx)
 

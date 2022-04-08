@@ -68,15 +68,11 @@ func (r *raftLogger) Debugf(format string, v ...interface{}) {
 }
 
 func (r *raftLogger) Info(v ...interface{}) {
-	if log.V(2) {
-		log.InfofDepth(r.ctx, 1, "", v...)
-	}
+	log.InfofDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Infof(format string, v ...interface{}) {
-	if log.V(2) {
-		log.InfofDepth(r.ctx, 1, format, v...)
-	}
+	log.InfofDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Warning(v ...interface{}) {
