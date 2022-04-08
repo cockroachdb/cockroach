@@ -15,6 +15,7 @@ go_library(
         "//pkg/settings",
         "//pkg/storage",
         "//pkg/util/ioctx",
+        "//pkg/util/mon",
         "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//sstable",
