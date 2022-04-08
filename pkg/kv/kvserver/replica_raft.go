@@ -13,8 +13,11 @@ package kvserver
 import (
 	"context"
 	"math/rand"
+	"os"
+	"os/signal"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -560,6 +563,12 @@ func (r *Replica) handleRaftReady(
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
 }
 
+var sigCh = func() chan os.Signal {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGHUP)
+	return ch
+}()
+
 // handleRaftReadyRaftMuLocked is the same as handleRaftReady but requires that
 // the replica's raftMu be held.
 //
@@ -631,6 +640,18 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// some quota back to the pool.
 		r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 		return stats, "", nil
+	}
+
+	if r.RangeID == 2 {
+		select {
+		case <-sigCh:
+			if l, _ := r.GetLease(); l.OwnedBy(r.store.StoreID()) {
+				log.Warningf(ctx, "deadlocking liveness leaseholder")
+				r.mu.Lock()
+				r.mu.Lock()
+			}
+		default:
+		}
 	}
 
 	logRaftReady(ctx, rd)
