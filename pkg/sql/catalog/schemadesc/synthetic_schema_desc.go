@@ -94,7 +94,8 @@ func (p synthetic) NewBuilder() catalog.DescriptorBuilder {
 func (p synthetic) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	return catalog.DescriptorIDSet{}, nil
 }
-func (p synthetic) ValidateSelf(_ catalog.ValidationErrorAccumulator) {}
+func (p synthetic) ValidateSelf(_ catalog.ValidationErrorAccumulator) {
+}
 func (p synthetic) ValidateCrossReferences(
 	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
