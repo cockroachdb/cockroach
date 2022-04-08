@@ -124,7 +124,7 @@ func Handler(cfg Config) http.Handler {
 
 	if HaveUI {
 		// Only compute hashes for UI-enabled builds
-		err := httputil.ComputeEtags(Assets, etags)
+		err := httputil.ComputeEtags(assetsFsys, etags)
 		if err != nil {
 			log.Errorf(context.Background(), "Unable to compute asset hashes: %+v", err)
 		}

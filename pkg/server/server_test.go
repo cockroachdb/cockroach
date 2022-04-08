@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/server/testdata"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -67,10 +68,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-// embedFsys is a small instance of embed.FS used for testing purposes only
-//go:embed doc.go
-var embedFsys embed.FS
 
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
 // been specified.
@@ -1163,7 +1160,7 @@ Binary built without web UI.
 		linkInFakeUI()
 		defer unlinkFakeUI()
 
-		ui.Assets = embedFsys
+		ui.Assets = testdata.TestAssets
 
 		// Clear fake asset FS when we're done
 		defer func() {
@@ -1196,7 +1193,7 @@ Binary built without web UI.
 		for _, testCase := range cases {
 			t.Run(fmt.Sprintf("bundle caching for %s", testCase.desc), func(t *testing.T) {
 				// Request bundle.js without an If-None-Match header first, to simulate the initial load
-				uncachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/doc.go", nil)
+				uncachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/bundle.js", nil)
 				require.NoError(t, err)
 
 				uncachedResp, err := testCase.client.Do(uncachedReq)
@@ -1208,7 +1205,7 @@ Binary built without web UI.
 				require.NotEmpty(t, etag, "Server must provide ETag response header with asset responses")
 
 				// Use that ETag header on the next request to simulate a client reload
-				cachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/doc.go", nil)
+				cachedReq, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL()+"/bundle.js", nil)
 				require.NoError(t, err)
 				cachedReq.Header.Add("If-None-Match", etag)
 
