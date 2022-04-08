@@ -504,7 +504,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			var eqFilters memo.FiltersExpr
 			extractEqualityFilter := func(leftCol, rightCol opt.ColumnID) memo.FiltersItem {
 				return memo.ExtractJoinEqualityFilter(
-					leftCol, rightCol, inputProps.OutputCols, rightCols, on,
+					leftCol, rightCol, inputProps.OutputCols, rightCols, onFilters,
 				)
 			}
 			eqFilters, constFilters, rightSideCols = c.findFiltersForIndexLookup(
