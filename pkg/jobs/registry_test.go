@@ -1107,3 +1107,42 @@ func TestJobIdleness(t *testing.T) {
 	})
 
 }
+
+// TestDisablingJobAdoptionClearsClaimSessionID tests that jobs adopted by a
+// registry for which job adoption has been disabled, have their
+// claim_session_id cleared prior to having their context cancelled. This will
+// allow other job registries in the cluster to claim and run this job.
+func TestDisablingJobAdoptionClearsClaimSessionID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	intervalOverride := time.Millisecond
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: &TestingKnobs{
+				DisableAdoptions: true,
+				IntervalOverrides: TestingIntervalOverrides{
+					Adopt:  &intervalOverride,
+					Cancel: &intervalOverride,
+				},
+			},
+		},
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	r := s.JobRegistry().(*Registry)
+	session, err := r.sqlInstance.Session(ctx)
+	require.NoError(t, err)
+
+	// Insert a running job with a `claim_session_id` equal to our overridden test
+	// session.
+	tdb.Exec(t,
+		"INSERT INTO system.jobs (id, status, created, payload, claim_session_id) values ($1, $2, $3, 'test'::bytes, $4)",
+		1, StatusRunning, timeutil.Now(), session.ID(),
+	)
+
+	// We expect the adopt loop to clear the claim session since job adoption is
+	// disabled on this registry.
+	tdb.CheckQueryResultsRetry(t, `SELECT claim_session_id FROM system.jobs WHERE id = 1`, [][]string{{"NULL"}})
+}
