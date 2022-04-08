@@ -5,7 +5,7 @@ FILES = [
     "add_column",
     "add_constraint",
     "alter_changefeed",
-    "alter_backup_stmt",
+    "alter_backup",
     "alter_column",
     "alter_database_add_region_stmt",
     "alter_database_add_super_region",
