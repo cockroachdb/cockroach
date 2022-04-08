@@ -28,7 +28,7 @@ type testCol struct {
 // less verbose way.
 func testTableDesc(
 	name string, columns []testCol, mutationColumns []testCol,
-) catalog.TableDescriptor {
+) catalog.MutableTableDescriptor {
 	cols := make([]descpb.ColumnDescriptor, len(columns))
 	for i := range columns {
 		cols[i] = descpb.ColumnDescriptor{
@@ -57,5 +57,5 @@ func testTableDesc(
 		ID:        1,
 		Columns:   cols,
 		Mutations: muts,
-	}).BuildImmutableTable()
+	}).BuildCreatedMutableTable()
 }
