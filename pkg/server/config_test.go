@@ -118,6 +118,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	// Makes sure no values are set when no environment variables are set.
 	cfg := MakeConfig(context.Background(), st)
 	cfgExpected := MakeConfig(context.Background(), st)
+	// Temp storage disk monitors will have slightly different names, so we
+	// override them to point to the same one.
+	cfgExpected.TempStorageConfig.Mon = cfg.TempStorageConfig.Mon
 
 	resetEnvVar()
 	cfg.readEnvironmentVariables()
