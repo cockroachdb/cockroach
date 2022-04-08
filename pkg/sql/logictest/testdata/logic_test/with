@@ -997,6 +997,31 @@ EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
 statement ok
 RESET CLUSTER SETTING sql.multiple_modifications_of_table.enabled
 
+# Multiple mutations can also be explicitly allowed with a session setting.
+statement ok
+SET enable_multiple_modifications_of_table = true
+
+# Multiple updates of different rows in the same table.
+query II rowsort
+WITH
+  u1 AS (UPDATE t SET j = j - 40 WHERE i < 20 RETURNING *),
+  u2 AS (UPDATE t SET j = j + 40 WHERE i >= 20 RETURNING *)
+TABLE u1 UNION ALL TABLE u2
+----
+2 60
+4 60
+6 60
+8 60
+20 440
+
+# Check for corruption.
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
+----
+
+statement ok
+RESET enable_multiple_modifications_of_table
+
 # Tests with multiple mutations on the same table, modifying the same
 # rows. These testcases vary the type of mutation and the form. All should fail
 # with an error. When issue 70731 is fixed, some might no longer fail.
