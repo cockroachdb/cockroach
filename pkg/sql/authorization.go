@@ -127,7 +127,7 @@ func (p *planner) CheckPrivilegeForUser(
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
 	if p.txn == nil || !p.txn.IsOpen() {
-		return errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
+		return errors.Wrapf(errors.AssertionFailedf("cannot use CheckPrivilege without a txn"), fmt.Sprintf("%s, %v", p.txn.String(), p.txn.IsOpen()))
 	}
 
 	// Test whether the object is being audited, and if so, record an
@@ -633,7 +633,10 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return true, nil
 	}
 
-	roleID, _ := GetUserID(ctx, p.ExecCfg().InternalExecutor, nil, user)
+	roleID, err := GetUserID(ctx, p.ExecCfg().InternalExecutor, p.txn, user)
+	if err != nil {
+		return false, err
+	}
 
 	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryRowEx(
 		ctx, "has-role-option", p.Txn(),

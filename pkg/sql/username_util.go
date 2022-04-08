@@ -31,10 +31,11 @@ func GetUserID(
 ) (oid.Oid, error) {
 	var userID oid.Oid
 
-	values, err := executor.QueryRowEx(ctx, "get-system-users-columns", txn, sessiondata.InternalExecutorOverride{
+	values, err := executor.QueryRowEx(ctx, "get-system-users-columns", nil, sessiondata.InternalExecutorOverride{
 		User: security.RootUserName(),
 	}, `SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM system.users] WHERE column_name = 'user_id')`)
 	if err != nil {
+		//panic(err)
 		return userID, err
 	}
 
@@ -45,12 +46,13 @@ func GetUserID(
 	}
 
 	query := `SELECT user_id FROM system.users WHERE username=$1`
-	values, err = executor.QueryRowEx(ctx, "GetUserID", txn, sessiondata.InternalExecutorOverride{
+	values, err = executor.QueryRowEx(ctx, "GetUserID", nil, sessiondata.InternalExecutorOverride{
 		User: security.RootUserName(),
 	},
 		query, role)
 
 	if err != nil {
+		//panic(err)
 		return userID, errors.Wrapf(errors.Wrapf(err, "error looking up user %s", role), string(debug.Stack()))
 	}
 
@@ -60,12 +62,14 @@ func GetUserID(
 		}
 	}
 	return userID, nil
-
 }
 
 // PublicRoleInfo is the SQLUsername for PublicRole.
 func PublicRoleInfo(ctx context.Context, p *planner) security.SQLUserInfo {
-	id, _ := GetUserID(ctx, p.execCfg.InternalExecutor, nil, security.PublicRoleName())
+	id, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, security.PublicRoleName())
+	if err != nil {
+		panic(err)
+	}
 	return security.SQLUserInfo{
 		Username: security.PublicRoleName(),
 		UserID:   id,

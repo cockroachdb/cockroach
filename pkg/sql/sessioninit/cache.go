@@ -115,6 +115,8 @@ func (a *Cache) GetAuthInfo(
 		username security.SQLUsername,
 	) (AuthInfo, error),
 ) (aInfo AuthInfo, err error) {
+	return readFromSystemTables(ctx, ie, username)
+
 	if !CacheEnabled.Get(&settings.SV) {
 		return readFromSystemTables(ctx, ie, username)
 	}

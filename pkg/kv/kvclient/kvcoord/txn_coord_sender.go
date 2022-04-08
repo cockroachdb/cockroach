@@ -466,6 +466,10 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 		tc.mu.txn.Status = roachpb.COMMITTED
 	} else {
 		tc.mu.txn.Status = roachpb.ABORTED
+		fmt.Println(tc.mu.txn.Name)
+		fmt.Println(tc.mu.txn.String())
+		debug.PrintStack()
+		fmt.Println("txn aborted here2")
 	}
 	tc.finalizeAndCleanupTxnLocked(ctx)
 	if et.Commit {

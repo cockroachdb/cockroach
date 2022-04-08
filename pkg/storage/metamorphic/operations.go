@@ -458,6 +458,8 @@ func (t txnAbortOp) run(ctx context.Context) string {
 	txn := t.m.getTxn(t.id)
 	txn.Status = roachpb.ABORTED
 
+	fmt.Println("txn aborted here")
+
 	for _, span := range txn.LockSpans {
 		intent := roachpb.MakeLockUpdate(txn, span)
 		intent.Status = roachpb.ABORTED

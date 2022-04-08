@@ -368,12 +368,12 @@ func makeRoleMembersRestoreFunc(
 				return err
 			}
 
-			roleId, err := sql.GetUserID(ctx, executor, txn, username)
+			roleID, err := sql.GetUserID(ctx, executor, txn, username)
 			if err != nil {
 				return err
 			}
 
-			memberId, err := sql.GetUserID(ctx, executor, txn, memberName)
+			memberID, err := sql.GetUserID(ctx, executor, txn, memberName)
 			if err != nil {
 				return err
 			}
@@ -388,7 +388,7 @@ func makeRoleMembersRestoreFunc(
 			opName := "system_role_members-data-insert"
 			if _, err := executor.ExecEx(ctx, opName, txn, sessiondata.InternalExecutorOverride{
 				User: security.RootUserName(),
-			}, restoreQuery, role, member, isAdmin, roleId, memberId); err != nil {
+			}, restoreQuery, role, member, isAdmin, roleID, memberID); err != nil {
 				return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 			}
 		}
@@ -445,7 +445,7 @@ func makeRoleOptionsRestoreFunc(
 			if err != nil {
 				return err
 			}
-			roleId, err := sql.GetUserID(ctx, executor, txn, sqlUsername)
+			roleID, err := sql.GetUserID(ctx, executor, txn, sqlUsername)
 			if err != nil {
 				return err
 			}
@@ -454,7 +454,7 @@ func makeRoleOptionsRestoreFunc(
 			opName := "system_role_options-data-insert"
 			if _, err := executor.ExecEx(ctx, opName, txn, sessiondata.InternalExecutorOverride{
 				User: security.RootUserName(),
-			}, restoreQuery, username, option, value, roleId); err != nil {
+			}, restoreQuery, username, option, value, roleID); err != nil {
 				return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 			}
 		}
