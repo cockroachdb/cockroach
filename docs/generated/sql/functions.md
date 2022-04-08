@@ -3055,6 +3055,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.num_geo_inverted_index_entries"></a><code>crdb_internal.num_geo_inverted_index_entries(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>, val: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: <a href="string.html">string</a>, version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.num_inverted_index_entries"></a><code>crdb_internal.num_inverted_index_entries(val: anyelement[], version: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
@@ -3195,6 +3197,17 @@ Notes
 If a probe should fail, the latency will be set to MaxInt64 in order to naturally sort above other latencies.
 Read probes are cheaper than write probes. If write probes have already ran, it’s not necessary to also run a read probe.
 A write probe will effectively probe reads as well.</p>
+</span></td></tr></tbody>
+</table>
+
+### Trigrams functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="show_trgm"></a><code>show_trgm(input: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Returns an array of all the trigrams in the given string.</p>
+</span></td></tr>
+<tr><td><a name="similarity"></a><code>similarity(left: <a href="string.html">string</a>, right: <a href="string.html">string</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns a number that indicates how similar the two arguments are. The range of the result is zero (indicating that the two strings are completely dissimilar) to one (indicating that the two strings are identical).</p>
 </span></td></tr></tbody>
 </table>
 
