@@ -3205,6 +3205,10 @@ func (m *sessionDataMutator) SetExpectAndIgnoreNotVisibleColumnsInCopy(val bool)
 	m.data.ExpectAndIgnoreNotVisibleColumnsInCopy = val
 }
 
+func (m *sessionDataMutator) SetMultipleModificationsOfTable(val bool) {
+	m.data.MultipleModificationsOfTable = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
