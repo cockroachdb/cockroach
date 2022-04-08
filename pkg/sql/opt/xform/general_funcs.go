@@ -95,7 +95,7 @@ func (c *CustomFuncs) remapScanColsInScalarExpr(
 		dstCol := dst.Table.ColumnID(ord)
 		colMap.Set(int(srcCol), int(dstCol))
 	}
-	return c.RemapCols(scalar, colMap)
+	return c.e.f.RemapCols(scalar, colMap)
 }
 
 // RemapJoinColsInFilter returns a new FiltersExpr where columns in leftSrc's
@@ -140,7 +140,7 @@ func (c *CustomFuncs) remapJoinColsInScalarExpr(
 		dstCol := rightDst.Table.ColumnID(ord)
 		colMap.Set(int(srcCol), int(dstCol))
 	}
-	return c.RemapCols(scalar, colMap)
+	return c.e.f.RemapCols(scalar, colMap)
 }
 
 // checkConstraintFilters generates all filters that we can derive from the
