@@ -2053,19 +2053,17 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 	temporaryIndexes []descpb.IndexID,
 	fractionScaler *multiStageFractionScaler,
 ) error {
-	var tbl *tabledesc.Mutable
+	var tbl catalog.TableDescriptor
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		tbl, err = descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		tbl, err = descsCol.GetImmutableTableByID(ctx, txn, sc.descID, tree.ObjectLookupFlagsWithRequired())
 		return err
 	}); err != nil {
 		return err
 	}
-	clusterVersion := tbl.ClusterVersion()
-	tableDesc := tabledesc.NewBuilder(&clusterVersion).BuildImmutableTable()
-	if err := sc.distIndexMerge(ctx, tableDesc, addingIndexes, temporaryIndexes, fractionScaler); err != nil {
+	if err := sc.distIndexMerge(ctx, tbl, addingIndexes, temporaryIndexes, fractionScaler); err != nil {
 		return err
 	}
 	return nil
