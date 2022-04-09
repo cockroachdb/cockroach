@@ -1,0 +1,117 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package invertedidx
+
+import (
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
+)
+
+type trigramFilterPlanner struct {
+	tabID           opt.TableID
+	index           cat.Index
+	computedColumns map[opt.ColumnID]opt.ScalarExpr
+}
+
+var _ invertedFilterPlanner = &trigramFilterPlanner{}
+
+// extractInvertedFilterConditionFromLeaf implements the invertedFilterPlanner
+// interface.
+func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
+	_ *eval.Context, expr opt.ScalarExpr,
+) (
+	invertedExpr inverted.Expression,
+	remainingFilters opt.ScalarExpr,
+	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
+) {
+	var constantVal opt.ScalarExpr
+	var left, right opt.ScalarExpr
+	var isLikeExpr, allMustMatch bool
+	switch e := expr.(type) {
+	// Both ILIKE and LIKE are supported because the index entries are always
+	// downcased. We re-check the condition no matter what later.
+	case *memo.ILikeExpr:
+		left, right = e.Left, e.Right
+		// If we're doing a LIKE (or ILIKE) expression, we need to construct an AND
+		// out of all of the spans: we need to find results that match every single
+		// one of the trigrams in the constant datum.
+		isLikeExpr = true
+		allMustMatch = true
+	case *memo.LikeExpr:
+		left, right = e.Left, e.Right
+		isLikeExpr = true
+		allMustMatch = true
+	case *memo.EqExpr:
+		left, right = e.Left, e.Right
+		isLikeExpr = false
+		allMustMatch = true
+	case *memo.ModExpr:
+		// If we're doing a % expression (similarity threshold), we need to
+		// construct an OR out of the spans: we need to find results that match any
+		// of the trigrams in the constant datum, and we'll filter the results
+		// further afterwards.
+		left, right = e.Left, e.Right
+		isLikeExpr = false
+		allMustMatch = false
+	default:
+		// Only the above types are supported.
+		return inverted.NonInvertedColExpression{}, expr, nil
+	}
+	if isIndexColumn(t.tabID, t.index, left, t.computedColumns) && memo.CanExtractConstDatum(right) {
+		constantVal = right
+	} else if isIndexColumn(t.tabID, t.index, right, t.computedColumns) && memo.CanExtractConstDatum(left) {
+		constantVal = left
+	} else {
+		// Can only accelerate with a single constant value.
+		return inverted.NonInvertedColExpression{}, expr, nil
+	}
+	d := memo.ExtractConstDatum(constantVal)
+	if d.ResolvedType() != types.String {
+		panic(errors.AssertionFailedf(
+			"trying to apply inverted index to unsupported type %s", d.ResolvedType(),
+		))
+	}
+	var chunks []string
+	s := string(*d.(*tree.DString))
+	if isLikeExpr {
+		// For a LIKE or ILIKE expr, we split the string by the % separator
+		// character which is used in LIKE expressions to separate matches.
+		chunks = strings.Split(s, "%")
+	} else {
+		chunks = []string{s}
+	}
+	var err error
+	invertedExpr, err = rowenc.EncodeTrigramSpans(chunks, allMustMatch)
+	if err != nil {
+		// An inverted expression could not be extracted.
+		return inverted.NonInvertedColExpression{}, expr, nil
+	}
+
+	// If the extracted inverted expression is not tight then remaining filters
+	// must be applied after the inverted index scan.
+	if !invertedExpr.IsTight() {
+		remainingFilters = expr
+	}
+
+	// We do not currently support pre-filtering for JSON and Array indexes, so
+	// the returned pre-filter state is nil.
+	return invertedExpr, remainingFilters, nil
+}
