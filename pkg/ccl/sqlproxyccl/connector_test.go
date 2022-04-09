@@ -484,7 +484,13 @@ func TestConnector_lookupAddr(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	balancer, err := balancer.NewBalancer(ctx, stopper)
+	balancer, err := balancer.NewBalancer(
+		ctx,
+		stopper,
+		nil, /* directoryCache */
+		nil, /* connTracker */
+		balancer.NoRebalanceLoop(),
+	)
 	require.NoError(t, err)
 
 	t.Run("successful", func(t *testing.T) {
