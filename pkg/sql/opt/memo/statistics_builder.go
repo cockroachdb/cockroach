@@ -4574,7 +4574,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 			var hasNullValue, ok bool
 			var values tree.Datums
 			var distinctVals uint64
-			invertedIndexableColumnType := colinfo.ColumnTypeIsInvertedIndexable(colType)
+			invertedIndexableColumnType := colinfo.ColumnTypeIsOnlyInvertedIndexable(colType)
 			if distinctVals, ok = filterConstraint.CalculateMaxResults(sb.evalCtx, cols, cols); ok {
 				// If the number of values is excessive, don't spend too much time building the histogram,
 				// as it may slow down the query.

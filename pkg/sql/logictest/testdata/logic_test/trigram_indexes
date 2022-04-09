@@ -1,0 +1,49 @@
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, t TEXT)
+
+statement ok
+CREATE INVERTED INDEX ON a(t)
+
+statement ok
+INSERT INTO a VALUES (1, 'foozoopa'),
+                     (2, 'Foo'),
+                     (3, 'blah')
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t ILIKE '%Foo%'
+----
+1  foozoopa
+2  Foo
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%Foo%'
+----
+2  Foo
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%foo%oop%'
+----
+1  foozoopa
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%fooz%'
+----
+1  foozoopa
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%foo%oop'
+----
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE '%foo%oop%' OR t ILIKE 'blah' ORDER BY a
+----
+1  foozoopa
+3  blah
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE 'blahf'
+----
+
+query IT
+SELECT * FROM a@a_t_idx WHERE t LIKE 'fblah'
+----

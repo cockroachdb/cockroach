@@ -13,6 +13,7 @@ package rowenc
 import (
 	"context"
 	"sort"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
@@ -578,6 +580,13 @@ func EncodeInvertedIndexTableKeys(
 		return json.EncodeInvertedIndexKeys(inKey, val.(*tree.DJSON).JSON)
 	case types.ArrayFamily:
 		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey, version, false /* excludeNulls */)
+	case types.StringFamily:
+		// TODO(jordan): Right now, this is just trigram inverted indexes. What if
+		// we want to support different types of inverted indexes on strings? We'll
+		// need to pass in the index type to this function.
+		// We pad the keys when writing them to the index.
+		// TODO(jordan): why are we doing this padding at all? Postgres does it.
+		return encodeTrigramInvertedIndexTableKeys(string(*val.(*tree.DString)), inKey, version, true /* pad */)
 	}
 	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
 }
@@ -831,6 +840,51 @@ func encodeOverlapsArrayInvertedIndexSpans(
 	return invertedExpr, nil
 }
 
+// EncodeLikeTrigramSpans returns the spans that must be scanned to look up all
+// trigrams present in the input string.
+func EncodeLikeTrigramSpans(val *tree.DString) (inverted.Expression, error) {
+	chunks := strings.Split(string(*val), "%")
+	// Each chunk will have at minimum 2 trigrams, so start at that default size.
+	keys := make([][]byte, 0, len(chunks)*2)
+	for _, chunk := range chunks {
+		if len(chunk) < 3 {
+			continue
+		}
+		// We do not pad the trigrams when searching the index. To see why, observe
+		// the keys that we insert for a string "zfooz":
+		//
+		// "  z", " zf", "zfo", "foo", "foz", "oz "
+		//
+		// If we were then searching for the string %foo%, and we padded the output
+		// keys as well, we'd be searching for the key "  f", which doesn't exist
+		// in the index for zfooz, even though zfooz is like %foo%.
+		chunkKeys, err := encodeTrigramInvertedIndexTableKeys(chunk, nil, /* inKey */
+			descpb.LatestIndexDescriptorVersion, false /* pad */)
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, chunkKeys...)
+	}
+	if len(keys) == 0 {
+		return nil, errors.New("no trigrams available to search with")
+	}
+
+	var ret inverted.Expression
+	for _, key := range keys {
+		spanExpr := inverted.ExprForSpan(inverted.MakeSingleValSpan(key), false /* tight*/)
+		spanExpr.Unique = true
+		if ret == nil {
+			ret = spanExpr
+		} else {
+			ret = inverted.And(ret, spanExpr)
+		}
+	}
+	// The result is never tight. We always need to re-check the condition once
+	// the rows are returned - there is a particular order that must be enforced.
+	ret.SetNotTight()
+	return ret, nil
+}
+
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys
 // for Geography and Geometry.
 func EncodeGeoInvertedIndexTableKeys(
@@ -877,6 +931,28 @@ func encodeGeoKeys(
 		keys[i] = newKey
 	}
 	return keys, nil
+}
+
+// encodeTrigramInvertedIndexTableKeys produces the trigram index table keys for
+// an input string. If pad is true, the returned table keys will include 3 extra
+// trigrams produced by padding the string with 2 spaces at the front and 1 at
+// the end.
+func encodeTrigramInvertedIndexTableKeys(
+	val string, inKey []byte, _ descpb.IndexDescriptorVersion, pad bool,
+) ([][]byte, error) {
+	trigrams := trigram.MakeTrigrams(val, pad)
+	outKeys := make([][]byte, len(trigrams))
+	for i := range trigrams {
+		// Make sure to copy inKey into a new byte slice to avoid aliasing.
+		inKeyLen := len(inKey)
+		// Pre-size the outkey - we know we're going to encode the trigram plus 2
+		// extra bytes for the prefix and terminator.
+		outKey := make([]byte, inKeyLen, inKeyLen+len(trigrams[i])+2)
+		copy(outKey, inKey)
+		newKey := encoding.EncodeStringAscending(outKey, trigrams[i])
+		outKeys[i] = newKey
+	}
+	return outKeys, nil
 }
 
 // EncodePrimaryIndex constructs a list of k/v pairs for a
