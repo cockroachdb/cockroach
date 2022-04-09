@@ -60,7 +60,6 @@ go_test(
     srcs = [
         "colbatch_scan_test.go",
         "dep_test.go",
-        "draining_test.go",
         "main_test.go",
         "routers_test.go",
         "stats_test.go",
