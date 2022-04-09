@@ -1492,3 +1492,107 @@ CREATE TABLE public.table_desc_inverted_index (
    FAMILY f1 (id, last_accessed),
    FAMILY f2 (testdata)
 )
+
+subtest overlaps_with_array
+
+statement ok
+DROP TABLE cb
+
+statement ok
+CREATE TABLE cb (
+  id INT PRIMARY KEY,
+  numbers INT[],
+  words STRING[],
+  primes INT[],
+  INVERTED INDEX n (numbers),
+  INVERTED INDEX w (words),
+  INVERTED INDEX p (primes)
+)
+
+statement ok
+INSERT INTO cb VALUES
+  (0, ARRAY[], ARRAY[], ARRAY[]),
+  (1, ARRAY[0], ARRAY[NULL, ''], ARRAY[2]),
+  (2, ARRAY[1], ARRAY['cat'], ARRAY[3]),
+  (3, ARRAY[0,1], ARRAY['mouse'], ARRAY[2,3]),
+  (4, ARRAY[NULL], ARRAY['cat', 'mouse'], ARRAY[2]),
+  (5, ARRAY[0,1,2], ARRAY['cat', NULL, 'mouse'], ARRAY[2,3,5]),
+  (6, ARRAY[3,4,5], ARRAY['rat'], ARRAY[2,3]),
+  (7, ARRAY[1,2,1], ARRAY['rat', NULL, ''], ARRAY[2,3]),
+  (8, ARRAY[0,1,NULL], ARRAY[''], ARRAY[7]),
+  (9, NULL, NULL, NULL)
+
+query T
+SELECT numbers FROM cb WHERE numbers && ARRAY[]::INT[] ORDER BY numbers
+----
+
+query T
+SELECT numbers FROM cb WHERE numbers && ARRAY[NULL]::INT[] ORDER BY numbers
+----
+
+query T
+SELECT numbers FROM cb@n WHERE numbers && ARRAY[1,NULL]::INT[] ORDER BY numbers
+----
+{0,1}
+{0,1,NULL}
+{0,1,2}
+{1}
+{1,2,1}
+
+query T
+SELECT numbers FROM cb@n WHERE numbers && ARRAY[0,1,2] ORDER BY numbers
+----
+{0}
+{0,1}
+{0,1,NULL}
+{0,1,2}
+{1}
+{1,2,1}
+
+query T
+SELECT numbers FROM cb@n WHERE numbers && ARRAY[5,4,3] ORDER BY numbers
+----
+{3,4,5}
+
+query T
+SELECT words FROM cb WHERE words && ARRAY[]::STRING[] ORDER BY words
+----
+
+query T
+SELECT words FROM cb@w WHERE words && ARRAY['']::STRING[] ORDER BY words
+----
+{NULL,""}
+{""}
+{rat,NULL,""}
+
+query T
+SELECT words FROM cb WHERE words && ARRAY[NULL]::STRING[] ORDER BY words
+----
+
+query T
+SELECT words FROM cb@w WHERE words && ARRAY['cat'] ORDER BY words
+----
+{cat}
+{cat,NULL,mouse}
+{cat,mouse}
+
+query T
+SELECT words FROM cb@w WHERE words && ARRAY[NULL, 'cat', 'mouse'] ORDER BY words
+----
+{cat}
+{cat,NULL,mouse}
+{cat,mouse}
+{mouse}
+
+query T
+SELECT words FROM cb@w WHERE words && ARRAY[NULL, 'rat'] ORDER BY words
+----
+{rat}
+{rat,NULL,""}
+
+query T
+SELECT primes FROM cb WHERE primes && numbers ORDER BY primes
+----
+{2,3}
+{2,3}
+{2,3,5}

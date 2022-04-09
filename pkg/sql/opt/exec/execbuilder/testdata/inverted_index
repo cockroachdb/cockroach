@@ -12,7 +12,7 @@ CREATE TABLE e (
   a INT PRIMARY KEY,
   b INT[],
   FAMILY (a,b),
-  INVERTED INDEX(b)
+  INVERTED INDEX bIdx (b)
 )
 
 statement ok
@@ -1049,7 +1049,7 @@ vectorized: true
 └── • scan
       columns: (a)
       estimated row count: 111 (missing stats)
-      table: e@e_b_idx
+      table: e@bidx
       spans: /1-/2
 
 query T
@@ -1134,10 +1134,10 @@ vectorized: true
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
-          left table: e@e_b_idx
+          left table: e@bidx
           left columns: (a, b_inverted_key)
           left fixed values: 1 column
-          right table: e@e_b_idx
+          right table: e@bidx
           right columns: (a, b_inverted_key)
           right fixed values: 1 column
 
@@ -1161,10 +1161,10 @@ vectorized: true
     │
     └── • zigzag join
           columns: (a, b_inverted_key, a, b_inverted_key)
-          left table: e@e_b_idx
+          left table: e@bidx
           left columns: (a, b_inverted_key)
           left fixed values: 1 column
-          right table: e@e_b_idx
+          right table: e@bidx
           right columns: (a, b_inverted_key)
           right fixed values: 1 column
 
@@ -1189,7 +1189,7 @@ vectorized: true
     └── • scan
           columns: (a)
           estimated row count: 111 (missing stats)
-          table: e@e_b_idx
+          table: e@bidx
           spans: /[]-/"D"
 
 query T
@@ -1221,7 +1221,7 @@ vectorized: true
             └── • scan
                   columns: (a, b_inverted_key)
                   estimated row count: 111 (missing stats)
-                  table: e@e_b_idx
+                  table: e@bidx
                   spans: /[]-/"D" /0-/3
 
 query T
@@ -1244,7 +1244,7 @@ vectorized: true
     └── • scan
           columns: (a)
           estimated row count: 111 (missing stats)
-          table: e@e_b_idx
+          table: e@bidx
           spans: /[]-/"D"
 
 query T
@@ -1276,7 +1276,7 @@ vectorized: true
             └── • scan
                   columns: (a, b_inverted_key)
                   estimated row count: 111 (missing stats)
-                  table: e@e_b_idx
+                  table: e@bidx
                   spans: /[]-/"D" /0-/2
 
 query T
@@ -1421,6 +1421,100 @@ vectorized: true
                   estimated row count: 111 (missing stats)
                   table: d@foo_inv
                   spans: /"f"-/"f"/PrefixEnd /[]-/{} /Arr/"f"-/Arr/"f"/PrefixEnd /Arr/{}-/Arr/{}/PrefixEnd /Arr/"a"/"b"-/Arr/"a"/"b"/PrefixEnd /Arr/"c"/{}-/Arr/"c"/{}/PrefixEnd /Arr/"c"/"d"/[]-/Arr/"c"/"d"/{} /Arr/"c"/"d"/Arr/"e"-/Arr/"c"/"d"/Arr/"e"/PrefixEnd
+
+# Test that queries with overlaps && operator use the inverted index
+# for non-empty non-null array
+# TODO: Add normalization rule to convert to no-op since predicate
+# is a contradiction
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b && ARRAY[]::INT[]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b && ARRAY[]
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: e@e_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e@bIdx WHERE b && ARRAY[0,1,2]
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ table: e@e_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 1
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: e@bidx
+              spans: /0-/3
+
+# TODO: Add normalization rule to convert to no-op since predicate
+# is a contradiction
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b && ARRAY[NULL]::INT[]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b && ARRAY[NULL]
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1,000 (missing stats)
+      table: e@e_pkey
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e@bIdx WHERE b && ARRAY[0,1,NULL]
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ table: e@e_pkey
+│ key columns: a
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 111 (missing stats)
+    │
+    └── • inverted filter
+        │ columns: (a, b_inverted_key)
+        │ inverted column: b_inverted_key
+        │ num spans: 1
+        │
+        └── • scan
+              columns: (a, b_inverted_key)
+              estimated row count: 111 (missing stats)
+              table: e@bidx
+              spans: /0-/2
 
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.
