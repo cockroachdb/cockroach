@@ -50,7 +50,7 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	// planCtx.NodeStatuses map ourselves. CheckInstanceHealthAndVersion() will
 	// populate it.
 	for _, node := range resp.Nodes {
-		_ /* NodeStatus */ = dsp.CheckInstanceHealthAndVersion(planCtx, base.SQLInstanceID(node.Desc.NodeID))
+		_ /* NodeStatus */ = dsp.CheckInstanceHealthAndVersion(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
 	}
 	nodes := make([]base.SQLInstanceID, 0, len(planCtx.NodeStatuses))
 	for nodeID, status := range planCtx.NodeStatuses {

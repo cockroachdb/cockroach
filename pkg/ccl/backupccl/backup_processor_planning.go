@@ -52,13 +52,13 @@ func distBackupPlanSpecs(
 	var introducedSpanPartitions []sql.SpanPartition
 	var err error
 	if len(spans) > 0 {
-		spanPartitions, err = dsp.PartitionSpans(planCtx, spans)
+		spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, spans)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if len(introducedSpans) > 0 {
-		introducedSpanPartitions, err = dsp.PartitionSpans(planCtx, introducedSpans)
+		introducedSpanPartitions, err = dsp.PartitionSpans(ctx, planCtx, introducedSpans)
 		if err != nil {
 			return nil, err
 		}
@@ -206,6 +206,6 @@ func distBackup(
 	defer close(progCh)
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
+	dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
 	return rowResultWriter.Err()
 }

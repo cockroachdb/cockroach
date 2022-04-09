@@ -980,7 +980,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if err != nil {
 			return err
 		}
-		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, todoSpans)
+		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 		return err
 	}); err != nil {
 		return err
@@ -1152,6 +1152,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := evalCtx
 		sc.distSQLPlanner.Run(
+			ctx,
 			planCtx,
 			nil, /* txn - the processors manage their own transactions */
 			p, recv, &evalCtxCopy,
@@ -1273,11 +1274,12 @@ func (sc *SchemaChanger) distColumnBackfill(
 			if err != nil {
 				return err
 			}
-			plan, err := sc.distSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, todoSpans)
+			plan, err := sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 			if err != nil {
 				return err
 			}
 			sc.distSQLPlanner.Run(
+				ctx,
 				planCtx,
 				nil, /* txn - the processors manage their own transactions */
 				plan, recv, &evalCtx,

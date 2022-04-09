@@ -54,6 +54,7 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 )
 
 func (dsp *DistSQLPlanner) createStatsPlan(
+	ctx context.Context,
 	planCtx *PlanningCtx,
 	desc catalog.TableDescriptor,
 	reqStats []requestedStat,
@@ -94,7 +95,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 	scan.isFull = true
 
-	p, err := dsp.createTableReaders(planCtx, &scan)
+	p, err := dsp.createTableReaders(ctx, planCtx, &scan)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +205,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	)
 
 	// Estimate the expected number of rows based on existing stats in the cache.
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +249,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 }
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
-	planCtx *PlanningCtx, jobID jobspb.JobID, details jobspb.CreateStatsDetails,
+	ctx context.Context, planCtx *PlanningCtx, jobID jobspb.JobID, details jobspb.CreateStatsDetails,
 ) (*PhysicalPlan, error) {
 	reqStats := make([]requestedStat, len(details.ColumnStats))
 	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
@@ -268,7 +269,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	}
 
 	tableDesc := tabledesc.NewBuilder(&details.Table).BuildImmutableTable()
-	return dsp.createStatsPlan(planCtx, tableDesc, reqStats, jobID, details)
+	return dsp.createStatsPlan(ctx, planCtx, tableDesc, reqStats, jobID, details)
 }
 
 func (dsp *DistSQLPlanner) planAndRunCreateStats(
@@ -282,7 +283,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
 
 	details := job.Details().(jobspb.CreateStatsDetails)
-	physPlan, err := dsp.createPlanForCreateStats(planCtx, job.ID(), details)
+	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, job.ID(), details)
 	if err != nil {
 		return err
 	}
@@ -302,6 +303,6 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	)
 	defer recv.Release()
 
-	dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)()
 	return resultWriter.Err()
 }
