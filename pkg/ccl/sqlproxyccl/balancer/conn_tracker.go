@@ -62,6 +62,36 @@ func (t *ConnTracker) GetConns(tenantID roachpb.TenantID) []ConnectionHandle {
 	return e.getConns()
 }
 
+// GetAllConns snapshots the connection tracker, and returns a list of tenants
+// together with handles associated with them. It is guaranteed that the tenants
+// in the list will have at least one connection handle each.
+func (t *ConnTracker) GetAllConns() map[roachpb.TenantID][]ConnectionHandle {
+	// Note that we do this because GetConns() on the tenant entry may take
+	// some time, and we don't want to hold onto t.mu while copying the
+	// individual tenant entries.
+	snapshotTenantEntries := func() map[roachpb.TenantID]*tenantEntry {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+
+		m := make(map[roachpb.TenantID]*tenantEntry)
+		for tenantID, entry := range t.mu.tenants {
+			m[tenantID] = entry
+		}
+		return m
+	}
+
+	m := make(map[roachpb.TenantID][]ConnectionHandle)
+	tenantsCopy := snapshotTenantEntries()
+	for tenantID, entry := range tenantsCopy {
+		conns := entry.getConns()
+		if len(conns) == 0 {
+			continue
+		}
+		m[tenantID] = conns
+	}
+	return m
+}
+
 // ensureTenantEntry ensures that an entry has been created for the given
 // tenant. If an entry already exists, that will be returned instead.
 func (t *ConnTracker) ensureTenantEntry(tenantID roachpb.TenantID) *tenantEntry {
