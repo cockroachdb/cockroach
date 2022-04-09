@@ -1492,6 +1492,7 @@ CREATE TABLE public.table_desc_inverted_index (
    FAMILY f1 (id, last_accessed),
    FAMILY f2 (testdata)
 )
+
 subtest overlaps_with_array
 
 statement ok

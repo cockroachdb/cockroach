@@ -801,7 +801,7 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 	}
 
 	runTest := func(indexedValue, value tree.Datum, expected, ok, unique bool) {
-		keys, err := EncodeInvertedIndexTableKeys(indexedValue, nil, descpb.LatestNonPrimaryIndexDescriptorVersion)
+		keys, err := EncodeInvertedIndexTableKeys(indexedValue, nil, descpb.PrimaryIndexWithStoredColumnsVersion)
 		require.NoError(t, err)
 
 		invertedExpr, err := EncodeOverlapsInvertedIndexSpans(&evalCtx, value)
