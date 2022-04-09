@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	. "github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -32,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/stretchr/testify/require"
 )
 
@@ -890,4 +894,211 @@ func containsNonNullUniqueElement(ctx *eval.Context, valArr *tree.DArray) bool {
 		}
 	}
 	return lastVal != tree.DNull
+}
+
+type trigramSearchType int
+
+const (
+	like trigramSearchType = iota
+	similar
+	eq
+)
+
+func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		// The value that's being indexed in the trigram index.
+		indexedValue string
+		// The value that's being turned into spans to search with.
+		value string
+		// Whether we're using LIKE or % operator for the search.
+		searchType trigramSearchType
+		// Whether we expect that the spans should contain all of the keys produced
+		// by indexing the indexedValue.
+		containsKeys bool
+		// Whether we expect that the indexed value should evaluate as matching
+		// the LIKE or % expression that we're testing.
+		expected bool
+		unique   bool
+	}{
+
+		// This test uses EncodeInvertedIndexTableKeys and EncodeTrigramSpans
+		// to determine if the spans produced from the second string value will
+		// correctly include or exclude the first value.
+
+		{`foobarbaz`, `%oob%baz`, like, true, true, false},
+		{`foobarbaz`, `%oob%`, like, true, true, true},
+		// Test that the order of the trigrams doesn't matter for containment, but
+		// does matter for evaluation.
+		{`staticcheck`, `%check%static%`, like, true, false, false},
+		// Make sure that we can satisfy a query that includes a chunk that is too
+		// short to produce any trigrams at all.
+		{`test`, `%a%bar`, like, false, false, true},
+
+		// "Reverse order" trigrams shouldn't match.
+		{`test`, `tse`, like, false, false, true},
+
+		// Similarity (%) queries.
+		{`staticcheck`, `staricheck`, similar, true, true, false},
+		{`staticcheck`, `blevicchlrk`, similar, true, false, false},
+		{`staticcheck`, `che`, similar, true, false, true},
+		{`staticcheck`, `xxx`, similar, false, false, true},
+		{`staticcheck`, `xxxyyy`, similar, false, false, false},
+
+		// Equality queries.
+		{`staticcheck`, `staticcheck`, eq, true, true, false},
+		{`staticcheck`, `staticcheckz`, eq, false, false, false},
+		{`staticcheck`, `zstaticcheck`, eq, false, false, false},
+		{`baba`, `abab`, eq, true, false, false},
+		{`foo`, `foo`, eq, true, true, true},
+		{`foo`, `bar`, eq, false, false, true},
+
+		{`eabc`, `eabd`, eq, false, false, false},
+	}
+
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx.SessionData().TrigramSimilarityThreshold = .3
+
+	runTest := func(indexedValue, value string, searchType trigramSearchType,
+		expectContainsKeys, expected, expectUnique bool) {
+		t.Logf("test case: %s %s %v %t %t %t", indexedValue, value, searchType, expectContainsKeys, expected, expectUnique)
+		keys, err := EncodeInvertedIndexTableKeys(tree.NewDString(indexedValue), nil, descpb.LatestIndexDescriptorVersion)
+		require.NoError(t, err)
+
+		chunks, typedExpr := makeTrigramBinOp(t, indexedValue, value, searchType)
+		invertedExpr, err := EncodeTrigramSpans(chunks, searchType != similar)
+		require.NoError(t, err)
+
+		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
+		if !ok {
+			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
+		}
+
+		if spanExpr.Tight {
+			// We never expect the inverted expressions for trigrams to be tight.
+			t.Fatalf("unexpectedly found a tight expression")
+		}
+		require.Equal(t, expectUnique, spanExpr.Unique, "%s, %s: unexpected unique attribute", indexedValue, value)
+
+		// Check if the indexedValue is included by the spans.
+		containsKeys, err := spanExpr.ContainsKeys(keys)
+		require.NoError(t, err)
+
+		require.Equal(t, expectContainsKeys, containsKeys, "%s, %s: expected containsKeys", indexedValue, value)
+
+		// Since the spans are never tight, apply an additional filter to determine
+		// if the result is contained.
+		datum, err := eval.Expr(&evalCtx, typedExpr)
+		require.NoError(t, err)
+		actual := bool(*datum.(*tree.DBool))
+		require.Equal(t, expected, actual, "%s, %s: expected evaluation result to match", indexedValue, value)
+	}
+
+	// Run pre-defined test cases from above.
+	for _, c := range testCases {
+		runTest(c.indexedValue, c.value, c.searchType, c.containsKeys, c.expected, c.unique)
+	}
+
+	// Run some random test cases.
+
+	rng, _ := randutil.NewTestRand()
+	for i := 0; i < 100; i++ {
+		const alphabet = "abcdefg"
+
+		// Generate two random strings and evaluate left % right, left LIKE right,
+		// and left = right both via eval and via the span comparisons.
+		left := randgen.RandString(rng, 15, alphabet)
+		length := 3 + rng.Intn(5)
+		right := randgen.RandString(rng, length, alphabet+"%")
+
+		for _, searchType := range []trigramSearchType{like, eq, similar} {
+			chunks, expr := makeTrigramBinOp(t, left, right, searchType)
+			lTrigrams := trigram.MakeTrigrams(left, false /* pad */)
+			// Check for intersection. We're looking for a non-zero intersection
+			// for similar, and complete containment of the right trigrams in the left
+			// for eq and like.
+			any := false
+			all := true
+			for _, chunk := range chunks {
+				rTrigrams := trigram.MakeTrigrams(chunk, false /* pad */)
+				for _, trigram := range rTrigrams {
+					idx := sort.Search(len(lTrigrams), func(i int) bool {
+						return lTrigrams[i] >= trigram
+					})
+					if idx < len(lTrigrams) && lTrigrams[idx] == trigram {
+						any = true
+					} else {
+						all = false
+					}
+				}
+			}
+			var expectedContainsKeys bool
+			if searchType == similar {
+				expectedContainsKeys = any
+			} else {
+				expectedContainsKeys = all
+			}
+
+			d, err := eval.Expr(&evalCtx, expr)
+			require.NoError(t, err)
+			expected := bool(*d.(*tree.DBool))
+			nTrigrams := 0
+			for _, chunk := range chunks {
+				trigrams := trigram.MakeTrigrams(chunk, false /* pad */)
+				nTrigrams += len(trigrams)
+			}
+			valid := nTrigrams > 0
+			unique := nTrigrams == 1
+			if !valid {
+				_, err := EncodeTrigramSpans(chunks, true /* allMustMatch */)
+				require.Error(t, err)
+				continue
+			}
+			runTest(left, right, searchType, expectedContainsKeys, expected, unique)
+		}
+	}
+}
+
+func makeTrigramBinOp(
+	t *testing.T, indexedValue string, value string, searchType trigramSearchType,
+) (chunks []string, typedExpr tree.TypedExpr) {
+	chunks = []string{value}
+	var opstr string
+	switch searchType {
+	case like:
+		opstr = "LIKE"
+		chunks = strings.Split(value, "%")
+	case eq:
+		opstr = "="
+	case similar:
+		opstr = "%"
+	default:
+		panic("no such searchtype")
+	}
+	expr, err := parser.ParseExpr(fmt.Sprintf("'%s' %s '%s'", indexedValue, opstr, value))
+	require.NoError(t, err)
+
+	semaContext := tree.MakeSemaContext()
+	typedExpr, err = tree.TypeCheck(context.Background(), expr, &semaContext, types.Bool)
+	require.NoError(t, err)
+	return chunks, typedExpr
+}
+
+func TestEncodeTrigramInvertedIndexSpansError(t *testing.T) {
+	// Make sure that any input with a chunk with fewer than 3 characters returns
+	// an error, since we can't produce trigrams from strings that don't meet a
+	// minimum of 3 characters.
+	tcs := []struct {
+		chunks []string
+	}{
+		{[]string{"fo", "ba", "a"}},
+		{[]string{"fo"}},
+		{[]string{"a"}},
+		{[]string{}},
+	}
+	for _, tc := range tcs {
+		_, err := EncodeTrigramSpans(tc.chunks, true /* allMustMatch */)
+		require.Error(t, err)
+		_, err = EncodeTrigramSpans(tc.chunks, false /* allMustMatch */)
+		require.Error(t, err)
+	}
 }
