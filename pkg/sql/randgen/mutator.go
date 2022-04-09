@@ -287,7 +287,7 @@ func statisticsMutator(
 // bounds are byte-encoded inverted index keys.
 func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
 	histogramColType := colType
-	if colinfo.ColumnTypeIsInvertedIndexable(colType) {
+	if colinfo.ColumnTypeIsOnlyInvertedIndexable(colType) {
 		histogramColType = types.Bytes
 	}
 	h := stats.HistogramData{
@@ -298,7 +298,7 @@ func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
 	var encodedUpperBounds [][]byte
 	for i, numDatums := 0, rng.Intn(10); i < numDatums; i++ {
 		upper := RandDatum(rng, colType, false /* nullOk */)
-		if colinfo.ColumnTypeIsInvertedIndexable(colType) {
+		if colinfo.ColumnTypeIsOnlyInvertedIndexable(colType) {
 			encs := encodeInvertedIndexHistogramUpperBounds(colType, upper)
 			encodedUpperBounds = append(encodedUpperBounds, encs...)
 		} else {
