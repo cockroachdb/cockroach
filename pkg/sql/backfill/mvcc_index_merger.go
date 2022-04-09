@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -262,34 +263,35 @@ func (ibm *IndexBackfillMerger) scan(
 
 	var nextStart roachpb.Key
 	var br *roachpb.BatchResponse
-	if err := ibm.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
-			return err
-		}
-		// For now just grab all of the destination KVs and merge the corresponding entries.
-		log.VInfof(ctx, 2, "scanning batch [%s, %s) at %v to merge", startKey, endKey, readAsOf)
-		var ba roachpb.BatchRequest
-		ba.TargetBytes = chunkBytes
-		if err := ibm.growBoundAccount(ctx, chunkBytes); err != nil {
-			return errors.Wrap(err, "failed to fetch keys to merge from temp index")
-		}
-		defer ibm.shrinkBoundAccount(ctx, chunkBytes)
+	if err := ibm.flowCtx.Cfg.DB.TxnWithAdmissionControl(ctx, roachpb.AdmissionHeader_FROM_SQL, admission.BulkNormalPri,
+		func(ctx context.Context, txn *kv.Txn) error {
+			if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
+				return err
+			}
+			// For now just grab all of the destination KVs and merge the corresponding entries.
+			log.VInfof(ctx, 2, "scanning batch [%s, %s) at %v to merge", startKey, endKey, readAsOf)
+			var ba roachpb.BatchRequest
+			ba.TargetBytes = chunkBytes
+			if err := ibm.growBoundAccount(ctx, chunkBytes); err != nil {
+				return errors.Wrap(err, "failed to fetch keys to merge from temp index")
+			}
+			defer ibm.shrinkBoundAccount(ctx, chunkBytes)
 
-		ba.MaxSpanRequestKeys = chunkSize
-		ba.Add(&roachpb.ScanRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key:    startKey,
-				EndKey: endKey,
-			},
-			ScanFormat: roachpb.KEY_VALUES,
-		})
-		var pErr *roachpb.Error
-		br, pErr = txn.Send(ctx, ba)
-		if pErr != nil {
-			return pErr.GoError()
-		}
-		return nil
-	}); err != nil {
+			ba.MaxSpanRequestKeys = chunkSize
+			ba.Add(&roachpb.ScanRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    startKey,
+					EndKey: endKey,
+				},
+				ScanFormat: roachpb.KEY_VALUES,
+			})
+			var pErr *roachpb.Error
+			br, pErr = txn.Send(ctx, ba)
+			if pErr != nil {
+				return pErr.GoError()
+			}
+			return nil
+		}); err != nil {
 		return mergeChunk{}, nil, err
 	}
 
@@ -333,40 +335,41 @@ func (ibm *IndexBackfillMerger) merge(
 	sourcePrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), sourceID)
 	destPrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), destinationID)
 
-	err := ibm.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var deletedCount int
-		txn.AddCommitTrigger(func(ctx context.Context) {
-			log.VInfof(ctx, 2, "merged batch of %d keys (%d deletes) (span: %s) (commit timestamp: %s)",
-				len(sourceKeys),
-				deletedCount,
-				sourceSpan,
-				txn.CommitTimestamp(),
-			)
-		})
-		if len(sourceKeys) == 0 {
-			return nil
-		}
+	err := ibm.flowCtx.Cfg.DB.TxnWithAdmissionControl(ctx, roachpb.AdmissionHeader_FROM_SQL, admission.BulkNormalPri,
+		func(ctx context.Context, txn *kv.Txn) error {
+			var deletedCount int
+			txn.AddCommitTrigger(func(ctx context.Context) {
+				log.VInfof(ctx, 2, "merged batch of %d keys (%d deletes) (span: %s) (commit timestamp: %s)",
+					len(sourceKeys),
+					deletedCount,
+					sourceSpan,
+					txn.CommitTimestamp(),
+				)
+			})
+			if len(sourceKeys) == 0 {
+				return nil
+			}
 
-		wb, memUsedInMerge, deletedKeys, err := ibm.constructMergeBatch(ctx, txn, sourceKeys, sourcePrefix, destPrefix)
-		if err != nil {
-			return err
-		}
+			wb, memUsedInMerge, deletedKeys, err := ibm.constructMergeBatch(ctx, txn, sourceKeys, sourcePrefix, destPrefix)
+			if err != nil {
+				return err
+			}
 
-		defer ibm.shrinkBoundAccount(ctx, memUsedInMerge)
-		deletedCount = deletedKeys
-		if err := txn.Run(ctx, wb); err != nil {
-			return err
-		}
+			defer ibm.shrinkBoundAccount(ctx, memUsedInMerge)
+			deletedCount = deletedKeys
+			if err := txn.Run(ctx, wb); err != nil {
+				return err
+			}
 
-		if knobs, ok := ibm.flowCtx.Cfg.TestingKnobs.IndexBackfillMergerTestingKnobs.(*IndexBackfillMergerTestingKnobs); ok {
-			if knobs != nil && knobs.RunDuringMergeTxn != nil {
-				if err := knobs.RunDuringMergeTxn(ctx, txn, sourceSpan.Key, sourceSpan.EndKey); err != nil {
-					return err
+			if knobs, ok := ibm.flowCtx.Cfg.TestingKnobs.IndexBackfillMergerTestingKnobs.(*IndexBackfillMergerTestingKnobs); ok {
+				if knobs != nil && knobs.RunDuringMergeTxn != nil {
+					if err := knobs.RunDuringMergeTxn(ctx, txn, sourceSpan.Key, sourceSpan.EndKey); err != nil {
+						return err
+					}
 				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
 
 	return err
 }
