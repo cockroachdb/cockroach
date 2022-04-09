@@ -45,16 +45,15 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 		Short: `Run the specified tests`,
 		Long: `Run the specified tests.
 
-This command takes a list of packages or build targets and tests all of them.
-The build target can be a normal bazel build target (like
-pkg/kv/kvserver:kvserver_test), or it can be a plain directory (like
-pkg/kv/kvserver). Furthermore, we accept the following shorthands: all
-and all_tests.`,
+This command takes a list of packages and tests all of them. It's also
+permissive enough to accept bazel build targets (like
+pkg/kv/kvserver:kvserver_test) instead.`,
 		Example: `
 	dev test
 	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
 	dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
-        dev test all_tests -v
+	dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
+	dev test pkg/... -v
 	dev test --stress --race ...`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
@@ -104,14 +103,17 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		count         = mustGetFlagInt(cmd, countFlag)
 		vModule       = mustGetFlagString(cmd, vModuleFlag)
 	)
+
+	var disableTestSharding bool
 	if rewrite {
 		ignoreCache = true
+		disableTestSharding = true
 	}
 
 	// Enumerate all tests to run.
 	if len(pkgs) == 0 {
-		// Empty `dev test` does the same thing as `dev test all_tests`.
-		pkgs = append(pkgs, "all_tests")
+		// Empty `dev test` does the same thing as `dev test pkg/...`
+		pkgs = append(pkgs, "pkg/...")
 	}
 
 	var args []string
@@ -122,12 +124,14 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if race {
 		args = append(args, "--config=race")
 	} else if stress {
-		args = append(args, "--test_sharding_strategy=disabled")
+		disableTestSharding = true
 	}
 
 	var testTargets []string
 	for _, pkg := range pkgs {
-		if pkg == "all" || pkg == "all_tests" {
+		if pkg == "pkg/..." {
+			// Special-cased target to skip known broken-under-bazel and
+			// integration tests.
 			testTargets = append(testTargets, "//pkg:all_tests")
 			continue
 		}
@@ -191,7 +195,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		// For sharded test packages, it doesn't make much sense to spawn multiple
 		// test processes that don't end up running anything. Default to running
 		// things in a single process if a filter is specified.
-		args = append(args, "--test_sharding_strategy=disabled")
+		disableTestSharding = true
 	}
 	if short {
 		args = append(args, "--test_arg", "-test.short")
@@ -214,6 +218,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			return err
 		}
 		args = append(args, goTestArgs...)
+	}
+	if disableTestSharding {
+		args = append(args, "--test_sharding_strategy=disabled")
 	}
 
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
