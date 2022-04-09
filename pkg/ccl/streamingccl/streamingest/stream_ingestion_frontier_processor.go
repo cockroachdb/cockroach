@@ -64,6 +64,9 @@ type streamIngestionFrontier struct {
 	// span set.
 	frontier *span.Frontier
 
+	// metrics are monitoring all running ingestion jobs.
+	metrics *Metrics
+
 	// heartbeatSender sends heartbeats to the source cluster to keep the replication
 	// stream alive.
 	heartbeatSender *heartbeatSender
@@ -101,6 +104,7 @@ func newStreamIngestionFrontierProcessor(
 		input:             input,
 		highWaterAtStart:  spec.HighWaterAtStart,
 		frontier:          frontier,
+		metrics:           flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
 		partitionProgress: make(map[string]jobspb.StreamIngestionProgress_PartitionProgress),
 		heartbeatSender:   heartbeatSender,
 	}
@@ -231,6 +235,7 @@ func (h *heartbeatSender) err() error {
 // Start is part of the RowSource interface.
 func (sf *streamIngestionFrontier) Start(ctx context.Context) {
 	ctx = sf.StartInternal(ctx, streamIngestionFrontierProcName)
+	sf.metrics.RunningCount.Inc(1)
 	sf.input.Start(ctx)
 	sf.heartbeatSender.startHeartbeatLoop(ctx)
 }
@@ -303,6 +308,7 @@ func (sf *streamIngestionFrontier) ConsumerClosed() {
 		if err := sf.heartbeatSender.stop(); err != nil {
 			log.Errorf(sf.Ctx, "heartbeatSender exited with error: %s", err.Error())
 		}
+		sf.metrics.RunningCount.Dec(1)
 	}
 }
 
