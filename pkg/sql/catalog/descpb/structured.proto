@@ -13,6 +13,7 @@ syntax = "proto2";
 package cockroach.sql.sqlbase;
 option go_package = "descpb";
 
+import "config/zonepb/zone.proto";
 import "util/hlc/timestamp.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/catpb/privilege.proto";
@@ -1306,6 +1307,44 @@ message SuperRegion {
   repeated string regions = 2 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
 }
 
+// ZoneConfigExtensions represents per-locality zone configurations that
+// influence the zone configurations derived for corresponding objects. A
+// locality type's associated extension acts as a targeted set of rewrite rules
+// for its associated objects' (database, table, partition) derived zone
+// configurations.
+//
+// "extending" a zone config means having the extension inherit any missing
+// fields from the zone config while replacing any set fields. This uses the
+// existing zone configuration inheritance rules.
+//
+// Rules (implemented in pkg/sql/region_util.go):
+// 1. database-level zone configs are extended first using the regional zone
+//    config extension and then with the regional_in[<primary_region>] zone
+//    config extension. In doing so, REGIONAL [ IN PRIMARY REGION ] tables can
+//    continue to inherit from the database level zone config.
+// 2. table-level zone configs use the extension associated with their locality
+//    type.
+//  2a. GLOBAL tables are extended with the global zone config extension.
+//  2b. REGIONAL IN <region> tables are extended first using the regional zone
+//      config extension and then with the regional_in[<affinity_region>] zone
+//      config extension.
+// 3. partition-level zone configs are extended first using the regional zone
+//    config extension and then with the regional_in[<partition_region>] zone
+//    config extension.
+message ZoneConfigExtensions {
+  option (gogoproto.equal) = true;
+
+  // Global extends the zone config applied to GLOBAL tables.
+  optional config.zonepb.ZoneConfig global = 1;
+  // Regional extends the zone config applied to REGIONAL [ BY ROW ] tables and
+  // partitions, regardless of affinity region.
+  optional config.zonepb.ZoneConfig regional = 2;
+  // RegionalIn further extends the zone configs applied to REGIONAL [ BY ROW ]
+  // tables and partitions, according to affinity region.
+  map<string, config.zonepb.ZoneConfig> regional_in = 3 [(gogoproto.nullable) = false,
+    (gogoproto.castkey)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+}
+
 // TypeDescriptor represents a user defined type and is stored in a structured
 // metadata key. The TypeDescriptor has a globally-unique ID shared with other
 // Descriptors.
@@ -1425,6 +1464,10 @@ message TypeDescriptor {
 
     // SuperRegions represents the super regions defined on the database.
     repeated SuperRegion super_regions = 2 [(gogoproto.nullable) = false];
+
+    // ZoneConfigExtensions represents per-locality zone configurations that
+    // influence the zone configurations derived for corresponding objects.
+    optional ZoneConfigExtensions zone_config_extensions = 3 [(gogoproto.nullable) = false];
   }
 
   optional RegionConfig region_config = 16;

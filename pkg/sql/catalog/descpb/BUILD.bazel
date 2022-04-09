@@ -59,6 +59,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb:zonepb_proto",
         "//pkg/geo/geoindex:geoindex_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
@@ -76,6 +77,7 @@ go_proto_library(
     proto = ":descpb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
         "//pkg/geo/geoindex",
         "//pkg/roachpb",  # keep
         "//pkg/sql/catalog/catpb",

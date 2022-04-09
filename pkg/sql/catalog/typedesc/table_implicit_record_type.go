@@ -308,6 +308,12 @@ func (v TableImplicitRecordType) SuperRegions() ([]descpb.SuperRegion, error) {
 	)
 }
 
+// ZoneConfigExtensions implements the TypeDescriptorInterface.
+func (v TableImplicitRecordType) ZoneConfigExtensions() (descpb.ZoneConfigExtensions, error) {
+	return descpb.ZoneConfigExtensions{}, errors.AssertionFailedf(
+		"can not get the zone config extensions of a implicit table record type")
+}
+
 // GetArrayTypeID implements the TypeDescriptorInterface.
 func (v TableImplicitRecordType) GetArrayTypeID() descpb.ID {
 	return 0

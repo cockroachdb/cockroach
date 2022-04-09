@@ -2054,6 +2054,7 @@ func planDatabaseModifiersForRestore(
 			regionEnumID,
 			descpb.DataPlacement_DEFAULT,
 			nil,
+			descpb.ZoneConfigExtensions{},
 		)
 		if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
 			return nil, nil, err
