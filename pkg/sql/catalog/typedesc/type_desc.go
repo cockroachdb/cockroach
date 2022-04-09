@@ -202,7 +202,7 @@ func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
 func (desc *immutable) PrimaryRegionName() (catpb.RegionName, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return "", errors.AssertionFailedf(
-			"can not get primary region of a non multi-region enum")
+			"can not get primary region of a non multi-region enum %q (%d)", desc.GetName(), desc.GetID())
 	}
 	return desc.RegionConfig.PrimaryRegion, nil
 }
@@ -211,7 +211,7 @@ func (desc *immutable) PrimaryRegionName() (catpb.RegionName, error) {
 func (desc *immutable) RegionNames() (catpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
-			"can not get regions of a non multi-region enum %d", desc.ID,
+			"can not get regions of a non multi-region enum %q (%d)", desc.GetName(), desc.GetID(),
 		)
 	}
 	var regions catpb.RegionNames
@@ -228,7 +228,7 @@ func (desc *immutable) RegionNames() (catpb.RegionNames, error) {
 func (desc *immutable) TransitioningRegionNames() (catpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
-			"can not get regions of a non multi-region enum %d", desc.ID,
+			"can not get regions of a non multi-region enum %q (%d)", desc.GetName(), desc.GetID(),
 		)
 	}
 	var regions catpb.RegionNames
@@ -244,7 +244,7 @@ func (desc *immutable) TransitioningRegionNames() (catpb.RegionNames, error) {
 func (desc *immutable) RegionNamesForValidation() (catpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
-			"can not get regions of a non multi-region enum %d", desc.ID,
+			"can not get regions of a non multi-region enum %q (%d)", desc.GetName(), desc.GetID(),
 		)
 	}
 	var regions catpb.RegionNames
@@ -262,7 +262,7 @@ func (desc *immutable) RegionNamesForValidation() (catpb.RegionNames, error) {
 func (desc *immutable) SuperRegions() ([]descpb.SuperRegion, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
-			"can not get regions of a non multi-region enum %d", desc.ID,
+			"can not get regions of a non multi-region enum %q (%d)", desc.GetName(), desc.GetID(),
 		)
 	}
 
@@ -273,7 +273,7 @@ func (desc *immutable) SuperRegions() ([]descpb.SuperRegion, error) {
 func (desc *immutable) RegionNamesIncludingTransitioning() (catpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
-			"can not get regions of a non multi-region enum %d", desc.ID,
+			"can not get regions of a non multi-region enum %q (%d)", desc.GetName(), desc.GetID(),
 		)
 	}
 	var regions catpb.RegionNames
@@ -281,6 +281,16 @@ func (desc *immutable) RegionNamesIncludingTransitioning() (catpb.RegionNames, e
 		regions = append(regions, catpb.RegionName(member.LogicalRepresentation))
 	}
 	return regions, nil
+}
+
+// ZoneConfigExtensions implements the TypeDescriptorInterface.
+func (desc *immutable) ZoneConfigExtensions() (descpb.ZoneConfigExtensions, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return descpb.ZoneConfigExtensions{}, errors.AssertionFailedf(
+			"can not get the zone config extensions of a non multi-region enum %q (%d)", desc.GetName(), desc.GetID(),
+		)
+	}
+	return desc.RegionConfig.ZoneConfigExtensions, nil
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
@@ -741,14 +751,17 @@ func (desc *immutable) validateMultiRegion(
 	if err != nil {
 		vea.Report(err)
 	}
-
-	err = multiregion.ValidateSuperRegions(superRegions, dbDesc.GetRegionConfig().SurvivalGoal, regionNames, func(err error) error {
+	multiregion.ValidateSuperRegions(superRegions, dbDesc.GetRegionConfig().SurvivalGoal, regionNames, func(err error) {
 		vea.Report(err)
-		return nil
 	})
+
+	zoneCfgExtensions, err := desc.ZoneConfigExtensions()
 	if err != nil {
 		vea.Report(err)
 	}
+	multiregion.ValidateZoneConfigExtensions(regionNames, zoneCfgExtensions, func(err error) {
+		vea.Report(err)
+	})
 }
 
 // ValidateTxnCommit implements the catalog.Descriptor interface.

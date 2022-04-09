@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -97,7 +98,13 @@ func initializeMultiRegionMetadata(
 		return nil, err
 	}
 	regionConfig := multiregion.MakeRegionConfig(
-		regionNames, primaryRegion, survivalGoal, regionEnumID, placement, nil,
+		regionNames,
+		primaryRegion,
+		survivalGoal,
+		regionEnumID,
+		placement,
+		nil,
+		descpb.ZoneConfigExtensions{},
 	)
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
 		return nil, err
