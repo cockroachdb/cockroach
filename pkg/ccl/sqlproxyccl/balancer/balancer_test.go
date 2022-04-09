@@ -11,14 +11,18 @@ package balancer
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -31,7 +35,13 @@ func TestBalancer_SelectTenantPod(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	b, err := NewBalancer(ctx, stopper)
+	b, err := NewBalancer(
+		ctx,
+		stopper,
+		nil, /* directoryCache */
+		nil, /* connTracker */
+		NoRebalanceLoop(),
+	)
 	require.NoError(t, err)
 
 	t.Run("no pods", func(t *testing.T) {
@@ -54,7 +64,14 @@ func TestRebalancer_processQueue(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	b, err := NewBalancer(ctx, stopper, MaxConcurrentRebalances(1))
+	b, err := NewBalancer(
+		ctx,
+		stopper,
+		nil, /* directoryCache */
+		nil, /* connTracker */
+		MaxConcurrentRebalances(1),
+		NoRebalanceLoop(),
+	)
 	require.NoError(t, err)
 
 	// Use a custom time source for testing.
@@ -217,6 +234,233 @@ func TestRebalancer_processQueue(t *testing.T) {
 	})
 }
 
+// This test only tests that the rebalance method was invoked during the
+// rebalance interval, and does a basic high-level assertion. Tests for the
+// actual logic was extracted into its own test below because testing them with
+// the manual timer is difficult to get it right (and often flaky).
+func TestRebalancer_rebalanceLoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	directoryCache := newTestDirectoryCache()
+	connTracker := NewConnTracker()
+
+	// Use a custom time source for testing.
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := timeutil.NewManualTime(t0)
+
+	_, err := NewBalancer(
+		ctx,
+		stopper,
+		directoryCache,
+		connTracker,
+		TimeSource(timeSource),
+	)
+	require.NoError(t, err)
+
+	pods := []*tenant.Pod{
+		{TenantID: 30, Addr: "127.0.0.30:80", State: tenant.DRAINING},
+		{TenantID: 30, Addr: "127.0.0.30:81", State: tenant.RUNNING},
+	}
+	for _, pod := range pods {
+		require.True(t, directoryCache.upsertPod(pod))
+	}
+
+	h := newTestTrackerConnHandle(pods[0].Addr)
+	require.True(t, connTracker.OnConnect(roachpb.MakeTenantID(30), h))
+
+	// Wait until rebalance queue gets processed.
+	runs := 0
+	testutils.SucceedsSoon(t, func() error {
+		runs++
+
+		timeSource.Advance(rebalanceInterval)
+
+		count := h.transferConnectionCount()
+		if count >= 3 && runs >= count {
+			return nil
+		}
+		return errors.Newf("insufficient runs, expected >= 3, but got %d", count)
+	})
+}
+
+func TestRebalancer_rebalance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	directoryCache := newTestDirectoryCache()
+	connTracker := NewConnTracker()
+
+	// Use a custom time source for testing.
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := timeutil.NewManualTime(t0)
+
+	b, err := NewBalancer(
+		ctx,
+		stopper,
+		directoryCache,
+		connTracker,
+		NoRebalanceLoop(),
+		TimeSource(timeSource),
+	)
+	require.NoError(t, err)
+
+	// Set up the following tenants:
+	// - tenant-10: no pods
+	// - tenant-20: one draining pod (no running pods)
+	// - tenant-30: two draining pods (one with < 1m), one running pod
+	// - tenant-40: one draining pod, one running pod
+	// - tenant-50: one running pod
+	recentlyDrainedPod := &tenant.Pod{
+		TenantID: 30,
+		Addr:     "127.0.0.30:81",
+		State:    tenant.DRAINING,
+	}
+	pods := []*tenant.Pod{
+		{TenantID: 20, Addr: "127.0.0.20:80", State: tenant.DRAINING},
+		{TenantID: 30, Addr: "127.0.0.30:80", State: tenant.DRAINING},
+		recentlyDrainedPod, // tenant-30, 127.0.0.30:81
+		{TenantID: 30, Addr: "127.0.0.30:82", State: tenant.RUNNING},
+		{TenantID: 40, Addr: "127.0.0.40:80", State: tenant.DRAINING},
+		{TenantID: 40, Addr: "127.0.0.40:81", State: tenant.RUNNING},
+		{TenantID: 50, Addr: "127.0.0.50:80", State: tenant.RUNNING},
+	}
+
+	// reset resets the directory cache and connection tracker.
+	reset := func(t *testing.T) {
+		t.Helper()
+
+		directoryCache = newTestDirectoryCache()
+		connTracker = NewConnTracker()
+		b.directoryCache = directoryCache
+		b.connTracker = connTracker
+
+		// Set it such that when the rebalance occurs, the pod goes into the
+		// DRAINING state.
+		recentlyDrainedPod.StateTimestamp = timeSource.Now().Add(rebalanceInterval)
+		for _, pod := range pods {
+			require.True(t, directoryCache.upsertPod(pod))
+		}
+	}
+
+	for _, tc := range []struct {
+		name           string
+		handlesFn      func(t *testing.T) []ConnectionHandle
+		expectedCounts []int
+	}{
+		{
+			// This case should not occur unless there's a bug in the directory
+			// server, where the connection is still alive, but the pod has
+			// been removed from the cache.
+			name: "no pods",
+			handlesFn: func(t *testing.T) []ConnectionHandle {
+				// Use a random IP since tenant-10 doesn't have a pod, and it
+				// does not matter.
+				tenant10, handle := makeConn(10, "foo-bar-baz")
+				require.True(t, connTracker.OnConnect(tenant10, handle))
+				return []ConnectionHandle{handle}
+			},
+			expectedCounts: []int{0},
+		},
+		{
+			// Only draining pods for tenant-20. We shouldn't transfer because
+			// there's nothing to transfer to.
+			name: "no running pods",
+			handlesFn: func(t *testing.T) []ConnectionHandle {
+				// Use a random IP since tenant-10 doesn't have a pod, and it
+				// does not matter.
+				tenant20, handle := makeConn(20, pods[0].Addr)
+				require.True(t, connTracker.OnConnect(tenant20, handle))
+				return []ConnectionHandle{handle}
+			},
+			expectedCounts: []int{0},
+		},
+		{
+			// If the connection has been closed, we shouldn't bother initiating
+			// a transfer. Use tenant-30's DRAINING pod here.
+			name: "connection closed",
+			handlesFn: func(t *testing.T) []ConnectionHandle {
+				cancelledCtx, cancel := context.WithCancel(context.Background())
+				cancel()
+
+				handle := newTestTrackerConnHandleWithContext(cancelledCtx, pods[1].Addr)
+				require.True(t, connTracker.OnConnect(roachpb.MakeTenantID(30), handle))
+				return []ConnectionHandle{handle}
+			},
+			expectedCounts: []int{0},
+		},
+		{
+			// Use tenant-30's recently drained pod. We shouldn't transfer
+			// because minDrainPeriod hasn't elapsed.
+			name: "recently drained pod",
+			handlesFn: func(t *testing.T) []ConnectionHandle {
+
+				tenant30, handle := makeConn(30, recentlyDrainedPod.Addr)
+				require.True(t, connTracker.OnConnect(tenant30, handle))
+				return []ConnectionHandle{handle}
+			},
+			expectedCounts: []int{0},
+		},
+		{
+			name: "multiple connections",
+			handlesFn: func(t *testing.T) []ConnectionHandle {
+				conns := []*tenant.Pod{
+					// Connection on tenant with single draining pod. Should
+					// not transfer because nothing to transfer to.
+					pods[0],
+					// Connections to draining pod (>= 1m).
+					pods[1],
+					pods[1],
+					// Connections to recently drained pod.
+					recentlyDrainedPod,
+					recentlyDrainedPod,
+					// Connection to running pod. Nothing happens.
+					pods[3],
+					// Connections to draining pod (>= 1m).
+					pods[4],
+					// Connections to running pods. Nothing happens.
+					pods[5],
+					pods[6],
+				}
+				var handles []ConnectionHandle
+				for _, c := range conns {
+					h := newTestTrackerConnHandle(c.Addr)
+					handles = append(handles, h)
+					require.True(t, connTracker.OnConnect(roachpb.MakeTenantID(c.TenantID), h))
+				}
+				return handles
+			},
+			expectedCounts: []int{0, 1, 1, 0, 0, 0, 1, 0, 0},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reset(t)
+			handles := tc.handlesFn(t)
+
+			// Attempt the rebalance.
+			b.rebalance(ctx)
+
+			// Wait until rebalance queue gets processed.
+			testutils.SucceedsSoon(t, func() error {
+				var counts []int
+				for _, h := range handles {
+					counts = append(counts, h.(*testTrackerConnHandle).transferConnectionCount())
+				}
+				if !reflect.DeepEqual(tc.expectedCounts, counts) {
+					return errors.Newf("require %v, but got %v", tc.expectedCounts, counts)
+				}
+				return nil
+			})
+		})
+	}
+}
+
 func TestRebalancerQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -344,4 +588,60 @@ func (h *testBalancerConnHandle) TransferConnection() error {
 // ServerRemoteAddr implements the ConnectionHandle interface.
 func (h *testBalancerConnHandle) ServerRemoteAddr() string {
 	return h.remoteAddr
+}
+
+// testDirectoryCache is a test implementation of the tenant directory cache.
+// This only overrides TryLookupTenantPods. Other methods will panic.
+type testDirectoryCache struct {
+	tenant.DirectoryCache
+
+	mu struct {
+		syncutil.Mutex
+		// When updating pods through the tests, we should copy on write to
+		// prevent races with callers because the slice is returned directly.
+		pods map[roachpb.TenantID][]*tenant.Pod
+	}
+}
+
+var _ tenant.DirectoryCache = &testDirectoryCache{}
+
+// newTestDirectoryCache returns a new instance of the test directory cache.
+func newTestDirectoryCache() *testDirectoryCache {
+	dc := &testDirectoryCache{}
+	dc.mu.pods = make(map[roachpb.TenantID][]*tenant.Pod)
+	return dc
+}
+
+// TryLookupTenantPods implements the tenant.DirectoryCache interface.
+func (r *testDirectoryCache) TryLookupTenantPods(
+	ctx context.Context, tenantID roachpb.TenantID,
+) ([]*tenant.Pod, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	p, ok := r.mu.pods[tenantID]
+	if !ok {
+		return nil, errors.New("no pods")
+	}
+	return p, nil
+}
+
+// upsertPod inserts the given pod into the tenant's list of pods. If it is
+// already present, then upsertPod updates the list and returns false.
+func (r *testDirectoryCache) upsertPod(pod *tenant.Pod) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	tenantID := roachpb.MakeTenantID(pod.TenantID)
+	pods := r.mu.pods[tenantID]
+	for i, existing := range pods {
+		if existing.Addr == pod.Addr {
+			r.mu.pods[tenantID] = make([]*tenant.Pod, len(pods))
+			copy(r.mu.pods[tenantID], pods)
+			r.mu.pods[tenantID][i] = pod
+			return false
+		}
+	}
+	r.mu.pods[tenantID] = append(r.mu.pods[tenantID], pod)
+	return true
 }
