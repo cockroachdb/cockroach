@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -170,10 +171,56 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 }
 
+// removeJobClaimsForNodes nullifies the `claim_session_id` for the job
+// corresponding to jobID, if it has been incorrectly claimed by one of the
+// `nodes`.
+func removeJobClaimsForNodes(
+	ctx context.Context, t test.Test, db *sql.DB, nodes option.NodeListOption, jobID jobspb.JobID,
+) {
+	if len(nodes) == 0 {
+		return
+	}
+
+	n := make([]string, 0)
+	for _, node := range nodes {
+		n = append(n, strconv.Itoa(node))
+	}
+	nodesStr := strings.Join(n, ",")
+
+	removeClaimQuery := `
+UPDATE system.jobs
+   SET claim_session_id = NULL
+WHERE claim_instance_id IN (%s)
+AND id = $1
+`
+	_, err := db.ExecContext(ctx, fmt.Sprintf(removeClaimQuery, nodesStr), jobID)
+	require.NoError(t, err)
+}
+
+// waitForJobToHaveStatus waits for the job with jobID to reach the
+// expectedStatus.
 func waitForJobToHaveStatus(
-	t test.Test, db *sql.DB, jobID jobspb.JobID, expectedStatus jobs.Status,
+	ctx context.Context,
+	t test.Test,
+	db *sql.DB,
+	jobID jobspb.JobID,
+	expectedStatus jobs.Status,
+	nodesWithAdoptionDisabled option.NodeListOption,
 ) {
 	if err := retry.ForDuration(time.Minute*2, func() error {
+		// TODO(adityamaru): This is unfortunate and can be deleted once
+		// https://github.com/cockroachdb/cockroach/pull/79666 is backported to
+		// 21.2 and the mixed version map for roachtests is bumped to the 21.2
+		// patch release with the backport.
+		//
+		// The bug above means that nodes for which we have disabled adoption may
+		// still lay claim on the job, and then not clear their claim on realizing
+		// that adoption is disabled. To prevent the job from getting wedged, we
+		// manually clear the claim session on the job for instances where job
+		// adoption is disabled. This will allow other node's in the cluster to
+		// adopt the job and run it.
+		removeJobClaimsForNodes(ctx, t, db, nodesWithAdoptionDisabled, jobID)
+
 		var status string
 		var payloadBytes []byte
 		err := db.QueryRow(`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID).Scan(&status, &payloadBytes)
@@ -286,8 +333,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 		}
 	}
 
-	successfulBackupStep := func(t test.Test, c cluster.Cluster, nodeToPlanBackup option.NodeListOption,
-		backupStmt string) versionStep {
+	planAndRunBackup := func(t test.Test, c cluster.Cluster, nodeToPlanBackup option.NodeListOption,
+		nodesWithAdoptionDisabled option.NodeListOption, backupStmt string) versionStep {
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 			gatewayDB := c.Conn(ctx, t.L(), nodeToPlanBackup[0])
 			defer gatewayDB.Close()
@@ -295,7 +342,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			var jobID jobspb.JobID
 			err := gatewayDB.QueryRow(backupStmt).Scan(&jobID)
 			require.NoError(t, err)
-			waitForJobToHaveStatus(t, gatewayDB, jobID, jobs.StatusSucceeded)
+			waitForJobToHaveStatus(ctx, t, gatewayDB, jobID, jobs.StatusSucceeded, nodesWithAdoptionDisabled)
 		}
 	}
 
@@ -343,7 +390,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 
 				// Run a backup from an old node so that it is planned on the old node
 				// but the job is adopted on a new node.
-				successfulBackupStep(t, c, oldNodes.RandNode(),
+				planAndRunBackup(t, c, oldNodes.RandNode(), oldNodes,
 					`BACKUP TABLE bank.bank INTO 'nodelocal://1/plan-old-resume-new' WITH detached`),
 
 				clearDisableJobAdoptionFileFromNodesStep(c, oldNodes),
@@ -356,7 +403,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 
 				// Run a backup from a new node so that it is planned on the new node
 				// but the job is adopted on an old node.
-				successfulBackupStep(t, c, upgradedNodes.RandNode(),
+				planAndRunBackup(t, c, upgradedNodes.RandNode(), upgradedNodes,
 					`BACKUP TABLE bank.bank INTO 'nodelocal://1/plan-new-resume-old' WITH detached`),
 
 				clearDisableJobAdoptionFileFromNodesStep(c, upgradedNodes),
@@ -368,7 +415,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				//         inc backup  -> old nodes
 				haltJobAdoptionOnNodesStep(c, oldNodes),
 				// Plan and run a full backup on the new nodes.
-				successfulBackupStep(t, c, upgradedNodes.RandNode(),
+				planAndRunBackup(t, c, upgradedNodes.RandNode(), oldNodes,
 					`BACKUP TABLE bank.bank INTO 'nodelocal://1/new-node-full-backup' WITH detached`),
 				// Set up the cluster so that only the old nodes plan and run the
 				// incremental backup.
@@ -377,14 +424,14 @@ func registerBackupMixedVersion(r registry.Registry) {
 
 				// Run an incremental (on old nodes) on top of a full backup taken by
 				// nodes on the upgraded version.
-				successfulBackupStep(t, c, oldNodes.RandNode(),
+				planAndRunBackup(t, c, oldNodes.RandNode(), upgradedNodes,
 					`BACKUP TABLE bank.bank INTO LATEST IN 'nodelocal://1/new-node-full-backup' WITH detached`),
 
 				// Case 2: full backup -> old nodes
 				//         inc backup  -> new nodes
 
 				// Plan and run a full backup on the old nodes.
-				successfulBackupStep(t, c, oldNodes.RandNode(),
+				planAndRunBackup(t, c, oldNodes.RandNode(), upgradedNodes,
 					`BACKUP TABLE bank.bank INTO 'nodelocal://1/old-node-full-backup' WITH detached`),
 
 				clearDisableJobAdoptionFileFromNodesStep(c, upgradedNodes),
@@ -396,7 +443,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 
 				// Run an incremental on top of a full backup taken by nodes on the
 				// old version.
-				successfulBackupStep(t, c, roachNodes.RandNode(),
+				planAndRunBackup(t, c, roachNodes.RandNode(), nil,
 					`BACKUP TABLE bank.bank INTO LATEST IN 'nodelocal://1/old-node-full-backup' WITH detached`),
 			)
 			u.run(ctx, t)
