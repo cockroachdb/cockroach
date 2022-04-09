@@ -1,0 +1,272 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE a (
+  a INT PRIMARY KEY,
+  b TEXT,
+  FAMILY (a,b),
+  INVERTED INDEX(b)
+)
+
+query T
+EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b LIKE '%foo%'
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • scan
+          missing stats
+          table: a@a_b_idx
+          spans: 1 span
+
+query T
+EXPLAIN SELECT * FROM a WHERE b ILIKE '%foo%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b ILIKE '%foo%'
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • scan
+          missing stats
+          table: a@a_b_idx
+          spans: 1 span
+
+query T
+EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%' OR b ILIKE '%bar%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (b LIKE '%foo%') OR (b ILIKE '%bar%')
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: a@a_b_idx
+              spans: 2 spans
+
+query T
+EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%' OR b ILIKE '%bar%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: (b LIKE '%foo%') OR (b ILIKE '%bar%')
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: a@a_b_idx
+              spans: 2 spans
+
+query T
+EXPLAIN SELECT * FROM a WHERE b LIKE '%foo%zoo%'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b LIKE '%foo%zoo%'
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: a@a_b_idx
+              spans: 2 spans
+
+# Test that trigram index can't support searches with fewer than 3 characters.
+query T
+EXPLAIN SELECT * FROM a WHERE b LIKE '%fo'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b LIKE '%fo'
+│
+└── • scan
+      missing stats
+      table: a@a_pkey
+      spans: FULL SCAN
+
+# Test that trigram indexes can't support searches with no constant args.
+# columns.
+query T
+EXPLAIN SELECT * FROM a WHERE b LIKE b
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b LIKE b
+│
+└── • scan
+      missing stats
+      table: a@a_pkey
+      spans: FULL SCAN
+
+# Test that trigram indexes accelerate the % operator.
+query T
+EXPLAIN SELECT * FROM a WHERE b % 'foo'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b % 'foo'
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • scan
+          missing stats
+          table: a@a_b_idx
+          spans: 1 span
+
+# Test that trigram indexes accelerate the % operator with an OR if the
+# constant has more than one trigram.
+query T
+EXPLAIN SELECT * FROM a WHERE b % 'foob'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b % 'foob'
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: a@a_b_idx
+              spans: 2 spans
+
+# Test that trigram indexes can't accelerate the % operator if there are fewer
+# than 3 characters in the constant.
+query T
+EXPLAIN SELECT * FROM a WHERE b % 'fo'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b % 'fo'
+│
+└── • scan
+      missing stats
+      table: a@a_pkey
+      spans: FULL SCAN
+
+# Test that trigram indexes can accelerate the % operator in reverse order.
+query T
+EXPLAIN SELECT * FROM a WHERE 'blah' % b
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: 'blah' % b
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: a@a_b_idx
+              spans: 2 spans
+
+# Test that trigram indexes can't accelerate the % operator with no constant
+# columns.
+query T
+EXPLAIN SELECT * FROM a WHERE b % b
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b % b
+│
+└── • scan
+      missing stats
+      table: a@a_pkey
+      spans: FULL SCAN
+
+
+# Test that trigram indexes can accelerate the equality operator.
+query T
+EXPLAIN SELECT * FROM a WHERE b = 'foobar'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b = 'foobar'
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 4
+        │
+        └── • scan
+              missing stats
+              table: a@a_b_idx
+              spans: 4 spans
+
+query T
+EXPLAIN SELECT * FROM a WHERE b = 'foo'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b = 'foo'
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • scan
+          missing stats
+          table: a@a_b_idx
+          spans: 1 span

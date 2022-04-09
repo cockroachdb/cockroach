@@ -6,6 +6,7 @@ go_library(
         "geo.go",
         "inverted_index_expr.go",
         "json_array.go",
+        "trigram.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx",
     visibility = ["//visibility:public"],
@@ -46,6 +47,7 @@ go_test(
     srcs = [
         "geo_test.go",
         "json_array_test.go",
+        "trigram_test.go",
     ],
     deps = [
         ":invertedidx",
