@@ -643,15 +643,6 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				return len(meta) == 1 && errors.Is(meta[0].Err, expectedError)
 			},
 			test: func(ctx context.Context, inbox *Inbox) []execinfrapb.ProducerMetadata {
-				defer func() {
-					// Make sure that the error is not propagated for the second
-					// time.
-					//
-					// We still need to drain to simulate what happens in
-					// production - there, the consumer of the inbox would
-					// transition into draining upon receiving the error.
-					require.True(t, len(inbox.DrainMeta()) == 0)
-				}()
 				for {
 					var b coldata.Batch
 					if err := colexecerror.CatchVectorizedRuntimeError(func() {

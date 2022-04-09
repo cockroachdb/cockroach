@@ -328,17 +328,13 @@ func (i *Inbox) Next() coldata.Batch {
 		return coldata.ZeroBatch
 	}
 
-	var ungracefulStreamTermination bool
 	defer func() {
 		// Catch any panics that occur and close the Inbox in order to not leak
 		// the goroutine listening for context cancellation. The Inbox must
 		// still be closed during normal termination.
 		if panicObj := recover(); panicObj != nil {
-			if ungracefulStreamTermination {
-				// Only close the Inbox here in case of an ungraceful
-				// termination.
-				i.close()
-			}
+			// Only close the Inbox here in case of an ungraceful termination.
+			i.close()
 			err := logcrash.PanicAsError(0, panicObj)
 			log.VEventf(i.Ctx, 1, "Inbox encountered an error in Next: %v", err)
 			// Note that here we use InternalError to propagate the error
@@ -367,37 +363,21 @@ func (i *Inbox) Next() coldata.Batch {
 			// to handle it.
 			err = pgerror.Newf(pgcode.InternalConnectionFailure, "inbox communication error: %s", err)
 			i.errCh <- err
-			ungracefulStreamTermination = true
 			colexecerror.ExpectedError(err)
 		}
 		if len(m.Data.Metadata) != 0 {
-			// If an error was encountered, it needs to be propagated
-			// immediately. All other metadata will simply be buffered and
-			// returned in DrainMeta.
-			var receivedErr error
 			for _, rpm := range m.Data.Metadata {
 				meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(i.Ctx, rpm)
 				if !ok {
 					continue
 				}
-				if meta.Err != nil && receivedErr == nil {
-					receivedErr = meta.Err
-				} else {
-					// Note that if multiple errors are sent in a single
-					// message, then we'll propagate the first one right away
-					// (via a panic below) and will buffer the rest to be
-					// returned in DrainMeta. The caller will catch the panic
-					// and will transition to draining, so this all works out.
-					//
-					// We choose this way of handling multiple errors rather
-					// than something like errors.CombineErrors() since we want
-					// to keep errors unchanged (e.g. roachpb.ErrPriority() will
-					// be called on each error in the DistSQLReceiver).
-					i.bufferedMeta = append(i.bufferedMeta, meta)
+				if meta.Err != nil {
+					// If an error was encountered, it needs to be propagated
+					// immediately. All other metadata will simply be buffered
+					// and returned in DrainMeta.
+					colexecerror.ExpectedError(meta.Err)
 				}
-			}
-			if receivedErr != nil {
-				colexecerror.ExpectedError(receivedErr)
+				i.bufferedMeta = append(i.bufferedMeta, meta)
 			}
 			// Continue until we get the next batch or EOF.
 			continue
