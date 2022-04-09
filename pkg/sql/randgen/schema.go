@@ -491,7 +491,7 @@ func randIndexTableDefFromCols(
 
 		// The last index column can be inverted-indexable, which makes the
 		// index an inverted index.
-		if colinfo.ColumnTypeIsInvertedIndexable(semType) {
+		if colinfo.ColumnTypeIsOnlyInvertedIndexable(semType) {
 			def.Inverted = true
 			stopPrefix = true
 		}
