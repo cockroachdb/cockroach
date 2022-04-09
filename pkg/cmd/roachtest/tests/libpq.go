@@ -25,7 +25,7 @@ import (
 )
 
 var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var libPQSupportedTag = "v1.10.4"
+var libPQSupportedTag = "v1.10.5"
 
 func registerLibPQ(r registry.Registry) {
 	runLibPQ := func(ctx context.Context, t test.Test, c cluster.Cluster) {
