@@ -251,9 +251,11 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 // balance.
 func (sr *StoreRebalancer) scorerOptions() *qpsScorerOptions {
 	return &qpsScorerOptions{
-		deterministic:         sr.rq.allocator.storePool.deterministic,
-		qpsRebalanceThreshold: qpsRebalanceThreshold.Get(&sr.st.SV),
-		minRequiredQPSDiff:    minQPSDifferenceForTransfers.Get(&sr.st.SV),
+		deterministic:              sr.rq.allocator.storePool.deterministic,
+		qpsRebalanceThreshold:      qpsRebalanceThreshold.Get(&sr.st.SV),
+		minRequiredQPSDiff:         minQPSDifferenceForTransfers.Get(&sr.st.SV),
+		diskRebalanceToThreshold:   rebalanceToMaxFractionUsedThreshold.Get(&sr.st.SV),
+		diskRebalanceFromThreshold: rebalanceFromMaxFractionUsedThreshold.Get(&sr.st.SV),
 	}
 }
 

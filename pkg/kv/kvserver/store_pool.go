@@ -747,7 +747,7 @@ type StoreList struct {
 
 	// candidateRanges tracks range count stats for stores that are eligible to
 	// be rebalance targets (their used capacity percentage must be lower than
-	// maxFractionUsedThreshold).
+	// rebalanceFromMaxFractionUsedThreshold).
 	candidateRanges stat
 
 	// candidateLeases tracks range lease stats for stores that are eligible to
@@ -772,9 +772,7 @@ type StoreList struct {
 func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 	sl := StoreList{stores: descriptors}
 	for _, desc := range descriptors {
-		if maxCapacityCheck(desc) {
-			sl.candidateRanges.update(float64(desc.Capacity.RangeCount))
-		}
+		sl.candidateRanges.update(float64(desc.Capacity.RangeCount))
 		sl.candidateLeases.update(float64(desc.Capacity.LeaseCount))
 		sl.candidateLogicalBytes.update(float64(desc.Capacity.LogicalBytes))
 		sl.candidateQueriesPerSecond.update(desc.Capacity.QueriesPerSecond)

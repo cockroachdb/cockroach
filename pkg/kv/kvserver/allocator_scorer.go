@@ -45,20 +45,6 @@ const (
 	// https://www.eecs.harvard.edu/~michaelm/postscripts/mythesis.pdf.
 	allocatorRandomCount = 2
 
-	// maxFractionUsedThreshold: if the fraction used of a store descriptor
-	// capacity is greater than this value, it will never be used as a rebalance
-	// or allocate target and we will actively try to move replicas off of it.
-	maxFractionUsedThreshold = 0.95
-
-	// rebalanceToMaxFractionUsedThreshold: if the fraction used of a store
-	// descriptor capacity is greater than this value, it will never be used as a
-	// rebalance target. This is important for providing a buffer between fully
-	// healthy stores and full stores (as determined by
-	// maxFractionUsedThreshold).  Without such a buffer, replicas could
-	// hypothetically ping pong back and forth between two nodes, making one full
-	// and then the other.
-	rebalanceToMaxFractionUsedThreshold = 0.925
-
 	// minRangeRebalanceThreshold is the number of replicas by which a store
 	// must deviate from the mean number of replicas to be considered overfull
 	// or underfull. This absolute bound exists to account for deployments
@@ -70,6 +56,51 @@ const (
 	// consider a store full/empty if it's at least minRebalanceThreshold
 	// away from the mean.
 	minRangeRebalanceThreshold = 2
+)
+
+// TODO DURING REVIEW: There's no great way to validate that the
+// `rebalanceFrom..` threshold will be set higher than the `rebalanceTo..`
+// threshold (is there?). Should we change this such that only the rebalanceFrom
+// threshold is configurable, and the other is always 5% below the rebalanceFrom
+// threshold?
+const rebalanceFromMaxFractionUsedDefault = 0.95
+
+// rebalanceFromMaxFractionUsedThreshold: if the fraction used of a store's disk
+// capacity is greater than this value, it will never be used as a rebalance or
+// allocate target and we will actively try to move replicas off of it.
+var rebalanceFromMaxFractionUsedThreshold = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.allocator.max_disk_used_threshold",
+	"the disk utilization threshold above which a store will start shedding replicas off of itself",
+	rebalanceFromMaxFractionUsedDefault,
+	func(f float64) error {
+		if f < 0.50 || f > 1.0 {
+			return fmt.Errorf("must be between 0.5 and 1.0")
+		}
+		return nil
+	},
+)
+
+const rebalanceToMaxFractionUsedDefault = 0.925
+
+// rebalanceToMaxFractionUsedThreshold: if the fraction used of a store
+// descriptor capacity is greater than this value, it will never be used as a
+// rebalance target. This is important for providing a buffer between fully
+// healthy stores and full stores (as determined by
+// rebalanceFromMaxFractionUsedThreshold). Without such a buffer, replicas could
+// hypothetically ping pong back and forth between two nodes, making one full
+// and then the other.
+var rebalanceToMaxFractionUsedThreshold = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.allocator.stop_rebalance_to_disk_used_threshold",
+	"the disk utilization threshold above which a store will never be used as a rebalance target",
+	rebalanceToMaxFractionUsedDefault,
+	func(f float64) error {
+		if f < 0.50 || f > 1.0 {
+			return fmt.Errorf("must be between 0.5 and 1.0")
+		}
+		return nil
+	},
 )
 
 // rangeRebalanceThreshold is the minimum ratio of a store's range count to
@@ -140,6 +171,13 @@ type scorerOptions interface {
 	// with the same QPS) that would converge the range's existing stores' QPS the
 	// most.
 	removalMaximallyConvergesScore(removalCandStoreList StoreList, existing roachpb.StoreDescriptor) int
+	// rebalanceToDiskCapacityCheck returns false if the store does not have
+	// enough disk capacity to receive rebalances or new allocations of replicas,
+	// true otherwise.
+	rebalanceToDiskCapacityCheck(sc roachpb.StoreCapacity) bool
+	// rebalanceFromDiskCapacityCheck returns false if the store's disk is close
+	// to being full and it should start shedding replicas away, true otherwise.
+	rebalanceFromDiskCapacityCheck(sc roachpb.StoreCapacity) bool
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -181,8 +219,9 @@ func (o *scatterScorerOptions) maybeJitterStoreStats(
 // This means that the resulting rebalancing decisions will further the goal of
 // converging range counts across stores in the cluster.
 type rangeCountScorerOptions struct {
-	deterministic           bool
-	rangeRebalanceThreshold float64
+	deterministic                                        bool
+	rangeRebalanceThreshold                              float64
+	diskRebalanceToThreshold, diskRebalanceFromThreshold float64
 }
 
 func (o *rangeCountScorerOptions) maybeJitterStoreStats(
@@ -290,6 +329,21 @@ func (o *rangeCountScorerOptions) removalMaximallyConvergesScore(
 	return 0
 }
 
+func (o *rangeCountScorerOptions) rebalanceToDiskCapacityCheck(sc roachpb.StoreCapacity) bool {
+	if o.diskRebalanceToThreshold == 0 {
+		panic("diskRebalanceToThreshold must be set")
+	}
+	return sc.FractionUsed() < o.diskRebalanceToThreshold
+}
+
+func (o *rangeCountScorerOptions) rebalanceFromDiskCapacityCheck(sc roachpb.StoreCapacity) bool {
+	if o.diskRebalanceFromThreshold == 0 {
+		panic("diskRebalanceFromThreshold must be set")
+	}
+	return sc.FractionUsed() < o.diskRebalanceFromThreshold
+
+}
+
 // qpsScorerOptions is used by the StoreRebalancer to tell the Allocator's
 // rebalancing machinery to base its balance/convergence scores on
 // queries-per-second. This means that the resulting rebalancing decisions will
@@ -313,6 +367,8 @@ type qpsScorerOptions struct {
 	// qpsPerReplica states the level of traffic being served by each replica in a
 	// range.
 	qpsPerReplica float64
+
+	diskRebalanceToThreshold, diskRebalanceFromThreshold float64
 }
 
 func (o *qpsScorerOptions) maybeJitterStoreStats(sl StoreList, _ allocatorRand) StoreList {
@@ -441,6 +497,20 @@ func (o *qpsScorerOptions) removalMaximallyConvergesScore(
 		return -1
 	}
 	return 0
+}
+
+func (o *qpsScorerOptions) rebalanceToDiskCapacityCheck(sc roachpb.StoreCapacity) bool {
+	if o.diskRebalanceToThreshold == 0 {
+		panic("diskRebalanceToThreshold must be set")
+	}
+	return sc.FractionUsed() < o.diskRebalanceToThreshold
+}
+
+func (o *qpsScorerOptions) rebalanceFromDiskCapacityCheck(sc roachpb.StoreCapacity) bool {
+	if o.diskRebalanceFromThreshold == 0 {
+		panic("diskRebalanceFromThreshold must be set")
+	}
+	return sc.FractionUsed() < o.diskRebalanceFromThreshold
 }
 
 // candidate store for allocation.
@@ -774,7 +844,7 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		if !maxCapacityCheck(s) {
+		if !options.rebalanceFromDiskCapacityCheck(s.Capacity) {
 			continue
 		}
 		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
@@ -830,7 +900,7 @@ func candidateListForRemoval(
 			store:          s,
 			valid:          constraintsOK,
 			necessary:      necessary,
-			fullDisk:       !maxCapacityCheck(s),
+			fullDisk:       !options.rebalanceFromDiskCapacityCheck(s.Capacity),
 			diversityScore: diversityScore,
 		})
 	}
@@ -1126,7 +1196,7 @@ func rankedCandidateListForRebalancing(
 				continue
 			}
 			valid, necessary := removalConstraintsChecker(store)
-			fullDisk := !maxCapacityCheck(store)
+			fullDisk := !options.rebalanceFromDiskCapacityCheck(store.Capacity)
 			if !valid {
 				if !needRebalanceFrom {
 					log.VEventf(ctx, 2, "s%d: should-rebalance(invalid): locality:%q",
@@ -1216,14 +1286,13 @@ func rankedCandidateListForRebalancing(
 			}
 
 			constraintsOK, necessary := rebalanceConstraintsChecker(store, existing.store)
-			maxCapacityOK := maxCapacityCheck(store)
 			diversityScore := diversityRebalanceFromScore(
 				store, existing.store.StoreID, existingStoreLocalities)
 			cand := candidate{
 				store:          store,
 				valid:          constraintsOK,
 				necessary:      necessary,
-				fullDisk:       !maxCapacityOK,
+				fullDisk:       !options.rebalanceFromDiskCapacityCheck(store.Capacity),
 				diversityScore: diversityScore,
 			}
 			if !cand.less(existing) {
@@ -1321,7 +1390,7 @@ func rankedCandidateListForRebalancing(
 			// above, but recompute fullDisk using special rebalanceTo logic for
 			// rebalance candidates.
 			s := cand.store
-			cand.fullDisk = !rebalanceToMaxCapacityCheck(s)
+			cand.fullDisk = !options.rebalanceToDiskCapacityCheck(s.Capacity)
 			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
 			cand.convergesScore = options.rebalanceToConvergesScore(comparable, s)
 			cand.rangeCount = int(s.Capacity.RangeCount)
@@ -1854,18 +1923,6 @@ func rebalanceConvergesRangeCountOnMean(
 
 func convergesOnMean(oldVal, newVal, mean float64) bool {
 	return math.Abs(newVal-mean) < math.Abs(oldVal-mean)
-}
-
-// maxCapacityCheck returns true if the store has room for a new replica.
-func maxCapacityCheck(store roachpb.StoreDescriptor) bool {
-	return store.Capacity.FractionUsed() < maxFractionUsedThreshold
-}
-
-// rebalanceToMaxCapacityCheck returns true if the store has enough room to
-// accept a rebalance. The bar for this is stricter than for whether a store
-// has enough room to accept a necessary replica (i.e. via AllocateCandidates).
-func rebalanceToMaxCapacityCheck(store roachpb.StoreDescriptor) bool {
-	return store.Capacity.FractionUsed() < rebalanceToMaxFractionUsedThreshold
 }
 
 func scoresAlmostEqual(score1, score2 float64) bool {

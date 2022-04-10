@@ -1453,16 +1453,20 @@ func (a Allocator) RebalanceNonVoter(
 
 func (a *Allocator) scorerOptions() *rangeCountScorerOptions {
 	return &rangeCountScorerOptions{
-		deterministic:           a.storePool.deterministic,
-		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
+		deterministic:              a.storePool.deterministic,
+		rangeRebalanceThreshold:    rangeRebalanceThreshold.Get(&a.storePool.st.SV),
+		diskRebalanceToThreshold:   rebalanceToMaxFractionUsedThreshold.Get(&a.storePool.st.SV),
+		diskRebalanceFromThreshold: rebalanceFromMaxFractionUsedThreshold.Get(&a.storePool.st.SV),
 	}
 }
 
 func (a *Allocator) scorerOptionsForScatter() *scatterScorerOptions {
 	return &scatterScorerOptions{
 		rangeCountScorerOptions: rangeCountScorerOptions{
-			deterministic:           a.storePool.deterministic,
-			rangeRebalanceThreshold: 0,
+			deterministic:              a.storePool.deterministic,
+			rangeRebalanceThreshold:    0,
+			diskRebalanceToThreshold:   rebalanceToMaxFractionUsedThreshold.Get(&a.storePool.st.SV),
+			diskRebalanceFromThreshold: rebalanceFromMaxFractionUsedThreshold.Get(&a.storePool.st.SV),
 		},
 		// We set jitter to be equal to the padding around replica-count rebalancing
 		// because we'd like to make it such that rebalances made due to an

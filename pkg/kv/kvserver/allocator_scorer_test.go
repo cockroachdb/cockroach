@@ -1593,7 +1593,7 @@ func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
 	}
 }
 
-func TestMaxCapacity(t *testing.T) {
+func TestShouldShedReplicasBasedOnDiskCapacity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1603,9 +1603,10 @@ func TestMaxCapacity(t *testing.T) {
 		testStoreUSb:    true,
 		testStoreEurope: true,
 	}
+	options := rangeCountScorerOptions{diskRebalanceFromThreshold: rebalanceFromMaxFractionUsedDefault}
 
 	for _, s := range testStores {
-		if e, a := expectedCheck[s.StoreID], maxCapacityCheck(s); e != a {
+		if e, a := expectedCheck[s.StoreID], !options.rebalanceFromDiskCapacityCheck(s.Capacity); e != a {
 			t.Errorf("store %d expected max capacity check: %t, actual %t", s.StoreID, e, a)
 		}
 	}
