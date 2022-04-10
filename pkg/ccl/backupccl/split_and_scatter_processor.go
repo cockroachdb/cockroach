@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -136,17 +137,21 @@ func (s dbSplitAndScatterer) scatter(
 		// ranges in a cluster, but in RESTORE, we really just want it to be
 		// balancing the span being restored into.
 		RandomizeLeases: true,
+		MaxSize:         1, // don't scatter non-empty ranges on resume.
 	}
 
 	res, pErr := kv.SendWrapped(ctx, s.db.NonTransactionalSender(), req)
 	if pErr != nil {
-		// TODO(pbardea): Unfortunately, Scatter is still too unreliable to
-		// fail the RESTORE when Scatter fails. I'm uncomfortable that
-		// this could break entirely and not start failing the tests,
-		// but on the bright side, it doesn't affect correctness, only
-		// throughput.
-		log.Errorf(ctx, "failed to scatter span [%s,%s): %+v",
-			newScatterKey, newScatterKey.Next(), pErr.GoError())
+		// TODO(dt): typed error.
+		if !strings.Contains(pErr.String(), "existing range size") {
+			// TODO(pbardea): Unfortunately, Scatter is still too unreliable to
+			// fail the RESTORE when Scatter fails. I'm uncomfortable that
+			// this could break entirely and not start failing the tests,
+			// but on the bright side, it doesn't affect correctness, only
+			// throughput.
+			log.Errorf(ctx, "failed to scatter span [%s,%s): %+v",
+				newScatterKey, newScatterKey.Next(), pErr.GoError())
+		}
 		return 0, nil
 	}
 
