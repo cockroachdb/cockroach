@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -455,13 +454,13 @@ func (oc *optCatalog) dataSourceForTable(
 	return ds, nil
 }
 
-var emptyZoneConfig = &zonepb.ZoneConfig{}
+var emptyZoneConfig = cat.EmptyZone()
 
 // getZoneConfig returns the ZoneConfig data structure for the given table.
 // ZoneConfigs are stored in protobuf binary format in the SystemConfig, which
 // is gossiped around the cluster. Note that the returned ZoneConfig might be
 // somewhat stale, since it's taken from the gossiped SystemConfig.
-func (oc *optCatalog) getZoneConfig(desc catalog.TableDescriptor) (*zonepb.ZoneConfig, error) {
+func (oc *optCatalog) getZoneConfig(desc catalog.TableDescriptor) (cat.Zone, error) {
 	// Lookup table's zone if system config is available (it may not be as node
 	// is starting up and before it's received the gossiped config). If it is
 	// not available, use an empty config that has no zone constraints.
@@ -474,9 +473,9 @@ func (oc *optCatalog) getZoneConfig(desc catalog.TableDescriptor) (*zonepb.ZoneC
 	}
 	if zone == nil {
 		// This can happen with tests that override the hook.
-		zone = emptyZoneConfig
+		return emptyZoneConfig, nil
 	}
-	return zone, err
+	return cat.AsZone(zone), nil
 }
 
 func (oc *optCatalog) codec() keys.SQLCodec {
@@ -617,7 +616,7 @@ type optTable struct {
 	// stats are the inlined wrappers for table statistics.
 	stats []optTableStat
 
-	zone *zonepb.ZoneConfig
+	zone cat.Zone
 
 	// family is the inlined wrapper for the table's primary family. The primary
 	// family is the first family explicitly specified by the user. If no families
@@ -651,7 +650,7 @@ func newOptTable(
 	desc catalog.TableDescriptor,
 	codec keys.SQLCodec,
 	stats []*stats.TableStatistic,
-	tblZone *zonepb.ZoneConfig,
+	tblZone cat.Zone,
 ) (*optTable, error) {
 	ot := &optTable{
 		desc:     desc,
@@ -793,20 +792,17 @@ func newOptTable(
 		// use the table zone. Save subzones that apply to partitions, since we will
 		// use those later when initializing partitions in the index.
 		idxZone := tblZone
-		partZones := make(map[string]*zonepb.ZoneConfig)
-		for j := range tblZone.Subzones {
-			subzone := &tblZone.Subzones[j]
-			if subzone.IndexID == uint32(idx.GetID()) {
-				if subzone.PartitionName == "" {
+		partZones := make(map[string]cat.Zone)
+		for j := 0; j < tblZone.SubzoneCount(); j++ {
+			subzone := tblZone.Subzone(j)
+			if subzone.Index() == cat.StableID(idx.GetID()) {
+				copyZone := subzone.Zone().InheritFromParent(tblZone)
+				if subzone.Partition() == "" {
 					// Subzone applies to the whole index.
-					copyZone := subzone.Config
-					copyZone.InheritFromParent(tblZone)
-					idxZone = &copyZone
+					idxZone = copyZone
 				} else {
 					// Subzone applies to a partition.
-					copyZone := subzone.Config
-					copyZone.InheritFromParent(tblZone)
-					partZones[subzone.PartitionName] = &copyZone
+					partZones[subzone.Partition()] = copyZone
 				}
 			}
 		}
@@ -968,7 +964,7 @@ func (ot *optTable) PostgresDescriptorID() cat.StableID {
 // isStale checks if the optTable object needs to be refreshed because the stats,
 // zone config, or used types have changed. False positives are ok.
 func (ot *optTable) isStale(
-	rawDesc catalog.TableDescriptor, tableStats []*stats.TableStatistic, zone *zonepb.ZoneConfig,
+	rawDesc catalog.TableDescriptor, tableStats []*stats.TableStatistic, zone cat.Zone,
 ) bool {
 	// Fast check to verify that the statistics haven't changed: we check the
 	// length and the address of the underlying array. This is not a perfect
@@ -1021,7 +1017,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 
 	// Verify that indexes are in same zones. For performance, skip deep equality
 	// check if it's the same as the previous index (common case).
-	var prevLeftZone, prevRightZone *zonepb.ZoneConfig
+	var prevLeftZone, prevRightZone cat.Zone
 	for i := range ot.indexes {
 		leftZone := ot.indexes[i].zone
 		rightZone := otherTable.indexes[i].zone
@@ -1132,7 +1128,7 @@ func (ot *optTable) OutboundForeignKeyCount() int {
 	return len(ot.outboundFKs)
 }
 
-// OutboundForeignKeyCount is part of the cat.Table interface.
+// OutboundForeignKey is part of the cat.Table interface.
 func (ot *optTable) OutboundForeignKey(i int) cat.ForeignKeyConstraint {
 	return &ot.outboundFKs[i]
 }
@@ -1202,7 +1198,7 @@ func (ot *optTable) CollectTypes(ord int) (descpb.IDs, error) {
 type optIndex struct {
 	tab  *optTable
 	idx  catalog.Index
-	zone *zonepb.ZoneConfig
+	zone cat.Zone
 
 	// columnOrds maps the index columns to table column ordinals.
 	columnOrds []int
@@ -1234,8 +1230,8 @@ func (oi *optIndex) init(
 	tab *optTable,
 	indexOrdinal int,
 	idx catalog.Index,
-	zone *zonepb.ZoneConfig,
-	partZones map[string]*zonepb.ZoneConfig,
+	zone cat.Zone,
+	partZones map[string]cat.Zone,
 	invertedColOrd int,
 ) {
 	oi.tab = tab
@@ -1268,7 +1264,7 @@ func (oi *optIndex) init(
 	_ = idxPartitioning.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
 		op := optPartition{
 			name:   name,
-			zone:   &zonepb.ZoneConfig{},
+			zone:   cat.EmptyZone(),
 			datums: make([]tree.Datums, 0, len(values)),
 		}
 
@@ -1489,7 +1485,7 @@ func (oi *optIndex) Partition(i int) cat.Partition {
 // partition of an index.
 type optPartition struct {
 	name   string
-	zone   *zonepb.ZoneConfig
+	zone   cat.Zone
 	datums []tree.Datums
 }
 

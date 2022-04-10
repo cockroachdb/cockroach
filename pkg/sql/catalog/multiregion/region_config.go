@@ -15,6 +15,7 @@ package multiregion
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -39,6 +40,7 @@ type RegionConfig struct {
 	regionEnumID         descpb.ID
 	placement            descpb.DataPlacement
 	superRegions         []descpb.SuperRegion
+	zoneCfgExtensions    descpb.ZoneConfigExtensions
 }
 
 // SurvivalGoal returns the survival goal configured on the RegionConfig.
@@ -56,6 +58,14 @@ func (r *RegionConfig) Regions() catpb.RegionNames {
 	return r.regions
 }
 
+// WithRegions returns a copy of the RegionConfig with only the provided
+// regions.
+func (r *RegionConfig) WithRegions(regions catpb.RegionNames) RegionConfig {
+	cpy := *r
+	cpy.regions = regions
+	return cpy
+}
+
 // IsMemberOfExplicitSuperRegion returns whether t the region is an explicit
 // member of a super region.
 func (r *RegionConfig) IsMemberOfExplicitSuperRegion(region catpb.RegionName) bool {
@@ -66,24 +76,24 @@ func (r *RegionConfig) IsMemberOfExplicitSuperRegion(region catpb.RegionName) bo
 			}
 		}
 	}
-
 	return false
 }
 
 // GetSuperRegionRegionsForRegion returns the members of the super region the
 // specified region is part of.
-// If the region is not a member of any super regions, we return all
-// the regions on the RegionConfig.
-func (r *RegionConfig) GetSuperRegionRegionsForRegion(region catpb.RegionName) catpb.RegionNames {
+// If the region is not a member of any super regions, the function returns an
+// error.
+func (r *RegionConfig) GetSuperRegionRegionsForRegion(
+	region catpb.RegionName,
+) (catpb.RegionNames, error) {
 	for _, superRegion := range r.SuperRegions() {
 		for _, regionOfSuperRegion := range superRegion.Regions {
 			if region == regionOfSuperRegion {
-				return superRegion.Regions
+				return superRegion.Regions, nil
 			}
 		}
 	}
-
-	return r.Regions()
+	return nil, errors.AssertionFailedf("region %s is not part of a super region", region)
 }
 
 // IsValidRegionNameString implements the tree.DatabaseRegionConfig interface.
@@ -123,9 +133,95 @@ func (r *RegionConfig) IsPlacementRestricted() bool {
 	return r.placement == descpb.DataPlacement_RESTRICTED
 }
 
+// WithPlacementDefault returns a copy of the RegionConfig with the data
+// placement strategy configured as placement default.
+func (r *RegionConfig) WithPlacementDefault() RegionConfig {
+	cpy := *r
+	cpy.placement = descpb.DataPlacement_DEFAULT
+	return cpy
+}
+
 // SuperRegions returns the list of super regions in the database.
 func (r *RegionConfig) SuperRegions() []descpb.SuperRegion {
 	return r.superRegions
+}
+
+// ZoneConfigExtensions returns the zone configuration extensions applied to the
+// database.
+func (r *RegionConfig) ZoneConfigExtensions() descpb.ZoneConfigExtensions {
+	return r.zoneCfgExtensions
+}
+
+// ApplyZoneConfigExtensionForGlobal applies the global table zone configuration
+// extensions to the provided zone configuration, returning the updated config.
+func (r *RegionConfig) ApplyZoneConfigExtensionForGlobal(zc zonepb.ZoneConfig) zonepb.ZoneConfig {
+	if ext := r.zoneCfgExtensions.Global; ext != nil {
+		zc = extendZoneCfg(zc, *ext)
+	}
+	return zc
+}
+
+// ApplyZoneConfigExtensionForRegionalIn applies the regional table zone
+// configuration extensions for the provided region to the provided zone
+// configuration, returning the updated config.
+func (r *RegionConfig) ApplyZoneConfigExtensionForRegionalIn(
+	zc zonepb.ZoneConfig, region catpb.RegionName,
+) zonepb.ZoneConfig {
+	if ext := r.zoneCfgExtensions.Regional; ext != nil {
+		zc = extendZoneCfg(zc, *ext)
+	}
+	if ext, ok := r.zoneCfgExtensions.RegionalIn[region]; ok {
+		zc = extendZoneCfg(zc, ext)
+	}
+	return zc
+}
+
+// "extending" a zone config means having the extension inherit any missing
+// fields from the zone config while replacing any set fields.
+func extendZoneCfg(zc, ext zonepb.ZoneConfig) zonepb.ZoneConfig {
+	ext.InheritFromParent(&zc)
+	return ext
+}
+
+// GlobalTablesInheritDatabaseConstraints returns whether GLOBAL tables can
+// inherit replica constraints from their database zone configuration, or
+// whether they must set these constraints themselves.
+func (r *RegionConfig) GlobalTablesInheritDatabaseConstraints() bool {
+	if r.placement == descpb.DataPlacement_RESTRICTED {
+		// Placement restricted does not apply to GLOBAL tables.
+		return false
+	}
+	if r.zoneCfgExtensions.Global != nil {
+		// Global tables have a zone config extension that will not be set at
+		// the database level.
+		return false
+	}
+	if r.zoneCfgExtensions.Regional != nil {
+		// Regional tables have a zone config extension that will be set at the
+		// database level but which should not apply to GLOBAL tables.
+		return false
+	}
+	if _, ok := r.zoneCfgExtensions.RegionalIn[r.primaryRegion]; ok {
+		// Regional tables in the primary region have a zone config extension that
+		// will be set at the database level but which should not apply to GLOBAL
+		// tables.
+		return false
+	}
+	return true
+}
+
+// RegionalInTablesInheritDatabaseConstraints returns whether REGIONAL
+// tables/partitions with affinity to the specified region can inherit replica
+// constraints from their database zone configuration, or whether they must set
+// these constraints themselves.
+func (r *RegionConfig) RegionalInTablesInheritDatabaseConstraints(region catpb.RegionName) bool {
+	if _, ok := r.zoneCfgExtensions.RegionalIn[r.primaryRegion]; ok {
+		// Regional tables in the primary region have a zone config extension that
+		// will be set at the database level but which should not apply to regional
+		// tables in any other region.
+		return r.primaryRegion == region
+	}
+	return true
 }
 
 // MakeRegionConfigOption is an option for MakeRegionConfig
@@ -147,15 +243,17 @@ func MakeRegionConfig(
 	regionEnumID descpb.ID,
 	placement descpb.DataPlacement,
 	superRegions []descpb.SuperRegion,
+	zoneCfgExtensions descpb.ZoneConfigExtensions,
 	opts ...MakeRegionConfigOption,
 ) RegionConfig {
 	ret := RegionConfig{
-		regions:       regions,
-		primaryRegion: primaryRegion,
-		survivalGoal:  survivalGoal,
-		regionEnumID:  regionEnumID,
-		placement:     placement,
-		superRegions:  superRegions,
+		regions:           regions,
+		primaryRegion:     primaryRegion,
+		survivalGoal:      survivalGoal,
+		regionEnumID:      regionEnumID,
+		placement:         placement,
+		superRegions:      superRegions,
+		zoneCfgExtensions: zoneCfgExtensions,
 	}
 	for _, opt := range opts {
 		opt(&ret)
@@ -196,8 +294,20 @@ func ValidateRegionConfig(config RegionConfig) error {
 			"cannot have a database with restricted placement that is also region survivable")
 	}
 
-	err := ValidateSuperRegions(config.SuperRegions(), config.SurvivalGoal(), config.Regions(), func(err error) error {
+	var err error
+	ValidateSuperRegions(config.SuperRegions(), config.SurvivalGoal(), config.Regions(), func(validateErr error) {
+		if err == nil {
+			err = validateErr
+		}
+	})
+	if err != nil {
 		return err
+	}
+
+	ValidateZoneConfigExtensions(config.Regions(), config.ZoneConfigExtensions(), func(validateErr error) {
+		if err == nil {
+			err = validateErr
+		}
 	})
 	if err != nil {
 		return err
@@ -215,8 +325,8 @@ func ValidateSuperRegions(
 	superRegions []descpb.SuperRegion,
 	survivalGoal descpb.SurvivalGoal,
 	regionNames catpb.RegionNames,
-	errorHandler func(error) error,
-) error {
+	errorHandler func(error),
+) {
 	seenRegions := make(map[catpb.RegionName]struct{})
 	superRegionNames := make(map[string]struct{})
 
@@ -225,32 +335,24 @@ func ValidateSuperRegions(
 		return superRegions[i].SuperRegionName < superRegions[j].SuperRegionName
 	}) {
 		err := errors.AssertionFailedf("super regions are not in sorted order based on the super region name %v", superRegions)
-		if err := errorHandler(err); err != nil {
-			return err
-		}
+		errorHandler(err)
 	}
 
 	for _, superRegion := range superRegions {
 		if len(superRegion.Regions) == 0 {
 			err := errors.AssertionFailedf("no regions found within super region %s", superRegion.SuperRegionName)
-			if err := errorHandler(err); err != nil {
-				return err
-			}
+			errorHandler(err)
 		}
 
 		if err := CanSatisfySurvivalGoal(survivalGoal, len(superRegion.Regions)); err != nil {
 			err := errors.HandleAsAssertionFailure(errors.Wrapf(err, "super region %s only has %d regions", superRegion.SuperRegionName, len(superRegion.Regions)))
-			if err := errorHandler(err); err != nil {
-				return err
-			}
+			errorHandler(err)
 		}
 
 		_, found := superRegionNames[superRegion.SuperRegionName]
 		if found {
 			err := errors.AssertionFailedf("duplicate super regions with name %s found", superRegion.SuperRegionName)
-			if err := errorHandler(err); err != nil {
-				return err
-			}
+			errorHandler(err)
 		}
 		superRegionNames[superRegion.SuperRegionName] = struct{}{}
 
@@ -259,9 +361,7 @@ func ValidateSuperRegions(
 			return superRegion.Regions[i] < superRegion.Regions[j]
 		}) {
 			err := errors.AssertionFailedf("the regions within super region %s were not in a sorted order", superRegion.SuperRegionName)
-			if err := errorHandler(err); err != nil {
-				return err
-			}
+			errorHandler(err)
 		}
 
 		seenRegionsInCurrentSuperRegion := make(map[catpb.RegionName]struct{})
@@ -269,14 +369,15 @@ func ValidateSuperRegions(
 			_, found := seenRegionsInCurrentSuperRegion[region]
 			if found {
 				err := errors.AssertionFailedf("duplicate region %s found in super region %s", region, superRegion.SuperRegionName)
-				if err := errorHandler(err); err != nil {
-					return err
-				}
+				errorHandler(err)
+				continue
 			}
 			seenRegionsInCurrentSuperRegion[region] = struct{}{}
 			_, found = seenRegions[region]
 			if found {
-				return errors.AssertionFailedf("region %s found in multiple super regions", region)
+				err := errors.AssertionFailedf("region %s found in multiple super regions", region)
+				errorHandler(err)
+				continue
 			}
 			seenRegions[region] = struct{}{}
 
@@ -289,13 +390,37 @@ func ValidateSuperRegions(
 			}
 			if !found {
 				err := errors.Newf("region %s not part of database", region)
-				if err := errorHandler(err); err != nil {
-					return err
-				}
+				errorHandler(err)
 			}
 		}
 	}
-	return nil
+}
+
+// ValidateZoneConfigExtensions validates that zone configuration extensions are
+// coherent with the rest of the multi-region configuration. It validates that:
+//   1. All per-region extensions map to a region on the RegionConfig.
+//   2. TODO(nvanbenschoten): add more zone config extension validation in the
+//      future to ensure zone config extensions do not subvert other portions
+//      of the multi-region config (e.g. like breaking REGION survivability).
+func ValidateZoneConfigExtensions(
+	regionNames catpb.RegionNames,
+	zoneCfgExtensions descpb.ZoneConfigExtensions,
+	errorHandler func(error),
+) {
+	// Ensure that all per-region extensions map to a region on the RegionConfig.
+	for regionExt := range zoneCfgExtensions.RegionalIn {
+		found := false
+		for _, regionInDB := range regionNames {
+			if regionExt == regionInDB {
+				found = true
+				break
+			}
+		}
+		if !found {
+			errorHandler(errors.AssertionFailedf("region %s has REGIONAL IN "+
+				"zone config extension, but is not a region in the database", regionExt))
+		}
+	}
 }
 
 // IsMemberOfSuperRegion returns a boolean representing if the region is part
