@@ -35,12 +35,9 @@ type pebbleIterator struct {
 	// Reusable buffer for MVCCKey or EngineKey encoding.
 	keyBuf []byte
 	// Buffers for copying iterator bounds to. Note that the underlying memory
-	// is not GCed upon Close(), to reduce the number of overall allocations. We
-	// use two slices for each of the bounds since this caller should not change
-	// the slice holding the current bounds, that the callee (pebble.MVCCIterator)
-	// is currently using, until after the caller has made the SetBounds call.
-	lowerBoundBuf [2][]byte
-	upperBoundBuf [2][]byte
+	// is not GCed upon Close(), to reduce the number of overall allocations.
+	lowerBoundBuf []byte
+	upperBoundBuf []byte
 
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC/Engine key when true.
@@ -184,15 +181,15 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		// Since we are encoding keys with an empty version anyway, we can just
 		// append the NUL byte instead of calling the above encode functions which
 		// will do the same thing.
-		p.lowerBoundBuf[0] = append(p.lowerBoundBuf[0][:0], opts.LowerBound...)
-		p.lowerBoundBuf[0] = append(p.lowerBoundBuf[0], 0x00)
-		p.options.LowerBound = p.lowerBoundBuf[0]
+		p.lowerBoundBuf = append(p.lowerBoundBuf[:0], opts.LowerBound...)
+		p.lowerBoundBuf = append(p.lowerBoundBuf, 0x00)
+		p.options.LowerBound = p.lowerBoundBuf
 	}
 	if opts.UpperBound != nil {
 		// Same as above.
-		p.upperBoundBuf[0] = append(p.upperBoundBuf[0][:0], opts.UpperBound...)
-		p.upperBoundBuf[0] = append(p.upperBoundBuf[0], 0x00)
-		p.options.UpperBound = p.upperBoundBuf[0]
+		p.upperBoundBuf = append(p.upperBoundBuf[:0], opts.UpperBound...)
+		p.upperBoundBuf = append(p.upperBoundBuf, 0x00)
+		p.options.UpperBound = p.upperBoundBuf
 	}
 
 	if opts.MaxTimestampHint.IsSet() {
