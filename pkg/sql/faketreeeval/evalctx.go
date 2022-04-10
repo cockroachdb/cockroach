@@ -288,6 +288,11 @@ func (*DummyEvalPlanner) RepairTTLScheduledJobForTable(ctx context.Context, tabl
 	return errors.WithStack(errEvalPlanner)
 }
 
+// DebugJobInfo is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) DebugJobInfo(ctx context.Context, jobID int64) (*tree.DJSON, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // ExecutorConfig is part of the EvalPlanner interface.
 func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil

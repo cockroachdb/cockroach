@@ -3318,6 +3318,8 @@ type EvalPlanner interface {
 	// it is invalid.
 	RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error
 
+	DebugJobInfo(ctx context.Context, jobID int64) (*DJSON, error)
+
 	// QueryRowEx executes the supplied SQL statement and returns a single row, or
 	// nil if no row is found, or an error if more that one row is returned.
 	//

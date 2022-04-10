@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -821,4 +822,18 @@ func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []b
 		return err
 	}
 	return cloud.WriteFile(ctx, conn, "", bytes.NewReader(content))
+}
+
+func (p *planner) DebugJobInfo(ctx context.Context, jobID int64) (*tree.DJSON, error) {
+	j := p.ExecCfg().JobRegistry.ExecutionInfo(catpb.JobID(jobID))
+	if j == nil {
+		return nil, errors.Newf("job not found in this node's registry")
+	}
+	details := j.Get()
+	flags := protoreflect.FmtFlags{EmitDefaults: false, EmitRedacted: false}
+	info, err := protoreflect.MessageToJSON(&details, flags)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDJSON(info), nil
 }

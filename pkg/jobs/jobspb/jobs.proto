@@ -23,6 +23,7 @@ import "sql/catalog/descpb/tenant.proto";
 import "util/hlc/timestamp.proto";
 import "clusterversion/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
 
 enum EncryptionMode {
   Passphrase = 0;
@@ -1059,4 +1060,16 @@ message RetriableExecutionFailure {
   // that the error was too large. While the structure may be lost, at least
   // some information will be preserved.
   string truncated_error = 6;
+}
+
+// ExecutionInfo holds ephemeral information about the current execution of a 
+// job, for use in introspection and debugging. This could include information
+// extracted from traces, recorded during planning, or noted by the job itself.
+message ExecutionInfo {
+
+  // Details is avilable for individual jobs for job-specific details. 
+  google.protobuf.Any details = 1;
+
+  // CurrentDistPlan is the job's most recently started distributed flow plan.
+  string current_dist_plan = 2;
 }

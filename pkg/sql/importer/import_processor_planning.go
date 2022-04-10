@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -258,6 +259,14 @@ func distImport(
 	g.GoCtx(func(ctx context.Context) error {
 		defer cancelReplanner()
 		defer close(stopProgress)
+
+		if d, err := p.GetDiagram(job.Payload().Description); err != nil {
+			log.Warningf(ctx, "failed to generate plan diagram: %v", err)
+		} else {
+			execCtx.ExecCfg().JobRegistry.ExecutionInfo(job.ID()).Update(func(e *jobspb.ExecutionInfo) {
+				e.CurrentDistPlan = d
+			})
+		}
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx

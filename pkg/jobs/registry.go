@@ -43,6 +43,12 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
+// ExecutionInfoContainer wraps an ExecutionInfo to require locking access.
+type ExecutionInfoContainer struct {
+	syncutil.Mutex
+	info jobspb.ExecutionInfo
+}
+
 // adoptedJobs represents a the epoch and cancelation of a job id being run
 // by the registry.
 type adoptedJob struct {
@@ -50,6 +56,8 @@ type adoptedJob struct {
 	isIdle bool
 	// Calling the func will cancel the context the job was resumed with.
 	cancel context.CancelFunc
+
+	execInfo ExecutionInfoContainer
 }
 
 // adoptionNotice is used by Run to notify the registry to resumeClaimedJobs
@@ -1482,4 +1490,33 @@ func (r *Registry) TestingIsJobIdle(jobID jobspb.JobID) bool {
 	defer r.mu.Unlock()
 	adoptedJob := r.mu.adoptedJobs[jobID]
 	return adoptedJob != nil && adoptedJob.isIdle
+}
+
+// ExecutionInfo returns the accessor wrapper for the execcution info for a job;
+// or nil if the passed job is not currently being executed by this registry.
+func (r *Registry) ExecutionInfo(jobID jobspb.JobID) *ExecutionInfoContainer {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	j, ok := r.mu.adoptedJobs[jobID]
+	if !ok {
+		return nil
+	}
+	return &j.execInfo
+}
+
+// Update updates the current execution info using the passed function.
+func (e *ExecutionInfoContainer) Update(fn func(e *jobspb.ExecutionInfo)) {
+	if e == nil {
+		return
+	}
+	e.Lock()
+	defer e.Unlock()
+	fn(&e.info)
+}
+
+// Get gets the current execution info.
+func (e *ExecutionInfoContainer) Get() jobspb.ExecutionInfo {
+	e.Lock()
+	defer e.Unlock()
+	return e.info
 }

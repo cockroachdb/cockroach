@@ -838,6 +838,20 @@ func (p *PlanningCtx) flowSpecsToDiagram(
 	return diagram, nil
 }
 
+// GetDiagram gets the diagram URI string for the specified plan.
+func (p *PhysicalPlan) GetDiagram(stmt string) (string, error) {
+	specs := p.GenerateFlowSpecs()
+	diag, err := execinfrapb.GeneratePlanDiagram(stmt, specs, execinfrapb.DiagramFlags{})
+	if err != nil {
+		return "", err
+	}
+	_, u, err := diag.ToURL()
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
 // getCleanupFunc returns a non-nil function that needs to be called after the
 // local flow finished running. This can be called only after the physical
 // planning has been completed.

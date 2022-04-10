@@ -6547,6 +6547,22 @@ table's zone configuration this will return NULL.`,
 		},
 	),
 
+	"crdb_internal.job_debug_state": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"job_id", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				jobID := tree.MustBeDInt(args[0])
+				return evalCtx.Planner.DebugJobInfo(evalCtx.Context, int64(jobID))
+			},
+			Info:       `Validate all TTL tables have a valid scheduled job attached.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.validate_ttl_scheduled_jobs": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,
