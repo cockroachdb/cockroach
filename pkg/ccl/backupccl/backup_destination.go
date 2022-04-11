@@ -136,7 +136,27 @@ func resolveDest(
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
-	if !exists {
+	if exists && !dest.Exists {
+		// We disallow a user from writing a full backup to a path containing an existing backup.
+		return "",
+			"",
+			"",
+			nil,
+			nil,
+			errors.Newf("A full backup already exists in %s. "+
+				"Consider running an incremental backup to this full backup via `BACKUP INTO '%s' IN '%s'`",
+				plannedBackupDefaultURI, chosenSuffix, dest.To[0])
+
+	} else if !exists {
+		if dest.Exists {
+			// Implies the user passed a subdirectory in their backup command, either
+			// explicitly or using LATEST; however, we could not find an existing
+			// backup in that subdirectory.
+			// - Pre 22.1: this was fine. we created a full backup in their specified subdirectory
+			// - 22.1: throw a warning: full backups with an explicit subdirectory are deprecated
+			// - 22.2+: the backup will fail.
+			// TODO (msbutler): throw error in 22.2
+		}
 		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
 		return collectionURI, plannedBackupDefaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
 	}

@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -699,16 +700,22 @@ func backupPlanHook(
 		if backupStmt.Nested {
 			if backupStmt.AppendToLatest {
 				initialDetails.Destination.Subdir = latestFileName
+				initialDetails.Destination.Exists = true
+
 			} else if subdir != "" {
 				initialDetails.Destination.Subdir = "/" + strings.TrimPrefix(subdir, "/")
-				// Deprecation notice for `BACKUP INTO` syntax with an explicit subdir.
-				// Remove this once the syntax is deleted in 22.2.
-				p.BufferClientNotice(ctx,
-					pgnotice.Newf("BACKUP commands with an explicitly specified"+
-						" subdirectory will be removed in a future release. Users can create a full backup via `BACKUP ... "+
-						"INTO <collectionURI>`, or an incremental backup on the latest full backup in their "+
-						"collection via `BACKUP ... INTO LATEST IN <collectionURI>`"))
-
+				initialDetails.Destination.Exists = true
+				if _, err := time.Parse(DateBasedIntoFolderName,
+					initialDetails.Destination.Subdir); err != nil {
+					// Deprecation notice for `BACKUP INTO` syntax with an explicit non time based subdir.
+					// Remove this once the syntax is deleted in 22.2.
+					p.BufferClientNotice(ctx,
+						pgnotice.Newf("BACKUP commands with a non time based"+
+							" subdirectory will be removed in a future release. Users can create a full backup via `BACKUP ... "+
+							"INTO <collectionURI>` or an incremental backup to the latest full backup in their"+
+							" collection via `BACKUP ... INTO LATEST IN <collectionURI>` or to a specific time based subdirectory"+
+							" `BACKUP INTO 2021/03/23-213101.37 IN <collectionURI>`"))
+				}
 			} else {
 				initialDetails.Destination.Subdir = endTime.GoTime().Format(DateBasedIntoFolderName)
 			}
@@ -1460,6 +1467,13 @@ func getBackupDetailAndManifest(
 
 		if err := requireEnterprise(execCfg, "incremental"); err != nil {
 			return jobspb.BackupDetails{}, BackupManifest{}, err
+		}
+		lastEndTime := prevBackups[len(prevBackups)-1].EndTime
+		if lastEndTime.Compare(initialDetails.EndTime) > 0 {
+			return jobspb.BackupDetails{}, BackupManifest{},
+				errors.Newf("`AS OF SYSTEM TIME` %s must be greater than "+
+					"the previous backup's end time of %s.",
+					initialDetails.EndTime.GoTime(), lastEndTime.GoTime())
 		}
 	}
 

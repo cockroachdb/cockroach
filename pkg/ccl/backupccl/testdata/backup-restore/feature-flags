@@ -75,7 +75,7 @@ NOTICE: The `BACKUP TO` syntax will be removed in a future release, please switc
 exec-sql
 BACKUP INTO 'deprecatedExplicitSubdir' IN 'nodelocal://1/deprecated';
 ----
-NOTICE: BACKUP commands with an explicitly specified subdirectory will be removed in a future release. Users can create a full backup via `BACKUP ... INTO <collectionURI>`, or an incremental backup on the latest full backup in their collection via `BACKUP ... INTO LATEST IN <collectionURI>`
+NOTICE: BACKUP commands with a non time based subdirectory will be removed in a future release. Users can create a full backup via `BACKUP ... INTO <collectionURI>` or an incremental backup to the latest full backup in their collection via `BACKUP ... INTO LATEST IN <collectionURI>` or to a specific time based subdirectory `BACKUP INTO 2021/03/23-213101.37 IN <collectionURI>`
 
 exec-sql
 DROP TABLE d.t;
