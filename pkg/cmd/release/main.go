@@ -25,6 +25,8 @@ const (
 	smtpPort        = "smtp-port"
 	emailAddresses  = "to"
 	dryRun          = "dry-run"
+
+	fromEmailFormat = "Justin Beaver <%s>"
 )
 
 func main() {
@@ -36,5 +38,6 @@ func main() {
 func init() {
 	rootCmd.AddCommand(pickSHACmd)
 	rootCmd.AddCommand(postReleaseSeriesBlockersCmd)
+	rootCmd.AddCommand(cancelReleaseSeriesDateCmd)
 	rootCmd.AddCommand(setOrchestrationVersionCmd)
 }

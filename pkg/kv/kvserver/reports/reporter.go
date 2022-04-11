@@ -294,7 +294,7 @@ type nodeChecker func(nodeID roachpb.NodeID) bool
 type zoneResolver struct {
 	init bool
 	// curObjectID is the object (i.e. usually table) of the configured range.
-	curObjectID config.SystemTenantObjectID
+	curObjectID config.ObjectID
 	// curRootZone is the lowest zone convering the previously resolved range
 	// that's not a subzone.
 	// This is used to compute the subzone for a range.
@@ -316,9 +316,7 @@ func (c *zoneResolver) resolveRange(
 // setZone remembers the passed-in info as the reference for further
 // checkSameZone() calls.
 // Clients should generally use the higher-level updateZone().
-func (c *zoneResolver) setZone(
-	objectID config.SystemTenantObjectID, key ZoneKey, rootZone *zonepb.ZoneConfig,
-) {
+func (c *zoneResolver) setZone(objectID config.ObjectID, key ZoneKey, rootZone *zonepb.ZoneConfig) {
 	c.init = true
 	c.curObjectID = objectID
 	c.curRootZone = rootZone
@@ -330,7 +328,7 @@ func (c *zoneResolver) setZone(
 func (c *zoneResolver) updateZone(
 	ctx context.Context, rd *roachpb.RangeDescriptor, cfg *config.SystemConfig,
 ) (ZoneKey, error) {
-	objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(rd.StartKey)
+	objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(keys.SystemSQLCodec, rd.StartKey)
 	first := true
 	var zoneKey ZoneKey
 	var rootZone *zonepb.ZoneConfig
@@ -374,7 +372,7 @@ func (c *zoneResolver) checkSameZone(ctx context.Context, rng *roachpb.RangeDesc
 		return false
 	}
 
-	objectID, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(rng.StartKey)
+	objectID, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(keys.SystemSQLCodec, rng.StartKey)
 	if objectID != c.curObjectID {
 		return false
 	}
@@ -405,7 +403,7 @@ func visitZones(
 	opt visitOpt,
 	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
-	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(rng.StartKey)
+	id, keySuffix := config.DecodeKeyIntoZoneIDAndSuffix(keys.SystemSQLCodec, rng.StartKey)
 	zone, err := getZoneByID(id, cfg)
 	if err != nil {
 		return false, err
@@ -441,7 +439,7 @@ func visitZones(
 // corresponding to id. The zone corresponding to id itself is not visited.
 func visitAncestors(
 	ctx context.Context,
-	id config.SystemTenantObjectID,
+	id config.ObjectID,
 	cfg *config.SystemConfig,
 	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
@@ -467,12 +465,12 @@ func visitAncestors(
 	}
 
 	// If it's a table, the parent is a database.
-	zone, err := getZoneByID(config.SystemTenantObjectID(tableDesc.ParentID), cfg)
+	zone, err := getZoneByID(config.ObjectID(tableDesc.ParentID), cfg)
 	if err != nil {
 		return false, err
 	}
 	if zone != nil {
-		if visitor(ctx, zone, MakeZoneKey(config.SystemTenantObjectID(tableDesc.ParentID), NoSubzone)) {
+		if visitor(ctx, zone, MakeZoneKey(config.ObjectID(tableDesc.ParentID), NoSubzone)) {
 			return true, nil
 		}
 	}
@@ -496,9 +494,7 @@ func visitDefaultZone(
 }
 
 // getZoneByID returns a zone given its id. Inheritance does not apply.
-func getZoneByID(
-	id config.SystemTenantObjectID, cfg *config.SystemConfig,
-) (*zonepb.ZoneConfig, error) {
+func getZoneByID(id config.ObjectID, cfg *config.SystemConfig) (*zonepb.ZoneConfig, error) {
 	zoneVal := cfg.GetValue(config.MakeZoneKey(keys.SystemSQLCodec, descpb.ID(id)))
 	if zoneVal == nil {
 		return nil, nil

@@ -125,7 +125,7 @@ func TestGetZoneConfig(t *testing.T) {
 			// Verify SystemConfig.GetZoneConfigForKey.
 			{
 				key := append(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tc.objectID)), tc.keySuffix...)
-				_, zoneCfg, err := cfg.GetZoneConfigForKey(key) // Complete ZoneConfig
+				_, zoneCfg, err := config.TestingGetSystemTenantZoneConfigForKey(cfg, key) // Complete ZoneConfig
 				if err != nil {
 					t.Fatalf("#%d: err=%s", tcNum, err)
 				}
@@ -361,7 +361,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 			// Verify SystemConfig.GetZoneConfigForKey.
 			{
 				key := append(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(tc.objectID)), tc.keySuffix...)
-				_, zoneCfg, err := cfg.GetZoneConfigForKey(key) // Complete ZoneConfig
+				_, zoneCfg, err := config.TestingGetSystemTenantZoneConfigForKey(cfg, key) // Complete ZoneConfig
 				if err != nil {
 					t.Fatalf("#%d: err=%s", tcNum, err)
 				}
@@ -660,7 +660,7 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)))
-		_, _, err := cfg.GetZoneConfigForKey(key)
+		_, _, err := config.TestingGetSystemTenantZoneConfigForKey(cfg, key)
 		if err != nil {
 			b.Fatal(err)
 		}

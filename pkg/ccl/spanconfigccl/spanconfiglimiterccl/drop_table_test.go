@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
@@ -57,14 +56,15 @@ func TestDropTableLowersSpanCount(t *testing.T) {
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.GC.TTLSeconds = 1
 	config.TestingSetupZoneConfigHook(tc.Stopper())
-	// TODO(irfansharif): Work around for #75864.
-	config.TestingSetZoneConfig(keys.TenantsRangesID, zoneConfig)
 
 	require.NoError(t, err)
 	defer func() { require.NoError(t, tenantSQLDB.Close()) }()
 
 	tenantDB := sqlutils.MakeSQLRunner(tenantSQLDB)
+
 	tenantDB.Exec(t, `CREATE TABLE t(k INT PRIMARY KEY)`)
+	id := sqlutils.QueryTableID(t, tenantSQLDB, "defaultdb", "public", "t")
+	config.TestingSetZoneConfig(config.ObjectID(id), zoneConfig)
 
 	var spanCount int
 	tenantDB.QueryRow(t, `SELECT span_count FROM system.span_count LIMIT 1`).Scan(&spanCount)

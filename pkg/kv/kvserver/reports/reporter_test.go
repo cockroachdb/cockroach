@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -516,9 +517,9 @@ func TestZoneChecker(t *testing.T) {
 	p2SubzoneIndex := 1
 	require.Equal(t, "p1", t1Zone.Subzones[p1SubzoneIndex].PartitionName)
 	require.Equal(t, "p2", t1Zone.Subzones[p2SubzoneIndex].PartitionName)
-	t1ZoneKey := MakeZoneKey(config.SystemTenantObjectID(t1ID), NoSubzone)
-	p1ZoneKey := MakeZoneKey(config.SystemTenantObjectID(t1ID), base.SubzoneIDFromIndex(p1SubzoneIndex))
-	p2ZoneKey := MakeZoneKey(config.SystemTenantObjectID(t1ID), base.SubzoneIDFromIndex(p2SubzoneIndex))
+	t1ZoneKey := MakeZoneKey(config.ObjectID(t1ID), NoSubzone)
+	p1ZoneKey := MakeZoneKey(config.ObjectID(t1ID), base.SubzoneIDFromIndex(p1SubzoneIndex))
+	p2ZoneKey := MakeZoneKey(config.ObjectID(t1ID), base.SubzoneIDFromIndex(p2SubzoneIndex))
 
 	ranges := []tc{
 		{
@@ -573,7 +574,7 @@ func TestZoneChecker(t *testing.T) {
 		newZone := !sameZone
 		require.Equal(t, tc.newZone, newZone, "failed at: %d (%s)", i, tc.split)
 		if newZone {
-			objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(rngs[i].StartKey)
+			objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(keys.SystemSQLCodec, rngs[i].StartKey)
 			zc.setZone(objectID, tc.newZoneKey, tc.newRootZoneCfg)
 		}
 	}

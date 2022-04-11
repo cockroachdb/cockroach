@@ -70,7 +70,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	if err != nil {
 		t.Fatal(err)
 	}
-	last := config.SystemTenantObjectID(v.ValueInt())
+	last := config.ObjectID(v.ValueInt())
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(5000)
 	config.TestingSetZoneConfig(last+1, zoneConfig)

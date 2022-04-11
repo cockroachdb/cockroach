@@ -18,7 +18,7 @@ import (
 )
 
 // templateToText is helper function to execute a template using the text/template package
-func templateToText(templateText string, args interface{}) (string, error) {
+func templateToText(args interface{}, templateText string) (string, error) {
 	templ, err := template.New("").Parse(templateText)
 	if err != nil {
 		return "", fmt.Errorf("cannot parse template: %w", err)
@@ -32,15 +32,22 @@ func templateToText(templateText string, args interface{}) (string, error) {
 	return buf.String(), nil
 }
 
-// templateToHTML is helper function to execute a template using the html/template package
-func templateToHTML(templateText string, args interface{}) (string, error) {
-	templ, err := htmltemplate.New("").Parse(templateText)
-	if err != nil {
-		return "", fmt.Errorf("cannot parse template: %w", err)
-	}
-
+// templateFilesToText is helper function to execute templates using the text/template package
+func templateFilesToText(args interface{}, templateFiles ...string) (string, error) {
+	templ := template.Must(template.ParseFiles(templateFiles...))
 	var buf bytes.Buffer
-	err = templ.Execute(&buf, args)
+	err := templ.Execute(&buf, args)
+	if err != nil {
+		return "", fmt.Errorf("cannot execute template: %w", err)
+	}
+	return buf.String(), nil
+}
+
+// templateToHTML is helper function to execute templates using the html/template package
+func templateFilesToHTML(args interface{}, templateFiles ...string) (string, error) {
+	templ := htmltemplate.Must(htmltemplate.ParseFiles(templateFiles...))
+	var buf bytes.Buffer
+	err := templ.Execute(&buf, args)
 	if err != nil {
 		return "", fmt.Errorf("cannot execute template: %w", err)
 	}
