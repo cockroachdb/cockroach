@@ -414,7 +414,7 @@ SELECT nextval('setval_test')
 2
 
 query I
-SELECT setval('setval_test', 10)
+SELECT setval('setval_test', 10, false)
 ----
 10
 
@@ -1825,7 +1825,7 @@ SELECT nextval('seq71135')
 ----
 201
 
-# The 2-parameter version of setval uses is_called=false.
+# The 2-parameter version of setval uses is_called=true.
 query I
 SELECT setval('seq71135'::regclass::oid, 500)
 ----
@@ -1834,17 +1834,17 @@ SELECT setval('seq71135'::regclass::oid, 500)
 query I
 SELECT lastval()
 ----
-201
+500
 
 query I
 SELECT currval('seq71135')
 ----
-201
+500
 
 query I
 SELECT nextval('seq71135')
 ----
-500
+501
 
 subtest sequence_in_txn
 
@@ -2073,6 +2073,8 @@ CREATE SEQUENCE seqas_error
   MAXVALUE 123456
   CACHE 1
 
+subtest sequence_in_transaction
+
 # create a sequence and nextval in the same transaction
 statement ok
 BEGIN
@@ -2108,11 +2110,10 @@ SELECT setval('setval_txn_nextval_seq', 2)
 statement ok
 END
 
-# should be 3 - see https://github.com/cockroachdb/cockroach/issues/79430
 query I
 SELECT nextval('setval_txn_nextval_seq')
 ----
-2
+3
 
 # create a sequence and setval then nextval in the same transaction
 statement ok
@@ -2126,11 +2127,10 @@ SELECT setval('setval_nextval_txn_seq', 2)
 ----
 2
 
-# should be 3 - see https://github.com/cockroachdb/cockroach/issues/79430
 query I
 SELECT nextval('setval_nextval_txn_seq')
 ----
-2
+3
 
 statement ok
 END
@@ -2150,9 +2150,10 @@ SELECT setval('setval_txn_currval_seq', 1)
 statement ok
 END
 
-# should be 1 - see https://github.com/cockroachdb/cockroach/issues/79436
-statement error currval of sequence .+ is not yet defined in this session
+query I
 SELECT currval('setval_txn_currval_seq')
+----
+1
 
 # create a sequence and setval then currval in the same transaction
 statement ok
@@ -2166,9 +2167,10 @@ SELECT setval('setval_currval_txn_seq', 1)
 ----
 1
 
-# should be 1 - see https://github.com/cockroachdb/cockroach/issues/79436
-statement error currval of sequence .+ is not yet defined in this session
+query I
 SELECT currval('setval_currval_txn_seq')
+----
+1
 
 statement ok
 END
