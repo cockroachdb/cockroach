@@ -10,17 +10,21 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -108,4 +112,115 @@ func TestBackupTenantImportingTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	require.Equal(t, 1, rowCount)
+}
+
+// TestTenantBackupMultiRegionDatabases ensures secondary tenants restoring
+// MR databases respect the
+// sql.multi_region.allow_abstractions_for_secondary_tenants.enabled cluster
+// setting.
+func TestTenantBackupMultiRegionDatabases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "times out")
+
+	tc, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /*numServers*/, base.TestingKnobs{},
+	)
+	defer cleanup()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	tenID := roachpb.MakeTenantID(10)
+	_, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+		TenantID:     tenID,
+		TestingKnobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+	})
+	defer tSQL.Close()
+	tenSQLDB := sqlutils.MakeSQLRunner(tSQL)
+
+	waitForSettingToTakeEffect := func(expValue string) {
+		testutils.SucceedsSoon(t, func() error {
+			var val string
+			tenSQLDB.QueryRow(t,
+				fmt.Sprintf(
+					"SHOW CLUSTER SETTING %s", sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+				),
+			).Scan(&val)
+
+			if val != expValue {
+				return errors.Newf("waiting for cluster setting to be set to %q", expValue)
+			}
+			return nil
+		})
+	}
+
+	setTenantReadOnlyClusterSetting := func(val string) {
+		sqlDB.Exec(
+			t,
+			fmt.Sprintf(
+				"ALTER TENANT $1 SET CLUSTER	SETTING %s = '%s'",
+				sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+				val,
+			),
+			tenID.ToUint64(),
+		)
+	}
+
+	setTenantReadOnlyClusterSetting("true")
+	waitForSettingToTakeEffect("true")
+
+	// Setup.
+	const tenDst = "userfile:///ten_backup"
+	const hostDst = "userfile:///host_backup"
+	tenSQLDB.Exec(t, `CREATE DATABASE mrdb PRIMARY REGION "us-east1"`)
+	tenSQLDB.Exec(t, fmt.Sprintf("BACKUP DATABASE mrdb INTO '%s'", tenDst))
+
+	sqlDB.Exec(t, `CREATE DATABASE mrdb PRIMARY REGION "us-east1"`)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE mrdb INTO '%s'", hostDst))
+
+	{
+		// Flip the tenant-read only cluster setting; ensure database can be restored
+		// on the system tenant but not on the secondary tenant.
+		setTenantReadOnlyClusterSetting("false")
+		waitForSettingToTakeEffect("false")
+
+		tenSQLDB.Exec(t, "DROP DATABASE mrdb CASCADE")
+		tenSQLDB.ExpectErr(
+			t,
+			"setting .* disallows secondary tenant to restore a multi-region database",
+			fmt.Sprintf("RESTORE DATABASE mrdb FROM LATEST IN '%s'", tenDst),
+		)
+
+		// The system tenant should remain unaffected.
+		sqlDB.Exec(t, "DROP DATABASE mrdb CASCADE")
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE mrdb FROM LATEST IN '%s'", hostDst))
+	}
+
+	{
+		// Flip the tenant-read only cluster setting back to true and ensure the
+		// restore succeeds.
+		setTenantReadOnlyClusterSetting("true")
+		waitForSettingToTakeEffect("true")
+
+		tenSQLDB.Exec(t, fmt.Sprintf("RESTORE DATABASE mrdb FROM LATEST IN '%s'", tenDst))
+	}
+
+	{
+		// Ensure tenant's restoring non multi-region databases are unaffected
+		// by this setting. We set sql.defaults.primary_region for good measure.
+		tenSQLDB.Exec(
+			t,
+			fmt.Sprintf(
+				"SET CLUSTER SETTING %s = 'us-east1'", sql.DefaultPrimaryRegionClusterSettingName,
+			),
+		)
+		setTenantReadOnlyClusterSetting("false")
+		waitForSettingToTakeEffect("false")
+
+		tenSQLDB.Exec(t, "CREATE DATABASE nonMrDB")
+		tenSQLDB.Exec(t, fmt.Sprintf("BACKUP DATABASE nonMrDB INTO '%s'", tenDst))
+
+		tenSQLDB.Exec(t, "DROP DATABASE nonMrDB CASCADE")
+		tenSQLDB.Exec(t, fmt.Sprintf("RESTORE DATABASE nonMrDB FROM LATEST IN '%s'", tenDst))
+	}
 }
