@@ -12,11 +12,12 @@ package config
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-type zoneConfigMap map[SystemTenantObjectID]zonepb.ZoneConfig
+type zoneConfigMap map[ObjectID]zonepb.ZoneConfig
 
 var (
 	testingZoneConfig   zoneConfigMap
@@ -40,7 +41,7 @@ func TestingSetupZoneConfigHook(stopper *stop.Stopper) {
 	testingZoneConfig = make(zoneConfigMap)
 	testingPreviousHook = ZoneConfigHook
 	ZoneConfigHook = testingZoneConfigHook
-	testingLargestIDHook = func(maxID SystemTenantObjectID) (max SystemTenantObjectID) {
+	testingLargestIDHook = func(maxID ObjectID) (max ObjectID) {
 		testingLock.Lock()
 		defer testingLock.Unlock()
 		for id := range testingZoneConfig {
@@ -70,14 +71,14 @@ func testingResetZoneConfigHook() {
 
 // TestingSetZoneConfig sets the zone config entry for object 'id'
 // in the testing map.
-func TestingSetZoneConfig(id SystemTenantObjectID, zone zonepb.ZoneConfig) {
+func TestingSetZoneConfig(id ObjectID, zone zonepb.ZoneConfig) {
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	testingZoneConfig[id] = zone
 }
 
 func testingZoneConfigHook(
-	_ *SystemConfig, id SystemTenantObjectID,
+	_ *SystemConfig, codec keys.SQLCodec, id ObjectID,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 	testingLock.Lock()
 	defer testingLock.Unlock()

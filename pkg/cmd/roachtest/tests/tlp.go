@@ -210,8 +210,22 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 	}()
 
 	unpartitioned, partitioned, args := smither.GenerateTLP()
+	combined := sqlsmith.CombinedTLP(unpartitioned, partitioned)
 
 	return runWithTimeout(func() error {
+		counts := conn.QueryRow(combined, args...)
+		var undiffCount, diffCount int
+		if err := counts.Scan(&undiffCount, &diffCount); err != nil {
+			// Ignore errors.
+			//nolint:returnerrcheck
+			return nil
+		}
+		if undiffCount == 0 && diffCount == 0 {
+			return nil
+		}
+
+		// We found a TLP mismatch! Run individual queries again to print a diff.
+
 		rows1, err := conn.Query(unpartitioned)
 		if err != nil {
 			// Ignore errors.
@@ -239,14 +253,12 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 			return nil
 		}
 
-		if diff := unsortedMatricesDiff(unpartitionedRows, partitionedRows); diff != "" {
-			logStmt(unpartitioned)
-			logStmt(partitioned)
-			return errors.Newf(
-				"expected unpartitioned and partitioned results to be equal\n%s\nsql: %s\n%s\nwith args: %s",
-				diff, unpartitioned, partitioned, args)
-		}
-		return nil
+		diff := unsortedMatricesDiff(unpartitionedRows, partitionedRows)
+		logStmt(unpartitioned)
+		logStmt(partitioned)
+		return errors.Newf(
+			"expected unpartitioned and partitioned results to be equal\n%s\nsql: %s\n%s\nwith args: %s",
+			diff, unpartitioned, partitioned, args)
 	})
 }
 

@@ -185,7 +185,7 @@ func (r *replicationConstraintStatsReportSaver) loadPreviousVersion(
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
 		key := ConstraintStatusKey{}
-		key.ZoneID = (config.SystemTenantObjectID)(*row[0].(*tree.DInt))
+		key.ZoneID = (config.ObjectID)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID((*row[1].(*tree.DInt)))
 		key.ViolationType = (ConstraintType)(*row[2].(*tree.DString))
 		key.Constraint = (ConstraintRepr)(*row[3].(*tree.DString))
@@ -396,7 +396,7 @@ func (v *constraintConformanceVisitor) reset(ctx context.Context) {
 	if err != nil {
 		log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
 	}
-	for i := config.SystemTenantObjectID(1); i <= maxObjectID; i++ {
+	for i := config.ObjectID(1); i <= maxObjectID; i++ {
 		zone, err := getZoneByID(i, v.cfg)
 		if err != nil {
 			log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
