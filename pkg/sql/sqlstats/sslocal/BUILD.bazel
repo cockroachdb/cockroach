@@ -52,6 +52,7 @@ go_test(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats",
