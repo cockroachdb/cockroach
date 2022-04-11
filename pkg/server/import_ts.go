@@ -149,6 +149,12 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 
 	nodeIDs := map[string]struct{}{}
 	storeIDs := map[string]struct{}{}
+	nodeMetrics := map[string]bool{}
+	storeMetrics := map[string]bool{}
+
+	nodeMetricIdentifier := "cr.node."
+	storeMetricIdentifier := "cr.store."
+
 	dec := gob.NewDecoder(f)
 	for {
 		var v roachpb.KeyValue
@@ -168,10 +174,15 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 			deferError(err)
 			continue
 		}
-		if strings.HasPrefix(name, "cr.node.") {
+
+		if strings.HasPrefix(name, nodeMetricIdentifier) {
 			nodeIDs[source] = struct{}{}
-		} else if strings.HasPrefix(name, "cr.store.") {
+			metricName := strings.Replace(name, nodeMetricIdentifier, "", 1)
+			nodeMetrics[metricName] = true
+		} else if strings.HasPrefix(name, storeMetricIdentifier) {
 			storeIDs[source] = struct{}{}
+			metricName := strings.Replace(name, storeMetricIdentifier, "", 1)
+			storeMetrics[metricName] = true
 		} else {
 			deferError(errors.Errorf("unknown metric %s", name))
 			continue
@@ -186,7 +197,7 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 		}
 	}
 
-	fakeStatuses := makeFakeNodeStatuses(storeToNode)
+	fakeStatuses := makeFakeNodeStatuses(storeToNode, nodeMetrics, storeMetrics)
 	if err := checkFakeStatuses(fakeStatuses, storeIDs); err != nil {
 		// The checks are pretty strict and in particular make sure that there is at
 		// least one data point for each store. Sometimes stores are down for the
@@ -208,7 +219,12 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 	return nil
 }
 
-func makeFakeNodeStatuses(storeToNode map[roachpb.StoreID]roachpb.NodeID) []statuspb.NodeStatus {
+func makeFakeNodeStatuses(
+	storeToNode map[roachpb.StoreID]roachpb.NodeID,
+	nodeMetrics map[string]bool,
+	storeMetrics map[string]bool,
+) []statuspb.NodeStatus {
+
 	var sl []statuspb.NodeStatus
 	nodeToStore := map[roachpb.NodeID][]roachpb.StoreID{}
 	for sid, nid := range storeToNode {
@@ -224,11 +240,47 @@ func makeFakeNodeStatuses(storeToNode map[roachpb.StoreID]roachpb.NodeID) []stat
 				NodeID: nodeID,
 			},
 		}
+
+		// Populate nodeStatus.Metrics and storeStatus.Metrics
+		// with the metric names found in the dump.
+		//
+		// A metric name prefixed with the `storeMetricIdentifier` should be
+		// included in both `nodeStatus.Metrics` and `storeStatus.Metrics`.
+		//
+		// A metric name prefixed with the `nodeMetricIdentifier` should only be
+		// included in `nodeStatus.Metrics`.
+		//
+		// The value of the metric is not consequential here.
+
+		if nodeMetrics != nil || storeMetrics != nil {
+			nodeStatus.Metrics = map[string]float64{}
+		}
+
+		for metricName := range nodeMetrics {
+			nodeStatus.Metrics[metricName] = 0.0
+		}
+
+		for metricName := range storeMetrics {
+			nodeStatus.Metrics[metricName] = 0.0
+		}
+
 		for _, storeID := range storeIDs {
-			nodeStatus.StoreStatuses = append(nodeStatus.StoreStatuses, statuspb.StoreStatus{Desc: roachpb.StoreDescriptor{
-				Node:    nodeStatus.Desc, // don't want cycles here
-				StoreID: storeID,
-			}})
+			storeStatus := statuspb.StoreStatus{
+				Desc: roachpb.StoreDescriptor{
+					Node:    nodeStatus.Desc, // don't want cycles here
+					StoreID: storeID,
+				},
+			}
+
+			if storeMetrics != nil {
+				storeStatus.Metrics = map[string]float64{}
+			}
+
+			for metricName := range storeMetrics {
+				storeStatus.Metrics[metricName] = 0.0
+			}
+
+			nodeStatus.StoreStatuses = append(nodeStatus.StoreStatuses, storeStatus)
 		}
 
 		sl = append(sl, nodeStatus)
