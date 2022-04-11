@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,6 +49,7 @@ func makeCollection(
 	systemNamespace *systemDatabaseNamespaceCache,
 	virtualSchemas catalog.VirtualSchemas,
 	temporarySchemaProvider TemporarySchemaProvider,
+	monitor *mon.BytesMonitor,
 ) Collection {
 	return Collection{
 		settings:       settings,
@@ -55,7 +57,7 @@ func makeCollection(
 		hydratedTables: hydratedTables,
 		virtual:        makeVirtualDescriptors(virtualSchemas),
 		leased:         makeLeasedDescriptors(leaseMgr),
-		kv:             makeKVDescriptors(codec, systemNamespace),
+		kv:             makeKVDescriptors(codec, systemNamespace, monitor),
 		temporary:      makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
 		direct:         makeDirect(ctx, codec, settings),
 	}
@@ -176,7 +178,7 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.uncommitted.reset()
-	tc.kv.reset()
+	tc.kv.reset(ctx)
 	tc.synthetic.reset()
 	tc.deletedDescs = catalog.DescriptorIDSet{}
 	tc.skipValidationOnWrite = false

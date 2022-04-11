@@ -410,14 +410,14 @@ var specs = []stmtSpec{
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_hash_sharded"},
 		regreplace: map[string]string{
-			"'=' a_expr": "'=' n_buckets",
-			regList:      "",
+			"opt_hash_sharded_bucket_count ": "",
+			regList:                          "",
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' 'PRIMARY' 'KEY' ")},
 		replace: map[string]string{
-			"relation_expr": "table_name",
+			"relation_expr":                  "table_name",
+			"opt_hash_sharded_bucket_count ": "",
 		},
-		unlink: []string{"table_name", "n_buckets"},
 	},
 	{
 		name:   "alter_role_stmt",
@@ -562,9 +562,8 @@ var specs = []stmtSpec{
 		stmt:   "col_qualification",
 		inline: []string{"col_qualification_elem", "opt_hash_sharded", "generated_always_as", "generated_by_default_as"},
 		replace: map[string]string{
-			"'=' a_expr": "'=' n_buckets",
+			"opt_hash_sharded_bucket_count ": "",
 		},
-		unlink: []string{"n_buckets"},
 	},
 	{
 		name:    "comment",
@@ -635,11 +634,10 @@ var specs = []stmtSpec{
 		name:   "create_index_stmt",
 		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_index_access_method", "opt_hash_sharded", "opt_concurrently", "opt_with_storage_parameter_list", "storage_parameter_list"},
 		replace: map[string]string{
-			"'ON' a_expr":     "'ON' column_name",
-			"'=' a_expr":      "'=' n_buckets",
-			"opt_nulls_order": "",
+			"'ON' a_expr":                    "'ON' column_name",
+			"opt_hash_sharded_bucket_count ": "",
+			"opt_nulls_order":                "",
 		},
-		unlink: []string{"n_buckets"},
 		regreplace: map[string]string{
 			".* 'CREATE' .* 'INVERTED' 'INDEX' .*": "",
 		},
@@ -901,8 +899,7 @@ var specs = []stmtSpec{
 	{
 		name:    "index_def",
 		inline:  []string{"opt_storing", "storing", "index_params", "opt_name", "opt_hash_sharded"},
-		replace: map[string]string{"a_expr": "n_buckets"},
-		unlink:  []string{"n_buckets"},
+		replace: map[string]string{"opt_hash_sharded_bucket_count ": ""},
 	},
 	{
 		name:   "import_csv",
@@ -1386,9 +1383,8 @@ var specs = []stmtSpec{
 		name:   "table_constraint",
 		inline: []string{"constraint_elem", "opt_storing", "storing", "opt_hash_sharded"},
 		replace: map[string]string{
-			"'=' a_expr": "'=' n_buckets",
+			"opt_hash_sharded_bucket_count ": "",
 		},
-		unlink: []string{"n_buckets"},
 	},
 	{
 		name:   "opt_persistence_temp_table",

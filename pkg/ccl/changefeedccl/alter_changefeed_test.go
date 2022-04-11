@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -396,6 +397,42 @@ func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 			`cannot drop all targets`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d DROP foo, bar`, feed.JobID()),
 		)
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestAlterChangefeedTelemetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+		sqlDB.Exec(t, `CREATE TABLE baz (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO baz VALUES (1)`)
+
+		// Reset the counts.
+		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH diff`)
+		defer closeFeed(t, testFeed)
+
+		feed := testFeed.(cdctest.EnterpriseTestFeed)
+
+		require.NoError(t, feed.Pause())
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP bar, foo ADD baz UNSET diff SET resolved, format=json`, feed.JobID()))
+
+		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+		require.Equal(t, int32(1), counts[`changefeed.alter`])
+		require.Equal(t, int32(1), counts[`changefeed.alter.dropped_targets.2`])
+		require.Equal(t, int32(1), counts[`changefeed.alter.added_targets.1`])
+		require.Equal(t, int32(1), counts[`changefeed.alter.set_options.2`])
+		require.Equal(t, int32(1), counts[`changefeed.alter.unset_options.1`])
 	}
 
 	t.Run(`kafka`, kafkaTest(testFn))
