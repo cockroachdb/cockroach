@@ -1596,7 +1596,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 // considering the threshold for L0 sub-levels. This threshold is not
 // considered in allocation or rebalancing decisions (excluding candidate
 // stores as targets) when enforcementLevel is set to storeHealthNoAction or
-// storeHealthLogOnly. By default storeHealthLogOnly is the action taken. When
+// storeHealthLogOnly. By default storeHealthBlockRebalanceTo is the action taken. When
 // there is a mixed version cluster, storeHealthNoAction is set instead.
 func (a *Allocator) storeHealthOptions(ctx context.Context) storeHealthOptions {
 	enforcementLevel := storeHealthNoAction
