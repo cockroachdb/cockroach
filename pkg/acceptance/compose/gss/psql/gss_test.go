@@ -18,6 +18,7 @@
 package gss
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"os/exec"
@@ -27,12 +28,25 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgconn/auth/krb"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/lib/pq/auth/kerberos"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
 	pq.RegisterGSSProvider(func() (pq.GSS, error) { return kerberos.NewGSS() })
+	pgconn.RegisterGSSProvider(func() (pq.GSS, error) { return krb.NewGSS() })
+}
+
+func TestGSSJackC(t *testing.T) {
+	connector, err := pgx.Connect(context.Background(), "user=root password=rootpw sslmode=require")
+	require.NoError(t, err)
+
+	_, err = connector.Exec(ctx, "SELECT 1")
+	require.NoError(t, err)
 }
 
 func TestGSS(t *testing.T) {

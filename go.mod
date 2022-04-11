@@ -90,6 +90,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/irfansharif/recorder v0.0.0-20211218081646-a21b46510fd6
 	github.com/jackc/pgconn v1.10.0
+	github.com/jackc/pgconn/auth/krb v0.0.0
 	github.com/jackc/pgproto3/v2 v2.1.1
 	github.com/jackc/pgtype v1.8.1
 	github.com/jackc/pgx/v4 v4.13.0
@@ -369,3 +370,9 @@ replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-0
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
 replace github.com/maruel/panicparse/v2 => github.com/cockroachdb/panicparse/v2 v2.0.0-20211103220158-604c82a44f1e
+
+replace github.com/jackc/pgconn => github.com/otan-cockroach/pgconn v1.11.1-0.20220411052521-e7b83b7968d0
+
+replace github.com/jackc/pgconn/auth/krb => github.com/otan-cockroach/pgconn/auth/krb v0.0.0-20220411052521-e7b83b7968d0
+
+replace github.com/jackc/pgproto3/v2 => github.com/otan-cockroach/pgproto3/v2 v2.2.1-0.20220411001252-6bb7be1c99b8
