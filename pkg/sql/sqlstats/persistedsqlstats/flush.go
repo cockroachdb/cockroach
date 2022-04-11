@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -34,7 +35,7 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
 	minimumFlushInterval := MinimumInterval.Get(&s.cfg.Settings.SV)
 
-	enabled := SQLStatsFlushEnabled.Get(&s.cfg.Settings.SV)
+	enabled := SQLStatsFlushEnabled.Get(&s.cfg.Settings.SV) && s.clusterVersionSupportsPersistedSQLStats(ctx)
 	flushingTooSoon := now.Before(s.lastFlushStarted.Add(minimumFlushInterval))
 
 	// Handle wiping in-memory stats here, we only wipe in-memory stats under 2
@@ -72,6 +73,13 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 
 	s.flushStmtStats(ctx, aggregatedTs)
 	s.flushTxnStats(ctx, aggregatedTs)
+}
+
+// clusterVersionSupportsPersistedSQLStats returns true if the cluster version
+// is high enough to support persisted SQL Stats.
+func (s *PersistedSQLStats) clusterVersionSupportsPersistedSQLStats(ctx context.Context) bool {
+	clusterVersion := s.cfg.Settings.Version.ActiveVersionOrEmpty(ctx)
+	return clusterVersion.IsActive(clusterversion.SQLStatsTables)
 }
 
 func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs time.Time) {

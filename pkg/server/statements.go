@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -25,7 +26,10 @@ import (
 func (s *statusServer) Statements(
 	ctx context.Context, req *serverpb.StatementsRequest,
 ) (*serverpb.StatementsResponse, error) {
-	if req.Combined {
+	clusterVersion := s.st.Version.ActiveVersionOrEmpty(ctx)
+	isCombinedSQLStatsAvailable := clusterVersion.IsActive(clusterversion.SQLStatsTables)
+
+	if req.Combined && isCombinedSQLStatsAvailable {
 		combinedRequest := serverpb.CombinedStatementsStatsRequest{
 			Start: req.Start,
 			End:   req.End,

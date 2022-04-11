@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -2858,4 +2860,50 @@ func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
 	err = postStatusJSONProtoWithAdminOption(testCluster.Server(1), "cancel_session/1", req, resp, false)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "status: 403 Forbidden")
+}
+
+func TestSQLStatsAPIInMixedVersionState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &TestingKnobs{
+				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				DisableAutomaticVersionUpgrade: 1,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	t.Run("statement endpoint", func(t *testing.T) {
+		var resp serverpb.StatementsResponse
+
+		// Prior to the fix for SQL Stats mixed version state bug, this call was
+		// returning with "descriptor-not-found" error due to the use of follower
+		// read.
+		err := getStatusJSONProto(s, "statements?combined=true", &resp)
+		require.NoError(t, err)
+	})
+
+	t.Run("flush", func(t *testing.T) {
+		sqlStats :=
+			s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+
+		sqlConn := sqlutils.MakeSQLRunner(conn)
+		sqlConn.Exec(t, "SELECT 1")
+
+		// In the unit test, the system tables is still created under the hood. So
+		// this means the flush will still succeed without version gate. However,
+		// since we have introduced the version gate, and we started up the test
+		// server using a low version number, the flush should be no-op.
+		sqlStats.Flush(ctx)
+		sqlConn.CheckQueryResults(t,
+			"SELECT count(*) FROM system.statement_statistics", [][]string{{"0"}})
+
+		sqlConn.CheckQueryResults(t,
+			"SELECT count(*) FROM system.transaction_statistics", [][]string{{"0"}})
+	})
 }
