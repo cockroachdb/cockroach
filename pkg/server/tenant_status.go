@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -477,7 +478,10 @@ func (t *tenantStatusServer) CombinedStatementStats(
 func (t *tenantStatusServer) Statements(
 	ctx context.Context, req *serverpb.StatementsRequest,
 ) (*serverpb.StatementsResponse, error) {
-	if req.Combined {
+	clusterVersion := t.st.Version.ActiveVersionOrEmpty(ctx)
+	isCombinedSQLStatsAvailable := clusterVersion.IsActive(clusterversion.SQLStatsTables)
+
+	if req.Combined && isCombinedSQLStatsAvailable {
 		combinedRequest := serverpb.CombinedStatementsStatsRequest{
 			Start: req.Start,
 			End:   req.End,
