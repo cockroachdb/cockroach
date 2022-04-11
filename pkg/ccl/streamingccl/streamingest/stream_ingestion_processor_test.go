@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"net/url"
 	"strconv"
 	"sync"
@@ -67,7 +68,7 @@ func (m *mockStreamClient) Create(
 // Heartbeat implements the Client interface.
 func (m *mockStreamClient) Heartbeat(
 	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,
-) error {
+) (*streampb.StreamReplicationStatus, error) {
 	panic("unimplemented")
 }
 

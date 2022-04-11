@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -33,6 +34,7 @@ func ingest(
 	streamAddress streamingccl.StreamAddress,
 	oldTenantID roachpb.TenantID,
 	newTenantID roachpb.TenantID,
+	streamID streaming.StreamID,
 	startTime hlc.Timestamp,
 	progress jobspb.Progress,
 	ingestionJobID jobspb.JobID,
@@ -44,11 +46,6 @@ func ingest(
 	}
 	ingestWithClient := func() error {
 		// TODO(dt): if there is an existing stream ID, reconnect to it.
-		streamID, err := client.Create(ctx, oldTenantID)
-		if err != nil {
-			return err
-		}
-
 		topology, err := client.Plan(ctx, streamID)
 		if err != nil {
 			return err
@@ -105,7 +102,8 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 
 	// Start ingesting KVs from the replication stream.
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	return ingest(resumeCtx, p, streamAddress, details.TenantID, details.NewTenantID, details.StartTime, s.job.Progress(), s.job.ID())
+	return ingest(resumeCtx, p, streamAddress, details.TenantID, details.NewTenantID,
+		streaming.StreamID(details.StreamID), details.StartTime, s.job.Progress(), s.job.ID())
 }
 
 // revertToCutoverTimestamp reads the job progress for the cutover time and

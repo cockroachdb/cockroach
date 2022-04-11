@@ -11,6 +11,7 @@ package streamclient
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"math/rand"
 	"net/url"
 	"strconv"
@@ -259,8 +260,8 @@ func (m *randomStreamClient) Create(
 // Heartbeat implements the Client interface.
 func (m *randomStreamClient) Heartbeat(
 	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,
-) error {
-	return nil
+) (*streampb.StreamReplicationStatus, error) {
+	return nil, nil
 }
 
 // getDescriptorAndNamespaceKVForTableID returns the namespace and descriptor

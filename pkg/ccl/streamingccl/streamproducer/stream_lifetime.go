@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -37,21 +38,21 @@ import (
 func completeStreamIngestion(
 	evalCtx *tree.EvalContext,
 	txn *kv.Txn,
-	streamID streaming.StreamID,
+	ingestionJobID jobspb.JobID,
 	cutoverTimestamp hlc.Timestamp,
 ) error {
 	// Get the job payload for job_id.
 	const jobsQuery = `SELECT progress FROM system.jobs WHERE id=$1 FOR UPDATE`
 	row, err := evalCtx.Planner.QueryRowEx(evalCtx.Context,
 		"get-stream-ingestion-job-metadata",
-		txn, sessiondata.NodeUserSessionDataOverride, jobsQuery, streamID)
+		txn, sessiondata.NodeUserSessionDataOverride, jobsQuery, ingestionJobID)
 	if err != nil {
 		return err
 	}
 	// If an entry does not exist for the provided job_id we return an
 	// error.
 	if row == nil {
-		return errors.Newf("job %d: not found in system.jobs table", streamID)
+		return errors.Newf("job %d: not found in system.jobs table", ingestionJobID)
 	}
 
 	progress, err := jobs.UnmarshalProgress(row[0])
@@ -61,7 +62,7 @@ func completeStreamIngestion(
 	var sp *jobspb.Progress_StreamIngest
 	var ok bool
 	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
-		return errors.Newf("job %d: not of expected type StreamIngest", streamID)
+		return errors.Newf("job %d: not of expected type StreamIngest", ingestionJobID)
 	}
 
 	// Check that the supplied cutover time is a valid one.
@@ -74,7 +75,7 @@ func completeStreamIngestion(
 			highWaterTimestamp = *hw
 		}
 		return errors.Newf("cannot cutover to a timestamp %s that is after the latest resolved time"+
-			" %s for job %d", cutoverTimestamp.String(), highWaterTimestamp.String(), streamID)
+			" %s for job %d", cutoverTimestamp.String(), highWaterTimestamp.String(), ingestionJobID)
 	}
 
 	// Reject setting a cutover time, if an earlier request to cutover has already
@@ -84,7 +85,7 @@ func completeStreamIngestion(
 	// has not started.
 	if !sp.StreamIngest.CutoverTime.IsEmpty() {
 		return errors.Newf("cutover timestamp already set to %s, "+
-			"job %d is in the process of cutting over", sp.StreamIngest.CutoverTime.String(), streamID)
+			"job %d is in the process of cutting over", sp.StreamIngest.CutoverTime.String(), ingestionJobID)
 	}
 
 	// Update the sentinel being polled by the stream ingestion job to
@@ -98,7 +99,7 @@ func completeStreamIngestion(
 	updateJobQuery := `UPDATE system.jobs SET progress=$1 WHERE id=$2`
 	_, err = evalCtx.Planner.QueryRowEx(evalCtx.Context,
 		"set-stream-ingestion-job-metadata", txn,
-		sessiondata.NodeUserSessionDataOverride, updateJobQuery, progressBytes, streamID)
+		sessiondata.NodeUserSessionDataOverride, updateJobQuery, progressBytes, ingestionJobID)
 	return err
 }
 
@@ -288,4 +289,31 @@ func completeReplicationStream(
 			}
 			return nil
 		})
+}
+
+func getStreamIngestionStats(
+	evalCtx *tree.EvalContext, txn *kv.Txn, ingestionJobID jobspb.JobID,
+) (*streampb.StreamIngestionStats, error) {
+	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
+	j, err := registry.LoadJobWithTxn(evalCtx.Ctx(), ingestionJobID, txn)
+	if err != nil {
+		return nil, err
+	}
+	details := j.Details().(jobspb.StreamIngestionDetails)
+	progress := j.Progress()
+
+	client, err := streamclient.NewStreamClient(streamingccl.StreamAddress(details.StreamAddress))
+	if err != nil {
+		return nil, err
+	}
+	streamStatus, err := client.Heartbeat(evalCtx.Ctx(), streaming.StreamID(details.StreamID), hlc.MinTimestamp)
+	err = errors.CombineErrors(err, client.Close())
+	if err != nil {
+		return nil, err
+	}
+	return &streampb.StreamIngestionStats{
+		StreamId:                details.StreamID,
+		StreamReplicationStatus: streamStatus,
+		IngestionProgress:       progress.GetStreamIngest(),
+	}, nil
 }

@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -173,9 +174,23 @@ func ingestionPlanHook(
 				oldTenantID.ToUint64(), newTenantID.ToUint64())
 		}
 
+		// Create a new stream with stream client.
+		client, err := streamclient.NewStreamClient(streamAddress)
+		if err != nil {
+			return err
+		}
+		streamID, err := client.Create(ctx, oldTenantID)
+		if err != nil {
+			return err
+		}
+		if err := client.Close(); err != nil {
+			return err
+		}
+
 		prefix := keys.MakeTenantPrefix(newTenantID)
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress: string(streamAddress),
+			StreamID:      uint64(streamID),
 			TenantID:      oldTenantID,
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			StartTime:     startTime,

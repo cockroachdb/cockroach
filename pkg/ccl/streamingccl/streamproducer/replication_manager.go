@@ -11,6 +11,7 @@ package streamproducer
 import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -26,10 +27,17 @@ type replicationStreamManagerImpl struct{}
 func (r *replicationStreamManagerImpl) CompleteStreamIngestion(
 	evalCtx *tree.EvalContext,
 	txn *kv.Txn,
-	streamID streaming.StreamID,
+	ingestionJobID jobspb.JobID,
 	cutoverTimestamp hlc.Timestamp,
 ) error {
-	return completeStreamIngestion(evalCtx, txn, streamID, cutoverTimestamp)
+	return completeStreamIngestion(evalCtx, txn, ingestionJobID, cutoverTimestamp)
+}
+
+// GetStreamIngestionStats implements ReplicationStreamManager interface.
+func (r *replicationStreamManagerImpl) GetStreamIngestionStats(
+	evalCtx *tree.EvalContext, txn *kv.Txn, ingestionJobID jobspb.JobID,
+) (*streampb.StreamIngestionStats, error) {
+	return getStreamIngestionStats(evalCtx, txn, ingestionJobID)
 }
 
 // StartReplicationStream implements ReplicationStreamManager interface.
