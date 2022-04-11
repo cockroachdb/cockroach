@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -35,6 +36,8 @@ import (
 func init() {
 	sql.AddPlanHook("alter changefeed", alterChangefeedPlanHook)
 }
+
+const telemetryPath = `changefeed.alter`
 
 // alterChangefeedPlanHook implements sql.PlanHookFn.
 func alterChangefeedPlanHook(
@@ -153,6 +156,8 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
+		telemetry.Count(telemetryPath)
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -250,6 +255,7 @@ func generateNewOpts(
 					newOptions[key] = value
 				}
 			}
+			telemetry.CountBucketed(telemetryPath+`.set_options`, int64(len(opts)))
 		case *tree.AlterChangefeedUnsetOptions:
 			optKeys := v.Options.ToStrings()
 			for _, key := range optKeys {
@@ -264,6 +270,7 @@ func generateNewOpts(
 				}
 				delete(newOptions, key)
 			}
+			telemetry.CountBucketed(telemetryPath+`.unset_options`, int64(len(optKeys)))
 		}
 	}
 
@@ -425,6 +432,7 @@ func generateNewTargets(
 			if err != nil {
 				return nil, nil, hlc.Timestamp{}, nil, err
 			}
+			telemetry.CountBucketed(telemetryPath+`.added_targets`, int64(len(v.Targets)))
 		case *tree.AlterChangefeedDropTarget:
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
@@ -450,6 +458,7 @@ func generateNewTargets(
 				}
 				delete(newTargets, k)
 			}
+			telemetry.CountBucketed(telemetryPath+`.dropped_targets`, int64(len(v.Targets)))
 		}
 	}
 
