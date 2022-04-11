@@ -102,7 +102,6 @@ func TestPutS3(t *testing.T) {
 			cloud.AuthParam, cloud.AuthParamImplicit,
 		), false, user, nil, nil, testSettings)
 	})
-
 	t.Run("auth-specified", func(t *testing.T) {
 		uri := S3URI(bucket, "backup-test",
 			&roachpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
@@ -173,6 +172,52 @@ func TestPutS3(t *testing.T) {
 			"aws:kms")
 		_, err = makeS3Storage(ctx, invalidKMSURI, user)
 		require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
+	})
+}
+
+func TestPutS3AssumeRole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// If environment credentials are not present, we want to
+	// skip all S3 tests, including auth-implicit, even though
+	// it is not used in auth-implicit.
+	creds, err := credentials.NewEnvCredentials().Get()
+	if err != nil {
+		skip.IgnoreLint(t, "No AWS credentials")
+	}
+	bucket := os.Getenv("AWS_S3_BUCKET")
+	if bucket == "" {
+		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
+	}
+
+	testSettings := cluster.MakeTestingClusterSettings()
+
+	user := security.RootUserName()
+
+	roleArn := os.Getenv(AWSRoleArnParam)
+	if roleArn == "" {
+		skip.IgnoreLintf(t, "%s env var must be set", AWSRoleArnParam)
+	}
+	t.Run("auth-implicit", func(t *testing.T) {
+		credentialsProvider := credentials.SharedCredentialsProvider{}
+		_, err := credentialsProvider.Retrieve()
+		if err != nil {
+			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
+				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+		}
+		uri := S3URI(bucket, "backup-test",
+			&roachpb.ExternalStorage_S3{Auth: cloud.AuthParamAssume, RoleArn: roleArn, Region: "us-east-1"},
+		)
+		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
+	})
+
+	t.Run("auth-specified", func(t *testing.T) {
+		uri := S3URI(bucket, "backup-test",
+			&roachpb.ExternalStorage_S3{Auth: cloud.AuthParamAssume, RoleArn: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+		)
+		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
 	})
 }
 
