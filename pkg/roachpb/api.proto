@@ -1386,6 +1386,7 @@ message ExternalStorage {
     string server_enc_mode  = 9;
     string server_kms_id = 10  [(gogoproto.customname) = "ServerKMSID"];
     string storage_class = 11;
+    string role_arn = 12;
   }
   message GCS {
     string bucket = 1;

@@ -73,42 +73,71 @@ func TestPutS3(t *testing.T) {
 
 	ctx := context.Background()
 	user := security.RootUserName()
-	t.Run("auth-empty-no-cred", func(t *testing.T) {
-		_, err := cloud.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
-			"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
-			blobs.TestEmptyBlobClientFactory, user, nil, nil)
-		require.EqualError(t, err, fmt.Sprintf(
-			`%s is set to '%s', but %s is not set`,
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
-			AWSAccessKeyParam,
-		))
+	t.Run("auth-access-key", func(t *testing.T) {
+		t.Run("empty-no-cred", func(t *testing.T) {
+			_, err := cloud.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
+				"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
+				blobs.TestEmptyBlobClientFactory, user, nil, nil)
+			require.EqualError(t, err, fmt.Sprintf(
+				"%s is set to '%s', but %s is not set",
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				AWSAccessKeyParam,
+			))
+		})
+		t.Run("implicit", func(t *testing.T) {
+			// You can create an IAM that can access S3
+			// in the AWS console, then set it up locally.
+			// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
+			// We only run this test if default role exists.
+			credentialsProvider := credentials.SharedCredentialsProvider{}
+			_, err := credentialsProvider.Retrieve()
+			if err != nil {
+				skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
+					"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+			}
+
+			cloudtestutils.CheckExportStore(t, fmt.Sprintf(
+				"s3://%s/%s?%s=%s",
+				bucket, "backup-test-default",
+				cloud.AuthParam, cloud.AuthParamImplicit,
+			), false, user, nil, nil, testSettings)
+		})
+		t.Run("specified", func(t *testing.T) {
+			uri := S3URI(bucket, "backup-test",
+				&roachpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+			)
+			cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+			cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
+		})
 	})
-	t.Run("auth-implicit", func(t *testing.T) {
-		// You can create an IAM that can access S3
-		// in the AWS console, then set it up locally.
-		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
-		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
-		if err != nil {
-			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+
+	t.Run("auth-assume-role", func(t *testing.T) {
+		roleArn := os.Getenv(AWSRoleArnParam)
+		if roleArn == "" {
+			skip.IgnoreLintf(t, "%s env var must be set", AWSRoleArnParam)
 		}
+		t.Run("implicit", func(t *testing.T) {
+			credentialsProvider := credentials.SharedCredentialsProvider{}
+			_, err := credentialsProvider.Retrieve()
+			if err != nil {
+				skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
+					"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+			}
+			uri := S3URI(bucket, "backup-test",
+				&roachpb.ExternalStorage_S3{Auth: cloud.AuthAssumeRole, RoleArn: roleArn, Region: "us-east-1"},
+			)
+			cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+			cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
+		})
 
-		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
-			"s3://%s/%s?%s=%s",
-			bucket, "backup-test-default",
-			cloud.AuthParam, cloud.AuthParamImplicit,
-		), false, user, nil, nil, testSettings)
-	})
-
-	t.Run("auth-specified", func(t *testing.T) {
-		uri := S3URI(bucket, "backup-test",
-			&roachpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
-		)
-		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
-		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
+		t.Run("specified", func(t *testing.T) {
+			uri := S3URI(bucket, "backup-test",
+				&roachpb.ExternalStorage_S3{Auth: cloud.AuthAssumeRole, RoleArn: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+			)
+			cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+			cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
+		})
 	})
 
 	// Tests that we can put an object with server side encryption specified.
