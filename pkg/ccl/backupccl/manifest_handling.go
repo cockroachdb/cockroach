@@ -93,6 +93,10 @@ const (
 	// path of the most recently taken full backup in the backup collection.
 	latestFileName = "LATEST"
 
+	// unresolvedFullSubdir is a placeholder for the time based full backup
+	// subdirectory. The full backup subdirectory gets resolved during execution.
+	unresolvedFullSubdir = "unresolvedFullSubdirPlaceholder"
+
 	// latestHistoryDirectory is the directory where all 22.1 and beyond
 	// LATEST files will be stored as we no longer want to overwrite it.
 	latestHistoryDirectory = backupMetadataDirectory + "/" + "latest"

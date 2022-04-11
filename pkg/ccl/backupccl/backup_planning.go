@@ -708,9 +708,8 @@ func backupPlanHook(
 						" subdirectory will be removed in a future release. Users can create a full backup via `BACKUP ... "+
 						"INTO <collectionURI>`, or an incremental backup on the latest full backup in their "+
 						"collection via `BACKUP ... INTO LATEST IN <collectionURI>`"))
-
 			} else {
-				initialDetails.Destination.Subdir = endTime.GoTime().Format(DateBasedIntoFolderName)
+				initialDetails.Destination.Subdir = unresolvedFullSubdir
 			}
 		}
 
@@ -1460,6 +1459,14 @@ func getBackupDetailAndManifest(
 
 		if err := requireEnterprise(execCfg, "incremental"); err != nil {
 			return jobspb.BackupDetails{}, BackupManifest{}, err
+		}
+		lastEndTime := prevBackups[len(prevBackups)-1].EndTime
+		if lastEndTime.Compare(initialDetails.EndTime) > 0 {
+			return jobspb.BackupDetails{}, BackupManifest{},
+				errors.Newf("The previous backup covers changes up to %s, "+
+					"while the current backup would only cover changes up to %s. "+
+					"Consider updating your AS OF SYSTEM TIME timestamp or the schedule you run backups",
+					lastEndTime.GoTime(), initialDetails.EndTime)
 		}
 	}
 

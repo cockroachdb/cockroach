@@ -93,6 +93,9 @@ func resolveDest(
 ) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
 
+	// TODO(msbutler): delete when old backup syntax gets removed
+	collectionFullBackup := false
+
 	defaultURI, _, err := getURIsByLocalityKV(dest.To, "")
 	if err != nil {
 		return "", "", "", nil, nil, err
@@ -110,6 +113,10 @@ func resolveDest(
 				return "", "", "", nil, nil, err
 			}
 			chosenSuffix = latest
+		}
+		if chosenSuffix == unresolvedFullSubdir {
+			chosenSuffix = endTime.GoTime().Format(DateBasedIntoFolderName)
+			collectionFullBackup = true
 		}
 	}
 
@@ -136,7 +143,19 @@ func resolveDest(
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
-	if !exists {
+	if exists && collectionFullBackup {
+		// implies we're attempting to conduct a full backup into a time formatted subdirectory that
+		// already contains full backups (likely bc this backup is AS OF SYSTEM TIME)
+		return "",
+			"",
+			"",
+			nil,
+			nil,
+			errors.Newf("A full backup already exists in %s. "+
+				"Consider running an incremental backup to this full backup via `BACKUP INTO '%s' IN '%s'`",
+				plannedBackupDefaultURI, chosenSuffix, dest.To[0])
+
+	} else if !exists {
 		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
 		return collectionURI, plannedBackupDefaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
 	}

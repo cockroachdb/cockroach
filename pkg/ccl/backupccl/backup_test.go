@@ -673,7 +673,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 		[][]string{
 			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s')", backups[0].(string), backups[1].(string),
 				backups[2].(string))},
-			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", full1, collections[0],
+			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", unresolvedFullSubdir, collections[0],
 				collections[1], collections[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", full1,
 				collections[0], collections[1], collections[2])},
@@ -3524,8 +3524,24 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 	beforeDir := localFoo + `/beforeTs`
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, beforeDir, beforeTs))
+
 	equalDir := localFoo + `/equalTs`
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, equalDir, equalTs))
+	{
+		// testing UX guardrails for AS OF SYSTEM TIME backups in collections
+		sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO '%s' AS OF SYSTEM TIME %s`, equalDir, equalTs))
+
+		sqlDB.ExpectErr(t, "The previous backup covers changes up to .* Consider updating your AS OF"+
+			" SYSTEM TIME timestamp or the schedule you run backups",
+			fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN '%s' AS OF SYSTEM TIME %s`,
+				equalDir,
+				beforeTs))
+
+		sqlDB.ExpectErr(t, "A full backup already exists in .* Consider running an incremental backup"+
+			" to this full backup via `BACKUP INTO ",
+			fmt.Sprintf(`BACKUP DATABASE data INTO '%s' AS OF SYSTEM TIME %s`, equalDir,
+				equalTs))
+	}
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 	sqlDB.Exec(t, `RESTORE data.* FROM $1`, beforeDir)
