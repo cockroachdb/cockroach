@@ -12,17 +12,43 @@
 // that must also be accessible from other packages.
 package rowinfra
 
+import (
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
+)
+
 // RowLimit represents a response limit expressed in terms of number of result
 // rows. RowLimits get ultimately converted to KeyLimits and are translated into
 // BatchRequest.MaxSpanRequestKeys.
 type RowLimit uint64
 
+var _ redact.SafeFormatter = RowLimit(0)
+
+// SafeFormat implements redact.SafeFormatter.
+func (r RowLimit) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	s.SafeUint(redact.SafeUint(r))
+}
+
 // KeyLimit represents a response limit expressed in terms of number of keys.
 type KeyLimit int64
+
+var _ redact.SafeFormatter = KeyLimit(0)
+
+// SafeFormat implements redact.SafeFormatter.
+func (k KeyLimit) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	s.SafeInt(redact.SafeInt(k))
+}
 
 // BytesLimit represents a response limit expressed in terms of the size of the
 // results. A BytesLimit ultimately translates into BatchRequest.TargetBytes.
 type BytesLimit uint64
+
+var _ redact.SafeFormatter = BytesLimit(0)
+
+// SafeFormat implements redact.SafeFormatter.
+func (b BytesLimit) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	s.SafeUint(redact.SafeUint(b))
+}
 
 // NoRowLimit can be passed to Fetcher.StartScan to signify that the caller
 // doesn't want to limit the number of result rows for each scan request.
