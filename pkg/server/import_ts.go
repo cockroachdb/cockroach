@@ -15,11 +15,6 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
-	"io"
-	"os"
-	"sort"
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +26,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	yaml "gopkg.in/yaml.v2"
+	"io"
+	"os"
+	"sort"
+	"strings"
 )
 
 // maxBatchSize governs the maximum size of the kv batch comprising of ts data
@@ -149,6 +148,9 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 
 	nodeIDs := map[string]struct{}{}
 	storeIDs := map[string]struct{}{}
+	nodeMetrics := map[string]bool{}
+	storeMetrics := map[string]bool{}
+
 	dec := gob.NewDecoder(f)
 	for {
 		var v roachpb.KeyValue
@@ -168,10 +170,18 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 			deferError(err)
 			continue
 		}
-		if strings.HasPrefix(name, "cr.node.") {
+
+		nodeMetricIdentifier := "cr.node."
+		storeMetricIdentifier := "cr.store."
+
+		if strings.HasPrefix(name, nodeMetricIdentifier) {
 			nodeIDs[source] = struct{}{}
-		} else if strings.HasPrefix(name, "cr.store.") {
+			metricName := strings.Replace(name, nodeMetricIdentifier, "", 1)
+			nodeMetrics[metricName] = true
+		} else if strings.HasPrefix(name, storeMetricIdentifier) {
 			storeIDs[source] = struct{}{}
+			metricName := strings.Replace(name, storeMetricIdentifier, "", 1)
+			storeMetrics[metricName] = true
 		} else {
 			deferError(errors.Errorf("unknown metric %s", name))
 			continue
@@ -186,7 +196,7 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 		}
 	}
 
-	fakeStatuses := makeFakeNodeStatuses(storeToNode)
+	fakeStatuses := makeFakeNodeStatuses(storeToNode, nodeMetrics, storeMetrics)
 	if err := checkFakeStatuses(fakeStatuses, storeIDs); err != nil {
 		// The checks are pretty strict and in particular make sure that there is at
 		// least one data point for each store. Sometimes stores are down for the
@@ -208,7 +218,12 @@ func maybeImportTS(ctx context.Context, s *Server) (returnErr error) {
 	return nil
 }
 
-func makeFakeNodeStatuses(storeToNode map[roachpb.StoreID]roachpb.NodeID) []statuspb.NodeStatus {
+func makeFakeNodeStatuses(
+	storeToNode map[roachpb.StoreID]roachpb.NodeID,
+	nodeMetrics map[string]bool,
+	storeMetrics map[string]bool,
+	) []statuspb.NodeStatus {
+
 	var sl []statuspb.NodeStatus
 	nodeToStore := map[roachpb.NodeID][]roachpb.StoreID{}
 	for sid, nid := range storeToNode {
@@ -223,12 +238,32 @@ func makeFakeNodeStatuses(storeToNode map[roachpb.StoreID]roachpb.NodeID) []stat
 			Desc: roachpb.NodeDescriptor{
 				NodeID: nodeID,
 			},
+			Metrics: map[string]float64{},
 		}
+
+		// populate nodeStatus.Metrics and storeStatus.Metrics
+		// with the metric names found in the dump.
+		// The value of the metric is not consequential here.
+		_storeMetrics := map[string]float64{}
+
+		for metricName, _ := range nodeMetrics {
+			nodeStatus.Metrics[metricName] = 0.0
+		}
+
+		for metricName, _ := range storeMetrics {
+			_storeMetrics[metricName] = 0.0
+			nodeStatus.Metrics[metricName] = 0.0
+		}
+
 		for _, storeID := range storeIDs {
-			nodeStatus.StoreStatuses = append(nodeStatus.StoreStatuses, statuspb.StoreStatus{Desc: roachpb.StoreDescriptor{
-				Node:    nodeStatus.Desc, // don't want cycles here
-				StoreID: storeID,
-			}})
+			storeStatus := statuspb.StoreStatus{
+				Desc: roachpb.StoreDescriptor{
+					Node:    nodeStatus.Desc, // don't want cycles here
+					StoreID: storeID,
+				},
+				Metrics: _storeMetrics,
+			}
+			nodeStatus.StoreStatuses = append(nodeStatus.StoreStatuses, storeStatus)
 		}
 
 		sl = append(sl, nodeStatus)
