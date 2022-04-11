@@ -221,6 +221,33 @@ func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
 	cancel()
 }
 
+func TestBufferCtxDoneFlushesWithTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancel := context.WithCancel(context.Background())
+	ctrl := gomock.NewController(t)
+	mock := NewMockLogSink(ctrl)
+	mock.setOutputDelay(3 * time.Second)
+	sink := newBufferSink(ctx, mock, 0 /*maxStaleness*/, 1 /*sizeTrigger*/, 0 /* maxInFlight */, nil /*errCallback*/)
+	defer ctrl.Finish()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	defer wg.Wait()
+
+	mock.EXPECT().
+		output(gomock.Eq([]byte("test1")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)})
+	mock.EXPECT().
+		output(gomock.Eq([]byte("test2")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
+		Do(addArgs(wg.Done))
+
+	require.NoError(t, sink.output([]byte("test1"), sinkOutputOptions{}))
+	require.NoError(t, sink.output([]byte("test2"), sinkOutputOptions{}))
+	cancel()
+	// Given the mock sink's output delay, this call should never be flushed, since
+	// the flusher will timeout before it has a chance to do so.
+	require.NoError(t, sink.output([]byte("test3"), sinkOutputOptions{}))
+}
+
 type sinkOutputOptionsMatcher struct {
 	extraFlush   gomock.Matcher
 	ignoreErrors gomock.Matcher

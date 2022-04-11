@@ -6,6 +6,7 @@ package log
 
 import (
 	reflect "reflect"
+	"time"
 
 	exit "github.com/cockroachdb/cockroach/pkg/cli/exit"
 	gomock "github.com/golang/mock/gomock"
@@ -15,6 +16,11 @@ import (
 type MockLogSink struct {
 	ctrl     *gomock.Controller
 	recorder *MockLogSinkMockRecorder
+	// outputDelay causes calls the the MockLogSink to sleep
+	// for the given duration before completing. This helps
+	// simulate logging sinks with slow underlying operations,
+	// such as an httpSink experiencing network issues.
+	outputDelay *time.Duration
 }
 
 // MockLogSinkMockRecorder is the mock recorder for MockLogSink.
@@ -27,6 +33,12 @@ func NewMockLogSink(ctrl *gomock.Controller) *MockLogSink {
 	mock := &MockLogSink{ctrl: ctrl}
 	mock.recorder = &MockLogSinkMockRecorder{mock}
 	return mock
+}
+
+// setOutputDelay applies a delay to output calls made to this
+// mock instance.
+func (m *MockLogSink) setOutputDelay(delay time.Duration) {
+	m.outputDelay = &delay
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
@@ -79,6 +91,9 @@ func (mr *MockLogSinkMockRecorder) exitCode() *gomock.Call {
 // output mocks base method.
 func (m *MockLogSink) output(arg0 []byte, arg1 sinkOutputOptions) error {
 	m.ctrl.T.Helper()
+	if m.outputDelay != nil {
+		time.Sleep(*m.outputDelay)
+	}
 	ret := m.ctrl.Call(m, "output", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0

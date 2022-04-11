@@ -184,7 +184,7 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 // requested.
 // See: https://github.com/cockroachdb/cockroach/issues/72459
 func (bs *bufferSink) flusher(ctx context.Context) {
-	for b := range bs.flushCh {
+	doFlush := func(b bufferSinkBundle) (stopFlush bool) {
 		if len(b.messages) > 0 {
 			// Append all the messages in the first buffer.
 			buf := b.messages[0].b
@@ -220,7 +220,46 @@ func (bs *bufferSink) flusher(ctx context.Context) {
 		// instead of a blocked channel.
 		atomic.AddInt32(&bs.nInFlight, -1)
 		if b.done {
-			return
+			return true
+		}
+		return false
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			// TODO(abarganier): hook timer duration up to a cluster setting.
+			timer := time.After(2 * time.Second)
+			for {
+				// Do our best to drain anything left on the flushCh, with a timeout.
+				select {
+				case <-timer:
+					if len(bs.flushCh) > 0 {
+						Ops.Warningf(ctx, "timed out flushing buffered logs: %d batches dropped", len(bs.flushCh))
+					}
+					return
+				// For the same reason as the normal consumption case below, attempt to drain
+				// `flushCh` in the default case here to ensure we give priority to the timer.
+				default:
+					select {
+					case b := <-bs.flushCh:
+						if stopFlush := doFlush(b); stopFlush {
+							return
+						}
+					}
+				}
+			}
+		// nest normal consumption of `flushCh` in the default case so that we always
+		// give priority to `ctx.Done()`. This is necessary because Go does not follow
+		// and specific rule or priority when picking channels in select statements, if
+		// both channels are empty.
+		default:
+			select {
+			case b := <-bs.flushCh:
+				if stopFlush := doFlush(b); stopFlush {
+					return
+				}
+			}
 		}
 	}
 }
