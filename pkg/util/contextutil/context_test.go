@@ -93,6 +93,19 @@ func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
 	}
 }
 
+func TestRunWithTimeoutAfterDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+	err := RunWithTimeout(ctx, "test", time.Second, func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	require.Error(t, err)
+	require.Equal(t,
+		`operation "test" timed out after 1ms (given timeout 1s): context deadline exceeded`,
+		err.Error())
+}
+
 func TestCancelWithReason(t *testing.T) {
 	ctx := context.Background()
 
