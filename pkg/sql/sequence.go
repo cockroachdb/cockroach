@@ -333,7 +333,7 @@ func (p *planner) SetSequenceValueByID(
 	}
 
 	// Clear out the cache and update the last value if needed.
-	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+	p.sessionDataMutatorIterator.applyForEachMutator(func(m sessionDataMutator) {
 		m.initSequenceCache()
 		if isCalled {
 			m.RecordLatestSequenceVal(seqID, newVal)
