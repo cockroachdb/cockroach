@@ -145,7 +145,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		// by yourself or by roles that you are a member of.
 		for _, targetRole := range targetRoles {
 			if targetRole != params.p.User() {
-				paramUserID, err := GetUserID(params.ctx, params.p.execCfg.InternalExecutor, params.p.txn, params.p.User())
+				paramUserID, err := GetUserIDWithCache(params.ctx, params.p.execCfg, params.p.txn, params.p.User())
 				if err != nil {
 					return err
 				}

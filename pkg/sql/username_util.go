@@ -16,11 +16,65 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
+
+func GetUserIDWithCache(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, role security.SQLUsername,
+) (oid.Oid, error) {
+	roleIDCache := execCfg.RoleIDCache
+	roleIDCache.Mutex.Lock()
+	defer roleIDCache.Unlock()
+	// First try to consult cache.
+	var usersTableDesc catalog.TableDescriptor
+	var err error
+	err = execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		_, usersTableDesc, err = descriptors.GetImmutableTableByName(
+			ctx,
+			txn,
+			sessioninit.UsersTableName,
+			tree.ObjectLookupFlagsWithRequired(),
+		)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	usersTableVersion := usersTableDesc.GetVersion()
+
+	if usersTableVersion > roleIDCache.tableVersion {
+		// Clear cache.
+		roleIDCache.roleIDMap = make(map[security.SQLUsername]oid.Oid)
+		roleID, err := GetUserID(ctx, execCfg.InternalExecutor, txn, role)
+		if err != nil {
+			return 0, err
+		}
+
+		roleIDCache.tableVersion = usersTableVersion
+		roleIDCache.roleIDMap[role] = roleID
+	}
+
+	// Cache is valid, do a lookup.
+	id, found := roleIDCache.roleIDMap[role]
+	if !found {
+		roleID, err := GetUserID(ctx, execCfg.InternalExecutor, txn, role)
+		if err != nil {
+			return 0, err
+		}
+		roleIDCache.roleIDMap[role] = roleID
+	}
+
+	return id, nil
+}
 
 // GetUserID returns id of the user if role exists
 // GetUserID returns 0 if the system.users table does not have a role id column
@@ -31,7 +85,7 @@ func GetUserID(
 ) (oid.Oid, error) {
 	var userID oid.Oid
 
-	values, err := executor.QueryRowEx(ctx, "get-system-users-columns", nil, sessiondata.InternalExecutorOverride{
+	values, err := executor.QueryRowEx(ctx, "get-system-users-columns", txn, sessiondata.InternalExecutorOverride{
 		User: security.RootUserName(),
 	}, `SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM system.users] WHERE column_name = 'user_id')`)
 	if err != nil {
@@ -46,7 +100,7 @@ func GetUserID(
 	}
 
 	query := `SELECT user_id FROM system.users WHERE username=$1`
-	values, err = executor.QueryRowEx(ctx, "GetUserID", nil, sessiondata.InternalExecutorOverride{
+	values, err = executor.QueryRowEx(ctx, "GetUserID", txn, sessiondata.InternalExecutorOverride{
 		User: security.RootUserName(),
 	},
 		query, role)
@@ -66,7 +120,7 @@ func GetUserID(
 
 // PublicRoleInfo is the SQLUsername for PublicRole.
 func PublicRoleInfo(ctx context.Context, p *planner) security.SQLUserInfo {
-	id, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, security.PublicRoleName())
+	id, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, security.PublicRoleName())
 	if err != nil {
 		panic(err)
 	}

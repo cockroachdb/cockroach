@@ -368,12 +368,12 @@ func makeRoleMembersRestoreFunc(
 				return err
 			}
 
-			roleID, err := sql.GetUserID(ctx, executor, txn, username)
+			roleID, err := sql.GetUserID(ctx, execCfg.InternalExecutor, txn, username)
 			if err != nil {
 				return err
 			}
 
-			memberID, err := sql.GetUserID(ctx, executor, txn, memberName)
+			memberID, err := sql.GetUserID(ctx, execCfg.InternalExecutor, txn, memberName)
 			if err != nil {
 				return err
 			}
@@ -445,7 +445,7 @@ func makeRoleOptionsRestoreFunc(
 			if err != nil {
 				return err
 			}
-			roleID, err := sql.GetUserID(ctx, executor, txn, sqlUsername)
+			roleID, err := sql.GetUserID(ctx, execCfg.InternalExecutor, txn, sqlUsername)
 			if err != nil {
 				return err
 			}

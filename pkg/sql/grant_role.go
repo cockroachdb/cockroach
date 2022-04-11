@@ -56,7 +56,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 		return nil, err
 	}
 	// Check permissions on each role.
-	userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, p.User())
+	userID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, p.User())
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	// After adding a given edge (grant.Member ∈ grant.Role), we add the edge to the list as well.
 	allRoleMemberships := make(map[security.SQLUsername]map[security.SQLUsername]bool)
 	for _, r := range inputRoles {
-		rID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, r)
+		rID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, r)
 		if err != nil {
 			return nil, err
 		}

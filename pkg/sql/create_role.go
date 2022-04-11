@@ -162,7 +162,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			rowsAffected,
 		)
 	}
-	roleID, err := GetUserID(params.ctx, params.ExecCfg().InternalExecutor, params.p.txn, n.roleName)
+	roleID, err := GetUserIDWithCache(params.ctx, params.ExecCfg(), params.p.txn, n.roleName)
 	if err != nil {
 		return err
 	}

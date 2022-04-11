@@ -69,6 +69,20 @@ func NewMembershipCache(account mon.BoundAccount, stopper *stop.Stopper) *Member
 // userRoleMembership is a mapping of "rolename" -> "with admin option".
 //type userRoleMembership map[security.SQLUsername]bool
 
+type sqlUsernameToRoleID map[security.SQLUsername]oid.Oid
+
+type RoleIDCache struct {
+	syncutil.Mutex
+	tableVersion descpb.DescriptorVersion
+	roleIDMap    sqlUsernameToRoleID
+	//boundAccount mon.BoundAccount
+}
+
+// NewRoleIDCache initializes a new RoleIDCache.
+func NewRoleIDCache(account mon.BoundAccount, stopper *stop.Stopper) *RoleIDCache {
+	return &RoleIDCache{}
+}
+
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
@@ -257,7 +271,7 @@ func (p *planner) checkRolePredicate(
 	if ok := predicate(user); ok {
 		return ok, nil
 	}
-	userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, user)
+	userID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, user)
 	if err != nil {
 		return false, err
 	}
@@ -303,7 +317,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 	}
 
 	// Expand role memberships.
-	userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, user)
+	userID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, user)
 	if err != nil {
 		return err
 	}
@@ -345,7 +359,7 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user security.SQLUsernam
 	}
 
 	// Expand role memberships.
-	userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, user)
+	userID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, user)
 	if err != nil {
 		return false, err
 	}
@@ -633,7 +647,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return true, nil
 	}
 
-	roleID, err := GetUserID(ctx, p.ExecCfg().InternalExecutor, p.txn, user)
+	roleID, err := GetUserIDWithCache(ctx, p.ExecCfg(), p.txn, user)
 	if err != nil {
 		return false, err
 	}
@@ -817,7 +831,7 @@ func (p *planner) checkCanAlterToNewOwner(
 	if p.User() == newOwner {
 		return nil
 	}
-	userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, p.User())
+	userID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, p.User())
 	if err != nil {
 		return err
 	}

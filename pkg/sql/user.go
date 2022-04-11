@@ -132,7 +132,7 @@ func GetUserSessionInitInfo(
 			ie,
 			execCfg.DB,
 			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				userID, err := GetUserID(ctx, execCfg.InternalExecutor, txn, username)
+				userID, err := GetUserIDWithCache(ctx, execCfg, txn, username)
 				if err != nil {
 					return err
 				}
@@ -612,7 +612,7 @@ func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQ
 		)
 	}
 
-	userID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, sessionUser)
+	userID, err := GetUserIDWithCache(ctx, p.execCfg, p.txn, sessionUser)
 	if err != nil {
 		return err
 	}
