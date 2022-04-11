@@ -639,6 +639,69 @@ func registerBackup(r registry.Registry) {
 		},
 	})
 
+	r.Add(registry.TestSpec{
+		Name:            "backup/assume-role/AWS",
+		Owner:           registry.OwnerBulkIO,
+		Cluster:         r.MakeClusterSpec(3),
+		EncryptAtRandom: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			q := make(url.Values)
+			expect := map[string]string{
+				"AWS_ACCESS_KEY_ID_ASSUME_ROLE":     amazon.AWSAccessKeyParam,
+				"AWS_SECRET_ACCESS_KEY_ASSUME_ROLE": amazon.AWSSecretParam,
+				"AWS_ROLE_ARN":                      amazon.AWSRoleArnParam,
+				KMSRegionAEnvVar:                    amazon.KMSRegionParam,
+			}
+			for env, param := range expect {
+				v := os.Getenv(env)
+				if v == "" {
+					t.Errorf("env variable %s must be present to run the KMS test", env)
+				}
+				q.Add(param, v)
+			}
+			q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
+
+			rows := rows3GiB
+			if c.IsLocal() {
+				rows = 100
+			}
+			if c.Spec().Cloud != spec.AWS {
+				t.Skip("backup assumeRole is only configured to run on "+spec.AWS, "")
+			}
+			dest := importBankData(ctx, rows, t, c)
+			tick, perfBuf := initBulkJobPerfArtifacts("backup/3GiB", 2*time.Hour)
+
+			m := c.NewMonitor(ctx)
+			m.Go(func(ctx context.Context) error {
+				t.Status(`running backup`)
+				// Tick once before starting the backup, and once after to capture the
+				// total elapsed time. This is used by roachperf to compute and display
+				// the average MB/sec per node.
+				tick()
+				kmsURI, err := getAWSKMSAssumeRoleURI(KMSRegionAEnvVar, KMSKeyARNAEnvVar)
+				if err != nil {
+					return err
+				}
+				c.Run(ctx, c.Node(1), fmt.Sprintf(
+					"./cockroach sql --insecure -e \"BACKUP bank.bank TO 's3://cockroachdb-backup-testing/%s?%s' WITH KMS='%s'\"",
+					dest, q.Encode(), kmsURI))
+				tick()
+
+				// Upload the perf artifacts to any one of the nodes so that the test
+				// runner copies it into an appropriate directory path.
+				dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+				if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+					log.Errorf(ctx, "failed to create perf dir: %+v", err)
+				}
+				if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
+					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+				}
+				return nil
+			})
+			m.Wait()
+		},
+	})
+
 	KMSSpec := r.MakeClusterSpec(3)
 	for _, item := range []struct {
 		kmsProvider string
@@ -1011,6 +1074,35 @@ func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
 
 	// Set AUTH to specified
 	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
+	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
+
+	return correctURI, nil
+}
+
+func getAWSKMSAssumeRoleURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
+	q := make(url.Values)
+	expect := map[string]string{
+		"AWS_ACCESS_KEY_ID_ASSUME_ROLE":     amazon.AWSAccessKeyParam,
+		"AWS_SECRET_ACCESS_KEY_ASSUME_ROLE": amazon.AWSSecretParam,
+		"AWS_ROLE_ARN":                      amazon.AWSRoleArnParam,
+		regionEnvVariable:                   amazon.KMSRegionParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			return "", errors.Newf("env variable %s must be present to run the KMS test", env)
+		}
+		q.Add(param, v)
+	}
+
+	// Get AWS Key ARN from env variable.
+	keyARN := os.Getenv(keyIDEnvVariable)
+	if keyARN == "" {
+		return "", errors.Newf("env variable %s must be present to run the KMS test", keyIDEnvVariable)
+	}
+
+	// Set AUTH to assume role
+	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
 	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 
 	return correctURI, nil
