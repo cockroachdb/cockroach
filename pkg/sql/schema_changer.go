@@ -1059,7 +1059,10 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 			ctx,
 			txn,
 			tbl.GetParentID(),
-			tree.DatabaseLookupFlags{Required: true},
+			tree.DatabaseLookupFlags{
+				Required:    true,
+				AvoidLeased: true,
+			},
 		)
 		if err != nil {
 			return err
@@ -1314,7 +1317,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			ctx,
 			txn,
 			scTable.GetParentID(),
-			tree.DatabaseLookupFlags{Required: true},
+			tree.DatabaseLookupFlags{
+				Required:    true,
+				AvoidLeased: true,
+			},
 		)
 		if err != nil {
 			return err
