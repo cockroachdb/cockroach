@@ -300,6 +300,14 @@ func shouldReplicaQuiesce(
 		}
 		return nil, nil, false
 	}
+
+	if q.hasRaftReadyRLocked() {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: raft ready")
+		}
+		return nil, nil, false
+	}
+
 	status := q.raftStatusRLocked()
 	if status == nil {
 		if log.V(4) {
@@ -387,12 +395,6 @@ func shouldReplicaQuiesce(
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: %d not found in progress: %+v",
 				status.ID, status.Progress)
-		}
-		return nil, nil, false
-	}
-	if q.hasRaftReadyRLocked() {
-		if log.V(4) {
-			log.Infof(ctx, "not quiescing: raft ready")
 		}
 		return nil, nil, false
 	}
