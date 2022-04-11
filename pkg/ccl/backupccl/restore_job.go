@@ -142,17 +142,24 @@ func restoreWithRetry(
 	var res roachpb.RowCount
 	var err error
 	for r := retry.StartWithCtx(restoreCtx, retryOpts); r.Next(); {
-		res, err = restore(
-			restoreCtx,
-			execCtx,
-			numNodes,
-			backupManifests,
-			backupLocalityInfo,
-			endTime,
-			dataToRestore,
-			job,
-			encryption,
-		)
+		// Re-plan inner loop (does not count as retries, done by outer loop).
+		for {
+			res, err = restore(
+				restoreCtx,
+				execCtx,
+				numNodes,
+				backupManifests,
+				backupLocalityInfo,
+				endTime,
+				dataToRestore,
+				job,
+				encryption,
+			)
+			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
+				break
+			}
+		}
+
 		if err == nil {
 			break
 		}
