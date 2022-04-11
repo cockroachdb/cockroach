@@ -113,8 +113,6 @@ const (
 	ExplainFlagEnv
 	ExplainFlagCatalog
 	ExplainFlagJSON
-	ExplainFlagStages
-	ExplainFlagDeps
 	ExplainFlagMemo
 	ExplainFlagShape
 	numExplainFlags = iota
@@ -126,8 +124,6 @@ var explainFlagStrings = [...]string{
 	ExplainFlagEnv:     "ENV",
 	ExplainFlagCatalog: "CATALOG",
 	ExplainFlagJSON:    "JSON",
-	ExplainFlagStages:  "STAGES",
-	ExplainFlagDeps:    "DEPS",
 	ExplainFlagMemo:    "MEMO",
 	ExplainFlagShape:   "SHAPE",
 }
