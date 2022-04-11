@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,6 +29,7 @@ const awsScheme = "aws"
 type awsKMS struct {
 	kms                 *kms.KMS
 	customerMasterKeyID string
+	roleArn             string
 }
 
 var _ cloud.KMS = &awsKMS{}
@@ -43,6 +45,7 @@ type kmsURIParams struct {
 	endpoint  string
 	region    string
 	auth      string
+	roleArn   string
 }
 
 func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
@@ -53,6 +56,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 		endpoint:  kmsURI.Query().Get(AWSEndpointParam),
 		region:    kmsURI.Query().Get(KMSRegionParam),
 		auth:      kmsURI.Query().Get(cloud.AuthParam),
+		roleArn:   kmsURI.Query().Get(AWSRoleArnParam),
 	}
 
 	// AWS secrets often contain + characters, which must be escaped when
@@ -109,23 +113,42 @@ func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	opts := session.Options{}
 	switch kmsURIParams.auth {
 	case "", cloud.AuthParamSpecified:
-		if kmsURIParams.accessKey == "" {
+		// Credentials can either be specified with an access key and secret
+		// or with AssumeRole.
+		if kmsURIParams.accessKey != "" || kmsURIParams.secret != "" {
+			// User appears to be trying to authenticate with an access key.
+			if kmsURIParams.roleArn != "" {
+				return nil, errors.Errorf(
+					"Only one form of authentication must be set, %s and %s to authenticate with an access key or %s to authenticate with an IAM Role",
+					AWSAccessKeyParam,
+					AWSSecretParam,
+					AWSRoleArnParam,
+				)
+			}
+			if kmsURIParams.accessKey == "" {
+				return nil, errors.Errorf(
+					"To authenticate with an access key, %s must also be set",
+					AWSAccessKeyParam,
+				)
+			}
+			if kmsURIParams.secret == "" {
+				return nil, errors.Errorf(
+					"To authenticate with an access key, %s must also be set",
+					AWSSecretParam,
+				)
+			}
+			// We only want to merge in the credentials if they are specified.
+			opts.Config.MergeIn(awsConfig)
+		} else if kmsURIParams.roleArn == "" {
 			return nil, errors.Errorf(
-				"%s is set to '%s', but %s is not set",
+				"%s is set to '%s', but either %s and %s to authenticate with an access key or %s to authenticate with an IAM Role must be set",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
 				AWSAccessKeyParam,
-			)
-		}
-		if kmsURIParams.secret == "" {
-			return nil, errors.Errorf(
-				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
 				AWSSecretParam,
+				AWSRoleArnParam,
 			)
 		}
-		opts.Config.MergeIn(awsConfig)
 	case cloud.AuthParamImplicit:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
@@ -136,19 +159,26 @@ func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
 
-	sess, err := session.NewSessionWithOptions(opts)
-	if err != nil {
-		return nil, errors.Wrap(err, "new aws session")
-	}
 	if region == "" {
 		// TODO(adityamaru): Maybe use the KeyID to get the region, similar to how
 		// we infer the region from the bucket for s3_storage.
 		return nil, errors.New("could not find the aws kms region")
 	}
+
+	sess, err := session.NewSessionWithOptions(opts)
+	if err != nil {
+		return nil, errors.Wrap(err, "new aws session")
+	}
+
 	sess.Config.Region = aws.String(region)
+
+	// AssumeRole if used happens when Encrypt() and Decrypt() is called
+	// by creating a Grant Token. So no need
+	// to pass in options like we do when authenticating with a user key.
 	return &awsKMS{
 		kms:                 kms.New(sess),
 		customerMasterKeyID: strings.TrimPrefix(kmsURI.Path, "/"),
+		roleArn:             kmsURIParams.roleArn,
 	}, nil
 }
 
@@ -159,9 +189,39 @@ func (k *awsKMS) MasterKeyID() (string, error) {
 
 // Encrypt implements the KMS interface.
 func (k *awsKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
+	var grantTokens []*string
+	if k.roleArn != "" {
+		input := &kms.CreateGrantInput{
+			GranteePrincipal: aws.String(k.roleArn),
+			KeyId:            aws.String(k.customerMasterKeyID),
+			Operations: []*string{
+				aws.String("Encrypt"),
+			},
+		}
+		grant, err := k.kms.CreateGrant(input)
+		if err != nil {
+			return nil, errors.Wrap(err, "AWS KMS: could not create grant")
+		}
+
+		revokeGrantInput := &kms.RevokeGrantInput{
+			GrantId: grant.GrantId,
+			KeyId:   aws.String(k.customerMasterKeyID),
+		}
+		revokeGrant := func() {
+			_, err = k.kms.RevokeGrant(revokeGrantInput)
+			if err != nil {
+				log.Warningf(ctx, "unable to revoke AWS KMS grant: %s", err)
+			}
+		}
+
+		grantTokens = append(grantTokens, grant.GrantToken)
+		defer revokeGrant()
+	}
+
 	encryptInput := &kms.EncryptInput{
-		KeyId:     &k.customerMasterKeyID,
-		Plaintext: data,
+		KeyId:       &k.customerMasterKeyID,
+		Plaintext:   data,
+		GrantTokens: grantTokens,
 	}
 
 	encryptOutput, err := k.kms.Encrypt(encryptInput)
@@ -174,9 +234,40 @@ func (k *awsKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
 
 // Decrypt implements the KMS interface.
 func (k *awsKMS) Decrypt(ctx context.Context, data []byte) ([]byte, error) {
+	var grantTokens []*string
+	if k.roleArn != "" {
+		input := &kms.CreateGrantInput{
+			GranteePrincipal: aws.String(k.roleArn),
+			KeyId:            aws.String(k.customerMasterKeyID),
+			Operations: []*string{
+				aws.String("Decrypt"),
+			},
+		}
+
+		grant, err := k.kms.CreateGrant(input)
+		if err != nil {
+			return nil, errors.Wrap(err, "AWS KMS: could not create grant")
+		}
+
+		revokeGrantInput := &kms.RevokeGrantInput{
+			GrantId: grant.GrantId,
+			KeyId:   aws.String(k.customerMasterKeyID),
+		}
+		revokeGrant := func() {
+			_, err = k.kms.RevokeGrant(revokeGrantInput)
+			if err != nil {
+				log.Warningf(ctx, "unable to revoke AWS KMS grant: %s", err)
+			}
+		}
+
+		grantTokens = append(grantTokens, grant.GrantToken)
+		defer revokeGrant()
+	}
+
 	decryptInput := &kms.DecryptInput{
 		KeyId:          &k.customerMasterKeyID,
 		CiphertextBlob: data,
+		GrantTokens:    grantTokens,
 	}
 
 	decryptOutput, err := k.kms.Decrypt(decryptInput)

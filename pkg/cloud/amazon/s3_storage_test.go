@@ -78,10 +78,12 @@ func TestPutS3(t *testing.T) {
 			"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
 			blobs.TestEmptyBlobClientFactory, user, nil, nil)
 		require.EqualError(t, err, fmt.Sprintf(
-			`%s is set to '%s', but %s is not set`,
+			"%s is set to '%s', but either %s and %s to authenticate with an access key or %s to authenticate with an IAM Role must be set",
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
 			AWSAccessKeyParam,
+			AWSSecretParam,
+			AWSRoleArnParam,
 		))
 	})
 	t.Run("auth-implicit", func(t *testing.T) {
@@ -103,9 +105,21 @@ func TestPutS3(t *testing.T) {
 		), false, user, nil, nil, testSettings)
 	})
 
-	t.Run("auth-specified", func(t *testing.T) {
+	t.Run("auth-specified-access-key", func(t *testing.T) {
 		uri := S3URI(bucket, "backup-test",
 			&roachpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+		)
+		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
+	})
+
+	t.Run("auth-specified-assume-role", func(t *testing.T) {
+		roleArn := os.Getenv(AWSRoleArnParam)
+		if roleArn == "" {
+			skip.IgnoreLintf(t, "%s env var must be set", AWSRoleArnParam)
+		}
+		uri := S3URI(bucket, "backup-test",
+			&roachpb.ExternalStorage_S3{RoleArn: roleArn, Region: "us-east-1"},
 		)
 		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)

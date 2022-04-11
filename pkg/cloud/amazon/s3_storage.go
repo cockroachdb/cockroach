@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -68,6 +69,10 @@ const (
 
 	// KMSRegionParam is the query parameter for the 'region' in every KMS URI.
 	KMSRegionParam = "REGION"
+
+	// AWSRoleArnParam is the query parameter for the 'role ARN' in an AWS
+	// URI, use if credentials are being verified with Assume Role.
+	AWSRoleArnParam = "AWS_ROLE_ARN"
 )
 
 type s3Storage struct {
@@ -100,7 +105,7 @@ var reuseSession = settings.RegisterBoolSetting(
 // requests).
 type s3ClientConfig struct {
 	// copied from ExternalStorage_S3.
-	endpoint, region, bucket, accessKey, secret, tempToken, auth string
+	endpoint, region, bucket, accessKey, secret, tempToken, auth, roleArn string
 	// log.V(2) decides session init params so include it in key.
 	verbose bool
 }
@@ -115,6 +120,7 @@ func clientConfig(conf *roachpb.ExternalStorage_S3) s3ClientConfig {
 		tempToken: conf.TempToken,
 		auth:      conf.Auth,
 		verbose:   log.V(2),
+		roleArn:   conf.RoleArn,
 	}
 }
 
@@ -151,6 +157,7 @@ func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
 	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
 	setIf(S3StorageClassParam, conf.StorageClass)
+	setIf(AWSRoleArnParam, conf.RoleArn)
 
 	s3URL := url.URL{
 		Scheme:   "s3",
@@ -177,6 +184,7 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 		ServerEncMode: uri.Query().Get(AWSServerSideEncryptionMode),
 		ServerKMSID:   uri.Query().Get(AWSServerSideEncryptionKMSID),
 		StorageClass:  uri.Query().Get(S3StorageClassParam),
+		RoleArn:       uri.Query().Get(AWSRoleArnParam),
 		/* NB: additions here should also update s3QueryParams() serializer */
 	}
 	conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
@@ -210,20 +218,38 @@ func MakeS3Storage(
 
 	switch conf.Auth {
 	case "", cloud.AuthParamSpecified:
-		if conf.AccessKey == "" {
+		// Credentials can either be specified with an access key and secret
+		// or with AssumeRole.
+		if conf.AccessKey != "" || conf.Secret != "" {
+			// User appears to be trying to authenticate with an access key.
+			if conf.RoleArn != "" {
+				return nil, errors.Errorf(
+					"Only one form of authentication must be set, %s and %s to authenticate with an access key or %s to authenticate with an IAM Role",
+					AWSAccessKeyParam,
+					AWSSecretParam,
+					AWSRoleArnParam,
+				)
+			}
+			if conf.AccessKey == "" {
+				return nil, errors.Errorf(
+					"To authenticate with an access key, %s must also be set",
+					AWSAccessKeyParam,
+				)
+			}
+			if conf.Secret == "" {
+				return nil, errors.Errorf(
+					"To authenticate with an access key, %s must also be set",
+					AWSSecretParam,
+				)
+			}
+		} else if conf.RoleArn == "" {
 			return nil, errors.Errorf(
-				"%s is set to '%s', but %s is not set",
+				"%s is set to '%s', but either %s and %s to authenticate with an access key or %s to authenticate with an IAM Role must be set",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
 				AWSAccessKeyParam,
-			)
-		}
-		if conf.Secret == "" {
-			return nil, errors.Errorf(
-				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
 				AWSSecretParam,
+				AWSRoleArnParam,
 			)
 		}
 	case cloud.AuthParamImplicit:
@@ -319,13 +345,6 @@ func newClient(
 		opts.Config.HTTPClient = client
 	}
 
-	switch conf.auth {
-	case "", cloud.AuthParamSpecified:
-		opts.Config.WithCredentials(credentials.NewStaticCredentials(conf.accessKey, conf.secret, conf.tempToken))
-	case cloud.AuthParamImplicit:
-		opts.SharedConfigState = session.SharedConfigEnable
-	}
-
 	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
 	opts.Config.MaxRetries = aws.Int(10)
 
@@ -335,9 +354,27 @@ func newClient(
 		opts.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
 	}
 
-	sess, err := session.NewSessionWithOptions(opts)
-	if err != nil {
-		return s3Client{}, "", errors.Wrap(err, "new aws session")
+	var sess *session.Session
+	var err error
+	var creds *credentials.Credentials
+
+	switch conf.auth {
+	case "", cloud.AuthParamSpecified:
+		sess, err = session.NewSessionWithOptions(opts)
+		if err != nil {
+			return s3Client{}, "", errors.Wrap(err, "new aws session")
+		}
+		if conf.accessKey != "" {
+			creds = credentials.NewStaticCredentials(conf.accessKey, conf.secret, conf.tempToken)
+		} else {
+			creds = stscreds.NewCredentials(sess, conf.roleArn)
+		}
+	case cloud.AuthParamImplicit:
+		opts.SharedConfigState = session.SharedConfigEnable
+		sess, err = session.NewSessionWithOptions(opts)
+		if err != nil {
+			return s3Client{}, "", errors.Wrap(err, "new aws session")
+		}
 	}
 
 	region := conf.region
@@ -351,7 +388,7 @@ func newClient(
 	}
 	sess.Config.Region = aws.String(region)
 
-	c := s3.New(sess)
+	c := s3.New(sess, &aws.Config{Credentials: creds})
 	u := s3manager.NewUploader(sess)
 	return s3Client{client: c, uploader: u}, region, nil
 }
