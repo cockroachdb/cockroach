@@ -854,10 +854,21 @@ if not hidedownloads:
 
     print("""### Downloads
 
+#### Full CockroachDB executable
+
 <div id="os-tabs" class="filters clearfix">
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.linux-amd64.tgz"><button id="linux" class="filter-button" data-scope="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.darwin-10.9-amd64.tgz"><button id="mac" class="filter-button" data-scope="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
     <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.windows-6.2-amd64.zip"><button id="windows" class="filter-button" data-scope="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
+    <a target="_blank" href="https://github.com/cockroachdb/cockroach/releases/tag/""" + current_version + '"' + """><button id="source" class="filter-button" data-scope="source" data-eventcategory="source-release-notes">Source</button></a>
+</div>
+
+#### SQL-only executable
+
+<div id="os-tabs" class="filters clearfix">
+    <a href="https://binaries.cockroachdb.com/cockroach-sql-""" + current_version + """.linux-amd64"><button id="linux" class="filter-button" data-scope="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-sql-""" + current_version + """.darwin-10.9-amd64"><button id="mac" class="filter-button" data-scope="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-sql-""" + current_version + """.windows-6.2-amd64.exe"><button id="windows" class="filter-button" data-scope="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
     <a target="_blank" href="https://github.com/cockroachdb/cockroach/releases/tag/""" + current_version + '"' + """><button id="source" class="filter-button" data-scope="source" data-eventcategory="source-release-notes">Source</button></a>
 </div>
 
