@@ -465,7 +465,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 			0, /* no target */
 			&eventpb.AlterRole{
 				RoleName: roleName.Normalized(),
-				Options:  []string{roleoption.DEFAULTSETTINGS.String()},
+				SetInfo:  []string{"DEFAULTSETTINGS"},
 			})
 	}
 
