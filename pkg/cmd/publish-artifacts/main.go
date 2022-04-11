@@ -94,32 +94,44 @@ func main() {
 	}
 	log.Printf("Using S3 bucket: %s", bucketName)
 
-	releaseVersionStrs := []string{versionStr}
+	run(svc, runFlags{
+		pkgDir:     pkg,
+		branch:     branch,
+		sha:        versionStr,
+		bucketName: bucketName,
+	}, release.ExecFn{})
+}
 
+type runFlags struct {
+	branch, sha string
+	pkgDir      string
+	bucketName  string
+}
+
+func run(svc s3putter, flags runFlags, execFn release.ExecFn) {
 	for _, platform := range []release.Platform{release.PlatformLinux, release.PlatformMacOS, release.PlatformWindows} {
 		var o opts
 		o.Platform = platform
-		o.ReleaseVersionStrs = releaseVersionStrs
-		o.PkgDir = pkg
-		o.Branch = branch
-		o.VersionStr = versionStr
-		o.BucketName = bucketName
-		o.Branch = branch
-		o.AbsolutePath = filepath.Join(pkg, "cockroach"+release.SuffixFromPlatform(platform))
+		o.ReleaseVersionStrs = []string{flags.sha}
+		o.PkgDir = flags.pkgDir
+		o.Branch = flags.branch
+		o.VersionStr = flags.sha
+		o.BucketName = flags.bucketName
+		o.AbsolutePath = filepath.Join(flags.pkgDir, "cockroach"+release.SuffixFromPlatform(platform))
 
 		log.Printf("building %s", pretty.Sprint(o))
 
-		buildOneCockroach(svc, o)
+		buildOneCockroach(svc, o, execFn)
 	}
 }
 
-func buildOneCockroach(svc s3putter, o opts) {
+func buildOneCockroach(svc s3putter, o opts, execFn release.ExecFn) {
 	log.Printf("building cockroach %s", pretty.Sprint(o))
 	defer func() {
 		log.Printf("done building cockroach: %s", pretty.Sprint(o))
 	}()
 
-	if err := release.MakeRelease(o.Platform, release.BuildOptions{}, o.PkgDir); err != nil {
+	if err := release.MakeRelease(o.Platform, release.BuildOptions{ExecFn: execFn}, o.PkgDir); err != nil {
 		log.Fatal(err)
 	}
 

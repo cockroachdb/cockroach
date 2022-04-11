@@ -23,14 +23,14 @@ go_binary(
 go_test(
     name = "publish-artifacts_test",
     size = "small",
-    srcs = [
-        "main_test.go",
-        "slow_test.go",
-    ],
+    srcs = ["main_test.go"],
     embed = [":publish-artifacts_lib"],
     deps = [
-        "//pkg/testutils/skip",
+        "//pkg/release",
+        "//pkg/testutils",
+        "@com_github_alessio_shellescape//:shellescape",
         "@com_github_aws_aws_sdk_go//service/s3",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
