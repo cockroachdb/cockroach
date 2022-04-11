@@ -70,33 +70,6 @@ func buildURL(gv string) (string, error) {
 	}).String(), nil
 }
 
-// DecorateErrorWithPlanDetails adds plan graphviz URLs as error details.
-func DecorateErrorWithPlanDetails(
-	err error, cs scpb.CurrentState, g *scgraph.Graph, stages []scstage.Stage,
-) error {
-	if err == nil {
-		return nil
-	}
-
-	if len(stages) > 0 {
-		stagesURL, stagesErr := StagesURL(cs, g, stages)
-		if stagesErr != nil {
-			return errors.CombineErrors(err, stagesErr)
-		}
-		err = errors.WithDetailf(err, "stages: %s", stagesURL)
-	}
-
-	if g != nil {
-		dependenciesURL, dependenciesErr := DependenciesURL(cs, g)
-		if dependenciesErr != nil {
-			return errors.CombineErrors(err, dependenciesErr)
-		}
-		err = errors.WithDetailf(err, "dependencies: %s", dependenciesURL)
-	}
-
-	return errors.WithAssertionFailure(err)
-}
-
 // DrawStages returns a graphviz string of the stages of the Plan.
 func DrawStages(cs scpb.CurrentState, g *scgraph.Graph, stages []scstage.Stage) (string, error) {
 	if len(stages) == 0 {

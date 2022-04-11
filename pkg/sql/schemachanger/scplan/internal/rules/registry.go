@@ -53,13 +53,14 @@ func ApplyDepRules(g *scgraph.Graph) error {
 // to the registered rules.
 func ApplyOpRules(g *scgraph.Graph) (*scgraph.Graph, error) {
 	db := g.Database()
-	m := make(map[*screl.Node]struct{})
+	m := make(map[*screl.Node][]string)
 	for _, rule := range registry.opRules {
 		var added int
 		start := timeutil.Now()
 		err := rule.q.Iterate(db, func(r rel.Result) error {
 			added++
-			m[r.Var(rule.from).(*screl.Node)] = struct{}{}
+			n := r.Var(rule.from).(*screl.Node)
+			m[n] = append(m[n], rule.name)
 			return nil
 		})
 		if err != nil {
@@ -74,9 +75,9 @@ func ApplyOpRules(g *scgraph.Graph) (*scgraph.Graph, error) {
 	}
 	// Mark any op edges from these nodes as no-op.
 	ret := g.ShallowClone()
-	for from := range m {
+	for from, rules := range m {
 		if opEdge, ok := g.GetOpEdgeFrom(from); ok {
-			ret.MarkAsNoOp(opEdge)
+			ret.MarkAsNoOp(opEdge, rules...)
 		}
 	}
 	return ret, nil
