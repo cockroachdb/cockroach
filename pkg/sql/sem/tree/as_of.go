@@ -93,6 +93,7 @@ type AsOfSystemTime struct {
 	// This is be zero if there is no maximum bound.
 	// In non-zero, we want a read t where Timestamp <= t < MaxTimestampBound.
 	MaxTimestampBound hlc.Timestamp
+	All               bool
 }
 
 type evalAsOfTimestampOptions struct {
@@ -119,6 +120,10 @@ func EvalAsOfTimestamp(
 	evalCtx *EvalContext,
 	opts ...EvalAsOfTimestampOption,
 ) (AsOfSystemTime, error) {
+	if asOf.All {
+		return AsOfSystemTime{All: true}, nil
+	}
+
 	o := evalAsOfTimestampOptions{}
 	for _, f := range opts {
 		o = f(o)

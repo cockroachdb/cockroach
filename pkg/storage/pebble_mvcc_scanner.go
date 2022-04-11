@@ -340,8 +340,12 @@ type pebbleMVCCScanner struct {
 	inconsistent, tombstones bool
 	failOnMoreRecent         bool
 	isGet                    bool
-	keyBuf                   []byte
-	savedBuf                 []byte
+	// allVersions is true if the scanner should return all MVCC versions it finds
+	// under the read timestamp, not just the most recent one under the read
+	// timestamp.
+	allVersions bool
+	keyBuf      []byte
+	savedBuf    []byte
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
@@ -785,7 +789,9 @@ func (p *pebbleMVCCScanner) nextKey() bool {
 		if !p.iterNext() {
 			return false
 		}
-		if !bytes.Equal(p.curUnsafeKey.Key, p.keyBuf) {
+		// Keep stepping until we find a key that isn't equal to the last key that
+		// we returned.
+		if !bytes.Equal(p.curUnsafeKey.Key, p.keyBuf) || p.allVersions {
 			p.incrementItersBeforeSeek()
 			return true
 		}
@@ -845,6 +851,7 @@ func (p *pebbleMVCCScanner) prevKey(key []byte) bool {
 		if !ok {
 			return false
 		}
+		// TODO(jordan): implement p.allVersions for reverse scans.
 		if !bytes.Equal(peekedKey, p.keyBuf) {
 			return p.backwardLatestVersion(peekedKey, i+1)
 		}
@@ -1041,7 +1048,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 	}
 }
 
-// Updates cur{RawKey, Key, TS} to match record the iterator is pointing to.
+// Updates cur{RawKey, Key, TS} to match the record the iterator is pointing to.
 func (p *pebbleMVCCScanner) updateCurrent() bool {
 	if !p.iterValid() {
 		return false

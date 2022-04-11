@@ -10905,6 +10905,10 @@ as_of_clause:
   {
     $$.val = tree.AsOfClause{Expr: $5.expr()}
   }
+| AS_LA OF SYSTEM TIME ALL
+  {
+    $$.val = tree.AsOfClause{All: true}
+  }
 
 opt_as_of_clause:
   as_of_clause

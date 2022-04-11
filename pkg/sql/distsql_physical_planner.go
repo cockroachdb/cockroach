@@ -1210,6 +1210,7 @@ func initTableReaderSpecTemplate(
 	s := physicalplan.NewTableReaderSpec()
 	*s = execinfrapb.TableReaderSpec{
 		Reverse:                         n.reverse,
+		AllVersions:                     n.allVersions,
 		TableDescriptorModificationTime: n.desc.GetModificationTime(),
 		LockingStrength:                 n.lockingStrength,
 		LockingWaitPolicy:               n.lockingWaitPolicy,

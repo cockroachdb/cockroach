@@ -181,6 +181,9 @@ type cFetcherArgs struct {
 	// reverse denotes whether or not the spans should be read in reverse or not
 	// when StartScan is invoked.
 	reverse bool
+	// allVersions denotes whether to return all MVCC versions instead of just
+	// one.
+	allVersions bool
 	// traceKV indicates whether or not session tracing is enabled. It is set
 	// when initializing the fetcher.
 	traceKV bool
@@ -548,6 +551,7 @@ func (cf *cFetcher) StartScan(
 		spans,
 		bsHeader,
 		cf.reverse,
+		cf.allVersions,
 		batchBytesLimit,
 		firstBatchLimit,
 		cf.lockStrength,

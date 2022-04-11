@@ -54,6 +54,8 @@ type ScanParams struct {
 
 	Reverse bool
 
+	AllVersions bool
+
 	// If true, the scan will scan all spans in parallel. It should only be set to
 	// true if there is a known upper bound on the number of rows that will be
 	// scanned. It should not be set if there is a hard or soft limit.

@@ -55,8 +55,9 @@ type scanNode struct {
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns colinfo.ResultColumns
 
-	spans   []roachpb.Span
-	reverse bool
+	spans       []roachpb.Span
+	reverse     bool
+	allVersions bool
 
 	reqOrdering ReqOrdering
 

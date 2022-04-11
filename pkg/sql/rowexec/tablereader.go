@@ -132,13 +132,16 @@ func newTableReader(
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
-		spec.Reverse,
-		spec.LockingStrength,
-		spec.LockingWaitPolicy,
-		flowCtx.EvalCtx.SessionData().LockTimeout,
-		&tr.alloc,
-		flowCtx.EvalCtx.Mon,
-		&spec.FetchSpec,
+		row.FetcherInitArgs{
+			AllVersions:    spec.AllVersions,
+			Reverse:        spec.Reverse,
+			LockStrength:   spec.LockingStrength,
+			LockWaitPolicy: spec.LockingWaitPolicy,
+			LockTimeout:    flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:          &tr.alloc,
+			MemMonitor:     flowCtx.EvalCtx.Mon,
+			Spec:           &spec.FetchSpec,
+		},
 	); err != nil {
 		return nil, err
 	}

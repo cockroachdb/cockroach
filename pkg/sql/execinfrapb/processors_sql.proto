@@ -63,6 +63,7 @@ message TableReaderSpec {
   optional util.hlc.Timestamp table_descriptor_modification_time = 21 [(gogoproto.nullable) = false];
 
   optional bool reverse = 3 [(gogoproto.nullable) = false];
+  optional bool all_versions = 22 [(gogoproto.nullable) = false];
   repeated roachpb.Span spans = 18 [(gogoproto.nullable) = false];
 
   // A hint for how many rows the consumer of the table reader output might

@@ -753,7 +753,7 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 	if ex.implicitTxn() {
 		if p.extendedEvalCtx.AsOfSystemTime == nil {
 			p.extendedEvalCtx.AsOfSystemTime = asOf
-			if !asOf.BoundedStaleness {
+			if !asOf.BoundedStaleness && !asOf.All {
 				p.extendedEvalCtx.SetTxnTimestamp(asOf.Timestamp.GoTime())
 				if err := ex.state.setHistoricalTimestamp(ctx, asOf.Timestamp); err != nil {
 					return err

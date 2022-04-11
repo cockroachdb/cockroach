@@ -95,6 +95,10 @@ define ScanPrivate {
 
     # ExactPrefix caches the exact prefix of the Constraint.
     ExactPrefix int
+
+    # AllVersions informs the scan to return all MVCC versions of the data in
+    # the table.
+    AllVersions bool
 }
 
 # PlaceholderScan is a special variant of Scan. It scans exactly one span of a

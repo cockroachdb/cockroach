@@ -1,0 +1,15 @@
+parse
+SELECT * FROM t AS OF SYSTEM TIME '-10s'
+----
+SELECT * FROM t AS OF SYSTEM TIME '-10s'
+SELECT (*) FROM t AS OF SYSTEM TIME ('-10s') -- fully parenthesized
+SELECT * FROM t AS OF SYSTEM TIME '_' -- literals removed
+SELECT * FROM _ AS OF SYSTEM TIME '-10s' -- identifiers removed
+
+parse
+SELECT * FROM t AS OF SYSTEM TIME ALL
+----
+SELECT * FROM t AS OF SYSTEM TIME ALL
+SELECT (*) FROM t AS OF SYSTEM TIME ALL -- fully parenthesized
+SELECT * FROM t AS OF SYSTEM TIME ALL -- literals removed
+SELECT * FROM _ AS OF SYSTEM TIME ALL -- identifiers removed
