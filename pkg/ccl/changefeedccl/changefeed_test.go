@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -6027,4 +6028,130 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	})
 
 	require.Equal(t, 2, aggregatorCount)
+}
+
+func TestChangefeedCreateTelemetryLogs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, stopServer := startTestServer(t, newTestOptions())
+	defer stopServer()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+	sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
+
+	t.Run(`core_sink_type`, func(t *testing.T) {
+		coreSink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		defer cleanup()
+		coreFeedFactory := makeSinklessFeedFactory(s, coreSink)
+
+		beforeCreateSinkless := timeutil.Now()
+		coreFeed := feed(t, coreFeedFactory, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, coreFeed)
+
+		createLogs := checkCreateChangefeedLogs(t, beforeCreateSinkless.UnixNano())
+		require.Equal(t, 1, len(createLogs))
+		require.Equal(t, createLogs[0].SinkType, "core")
+	})
+
+	t.Run(`gcpubsub_sink_type with options`, func(t *testing.T) {
+		pubsubFeedFactory := makePubsubFeedFactory(s, db)
+		beforeCreatePubsub := timeutil.Now()
+		pubsubFeed := feed(t, pubsubFeedFactory, `CREATE CHANGEFEED FOR foo, bar WITH resolved, no_initial_scan`)
+		defer closeFeed(t, pubsubFeed)
+
+		createLogs := checkCreateChangefeedLogs(t, beforeCreatePubsub.UnixNano())
+		require.Equal(t, 1, len(createLogs))
+		require.Equal(t, createLogs[0].SinkType, `gcpubsub`)
+		require.Equal(t, createLogs[0].NumTables, int32(2))
+		require.Equal(t, createLogs[0].Resolved, `yes`)
+		require.Equal(t, createLogs[0].InitialScan, `no`)
+	})
+}
+
+// Note that closeFeed needs to be called in order for the logs to be detected
+func TestChangefeedFailedTelemetryLogs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	waitForLogs := func(t *testing.T, startTime time.Time) []eventpb.ChangefeedFailed {
+		var logs []eventpb.ChangefeedFailed
+		testutils.SucceedsSoon(t, func() error {
+			logs = checkChangefeedFailedLogs(t, startTime.UnixNano())
+			if len(logs) < 1 {
+				return fmt.Errorf("no logs found")
+			}
+			return nil
+		})
+		return logs
+	}
+
+	t.Run(`connection_closed`, func(t *testing.T) {
+		// Race condition every ~3000 runs around the error not being seen as a context cancellation
+		skip.UnderStress(t)
+
+		s, db, stopServer := startTestServer(t, newTestOptions())
+		defer stopServer()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+
+		coreSink, coreSinkCleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		coreFactory := makeSinklessFeedFactory(s, coreSink)
+		coreFeed := feed(t, coreFactory, `CREATE CHANGEFEED FOR foo`)
+		assertPayloads(t, coreFeed, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+		beforeCoreSinkClose := timeutil.Now()
+
+		coreSinkCleanup()
+		closeFeed(t, coreFeed)
+
+		failLogs := waitForLogs(t, beforeCoreSinkClose)
+		require.Equal(t, 1, len(failLogs))
+		require.Equal(t, failLogs[0].FailureType, changefeedbase.ConnectionClosed)
+	})
+
+	t.Run(`user_input`, enterpriseTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		beforeCreate := timeutil.Now()
+		_, err := f.Feed(`CREATE CHANGEFEED FOR foo, invalid_table`)
+		require.Error(t, err)
+
+		failLogs := waitForLogs(t, beforeCreate)
+		require.Equal(t, 1, len(failLogs))
+		require.Equal(t, failLogs[0].FailureType, changefeedbase.UserInput)
+	}))
+
+	t.Run(`unknown_error`, pubsubTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		knobs := f.Server().TestingKnobs().
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		knobs.BeforeEmitRow = func(_ context.Context) error {
+			return errors.Errorf("should fail")
+		}
+
+		beforeCreate := timeutil.Now()
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH on_error=FAIL`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'next')`)
+		feedJob := foo.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, feedJob.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusFailed }))
+
+		closeFeed(t, foo)
+		failLogs := waitForLogs(t, beforeCreate)
+		require.Equal(t, 1, len(failLogs))
+		require.Equal(t, failLogs[0].FailureType, changefeedbase.UnknownError)
+		require.Equal(t, failLogs[0].SinkType, `gcpubsub`)
+		require.Equal(t, failLogs[0].NumTables, int32(1))
+	}))
 }
