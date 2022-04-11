@@ -134,7 +134,9 @@ func (e *distSQLSpecExecFactory) ConstructValues(
 			specifiedInQuery: true,
 		}
 		planNodesToClose = []planNode{v}
-		physPlan, err = e.dsp.wrapPlan(planCtx, v, e.planningMode != distSQLLocalOnlyPlanning)
+		// TODO: don't use a stored context.
+		ctx := planCtx.EvalContext().Context
+		physPlan, err = e.dsp.wrapPlan(ctx, planCtx, v, e.planningMode != distSQLLocalOnlyPlanning)
 	} else {
 		// We can create a spec for the values processor, so we don't create a
 		// valuesNode.
@@ -163,7 +165,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		return constructVirtualScan(
 			e, e.planner, table, index, params, reqOrdering,
 			func(d *delayedNode) (exec.Node, error) {
-				physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), d, e.planningMode != distSQLLocalOnlyPlanning)
+				planCtx := e.getPlanCtx(cannotDistribute)
+				// TODO: don't use a stored context.
+				ctx := planCtx.EvalContext().Context
+				physPlan, err := e.dsp.wrapPlan(ctx, planCtx, d, e.planningMode != distSQLLocalOnlyPlanning)
 				if err != nil {
 					return nil, err
 				}
@@ -271,6 +276,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	err = e.dsp.planTableReaders(
+		planCtx.EvalContext().Context, // TODO: don't use a stored context.
 		e.getPlanCtx(recommendation),
 		p,
 		&tableReaderPlanningInfo{
@@ -900,7 +906,8 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 		}
 	}
 
-	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), explainNode, e.planningMode != distSQLLocalOnlyPlanning)
+	planCtx := e.getPlanCtx(cannotDistribute)
+	physPlan, err := e.dsp.wrapPlan(planCtx.EvalContext().Context, planCtx, explainNode, e.planningMode != distSQLLocalOnlyPlanning)
 	if err != nil {
 		return nil, err
 	}
@@ -1040,7 +1047,8 @@ func (e *distSQLSpecExecFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (e
 	if err != nil {
 		return nil, err
 	}
-	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), plan, e.planningMode != distSQLLocalOnlyPlanning)
+	planCtx := e.getPlanCtx(cannotDistribute)
+	physPlan, err := e.dsp.wrapPlan(planCtx.EvalContext().Context, planCtx, plan, e.planningMode != distSQLLocalOnlyPlanning)
 	if err != nil {
 		return nil, err
 	}
