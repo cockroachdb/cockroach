@@ -216,6 +216,16 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 			colmem.NewAllocator(ctx, &acc, coldata.StandardColumnFactory),
 		)
 	}
+	// Also add a metadata source to each input.
+	for i := 0; i < len(inputs); i++ {
+		inputs[i].MetadataSources = colexecop.MetadataSources{colexectestutils.CallbackMetadataSource{
+			DrainMetaCb: func() []execinfrapb.ProducerMetadata {
+				// Note that we don't care about the type of metadata, so we can
+				// just use an empty metadata object.
+				return []execinfrapb.ProducerMetadata{{}}
+			},
+		}}
+	}
 
 	var wg sync.WaitGroup
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
@@ -228,7 +238,12 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		// Loop until we get an error.
 	}
 	// The caller must call DrainMeta on error.
-	require.Zero(t, len(s.DrainMeta()))
+	//
+	// Ensure that all inputs, including the one that encountered an error,
+	// properly drain their metadata sources. Notably, the error itself should
+	// not be propagated as metadata (i.e. we don't want it to be duplicated),
+	// but each input should produce a single metadata object.
+	require.Equal(t, len(inputs), len(s.DrainMeta()))
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
 }
