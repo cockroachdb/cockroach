@@ -365,7 +365,7 @@ var DefaultPrimaryRegion = settings.RegisterStringSetting(
 // cluster setting that governs secondary tenant multi-region abstraction usage.
 const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
 
-// secondaryTenantMultiRegionAbstractionsEnabled controls if secondary tenants
+// SecondaryTenantsMultiRegionAbstractionsEnabled controls if secondary tenants
 // are allowed to use multi-region abstractions. In particular, it controls if
 // secondary tenants are allowed to add a region to their database. It has no
 // effect on the system tenant.
@@ -373,7 +373,7 @@ const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.multi_reg
 // This setting has no effect for existing multi-region databases that have
 // already been configured. It only affects regions being added to new
 // databases.
-var secondaryTenantsMultiRegionAbstractionsEnabled = settings.RegisterBoolSetting(
+var SecondaryTenantsMultiRegionAbstractionsEnabled = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
 	SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
 	"allow secondary tenants to use multi-region abstractions",
@@ -392,7 +392,7 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 	placement tree.DataPlacement,
 ) (*multiregion.RegionConfig, error) {
 	if !p.execCfg.Codec.ForSystemTenant() &&
-		!secondaryTenantsMultiRegionAbstractionsEnabled.Get(&p.execCfg.Settings.SV) {
+		!SecondaryTenantsMultiRegionAbstractionsEnabled.Get(&p.execCfg.Settings.SV) {
 		// There was no primary region provided, let the thing pass through.
 		if primaryRegion == "" && len(regions) == 0 {
 			return nil, nil
