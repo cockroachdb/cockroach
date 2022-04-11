@@ -17,10 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
@@ -639,4 +641,31 @@ WHERE
   jsonb_array_length(metadata -> 'stmtFingerprintIDs') = 0
 `,
 		[][]string{{"0"}})
+}
+
+func TestUnprivilegedUserReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	sqlConn.Exec(t, "CREATE USER nonAdminUser")
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+
+	_, err := ie.ExecEx(
+		ctx,
+		"test-reset-sql-stats-as-non-admin-user",
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: security.MakeSQLUsernameFromPreNormalizedString("nonAdminUser"),
+		},
+		"SELECT crdb_internal.reset_sql_stats()",
+	)
+
+	require.Contains(t, err.Error(), "requires admin privilege")
 }
