@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraphviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -71,21 +70,6 @@ func (p Plan) StagesForCurrentPhase() []scstage.Stage {
 		}
 	}
 	return p.Stages
-}
-
-// DecorateErrorWithPlanDetails adds plan graphviz URLs as error details.
-func (p Plan) DecorateErrorWithPlanDetails(err error) error {
-	return scgraphviz.DecorateErrorWithPlanDetails(err, p.CurrentState, p.Graph, p.Stages)
-}
-
-// DependenciesURL returns a URL to render the dependency graph in the Plan.
-func (p Plan) DependenciesURL() (string, error) {
-	return scgraphviz.DependenciesURL(p.CurrentState, p.Graph)
-}
-
-// StagesURL returns a URL to render the stages in the Plan.
-func (p Plan) StagesURL() (string, error) {
-	return scgraphviz.StagesURL(p.CurrentState, p.Graph, p.Stages)
 }
 
 // MakePlan generates a Plan for a particular phase of a schema change, given
