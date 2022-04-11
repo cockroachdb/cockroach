@@ -570,7 +570,7 @@ func checkPrivilegesForBackup(
 
 func requireEnterprise(execCfg *sql.ExecutorConfig, feature string) error {
 	if err := utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings, execCfg.ClusterID(), execCfg.Organization(),
+		execCfg.Settings, execCfg.LogicalClusterID(), execCfg.Organization(),
 		fmt.Sprintf("BACKUP with %s", feature),
 	); err != nil {
 		return err
@@ -928,7 +928,7 @@ func backupPlanHook(
 		}
 
 		lic := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "",
+			p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(), "",
 		) != nil
 
 		if err := protectTimestampForBackup(
@@ -1706,7 +1706,7 @@ func getBackupDetailAndManifest(
 		}
 	}
 
-	clusterID := execCfg.ClusterID()
+	clusterID := execCfg.LogicalClusterID()
 	for i := range prevBackups {
 		// IDs are how we identify tables, and those are only meaningful in the
 		// context of their own cluster, so we need to ensure we only allow
@@ -1830,7 +1830,7 @@ func getBackupDetailAndManifest(
 		FormatVersion:       BackupFormatDescriptorTrackingVersion,
 		BuildInfo:           build.GetInfo(),
 		ClusterVersion:      execCfg.Settings.Version.ActiveVersion(ctx).Version,
-		ClusterID:           execCfg.ClusterID(),
+		ClusterID:           execCfg.LogicalClusterID(),
 		StatisticsFilenames: statsFiles,
 		DescriptorCoverage:  coverage,
 	}

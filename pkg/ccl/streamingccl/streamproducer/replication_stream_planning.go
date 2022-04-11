@@ -46,7 +46,7 @@ func makeReplicationStreamEval(
 	ctx context.Context, p sql.PlanHookState, stream *tree.ReplicationStream,
 ) (*replicationStreamEval, error) {
 	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().ClusterID(),
+		p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(),
 		p.ExecCfg().Organization(), createStreamOp); err != nil {
 		return nil, err
 	}

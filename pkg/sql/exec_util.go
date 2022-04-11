@@ -1126,10 +1126,18 @@ func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
 
 // NodeInfo contains metadata about the executing node and cluster.
 type NodeInfo struct {
-	ClusterID func() uuid.UUID
-	NodeID    *base.SQLIDContainer
-	AdminURL  func() *url.URL
-	PGURL     func(*url.Userinfo) (*pgurl.URL, error)
+	// LogicalClusterID is the cluster ID of the tenant, unique per
+	// tenant.
+	LogicalClusterID func() uuid.UUID
+	// NodeID is either the SQL instance ID or node ID, depending on
+	// circumstances.
+	// TODO(knz): Split this across node ID and instance ID. Likely,
+	// the SQL layer only needs instance ID.
+	NodeID *base.SQLIDContainer
+	// AdminURL is the URL of the DB Console for this server.
+	AdminURL func() *url.URL
+	// PGURL is the SQL connection URL for this server.
+	PGURL func(*url.Userinfo) (*pgurl.URL, error)
 }
 
 // nodeStatusGenerator is a limited portion of the status.MetricsRecorder

@@ -373,7 +373,7 @@ func newRPCTestContext(ctx context.Context, ts *TestServer, cfg *base.Config) *r
 	// Ensure that the RPC client context validates the server cluster ID.
 	// This ensures that a test where the server is restarted will not let
 	// its test RPC client talk to a server started by an unrelated concurrent test.
-	rpcContext.ClusterID.Set(context.Background(), ts.ClusterID())
+	rpcContext.StorageClusterID.Set(context.Background(), ts.StorageClusterID())
 	return rpcContext
 }
 

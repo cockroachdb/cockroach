@@ -339,7 +339,7 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx = &tree.EvalContext{
 			Settings:         ds.ServerConfig.Settings,
 			SessionDataStack: sessiondata.NewStack(sd),
-			ClusterID:        ds.ServerConfig.ClusterID.Get(),
+			ClusterID:        ds.ServerConfig.LogicalClusterID.Get(),
 			ClusterName:      ds.ServerConfig.ClusterName,
 			NodeID:           ds.ServerConfig.NodeID,
 			Codec:            ds.ServerConfig.Codec,
