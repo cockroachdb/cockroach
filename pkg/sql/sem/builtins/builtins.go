@@ -2292,7 +2292,7 @@ var builtins = map[string]builtinDefinition{
 
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(dOid.DInt), int64(newVal), false /* isCalled */); err != nil {
+					evalCtx.Ctx(), uint32(dOid.DInt), int64(newVal), true /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
@@ -2308,7 +2308,7 @@ var builtins = map[string]builtinDefinition{
 				oid := tree.MustBeDOid(args[0])
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValueByID(
-					evalCtx.Ctx(), uint32(oid.DInt), int64(newVal), false /* isCalled */); err != nil {
+					evalCtx.Ctx(), uint32(oid.DInt), int64(newVal), true /* isCalled */); err != nil {
 					return nil, err
 				}
 				return args[1], nil
