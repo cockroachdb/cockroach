@@ -215,18 +215,18 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	if opts.Prefix {
 		iter = &p.prefixIter
 	}
+	handle := pebble.Reader(p.batch)
+	if !p.batch.Indexed() {
+		handle = p.db
+	}
 	if iter.inuse {
-		return newPebbleIterator(p.db, p.iter, opts, StandardDurability)
+		return newPebbleIterator(handle, p.iter, opts, StandardDurability)
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, StandardDurability)
 	} else {
-		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, p.iterUnused, opts, StandardDurability)
-		} else {
-			iter.init(p.db, p.iter, p.iterUnused, opts, StandardDurability)
-		}
+		iter.init(handle, p.iter, p.iterUnused, opts, StandardDurability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -252,18 +252,18 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if opts.Prefix {
 		iter = &p.prefixEngineIter
 	}
+	handle := pebble.Reader(p.batch)
+	if !p.batch.Indexed() {
+		handle = p.db
+	}
 	if iter.inuse {
-		return newPebbleIterator(p.db, p.iter, opts, StandardDurability)
+		return newPebbleIterator(handle, p.iter, opts, StandardDurability)
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, StandardDurability)
 	} else {
-		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, p.iterUnused, opts, StandardDurability)
-		} else {
-			iter.init(p.db, p.iter, p.iterUnused, opts, StandardDurability)
-		}
+		iter.init(handle, p.iter, p.iterUnused, opts, StandardDurability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
