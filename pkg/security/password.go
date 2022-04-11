@@ -150,6 +150,19 @@ func (h HashMethod) String() string {
 	}
 }
 
+// GetHashMethodFromString returns the HashMethod corresponding to
+// HashMethod.String().
+func GetHashMethodFromString(s string) (HashMethod, error) {
+	switch s {
+	case "crdb-bcrypt":
+		return HashBCrypt, nil
+	case "scram-sha-256":
+		return HashSCRAMSHA256, nil
+	default:
+		return HashInvalidMethod, errors.AssertionFailedf("unknown hash method %s", s)
+	}
+}
+
 // PasswordHash represents the type of a password hash loaded from a credential store.
 type PasswordHash interface {
 	fmt.Stringer
@@ -408,8 +421,9 @@ func GetConfiguredPasswordHashMethod(ctx context.Context, sv *settings.Values) (
 
 // HashPassword takes a raw password and returns a hashed password, hashed
 // using the currently configured method.
-func HashPassword(ctx context.Context, sv *settings.Values, password string) ([]byte, error) {
-	method := GetConfiguredPasswordHashMethod(ctx, sv)
+func HashPassword(
+	ctx context.Context, sv *settings.Values, method HashMethod, password string,
+) ([]byte, error) {
 	switch method {
 	case HashBCrypt:
 		sem := getExpensiveHashComputeSem(ctx)
