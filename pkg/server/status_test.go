@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -2906,4 +2907,31 @@ func TestSQLStatsAPIInMixedVersionState(t *testing.T) {
 		sqlConn.CheckQueryResults(t,
 			"SELECT count(*) FROM system.transaction_statistics", [][]string{{"0"}})
 	})
+}
+
+func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+	sqlConn.Exec(t, "CREATE USER nonAdminUser")
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+
+	_, err := ie.ExecEx(
+		ctx,
+		"test-reset-index-usage-stats-as-non-admin-user",
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: security.MakeSQLUsernameFromPreNormalizedString("nonAdminUser"),
+		},
+		"SELECT crdb_internal.reset_index_usage_stats()",
+	)
+
+	require.Contains(t, err.Error(), "requires admin privilege")
 }
