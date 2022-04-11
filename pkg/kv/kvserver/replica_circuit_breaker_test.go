@@ -13,11 +13,13 @@ package kvserver
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -39,11 +41,13 @@ func TestReplicaUnavailableError(t *testing.T) {
 	lm := liveness.IsLiveMap{
 		1: liveness.IsLiveMapEntry{IsLive: true},
 	}
+	ts, err := time.Parse("2006-01-02 15:04:05", "2006-01-02 15:04:05")
+	require.NoError(t, err)
 	wrappedErr := errors.New("probe failed")
 	rs := raft.Status{}
 	ctx := context.Background()
-	err := errors.DecodeError(ctx, errors.EncodeError(ctx, replicaUnavailableError(
-		wrappedErr, desc, desc.Replicas().AsProto()[0], lm, &rs),
+	err = errors.DecodeError(ctx, errors.EncodeError(ctx, replicaUnavailableError(
+		wrappedErr, desc, desc.Replicas().AsProto()[0], lm, &rs, hlc.Timestamp{WallTime: ts.UnixNano()}),
 	))
 	require.True(t, errors.Is(err, wrappedErr), "%+v", err)
 	echotest.Require(t, string(redact.Sprint(err)), testutils.TestDataPath(t, "replica_unavailable_error.txt"))
