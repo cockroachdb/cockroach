@@ -415,7 +415,13 @@ func rowToRecord(
 
 	if !useDeprecatedProtectedTSStorage(ctx, st, knobs) {
 		target := &ptpb.Target{}
-		if err := protoutil.Unmarshal([]byte(*row[6].(*tree.DBytes)), target); err != nil {
+		targetDBytes, ok := row[6].(*tree.DBytes)
+		if !ok {
+			// We are reading a pre-22.1 protected timestamp record that has a NULL
+			// target column, so there is nothing more to do.
+			return nil
+		}
+		if err := protoutil.Unmarshal([]byte(*targetDBytes), target); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal target for %v", r.ID)
 		}
 		r.Target = target
