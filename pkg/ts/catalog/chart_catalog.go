@@ -2281,6 +2281,13 @@ var charts = []sectionDescription{
 				AxisLabel: "Latency",
 			},
 			{
+				Title: "Connection Failures",
+				Metrics: []string{
+					"sql.conn.failures",
+				},
+				AxisLabel: "Failures",
+			},
+			{
 				Title: "Open Transactions",
 				Metrics: []string{
 					"sql.txns.open",

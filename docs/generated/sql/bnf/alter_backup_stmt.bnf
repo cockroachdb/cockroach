@@ -1,3 +1,0 @@
-alter_backup_stmt ::=
-	'ALTER' 'BACKUP' string_or_placeholder alter_backup_cmds
-	| 'ALTER' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder alter_backup_cmds
