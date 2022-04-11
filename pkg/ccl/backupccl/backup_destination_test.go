@@ -344,9 +344,14 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 						require.NoError(t, err)
 					}
 
+					fullBackupExists := false
+					if expectedIncDir != "" {
+						fullBackupExists = true
+					}
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
 						ctx, security.RootUserName(),
-						jobspb.BackupDetails_Destination{To: collectionTo, Subdir: subdir, IncrementalStorage: incrementalTo},
+						jobspb.BackupDetails_Destination{To: collectionTo, Subdir: subdir,
+							IncrementalStorage: incrementalTo, Exists: fullBackupExists},
 						endTime,
 						incrementalFrom,
 						&execCfg,

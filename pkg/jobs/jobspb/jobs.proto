@@ -161,6 +161,8 @@ message BackupDetails {
     // Subdir is the path within the collection path in to to backup to.
     string subdir = 2;
     repeated string incremental_storage = 3;
+    // Exists is true if a backup should already exist at the destination
+    bool exists = 4;
   }
 
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
