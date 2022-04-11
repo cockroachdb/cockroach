@@ -408,8 +408,9 @@ func GetConfiguredPasswordHashMethod(ctx context.Context, sv *settings.Values) (
 
 // HashPassword takes a raw password and returns a hashed password, hashed
 // using the currently configured method.
-func HashPassword(ctx context.Context, sv *settings.Values, password string) ([]byte, error) {
-	method := GetConfiguredPasswordHashMethod(ctx, sv)
+func HashPassword(
+	ctx context.Context, sv *settings.Values, method HashMethod, password string,
+) ([]byte, error) {
 	switch method {
 	case HashBCrypt:
 		sem := getExpensiveHashComputeSem(ctx)
