@@ -139,10 +139,8 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	m := &execinfrapb.ProducerMessage{}
 	m.Data.RawBytes = []byte("garbage")
 
-	// Simulate the client (outbox) that sends only a single piece of metadata.
 	go func() {
 		_ = rpcLayer.client.Send(m)
-		_ = rpcLayer.client.CloseSend()
 	}()
 
 	// inbox.Next should panic given that the deserializer will encounter garbage
@@ -151,10 +149,6 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 		inbox.Init(context.Background())
 		inbox.Next()
 	})
-
-	// Upon catching the panic and converting it into an error, the caller
-	// transitions to draining.
-	inbox.DrainMeta()
 
 	// We require no error from the stream handler as nothing was canceled. The
 	// panic is bubbled up through the Next chain on the Inbox's host.
