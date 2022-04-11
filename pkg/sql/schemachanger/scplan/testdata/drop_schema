@@ -1367,10 +1367,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SourceElementID: 4
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
-      TableID: 107
+    *scop.DeleteDescriptor
+      DescriptorID: 107
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 107
@@ -1388,10 +1386,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SourceElementID: 5
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
-      TableID: 108
+    *scop.DeleteDescriptor
+      DescriptorID: 108
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 108
@@ -1413,10 +1409,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SourceElementID: 6
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
-      TableID: 109
+    *scop.DeleteDescriptor
+      DescriptorID: 109
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 109
@@ -1437,10 +1431,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SourceElementID: 6
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
-      TableID: 110
+    *scop.DeleteDescriptor
+      DescriptorID: 110
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 110
@@ -1464,10 +1456,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 45 MutationType ops
         SourceElementID: 8
         SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
-      StatementForDropJob:
-        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
-      TableID: 113
+    *scop.DeleteDescriptor
+      DescriptorID: 113
     *scop.MakeColumnAbsent
       ColumnID: 1
       TableID: 113

@@ -205,7 +205,7 @@ upsert descriptor #106
   -  version: "1"
   +  version: "2"
 write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
-create job #1 (non-cancelable: false): "schema change job"
+create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
   descriptor IDs: [106]
 # end PreCommitPhase
 commit transaction #1
