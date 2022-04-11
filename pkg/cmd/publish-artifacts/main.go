@@ -118,6 +118,7 @@ func run(svc s3putter, flags runFlags, execFn release.ExecFn) {
 		o.VersionStr = flags.sha
 		o.BucketName = flags.bucketName
 		o.AbsolutePath = filepath.Join(flags.pkgDir, "cockroach"+release.SuffixFromPlatform(platform))
+		o.CockroachSQLAbsolutePath = filepath.Join(flags.pkgDir, "cockroach-sql"+release.SuffixFromPlatform(platform))
 
 		log.Printf("building %s", pretty.Sprint(o))
 
@@ -145,9 +146,10 @@ type opts struct {
 
 	Platform release.Platform
 
-	BucketName   string
-	AbsolutePath string
-	PkgDir       string
+	BucketName               string
+	AbsolutePath             string
+	CockroachSQLAbsolutePath string
+	PkgDir                   string
 }
 
 func putNonRelease(svc s3putter, o opts, additionalNonReleaseFiles ...release.NonReleaseFile) {
@@ -157,7 +159,10 @@ func putNonRelease(svc s3putter, o opts, additionalNonReleaseFiles ...release.No
 			Branch:     o.Branch,
 			BucketName: o.BucketName,
 			Files: append(
-				[]release.NonReleaseFile{release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr)},
+				[]release.NonReleaseFile{
+					release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr),
+					release.MakeCRDBBinaryNonReleaseFile(o.CockroachSQLAbsolutePath, o.VersionStr),
+				},
 				additionalNonReleaseFiles...,
 			),
 		},

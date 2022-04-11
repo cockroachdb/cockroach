@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2017 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -160,6 +160,11 @@ func TestPublish(t *testing.T) {
 					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' " +
 					"-c opt --config=ci --config=with_ui --config=crosslinuxbase",
 				"s3://cockroach/cockroach/cockroach.linux-gnu-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-amd64.1234567890abcdef",
+				"s3://cockroach//cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"s3://cockroach/cockroach/cockroach-sql.linux-gnu-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef",
 				"s3://cockroach//cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' " +
@@ -175,6 +180,11 @@ func TestPublish(t *testing.T) {
 					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' " +
 					"-c opt --config=ci --config=with_ui --config=crossmacosbase",
 				"s3://cockroach/cockroach/cockroach.darwin-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.darwin-amd64.1234567890abcdef",
+				"s3://cockroach//cockroach/cockroach-sql.darwin-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"s3://cockroach/cockroach/cockroach-sql.darwin-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.darwin-amd64.1234567890abcdef",
 				"s3://cockroach//cockroach/lib/libgeos.darwin-amd64.1234567890abcdef.dylib CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' " +
@@ -190,6 +200,11 @@ func TestPublish(t *testing.T) {
 					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' " +
 					"-c opt --config=ci --config=with_ui --config=crosswindowsbase",
 				"s3://cockroach/cockroach/cockroach.windows-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.windows-amd64.1234567890abcdef.exe",
+				"s3://cockroach//cockroach/cockroach-sql.windows-amd64.1234567890abcdef.exe CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crosswindowsbase",
+				"s3://cockroach/cockroach/cockroach-sql.windows-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.windows-amd64.1234567890abcdef.exe",
 				"s3://cockroach//cockroach/lib/libgeos.windows-amd64.1234567890abcdef.dll CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' " +
