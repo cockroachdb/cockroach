@@ -113,7 +113,6 @@ type Cluster interface {
 
 	// Internal niche tools.
 
-	Reset(ctx context.Context, l *logger.Logger) error
 	Reformat(ctx context.Context, l *logger.Logger, node option.NodeListOption, filesystem string) error
 	Install(
 		ctx context.Context, l *logger.Logger, nodes option.NodeListOption, software ...string,

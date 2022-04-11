@@ -1110,45 +1110,8 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	}
 	defer func() { _ = os.RemoveAll(resultsDir) }()
 
-	restart := func() {
-		// We overload the clusters in tpccbench, which can lead to transient infra
-		// failures. These are a) really annoying to debug and b) hide the actual
-		// passing warehouse count, making the line search sensitive to the choice
-		// of starting warehouses. Do a best-effort at waiting for the cloud VM(s)
-		// to recover without failing the line search.
-		if err := c.Reset(ctx, t.L()); err != nil {
-			// Reset() can flake sometimes, see for example:
-			// https://github.com/cockroachdb/cockroach/issues/61981#issuecomment-826838740
-			t.L().Printf("failed to reset VMs, proceeding anyway: %s", err)
-			_ = err // intentionally continuing
-		}
-		var ok bool
-		for i := 0; i < 10; i++ {
-			if err := ctx.Err(); err != nil {
-				t.Fatal(err)
-			}
-			shortCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-			if err := c.StopE(shortCtx, t.L(), option.DefaultStopOpts(), roachNodes); err != nil {
-				cancel()
-				t.L().Printf("unable to stop cluster; retrying to allow vm to recover: %s", err)
-				// We usually spend a long time blocking in StopE anyway, but just in case
-				// of a fast-failure mode, we still want to spend a little bit of time over
-				// the course of 10 retries to maximize the chances of things going back to
-				// working.
-				select {
-				case <-time.After(30 * time.Second):
-				case <-ctx.Done():
-				}
-				continue
-			}
-			cancel()
-			ok = true
-			break
-		}
-		if !ok {
-			t.Fatalf("VM is hosed; giving up")
-		}
-
+	restart := func(ctx context.Context) {
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), roachNodes)
 		startOpts, settings := b.startOpts()
 		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 		SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
@@ -1160,7 +1123,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		iteration++
 		t.L().Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
 
-		restart()
+		restart(ctx)
 
 		time.Sleep(restartWait)
 
@@ -1311,7 +1274,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		// The last iteration may have been a failing run that overloaded
 		// nodes to the point of them crashing. Make roachtest happy by
 		// restarting the cluster so that it can run consistency checks.
-		restart()
+		restart(ctx)
 		ttycolor.Stdout(ttycolor.Green)
 		t.L().Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
