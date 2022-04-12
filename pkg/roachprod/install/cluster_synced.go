@@ -2198,7 +2198,11 @@ func (c *SyncedCluster) ParallelE(
 	}
 
 	if len(failed) > 0 {
-		return failed, errors.New("one or more parallel execution failure")
+		var err error
+		for _, res := range failed {
+			err = errors.CombineErrors(err, res.Err)
+		}
+		return nil, errors.Wrap(err, "parallel execution failure")
 	}
 	return nil, nil
 }
