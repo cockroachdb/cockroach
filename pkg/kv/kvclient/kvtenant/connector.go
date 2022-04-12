@@ -76,6 +76,12 @@ type Connector interface {
 
 	// OverridesMonitor provides access to tenant cluster setting overrides.
 	settingswatcher.OverridesMonitor
+
+	// SystemConfigProvider provides access to basic host-tenant controlled
+	// information regarding tenant zone configs. This is critical for the
+	// mixed version 21.2->22.1 state where the tenant has not yet configured
+	// its own zones.
+	config.SystemConfigProvider
 }
 
 // TokenBucketProvider supplies an endpoint (to tenants) for the TokenBucket API

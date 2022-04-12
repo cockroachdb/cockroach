@@ -28,7 +28,7 @@ func TestDecodeSystemTenantObjectID(t *testing.T) {
 		key       roachpb.RKey
 		keySuffix []byte
 		success   bool
-		id        config.SystemTenantObjectID
+		id        config.ObjectID
 	}{
 		// Before the structured span.
 		{roachpb.RKeyMin, nil, false, 0},
@@ -43,7 +43,7 @@ func TestDecodeSystemTenantObjectID(t *testing.T) {
 	}
 
 	for tcNum, tc := range testCases {
-		id, keySuffix, success := config.DecodeSystemTenantObjectID(tc.key)
+		id, keySuffix, success := config.DecodeObjectID(keys.SystemSQLCodec, tc.key)
 		if success != tc.success {
 			t.Errorf("#%d: expected success=%t", tcNum, tc.success)
 			continue
