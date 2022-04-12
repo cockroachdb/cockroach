@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHasMultipleStatements(t *testing.T) {
@@ -40,6 +41,41 @@ func TestHasMultipleStatements(t *testing.T) {
 		if actual != tc.expected {
 			t.Errorf("%q: expected %v, got %v", tc.in, tc.expected, actual)
 		}
+	}
+}
+
+func TestFirstLexicalToken(t *testing.T) {
+	tests := []struct {
+		s   string
+		res int
+	}{
+		{
+			s:   "",
+			res: 0,
+		},
+		{
+			s:   " /* comment */ ",
+			res: 0,
+		},
+		{
+			s:   "SELECT",
+			res: lexbase.SELECT,
+		},
+		{
+			s:   "SELECT 1",
+			res: lexbase.SELECT,
+		},
+		{
+			s:   "SELECT 1;",
+			res: lexbase.SELECT,
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			tok := FirstLexicalToken(tc.s)
+			require.Equal(t, tc.res, tok)
+		})
 	}
 }
 
