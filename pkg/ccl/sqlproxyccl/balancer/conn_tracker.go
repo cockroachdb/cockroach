@@ -37,7 +37,7 @@ func NewConnTracker() *ConnTracker {
 // OnConnect registers the connection handle for tracking under the given
 // tenant. If the handler has already been registered, this returns false.
 func (t *ConnTracker) OnConnect(tenantID roachpb.TenantID, handle ConnectionHandle) bool {
-	e := t.ensureTenantEntry(tenantID)
+	e := t.getEntry(tenantID, true /* allowCreate */)
 	success := e.addHandle(handle)
 	if success {
 		logTrackerEvent("OnConnect", handle)
@@ -48,7 +48,10 @@ func (t *ConnTracker) OnConnect(tenantID roachpb.TenantID, handle ConnectionHand
 // OnDisconnect unregisters the connection handle under the given tenant. If
 // the handler cannot be found, this returns false.
 func (t *ConnTracker) OnDisconnect(tenantID roachpb.TenantID, handle ConnectionHandle) bool {
-	e := t.ensureTenantEntry(tenantID)
+	e := t.getEntry(tenantID, false /* allowCreate */)
+	if e == nil {
+		return false
+	}
 	success := e.removeHandle(handle)
 	if success {
 		logTrackerEvent("OnDisconnect", handle)
@@ -56,50 +59,42 @@ func (t *ConnTracker) OnDisconnect(tenantID roachpb.TenantID, handle ConnectionH
 	return success
 }
 
-// GetConns returns a snapshot of connections for the given tenant.
-func (t *ConnTracker) GetConns(tenantID roachpb.TenantID) []ConnectionHandle {
-	e := t.ensureTenantEntry(tenantID)
-	return e.getConns()
+// GetConnsMap returns a snapshot of connections indexed by the pod's address
+// that the connection is in for the given tenant.
+func (t *ConnTracker) GetConnsMap(tenantID roachpb.TenantID) map[string][]ConnectionHandle {
+	e := t.getEntry(tenantID, false /* allowCreate */)
+	if e == nil {
+		return nil
+	}
+	return e.getConnsMap()
 }
 
-// GetAllConns snapshots the connection tracker, and returns a list of tenants
-// together with handles associated with them. It is guaranteed that the tenants
-// in the list will have at least one connection handle each.
-func (t *ConnTracker) GetAllConns() map[roachpb.TenantID][]ConnectionHandle {
-	// Note that we do this because GetConns() on the tenant entry may take
-	// some time, and we don't want to hold onto t.mu while copying the
-	// individual tenant entries.
-	snapshotTenantEntries := func() map[roachpb.TenantID]*tenantEntry {
-		t.mu.Lock()
-		defer t.mu.Unlock()
+// GetTenantIDs returns a list of tenant IDs that have at least one connection
+// registered with the connection tracker.
+func (t *ConnTracker) GetTenantIDs() []roachpb.TenantID {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-		m := make(map[roachpb.TenantID]*tenantEntry)
-		for tenantID, entry := range t.mu.tenants {
-			m[tenantID] = entry
+	tenants := make([]roachpb.TenantID, 0, len(t.mu.tenants))
+	for tenantID, entry := range t.mu.tenants {
+		if entry.getConnsCount() > 0 {
+			tenants = append(tenants, tenantID)
 		}
-		return m
 	}
-
-	m := make(map[roachpb.TenantID][]ConnectionHandle)
-	tenantsCopy := snapshotTenantEntries()
-	for tenantID, entry := range tenantsCopy {
-		conns := entry.getConns()
-		if len(conns) == 0 {
-			continue
-		}
-		m[tenantID] = conns
-	}
-	return m
+	return tenants
 }
 
-// ensureTenantEntry ensures that an entry has been created for the given
-// tenant. If an entry already exists, that will be returned instead.
-func (t *ConnTracker) ensureTenantEntry(tenantID roachpb.TenantID) *tenantEntry {
+// getEntry retrieves the tenantEntry instance for the given tenant. If
+// allowCreate is set to false, getEntry returns nil if the entry does not
+// exist for the given tenant. On the other hand, if allowCreate is set to
+// true, getEntry creates an entry if one does not exist, and returns that.
+// getEntry will never return nil if allowCreate is true.
+func (t *ConnTracker) getEntry(tenantID roachpb.TenantID, allowCreate bool) *tenantEntry {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	entry, ok := t.mu.tenants[tenantID]
-	if !ok {
+	if !ok && allowCreate {
 		entry = newTenantEntry()
 		t.mu.tenants[tenantID] = entry
 	}
@@ -162,17 +157,38 @@ func (e *tenantEntry) removeHandle(handle ConnectionHandle) bool {
 	return true
 }
 
-// getConns returns a snapshot of connections.
-func (e *tenantEntry) getConns() []ConnectionHandle {
+// getConnsMap returns a snapshot of connections, indexed by server's address.
+// Since this a snapshot, the mappings may be stale, if the connection was
+// transferred to a different pod after the snapshot was made.
+func (e *tenantEntry) getConnsMap() map[string][]ConnectionHandle {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// Perform a copy to avoid races whenever the map gets mutated through
-	// addHandle or removeHandle. Copying 50K entries (the number of conns that
-	// we plan to support in each proxy) would be a few ms (~5ms).
-	conns := make([]ConnectionHandle, 0, len(e.mu.conns))
+	// Iterating 50K entries (the number of conns that we plan to support in
+	// each proxy) would be a few ms (< 10ms). Since getConnsMap will only be
+	// used during rebalancing, holding onto the lock while doing the below is
+	// fine. Connection goroutines that invoke addHandle or removeHandle would
+	// not have the forwarding affected, so this will not affect latency on the
+	// user's end. Regardless, if we'd like to improve this, we could first
+	// perform a copy of e.mu.conns, followed by releasing the lock before
+	// calling ServerRemoteAddr (that uses a forwarder-specific lock under the
+	// hood).
+	conns := make(map[string][]ConnectionHandle)
 	for handle := range e.mu.conns {
-		conns = append(conns, handle)
+		// Connection has been closed.
+		if handle.Context().Err() != nil {
+			continue
+		}
+		addr := handle.ServerRemoteAddr()
+		conns[addr] = append(conns[addr], handle)
 	}
 	return conns
+}
+
+// getConnsCount returns the number of connections associated with the tenant.
+func (e *tenantEntry) getConnsCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return len(e.mu.conns)
 }
