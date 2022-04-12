@@ -54,6 +54,8 @@ message AlterRole {
   string role_name = 3 [(gogoproto.jsontag) = ",omitempty"];
   // The options set on the user/role.
   repeated string options = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // Information corresponding to an ALTER ROLE SET statement.
+  repeated string set_info = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // PasswordHashConverted is recorded when the password credentials

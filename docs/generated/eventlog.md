@@ -2242,6 +2242,7 @@ An event of type `alter_role` is recorded when a role is altered.
 |--|--|--|
 | `RoleName` | The name of the affected user/role. | yes |
 | `Options` | The options set on the user/role. | no |
+| `SetInfo` | Information corresponding to an ALTER ROLE SET statement. | no |
 
 
 #### Common fields
