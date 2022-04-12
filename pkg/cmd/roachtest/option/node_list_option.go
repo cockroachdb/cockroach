@@ -113,3 +113,9 @@ func (n NodeListOption) String() string {
 	}
 	return buf.String()
 }
+
+// NoNodes is an option that explicitly deselects all nodes.
+type NoNodes struct{}
+
+// Option implements option.Option.
+func (n NoNodes) Option() {}

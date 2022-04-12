@@ -2359,6 +2359,12 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 		if s, ok := o.(nodeSelector); ok {
 			r = s.Merge(r)
 		}
+		if _, ok := o.(*option.NoNodes); ok {
+			return ""
+		}
+		if _, ok := o.(option.NoNodes); ok {
+			return ""
+		}
 	}
 	return c.name + r.String()
 }
