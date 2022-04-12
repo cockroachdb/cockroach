@@ -127,3 +127,9 @@ func (n NodeListOption) InstallNodes() install.Nodes {
 	}
 	return installNodes
 }
+
+// NoNodes is an option that explicitly deselects all nodes.
+type NoNodes struct{}
+
+// Option implements option.Option.
+func (n NoNodes) Option() {}

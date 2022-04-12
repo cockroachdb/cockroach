@@ -180,6 +180,10 @@ func (m *monitorImpl) wait() error {
 			wg.Done()
 		}()
 
+		if m.nodes == "" {
+			<-m.ctx.Done()
+			return
+		}
 		messagesChannel, err := roachprod.Monitor(m.ctx, m.l, m.nodes, install.MonitorOpts{})
 		if err != nil {
 			setErr(errors.Wrap(err, "monitor command failure"))
