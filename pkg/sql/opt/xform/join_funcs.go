@@ -446,81 +446,61 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			// join implements logic equivalent to simple equality between
 			// columns (where NULL never equals anything).
 			foundVals, allIdx, ok := c.findJoinFilterConstants(allFilters, idxCol)
+			if ok && len(foundVals) == 1 {
+				// If a single constant value was found, project it in the input
+				// and use it as an equality column.
+				idxColType := c.e.f.Metadata().ColumnMeta(idxCol).Type
+				constColID := c.e.f.Metadata().AddColumn(
+					fmt.Sprintf("lookup_join_const_col_@%d", idxCol),
+					idxColType,
+				)
+				inputProjections = append(inputProjections, c.e.f.ConstructProjectionsItem(
+					c.e.f.ConstructConstVal(foundVals[0], idxColType),
+					constColID,
+				))
+				constFilters = append(constFilters, allFilters[allIdx])
+				lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
+				rightSideCols = append(rightSideCols, idxCol)
+				continue
+			}
+
 			var foundRange bool
 			if !ok {
-				// Also allow a limited form of range condition filters.
-				allIdx, foundRange = c.findJoinFilterRange(allFilters, idxCol)
-				if !foundRange {
-					break
-				}
+				// If constant values were not found, try to find a filter that
+				// constrains this index column to a range.
+				_, foundRange = c.findJoinFilterRange(allFilters, idxCol)
 			}
 
-			if len(foundVals) > 1 {
-				if joinType == opt.LeftJoinOp || joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
-					// We cannot use the method constructJoinWithConstants to
-					// create a cross join for left, semi, or anti joins,
-					// because constructing a cross join with foundVals will
-					// increase the size of the input. As a result, non-matching
-					// input rows will show up more than once in the output,
-					// which is incorrect (see #59615 and #78681).
-					shouldBuildMultiSpanLookupJoin = true
-					break
-				}
-				if j == 0 && projectedVirtualCols.Empty() && index.PartitionCount() > 1 {
-					// If this is the first index column and there is more than one
-					// partition, we may be able to build a locality optimized lookup
-					// join. This requires a multi-span lookup join as a starting point.
-					// See GenerateLocalityOptimizedLookupJoin for details.
-					//
-					// Note that we do not currently support locality optimized
-					// lookup joins for indexes on virtual columns.
-					shouldBuildMultiSpanLookupJoin = true
-					break
-				}
-			}
-
-			if foundRange {
+			// If more than one constant value or a range to constrain the index
+			// column was found, use a LookupExpr rather than KeyCols.
+			if len(foundVals) > 1 || foundRange {
 				shouldBuildMultiSpanLookupJoin = true
-				break
 			}
 
-			// We will join these constant values with the input to make
-			// equality columns for the lookup join.
-			if constFilters == nil {
-				constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
-			}
-
-			idxColType := c.e.f.Metadata().ColumnMeta(idxCol).Type
-			constColAlias := fmt.Sprintf("lookup_join_const_col_@%d", idxCol)
-			join, constColID := c.constructJoinWithConstants(
-				lookupJoin.Input,
-				foundVals,
-				idxColType,
-				constColAlias,
-			)
-
-			lookupJoin.Input = join
-			lookupJoin.KeyCols = append(lookupJoin.KeyCols, constColID)
-			rightSideCols = append(rightSideCols, idxCol)
-			constFilters = append(constFilters, allFilters[allIdx])
+			// Either multiple constant values or a range were found, or the
+			// index column cannot be constrained. In all cases, we cannot
+			// continue on to the next index column, so we break out of the
+			// loop.
+			break
 		}
 
 		if shouldBuildMultiSpanLookupJoin {
-			// Some of the index columns were constrained to multiple constant values
-			// or a range expression, and we did not use the method
-			// constructJoinWithConstants to create a cross join as the input (either
-			// because it would have been incorrect or because it would have
-			// eliminated the opportunity to apply other optimizations such as
-			// locality optimized search; see above).
+			// Some of the index columns were constrained to multiple constant
+			// values or a range expression, so we cannot build a lookup join
+			// with KeyCols. As an alternative, we store all the filters needed
+			// for the lookup in LookupExpr, which will be used to construct
+			// spans at execution time. Each input row will generate multiple
+			// spans to lookup in the index.
 			//
-			// As an alternative, we store all the filters needed for the lookup in
-			// LookupExpr, which will be used to construct spans at execution time.
-			// The result is that each input row will generate multiple spans to
-			// lookup in the index. For example, if the index cols are (region, id)
-			// and the LookupExpr is `region in ('east', 'west') AND id = input.id`,
-			// each input row will generate two spans to be scanned in the lookup:
-			//   [/'east'/<id> - /'east'/<id>] [/'west'/<id> - /'west'/<id>]
-			// where <id> is the value of input.id for the current input row.
+			// For example, if the index cols are (region, id) and the
+			// LookupExpr is `region in ('east', 'west') AND id = input.id`,
+			// each input row will generate two spans to be scanned in the
+			// lookup:
+			//
+			//   [/'east'/<id> - /'east'/<id>]
+			//   [/'west'/<id> - /'west'/<id>]
+			//
+			// Where <id> is the value of input.id for the current input row.
 			var eqFilters memo.FiltersExpr
 			extractEqualityFilter := func(leftCol, rightCol opt.ColumnID) memo.FiltersItem {
 				return memo.ExtractJoinEqualityFilter(
@@ -534,9 +514,9 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 
 			// Reset KeyCols since we're not using it anymore.
 			lookupJoin.KeyCols = opt.ColList{}
-			// Reset input since we don't need any constant values that may have
-			// been joined on the input above.
-			lookupJoin.Input = input
+			// Reset the input projections since we don't need any constant
+			// values projected.
+			inputProjections = nil
 		}
 
 		if len(lookupJoin.KeyCols) == 0 && len(lookupJoin.LookupExpr) == 0 {
@@ -805,9 +785,9 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 			constFilters = make(memo.FiltersExpr, 0, numIndexKeyCols-j)
 		}
 
-		// Ensure that the constant filter is an equality, IN or inequality
-		// expression.   These are the only types of expressions currently supported
-		// by the lookupJoiner for building lookup spans.
+		// Construct a constant filter as an equality, IN expression, or
+		// inequality. These are the only types of expressions currently
+		// supported by the lookupJoiner for building lookup spans.
 		constFilter := filters[allIdx]
 		if !c.isCanonicalLookupJoinFilter(constFilter) {
 			if len(values) > 0 {
@@ -835,31 +815,36 @@ func (c *CustomFuncs) findFiltersForIndexLookup(
 // isCanonicalLookupJoinFilter returns true for the limited set of expr's that are
 // supported by the lookup joiner at execution time.
 func (c *CustomFuncs) isCanonicalLookupJoinFilter(filter memo.FiltersItem) bool {
-	var checkExpr func(expr opt.Expr) bool
-	checkExpr = func(expr opt.Expr) bool {
+	isVar := func(expr opt.Expr) bool {
+		_, ok := expr.(*memo.VariableExpr)
+		return ok
+	}
+	var isCanonicalInequality func(expr opt.Expr) bool
+	isCanonicalInequality = func(expr opt.Expr) bool {
 		switch t := expr.(type) {
 		case *memo.RangeExpr:
-			return checkExpr(t.And)
+			return isCanonicalInequality(t.And)
 		case *memo.AndExpr:
-			return checkExpr(t.Left) && checkExpr(t.Right)
+			return isCanonicalInequality(t.Left) && isCanonicalInequality(t.Right)
 		case *memo.GeExpr:
-			return checkExpr(t.Left) && checkExpr(t.Right)
+			return isCanonicalInequality(t.Left) && isCanonicalInequality(t.Right)
 		case *memo.GtExpr:
-			return checkExpr(t.Left) && checkExpr(t.Right)
+			return isCanonicalInequality(t.Left) && isCanonicalInequality(t.Right)
 		case *memo.LeExpr:
-			return checkExpr(t.Left) && checkExpr(t.Right)
+			return isCanonicalInequality(t.Left) && isCanonicalInequality(t.Right)
 		case *memo.LtExpr:
-			return checkExpr(t.Left) && checkExpr(t.Right)
-		case *memo.VariableExpr:
-			return true
-		case *memo.EqExpr:
-			return checkExpr(t.Left) && checkExpr(t.Right)
-		case *memo.InExpr:
-			return checkExpr(t.Left) && memo.CanExtractConstTuple(t.Right)
+			return isCanonicalInequality(t.Left) && isCanonicalInequality(t.Right)
 		}
-		return opt.IsConstValueOp(expr)
+		return isVar(expr) || opt.IsConstValueOp(expr)
 	}
-	return checkExpr(filter.Condition)
+	switch t := filter.Condition.(type) {
+	case *memo.EqExpr:
+		return isVar(t.Left) && opt.IsConstValueOp(t.Right)
+	case *memo.InExpr:
+		return isVar(t.Left) && memo.CanExtractConstTuple(t.Right)
+	default:
+		return isCanonicalInequality(t)
+	}
 }
 
 // makeConstFilter builds a filter that constrains the given column to the given
@@ -1364,9 +1349,7 @@ func (c *CustomFuncs) findJoinFilterRange(
 			constraintCol := constraint.Columns.Get(0).ID()
 			// See comment in findFiltersForIndexLookup for why we check filter here.
 			// We only support 1 span in the execution engine so check that.
-			if constraintCol != col ||
-				constraint.Spans.Count() != 1 ||
-				!c.isCanonicalLookupJoinFilter(filters[filterIdx]) {
+			if constraintCol != col || constraint.Spans.Count() != 1 {
 				continue
 			}
 			return filterIdx, true
