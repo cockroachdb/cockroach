@@ -70,17 +70,20 @@ const (
 	Table ObjectType = "table"
 	// Type represents a type object.
 	Type ObjectType = "type"
+	// Sequence represents a sequence object.
+	Sequence ObjectType = "sequence"
 )
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges    = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
-	ReadData         = List{GRANT, SELECT}
-	ReadWriteData    = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
-	DBPrivileges     = List{ALL, CONNECT, CREATE, DROP, GRANT, ZONECONFIG}
-	TablePrivileges  = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
-	SchemaPrivileges = List{ALL, GRANT, CREATE, USAGE}
-	TypePrivileges   = List{ALL, GRANT, USAGE}
+	AllPrivileges      = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
+	ReadData           = List{GRANT, SELECT}
+	ReadWriteData      = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
+	DBPrivileges       = List{ALL, CONNECT, CREATE, DROP, GRANT, ZONECONFIG}
+	TablePrivileges    = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	SchemaPrivileges   = List{ALL, GRANT, CREATE, USAGE}
+	TypePrivileges     = List{ALL, GRANT, USAGE}
+	SequencePrivileges = List{ALL, USAGE, SELECT, UPDATE}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -268,6 +271,8 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 		return DBPrivileges
 	case Type:
 		return TypePrivileges
+	case Sequence:
+		return SequencePrivileges
 	case Any:
 		return AllPrivileges
 	default:
