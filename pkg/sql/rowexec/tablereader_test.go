@@ -372,6 +372,7 @@ func TestLimitScans(t *testing.T) {
 	st := s.ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
+	evalCtx.TestingKnobs.ForceProductionValues = true
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
