@@ -322,7 +322,7 @@ func DescriptorsMatchingTargets(
 	asOf hlc.Timestamp,
 ) (DescriptorsMatched, error) {
 	ret := DescriptorsMatched{
-		DescsByTablePattern: make(map[tree.TablePattern]catalog.Descriptor, len(targets.Tables)),
+		DescsByTablePattern: make(map[tree.TablePattern]catalog.Descriptor, len(targets.Tables.TablePatterns)),
 	}
 
 	r, err := NewDescriptorResolver(descriptors)
@@ -424,7 +424,7 @@ func DescriptorsMatchingTargets(
 	alreadyRequestedTables := make(map[descpb.ID]struct{})
 	// Process specific SCHEMAs requested for a database.
 	alreadyRequestedSchemasByDBs := make(map[descpb.ID]map[string]struct{})
-	for _, pattern := range targets.Tables {
+	for _, pattern := range targets.Tables.TablePatterns {
 		var err error
 		origPat := pattern
 		pattern, err = pattern.NormalizeTablePattern()

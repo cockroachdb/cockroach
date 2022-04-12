@@ -171,7 +171,7 @@ FROM "".information_schema.type_privileges`
 			// if the type of target is table.
 			var allTables tree.TableNames
 
-			for _, tableTarget := range n.Targets.Tables {
+			for _, tableTarget := range n.Targets.Tables.TablePatterns {
 				tableGlob, err := tableTarget.NormalizeTablePattern()
 				if err != nil {
 					return nil, err

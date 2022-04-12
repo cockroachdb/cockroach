@@ -82,6 +82,7 @@ grant_stmt ::=
 	| 'GRANT' privilege_list 'TO' role_spec_list 'WITH' 'ADMIN' 'OPTION'
 	| 'GRANT' privileges 'ON' 'TYPE' target_types 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' privileges 'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
+	| 'GRANT' privileges 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 
 prepare_stmt ::=
@@ -97,6 +98,7 @@ revoke_stmt ::=
 	| 'REVOKE' privileges 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' privileges 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 
 savepoint_stmt ::=
@@ -334,6 +336,7 @@ targets ::=
 	| col_name_keyword
 	| unreserved_keyword
 	| complex_table_pattern
+	| 'SEQUENCE' table_pattern_list
 	| table_pattern ',' table_pattern_list
 	| 'TABLE' table_pattern_list
 	| 'TENANT' iconst64
@@ -1364,12 +1367,12 @@ complex_table_pattern ::=
 	| db_object_name_component '.' '*'
 	| '*'
 
+table_pattern_list ::=
+	( table_pattern ) ( ( ',' table_pattern ) )*
+
 table_pattern ::=
 	simple_db_object_name
 	| complex_table_pattern
-
-table_pattern_list ::=
-	( table_pattern ) ( ( ',' table_pattern ) )*
 
 iconst64 ::=
 	'ICONST'
