@@ -624,7 +624,7 @@ func (b *Builder) scanParams(
 	parallelize := false
 	if hardLimit == 0 && softLimit == 0 {
 		maxResults, ok := b.indexConstraintMaxResults(scan, relProps)
-		if ok && maxResults < ParallelScanResultThreshold {
+		if ok && maxResults < getParallelScanResultThreshold(b.evalCtx.TestingKnobs.ForceProductionValues) {
 			// Don't set the flag when we have a single span which returns a single
 			// row: it does nothing in this case except litter EXPLAINs.
 			// There are still cases where the flag doesn't do anything when the spans
