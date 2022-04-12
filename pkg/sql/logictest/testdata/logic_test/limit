@@ -358,3 +358,7 @@ SELECT oid::INT, typname FROM pg_type ORDER BY oid LIMIT 3
 16  bool
 17  bytea
 18  char
+
+# Regression test for limit hint overflowing int64 range and becoming negative.
+statement ok
+SELECT * FROM t65171 WHERE x = 1 OFFSET 1 LIMIT 9223372036854775807

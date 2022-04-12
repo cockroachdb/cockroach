@@ -37,7 +37,7 @@ type indexJoinNode struct {
 
 	reqOrdering ReqOrdering
 
-	limitHint int
+	limitHint int64
 }
 
 func (n *indexJoinNode) startExec(params runParams) error {

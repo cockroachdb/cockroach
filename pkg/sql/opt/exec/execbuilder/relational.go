@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -595,7 +594,7 @@ func (b *Builder) scanParams(
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.PartitionConstrainedScan)
 	}
 
-	softLimit := int64(math.Ceil(reqProps.LimitHint))
+	softLimit := reqProps.LimitHintInt64()
 	hardLimit := scan.HardLimit.RowCount()
 
 	// If this is a bounded staleness query, check that it touches at most one
@@ -1723,7 +1722,7 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	needed, output := b.getColumns(cols, join.Table)
 	res := execPlan{outputCols: output}
 	res.root, err = b.factory.ConstructIndexJoin(
-		input.root, tab, keyCols, needed, res.reqOrdering(join), int(math.Ceil(join.RequiredPhysical().LimitHint)),
+		input.root, tab, keyCols, needed, res.reqOrdering(join), join.RequiredPhysical().LimitHintInt64(),
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -1832,7 +1831,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		join.IsSecondJoinInPairedJoiner,
 		res.reqOrdering(join),
 		locking,
-		int(math.Ceil(join.RequiredPhysical().LimitHint)),
+		join.RequiredPhysical().LimitHintInt64(),
 	)
 	if err != nil {
 		return execPlan{}, err
