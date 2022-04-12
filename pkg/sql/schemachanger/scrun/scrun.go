@@ -151,14 +151,12 @@ func executeStage(
 		}
 	}
 
-	log.Infof(ctx, "executing stage %d/%d in %v, %d ops of type %s (rollback=%v)",
-		stage.Ordinal, stage.StagesInPhase, stage.Phase, len(stage.Ops()), stage.Ops()[0].Type(), p.InRollback)
+	log.Infof(ctx, "executing %s (rollback=%v)", stage, p.InRollback)
 	start := timeutil.Now()
 	defer func() {
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "executed stage %d/%d in %v, %d ops of type %s (rollback=%v) took %v: err = %v",
-				stage.Ordinal, stage.StagesInPhase, stage.Phase, len(stage.Ops()), stage.Ops()[0].Type(), p.InRollback,
-				timeutil.Since(start), err)
+			log.Infof(ctx, "executing %s (rollback=%v) took %v: err = %v",
+				stage, p.InRollback, timeutil.Since(start), err)
 		}
 	}()
 	if err := scexec.ExecuteStage(ctx, deps, stage.Ops()); err != nil {
@@ -168,7 +166,7 @@ func executeStage(
 			!errors.Is(err, context.Canceled) {
 			err = p.DecorateErrorWithPlanDetails(err)
 		}
-		return errors.Wrapf(err, "error executing %s", stage.String())
+		return errors.Wrapf(err, "error executing %s", stage)
 	}
 	if knobs != nil && knobs.AfterStage != nil {
 		if err := knobs.AfterStage(p, stageIdx); err != nil {

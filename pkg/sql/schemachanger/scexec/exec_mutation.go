@@ -305,6 +305,7 @@ func manageJobs(
 			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), setNonCancelable func(),
 		) error {
 			progress := *md.Progress
+			progress.RunningStatus = update.runningStatus
 			updateProgress(&progress)
 			if !md.Payload.Noncancelable && update.isNonCancelable {
 				setNonCancelable()
@@ -361,10 +362,11 @@ type eventPayload struct {
 
 type schemaChangerJobUpdate struct {
 	isNonCancelable bool
+	runningStatus   string
 }
 
 func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
-	jobID jobspb.JobID, isNonCancelable bool,
+	jobID jobspb.JobID, isNonCancelable bool, runningStatus string,
 ) error {
 	if mvs.schemaChangerJobUpdates == nil {
 		mvs.schemaChangerJobUpdates = make(map[jobspb.JobID]schemaChangerJobUpdate)
@@ -373,6 +375,7 @@ func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
 	}
 	mvs.schemaChangerJobUpdates[jobID] = schemaChangerJobUpdate{
 		isNonCancelable: isNonCancelable,
+		runningStatus:   runningStatus,
 	}
 	return nil
 }
@@ -478,11 +481,19 @@ func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
 	isNonCancelable bool,
 	auth scpb.Authorization,
 	descriptorIDs descpb.IDs,
+	runningStatus string,
 ) error {
 	if mvs.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
 	}
-	mvs.schemaChangerJob = MakeDeclarativeSchemaChangeJobRecord(jobID, stmts, isNonCancelable, auth, descriptorIDs)
+	mvs.schemaChangerJob = MakeDeclarativeSchemaChangeJobRecord(
+		jobID,
+		stmts,
+		isNonCancelable,
+		auth,
+		descriptorIDs,
+		runningStatus,
+	)
 	return nil
 }
 
@@ -501,6 +512,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 	isNonCancelable bool,
 	auth scpb.Authorization,
 	descriptorIDs descpb.IDs,
+	runningStatus string,
 ) *jobs.Record {
 	stmtStrs := make([]string, len(stmts))
 	for i, stmt := range stmts {
@@ -522,8 +534,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 		DescriptorIDs: descriptorIDs,
 		Details:       jobspb.NewSchemaChangeDetails{},
 		Progress:      jobspb.NewSchemaChangeProgress{},
-		// TODO(ajwerner): It'd be good to populate the RunningStatus at all times.
-		RunningStatus: "",
+		RunningStatus: jobs.RunningStatus(runningStatus),
 		NonCancelable: isNonCancelable,
 	}
 	return rec

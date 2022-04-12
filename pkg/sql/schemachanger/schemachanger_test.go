@@ -656,6 +656,50 @@ func TestConcurrentSchemaChangesWait(t *testing.T) {
 	}
 }
 
+func TestSchemaChangerJobRunningStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	var runningStatus0, runningStatus1 atomic.Value
+	var jr *jobs.Registry
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
+			AfterStage: func(p scplan.Plan, stageIdx int) error {
+				if p.Params.ExecutionPhase < scop.PostCommitPhase || stageIdx > 1 {
+					return nil
+				}
+				job, err := jr.LoadJob(ctx, p.JobID)
+				require.NoError(t, err)
+				switch stageIdx {
+				case 0:
+					runningStatus0.Store(job.Progress().RunningStatus)
+				case 1:
+					runningStatus1.Store(job.Progress().RunningStatus)
+				}
+				return nil
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	jr = s.JobRegistry().(*jobs.Registry)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+	tdb.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
+	tdb.Exec(t, `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
+
+	require.NotNil(t, runningStatus0.Load())
+	require.Regexp(t, "PostCommit.* pending", runningStatus0.Load().(string))
+	require.NotNil(t, runningStatus1.Load())
+	require.Regexp(t, "PostCommit.* pending", runningStatus1.Load().(string))
+}
+
 func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

@@ -231,6 +231,8 @@ PreCommitPhase stage 1 of 1 with 33 MutationType ops
       - 109
       JobID: 1
       NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
+        pending
       Statements:
       - statement: DROP TABLE defaultdb.shipments CASCADE
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
@@ -772,7 +774,7 @@ CREATE TABLE defaultdb.greeter (
 ops
 DROP TABLE defaultdb.greeter
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[Table:{DescID: 112}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
@@ -882,6 +884,7 @@ PreCommitPhase stage 1 of 1 with 18 MutationType ops
       - 112
       JobID: 1
       NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.greeter
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹greeter›

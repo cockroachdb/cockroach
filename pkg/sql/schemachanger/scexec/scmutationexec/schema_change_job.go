@@ -23,14 +23,14 @@ func (m *visitor) CreateSchemaChangerJob(
 	ctx context.Context, job scop.CreateSchemaChangerJob,
 ) error {
 	return m.s.AddNewSchemaChangerJob(
-		job.JobID, job.Statements, job.NonCancelable, job.Authorization, job.DescriptorIDs,
+		job.JobID, job.Statements, job.NonCancelable, job.Authorization, job.DescriptorIDs, job.RunningStatus,
 	)
 }
 
 func (m *visitor) UpdateSchemaChangerJob(
 	ctx context.Context, op scop.UpdateSchemaChangerJob,
 ) error {
-	return m.s.UpdateSchemaChangerJob(op.JobID, op.IsNonCancelable)
+	return m.s.UpdateSchemaChangerJob(op.JobID, op.IsNonCancelable, op.RunningStatus)
 }
 
 func (m *visitor) SetJobStateOnDescriptor(
