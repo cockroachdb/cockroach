@@ -1079,6 +1079,88 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 	check([]roachpb.ReplicationTarget{tc.Target(0), tc.Target(1), tc.Target(2)})
 }
 
+// TestDemotedLearnerRemovalHandlesRace tests that a `ChangeReplicas` request at
+// the last step of removing a demoted learner replica does not fail if it finds
+// that the learner has been already removed from the range.
+func TestDemotedLearnerRemovalHandlesRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var activateTestingKnob int64
+	waitForRebalanceToBlockCh := make(chan struct{})
+	blockDemotedLearnerRemovalCh := make(chan struct{})
+	tc := testcluster.StartTestCluster(
+		t, 3, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						BeforeRemovingDemotedLearner: func() {
+							if atomic.LoadInt64(&activateTestingKnob) == 1 {
+								// Signal to the test that the rebalance is now trying to remove
+								// the demoted learner.
+								close(waitForRebalanceToBlockCh)
+								// Wait for the test to manually remove the demoted learner
+								// before letting the rebalance continue.
+								blockDemotedLearnerRemovalCh <- struct{}{}
+							}
+						},
+					},
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	// Add a new voting replica on node 2, then rebalance it to node 3. This will
+	// block on blockDemotedLearnerRemovalCh.
+	tc.AddVotersOrFatal(t, scratchKey, makeReplicationTargets(2)...)
+	atomic.StoreInt64(&activateTestingKnob, 1)
+	rebalanceCh := make(chan error)
+	var finishAndGetRecording func() tracing.Recording
+	err := tc.Stopper().RunAsyncTask(ctx, "test", func(ctx context.Context) {
+		ctx, finishAndGetRecording = tracing.ContextWithRecordingSpan(
+			ctx, tc.Servers[0].Tracer(), "rebalance",
+		)
+		_, err := tc.RebalanceVoter(
+			ctx,
+			scratchKey,
+			roachpb.ReplicationTarget{StoreID: 2, NodeID: 2}, /* src */
+			roachpb.ReplicationTarget{StoreID: 3, NodeID: 3}, /* dest */
+		)
+		rebalanceCh <- err
+	})
+	require.NoError(t, err)
+	defer func() {
+		// Unblock the rebalance and expect it to complete.
+		<-blockDemotedLearnerRemovalCh
+		require.NoError(t, <-rebalanceCh)
+		trace := finishAndGetRecording()
+		// Check that we actually detected that the learner was removed, and
+		// no-oped.
+		require.Contains(t, trace.String(), "skipping learner removal because it was already removed")
+	}()
+
+	select {
+	case <-waitForRebalanceToBlockCh:
+		// Continue.
+	case <-time.After(15 * time.Second):
+		t.Fatal("timed out waiting for rebalance to block")
+	}
+
+	// Manually remove the learner replica from the range, and expect that to not
+	// affect the previous rebalance anymore.
+	_, leaseRepl := getFirstStoreReplica(t, tc.Servers[0], scratchKey)
+	require.NotNil(t, leaseRepl)
+	beforeDesc := tc.LookupRangeOrFatal(t, scratchKey)
+	_, err = leaseRepl.TestingRemoveLearner(
+		ctx, &beforeDesc, roachpb.ReplicationTarget{StoreID: 2, NodeID: 2},
+	)
+	require.NoError(t, err)
+}
+
 func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
