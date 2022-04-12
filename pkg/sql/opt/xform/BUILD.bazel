@@ -34,6 +34,7 @@ go_library(
         "//pkg/sql/opt/idxconstraint",
         "//pkg/sql/opt/invertedexpr",
         "//pkg/sql/opt/invertedidx",
+        "//pkg/sql/opt/lookupjoin",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/ordering",
@@ -62,8 +63,6 @@ go_test(
     srcs = [
         "coster_test.go",
         "general_funcs_test.go",
-        "join_funcs_export_test.go",
-        "join_funcs_test.go",
         "join_order_builder_test.go",
         "main_test.go",
         "optimizer_test.go",
