@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "lookupjoin",
+    srcs = ["constraint_builder.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/lookupjoin",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "lookupjoin_test",
+    srcs = [
+        "constraint_builder_test.go",
+        "exports_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":lookupjoin"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/testutils",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/leaktest",
+    ],
+)

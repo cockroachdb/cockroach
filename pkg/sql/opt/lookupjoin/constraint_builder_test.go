@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package xform_test
+package lookupjoin_test
 
 import (
 	"reflect"
@@ -17,16 +17,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/lookupjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestCustomFuncs_makeRangeFilter(t *testing.T) {
+func TestMakeRangeFilterFromSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	fb := makeFilterBuilder(t)
 	col := fb.tbl.ColumnID(0)
@@ -91,55 +91,21 @@ func TestCustomFuncs_makeRangeFilter(t *testing.T) {
 			constraint.MakeKey(intHigh), constraint.IncludeBoundary,
 		},
 	}
-	fut := xform.TestingMakeRangeFilterFromSpan
+	var b lookupjoin.ConstraintBuilder
+	b.Init(fb.f, nil, nil, nil, nil, opt.ColSet{}, nil, nil)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := fb.o.CustomFuncs()
 			var sp constraint.Span
 			sp.Init(tt.start, tt.startBoundary, tt.end, tt.endBoundary)
 			want := fb.buildFilter(tt.filter)
-			if got := fut(c, col, &sp); !reflect.DeepEqual(got, want) {
+			if got := lookupjoin.TestingMakeRangeFilterFromSpan(&b, col, &sp); !reflect.DeepEqual(got, want) {
 				t.Errorf("makeRangeFilter() = %v, want %v", got, want)
 			}
 		})
 	}
 }
 
-type testFilterBuilder struct {
-	t       *testing.T
-	semaCtx *tree.SemaContext
-	ctx     *tree.EvalContext
-	o       *xform.Optimizer
-	f       *norm.Factory
-	tbl     opt.TableID
-}
-
-func makeFilterBuilder(t *testing.T) testFilterBuilder {
-	var o xform.Optimizer
-	ctx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	o.Init(&ctx, nil)
-	f := o.Factory()
-	cat := testcat.New()
-	if _, err := cat.ExecuteDDL("CREATE TABLE a (i INT PRIMARY KEY, b BOOL)"); err != nil {
-		t.Fatal(err)
-	}
-	tn := tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a")
-	tbl := f.Metadata().AddTable(cat.Table(tn), tn)
-	return testFilterBuilder{
-		t:       t,
-		semaCtx: &tree.SemaContext{},
-		ctx:     &ctx,
-		o:       &o,
-		f:       f,
-		tbl:     tbl,
-	}
-}
-
-func (fb *testFilterBuilder) buildFilter(str string) memo.FiltersItem {
-	return testutils.BuildFilters(fb.t, fb.f, fb.semaCtx, fb.ctx, str)[0]
-}
-
-func TestCustomFuncs_isCanonicalFilter(t *testing.T) {
+func TestIsCanonicalFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	fb := makeFilterBuilder(t)
 
@@ -182,14 +148,44 @@ func TestCustomFuncs_isCanonicalFilter(t *testing.T) {
 			want:   false,
 		},
 	}
-	fut := xform.TestingIsCanonicalLookupJoinFilter
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := fb.o.CustomFuncs()
 			filter := fb.buildFilter(tt.filter)
-			if got := fut(c, filter); got != tt.want {
-				t.Errorf("isCanonicalLookupJoinFilter() = %v, want %v", got, tt.want)
+			if got := lookupjoin.TestingIsCanonicalLookupJoinFilter(filter); got != tt.want {
+				t.Errorf("isCanonicalFilter() = %v, want %v", got, tt.want)
 			}
 		})
 	}
+}
+
+type testFilterBuilder struct {
+	t       *testing.T
+	semaCtx *tree.SemaContext
+	evalCtx *tree.EvalContext
+	f       *norm.Factory
+	tbl     opt.TableID
+}
+
+func makeFilterBuilder(t *testing.T) testFilterBuilder {
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var f norm.Factory
+	f.Init(&evalCtx, nil)
+	cat := testcat.New()
+	if _, err := cat.ExecuteDDL("CREATE TABLE a (i INT PRIMARY KEY, b BOOL)"); err != nil {
+		t.Fatal(err)
+	}
+	tn := tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a")
+	tbl := f.Metadata().AddTable(cat.Table(tn), tn)
+	return testFilterBuilder{
+		t:       t,
+		semaCtx: &tree.SemaContext{},
+		evalCtx: &evalCtx,
+		// o:       &o,
+		f:   &f,
+		tbl: tbl,
+	}
+}
+
+func (fb *testFilterBuilder) buildFilter(str string) memo.FiltersItem {
+	return testutils.BuildFilters(fb.t, fb.f, fb.semaCtx, fb.evalCtx, str)[0]
 }
