@@ -172,7 +172,7 @@ var l0SublevelsThresholdEnforce = settings.RegisterEnumSetting(
 		"event, `block_rebalance_to` will exclude candidates stores from being "+
 		"targets of rebalance actions, `block_all` will exclude candidate stores "+
 		"from being targets of both allocation and rebalancing",
-	"block_none_log",
+	"block_rebalance_to",
 	map[int64]string{
 		int64(storeHealthNoAction):         "block_none",
 		int64(storeHealthLogOnly):          "block_none_log",
