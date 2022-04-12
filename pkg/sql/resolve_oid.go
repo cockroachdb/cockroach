@@ -55,7 +55,12 @@ func resolveOID(
 ) (*tree.DOid, error) {
 	info, ok := regTypeInfos[resultType.Oid()]
 	if !ok {
-		return nil, errors.AssertionFailedf("illegal oid type %v", resultType)
+		return nil, pgerror.Newf(
+			pgcode.InvalidTextRepresentation,
+			"invalid input syntax for type %s: %q",
+			resultType,
+			tree.AsStringWithFlags(toResolve, tree.FmtBareStrings),
+		)
 	}
 	queryCol := info.nameCol
 	if _, isOid := toResolve.(*tree.DOid); isOid {
