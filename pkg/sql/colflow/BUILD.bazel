@@ -115,6 +115,7 @@ go_test(
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/stop",
