@@ -750,13 +750,13 @@ func makeScheduledBackupEval(
 	ctx context.Context, p sql.PlanHookState, schedule *tree.ScheduledBackup,
 ) (*scheduledBackupEval, error) {
 	var err error
-	if schedule.Targets != nil && schedule.Targets.Tables != nil {
+	if schedule.Targets != nil && schedule.Targets.Tables.TablePatterns != nil {
 		// Table backup targets must be fully qualified during scheduled backup
 		// planning. This is because the actual execution of the backup job occurs
 		// in a background, scheduled job session, that does not have the same
 		// resolution configuration as during planning.
-		schedule.Targets.Tables, err = fullyQualifyScheduledBackupTargetTables(ctx, p,
-			schedule.Targets.Tables)
+		schedule.Targets.Tables.TablePatterns, err = fullyQualifyScheduledBackupTargetTables(ctx, p,
+			schedule.Targets.Tables.TablePatterns)
 		if err != nil {
 			return nil, errors.Wrap(err, "qualifying backup target tables")
 		}

@@ -74,7 +74,7 @@ func TestClassifyTablePattern(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				tp, err := stmt.AST.(*tree.Grant).Targets.Tables[0].NormalizeTablePattern()
+				tp, err := stmt.AST.(*tree.Grant).Targets.Tables.TablePatterns[0].NormalizeTablePattern()
 				if err != nil {
 					return nil, err
 				}

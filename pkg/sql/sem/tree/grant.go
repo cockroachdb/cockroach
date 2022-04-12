@@ -34,9 +34,11 @@ type Grant struct {
 type TargetList struct {
 	Databases NameList
 	Schemas   ObjectNamePrefixList
-	Tables    TablePatterns
+	Tables    TableAttrs
 	TenantID  TenantID
 	Types     []*UnresolvedObjectName
+	// If the target is for all sequences in a set of schemas.
+	AllSequencesInSchema bool
 	// If the target is for all tables in a set of schemas.
 	AllTablesInSchema bool
 	// Whether the target is only system users and roles_members table
@@ -54,6 +56,9 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 	if tl.Databases != nil {
 		ctx.WriteString("DATABASE ")
 		ctx.FormatNode(&tl.Databases)
+	} else if tl.AllSequencesInSchema {
+		ctx.WriteString("ALL SEQUENCES IN SCHEMA ")
+		ctx.FormatNode(&tl.Schemas)
 	} else if tl.AllTablesInSchema {
 		ctx.WriteString("ALL TABLES IN SCHEMA ")
 		ctx.FormatNode(&tl.Schemas)
@@ -72,8 +77,12 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 			ctx.FormatNode(typ)
 		}
 	} else {
-		ctx.WriteString("TABLE ")
-		ctx.FormatNode(&tl.Tables)
+		if tl.Tables.IsSequence {
+			ctx.WriteString("SEQUENCE ")
+		} else {
+			ctx.WriteString("TABLE ")
+		}
+		ctx.FormatNode(&tl.Tables.TablePatterns)
 	}
 }
 
