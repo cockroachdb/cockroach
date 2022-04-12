@@ -163,7 +163,7 @@ func (tb *tableWriterBase) init(
 	if evalCtx != nil {
 		tb.lockTimeout = evalCtx.SessionData().LockTimeout
 	}
-	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionBatchSizes
+	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionValues
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
 	batchMaxBytes := int(maxBatchBytes.Default())
 	if evalCtx != nil {

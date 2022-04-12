@@ -880,7 +880,7 @@ func (jr *joinReader) readInput() (
 		}
 		err = jr.fetcher.StartScan(
 			jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
-			jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+			jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 	}
 	if err != nil {
@@ -956,7 +956,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			}
 			if err := jr.fetcher.StartScan(
 				jr.Ctx, jr.FlowCtx.Txn, spans, bytesLimit, rowinfra.NoRowLimit,
-				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
 			); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()
