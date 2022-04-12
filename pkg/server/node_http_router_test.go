@@ -45,6 +45,7 @@ func TestRouteToNode(t *testing.T) {
 		nodeIDRequestedInQueryParam string
 		expectStatusCode            int
 		expectRegex                 *regexp.Regexp
+		expectSetCookieResp         string
 	}{
 		{
 			name:                    "local _status/vars on node 2",
@@ -129,6 +130,13 @@ func TestRouteToNode(t *testing.T) {
 			nodeIDRequestedInCookie: "34",
 			expectStatusCode:        400,
 		},
+		{
+			name:                        "unknown nodeID from query param returns 400",
+			path:                        "/_status/vars",
+			sourceServerID:              0,
+			nodeIDRequestedInQueryParam: "34",
+			expectStatusCode:            400,
+		},
 	}
 
 	for _, rt := range routesToTest {
@@ -159,13 +167,15 @@ func TestRouteToNode(t *testing.T) {
 			defer resp.Body.Close()
 
 			require.Equal(t, rt.expectStatusCode, resp.StatusCode)
-			if rt.expectStatusCode >= 400 && rt.expectStatusCode != 401 {
+			if rt.expectStatusCode >= 400 && rt.expectStatusCode != 401 && rt.nodeIDRequestedInCookie != "" {
 				// We should be resetting the cookie on all errors to prevent
 				// the user from getting stuck. Unauthorized errors are
 				// omitted because the user can generally take action there
 				// and log in.
 				require.Equal(t, resp.Cookies()[0].Name, RemoteNodeID)
 				require.Equal(t, resp.Cookies()[0].Value, "")
+				require.Equal(t, resp.Cookies()[0].Path, "/")
+				require.Equal(t, resp.Cookies()[0].RawExpires, "Thu, 01 Jan 1970 00:00:01 GMT")
 			}
 			bodyBytes, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
