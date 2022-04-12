@@ -20,7 +20,11 @@ import { InlineAlert } from "src/components";
 
 import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import {
+  nodesSummarySelector,
+  NodesSummary,
+  LivenessStatus,
+} from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
@@ -29,6 +33,11 @@ import {
   localityToString,
   NodeFilterList,
 } from "src/views/reports/components/nodeFilterList";
+import {
+  PageConfig,
+  PageConfigItem,
+} from "src/views/shared/components/pageconfig";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 interface NodesOwnProps {
   nodesSummary: NodesSummary;
@@ -262,10 +271,20 @@ const nodesTableRows: NodesTableRowParams[] = [
   },
 ];
 
+type LocalNodeState = { selectFilter: string };
 /**
  * Renders the Nodes Diagnostics Report page.
  */
-export class Nodes extends React.Component<NodesProps, {}> {
+export class Nodes extends React.Component<NodesProps, LocalNodeState> {
+  constructor(props: NodesProps) {
+    super(props);
+
+    this.state = {
+      selectFilter: _.isEmpty(this.props.location.search)
+        ? LivenessStatus.NODE_STATUS_LIVE.toString()
+        : "-1",
+    };
+  }
   refresh(props = this.props) {
     props.refreshLiveness();
     props.refreshNodes();
@@ -336,8 +355,7 @@ export class Nodes extends React.Component<NodesProps, {}> {
 
   render() {
     const { nodesSummary } = this.props;
-    const { nodeStatusByID } = nodesSummary;
-
+    const { nodeStatusByID, livenessStatusByNodeID } = nodesSummary;
     if (this.requiresAdmin()) {
       return (
         <InlineAlert title="" message="This page requires admin privileges." />
@@ -365,6 +383,13 @@ export class Nodes extends React.Component<NodesProps, {}> {
         ),
       );
     }
+    if (this.state.selectFilter !== "-1") {
+      nodeIDsContext = nodeIDsContext.filter(
+        nodeID =>
+          livenessStatusByNodeID[nodeID] ===
+          Number.parseInt(this.state.selectFilter),
+      );
+    }
 
     // Sort the node IDs and then convert them back to string for lookups.
     const orderedNodeIDs = nodeIDsContext
@@ -372,18 +397,17 @@ export class Nodes extends React.Component<NodesProps, {}> {
       .map(nodeID => nodeID.toString())
       .value();
 
-    if (_.isEmpty(orderedNodeIDs)) {
-      return (
-        <section className="section">
-          <h1 className="base-heading">Node Diagnostics</h1>
-          <NodeFilterList
-            nodeIDs={filters.nodeIDs}
-            localityRegex={filters.localityRegex}
-          />
-          <h2 className="base-heading">No nodes match the filters</h2>
-        </section>
-      );
-    }
+    const dropdownOptions: DropdownOption[] = [
+      {
+        value: LivenessStatus.NODE_STATUS_LIVE.toString(),
+        label: "Active Nodes",
+      },
+      {
+        value: LivenessStatus.NODE_STATUS_DECOMMISSIONED.toString(),
+        label: "Decomissioned Nodes",
+      },
+      { value: "-1", label: "All Nodes" },
+    ];
 
     return (
       <section className="section">
@@ -393,21 +417,46 @@ export class Nodes extends React.Component<NodesProps, {}> {
           nodeIDs={filters.nodeIDs}
           localityRegex={filters.localityRegex}
         />
-        <h2 className="base-heading">Nodes</h2>
-        <table className="nodes-table">
-          <tbody>
-            {_.map(nodesTableRows, (row, key) => {
-              return this.renderNodesTableRow(
-                orderedNodeIDs,
-                key,
-                row.title,
-                row.extract,
-                row.equality,
-                row.cellTitle,
-              );
-            })}
-          </tbody>
-        </table>
+        {!_.isEmpty(orderedNodeIDs) && <h2 className="base-heading">Nodes</h2>}
+        {_.isEmpty(filters) && (
+          <PageConfig>
+            <PageConfigItem>
+              <Dropdown
+                title="Node Selection"
+                options={dropdownOptions}
+                selected={this.state.selectFilter}
+                onChange={selected =>
+                  this.setState({ selectFilter: selected.value })
+                }
+              />
+            </PageConfigItem>
+          </PageConfig>
+        )}
+        {_.isEmpty(orderedNodeIDs) ? (
+          <section className="section">
+            <h1 className="base-heading">Node Diagnostics</h1>
+            <NodeFilterList
+              nodeIDs={filters.nodeIDs}
+              localityRegex={filters.localityRegex}
+            />
+            <h2 className="base-heading">No nodes match the filters</h2>
+          </section>
+        ) : (
+          <table className="nodes-table">
+            <tbody>
+              {_.map(nodesTableRows, (row, key) => {
+                return this.renderNodesTableRow(
+                  orderedNodeIDs,
+                  key,
+                  row.title,
+                  row.extract,
+                  row.equality,
+                  row.cellTitle,
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </section>
     );
   }
