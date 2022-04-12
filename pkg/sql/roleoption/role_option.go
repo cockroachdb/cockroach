@@ -60,7 +60,6 @@ const (
 	NOCANCELQUERY
 	MODIFYCLUSTERSETTING
 	NOMODIFYCLUSTERSETTING
-	DEFAULTSETTINGS
 	VIEWACTIVITYREDACTED
 	NOVIEWACTIVITYREDACTED
 	SQLLOGIN
@@ -126,7 +125,6 @@ var ByName = map[string]Option{
 	"NOCANCELQUERY":          NOCANCELQUERY,
 	"MODIFYCLUSTERSETTING":   MODIFYCLUSTERSETTING,
 	"NOMODIFYCLUSTERSETTING": NOMODIFYCLUSTERSETTING,
-	"DEFAULTSETTINGS":        DEFAULTSETTINGS,
 	"VIEWACTIVITYREDACTED":   VIEWACTIVITYREDACTED,
 	"NOVIEWACTIVITYREDACTED": NOVIEWACTIVITYREDACTED,
 	"SQLLOGIN":               SQLLOGIN,
@@ -170,9 +168,8 @@ func (rol List) GetSQLStmts(op string) (map[string]func() (bool, string, error),
 		// Skip PASSWORD and DEFAULTSETTINGS options.
 		// Since PASSWORD still resides in system.users, we handle setting PASSWORD
 		// outside of this set stmt.
-		// DEFAULTSETTINGS is stored in system.database_role_settings.
 		// TODO(richardjcai): migrate password to system.role_options
-		if ro.Option == PASSWORD || ro.Option == DEFAULTSETTINGS {
+		if ro.Option == PASSWORD {
 			continue
 		}
 

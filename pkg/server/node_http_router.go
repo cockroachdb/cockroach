@@ -57,20 +57,24 @@ func (np *nodeProxy) nodeProxyHandler(
 	w http.ResponseWriter, r *http.Request, next http.HandlerFunc,
 ) {
 	ctx := r.Context()
-	nodeIDString, err := np.getNodeIDFromRequest(r)
+	nodeIDString, clearCookieOnError, err := np.getNodeIDFromRequest(r)
 	if err != nil {
 		if errors.Is(err, ErrNoNodeID) {
 			next(w, r)
 			return
 		}
-		resetCookie(w)
+		if clearCookieOnError {
+			resetCookie(w, r)
+		}
 		panic(errors.Wrap(err, "server: unexpected error reading nodeID from request"))
 	}
 	nodeID, local, err := np.parseNodeID(nodeIDString)
 	if err != nil {
 		httpErr := errors.Wrapf(err, "server: error parsing nodeID from request: %s", nodeIDString)
 		log.Errorf(ctx, "%v", httpErr)
-		resetCookie(w)
+		if clearCookieOnError {
+			resetCookie(w, r)
+		}
 		// Users are expected to recover from this by formatting their
 		// nodeID properly, hence the 4xx code.
 		http.Error(w, httpErr.Error(), http.StatusBadRequest)
@@ -79,40 +83,46 @@ func (np *nodeProxy) nodeProxyHandler(
 		next(w, r)
 		return
 	}
-	np.routeToNode(w, r, nodeID)
+	np.routeToNode(w, r, clearCookieOnError, nodeID)
 }
 
 // ErrNoNodeID is returned by getNodeIDFromRequest if the request
 // contains no nodeID to proxy to.
 var ErrNoNodeID = errors.New("http: nodeID not present in request")
 
-func (np *nodeProxy) getNodeIDFromRequest(r *http.Request) (string, error) {
+func (np *nodeProxy) getNodeIDFromRequest(
+	r *http.Request,
+) (nodeIDString string, nodeIDFromCookie bool, retErr error) {
 	queryParam := r.URL.Query().Get(RemoteNodeID)
 	if queryParam != "" {
-		return queryParam, nil
+		return queryParam, false, nil
 	}
 	cookie, err := r.Cookie(RemoteNodeID)
 	if err != nil {
 		if errors.Is(err, http.ErrNoCookie) {
-			return "", ErrNoNodeID
+			return "", false, ErrNoNodeID
 		}
 		// This should never trigger based on the implementation of
 		// `Cookie` in stdlib.
-		return "", errors.Wrapf(err, "server: error decoding node routing cookie")
+		return "", false, errors.Wrapf(err, "server: error decoding node routing cookie")
 	}
-	return cookie.Value, nil
+	return cookie.Value, true, nil
 }
 
 // routeToNode will proxy the given request to the node identified by
 // nodeID.a
-func (np *nodeProxy) routeToNode(w http.ResponseWriter, r *http.Request, nodeID roachpb.NodeID) {
+func (np *nodeProxy) routeToNode(
+	w http.ResponseWriter, r *http.Request, clearCookieOnError bool, nodeID roachpb.NodeID,
+) {
 	addr, err := np.getNodeIDHTTPAddress(nodeID)
 	if err != nil {
 		httpErr := errors.Wrapf(err, "unable to get address for n%d", nodeID)
 		log.Errorf(r.Context(), "%v", httpErr)
 
 		// Reset the cookie to `local` so the user session isn't stuck on a bad node
-		resetCookie(w)
+		if clearCookieOnError {
+			resetCookie(w, r)
+		}
 		// Users could recover from this by asking for a nodeID the cluster
 		// knows about, hence the 4xx code.
 		http.Error(w, httpErr.Error(), http.StatusBadRequest)
@@ -130,7 +140,9 @@ func (np *nodeProxy) routeToNode(w http.ResponseWriter, r *http.Request, nodeID 
 		// order to make requests to the HTTP server.
 		httpClient, err := np.rpcContext.GetHTTPClient()
 		if err != nil {
-			resetCookie(w)
+			if clearCookieOnError {
+				resetCookie(w, r)
+			}
 			panic(errors.Wrapf(err, "server: failed to get httpClient"))
 		}
 		proxy.Transport = httpClient.Transport
@@ -139,8 +151,11 @@ func (np *nodeProxy) routeToNode(w http.ResponseWriter, r *http.Request, nodeID 
 	proxy.ServeHTTP(w, r)
 }
 
-func resetCookie(w http.ResponseWriter) {
-	w.Header().Set("set-cookie", fmt.Sprintf("%s=", RemoteNodeID))
+// resetCookie only resets the cookie if one exists on the request
+func resetCookie(w http.ResponseWriter, req *http.Request) {
+	if _, err := req.Cookie(RemoteNodeID); err == nil {
+		w.Header().Set("set-cookie", fmt.Sprintf("%s=;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/", RemoteNodeID))
+	}
 }
 
 // reverseProxyCache implements a shared cache of `ReverseProxy`
