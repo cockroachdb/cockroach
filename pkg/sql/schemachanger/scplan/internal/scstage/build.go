@@ -11,6 +11,8 @@
 package scstage
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -45,6 +47,20 @@ func BuildStages(
 		c.isRevertibilityIgnored = false
 		stages = buildStages(c)
 	}
+	// Decorate stages with position in plan.
+	if len(stages) > 0 {
+		phaseMap := map[scop.Phase][]int{}
+		for i, s := range stages {
+			phaseMap[s.Phase] = append(phaseMap[s.Phase], i)
+		}
+		for _, indexes := range phaseMap {
+			for i, j := range indexes {
+				s := &stages[j]
+				s.Ordinal = i + 1
+				s.StagesInPhase = len(indexes)
+			}
+		}
+	}
 	// Add job ops to the stages.
 	for i := range stages {
 		var cur, next *Stage
@@ -55,7 +71,8 @@ func BuildStages(
 		jobOps := c.computeExtraJobOps(cur, next)
 		cur.ExtraOps = jobOps
 	}
-	return decorateStages(stages)
+
+	return stages
 }
 
 // buildContext contains the global constants for building the stages.
@@ -452,8 +469,9 @@ func (bc buildContext) computeExtraJobOps(s, next *Stage) []scop.Op {
 		// and update references for the affected descriptors.
 		if next != nil {
 			const initialize = true
+			runningStatus := fmt.Sprintf("%s pending", next)
 			return append(bc.setJobStateOnDescriptorOps(initialize, revertible, s.After),
-				bc.createSchemaChangeJobOp(revertible))
+				bc.createSchemaChangeJobOp(revertible, runningStatus))
 		}
 		return nil
 	case scop.PostCommitPhase, scop.PostCommitNonRevertiblePhase:
@@ -471,27 +489,33 @@ func (bc buildContext) computeExtraJobOps(s, next *Stage) []scop.Op {
 		}
 		// If we just moved to a non-cancelable phase, we need to tell the job
 		// that it cannot be canceled. Ideally we'd do this just once.
-		ops = append(ops, bc.updateJobProgressOp(revertible))
+		runningStatus := "all stages completed"
+		if next != nil {
+			runningStatus = fmt.Sprintf("%s pending", next)
+		}
+		ops = append(ops, bc.updateJobProgressOp(revertible, runningStatus))
 		return ops
 	default:
 		return nil
 	}
 }
 
-func (bc buildContext) createSchemaChangeJobOp(revertible bool) scop.Op {
+func (bc buildContext) createSchemaChangeJobOp(revertible bool, runningStatus string) scop.Op {
 	return &scop.CreateSchemaChangerJob{
 		JobID:         bc.scJobIDSupplier(),
 		Statements:    bc.targetState.Statements,
 		Authorization: bc.targetState.Authorization,
 		DescriptorIDs: screl.AllTargetDescIDs(bc.targetState).Ordered(),
 		NonCancelable: !revertible,
+		RunningStatus: runningStatus,
 	}
 }
 
-func (bc buildContext) updateJobProgressOp(revertible bool) scop.Op {
+func (bc buildContext) updateJobProgressOp(revertible bool, runningStatus string) scop.Op {
 	return &scop.UpdateSchemaChangerJob{
 		JobID:           bc.scJobIDSupplier(),
 		IsNonCancelable: !revertible,
+		RunningStatus:   runningStatus,
 	}
 }
 
@@ -574,23 +598,4 @@ func makeDescriptorStates(
 		state.CurrentStatuses = append(state.CurrentStatuses, statuses[i])
 	}
 	return descIDs, states
-}
-
-// decorateStages decorates stages with position in plan.
-func decorateStages(stages []Stage) []Stage {
-	if len(stages) == 0 {
-		return nil
-	}
-	phaseMap := map[scop.Phase][]int{}
-	for i, s := range stages {
-		phaseMap[s.Phase] = append(phaseMap[s.Phase], i)
-	}
-	for _, indexes := range phaseMap {
-		for i, j := range indexes {
-			s := &stages[j]
-			s.Ordinal = i + 1
-			s.StagesInPhase = len(indexes)
-		}
-	}
-	return stages
 }

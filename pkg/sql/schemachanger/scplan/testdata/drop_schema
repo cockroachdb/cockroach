@@ -1250,6 +1250,8 @@ PreCommitPhase stage 1 of 1 with 62 MutationType ops
       - 113
       JobID: 1
       NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
+        pending
       Statements:
       - statement: DROP SCHEMA defaultdb.sc1 CASCADE
         redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
