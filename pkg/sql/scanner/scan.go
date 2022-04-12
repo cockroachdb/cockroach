@@ -1064,6 +1064,17 @@ func LastLexicalToken(sql string) (lastTok int, ok bool) {
 	}
 }
 
+// FirstLexicalToken returns the first lexical token.
+// Returns 0 if there is no token.
+func FirstLexicalToken(sql string) (tok int) {
+	var s Scanner
+	var lval fakeSym
+	s.Init(sql)
+	s.Scan(&lval)
+	id := lval.ID()
+	return int(id)
+}
+
 // fakeSym is a simplified symbol type for use by
 // HasMultipleStatements.
 type fakeSym struct {
