@@ -494,7 +494,11 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	if desc.Privileges == nil {
 		vea.Report(errors.AssertionFailedf("privileges not set"))
 	} else {
-		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Table))
+		if desc.IsSequence() {
+			vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Sequence))
+		} else {
+			vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Table))
+		}
 	}
 
 	// Validate that the depended-on-by references are well-formed.

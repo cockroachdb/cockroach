@@ -1,0 +1,87 @@
+# LogicTest: local
+
+statement ok
+CREATE SEQUENCE a START 1 INCREMENT BY 2
+
+statement ok
+CREATE USER readwrite
+
+statement ok
+SET ROLE readwrite
+
+statement error pq: user readwrite does not have SELECT privilege on relation a
+SELECT * FROM a;
+
+statement error pq: nextval\(\): user readwrite does not have UPDATE privilege on relation a
+SELECT nextval('a')
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT USAGE ON SEQUENCE a TO readwrite
+
+statement ok
+SET ROLE readwrite
+
+query I
+SELECT nextval('a')
+----
+1
+
+query I
+SELECT currval('a')
+----
+1
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT ALL ON SEQUENCE a TO readwrite
+
+query TTTTTB colnames
+SHOW GRANTS ON SEQUENCE a
+----
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       a           admin      ALL             true
+test           public       a           readwrite  ALL             true
+test           public       a           root       ALL             true
+
+statement ok
+SET ROLE readwrite
+
+query IIB
+SELECT * FROM a;
+----
+1  0  true
+
+query I
+SELECT nextval('a')
+----
+3
+
+query I
+SELECT nextval('a')
+----
+5
+
+statement ok
+SET ROLE root
+
+query TTTTTTTT
+SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
+----
+NULL  readwrite  test  public  a  ALL  YES  NO
+
+statement ok
+CREATE SEQUENCE b START 1 INCREMENT BY 2
+
+statement ok
+GRANT ALL ON ALL SEQUENCES IN SCHEMA test.public TO readwrite;
+
+query TTTTTTTT
+SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
+----
+NULL  readwrite  test  public  a  ALL  YES  NO
+NULL  readwrite  test  public  b  ALL  YES  NO

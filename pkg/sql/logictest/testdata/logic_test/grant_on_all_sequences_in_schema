@@ -1,0 +1,88 @@
+statement ok
+CREATE USER testuser2
+
+statement ok
+CREATE SCHEMA s;
+CREATE SCHEMA s2;
+
+# Granting in a schema with no sequences should be okay.
+statement ok
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA s TO testuser
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  relation_name  grantee  privilege_type
+
+statement ok
+CREATE SEQUENCE s.q;
+CREATE SEQUENCE s2.q;
+CREATE TABLE s.t();
+CREATE TABLE s2.t();
+
+statement ok
+SET ROLE testuser
+
+statement error pq: user testuser does not have USAGE privilege on schema s
+SELECT * FROM s.q;
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA s TO testuser
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  relation_name  grantee   privilege_type
+test           s            q              testuser  SELECT
+
+statement ok
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA s TO testuser
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser
+----
+database_name  schema_name  relation_name  grantee   privilege_type
+test           s            q              testuser  SELECT
+test           s            q              testuser  USAGE
+
+statement ok
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA s, s2 TO testuser, testuser2
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  relation_name  grantee    privilege_type
+test           s            q              testuser   SELECT
+test           s            q              testuser   USAGE
+test           s            q              testuser2  SELECT
+test           s2           q              testuser   SELECT
+test           s2           q              testuser2  SELECT
+
+statement ok
+GRANT ALL ON ALL SEQUENCES IN SCHEMA s, s2 TO testuser, testuser2
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser, testuser2
+----
+database_name  schema_name  relation_name  grantee    privilege_type
+test           s            q              testuser   ALL
+test           s            q              testuser2  ALL
+test           s2           q              testuser   ALL
+test           s2           q              testuser2  ALL
+
+statement ok
+CREATE USER testuser3
+
+# Sequences are treated as a subset of tables.
+statement ok
+GRANT ALL ON ALL TABLES IN SCHEMA s2 TO testuser3
+
+query TTTTT colnames
+SHOW GRANTS FOR testuser3
+----
+database_name  schema_name  relation_name  grantee    privilege_type
+test           s2           q              testuser3  ALL
+test           s2           t              testuser3  ALL

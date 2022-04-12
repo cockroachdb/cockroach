@@ -99,14 +99,28 @@ func (p *planner) IncrementSequenceByID(ctx context.Context, seqID int64) (int64
 func incrementSequenceHelper(
 	ctx context.Context, p *planner, descriptor catalog.TableDescriptor,
 ) (int64, error) {
-	if err := p.CheckPrivilege(ctx, descriptor, privilege.UPDATE); err != nil {
-		return 0, err
+	var err error
+
+	requiredPrivileges := []privilege.Kind{privilege.USAGE, privilege.UPDATE}
+	HasRequiredPriviledge := false
+
+	for _, priv := range requiredPrivileges {
+		err = p.CheckPrivilege(ctx, descriptor, priv)
+		if err == nil {
+			HasRequiredPriviledge = true
+			break
+		}
+	}
+	if !HasRequiredPriviledge {
+		return 0, errors.AssertionFailedf(
+			"user %s has neither USAGE nor UPDATE privilege on relation %s",
+			p.User(),
+			descriptor.GetName())
 	}
 
 	seqOpts := descriptor.GetSequenceOpts()
 
 	var val int64
-	var err error
 	if seqOpts.Virtual {
 		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID.SQLInstanceID())
 		val = int64(rowid)

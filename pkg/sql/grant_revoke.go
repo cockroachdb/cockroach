@@ -369,6 +369,9 @@ func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privi
 	case targets.Databases != nil:
 		incIAMFunc(sqltelemetry.OnDatabase)
 		return privilege.Database
+	case targets.AllSequencesInSchema:
+		incIAMFunc(sqltelemetry.OnAllSequencesInSchema)
+		return privilege.Sequence
 	case targets.AllTablesInSchema:
 		incIAMFunc(sqltelemetry.OnAllTablesInSchema)
 		return privilege.Table
@@ -379,6 +382,10 @@ func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privi
 		incIAMFunc(sqltelemetry.OnType)
 		return privilege.Type
 	default:
+		if targets.Tables.IsSequence {
+			incIAMFunc(sqltelemetry.OnSequence)
+			return privilege.Sequence
+		}
 		incIAMFunc(sqltelemetry.OnTable)
 		return privilege.Table
 	}
