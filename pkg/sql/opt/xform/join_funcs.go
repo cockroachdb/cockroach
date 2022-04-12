@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/lookupjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
@@ -344,7 +345,6 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	if len(leftEq) == 0 {
 		return
 	}
-	rightEqSet := rightEq.ToSet()
 
 	// Generate implicit filters from CHECK constraints and computed columns as
 	// optional filters to help generate lookup join keys.
@@ -353,8 +353,9 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	optionalFilters = append(optionalFilters, computedColFilters...)
 
 	var pkCols opt.ColList
-	var eqColMap opt.ColMap
 	var iter scanIndexIter
+	var cb lookupjoin.ConstraintBuilder
+	cb.Init(c.e.f, c.e.mem.Metadata(), c.e.evalCtx, inputProps, scanPrivate, rightCols, leftEq, rightEq)
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		// Skip indexes that do no cover all virtual projection columns, if
@@ -368,21 +369,22 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			return
 		}
 
+		keyCols, lookupExpr, inputProjections, constFilters, rightSideCols :=
+			cb.Build(index, onFilters, optionalFilters)
+		if len(keyCols) == 0 && len(lookupExpr) == 0 {
+			// We couldn't find equality columns or a lookup expression to
+			// perform a lookup join on this index.
+			return
+		}
+
 		lookupJoin := memo.LookupJoinExpr{Input: input}
 		lookupJoin.JoinPrivate = *joinPrivate
 		lookupJoin.JoinType = joinType
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = index.Ordinal()
 		lookupJoin.Locking = scanPrivate.Locking
-
-		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
-		rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
-		var inputProjections memo.ProjectionsExpr
-
-		if len(lookupJoin.KeyCols) == 0 && len(lookupJoin.LookupExpr) == 0 {
-			// We couldn't find equality columns which we can lookup.
-			return
-		}
+		lookupJoin.KeyCols = keyCols
+		lookupJoin.LookupExpr = lookupExpr
 
 		// Wrap the input in a Project if any projections are required. The
 		// lookup join will project away these synthesized columns.
@@ -406,8 +408,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			lookupJoin.On = memo.ExtractRemainingJoinFilters(lookupJoin.On, lookupJoin.KeyCols, rightSideCols)
 		}
 		lookupJoin.On = lookupJoin.On.Difference(lookupJoin.LookupExpr)
-		lookupJoin.On = lookupJoin.On.Difference(constraintFilters)
-		lookupJoin.ConstFilters = constraintFilters
+		lookupJoin.On = lookupJoin.On.Difference(constFilters)
+		lookupJoin.ConstFilters = constFilters
 
 		// Add input columns and lookup expression columns, since these will be
 		// needed for all join types and cases.
