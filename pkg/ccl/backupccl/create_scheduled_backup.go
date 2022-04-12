@@ -258,7 +258,7 @@ func canChainProtectedTimestampRecords(p sql.PlanHookState, eval *scheduledBacku
 	// Check if there are any wildcard table selectors in the specified table
 	// targets. If we find a wildcard selector then we cannot chain PTS records
 	// because of the reason outlined in the comment above the method.
-	for _, t := range eval.Targets.Tables {
+	for _, t := range eval.Targets.Tables.TablePatterns {
 		pattern, err := t.NormalizeTablePattern()
 		if err != nil {
 			return false
@@ -269,7 +269,7 @@ func canChainProtectedTimestampRecords(p sql.PlanHookState, eval *scheduledBacku
 	}
 
 	// Return true if the backup has table targets or is backing up a tenant.
-	return eval.Targets.Tables != nil || eval.Targets.TenantID.IsSet()
+	return eval.Targets.Tables.TablePatterns != nil || eval.Targets.TenantID.IsSet()
 }
 
 // doCreateBackupSchedule creates requested schedule (or schedules).
@@ -785,13 +785,13 @@ func makeScheduledBackupEval(
 	ctx context.Context, p sql.PlanHookState, schedule *tree.ScheduledBackup,
 ) (*scheduledBackupEval, error) {
 	var err error
-	if schedule.Targets != nil && schedule.Targets.Tables != nil {
+	if schedule.Targets != nil && schedule.Targets.Tables.TablePatterns != nil {
 		// Table backup targets must be fully qualified during scheduled backup
 		// planning. This is because the actual execution of the backup job occurs
 		// in a background, scheduled job session, that does not have the same
 		// resolution configuration as during planning.
-		schedule.Targets.Tables, err = fullyQualifyScheduledBackupTargetTables(ctx, p,
-			schedule.Targets.Tables)
+		schedule.Targets.Tables.TablePatterns, err = fullyQualifyScheduledBackupTargetTables(ctx, p,
+			schedule.Targets.Tables.TablePatterns)
 		if err != nil {
 			return nil, errors.Wrap(err, "qualifying backup target tables")
 		}
