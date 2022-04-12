@@ -96,7 +96,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 		limitBatches,
 		s.batchBytesLimit,
 		s.limitHint,
-		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	); err != nil {
 		colexecerror.InternalError(err)
 	}
