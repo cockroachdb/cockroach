@@ -10,11 +10,7 @@
 
 package httputil
 
-import (
-	"net/http"
-
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-)
+import "net/http"
 
 // EtagHandler creates an http.Handler middleware that wraps another HTTP
 // handler, adding support for the If-None-Match request header and ETag
@@ -58,9 +54,6 @@ func EtagHandler(contentHashes map[string]string, next http.Handler) http.Handle
 			// still fresh, and that it can use the provided ETag for its next
 			// request.
 			w.WriteHeader(304)
-			if _, err := w.Write(nil); err != nil {
-				log.Errorf(r.Context(), "Unable to write empty response body: %+v", err)
-			}
 			return
 		}
 
