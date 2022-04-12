@@ -30,6 +30,7 @@ func RegisterTests(r registry.Registry) {
 	registerClockMonotonicTests(r)
 	registerConnectionLatencyTest(r)
 	registerCopy(r)
+	registerCostFuzz(r)
 	registerDecommission(r)
 	registerDiskFull(r)
 	RegisterDiskStalledDetection(r)

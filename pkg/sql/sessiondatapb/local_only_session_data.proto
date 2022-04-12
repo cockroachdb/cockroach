@@ -250,6 +250,10 @@ message LocalOnlySessionData {
   // ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table,
   // at the risk of data corruption if the same row is modified multiple times.
   bool multiple_modifications_of_table = 68;
+  // TestingOptimizerRandomCostSeed is non-zero when the coster should randomly
+  // perturb costs with an rng seeded to the given integer. This should only be
+  // used in test scenarios and is very much a non-production setting.
+  int64 testing_optimizer_random_cost_seed = 69;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
