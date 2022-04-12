@@ -118,6 +118,7 @@ const (
 
 	OptFormatJSON FormatType = `json`
 	OptFormatAvro FormatType = `avro`
+	OptFormatCSV  FormatType = `csv`
 
 	OptFormatNative FormatType = `native`
 

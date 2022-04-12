@@ -885,23 +885,34 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 			// The other TestFeed impls check both key and value here, but cloudFeeds
 			// don't have keys.
 			if len(m.Value) > 0 {
-				// Cloud storage sinks default the `WITH key_in_value` option so that
-				// the key is recoverable. Extract it out of the value (also removing it
-				// so the output matches the other sinks). Note that this assumes the
-				// format is json, this will have to be fixed once we add format=avro
-				// support to cloud storage.
-				//
-				// TODO(dan): Leave the key in the value if the TestFeed user
-				// specifically requested it.
-				var err error
-				if m.Key, m.Value, err = extractKeyFromJSONValue(m.Value); err != nil {
+				details, err := c.Details()
+				if err != nil {
 					return nil, err
 				}
-				if isNew := c.markSeen(m); !isNew {
-					continue
+
+				switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+				case ``, changefeedbase.OptFormatJSON:
+					// Cloud storage sinks default the `WITH key_in_value` option so that
+					// the key is recoverable. Extract it out of the value (also removing it
+					// so the output matches the other sinks). Note that this assumes the
+					// format is json, this will have to be fixed once we add format=avro
+					// support to cloud storage.
+					//
+					// TODO(dan): Leave the key in the value if the TestFeed user
+					// specifically requested it.
+					if m.Key, m.Value, err = extractKeyFromJSONValue(m.Value); err != nil {
+						return nil, err
+					}
+					if isNew := c.markSeen(m); !isNew {
+						continue
+					}
+					m.Resolved = nil
+					return m, nil
+				case changefeedbase.OptFormatCSV:
+					return m, nil
+				default:
+					return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
 				}
-				m.Resolved = nil
-				return m, nil
 			}
 			m.Key, m.Value = nil, nil
 			return m, nil
@@ -1449,28 +1460,38 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 		if msg != "" {
 			m := &cdctest.TestFeedMessage{}
 			if msg != "" {
-				var err error
-				var resolved bool
-				resolved, err = isResolvedTimestamp([]byte(msg))
+				details, err := f.Details()
 				if err != nil {
 					return nil, err
 				}
-				if resolved {
-					m.Resolved = []byte(msg)
-				} else {
-					wrappedValue, err := extractValueFromJSONMessage([]byte(msg))
+				switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+				case ``, changefeedbase.OptFormatJSON:
+					resolved, err := isResolvedTimestamp([]byte(msg))
 					if err != nil {
 						return nil, err
 					}
-					if m.Key, m.Value, err = extractKeyFromJSONValue(wrappedValue); err != nil {
-						return nil, err
+					if resolved {
+						m.Resolved = []byte(msg)
+					} else {
+						wrappedValue, err := extractValueFromJSONMessage([]byte(msg))
+						if err != nil {
+							return nil, err
+						}
+						if m.Key, m.Value, err = extractKeyFromJSONValue(wrappedValue); err != nil {
+							return nil, err
+						}
+						if m.Topic, m.Value, err = extractTopicFromJSONValue(m.Value); err != nil {
+							return nil, err
+						}
+						if isNew := f.markSeen(m); !isNew {
+							continue
+						}
 					}
-					if m.Topic, m.Value, err = extractTopicFromJSONValue(m.Value); err != nil {
-						return nil, err
-					}
-					if isNew := f.markSeen(m); !isNew {
-						continue
-					}
+				case changefeedbase.OptFormatCSV:
+					m.Value = []byte(msg)
+					return m, nil
+				default:
+					return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
 				}
 				return m, nil
 			}

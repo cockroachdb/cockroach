@@ -820,6 +820,22 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		switch v := changefeedbase.FormatType(details.Opts[opt]); v {
 		case ``, changefeedbase.OptFormatJSON:
 			details.Opts[opt] = string(changefeedbase.OptFormatJSON)
+		case changefeedbase.OptFormatCSV:
+			initialScanType, err := initialScanTypeFromOpts(details.Opts)
+			if err != nil {
+				return jobspb.ChangefeedDetails{}, err
+			}
+			if initialScanType != changefeedbase.OnlyInitialScan {
+				return jobspb.ChangefeedDetails{}, errors.Errorf(
+					`%s=%s is only usable with %s='only'`,
+					changefeedbase.OptFormat, changefeedbase.OptFormatCSV, changefeedbase.OptInitialScan)
+			}
+			if _, ok := details.Opts[changefeedbase.OptResolvedTimestamps]; ok {
+				return jobspb.ChangefeedDetails{}, errors.Errorf(
+					`cannot specify both %s=%s and %s`,
+					changefeedbase.OptFormat, changefeedbase.OptFormatCSV, changefeedbase.OptResolvedTimestamps)
+			}
+			details.Opts[opt] = string(changefeedbase.OptFormatCSV)
 		case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
 			// No-op.
 		default:

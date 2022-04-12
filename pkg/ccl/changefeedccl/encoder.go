@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -99,6 +100,8 @@ func getEncoder(
 		return newConfluentAvroEncoder(opts, targets)
 	case changefeedbase.OptFormatNative:
 		return &nativeEncoder{}, nil
+	case changefeedbase.OptFormatCSV:
+		return newCSVEncoder(opts), nil
 	default:
 		return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
 	}
@@ -365,6 +368,75 @@ func (e *jsonEncoder) getTableColMap(desc catalog.TableDescriptor) catalog.Table
 	}
 	e.columnMapCache[desc.GetID()] = ce
 	return ce.TableColMap
+}
+
+type csvEncoder struct {
+	alloc                   tree.DatumAlloc
+	virtualColumnVisibility string
+
+	buf    *bytes.Buffer
+	writer *csv.Writer
+}
+
+func newCSVEncoder(opts map[string]string) *csvEncoder {
+	newBuf := bytes.NewBuffer([]byte{})
+	newEncoder := &csvEncoder{
+		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
+		buf:                     newBuf,
+		writer:                  csv.NewWriter(newBuf),
+	}
+	newEncoder.writer.SkipNewline = true
+	return newEncoder
+}
+
+// EncodeKey implements the Encoder interface.
+func (e *csvEncoder) EncodeKey(_ context.Context, row encodeRow) ([]byte, error) {
+	return nil, nil
+}
+
+// EncodeValue implements the Encoder interface.
+func (e *csvEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, error) {
+	if row.deleted {
+		return nil, errors.Errorf(`cannot encode deleted rows into CSV format`)
+	}
+
+	family, err := row.tableDesc.FindFamilyByID(row.familyID)
+	if err != nil {
+		return nil, err
+	}
+	include := make(map[descpb.ColumnID]struct{}, len(family.ColumnIDs))
+	var yes struct{}
+	for _, colID := range family.ColumnIDs {
+		include[colID] = yes
+	}
+
+	var csvRow []string
+
+	for i, col := range row.tableDesc.PublicColumns() {
+		_, inFamily := include[col.GetID()]
+		virtual := col.IsVirtual() && e.virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
+		if inFamily || virtual {
+			datum := row.datums[i]
+			if err := datum.EnsureDecoded(col.GetType(), &e.alloc); err != nil {
+				return nil, err
+			}
+			csvRow = append(csvRow, tree.AsString(datum.Datum))
+		}
+	}
+
+	e.buf.Reset()
+	if err := e.writer.Write(csvRow); err != nil {
+		return nil, err
+	}
+	e.writer.Flush()
+	return e.buf.Bytes(), nil
+}
+
+// EncodeResolvedTimestamp implements the Encoder interface.
+func (e *csvEncoder) EncodeResolvedTimestamp(
+	_ context.Context, _ string, resolved hlc.Timestamp,
+) ([]byte, error) {
+	return nil, nil
 }
 
 // confluentAvroEncoder encodes changefeed entries as Avro's binary or textual

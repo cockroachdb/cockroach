@@ -3805,6 +3805,15 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'no', initial_scan_only`, `kafka://nope`,
 	)
 
+	sqlDB.ExpectErr(
+		t, `format=csv is only usable with initial_scan='only'`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format = csv`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `cannot specify both format=csv and resolved`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'only', format = csv, resolved = '100ms'`, `kafka://nope`,
+	)
+
 	var tsCurrent string
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsCurrent)
 
@@ -5833,6 +5842,68 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	initialScanOnlyCSVTests := map[string]string{
+		`initial scan only with csv`:     `CREATE CHANGEFEED FOR foo WITH initial_scan_only, format = csv`,
+		`initial backfill only with csv`: `CREATE CHANGEFEED FOR foo WITH initial_scan = 'only', format = csv`,
+	}
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		for testName, changefeedStmt := range initialScanOnlyCSVTests {
+			t.Run(testName, func(t *testing.T) {
+				sqlDB.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY, name STRING)")
+				sqlDB.Exec(t, "INSERT INTO foo VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol')")
+
+				feed := feed(t, f, changefeedStmt)
+
+				sqlDB.Exec(t, "INSERT INTO foo VALUES (4, 'Doug'), (5, 'Elaine'), (6, 'Fred')")
+
+				expectedMessages := []string{
+					`1,'Alice'`,
+					`2,'Bob'`,
+					`3,'Carol'`,
+				}
+				var actualMessages []string
+				g := ctxgroup.WithContext(context.Background())
+				g.Go(func() error {
+					for {
+						m, err := feed.Next()
+						if err != nil {
+							return err
+						}
+						actualMessages = append(actualMessages, string(m.Value))
+					}
+				})
+				defer func() {
+					closeFeed(t, feed)
+					sqlDB.Exec(t, `DROP TABLE foo`)
+					_ = g.Wait()
+					require.Equal(t, len(expectedMessages), len(actualMessages))
+					sort.Strings(expectedMessages)
+					sort.Strings(actualMessages)
+					for i := range expectedMessages {
+						require.Equal(t, expectedMessages[i], actualMessages[i])
+					}
+				}()
+
+				jobFeed := feed.(cdctest.EnterpriseTestFeed)
+				require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
+					return s == jobs.StatusSucceeded
+				}))
+			})
+		}
+	}
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
 }
 
 func startMonitorWithBudget(budget int64) *mon.BytesMonitor {

@@ -38,6 +38,7 @@ import (
 
 const (
 	applicationTypeJSON = `application/json`
+	applicationTypeCSV  = `text/csv`
 	authorizationHeader = `Authorization`
 	defaultConnTimeout  = 3 * time.Second
 )
@@ -58,6 +59,7 @@ type webhookSink struct {
 	retryCfg    retry.Options
 	batchCfg    batchConfig
 	ts          timeutil.TimeSource
+	format      changefeedbase.FormatType
 
 	// Webhook destination.
 	url        sinkURL
@@ -256,9 +258,13 @@ func makeWebhookSink(
 	}
 	u.Scheme = strings.TrimPrefix(u.Scheme, `webhook-`)
 
+	var formatType changefeedbase.FormatType
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
+	// only JSON and CSV supported at this time for webhook sink
 	case changefeedbase.OptFormatJSON:
-	// only JSON supported at this time for webhook sink
+		formatType = changefeedbase.OptFormatJSON
+	case changefeedbase.OptFormatCSV:
+		formatType = changefeedbase.OptFormatCSV
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
@@ -297,6 +303,7 @@ func makeWebhookSink(
 	sink := &webhookSink{
 		workerCtx:   ctx,
 		authHeader:  opts[changefeedbase.OptWebhookAuthHeader],
+		format:      formatType,
 		exitWorkers: cancel,
 		parallelism: parallelism,
 		ts:          source,
@@ -571,18 +578,30 @@ func (s *webhookSink) workerLoop(workerIndex int) {
 				continue
 			}
 
-			encoded, err := encodePayloadWebhook(msgs)
-			if err != nil {
-				s.exitWorkersWithError(err)
-				return
+			switch s.format {
+			case changefeedbase.OptFormatJSON:
+				encoded, err := encodePayloadWebhook(msgs)
+				if err != nil {
+					s.exitWorkersWithError(err)
+					return
+				}
+				if err := s.sendMessageWithRetries(s.workerCtx, encoded.data); err != nil {
+					s.exitWorkersWithError(err)
+					return
+				}
+				encoded.alloc.Release(s.workerCtx)
+				s.metrics.recordEmittedBatch(
+					encoded.emitTime, len(msgs), encoded.mvcc, len(encoded.data), sinkDoesNotCompress)
+			case changefeedbase.OptFormatCSV:
+				var mergedMsgs []byte
+				for _, msg := range msgs {
+					mergedMsgs = append(mergedMsgs, msg.val...)
+				}
+				if err := s.sendMessageWithRetries(s.workerCtx, mergedMsgs); err != nil {
+					s.exitWorkersWithError(err)
+					return
+				}
 			}
-			if err := s.sendMessageWithRetries(s.workerCtx, encoded.data); err != nil {
-				s.exitWorkersWithError(err)
-				return
-			}
-			encoded.alloc.Release(s.workerCtx)
-			s.metrics.recordEmittedBatch(
-				encoded.emitTime, len(msgs), encoded.mvcc, len(encoded.data), sinkDoesNotCompress)
 		}
 	}
 }
@@ -599,7 +618,13 @@ func (s *webhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", applicationTypeJSON)
+	switch s.format {
+	case changefeedbase.OptFormatJSON:
+		req.Header.Set("Content-Type", applicationTypeJSON)
+	case changefeedbase.OptFormatCSV:
+		req.Header.Set("Content-Type", applicationTypeCSV)
+	}
+
 	if s.authHeader != "" {
 		req.Header.Set(authorizationHeader, s.authHeader)
 	}
