@@ -4203,6 +4203,7 @@ statement_timeout                                     0                   NULL  
 stub_catalog_tables                                   on                  NULL      NULL        NULL        string
 synchronize_seqscans                                  on                  NULL      NULL        NULL        string
 synchronous_commit                                    on                  NULL      NULL        NULL        string
+testing_optimizer_random_cost_seed                    0                   NULL      NULL        NULL        string
 testing_vectorize_inject_panics                       off                 NULL      NULL        NULL        string
 timezone                                              UTC                 NULL      NULL        NULL        string
 tracing                                               off                 NULL      NULL        NULL        string
@@ -4324,6 +4325,7 @@ statement_timeout                                     0                   NULL  
 stub_catalog_tables                                   on                  NULL  user     NULL      on                  on
 synchronize_seqscans                                  on                  NULL  user     NULL      on                  on
 synchronous_commit                                    on                  NULL  user     NULL      on                  on
+testing_optimizer_random_cost_seed                    0                   NULL  user     NULL      0                   0
 testing_vectorize_inject_panics                       off                 NULL  user     NULL      off                 off
 timezone                                              UTC                 NULL  user     NULL      UTC                 UTC
 tracing                                               off                 NULL  user     NULL      off                 off
@@ -4443,6 +4445,7 @@ statement_timeout                                     NULL    NULL     NULL     
 stub_catalog_tables                                   NULL    NULL     NULL     NULL        NULL
 synchronize_seqscans                                  NULL    NULL     NULL     NULL        NULL
 synchronous_commit                                    NULL    NULL     NULL     NULL        NULL
+testing_optimizer_random_cost_seed                    NULL    NULL     NULL     NULL        NULL
 testing_vectorize_inject_panics                       NULL    NULL     NULL     NULL        NULL
 timezone                                              NULL    NULL     NULL     NULL        NULL
 tracing                                               NULL    NULL     NULL     NULL        NULL

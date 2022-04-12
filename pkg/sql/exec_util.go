@@ -3235,6 +3235,10 @@ func (m *sessionDataMutator) SetShowPrimaryKeyConstraintOnNotVisibleColumns(val 
 	m.data.ShowPrimaryKeyConstraintOnNotVisibleColumns = val
 }
 
+func (m *sessionDataMutator) SetTestingOptimizerRandomCostSeed(val int64) {
+	m.data.TestingOptimizerRandomCostSeed = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
