@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
 
@@ -262,7 +263,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 	defer ngn.Close()
 	defer dirCleanup()
 
-	newVectorizedFlow := func() *vectorizedFlow {
+	newVectorizedFlow := func(queriesSpilled *metric.Counter) *vectorizedFlow {
 		return NewVectorizedFlow(
 			&flowinfra.FlowBase{
 				FlowCtx: execinfra.FlowCtx{
@@ -270,7 +271,9 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 						TempFS:          ngn,
 						TempStoragePath: tempPath,
 						VecFDSemaphore:  &colexecop.TestingSemaphore{},
-						Metrics:         &execinfra.DistSQLMetrics{},
+						Metrics: &execinfra.DistSQLMetrics{
+							QueriesSpilled: queriesSpilled,
+						},
 					},
 					EvalCtx:     &evalCtx,
 					NodeID:      base.TestingIDContainer,
@@ -294,7 +297,8 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 	// LazilyCreated asserts that a directory is not created during flow Setup
 	// but is done so when an operator spills to disk.
 	t.Run("LazilyCreated", func(t *testing.T) {
-		vf := newVectorizedFlow()
+		spilledCounter := metric.NewCounter(metric.Metadata{})
+		vf := newVectorizedFlow(spilledCounter)
 		var creator *vectorizedFlowCreator
 		vf.testingKnobs.onSetupFlow = func(c *vectorizedFlowCreator) {
 			creator = c
@@ -305,6 +309,9 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 
 		// No directory should have been created.
 		checkDirs(t, 0)
+
+		// The spilling hasn't happened yet.
+		require.Equal(t, int64(0), spilledCounter.Count())
 
 		// After the call to Setup, creator should be non-nil (i.e. the testing knob
 		// should have been called).
@@ -317,6 +324,9 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		// We should now have one directory, the flow's temporary storage directory.
 		checkDirs(t, 1)
 
+		// The metric must have been incremented.
+		require.Equal(t, int64(1), spilledCounter.Count())
+
 		// Another operator calling GetPath again should not create a new
 		// directory.
 		creator.diskQueueCfg.GetPather.GetPath(ctx)
@@ -328,7 +338,8 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 	})
 
 	t.Run("DirCreationRace", func(t *testing.T) {
-		vf := newVectorizedFlow()
+		spilledCounter := metric.NewCounter(metric.Metadata{})
+		vf := newVectorizedFlow(spilledCounter)
 		var creator *vectorizedFlowCreator
 		vf.testingKnobs.onSetupFlow = func(c *vectorizedFlowCreator) {
 			creator = c
@@ -350,5 +361,8 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		require.NoError(t, <-errCh)
 		vf.Cleanup(ctx)
 		checkDirs(t, 0)
+
+		// The metric must have been incremented exactly once.
+		require.Equal(t, int64(1), spilledCounter.Count())
 	})
 }
