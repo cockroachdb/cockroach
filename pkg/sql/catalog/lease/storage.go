@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -167,11 +169,15 @@ func (s storage) acquire(
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
 		err := s.db.Txn(ctx, acquireInTxn)
 		var pErr *roachpb.AmbiguousResultError
-		if errors.As(err, &pErr) {
+		switch {
+		case errors.As(err, &pErr):
 			log.Infof(ctx, "ambiguous error occurred during lease acquisition for %v, retrying: %v", id, err)
 			continue
-		}
-		if err != nil {
+		case pgerror.GetPGCode(err) == pgcode.UniqueViolation:
+			log.Infof(ctx, "uniqueness violation occurred due to concurrent lease"+
+				" removal for %v, retrying: %v", id, err)
+			continue
+		case err != nil:
 			return nil, hlc.Timestamp{}, err
 		}
 		log.VEventf(ctx, 2, "storage acquired lease %v@%v", desc, expiration)
