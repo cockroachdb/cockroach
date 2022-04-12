@@ -12,7 +12,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -227,7 +230,17 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	args = append(args, additionalBazelArgs...)
 
 	logCommand("bazel", args...)
-	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	if err != nil {
+		var cmderr *exec.ExitError
+		if errors.As(err, &cmderr) && cmderr.ProcessState.ExitCode() == 4 {
+			// If the exit code is 4, the build was successful but no tests were found.
+			// ref: https://docs.bazel.build/versions/0.21.0/guide.html#what-exit-code-will-i-get
+			log.Printf("WARNING: the build succeeded but no tests were found.")
+			return nil
+		}
+	}
+	return err
 
 	// TODO(irfansharif): Both here and in `dev bench`, if the command is
 	// unsuccessful we could explicitly check for "missing package" errors. The
