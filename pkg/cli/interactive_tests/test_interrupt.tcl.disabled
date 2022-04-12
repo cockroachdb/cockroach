@@ -1,5 +1,7 @@
 #! /usr/bin/env expect -f
 
+# Disabled until https://github.com/cockroachdb/cockroach/issues/76483 is resolved.
+
 source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
