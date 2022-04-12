@@ -1,4 +1,4 @@
-# LogicTest: multiregion-9node-3region-3azs
+# LogicTest: multiregion-9node-3region-3azs !metamorphic
 # TODO(#75864): enable multiregion-9node-3region-3azs-tenant
 
 statement ok
