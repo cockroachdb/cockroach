@@ -179,13 +179,6 @@ func newProxyHandler(
 		return nil, err
 	}
 
-	// Create the balancer component.
-	handler.balancer, err = balancer.NewBalancer(ctx, stopper)
-	if err != nil {
-		return nil, err
-	}
-	handler.connTracker = balancer.NewConnTracker()
-
 	// If denylist functionality is requested, create the denylist service.
 	if options.Denylist != "" {
 		handler.denyListWatcher = denylist.WatcherFromFile(ctx, options.Denylist,
@@ -252,6 +245,13 @@ func newProxyHandler(
 
 	client := tenant.NewDirectoryClient(conn)
 	handler.directoryCache, err = tenant.NewDirectoryCache(ctx, stopper, client, dirOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the connection tracker and balancer components.
+	handler.connTracker = balancer.NewConnTracker()
+	handler.balancer, err = balancer.NewBalancer(ctx, stopper, handler.directoryCache, handler.connTracker)
 	if err != nil {
 		return nil, err
 	}

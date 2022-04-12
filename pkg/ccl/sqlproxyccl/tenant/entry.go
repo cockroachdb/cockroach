@@ -153,7 +153,7 @@ func (e *tenantEntry) UpdatePod(pod *Pod) bool {
 }
 
 // RemovePodByAddr removes the pod with the given IP address from the tenant's
-// list of pod addresses. If it was not present, RemovePodAddr returns false.
+// list of pod addresses. If it was not present, RemovePodByAddr returns false.
 func (e *tenantEntry) RemovePodByAddr(addr string) bool {
 	e.pods.Lock()
 	defer e.pods.Unlock()
