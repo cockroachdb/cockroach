@@ -278,10 +278,10 @@ func (b *Balancer) rebalanceLoop(ctx context.Context) {
 // also want to rate limit the number of rebalances per tenant for requests
 // coming from the pod watcher.
 func (b *Balancer) rebalance(ctx context.Context) {
-	// getAllConns ensures that tenants will have at least one connection.
-	tenantConns := b.connTracker.GetAllConns()
+	// GetTenantIDs ensures that tenants will have at least one connection.
+	tenantIDs := b.connTracker.GetTenantIDs()
 
-	for tenantID, allConns := range tenantConns {
+	for _, tenantID := range tenantIDs {
 		tenantPods, err := b.directoryCache.TryLookupTenantPods(ctx, tenantID)
 		if err != nil {
 			// This case shouldn't really occur unless there's a bug in the
@@ -291,6 +291,7 @@ func (b *Balancer) rebalance(ctx context.Context) {
 			continue
 		}
 
+		// Build a podMap so we could easily retrieve the pod by address.
 		podMap := make(map[string]*tenant.Pod)
 		hasRunningPod := false
 		for _, pod := range tenantPods {
@@ -310,16 +311,7 @@ func (b *Balancer) rebalance(ctx context.Context) {
 			continue
 		}
 
-		connMap := make(map[string][]ConnectionHandle)
-		for _, conn := range allConns {
-			// Connection has been closed.
-			if conn.Context().Err() != nil {
-				continue
-			}
-			addr := conn.ServerRemoteAddr()
-			connMap[addr] = append(connMap[addr], conn)
-		}
-
+		connMap := b.connTracker.GetConnsMap(tenantID)
 		for addr, podConns := range connMap {
 			pod, ok := podMap[addr]
 			if !ok {
@@ -333,6 +325,9 @@ func (b *Balancer) rebalance(ctx context.Context) {
 			}
 
 			// Transfer all connections in DRAINING pods.
+			//
+			// TODO(jaylim-crl): Consider extracting this logic for the DRAINING
+			// case into a separate function once we add the rebalancing logic.
 			if pod.State != tenant.DRAINING {
 				continue
 			}

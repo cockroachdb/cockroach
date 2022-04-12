@@ -33,16 +33,27 @@ func TestConnTracker(t *testing.T) {
 	require.True(t, tracker.OnConnect(tenantID, handle))
 	require.False(t, tracker.OnConnect(tenantID, handle))
 
-	conns := tracker.GetConns(tenantID)
-	require.Len(t, conns, 1)
-	require.Equal(t, handle, conns[0])
+	connsMap := tracker.GetConnsMap(tenantID)
+	require.Len(t, connsMap, 1)
+	h, ok := connsMap[handle.remoteAddr]
+	require.True(t, ok)
+	require.Equal(t, []ConnectionHandle{handle}, h)
+
+	tenantIDs := tracker.GetTenantIDs()
+	require.Len(t, tenantIDs, 1)
+	require.Equal(t, tenantID, tenantIDs[0])
 
 	// Non-existent.
-	conns = tracker.GetConns(roachpb.MakeTenantID(10))
-	require.Empty(t, conns)
+	connsMap = tracker.GetConnsMap(roachpb.MakeTenantID(10))
+	require.Empty(t, connsMap)
 
 	require.True(t, tracker.OnDisconnect(tenantID, handle))
 	require.False(t, tracker.OnDisconnect(tenantID, handle))
+
+	// Once the handle gets disconnected, we shouldn't return that tenant since
+	// there are no active connections.
+	tenantIDs = tracker.GetTenantIDs()
+	require.Empty(t, tenantIDs)
 
 	// Ensure methods are thread-safe.
 	var wg sync.WaitGroup
@@ -59,12 +70,15 @@ func TestConnTracker(t *testing.T) {
 	}
 
 	wg.Wait()
+
+	tenantIDs = tracker.GetTenantIDs()
+	require.Empty(t, tenantIDs)
 	for _, entry := range tracker.mu.tenants {
 		require.Empty(t, entry.mu.conns)
 	}
 }
 
-func TestConnTracker_GetAllConns(t *testing.T) {
+func TestConnTracker_GetConnsMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -75,12 +89,12 @@ func TestConnTracker_GetAllConns(t *testing.T) {
 	require.True(t, tracker.OnConnect(tenant10, handle1))
 	require.True(t, tracker.OnConnect(tenant10, handle2))
 
-	// Ensure that map contains two handles for tenant 10.
-	tenantConns := tracker.GetAllConns()
-	require.Len(t, tenantConns, 1)
-	conns, ok := tenantConns[tenant10]
-	require.True(t, ok)
-	require.Len(t, conns, 2)
+	// Ensure that map contains two handles for tenant 10, one per pod.
+	initialConnsMap := tracker.GetConnsMap(tenant10)
+	require.Equal(t, map[string][]ConnectionHandle{
+		handle1.remoteAddr: {handle1},
+		handle2.remoteAddr: {handle2},
+	}, initialConnsMap)
 
 	// Add a new handle, and disconnect after.
 	tenant20, handle3 := makeConn(20, "127.0.0.10:1020")
@@ -88,35 +102,32 @@ func TestConnTracker_GetAllConns(t *testing.T) {
 	require.True(t, tracker.OnDisconnect(tenant20, handle3))
 
 	// Ensure that tenants with no connections do not show up.
-	tenantConns = tracker.GetAllConns()
-	require.Len(t, tenantConns, 1)
-	conns, ok = tenantConns[tenant10]
-	require.True(t, ok)
-	require.Len(t, conns, 2)
+	connsMap := tracker.GetConnsMap(tenant20)
+	require.Empty(t, connsMap)
 
 	// Add a new handle for tenant 10.
 	_, handle4 := makeConn(10, "127.0.0.10:1020")
 	require.True(t, tracker.OnConnect(tenant10, handle4))
 
-	// Existing tenantConns does not change. This shows snapshotting.
-	require.Len(t, tenantConns, 1)
-	conns, ok = tenantConns[tenant10]
-	require.True(t, ok)
-	require.Len(t, conns, 2)
+	// Existing initialConnsMap does not change. This shows snapshotting.
+	require.Equal(t, map[string][]ConnectionHandle{
+		handle1.remoteAddr: {handle1},
+		handle2.remoteAddr: {handle2},
+	}, initialConnsMap)
 
 	// Fetch again, and we should have the updated entry.
-	tenantConns = tracker.GetAllConns()
-	require.Len(t, tenantConns, 1)
-	conns, ok = tenantConns[tenant10]
-	require.True(t, ok)
-	require.Len(t, conns, 3)
+	connsMap = tracker.GetConnsMap(tenant10)
+	require.Equal(t, map[string][]ConnectionHandle{
+		handle1.remoteAddr: {handle1},
+		handle2.remoteAddr: {handle2, handle4},
+	}, connsMap)
 
 	// Disconnect everything.
 	require.True(t, tracker.OnDisconnect(tenant10, handle1))
 	require.True(t, tracker.OnDisconnect(tenant10, handle2))
 	require.True(t, tracker.OnDisconnect(tenant10, handle4))
-	tenantConns = tracker.GetAllConns()
-	require.Empty(t, tenantConns)
+	connsMap = tracker.GetConnsMap(tenant10)
+	require.Empty(t, connsMap)
 }
 
 func TestTenantEntry(t *testing.T) {
@@ -127,15 +138,17 @@ func TestTenantEntry(t *testing.T) {
 	h1 := newTestTrackerConnHandle("10.0.0.1:12345")
 	require.True(t, entry.addHandle(h1))
 	require.False(t, entry.addHandle(h1))
+	require.Equal(t, 1, entry.getConnsCount())
 
-	conns := entry.getConns()
-	require.Len(t, conns, 1)
+	connsMap := entry.getConnsMap()
+	require.Len(t, connsMap, 1)
 
 	require.True(t, entry.removeHandle(h1))
 	require.False(t, entry.removeHandle(h1))
+	require.Equal(t, 0, entry.getConnsCount())
 
-	require.Empty(t, entry.getConns())
-	require.Len(t, conns, 1)
+	require.Empty(t, entry.getConnsMap())
+	require.Len(t, connsMap, 1)
 }
 
 // testTrackerConnHandle is a test connection handle that only implements a
