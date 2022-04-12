@@ -19,6 +19,12 @@ grant_stmt ::=
 	| 'GRANT' 'ALL'  'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list 
 	| 'GRANT' privilege_list 'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
 	| 'GRANT' privilege_list 'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list 
+	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
+	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 
+	| 'GRANT' 'ALL'  'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
+	| 'GRANT' 'ALL'  'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 
+	| 'GRANT' privilege_list 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
+	| 'GRANT' privilege_list 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 
 	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'
 	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 
 	| 'GRANT' 'ALL'  'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list 'WITH' 'GRANT' 'OPTION'

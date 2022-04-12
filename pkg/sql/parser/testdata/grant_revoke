@@ -256,6 +256,54 @@ GRANT SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 TO root, bar -- fully parent
 GRANT SELECT, UPDATE ON ALL TABLES IN SCHEMA s1, s2 TO root, bar -- literals removed
 GRANT SELECT, UPDATE ON ALL TABLES IN SCHEMA _, _ TO _, _ -- identifiers removed
 
+parse
+GRANT SELECT ON SEQUENCE s1 TO root, bar
+----
+GRANT SELECT ON SEQUENCE s1 TO root, bar
+GRANT SELECT ON SEQUENCE (s1) TO root, bar -- fully parenthesized
+GRANT SELECT ON SEQUENCE s1 TO root, bar -- literals removed
+GRANT SELECT ON SEQUENCE _ TO _, _ -- identifiers removed
+
+parse
+GRANT ALL ON SEQUENCE s1 TO root, bar
+----
+GRANT ALL ON SEQUENCE s1 TO root, bar
+GRANT ALL ON SEQUENCE (s1) TO root, bar -- fully parenthesized
+GRANT ALL ON SEQUENCE s1 TO root, bar -- literals removed
+GRANT ALL ON SEQUENCE _ TO _, _ -- identifiers removed
+
+parse
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA s1, s2 TO root, bar
+----
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA s1, s2 TO root, bar
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA s1, s2 TO root, bar -- fully parenthesized
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA s1, s2 TO root, bar -- literals removed
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA _, _ TO _, _ -- identifiers removed
+
+parse
+REVOKE SELECT ON SEQUENCE s1 FROM root, bar
+----
+REVOKE SELECT ON SEQUENCE s1 FROM root, bar
+REVOKE SELECT ON SEQUENCE (s1) FROM root, bar -- fully parenthesized
+REVOKE SELECT ON SEQUENCE s1 FROM root, bar -- literals removed
+REVOKE SELECT ON SEQUENCE _ FROM _, _ -- identifiers removed
+
+parse
+REVOKE ALL ON SEQUENCE s1 FROM root, bar
+----
+REVOKE ALL ON SEQUENCE s1 FROM root, bar
+REVOKE ALL ON SEQUENCE (s1) FROM root, bar -- fully parenthesized
+REVOKE ALL ON SEQUENCE s1 FROM root, bar -- literals removed
+REVOKE ALL ON SEQUENCE _ FROM _, _ -- identifiers removed
+
+parse
+REVOKE SELECT ON ALL SEQUENCES IN SCHEMA s1, s2 FROM root, bar
+----
+REVOKE SELECT ON ALL SEQUENCES IN SCHEMA s1, s2 FROM root, bar
+REVOKE SELECT ON ALL SEQUENCES IN SCHEMA s1, s2 FROM root, bar -- fully parenthesized
+REVOKE SELECT ON ALL SEQUENCES IN SCHEMA s1, s2 FROM root, bar -- literals removed
+REVOKE SELECT ON ALL SEQUENCES IN SCHEMA _, _ FROM _, _ -- identifiers removed
+
 ## Tables are the default, but can also be specified with
 ## REVOKE x ON TABLE y. However, the stringer does not output TABLE.
 

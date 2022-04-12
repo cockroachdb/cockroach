@@ -510,11 +510,11 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		return descs, nil
 	}
 
-	if len(targets.Tables) == 0 {
+	if len(targets.Tables.TablePatterns) == 0 {
 		return nil, errNoTable
 	}
-	descs := make([]catalog.Descriptor, 0, len(targets.Tables))
-	for _, tableTarget := range targets.Tables {
+	descs := make([]catalog.Descriptor, 0, len(targets.Tables.TablePatterns))
+	for _, tableTarget := range targets.Tables.TablePatterns {
 		tableGlob, err := tableTarget.NormalizeTablePattern()
 		if err != nil {
 			return nil, err
