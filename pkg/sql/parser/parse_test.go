@@ -575,8 +575,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`UPDATE foo SET a.b = 1`, 27792, ``, ``},
 		{`UPDATE Foo SET x.y = z`, 27792, ``, ``},
 
-		{`GRANT SELECT ON SEQUENCE a`, 74780, `grant privileges on sequence`, ``},
-
 		{`REINDEX INDEX a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
 		{`REINDEX INDEX CONCURRENTLY a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
 		{`REINDEX TABLE a`, 0, `reindex table`, `CockroachDB does not require reindexing.`},

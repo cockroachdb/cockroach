@@ -10,6 +10,9 @@ grant_stmt ::=
 	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' 'ALL'  'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' privilege_list 'ON' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
+	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
+	| 'GRANT' 'ALL'  'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
+	| 'GRANT' privilege_list 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' 'ALL' 'PRIVILEGES' 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' 'ALL'  'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' privilege_list 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
