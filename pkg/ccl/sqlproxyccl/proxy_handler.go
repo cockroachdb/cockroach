@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -163,7 +164,11 @@ var throttledError = errors.WithHint(
 // newProxyHandler will create a new proxy handler with configuration based on
 // the provided options.
 func newProxyHandler(
-	ctx context.Context, stopper *stop.Stopper, proxyMetrics *metrics, options ProxyOptions,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	registry *metric.Registry,
+	proxyMetrics *metrics,
+	options ProxyOptions,
 ) (*proxyHandler, error) {
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
@@ -250,8 +255,12 @@ func newProxyHandler(
 	}
 
 	// Create the connection tracker and balancer components.
+	balancerMetrics := balancer.NewMetrics()
+	registry.AddMetricStruct(balancerMetrics)
 	handler.connTracker = balancer.NewConnTracker()
-	handler.balancer, err = balancer.NewBalancer(ctx, stopper, handler.directoryCache, handler.connTracker)
+	handler.balancer, err = balancer.NewBalancer(
+		ctx, stopper, balancerMetrics, handler.directoryCache, handler.connTracker,
+	)
 	if err != nil {
 		return nil, err
 	}
