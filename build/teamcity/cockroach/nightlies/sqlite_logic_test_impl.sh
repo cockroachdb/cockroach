@@ -14,7 +14,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
     --test_arg -bigtest --test_arg -flex-types \
     --define gotags=bazel,crdb_test_off --test_timeout 86400 \
     --test_filter '^TestSqlLiteLogic$|^TestTenantSQLLiteLogic$' \
-    --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE || $exit_status=$?
+    --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE || exit_status=$?
 process_test_json \
         $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
         $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
