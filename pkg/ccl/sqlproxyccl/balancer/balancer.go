@@ -105,6 +105,9 @@ type Balancer struct {
 	// balancer.
 	stopper *stop.Stopper
 
+	// metrics contains various counters reflecting the balancer operations.
+	metrics *Metrics
+
 	// directoryCache corresponds to the tenant directory cache, which will be
 	// used to lookup IP addresses of SQL pods for tenants.
 	directoryCache tenant.DirectoryCache
@@ -131,6 +134,7 @@ type Balancer struct {
 func NewBalancer(
 	ctx context.Context,
 	stopper *stop.Stopper,
+	metrics *Metrics,
 	directoryCache tenant.DirectoryCache,
 	connTracker *ConnTracker,
 	opts ...Option,
@@ -150,13 +154,14 @@ func NewBalancer(
 	// Ensure that ctx gets cancelled on stopper's quiescing.
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
-	q, err := newRebalancerQueue(ctx)
+	q, err := newRebalancerQueue(ctx, metrics)
 	if err != nil {
 		return nil, err
 	}
 
 	b := &Balancer{
 		stopper:        stopper,
+		metrics:        metrics,
 		connTracker:    connTracker,
 		directoryCache: directoryCache,
 		queue:          q,
@@ -219,8 +224,7 @@ func (b *Balancer) processQueue(ctx context.Context) {
 		}
 
 		// TODO(jaylim-crl): implement enhancements:
-		//   1. Add metrics to track the number of active transfers.
-		//   2. Rate limit the number of transfers per connection (e.g. once
+		//   1. Rate limit the number of transfers per connection (e.g. once
 		//      every 5 minutes). This ensures that the connection isn't
 		//      ping-ponged between pods within a short interval. However, for
 		//      draining ones, we may want to move right away (or after 60 secs),
@@ -228,6 +232,9 @@ func (b *Balancer) processQueue(ctx context.Context) {
 		//      pod.
 		if err := b.stopper.RunAsyncTask(ctx, "processQueue-item", func(ctx context.Context) {
 			defer b.processSem.Release(1)
+
+			b.metrics.processRebalanceStart()
+			defer b.metrics.processRebalanceFinish()
 
 			// Each request is retried up to maxTransferAttempts.
 			for i := 0; i < maxTransferAttempts && ctx.Err() == nil; i++ {
@@ -278,10 +285,10 @@ func (b *Balancer) rebalanceLoop(ctx context.Context) {
 // also want to rate limit the number of rebalances per tenant for requests
 // coming from the pod watcher.
 func (b *Balancer) rebalance(ctx context.Context) {
-	// getAllConns ensures that tenants will have at least one connection.
-	tenantConns := b.connTracker.GetAllConns()
+	// GetTenantIDs ensures that tenants will have at least one connection.
+	tenantIDs := b.connTracker.GetTenantIDs()
 
-	for tenantID, allConns := range tenantConns {
+	for _, tenantID := range tenantIDs {
 		tenantPods, err := b.directoryCache.TryLookupTenantPods(ctx, tenantID)
 		if err != nil {
 			// This case shouldn't really occur unless there's a bug in the
@@ -291,6 +298,7 @@ func (b *Balancer) rebalance(ctx context.Context) {
 			continue
 		}
 
+		// Build a podMap so we could easily retrieve the pod by address.
 		podMap := make(map[string]*tenant.Pod)
 		hasRunningPod := false
 		for _, pod := range tenantPods {
@@ -310,16 +318,7 @@ func (b *Balancer) rebalance(ctx context.Context) {
 			continue
 		}
 
-		connMap := make(map[string][]ConnectionHandle)
-		for _, conn := range allConns {
-			// Connection has been closed.
-			if conn.Context().Err() != nil {
-				continue
-			}
-			addr := conn.ServerRemoteAddr()
-			connMap[addr] = append(connMap[addr], conn)
-		}
-
+		connMap := b.connTracker.GetConnsMap(tenantID)
 		for addr, podConns := range connMap {
 			pod, ok := podMap[addr]
 			if !ok {
@@ -333,6 +332,9 @@ func (b *Balancer) rebalance(ctx context.Context) {
 			}
 
 			// Transfer all connections in DRAINING pods.
+			//
+			// TODO(jaylim-crl): Consider extracting this logic for the DRAINING
+			// case into a separate function once we add the rebalancing logic.
 			if pod.State != tenant.DRAINING {
 				continue
 			}
@@ -377,14 +379,16 @@ type rebalanceRequest struct {
 // rebalancing requests. All methods on the queue are thread-safe.
 type rebalancerQueue struct {
 	mu       syncutil.Mutex
+	metrics  *Metrics
 	sem      semaphore.Semaphore
 	queue    *list.List
 	elements map[ConnectionHandle]*list.Element
 }
 
 // newRebalancerQueue returns a new instance of rebalancerQueue.
-func newRebalancerQueue(ctx context.Context) (*rebalancerQueue, error) {
+func newRebalancerQueue(ctx context.Context, metrics *Metrics) (*rebalancerQueue, error) {
 	q := &rebalancerQueue{
+		metrics:  metrics,
 		sem:      semaphore.New(math.MaxInt32),
 		queue:    list.New(),
 		elements: make(map[ConnectionHandle]*list.Element),
@@ -398,8 +402,7 @@ func newRebalancerQueue(ctx context.Context) (*rebalancerQueue, error) {
 }
 
 // enqueue puts the rebalance request into the queue. If a request for the
-// connection already exists, the newer of the two will be used. This returns
-// nil if the operation succeeded.
+// connection already exists, the newer of the two will be used.
 //
 // NOTE: req should not be nil.
 func (q *rebalancerQueue) enqueue(req *rebalanceRequest) {
@@ -412,11 +415,13 @@ func (q *rebalancerQueue) enqueue(req *rebalanceRequest) {
 		if e.Value.(*rebalanceRequest).createdAt.Before(req.createdAt) {
 			e.Value = req
 		}
-	} else {
-		e = q.queue.PushBack(req)
-		q.elements[req.conn] = e
-		q.sem.Release(1)
+		return
 	}
+
+	e = q.queue.PushBack(req)
+	q.elements[req.conn] = e
+	q.metrics.rebalanceReqQueued.Inc(1)
+	q.sem.Release(1)
 }
 
 // dequeue removes a request at the front of the queue, and returns that. If the
@@ -445,5 +450,6 @@ func (q *rebalancerQueue) dequeue(ctx context.Context) (*rebalanceRequest, error
 
 	req := q.queue.Remove(e).(*rebalanceRequest)
 	delete(q.elements, req.conn)
+	q.metrics.rebalanceReqQueued.Dec(1)
 	return req, nil
 }
