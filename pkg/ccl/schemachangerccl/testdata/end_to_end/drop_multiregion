@@ -362,6 +362,7 @@ create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.ta
   descriptor IDs: [105 107 108]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -695,6 +696,7 @@ create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.pu
   descriptor IDs: [108]
 update progress of schema change job #1
 commit transaction #3
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase
 
 setup
@@ -947,6 +949,7 @@ create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.ta
   descriptor IDs: [105 109]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -1174,6 +1177,7 @@ create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.pu
   descriptor IDs: [109]
 update progress of schema change job #1
 commit transaction #3
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase
 
 test
@@ -1624,6 +1628,7 @@ create job #1 (non-cancelable: true): "DROP DATABASE multi_region_test_db CASCAD
   descriptor IDs: [104 105 106 107]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
