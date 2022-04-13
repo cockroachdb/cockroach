@@ -50,7 +50,7 @@ git tag "$TAG" "$SHA"
 git push git@github.com:cockroachdb/cockroach.git "$TAG"
 
 TAG_URL="https://github.com/cockroachdb/cockroach/releases/tag/${TAG}"
-TEAMCITY_URL="https://teamcity.cockroachdb.com/buildConfiguration/Internal_Release_MakeAndPublishBuild?branch=${TAG}&mode=builds"
+TEAMCITY_URL="https://teamcity.cockroachdb.com/buildConfiguration/Internal_Release_Process_TestingMakeAndPublishBuildV221?mode=builds&branch=${TAG}"
 if [ "$(command -v open)" ] ; then
     open "$TEAMCITY_URL"
     open "$TAG_URL"
