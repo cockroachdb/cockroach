@@ -32,6 +32,7 @@ import (
 type selectQueryBuilder struct {
 	tableID         descpb.ID
 	pkColumns       []string
+	selectOpName    string
 	startPK, endPK  tree.Datums
 	selectBatchSize int
 	aost            tree.DTimestampTZ
@@ -54,6 +55,7 @@ func makeSelectQueryBuilder(
 	tableID descpb.ID,
 	cutoff time.Time,
 	pkColumns []string,
+	relationName string,
 	startPK, endPK tree.Datums,
 	aost tree.DTimestampTZ,
 	selectBatchSize int,
@@ -72,6 +74,7 @@ func makeSelectQueryBuilder(
 	return selectQueryBuilder{
 		tableID:         tableID,
 		pkColumns:       pkColumns,
+		selectOpName:    fmt.Sprintf("ttl select %s", relationName),
 		startPK:         startPK,
 		endPK:           endPK,
 		aost:            aost,
@@ -167,7 +170,7 @@ func (b *selectQueryBuilder) run(
 	qosLevel := sessiondatapb.TTLLow
 	ret, err := ie.QueryBufferedEx(
 		ctx,
-		"ttl_scanner",
+		b.selectOpName,
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User:             security.RootUserName(),
@@ -206,6 +209,7 @@ type deleteQueryBuilder struct {
 	tableID         descpb.ID
 	pkColumns       []string
 	deleteBatchSize int
+	deleteOpName    string
 
 	// cachedQuery is the cached query, which stays the same as long as we are
 	// deleting up to deleteBatchSize elements.
@@ -216,7 +220,7 @@ type deleteQueryBuilder struct {
 }
 
 func makeDeleteQueryBuilder(
-	tableID descpb.ID, cutoff time.Time, pkColumns []string, deleteBatchSize int,
+	tableID descpb.ID, cutoff time.Time, pkColumns []string, relationName string, deleteBatchSize int,
 ) deleteQueryBuilder {
 	cachedArgs := make([]interface{}, 0, 1+len(pkColumns)*deleteBatchSize)
 	cachedArgs = append(cachedArgs, cutoff)
@@ -225,6 +229,7 @@ func makeDeleteQueryBuilder(
 		tableID:         tableID,
 		pkColumns:       pkColumns,
 		deleteBatchSize: deleteBatchSize,
+		deleteOpName:    fmt.Sprintf("ttl delete %s", relationName),
 
 		cachedArgs: cachedArgs,
 	}
@@ -281,7 +286,7 @@ func (b *deleteQueryBuilder) run(
 	qosLevel := sessiondatapb.TTLLow
 	_, err := ie.ExecEx(
 		ctx,
-		"ttl_delete",
+		b.deleteOpName,
 		txn,
 		sessiondata.InternalExecutorOverride{
 			User:             security.RootUserName(),
