@@ -348,27 +348,14 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		b.stats.batchesDueToRange++
 	}
 
-	shouldSplit := false
-	if !b.disableSplits {
-		if b.lastRange.span.ContainsKey(start) && size >= b.lastRange.remaining {
-			// If this file is starting in the same span we last added to and is bigger
-			// than the size that range had when we last added to it, then we should
-			// split off the suffix of that range where this file starts and add it to
-			// that new range after scattering it.
-			log.VEventf(ctx, 2, "%s batcher splitting full range %s before adding file starting at %s",
-				b.name, b.lastRange.span, start)
-			shouldSplit = true
-		} else if reason == sizeFlush && !b.initialSplitDone && b.stats.batches == 1 {
-			// If we didn't make initial splits, and this is our first flush and is due
-			// to filling the buffer, then we may have our own span and should drop a
-			// split at the first key to separate it out.
-			log.VEventf(ctx, 1, "%s splitting on first flush to separate ingestion span using key %s",
-				b.name, start)
-			shouldSplit = true
-		}
-	}
+	// If this file is starting in the same span we last added to and is bigger
+	// than the size that range had when we last added to it, then we should split
+	// off the suffix of that range where this file starts and add it to that new
+	// range after scattering it.
+	if !b.disableSplits && b.lastRange.span.ContainsKey(start) && size >= b.lastRange.remaining {
+		log.VEventf(ctx, 2, "%s batcher splitting full range %s before adding file starting at %s",
+			b.name, b.lastRange.span, start)
 
-	if shouldSplit {
 		expire := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Minute * 10).UnixNano()}
 
 		// If there was existing data as of last add that is above the file we are
