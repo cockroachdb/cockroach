@@ -357,9 +357,14 @@ func (s *kafkaSink) workerLoop() {
 		case err := <-s.producer.Errors():
 			ackMsg, ackError = err.Msg, err.Err
 			if ackError != nil {
-				ackError = errors.Wrapf(ackError,
-					"while sending message with key=%s, size=%d",
-					err.Msg.Key, err.Msg.Key.Length()+err.Msg.Value.Length())
+				// Msg should never be nil but we're being defensive around a vendor library.
+				// Msg.Key is nil for sentinel errors (e.g. producer shutting down)
+				// and errors sending dummy messages used to prefetch metadata.
+				if err.Msg != nil && err.Msg.Key != nil && err.Msg.Value != nil {
+					ackError = errors.Wrapf(ackError,
+						"while sending message with key=%s, size=%d",
+						err.Msg.Key, err.Msg.Key.Length()+err.Msg.Value.Length())
+				}
 			}
 		}
 
