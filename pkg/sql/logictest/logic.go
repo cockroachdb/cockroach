@@ -3327,6 +3327,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 }
 
 func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
+	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
@@ -3353,7 +3354,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 		startedChan := make(chan struct{})
 		go func() {
 			startedChan <- struct{}{}
-			res, err := t.db.Exec(execSQL)
+			res, err := db.Exec(execSQL)
 			pending.resultChan <- pendingExecResult{execSQL, res, err}
 		}()
 
@@ -3361,7 +3362,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 		return true, nil
 	}
 
-	res, err := t.db.Exec(execSQL)
+	res, err := db.Exec(execSQL)
 	return t.finishExecStatement(stmt, execSQL, res, err)
 }
 
