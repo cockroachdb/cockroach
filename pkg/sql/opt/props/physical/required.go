@@ -13,6 +13,7 @@ package physical
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -51,7 +52,7 @@ type Required struct {
 	// that only the hinted number of rows will be needed.
 	// A LimitHint of 0 indicates "no limit". The LimitHint is an intermediate
 	// float64 representation, and can be converted to an integer number of rows
-	// using math.Ceil.
+	// using LimitHintInt64.
 	LimitHint float64
 
 	// Distribution specifies the physical distribution of result rows. This is
@@ -119,6 +120,16 @@ func (p *Required) String() string {
 func (p *Required) Equals(rhs *Required) bool {
 	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering) &&
 		p.LimitHint == rhs.LimitHint && p.Distribution.Equals(rhs.Distribution)
+}
+
+// LimitHintInt64 returns the limit hint converted to an int64.
+func (p *Required) LimitHintInt64() int64 {
+	h := int64(math.Ceil(p.LimitHint))
+	if h < 0 {
+		// If we have an overflow, then disable the limit hint.
+		h = 0
+	}
+	return h
 }
 
 // Presentation specifies the naming, membership (including duplicates), and

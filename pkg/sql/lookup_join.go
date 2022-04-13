@@ -71,7 +71,7 @@ type lookupJoinNode struct {
 
 	reqOrdering ReqOrdering
 
-	limitHint int
+	limitHint int64
 }
 
 func (lj *lookupJoinNode) startExec(params runParams) error {
