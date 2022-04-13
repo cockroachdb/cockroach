@@ -68,6 +68,11 @@ type ColIndexJoin struct {
 		// too large.
 		inputBatchSize int64
 
+		// inputBatchSizeLimit is a batch size limit for the number of input
+		// rows that will be used to form lookup spans for each scan. It is
+		// usually equal to the inputBatchSizeLimit metamorphic variable.
+		inputBatchSizeLimit int64
+
 		// currentBatchSize tracks the size of the current input batch. This
 		// provides a shortcut when the entire batch fits in the memory limit.
 		currentBatchSize int64
@@ -230,10 +235,19 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 // we can remove this limit.
 var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
 	"ColIndexJoin-batch-size",
-	4<<20, /* 4 MB */
-	1,     /* min */
-	4<<20, /* max */
+	productionIndexJoinBatchSize, /* defaultValue */
+	1,                            /* min */
+	productionIndexJoinBatchSize, /* max */
 ))
+
+const productionIndexJoinBatchSize = 4 << 20 /* 4MiB */
+
+func getIndexJoinBatchSize(forceProductionValue bool) int64 {
+	if forceProductionValue {
+		return productionIndexJoinBatchSize
+	}
+	return inputBatchSizeLimit
+}
 
 // findEndIndex returns an index endIdx into s.batch such that generating spans
 // for rows in the interval [s.startIdx, endIdx) will get as close to the memory
@@ -243,23 +257,23 @@ var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
 // for the current iteration, endIdx == s.startIdx.
 func (s *ColIndexJoin) findEndIndex(hasSpans bool) (endIdx int) {
 	n := s.batch.Length()
-	if n == 0 || s.startIdx >= n || s.mem.inputBatchSize >= inputBatchSizeLimit {
+	if n == 0 || s.startIdx >= n || s.mem.inputBatchSize >= s.mem.inputBatchSizeLimit {
 		// No more spans should be generated.
 		return s.startIdx
 	}
-	if s.mem.inputBatchSize+s.mem.currentBatchSize <= inputBatchSizeLimit {
+	if s.mem.inputBatchSize+s.mem.currentBatchSize <= s.mem.inputBatchSizeLimit {
 		// The entire batch fits within the memory limit.
 		s.mem.inputBatchSize += s.mem.currentBatchSize
 		return n
 	}
 	for endIdx = s.startIdx; endIdx < n; endIdx++ {
 		s.mem.inputBatchSize += s.getRowSize(endIdx)
-		if s.mem.inputBatchSize > inputBatchSizeLimit {
+		if s.mem.inputBatchSize > s.mem.inputBatchSizeLimit {
 			// The current row (but not the previous) brings us to or over the memory
 			// limit, so use it as the exclusive end index.
 			break
 		}
-		if s.mem.inputBatchSize == inputBatchSizeLimit {
+		if s.mem.inputBatchSize == s.mem.inputBatchSizeLimit {
 			// The current row exactly meets the memory limit. Increment idx in order
 			// to make it exclusive.
 			endIdx++
@@ -481,6 +495,7 @@ func NewColIndexJoin(
 		maintainOrdering: spec.MaintainOrdering,
 		limitHintHelper:  execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
+	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes)
 	op.prepareMemLimit(inputTypes)
 
 	return op, nil
