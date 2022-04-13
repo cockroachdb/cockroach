@@ -44,6 +44,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 				1,
 				mockTime,
 				[]string{"col1", "col2"},
+				"relation_name",
 				tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 				tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				*mockTimestampTZ,
@@ -103,6 +104,7 @@ LIMIT 2`,
 				1,
 				mockTime,
 				[]string{"col1", "col2"},
+				"table_name",
 				nil,
 				nil,
 				*mockTimestampTZ,
@@ -158,6 +160,7 @@ LIMIT 2`,
 				1,
 				mockTime,
 				[]string{"col1", "col2"},
+				"table_name",
 				tree.Datums{tree.NewDInt(100)},
 				tree.Datums{tree.NewDInt(181)},
 				*mockTimestampTZ,
@@ -217,6 +220,7 @@ LIMIT 2`,
 				1,
 				mockTime,
 				[]string{"col1", "col2"},
+				"table_name",
 				nil,
 				tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				*mockTimestampTZ,
@@ -275,6 +279,7 @@ LIMIT 2`,
 				1,
 				mockTime,
 				[]string{"col1", "col2"},
+				"table_name",
 				tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 				nil,
 				*mockTimestampTZ,
@@ -361,7 +366,7 @@ func TestDeleteQueryBuilder(t *testing.T) {
 	}{
 		{
 			desc: "single delete less than batch size",
-			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, 3),
+			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3),
 			iterations: []iteration{
 				{
 					rows: []tree.Datums{
@@ -379,7 +384,7 @@ func TestDeleteQueryBuilder(t *testing.T) {
 		},
 		{
 			desc: "multiple deletes",
-			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, 3),
+			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3),
 			iterations: []iteration{
 				{
 					rows: []tree.Datums{
