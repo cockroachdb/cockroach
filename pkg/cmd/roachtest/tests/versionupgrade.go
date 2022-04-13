@@ -116,9 +116,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
 	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().RandNode()[0], 10 /* maxOps */, 2 /* concurrency */)
-	// TODO(irfansharif): All schema change instances were commented out while
-	// of #58489 is being addressed.
-	_ = schemaChangeStep
 	backupStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// Verify that backups can be created in various configurations. This is
 		// important to test because changes in system tables might cause backups to
@@ -168,18 +165,18 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// as they ought to.
 		binaryUpgradeStep(c.All(), predecessorVersion),
 		testFeaturesStep,
-		// schemaChangeStep,
+		schemaChangeStep,
 		backupStep,
 		// Roll nodes forward, this time allowing them to upgrade, and waiting
 		// for it to happen.
 		binaryUpgradeStep(c.All(), ""),
 		allowAutoUpgradeStep(1),
 		testFeaturesStep,
-		// schemaChangeStep,
+		schemaChangeStep,
 		backupStep,
 		waitForUpgradeStep(c.All()),
 		testFeaturesStep,
-		// schemaChangeStep,
+		schemaChangeStep,
 		backupStep,
 		// Turn tracing on globally to give it a fighting chance at exposing any
 		// crash-inducing incompatibilities or horrendous memory leaks. (It won't
@@ -187,7 +184,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// too much work). Then, run the previous tests again.
 		enableTracingGloballyStep,
 		testFeaturesStep,
-		// schemaChangeStep,
+		schemaChangeStep,
 		backupStep,
 	)
 
