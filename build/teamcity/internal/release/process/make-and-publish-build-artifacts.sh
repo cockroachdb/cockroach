@@ -40,6 +40,8 @@ EOF
 tc_end_block "Variable Setup"
 
 
+# Leaving the tagging part in place to make sure we don't break any scripts
+# relying on the tag.
 tc_start_block "Tag the release"
 git tag "${build_name}"
 tc_end_block "Tag the release"
@@ -67,23 +69,6 @@ docker build --no-cache --tag="${gcr_repository}:${build_name}" build/deploy
 docker push "${gcr_repository}:${build_name}"
 tc_end_block "Make and push docker image"
 
-tc_start_block "Push release tag to github.com/cockroachdb/cockroach"
-github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
-configure_git_ssh_key
-git_wrapped push ssh://git@github.com/cockroachlabs/release-staging.git "${build_name}"
-tc_end_block "Push release tag to github.com/cockroachdb/cockroach"
-
-
-tc_start_block "Tag docker image as latest-build"
-# Only tag the image as "latest-vX.Y-build" if the tag is on a release branch
-# (or master for the alphas for the next major release).
-if [[ -n "${release_branch}" ]] ; then
-  log_into_gcloud
-  gcloud container images add-tag "${gcr_repository}:${build_name}" "${gcr_repository}:latest-${release_branch}-build"
-fi
-tc_end_block "Tag docker image as latest-build"
-
-
 # Make finding the tag name easy.
 cat << EOF
 
@@ -92,10 +77,3 @@ Build ID: ${build_name}
 
 
 EOF
-
-
-if [[ -n "${is_custom_build}" ]] ; then
-  tc_start_block "Delete custombuild tag"
-  git_wrapped push ssh://git@github.com/cockroachdb/cockroach.git --delete "${TC_BUILD_BRANCH}"
-  tc_end_block "Delete custombuild tag"
-fi
