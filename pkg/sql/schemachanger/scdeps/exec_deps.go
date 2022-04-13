@@ -92,6 +92,7 @@ type txnDeps struct {
 	codec              keys.SQLCodec
 	descsCollection    *descs.Collection
 	jobRegistry        JobRegistry
+	createdJobs        []jobspb.JobID
 	indexValidator     scexec.IndexValidator
 	eventLogger        scexec.EventLogger
 	deletedDescriptors catalog.DescriptorIDSet
@@ -296,8 +297,16 @@ func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {
 
 // CreateJob implements the scexec.TransactionalJobRegistry interface.
 func (d *txnDeps) CreateJob(ctx context.Context, record jobs.Record) error {
-	_, err := d.jobRegistry.CreateJobWithTxn(ctx, record, record.JobID, d.txn)
-	return err
+	if _, err := d.jobRegistry.CreateJobWithTxn(ctx, record, record.JobID, d.txn); err != nil {
+		return err
+	}
+	d.createdJobs = append(d.createdJobs, record.JobID)
+	return nil
+}
+
+// CreatedJobs implements the scexec.TransactionalJobRegistry interface.
+func (d *txnDeps) CreatedJobs() []jobspb.JobID {
+	return d.createdJobs
 }
 
 var _ scexec.IndexSpanSplitter = (*txnDeps)(nil)

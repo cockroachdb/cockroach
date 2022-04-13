@@ -210,6 +210,7 @@ create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j I
   descriptor IDs: [106]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -562,4 +563,5 @@ create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLU
   descriptor IDs: [106]
 update progress of schema change job #1
 commit transaction #8
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase
