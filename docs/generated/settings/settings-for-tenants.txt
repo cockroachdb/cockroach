@@ -43,7 +43,7 @@ kv.replication_reports.interval	duration	1m0s	the frequency for generating the r
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions
 kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions
 kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed
-schedules.backup.gc_protection.enabled	boolean	false	enable chaining of GC protection across backups run as part of a schedule; default is false
+schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]
 security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable
 server.auth_log.sql_connections.enabled	boolean	false	if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)
