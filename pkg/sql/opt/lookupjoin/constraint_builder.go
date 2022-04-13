@@ -31,24 +31,31 @@ type ConstraintBuilder struct {
 	md      *opt.Metadata
 	evalCtx *eval.Context
 
-	inputProps      *props.Relational
-	sp              *memo.ScanPrivate
-	rightCols       opt.ColSet
+	// The table on the right side of the join to perform the lookup into.
+	table opt.TableID
+	// The columns on the left and right side of the join.
+	leftCols, rightCols opt.ColSet
+	// The columns on the left and right side of the join with equality
+	// conditions, i.e., the column at leftEq[i] is held equal to the column at
+	// rightEq[i].
 	leftEq, rightEq opt.ColList
-	rightEqSet      opt.ColSet
-	eqColMap        opt.ColMap
+	// The set of columns in rightEq.
+	rightEqSet opt.ColSet
+	// A map of columns in rightEq to their corresponding columns in leftEq.
+	// This is used to remap computed column expressions, and is only
+	// initialized if needed.
+	eqColMap opt.ColMap
 }
 
 // Init initializes a ConstraintBuilder. Once initialized, a ConstraintBuilder
 // can be reused to build lookup join constraints for all indexes in the given
-// ScanPrivate, as long as the join input and ON condition do not change.
+// table, as long as the join input and ON condition do not change.
 func (b *ConstraintBuilder) Init(
 	f *norm.Factory,
 	md *opt.Metadata,
 	evalCtx *eval.Context,
-	inputProps *props.Relational,
-	sp *memo.ScanPrivate,
-	rightCols opt.ColSet,
+	table opt.TableID,
+	leftCols, rightCols opt.ColSet,
 	leftEq, rightEq opt.ColList,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
@@ -57,8 +64,8 @@ func (b *ConstraintBuilder) Init(
 		f:          f,
 		md:         md,
 		evalCtx:    evalCtx,
-		inputProps: inputProps,
-		sp:         sp,
+		table:      table,
+		leftCols:   leftCols,
 		rightCols:  rightCols,
 		leftEq:     leftEq,
 		rightEq:    rightEq,
@@ -104,9 +111,9 @@ func (b *ConstraintBuilder) Build(
 	//
 	// This check doesn't guarantee that we will find lookup join key
 	// columns, but it avoids unnecessary work in most cases.
-	firstIdxCol := b.sp.Table.IndexColumnID(index, 0)
+	firstIdxCol := b.table.IndexColumnID(index, 0)
 	if _, ok := b.rightEq.Find(firstIdxCol); !ok {
-		if _, ok := b.findComputedColJoinEquality(b.sp.Table, firstIdxCol, b.rightEqSet); !ok {
+		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, b.rightEqSet); !ok {
 			if _, _, ok := b.findJoinFilterConstants(allFilters, firstIdxCol); !ok {
 				return
 			}
@@ -124,7 +131,7 @@ func (b *ConstraintBuilder) Build(
 	// All the lookup conditions must apply to the prefix of the index and so
 	// the projected columns created must be created in order.
 	for j := 0; j < numIndexKeyCols; j++ {
-		idxCol := b.sp.Table.IndexColumnID(index, j)
+		idxCol := b.table.IndexColumnID(index, j)
 		if eqIdx, ok := b.rightEq.Find(idxCol); ok {
 			keyCols = append(keyCols, b.leftEq[eqIdx])
 			rightSideCols = append(rightSideCols, idxCol)
@@ -137,7 +144,7 @@ func (b *ConstraintBuilder) Build(
 		// and construct a Project expression that wraps the join's input
 		// below. See findComputedColJoinEquality for the requirements to
 		// synthesize a computed column equality constraint.
-		if expr, ok := b.findComputedColJoinEquality(b.sp.Table, idxCol, b.rightEqSet); ok {
+		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, b.rightEqSet); ok {
 			colMeta := b.md.ColumnMeta(idxCol)
 			compEqCol := b.md.AddColumn(fmt.Sprintf("%s_eq", colMeta.Alias), colMeta.Type)
 
@@ -220,11 +227,11 @@ func (b *ConstraintBuilder) Build(
 		var eqFilters memo.FiltersExpr
 		extractEqualityFilter := func(leftCol, rightCol opt.ColumnID) memo.FiltersItem {
 			return memo.ExtractJoinEqualityFilter(
-				leftCol, rightCol, b.inputProps.OutputCols, b.rightCols, onFilters,
+				leftCol, rightCol, b.leftCols, b.rightCols, onFilters,
 			)
 		}
 		eqFilters, constFilters, rightSideCols = b.findFiltersForIndexLookup(
-			allFilters, b.sp.Table, index, b.leftEq, b.rightEq, extractEqualityFilter,
+			allFilters, b.table, index, b.leftEq, b.rightEq, extractEqualityFilter,
 		)
 		lookupExpr = append(eqFilters, constFilters...)
 
