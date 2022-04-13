@@ -327,6 +327,7 @@ var ReadableTypes = map[string]string{
 	"e": "enumeration",
 	// This is named "m" (instead of "v") for backwards compatibility reasons.
 	"m": "version",
+	"p": "protobuf",
 }
 
 // RedactedValue returns:
