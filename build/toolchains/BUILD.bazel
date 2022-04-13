@@ -125,16 +125,32 @@ platform(
     ],
 )
 
+# There are aliases for each of these flags defined in .bazelrc; for example,
+# --crdb_test instead of --//build/toolchains:crdb_test_flag.
+#
+# crdb_test_flag is set to true for every `bazel test` invocation (see .bazelrc).
+# When building a test executable via `bazel build`, you want to make sure you
+# set this flag (via `--config test` or `--crdb_test`) or else the executable
+# won't be compiled with the appropriate test logic.
+# crdb_test_off_flag is provided as an override to disable this default behavior
+# if desired. It's unnecessary under any other circumstances.
 bool_flag(
     name = "crdb_test_flag",
     build_setting_default = False,
     visibility = ["//visibility:public"],
 )
 
+bool_flag(
+    name = "crdb_test_off_flag",
+    build_setting_default = False,
+    visibility = [":__pkg__"],
+)
+
 config_setting(
     name = "crdb_test",
     flag_values = {
         ":crdb_test_flag": "true",
+        ":crdb_test_off_flag": "false",
     },
 )
 
