@@ -6874,7 +6874,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 				{"should_return_trace", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
 				if err != nil {
 					return nil, err
@@ -6920,7 +6920,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'split',
 'replicate', 'replicaGC', 'raftlog', 'raftsnapshot', 'consistencyChecker', and
 'timeSeriesMaintenance'. Specify if the trace corresponding to the enqueue operation should be rendered.`,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{

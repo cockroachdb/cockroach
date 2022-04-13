@@ -159,38 +159,10 @@ message ScheduledBackupExecutionArgs {
   // i.e. the full schedule will have the inc schedules ID and vice versa.
   // A value of 0 indicates that there is no dependent schedule.
   int64 dependent_schedule_id = 6 [(gogoproto.customname) = "DependentScheduleID"];
-  // Previously, when running incremental backups with revision history, the GC
-  // TTL of the backup targets had to be at least as long as the gap between two
-  // backups. This was to ensure that the later backup in the chain could
-  // successfully backup all revisions since the `EndTime` of the previous
-  // backup until the `EndTime` of the current backup. Chaining of protected
-  // timestamp records across backups in the chain allows us to decouple the
-  // cadence of backups from the GC TTL by protecting what we need as we go.
-  //
-  // Chaining scheme:
-  // - The first scheduled full backup on successful completion, will write a
-  //   PTS record to protect all backed up data after the backups' EndTime. It
-  //   will then store this record on the dependent incremental schedule.
-  //
-  // - Thereafter, every execution of an incremental backup will update the PTS
-  //   record on the incremental schedule to protect the same spans as the
-  //   previous record stored on the schedule, but after the `EndTime` of the
-  //   current backup.
-  //
-  // - Subsequent full backups will release the pts record on the incremental
-  //   schedule, and write a new pts record protecting all backed up data after
-  //   the full backups' EndTime.
-  //   This happens on successful completion of the full backup to ensure that
-  //   it does not interfere with incrementals that might be started while the
-  //   the full backup is executing.
-  //
-  // NB: The PTS records written and managed by the backup schedule is
-  // independent of the PTS record written during the backup planning. Each
-  // backup job will continue to write a pts record for the duration of its
-  // execution. The schedule managed chaining of pts records across backups
-  // ensures that we are never trying to protect a span after a timestamp that
-  // might have fallen out of the GC window, without a previously written pts
-  // record protecting it from GC.
+
+  // ChainProtectedTimestampRecords indicates that chaining of protected
+  // timestamp records is enabled for this schedule. The chaining scheme works
+  // as described in `schedule_pts_chaining.go`.
   bool chain_protected_timestamp_records = 7;
 
   bytes protected_timestamp_record = 8 [
