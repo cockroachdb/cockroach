@@ -82,11 +82,11 @@ func classifyTableEvent(e TableEvent) tableEventType {
 		et = et | tableEventAddHiddenColumn
 	}
 
-	if newColumnNoBackfill(e) {
+	if newVisibleColumnNoBackfill(e) {
 		et = et | tableEventTypeAddColumnNoBackfill
 	}
 
-	if hasNewColumnDropBackfillMutation(e) {
+	if hasNewVisibleColumnDropBackfillMutation(e) {
 		et = et | tableEventTypeDropColumn
 	}
 
@@ -134,15 +134,15 @@ func (filter tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (
 	return shouldFilter, nil
 }
 
-func hasNewColumnDropBackfillMutation(e TableEvent) (res bool) {
+func hasNewVisibleColumnDropBackfillMutation(e TableEvent) (res bool) {
 	// Make sure that the old descriptor *doesn't* have the same mutation to avoid adding
 	// the same scan boundary more than once.
-	return !dropColumnMutationExists(e.Before) && dropColumnMutationExists(e.After)
+	return !dropVisibleColumnMutationExists(e.Before) && dropVisibleColumnMutationExists(e.After)
 }
 
-func dropColumnMutationExists(desc catalog.TableDescriptor) bool {
+func dropVisibleColumnMutationExists(desc catalog.TableDescriptor) bool {
 	for _, m := range desc.AllMutations() {
-		if m.AsColumn() == nil {
+		if m.AsColumn() == nil || m.AsColumn().IsHidden() {
 			continue
 		}
 		if m.Dropped() && m.WriteAndDeleteOnly() {
@@ -164,8 +164,8 @@ func newHiddenColumnBackfillComplete(e TableEvent) (res bool) {
 		e.Before.HasColumnBackfillMutation() && !e.After.HasColumnBackfillMutation()
 }
 
-func newColumnNoBackfill(e TableEvent) (res bool) {
-	return len(e.Before.PublicColumns()) < len(e.After.PublicColumns()) &&
+func newVisibleColumnNoBackfill(e TableEvent) (res bool) {
+	return len(e.Before.VisibleColumns()) < len(e.After.VisibleColumns()) &&
 		!e.Before.HasColumnBackfillMutation()
 }
 
