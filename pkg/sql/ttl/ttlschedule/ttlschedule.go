@@ -146,7 +146,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 			Name: jobs.CreatedByScheduledJobs,
 		},
 		txn,
-		cfg.InternalExecutor,
+		p.(sql.PlanHookState).ExtendedEvalContext().Descs,
 		p.(sql.PlanHookState).ExecCfg().JobRegistry,
 		*args,
 	); err != nil {
@@ -217,12 +217,18 @@ func createRowLevelTTLJob(
 	ctx context.Context,
 	createdByInfo *jobs.CreatedByInfo,
 	txn *kv.Txn,
-	ie sqlutil.InternalExecutor,
+	descsCol *descs.Collection,
 	jobRegistry *jobs.Registry,
 	ttlDetails catpb.ScheduledRowLevelTTLArgs,
 ) (jobspb.JobID, error) {
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	tn, err := descs.GetTableNameByID(ctx, txn, descsCol, ttlDetails.TableID)
+	if err != nil {
+		return 0, err
+	}
+	f.FormatNode(tn)
 	record := jobs.Record{
-		Description: "ttl",
+		Description: fmt.Sprintf("ttl for %s", f.CloseAndGetString()),
 		Username:    security.NodeUserName(),
 		Details: jobspb.RowLevelTTLDetails{
 			TableID: ttlDetails.TableID,
