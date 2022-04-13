@@ -9217,6 +9217,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 		}
 	}
 	conn := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 	_, err := conn.Exec("CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
 	require.NoError(t, err)
 
@@ -9232,17 +9233,6 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	require.NoError(t, err)
 
 	rRand, _ := randutil.NewTestRand()
-	upsertUntilBackpressure := func() {
-		for {
-			_, err := conn.Exec("UPSERT INTO foo VALUES (1, $1)",
-				randutil.RandBytes(rRand, 1<<15))
-			if testutils.IsError(err, "backpressure") {
-				break
-			}
-			require.NoError(t, err)
-		}
-	}
-
 	waitForTableSplit(t, conn, "foo", "defaultdb")
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "defaultdb", func(r *kvserver.Replica) (bool, error) {
 		if r.GetMaxBytes() != tableRangeMaxBytes {
@@ -9253,8 +9243,8 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 
 	var tsBefore string
 	require.NoError(t, conn.QueryRow("SELECT cluster_logical_timestamp()").Scan(&tsBefore))
-	upsertUntilBackpressure()
-	runGCAndCheckTrace(ctx, t, tc, conn, false /* skipShouldQueue */, "foo", "defaultdb", func(traceStr string) error {
+	upsertUntilBackpressure(t, rRand, conn, "defaultdb", "foo")
+	runGCAndCheckTraceOnCluster(ctx, t, tc, sqlDB, false /* skipShouldQueue */, "foo", "defaultdb", func(traceStr string) error {
 		const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
 		processedRegexp := regexp.MustCompile(processedPattern)
 		if !processedRegexp.MatchString(traceStr) {
@@ -9321,18 +9311,6 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	runner.Exec(t, "ALTER TABLE test.foo CONFIGURE ZONE USING "+
 		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
 
-	rRand, _ := randutil.NewTestRand()
-	upsertUntilBackpressure := func() {
-		for {
-			_, err := conn.Exec("UPSERT INTO test.foo VALUES (1, $1)",
-				randutil.RandBytes(rRand, 1<<15))
-			if testutils.IsError(err, "backpressure") {
-				break
-			}
-			require.NoError(t, err)
-		}
-	}
-
 	// Wait for the span config fields to apply.
 	waitForTableSplit(t, conn, "foo", "test")
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "test", func(r *kvserver.Replica) (bool, error) {
@@ -9373,17 +9351,19 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	// Now that the backup has written a PTS record protecting the database, we
 	// check that the replica corresponding to `test.foo` continue to GC data
 	// since it has been marked as `exclude_data_from_backup`.
-	upsertUntilBackpressure()
-	runGCAndCheckTrace(ctx, t, tc, conn, false /* skipShouldQueue */, "foo", "test", func(traceStr string) error {
-		const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
-		processedRegexp := regexp.MustCompile(processedPattern)
-		if !processedRegexp.MatchString(traceStr) {
-			return errors.Errorf("%q does not match %q", traceStr, processedRegexp)
-		}
-		thresh := thresholdFromTrace(t, traceStr)
-		require.Truef(t, afterBackup.Less(thresh), "%v >= %v", afterBackup, thresh)
-		return nil
-	})
+	rRand, _ := randutil.NewTestRand()
+	upsertUntilBackpressure(t, rRand, conn, "test", "foo")
+	runGCAndCheckTraceOnCluster(ctx, t, tc, runner, false, /* skipShouldQueue */
+		"foo", "test", func(traceStr string) error {
+			const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
+			processedRegexp := regexp.MustCompile(processedPattern)
+			if !processedRegexp.MatchString(traceStr) {
+				return errors.Errorf("%q does not match %q", traceStr, processedRegexp)
+			}
+			thresh := thresholdFromTrace(t, traceStr)
+			require.Truef(t, afterBackup.Less(thresh), "%v >= %v", afterBackup, thresh)
+			return nil
+		})
 }
 
 // TestBackupRestoreSystemUsers tests RESTORE SYSTEM USERS feature which allows user to

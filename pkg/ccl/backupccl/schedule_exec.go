@@ -440,10 +440,10 @@ func unlinkDependentSchedule(
 }
 
 // OnDrop implements the ScheduledJobController interface.
-// The method is responsible for releasing the pts record stored on the schedule
-// if schedules.backup.gc_protection.enabled = true.
-// It is also responsible for unlinking the dependent schedule by clearing the
-// DependentID.
+//
+// The method is responsible for releasing the pts record stored on the
+// schedule. It is also responsible for unlinking the dependent schedule by
+// clearing the DependentID.
 func (e *scheduledBackupExecutor) OnDrop(
 	ctx context.Context,
 	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
