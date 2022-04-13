@@ -11,19 +11,183 @@
 package lookupjoin_test
 
 import (
+	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/lookupjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	tu "github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/datadriven"
 )
+
+// The test files support only one command:
+//
+//   - lookup-constraints [arg | arg=val | arg=(val1,val2, ...)]...
+//
+//   Builds lookup join constrains for the given left and right table
+//   definitions, and an index for the right table.Arguments:
+//
+//     - left=(<column> <type> [not null] [as <expr> [stored|virtual], ...)
+//
+//       Information about the left columns.
+
+//     - right=(<column> <type> [not null] [as <expr> [stored|virtual], ...)
+//
+//       Information about the left columns.
+//
+//     - index=(<column> [asc|desc], ...)
+//
+//       Information for the index on the right table.
+//
+func TestLookupConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	datadriven.Walk(t, tu.TestDataPath(t), func(t *testing.T, path string) {
+		semaCtx := tree.MakeSemaContext()
+		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			testCatalog := testcat.New()
+			var f norm.Factory
+			f.Init(&evalCtx, testCatalog)
+			md := f.Metadata()
+
+			for _, arg := range d.CmdArgs {
+				key, vals := arg.Key, arg.Vals
+				cols := strings.Join(vals, ", ")
+				switch key {
+				case "left", "right":
+					fmt.Printf("CREATE TABLE %s (%s)\n", key, cols)
+					_, err := testCatalog.ExecuteDDL(fmt.Sprintf("CREATE TABLE %s_table (%s)", key, cols))
+					if err != nil {
+						d.Fatalf(t, "%v", err)
+					}
+
+				case "index":
+					_, err := testCatalog.ExecuteDDL(fmt.Sprintf("CREATE INDEX ON right_table (%s)", cols))
+					if err != nil {
+						d.Fatalf(t, "%v", err)
+					}
+
+				default:
+					d.Fatalf(t, "unknown argument: %s", key)
+				}
+			}
+
+			addTable := func(name string) (_ opt.TableID, cols opt.ColSet, _ error) {
+				tn := tree.NewUnqualifiedTableName(tree.Name(name))
+				table := testCatalog.Table(tn)
+				tableID := md.AddTable(table, tn)
+				for i, n := 0, md.Table(tableID).ColumnCount(); i < n; i++ {
+					colID := tableID.ColumnID(i)
+					cols.Add(colID)
+					col := md.Table(tableID).Column(i)
+					if col.IsComputed() {
+						expr, err := parser.ParseExpr(col.ComputedExprStr())
+						if err != nil {
+							return 0, opt.ColSet{}, err
+						}
+						b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
+						if err := b.Build(expr); err != nil {
+							return 0, opt.ColSet{}, err
+						}
+						compExpr := f.Memo().RootExpr().(opt.ScalarExpr)
+						md.TableMeta(tableID).AddComputedCol(colID, compExpr)
+					}
+				}
+				return tableID, cols, nil
+			}
+
+			_, leftCols, err := addTable("left_table")
+			if err != nil {
+				t.Fatal(err)
+			}
+			rightTable, rightCols, err := addTable("right_table")
+			if err != nil {
+				t.Fatal(err)
+			}
+			index := md.Table(rightTable).Index(1)
+			allCols := leftCols.Union(rightCols)
+
+			switch d.Cmd {
+			case "lookup-constraints":
+				// Allow specifying optional filters using the "optional:" delimiter.
+				var filters, optionalFilters memo.FiltersExpr
+				var err error
+				if idx := strings.Index(d.Input, "optional:"); idx >= 0 {
+					optional := d.Input[idx+len("optional:"):]
+					optionalFilters, err = makeFilters(optional, allCols, &semaCtx, &evalCtx, &f)
+					if err != nil {
+						d.Fatalf(t, "%v", err)
+					}
+					d.Input = d.Input[:idx]
+				}
+				if filters, err = makeFilters(d.Input, allCols, &semaCtx, &evalCtx, &f); err != nil {
+					d.Fatalf(t, "%v", err)
+				}
+
+				leftEq, rightEq := memo.ExtractJoinEqualityColumns(leftCols, rightCols, filters)
+				if len(leftEq) == 0 {
+					return "lookup join requires equality columns"
+				}
+
+				var cb lookupjoin.ConstraintBuilder
+				cb.Init(&f, md, f.EvalContext(), rightTable, leftCols, rightCols, leftEq, rightEq)
+				keyCols, lookupExpr, inputProjections, _, _ :=
+					cb.Build(index, filters, optionalFilters)
+				var b strings.Builder
+				if len(keyCols) == 0 && len(lookupExpr) == 0 {
+					b.WriteString("lookup join not possible")
+				}
+				if len(keyCols) > 0 {
+					b.WriteString("key cols:\n")
+					for i := range keyCols {
+						b.WriteString("  ")
+						b.WriteString(string(index.Column(i).ColName()))
+						b.WriteString(" = ")
+						b.WriteString(md.ColumnMeta(keyCols[i]).Alias)
+						b.WriteString("\n")
+					}
+				}
+				if len(inputProjections) > 0 {
+					b.WriteString("input projections:\n")
+					for i := range inputProjections {
+						col := inputProjections[i].Col
+						b.WriteString("  ")
+						b.WriteString(md.ColumnMeta(col).Alias)
+						b.WriteString(" = ")
+						b.WriteString(formatScalar(inputProjections[i].Element, &f, &evalCtx))
+						b.WriteString("\n")
+					}
+				}
+				if len(lookupExpr) > 0 {
+					b.WriteString("lookup expression:\n  ")
+					b.WriteString(formatScalar(&lookupExpr, &f, &evalCtx))
+					b.WriteString("\n")
+				}
+				return b.String()
+
+			default:
+				d.Fatalf(t, "unsupported command: %s", d.Cmd)
+				return ""
+			}
+		})
+	})
+}
 
 func TestIsCanonicalFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -76,6 +240,99 @@ func TestIsCanonicalFilter(t *testing.T) {
 			}
 		})
 	}
+}
+
+// makeFilters returns a FiltersExpr generated from the input string that is
+// normalized within the context of a Select. By normalizing within a Select,
+// rules that only match on Selects are applied, such as SimplifySelectFilters.
+// This ensures that these test filters mimic the filters that will be created
+// during a real query.
+// TODO(mgartner): This function is a duplicate of one in the partialidx_test
+// package. Extract this to a utility that can be used in both packages.
+func makeFilters(
+	input string, cols opt.ColSet, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
+) (memo.FiltersExpr, error) {
+	filters, err := makeFiltersExpr(input, semaCtx, evalCtx, f)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create an output set of columns for the fake relation with all the
+	// columns in the test case.
+	colStatsMap := props.ColStatsMap{}
+	cols.ForEach(func(col opt.ColumnID) {
+		colStat, _ := colStatsMap.Add(opt.MakeColSet(col))
+		colStat.DistinctCount = 100
+		colStat.NullCount = 10
+	})
+
+	// Create a non-zero cardinality to prevent the fake Select from
+	// simplifying into a ValuesExpr.
+	card := props.Cardinality{Min: 0, Max: 1}
+
+	// Create stats for the fake relation.
+	stats := props.Statistics{
+		Available:   true,
+		RowCount:    1000,
+		ColStats:    colStatsMap,
+		Selectivity: props.OneSelectivity,
+	}
+
+	// Create a fake Select and input so that normalization rules are run.
+	p := &props.Relational{OutputCols: cols, Cardinality: card, Stats: stats}
+	fakeRel := f.ConstructFakeRel(&memo.FakeRelPrivate{Props: p})
+	sel := f.ConstructSelect(fakeRel, filters)
+
+	// If the normalized relational expression is a Select, return the filters.
+	if s, ok := sel.(*memo.SelectExpr); ok {
+		return s.Filters, nil
+	}
+
+	// Otherwise, the filters may be either true or false. Check the cardinality
+	// to determine which one.
+	if sel.Relational().Cardinality.IsZero() {
+		return memo.FiltersExpr{f.ConstructFiltersItem(memo.FalseSingleton)}, nil
+	}
+
+	return memo.TrueFilter, nil
+}
+
+// makeFiltersExpr returns a FiltersExpr generated from the input string.
+func makeFiltersExpr(
+	input string, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
+) (memo.FiltersExpr, error) {
+	expr, err := parser.ParseExpr(input)
+	if err != nil {
+		return nil, err
+	}
+
+	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
+	if err := b.Build(expr); err != nil {
+		return nil, err
+	}
+
+	root := f.Memo().RootExpr().(opt.ScalarExpr)
+
+	return memo.FiltersExpr{f.ConstructFiltersItem(root)}, nil
+}
+
+func formatScalar(e opt.Expr, f *norm.Factory, evalCtx *eval.Context) string {
+	execBld := execbuilder.New(
+		nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
+		e, evalCtx, false, /* allowAutoCommit */
+	)
+	expr, err := execBld.BuildScalar()
+	if err != nil {
+		return fmt.Sprintf("error: %v\n", err)
+	}
+	fmtCtx := tree.NewFmtCtx(
+		tree.FmtSimple,
+		tree.FmtIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
+			ctx.WriteString(f.Metadata().ColumnMeta(opt.ColumnID(idx + 1)).Alias)
+		}),
+	)
+	expr.Format(fmtCtx)
+	return fmtCtx.String()
 }
 
 type testFilterBuilder struct {
