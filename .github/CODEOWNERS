@@ -29,8 +29,25 @@
 
 /pkg/sql/                    @cockroachdb/sql-queries-noreview
 
-/pkg/sql/opt/                @cockroachdb/sql-opt-prs
-/pkg/sql/stats/              @cockroachdb/sql-opt-prs
+/pkg/sql/inverted/           @cockroachdb/sql-queries
+/pkg/sql/opt/                @cockroachdb/sql-queries
+/pkg/sql/opt_*.go            @cockroachdb/sql-queries
+/pkg/sql/opt/exec/execbuilder/testdata/ @cockroachdb/sql-queries-noreview
+/pkg/sql/plan_opt*.go        @cockroachdb/sql-queries
+/pkg/sql/querycache/         @cockroachdb/sql-queries
+/pkg/sql/span/               @cockroachdb/sql-queries
+/pkg/sql/stats/              @cockroachdb/sql-queries
+
+/pkg/sql/col*                @cockroachdb/sql-queries
+/pkg/sql/distsql*.go         @cockroachdb/sql-queries
+/pkg/sql/exec*               @cockroachdb/sql-queries
+/pkg/sql/exec_log*.go        @cockroachdb/sql-queries-noreview
+/pkg/sql/exec_util*.go       @cockroachdb/sql-queries-noreview
+/pkg/sql/flowinfra/          @cockroachdb/sql-queries
+/pkg/sql/physicalplan/       @cockroachdb/sql-queries
+/pkg/sql/row*                @cockroachdb/sql-queries
+
+/pkg/sql/execstats/          @cockroachdb/sql-observability
 
 /pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
 /pkg/sql/parser/             @cockroachdb/sql-syntax-prs
