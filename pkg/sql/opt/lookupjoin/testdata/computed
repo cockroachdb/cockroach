@@ -1,0 +1,62 @@
+# Tests for computed columns.
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) stored) index=(v, x)
+x = a
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a + 10
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual) index=(v, x)
+x = a
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a + 10
+
+# TODO(mgartner): We should be able to generate a lookup join by determining
+# that v is not null because the filter demands that x is not null, and v is
+# calculated from x.
+lookup-constraints left=(a int, b int) right=(x int, v int as (x + 10) virtual) index=(v, x)
+x = a
+----
+lookup join not possible
+
+lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
+x = a AND y = b
+----
+key cols:
+  v = v_eq
+  x = a
+  y = b
+input projections:
+  v_eq = a + 10
+
+lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
+x = a AND y = 1
+----
+key cols:
+  v = v_eq
+  x = a
+  y = lookup_join_const_col_@7
+input projections:
+  v_eq = a + 10
+  lookup_join_const_col_@7 = 1
+
+# TODO(mgartner): We should be able to generate a lookup join constraint by
+# projecting an expression for v.
+lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
+x = a AND y IN (1, 2)
+----
+lookup join not possible
+
+# TODO(mgartner): We should be able to generate a lookup join constraint by
+# projecting an expression for v.
+lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
+x = a AND y > 0
+----
+lookup join not possible
