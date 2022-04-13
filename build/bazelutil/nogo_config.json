@@ -100,7 +100,6 @@
     },
     "nilness": {
         "exclude_files": {
-            "cockroach/pkg/ccl/streamingccl/streamclient/random_stream_client.go": "https://github.com/cockroachdb/cockroach/issues/79926",
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",

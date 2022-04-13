@@ -369,9 +369,9 @@ func (m *randomStreamClient) Subscribe(
 
 		rng, _ := randutil.NewPseudoRand()
 
+		var keyValCopy *roachpb.KeyValue
 		for {
 			var event streamingccl.Event
-			var keyValCopy *roachpb.KeyValue
 			if numKVEventsSinceLastResolved == config.kvsPerCheckpoint {
 				// Emit a CheckpointEvent.
 				resolvedTime := timeutil.Now()
@@ -407,7 +407,9 @@ func (m *randomStreamClient) Subscribe(
 			if event.Type() == streamingccl.KVEvent {
 				// Use the originally generated KeyValue copy as the KeyValue inside the event might
 				// get modified by ingestion processor's tenant rekeyer.
-				event = streamingccl.MakeKVEvent(*keyValCopy)
+				// 'keyValCopy' will only be set when it is a KV event. Copying the 'keyValCopy' again
+				// to prevent the event being modified by interceptor again.
+				event = streamingccl.MakeKVEvent(*copyKeyVal(keyValCopy))
 			}
 			func() {
 				m.mu.Lock()
