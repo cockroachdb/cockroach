@@ -690,6 +690,9 @@ func (ie *InternalExecutor) execInternal(
 	if err != nil {
 		return nil, err
 	}
+	if parsed.AST.StatementType() != tree.TypeDML && txn != nil {
+		return nil, errors.New("cannot run non DML statement using internal executor with a supplied transaction")
+	}
 	parseEnd := timeutil.Now()
 
 	// Transforms the args to datums. The datum types will be passed as type

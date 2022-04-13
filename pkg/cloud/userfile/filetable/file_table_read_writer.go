@@ -830,7 +830,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 ) error {
 	// Create the File and Payload tables to hold the file chunks.
 	fileTableCreateQuery := fmt.Sprintf(fileTableSchema, f.GetFQFileTableName())
-	_, err := ie.ExecEx(ctx, "create-file-table", txn,
+	_, err := ie.ExecEx(ctx, "create-file-table", nil,
 		sessiondata.InternalExecutorOverride{User: f.username},
 		fileTableCreateQuery)
 	if err != nil {
@@ -838,7 +838,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 	}
 
 	payloadTableCreateQuery := fmt.Sprintf(payloadTableSchema, f.GetFQPayloadTableName())
-	_, err = ie.ExecEx(ctx, "create-payload-table", txn,
+	_, err = ie.ExecEx(ctx, "create-payload-table", nil,
 		sessiondata.InternalExecutorOverride{User: f.username},
 		payloadTableCreateQuery)
 	if err != nil {
@@ -847,7 +847,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 
 	addFKQuery := fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT file_id_fk FOREIGN KEY (
 file_id) REFERENCES %s (file_id)`, f.GetFQPayloadTableName(), f.GetFQFileTableName())
-	_, err = ie.ExecEx(ctx, "create-payload-table", txn,
+	_, err = ie.ExecEx(ctx, "create-payload-table", nil,
 		sessiondata.InternalExecutorOverride{User: f.username},
 		addFKQuery)
 	if err != nil {
@@ -864,7 +864,7 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 ) error {
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
 		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username.SQLIdentifier())
-	_, err := ie.ExecEx(ctx, "grant-user-file-payload-table-access", txn,
+	_, err := ie.ExecEx(ctx, "grant-user-file-payload-table-access", nil,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		grantQuery)
 	if err != nil {
