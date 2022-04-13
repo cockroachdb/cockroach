@@ -13,6 +13,7 @@ package persistedsqlstats
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -65,6 +66,12 @@ func (s *Controller) ResetClusterSQLStats(ctx context.Context) error {
 		return err
 	}
 
+	if !s.clusterVersionSupportsPersistedSQLStats(ctx) {
+		// If we are in the mixed version state, we silently exit here, since
+		// truncating a non-existing table will result in error.
+		return nil
+	}
+
 	resetSysTableStats := func(tableName string) error {
 		if _, err := s.ie.ExecEx(
 			ctx,
@@ -84,4 +91,9 @@ func (s *Controller) ResetClusterSQLStats(ctx context.Context) error {
 	}
 
 	return resetSysTableStats("system.transaction_statistics")
+}
+
+func (s *Controller) clusterVersionSupportsPersistedSQLStats(ctx context.Context) bool {
+	clusterVersion := s.st.Version.ActiveVersionOrEmpty(ctx)
+	return clusterVersion.IsActive(clusterversion.SQLStatsTables)
 }
