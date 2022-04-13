@@ -355,7 +355,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	var pkCols opt.ColList
 	var iter scanIndexIter
 	var cb lookupjoin.ConstraintBuilder
-	cb.Init(c.e.f, c.e.mem.Metadata(), c.e.evalCtx, inputProps, scanPrivate, rightCols, leftEq, rightEq)
+	cb.Init(c.e.f, c.e.mem.Metadata(), c.e.evalCtx, scanPrivate.Table,
+		inputProps.OutputCols, rightCols, leftEq, rightEq)
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		// Skip indexes that do no cover all virtual projection columns, if

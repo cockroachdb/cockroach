@@ -92,7 +92,7 @@ func TestMakeRangeFilterFromSpan(t *testing.T) {
 		},
 	}
 	var b lookupjoin.ConstraintBuilder
-	b.Init(fb.f, nil, nil, nil, nil, opt.ColSet{}, nil, nil)
+	b.Init(fb.f, nil, nil, 0, opt.ColSet{}, opt.ColSet{}, nil, nil)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sp constraint.Span
