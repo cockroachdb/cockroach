@@ -12,5 +12,8 @@ go_test(
     name = "scanner_test",
     srcs = ["scan_test.go"],
     embed = [":scanner"],
-    deps = ["//pkg/sql/lexbase"],
+    deps = [
+        "//pkg/sql/lexbase",
+        "@com_github_stretchr_testify//require",
+    ],
 )

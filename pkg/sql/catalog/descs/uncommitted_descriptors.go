@@ -164,6 +164,13 @@ func (ud *uncommittedDescriptors) add(
 	for _, n := range uNew.immutable.GetDrainingNames() {
 		ud.descNames.Add(n)
 	}
+	if prev, ok := ud.descs.GetByID(mut.GetID()).(*uncommittedDescriptor); ok {
+		if prev.mutable.OriginalVersion() != mut.OriginalVersion() {
+			return nil, errors.AssertionFailedf(
+				"cannot add a version of descriptor with a different original version" +
+					" than it was previously added with")
+		}
+	}
 	ud.descs.Upsert(uNew)
 	return uNew.immutable, err
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -163,7 +164,11 @@ var throttledError = errors.WithHint(
 // newProxyHandler will create a new proxy handler with configuration based on
 // the provided options.
 func newProxyHandler(
-	ctx context.Context, stopper *stop.Stopper, proxyMetrics *metrics, options ProxyOptions,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	registry *metric.Registry,
+	proxyMetrics *metrics,
+	options ProxyOptions,
 ) (*proxyHandler, error) {
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
@@ -250,8 +255,12 @@ func newProxyHandler(
 	}
 
 	// Create the connection tracker and balancer components.
+	balancerMetrics := balancer.NewMetrics()
+	registry.AddMetricStruct(balancerMetrics)
 	handler.connTracker = balancer.NewConnTracker()
-	handler.balancer, err = balancer.NewBalancer(ctx, stopper, handler.directoryCache, handler.connTracker)
+	handler.balancer, err = balancer.NewBalancer(
+		ctx, stopper, balancerMetrics, handler.directoryCache, handler.connTracker,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +516,10 @@ func (handler *proxyHandler) setupIncomingCert(ctx context.Context) error {
 // the connection parameters, and rewrites the database and options parameters,
 // if necessary.
 //
-// We currently support embedding the cluster identifier in two ways:
+// We currently support embedding the cluster identifier in three ways:
+//
+// - Through server name identification (SNI) when using TLS connections
+//   (e.g. serverless-101.5xj.gcp-us-central1.cockroachlabs.cloud)
 //
 // - Within the database param (e.g. "happy-koala-3.defaultdb")
 //
@@ -528,8 +540,13 @@ func clusterNameAndTenantFromParams(
 		return fe.msg, "", roachpb.MaxTenantID, err
 	}
 
+	sniTenID, sniPresent := parseSNI(fe.sniServerName)
+
 	// No cluster identifiers were specified.
 	if clusterIdentifierDB == "" && clusterIdentifierOpt == "" {
+		if sniPresent {
+			return fe.msg, "", sniTenID, nil
+		}
 		err := errors.New("missing cluster identifier")
 		err = errors.WithHint(err, clusterIdentifierHint)
 		return fe.msg, "", roachpb.MaxTenantID, err
@@ -605,11 +622,54 @@ func clusterNameAndTenantFromParams(
 		}
 	}
 
+	// Cluster ID provided through one of options or database (or both and the
+	// info is matching). If sni has been provided as well - check for match.
+	if sniPresent && tenID != sniTenID.InternalValue {
+		err := errors.New("multiple different tenant IDs provided")
+		err = errors.WithHintf(err,
+			"Is '%d' (SNI) or '%d' (database/options) the identifier for the cluster that you're connecting to?",
+			sniTenID.InternalValue, tenID)
+		err = errors.WithHint(err, clusterIdentifierHint)
+		return fe.msg, "", roachpb.MaxTenantID, err
+	}
+
 	outMsg := &pgproto3.StartupMessage{
 		ProtocolVersion: fe.msg.ProtocolVersion,
 		Parameters:      paramsOut,
 	}
 	return outMsg, clusterName, roachpb.MakeTenantID(tenID), nil
+}
+
+// parseSNI parses the sni server name parameter if provided and returns the
+// extracted tenant id. If the extraction was successful the second parameter
+// will be true. If not - false.
+func parseSNI(sniServerName string) (roachpb.TenantID, bool) {
+	if sniServerName == "" {
+		return roachpb.MaxTenantID, false
+	}
+
+	// Try to obtain tenant ID from SNI
+	parts := strings.Split(sniServerName, ".")
+	if len(parts) == 0 {
+		return roachpb.MaxTenantID, false
+	}
+
+	hostname := parts[0]
+	hostnameParts := strings.Split(hostname, "-")
+	// TODO serverless prefix may not be appropriate for all cases where the proxy
+	// is used so it needs to be mad configurable. A better design would be to pass
+	// the options (database, options, sni server name) to the tenant directory
+	// and get back a routing id.
+	if len(hostnameParts) != 2 || !strings.EqualFold("serverless", hostnameParts[0]) {
+		return roachpb.MaxTenantID, false
+	}
+
+	tenID, err := strconv.ParseUint(hostnameParts[1], 10, 64)
+	if err != nil || tenID < roachpb.MinTenantID.ToUint64() {
+		return roachpb.MaxTenantID, false
+	}
+
+	return roachpb.MakeTenantID(tenID), true
 }
 
 // parseDatabaseParam parses the database parameter from the PG connection
@@ -697,6 +757,11 @@ following methods:
 2) Options parameter:
    Use "--cluster=<cluster identifier>" as the options parameter.
    (e.g. options="--cluster=active-roach-42")
+
+3) Host name:
+   Use a driver that supports server name identification (SNI) with TLS 
+   connection and the hostname assigned to your cluster 
+   (e.g. serverless-101.5xj.gcp-us-central1.cockroachlabs.cloud)
 
 For more details, please visit our docs site at:
 	https://www.cockroachlabs.com/docs/cockroachcloud/connect-to-a-serverless-cluster

@@ -42,17 +42,17 @@ type Server struct {
 // NewServer constructs a new proxy server and provisions metrics and health
 // checks as well.
 func NewServer(ctx context.Context, stopper *stop.Stopper, options ProxyOptions) (*Server, error) {
+	registry := metric.NewRegistry()
+
 	proxyMetrics := makeProxyMetrics()
-	handler, err := newProxyHandler(ctx, stopper, &proxyMetrics, options)
+	registry.AddMetricStruct(&proxyMetrics)
+
+	handler, err := newProxyHandler(ctx, stopper, registry, &proxyMetrics, options)
 	if err != nil {
 		return nil, err
 	}
 
 	mux := http.NewServeMux()
-
-	registry := metric.NewRegistry()
-
-	registry.AddMetricStruct(&proxyMetrics)
 
 	s := &Server{
 		Stopper:            stopper,

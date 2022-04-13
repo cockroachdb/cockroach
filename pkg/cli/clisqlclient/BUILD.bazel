@@ -6,6 +6,7 @@ go_library(
         "api.go",
         "conn.go",
         "context.go",
+        "copy.go",
         "doc.go",
         "init_conn_error.go",
         "make_query.go",

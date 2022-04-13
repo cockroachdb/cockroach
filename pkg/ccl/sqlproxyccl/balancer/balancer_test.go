@@ -38,6 +38,7 @@ func TestBalancer_SelectTenantPod(t *testing.T) {
 	b, err := NewBalancer(
 		ctx,
 		stopper,
+		nil, /* metrics */
 		nil, /* directoryCache */
 		nil, /* connTracker */
 		NoRebalanceLoop(),
@@ -67,6 +68,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 	b, err := NewBalancer(
 		ctx,
 		stopper,
+		NewMetrics(),
 		nil, /* directoryCache */
 		nil, /* connTracker */
 		MaxConcurrentRebalances(1),
@@ -99,6 +101,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 			conn: &testBalancerConnHandle{
 				onTransferConnection: func() error {
 					count++
+					require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
 					return errors.New("cannot transfer")
 				},
 			},
@@ -112,6 +115,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 
 		// Ensure that we only retried up to 3 times.
 		require.Equal(t, 3, count)
+		require.Equal(t, int64(0), b.metrics.rebalanceReqRunning.Value())
 	})
 
 	t.Run("conn_was_transferred_by_other", func(t *testing.T) {
@@ -121,6 +125,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 			count++
 			// Simulate that connection was transferred by someone else.
 			conn.remoteAddr = "foo"
+			require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
 			return errors.New("cannot transfer")
 		}
 		req := &rebalanceRequest{
@@ -136,6 +141,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 
 		// We should only retry once.
 		require.Equal(t, 1, count)
+		require.Equal(t, int64(0), b.metrics.rebalanceReqRunning.Value())
 	})
 
 	t.Run("conn_was_transferred", func(t *testing.T) {
@@ -144,6 +150,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 		conn.onTransferConnection = func() error {
 			count++
 			conn.remoteAddr = "foo"
+			require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
 			return nil
 		}
 		req := &rebalanceRequest{
@@ -159,6 +166,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 
 		// We should only retry once.
 		require.Equal(t, 1, count)
+		require.Equal(t, int64(0), b.metrics.rebalanceReqRunning.Value())
 	})
 
 	t.Run("conn_was_closed", func(t *testing.T) {
@@ -166,6 +174,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 		conn := &testBalancerConnHandle{}
 		conn.onTransferConnection = func() error {
 			count++
+			require.Equal(t, int64(1), b.metrics.rebalanceReqRunning.Value())
 			return context.Canceled
 		}
 		req := &rebalanceRequest{
@@ -181,9 +190,15 @@ func TestRebalancer_processQueue(t *testing.T) {
 
 		// We should only retry once.
 		require.Equal(t, 1, count)
+		require.Equal(t, int64(0), b.metrics.rebalanceReqRunning.Value())
 	})
 
 	t.Run("limit_concurrent_rebalances", func(t *testing.T) {
+		// Temporarily override metrics so we could test total counts
+		// independent of other tests.
+		defer func(oldMetrics *Metrics) { b.metrics = oldMetrics }(b.metrics)
+		b.metrics = NewMetrics()
+
 		const reqCount = 100
 
 		// Allow up to 2 concurrent rebalances.
@@ -215,6 +230,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 						// concurrent rebalances defined.
 						newCount := atomic.AddInt32(&count, 1)
 						require.True(t, newCount <= 2)
+						require.True(t, b.metrics.rebalanceReqRunning.Value() <= 2)
 						return nil
 					},
 				},
@@ -231,6 +247,7 @@ func TestRebalancer_processQueue(t *testing.T) {
 
 		// We should only transfer once for every connection.
 		require.Equal(t, int32(0), count)
+		require.Equal(t, int64(reqCount), b.metrics.rebalanceReqTotal.Count())
 	})
 }
 
@@ -245,6 +262,7 @@ func TestRebalancer_rebalanceLoop(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
+	metrics := NewMetrics()
 	directoryCache := newTestDirectoryCache()
 	connTracker := NewConnTracker()
 
@@ -255,6 +273,7 @@ func TestRebalancer_rebalanceLoop(t *testing.T) {
 	_, err := NewBalancer(
 		ctx,
 		stopper,
+		metrics,
 		directoryCache,
 		connTracker,
 		TimeSource(timeSource),
@@ -294,6 +313,7 @@ func TestRebalancer_rebalance(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
+	metrics := NewMetrics()
 	directoryCache := newTestDirectoryCache()
 	connTracker := NewConnTracker()
 
@@ -304,6 +324,7 @@ func TestRebalancer_rebalance(t *testing.T) {
 	b, err := NewBalancer(
 		ctx,
 		stopper,
+		metrics,
 		directoryCache,
 		connTracker,
 		NoRebalanceLoop(),
@@ -467,7 +488,7 @@ func TestRebalancerQueue(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	q, err := newRebalancerQueue(ctx)
+	q, err := newRebalancerQueue(ctx, NewMetrics())
 	require.NoError(t, err)
 
 	// Use a custom time source for testing.
@@ -496,10 +517,13 @@ func TestRebalancerQueue(t *testing.T) {
 
 	// Enqueue in a specific order. req3 overrides req1; req2 is a no-op.
 	q.enqueue(req1)
+	require.Equal(t, int64(1), q.metrics.rebalanceReqQueued.Value())
 	q.enqueue(req3)
+	require.Equal(t, int64(1), q.metrics.rebalanceReqQueued.Value())
 	q.enqueue(req2)
 	require.Len(t, q.elements, 1)
 	require.Equal(t, 1, q.queue.Len())
+	require.Equal(t, int64(1), q.metrics.rebalanceReqQueued.Value())
 
 	// Create another request.
 	conn2 := &testBalancerConnHandle{}
@@ -509,6 +533,7 @@ func TestRebalancerQueue(t *testing.T) {
 		dst:       "bar1",
 	}
 	q.enqueue(req4)
+	require.Equal(t, int64(2), q.metrics.rebalanceReqQueued.Value())
 	require.Len(t, q.elements, 2)
 	require.Equal(t, 2, q.queue.Len())
 
@@ -516,9 +541,11 @@ func TestRebalancerQueue(t *testing.T) {
 	item, err := q.dequeue(ctx)
 	require.NoError(t, err)
 	require.Equal(t, req3, item)
+	require.Equal(t, int64(1), q.metrics.rebalanceReqQueued.Value())
 	item, err = q.dequeue(ctx)
 	require.NoError(t, err)
 	require.Equal(t, req4, item)
+	require.Equal(t, int64(0), q.metrics.rebalanceReqQueued.Value())
 	require.Empty(t, q.elements)
 	require.Equal(t, 0, q.queue.Len())
 
@@ -527,6 +554,7 @@ func TestRebalancerQueue(t *testing.T) {
 	req4, err = q.dequeue(ctx)
 	require.EqualError(t, err, context.Canceled.Error())
 	require.Nil(t, req4)
+	require.Equal(t, int64(0), q.metrics.rebalanceReqQueued.Value())
 }
 
 func TestRebalancerQueueBlocking(t *testing.T) {
@@ -535,7 +563,7 @@ func TestRebalancerQueueBlocking(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	q, err := newRebalancerQueue(ctx)
+	q, err := newRebalancerQueue(ctx, NewMetrics())
 	require.NoError(t, err)
 
 	reqCh := make(chan *rebalanceRequest, 10)

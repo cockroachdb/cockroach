@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// TODO(michae2): Remove this when #70731 is fixed.
 var multipleModificationsOfTableEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.multiple_modifications_of_table.enabled",
@@ -493,7 +494,9 @@ func (b *Builder) checkMultipleMutations(tab cat.Table, simpleInsert bool) {
 	}
 	allSimpleInserts = allSimpleInserts && simpleInsert
 	b.areAllTableMutationsSimpleInserts[tab.ID()] = allSimpleInserts
-	if !allSimpleInserts && !multipleModificationsOfTableEnabled.Get(&b.evalCtx.Settings.SV) {
+	if !allSimpleInserts &&
+		!multipleModificationsOfTableEnabled.Get(&b.evalCtx.Settings.SV) &&
+		!b.evalCtx.SessionData().MultipleModificationsOfTable {
 		panic(pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"multiple modification subqueries of the same table %q are not supported unless "+

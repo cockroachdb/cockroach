@@ -124,10 +124,7 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 func (c collectionBackedDereferencer) fastDescLookup(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	if uc, status := c.tc.uncommitted.getImmutableByID(id); uc != nil {
-		if status == checkedOutAtLeastOnce {
-			return nil, nil
-		}
+	if uc, _ := c.tc.uncommitted.getImmutableByID(id); uc != nil {
 		return uc, nil
 	}
 	return nil, nil

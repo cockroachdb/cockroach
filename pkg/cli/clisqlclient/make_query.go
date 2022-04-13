@@ -13,10 +13,8 @@ package clisqlclient
 import (
 	"context"
 	"database/sql/driver"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
-	"github.com/cockroachdb/errors"
 )
 
 // QueryFn is the type of functions produced by MakeQuery.
@@ -28,7 +26,6 @@ func MakeQuery(query string, parameters ...interface{}) QueryFn {
 	return func(ctx context.Context, conn Conn) (Rows, bool, error) {
 		isMultiStatementQuery, _ := scanner.HasMultipleStatements(query)
 		rows, err := conn.Query(ctx, query, parameters...)
-		err = handleCopyError(conn.(*sqlConn), err)
 		return rows, isMultiStatementQuery, err
 	}
 }
@@ -50,23 +47,4 @@ func convertArgs(parameters []interface{}) ([]driver.NamedValue, error) {
 		}
 	}
 	return dVals, nil
-}
-
-// handleCopyError ensures the user is properly informed when they issue
-// a COPY statement somewhere in their input.
-func handleCopyError(conn *sqlConn, err error) error {
-	if err == nil {
-		return nil
-	}
-
-	if !strings.HasPrefix(err.Error(), "pq: unknown response for simple query: 'G'") {
-		return err
-	}
-
-	// The COPY statement has hosed the connection by putting the
-	// protocol in a state that lib/pq cannot understand any more. Reset
-	// it.
-	_ = conn.Close()
-	conn.reconnecting = true
-	return errors.New("woops! COPY has confused this client! Suggestion: use 'psql' for COPY")
 }

@@ -797,7 +797,8 @@ func (p *planner) getQualifiedSchemaName(
 ) (*tree.ObjectNamePrefix, error) {
 	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
 		tree.DatabaseLookupFlags{
-			Required: true,
+			Required:    true,
+			AvoidLeased: true,
 		})
 	if err != nil {
 		return nil, err
@@ -817,7 +818,8 @@ func (p *planner) getQualifiedTypeName(
 ) (*tree.TypeName, error) {
 	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
 		tree.DatabaseLookupFlags{
-			Required: true,
+			Required:    true,
+			AvoidLeased: true,
 		})
 	if err != nil {
 		return nil, err

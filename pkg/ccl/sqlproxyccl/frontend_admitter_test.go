@@ -80,6 +80,7 @@ func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 
 	go func() {
 		cfg, err := pgconn.ParseConfig("postgres://localhost?sslmode=require")
+		cfg.TLSConfig.ServerName = "test"
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
 		cfg.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -96,6 +97,7 @@ func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 	require.NotEqual(t, srv, fe.conn) // The connection was replaced by SSL
 	require.NotNil(t, fe.msg)
 	require.Contains(t, fe.msg.Parameters, remoteAddrStartupParam)
+	require.Equal(t, fe.sniServerName, "test")
 }
 
 // TestFrontendAdmitRequireEncryption sends StartupRequest when SSlRequest is

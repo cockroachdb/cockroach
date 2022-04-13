@@ -108,19 +108,28 @@ func (p *planner) forEachMutableTableInDatabase(
 		return err
 	}
 
+	// TODO(ajwerner): Rewrite this to not use the internalLookupCtx.
 	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), dbDesc)
+	var droppedRemoved []descpb.ID
 	for _, tbID := range lCtx.tbIDs {
 		desc := lCtx.tbDescs[tbID]
 		if desc.Dropped() {
 			continue
 		}
-		mutable := tabledesc.NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
-		schemaName, found, err := lCtx.GetSchemaName(ctx, desc.GetParentSchemaID(), desc.GetParentID(), p.ExecCfg().Settings.Version)
+		droppedRemoved = append(droppedRemoved, tbID)
+	}
+	descs, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.Txn(), droppedRemoved...)
+	if err != nil {
+		return err
+	}
+	for _, d := range descs {
+		mutable := d.(*tabledesc.Mutable)
+		schemaName, found, err := lCtx.GetSchemaName(ctx, d.GetParentSchemaID(), d.GetParentID(), p.ExecCfg().Settings.Version)
 		if err != nil {
 			return err
 		}
 		if !found {
-			return errors.AssertionFailedf("schema id %d not found", desc.GetParentSchemaID())
+			return errors.AssertionFailedf("schema id %d not found", d.GetParentSchemaID())
 		}
 		if err := fn(ctx, schemaName, mutable); err != nil {
 			return err
