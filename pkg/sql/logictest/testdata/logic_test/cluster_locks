@@ -33,8 +33,18 @@ user testuser
 statement ok
 BEGIN
 
-statement async readReq ok
+query TT async,rowsort readReq
 SELECT * FROM t
+----
+a   val1
+b   val2_updated
+c   val3_updated
+l   val4_updated
+m   val5_updated
+p   val6_updated
+s   val7_updated
+t   val8_updated
+z   val9
 
 user root
 
@@ -49,7 +59,51 @@ COMMIT
 
 user testuser
 
-awaitstatement readReq
+awaitquery readReq
+
+statement ok
+COMMIT
+
+user root
+
+statement ok
+BEGIN
+
+query TT rowsort
+SELECT * FROM t FOR UPDATE
+----
+a   val1
+b   val2_updated
+c   val3_updated
+l   val4_updated
+m   val5_updated
+p   val6_updated
+s   val7_updated
+t   val8_updated
+z   val9
+
+user testuser
+
+statement ok
+BEGIN
+
+statement async deleteReq count 7
+DELETE FROM t WHERE k >= 'b' AND k < 'z'
+
+user root
+
+query TTT colnames,retry
+SELECT user_name, query, phase FROM crdb_internal.cluster_queries WHERE user_name='testuser'
+----
+user_name   query                                           phase
+testuser    DELETE FROM t WHERE (k >= 'b') AND (k < 'z')    executing
+
+statement ok
+COMMIT
+
+user testuser
+
+awaitstatement deleteReq
 
 statement ok
 COMMIT
