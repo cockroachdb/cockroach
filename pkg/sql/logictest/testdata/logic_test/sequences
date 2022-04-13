@@ -2174,3 +2174,43 @@ SELECT currval('setval_currval_txn_seq')
 
 statement ok
 END
+
+# create a sequence and setval in the same transaction then lastval
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_txn_lastval_seq
+
+query I
+SELECT setval('setval_txn_lastval_seq', 101)
+----
+101
+
+statement ok
+END
+
+query I
+SELECT lastval()
+----
+101
+
+# create a sequence and setval then lastval in the same transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE SEQUENCE setval_lastval_txn_seq
+
+query I
+SELECT setval('setval_lastval_txn_seq', 202)
+----
+202
+
+query I
+SELECT lastval()
+----
+202
+
+statement ok
+END
