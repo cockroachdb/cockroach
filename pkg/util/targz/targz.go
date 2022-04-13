@@ -62,8 +62,5 @@ func AsFS(r io.Reader) (fs.FS, error) {
 
 	// Create a read-only io/fs.FS suitable for external use
 	iofs := afero.NewIOFS(fsys)
-	if err != nil {
-		return nil, errors.Wrap(err, "error creating uncompressed filesystem")
-	}
 	return iofs, nil
 }

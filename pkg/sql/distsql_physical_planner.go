@@ -2566,9 +2566,6 @@ func (dsp *DistSQLPlanner) planZigzagJoin(
 		); err != nil {
 			return nil, err
 		}
-		if err != nil {
-			return nil, err
-		}
 
 		s.EqColumns.Columns = make([]uint32, len(side.eqCols))
 		for j, col := range side.eqCols {
