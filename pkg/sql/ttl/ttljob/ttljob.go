@@ -288,7 +288,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var ttlSettings catpb.RowLevelTTL
 	var pkColumns []string
 	var pkTypes []*types.T
-	var name string
+	var relationName string
 	var rangeSpan roachpb.Span
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := descsCol.GetImmutableTableByID(
@@ -329,10 +329,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 		tn, err := descs.GetTableNameByDesc(ctx, txn, descsCol, desc)
 		if err != nil {
-			return errors.Wrapf(err, "error fetching table name for TTL")
+			return errors.Wrapf(err, "error fetching table relation name for TTL")
 		}
 
-		name = tn.FQString()
+		relationName = tn.FQString()
 		rangeSpan = desc.TableSpan(p.ExecCfg().Codec)
 		ttlSettings = *ttl
 		return nil
@@ -342,7 +342,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 	var metrics = p.ExecCfg().JobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
 		ttlSettings.LabelMetrics,
-		name,
+		relationName,
 	)
 	var rangeDesc roachpb.RangeDescriptor
 	var alloc tree.DatumAlloc
@@ -379,6 +379,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					r.startPK,
 					r.endPK,
 					pkColumns,
+					relationName,
 					selectBatchSize,
 					deleteBatchSize,
 					deleteRateLimiter,
@@ -400,7 +401,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	if ttlSettings.RowStatsPollInterval != 0 {
 		g.GoCtx(func(ctx context.Context) error {
 			// Do once initially to ensure we have some base statistics.
-			fetchStatistics(ctx, p.ExecCfg(), knobs, details, metrics, aostDuration)
+			fetchStatistics(ctx, p.ExecCfg(), knobs, relationName, details, metrics, aostDuration)
 			// Wait until poll interval is reached, or early exit when we are done
 			// with the TTL job.
 			for {
@@ -408,7 +409,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				case <-statsCloseCh:
 					return nil
 				case <-time.After(ttlSettings.RowStatsPollInterval):
-					fetchStatistics(ctx, p.ExecCfg(), knobs, details, metrics, aostDuration)
+					fetchStatistics(ctx, p.ExecCfg(), knobs, relationName, details, metrics, aostDuration)
 				}
 			}
 		})
@@ -517,6 +518,7 @@ func fetchStatistics(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	knobs sql.TTLTestingKnobs,
+	relationName string,
 	details jobspb.RowLevelTTLDetails,
 	metrics rowLevelTTLMetrics,
 	aostDuration time.Duration,
@@ -533,12 +535,12 @@ func fetchStatistics(
 			gauge  *aggmetric.Gauge
 		}{
 			{
-				opName: "ttl_num_rows",
+				opName: fmt.Sprintf("ttl num rows stats %s", relationName),
 				query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
 				gauge:  metrics.TotalRows,
 			},
 			{
-				opName: "ttl_num_expired_rows",
+				opName: fmt.Sprintf("ttl num expired rows stats %s", relationName),
 				query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE ` + colinfo.TTLDefaultExpirationColumnName + ` < $1`,
 				args:   []interface{}{details.Cutoff},
 				gauge:  metrics.TotalExpiredRows,
@@ -584,6 +586,7 @@ func runTTLOnRange(
 	startPK tree.Datums,
 	endPK tree.Datums,
 	pkColumns []string,
+	relationName string,
 	selectBatchSize, deleteBatchSize int,
 	deleteRateLimiter *quotapool.RateLimiter,
 	aost tree.DTimestampTZ,
@@ -601,6 +604,7 @@ func runTTLOnRange(
 		details.TableID,
 		details.Cutoff,
 		pkColumns,
+		relationName,
 		startPK,
 		endPK,
 		aost,
@@ -610,6 +614,7 @@ func runTTLOnRange(
 		details.TableID,
 		details.Cutoff,
 		pkColumns,
+		relationName,
 		deleteBatchSize,
 	)
 
