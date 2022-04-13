@@ -220,9 +220,7 @@ func (f *KVFetcher) NextKV(
 	}
 }
 
-// Close releases the resources held by this KVFetcher. It must be called
-// at the end of execution if the fetcher was provisioned with a memory
-// monitor.
+// Close releases the resources held by this KVFetcher.
 func (f *KVFetcher) Close(ctx context.Context) {
 	f.KVBatchFetcher.close(ctx)
 }

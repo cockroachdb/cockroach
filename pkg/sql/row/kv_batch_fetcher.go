@@ -200,7 +200,8 @@ func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
 //
 // The passed-in memory account is owned by the fetcher throughout its lifetime
 // but is **not** closed - it is the caller's responsibility to close acc if it
-// is non-nil.
+// is non-nil. The account is cleared, so the caller must ensure that there are
+// no live outstanding reservations against acc.
 func makeKVBatchFetcher(
 	ctx context.Context,
 	sendFn sendFunc,
@@ -280,6 +281,7 @@ func makeKVBatchFetcher(
 
 	// Account for the memory of the spans that we're taking the ownership of.
 	if f.acc != nil {
+		f.acc.Clear(ctx)
 		f.spansAccountedFor = spans.MemUsage()
 		if err := f.acc.Grow(ctx, f.spansAccountedFor); err != nil {
 			return txnKVFetcher{}, err
@@ -338,10 +340,10 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// could return. Most of the time, scans won't use this amount of memory,
 		// so it's unnecessary to reserve it all. We reserve something rather than
 		// nothing at all to preserve some accounting.
-		f.batchResponseAccountedFor = tokenFetchAllocation
-		if err := f.acc.Grow(ctx, f.batchResponseAccountedFor); err != nil {
+		if err := f.acc.Resize(ctx, f.batchResponseAccountedFor, tokenFetchAllocation); err != nil {
 			return err
 		}
+		f.batchResponseAccountedFor = tokenFetchAllocation
 	}
 
 	br, err := f.sendFn(ctx, ba)
@@ -373,9 +375,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// likely that we'll expose ourselves to OOM conditions, so that's the
 		// reasoning for why we never ratchet this account down past the maximum
 		// fetch size once it's exceeded.
-		used := f.acc.Used()
-		delta := returnedBytes - f.batchResponseAccountedFor
-		if err := f.acc.Resize(ctx, used, used+delta); err != nil {
+		if err := f.acc.Resize(ctx, f.batchResponseAccountedFor, returnedBytes); err != nil {
 			return err
 		}
 		f.batchResponseAccountedFor = returnedBytes
@@ -519,12 +519,11 @@ func (f *txnKVFetcher) nextBatch(
 		// We have some resume spans.
 		f.spans = f.spansScratch[:f.newFetchSpansIdx]
 		if f.acc != nil {
-			used := f.acc.Used()
-			delta := f.spans.MemUsage() - f.spansAccountedFor
-			if err := f.acc.Resize(ctx, used, used+delta); err != nil {
+			newSpansMemUsage := f.spans.MemUsage()
+			if err := f.acc.Resize(ctx, f.spansAccountedFor, newSpansMemUsage); err != nil {
 				return false, nil, nil, err
 			}
-			f.spansAccountedFor += delta
+			f.spansAccountedFor = newSpansMemUsage
 		}
 	}
 	// We have more work to do. Ask the KV layer to continue where it left off.
@@ -541,7 +540,6 @@ func (f *txnKVFetcher) close(ctx context.Context) {
 	f.remainingBatches = nil
 	f.spans = nil
 	f.spansScratch = nil
-	f.acc.Clear(ctx)
 }
 
 // spansToRequests converts the provided spans to the corresponding requests. If
