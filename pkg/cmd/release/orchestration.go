@@ -85,9 +85,6 @@ func setOrchestrationVersion(_ *cobra.Command, _ []string) error {
 		}
 		// Go templates cannot be used here, because some files are templates already.
 		generatedContents := strings.ReplaceAll(string(contents), "@VERSION@", orchestrationFlags.version)
-		if err != nil {
-			return err
-		}
 		if strings.HasSuffix(destFile, ".yaml") {
 			generatedContents = fmt.Sprintf("# Generated file, DO NOT EDIT. Source: %s\n", filePath) + generatedContents
 		}
