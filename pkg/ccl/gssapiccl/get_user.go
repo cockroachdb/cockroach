@@ -17,8 +17,6 @@ package gssapiccl
 // to retrieve the current user.
 
 import (
-	"unsafe"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/errors"
 )
@@ -66,7 +64,7 @@ func getGssUser(c pgwire.AuthConn) (connClose func(), gssUser string, _ error) {
 		}
 
 		gbuf.length = C.ulong(len(token))
-		gbuf.value = C.CBytes([]byte(token))
+		gbuf.value = C.CBytes(token)
 
 		majStat = C.gss_accept_sec_context(
 			&minStat,
@@ -81,7 +79,7 @@ func getGssUser(c pgwire.AuthConn) (connClose func(), gssUser string, _ error) {
 			nil,
 			nil,
 		)
-		C.free(unsafe.Pointer(gbuf.value))
+		C.free(gbuf.value)
 
 		if outputToken.length != 0 {
 			outputBytes := C.GoBytes(outputToken.value, C.int(outputToken.length))
