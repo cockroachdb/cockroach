@@ -82,15 +82,17 @@ func WaitForUpdatedReplicationReport(ctx context.Context, t test.Test, db *gosql
 	// that the report picks up any new tables or zones.
 	tStart := timeutil.Now()
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
-		var gen time.Time
+		var count int
+		var gen gosql.NullTime
 		if err := db.QueryRowContext(
-			ctx, `SELECT generated FROM system.reports_meta ORDER BY 1 DESC LIMIT 1`,
-		).Scan(&gen); err != nil {
+			ctx, `SELECT count(*), min(generated) FROM system.reports_meta`,
+		).Scan(&count, &gen); err != nil {
 			if !errors.Is(err, gosql.ErrNoRows) {
 				t.Fatal(err)
 			}
-			// No report generated yet.
-		} else if tStart.Before(gen) {
+			// No report generated yet. There are 3 types of reports. We want to
+			// see a result for all of them.
+		} else if count == 3 && tStart.Before(gen.Time) {
 			// New report generated.
 			return
 		}
