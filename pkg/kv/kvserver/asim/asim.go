@@ -19,20 +19,6 @@ import (
 	"github.com/google/btree"
 )
 
-// ConfigEvent can be, for example, adding or removing a node in a region.
-type ConfigEvent struct {
-}
-
-// ConfigLoader is responsible for loading configurations such as adding and
-// removing nodes.
-type ConfigLoader struct {
-}
-
-// GetNext returns a ConfigEvent which happens before maxTime, if exists.
-func (sr *ConfigLoader) GetNext(maxTime time.Time) (bool, *ConfigEvent) {
-	return true, nil
-}
-
 // Range spans keys greater or equal to MinKey and smaller than the MinKey of
 // the next range.
 type Range struct {
@@ -107,6 +93,7 @@ func NewNode() *Node {
 type State struct {
 	lastNodeID int
 	Nodes      map[int]*Node
+	Cluster    *ClusterInfo
 
 	// This is the entire key space.
 	Ranges RangeMap
@@ -117,18 +104,19 @@ func NewState() *State {
 	return &State{Nodes: make(map[int]*Node)}
 }
 
-// AddNode adds a node to the cluster.
-func (s *State) AddNode(ctx context.Context) (nodeID int) {
+// AddNode adds a node with a single store to the cluster.
+func (s *State) AddNode() (nodeID int) {
 	s.lastNodeID++
 	nodeID = s.lastNodeID
 	n := NewNode()
 	n.nodeDesc = &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)}
 	s.Nodes[nodeID] = n
+	s.AddStore(nodeID)
 	return nodeID
 }
 
 // AddStore adds a store to an existing node.
-func (s *State) AddStore(ctx context.Context, node int) {
+func (s *State) AddStore(node int) {
 	allocator := kvserver.MakeAllocator(
 		nil,
 		func(string) (time.Duration, bool) {
@@ -138,10 +126,6 @@ func (s *State) AddStore(ctx context.Context, node int) {
 		nil,
 	)
 	s.Nodes[node].Stores = append(s.Nodes[node].Stores, &Store{allocator: allocator})
-}
-
-// ApplyStateChange updates the state with config changes.
-func (s *State) ApplyStateChange(ctx context.Context, event *ConfigEvent) {
 }
 
 // ApplyAllocatorAction updates the state with allocator ops such as
@@ -190,23 +174,19 @@ type Simulator struct {
 
 	// The simulator can run multiple workload Generators in parallel.
 	generators []WorkloadGenerator
-	conf       *ConfigLoader
-	prevState  *State
-	nextState  *State
+	state      *State
 }
 
 // NewSimulator constructs a valid Simulator.
 func NewSimulator(
-	start, end time.Time, interval time.Duration, wgs []WorkloadGenerator, conf *ConfigLoader,
+	start, end time.Time, interval time.Duration, wgs []WorkloadGenerator, initialState *State,
 ) *Simulator {
 	return &Simulator{
 		curr:       start,
 		end:        end,
 		interval:   interval,
 		generators: wgs,
-		conf:       conf,
-		prevState:  NewState(),
-		nextState:  NewState(),
+		state:      initialState,
 	}
 }
 
@@ -240,38 +220,31 @@ func (s *Simulator) RunSim(ctx context.Context) {
 			break
 		}
 
-		for {
-			done, event := s.conf.GetNext(tick)
-			if done {
-				break
-			}
-			s.nextState.ApplyStateChange(ctx, event)
-		}
-
 		for _, generator := range s.generators {
 			for {
 				done, event := generator.GetNext(tick)
 				if done {
 					break
 				}
-				s.nextState.ApplyLoad(ctx, event)
+				s.state.ApplyLoad(ctx, event)
 			}
 		}
 
 		// Done with config and load updates, the state is ready for the allocators.
-		s.prevState = s.nextState
+		stateForAlloc := s.state
 
-		for _, node := range s.prevState.Nodes {
+		for _, node := range stateForAlloc.Nodes {
 			for _, store := range node.Stores {
 				for _, r := range store.replicas {
-					// Run the real allocator code. Note that the input is from PrevState.
+					// Run the real allocator code. Note that the input is from the
+					// "frozen" state which is not affected by rebalancing decisions.
 					done, action, priority := RunAllocator(ctx, store.allocator, *r.spanConf, r.desc, tick)
 					if done {
 						break
 					}
 
-					// The allocator ops are applied on NextState.
-					s.nextState.ApplyAllocatorAction(ctx, action, priority)
+					// The allocator ops are applied.
+					s.state.ApplyAllocatorAction(ctx, action, priority)
 				}
 			}
 		}

@@ -20,26 +20,21 @@ import (
 )
 
 func TestStateUpdates(t *testing.T) {
-	ctx := context.Background()
-
 	s := asim.NewState()
-	s.AddNode(ctx)
+	s.AddNode()
 	require.Equal(t, 1, len(s.Nodes))
-
-	s.AddStore(ctx, 1)
 	require.Equal(t, 1, len(s.Nodes[1].Stores))
 }
 
 func TestRunAllocatorSimulator(t *testing.T) {
 	ctx := context.Background()
-
 	rwg := make([]asim.WorkloadGenerator, 1)
 	rwg[0] = &asim.RandomWorkloadGenerator{}
-	scl := &asim.ConfigLoader{}
 	start := time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
 	end := start.Add(25 * time.Second)
 	interval := 10 * time.Second
-	sim := asim.NewSimulator(start, end, interval, rwg, scl)
+	s := asim.LoadConfig(asim.SingleRegionConfig)
+	sim := asim.NewSimulator(start, end, interval, rwg, s)
 	sim.RunSim(ctx)
 }
 
