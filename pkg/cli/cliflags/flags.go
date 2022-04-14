@@ -574,6 +574,33 @@ An IPv6 address can also be specified with the notation [...], for
 example [::1]:8080 or [fe80::f6f2:::]:8080.`,
 	}
 
+	HTTPAdvertiseAddr = FlagInfo{
+		Name: "advertise-http-addr",
+		Description: `
+The HTTP address/hostname and port to advertise to nodes in the cluster
+for proxying of HTTP connections.
+It must resolve and be routable from other nodes in the cluster.
+<PRE>
+
+</PRE>
+If left unspecified, it defaults to the setting of --http-addr.
+If the flag is provided but either the address part or the port part
+is left unspecified, that particular part defaults to the
+same part in --http-addr. If --http-addr is left unspecified, it
+defaults to the setting of --advertise-addr. If --advertise-addr is
+unspecified, it defaults to the hostname as reported by the OS.
+<PRE>
+
+</PRE>
+An IPv6 address can also be specified with the notation [...], for
+example [::1]:26257 or [fe80::f6f2:::]:26257.
+<PRE>
+
+</PRE>
+The port number should be the same as in --http-addr unless port
+forwarding is set up on an intermediate firewall/router.`,
+	}
+
 	UnencryptedLocalhostHTTP = FlagInfo{
 		Name: "unencrypted-localhost-http",
 		Description: `
