@@ -292,7 +292,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 						m.stats.FlowStats.MaxDiskUsage.Set(uint64(m.flowCtx.DiskMonitor.MaximumBytes()))
 					}
 					span.RecordStructured(&m.stats)
-					if trace := execinfra.GetTraceData(ctx); trace != nil {
+					if trace := tracing.SpanFromContext(ctx).GetConfiguredRecording(); trace != nil {
 						err := m.AddRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
 						if err != nil {
 							return err

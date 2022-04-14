@@ -26,7 +26,7 @@ go_library(
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
-        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",

@@ -32,7 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -173,7 +175,7 @@ func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 // Setup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
-) (context.Context, execinfra.OpChains, error) {
+) (context.Context, execopnode.OpChains, error) {
 	var err error
 	ctx, _, err = f.FlowBase.Setup(ctx, spec, opt)
 	if err != nil {
@@ -181,7 +183,7 @@ func (f *vectorizedFlow) Setup(
 	}
 	log.VEvent(ctx, 2, "setting up vectorized flow")
 	recordingStats := false
-	if execinfra.ShouldCollectStats(ctx, &f.FlowCtx) {
+	if execstats.ShouldCollectStats(ctx, f.FlowCtx.CollectStats) {
 		recordingStats = true
 	}
 	helper := newVectorizedFlowCreatorHelper(f.FlowBase)
@@ -552,7 +554,7 @@ type vectorizedFlowCreator struct {
 	procIdxQueue []int
 	// opChains accumulates all operators that have no further outputs on the
 	// current node, for the purposes of EXPLAIN output.
-	opChains execinfra.OpChains
+	opChains execopnode.OpChains
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
 	// releasables contains all components that should be released back to their
@@ -677,7 +679,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	stream *execinfrapb.StreamEndpointSpec,
 	factory coldata.ColumnFactory,
 	getStats func() []*execinfrapb.ComponentStats,
-) (execinfra.OpNode, error) {
+) (execopnode.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
 		colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 		op, outputTyps, getStats,
@@ -1061,7 +1063,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	processorSpecs []execinfrapb.ProcessorSpec,
 	localProcessors []execinfra.LocalProcessor,
 	opt flowinfra.FuseOpt,
-) (opChains execinfra.OpChains, batchFlowCoordinator *BatchFlowCoordinator, err error) {
+) (opChains execopnode.OpChains, batchFlowCoordinator *BatchFlowCoordinator, err error) {
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
 		// The column factory will not change the eval context, so we can use
 		// the one we have in the flow context, without making a copy.

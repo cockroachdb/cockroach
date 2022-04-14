@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -99,7 +100,7 @@ func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
 }
 
 // Child implements the execinfrapb.OpNode interface.
-func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *OrderedSynchronizer) Child(nth int, verbose bool) execopnode.OpNode {
 	return o.inputs[nth].Root
 }
 

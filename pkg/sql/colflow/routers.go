@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,7 +38,7 @@ import (
 // routerOutput is an interface implemented by router outputs. It exists for
 // easier test mocking of outputs.
 type routerOutput interface {
-	execinfra.OpNode
+	execopnode.OpNode
 	// initWithHashRouter passes a reference to the HashRouter that will be
 	// pushing batches to this output.
 	initWithHashRouter(*HashRouter)
@@ -103,7 +104,7 @@ type drainCoordinator interface {
 type routerOutputOp struct {
 	colexecop.InitHelper
 	// input is a reference to our router.
-	input execinfra.OpNode
+	input execopnode.OpNode
 	// drainCoordinator is a reference to the HashRouter to be able to notify it
 	// if the output encounters an error or transitions to a draining state.
 	drainCoordinator drainCoordinator
@@ -134,7 +135,7 @@ func (o *routerOutputOp) ChildCount(verbose bool) int {
 	return 1
 }
 
-func (o *routerOutputOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (o *routerOutputOp) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
 		return o.input
 	}

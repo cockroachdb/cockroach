@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -215,7 +216,7 @@ func (ds *ServerImpl) setupFlow(
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localState LocalState,
-) (retCtx context.Context, _ flowinfra.Flow, _ execinfra.OpChains, retErr error) {
+) (retCtx context.Context, _ flowinfra.Flow, _ execopnode.OpChains, retErr error) {
 	if !FlowVerIsCompatible(req.Version, execinfra.MinAcceptedVersion, execinfra.Version) {
 		err := errors.Errorf(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
@@ -389,7 +390,7 @@ func (ds *ServerImpl) setupFlow(
 		opt = flowinfra.FuseAggressively
 	}
 
-	var opChains execinfra.OpChains
+	var opChains execopnode.OpChains
 	var err error
 	ctx, opChains, err = f.Setup(ctx, &req.Flow, opt)
 	if err != nil {
@@ -548,7 +549,7 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	output execinfra.RowReceiver,
 	batchOutput execinfra.BatchReceiver,
 	localState LocalState,
-) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
+) (context.Context, flowinfra.Flow, execopnode.OpChains, error) {
 	ctx, f, opChains, err := ds.setupFlow(
 		ctx, tracing.SpanFromContext(ctx), parentMonitor, req, output, batchOutput, localState,
 	)

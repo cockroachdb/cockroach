@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execopnode",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/parser",
         "//pkg/sql/randgen",

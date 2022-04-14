@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -43,7 +44,7 @@ type planNodeToRowSource struct {
 	row rowenc.EncDatumRow
 }
 
-var _ execinfra.OpNode = &planNodeToRowSource{}
+var _ execopnode.OpNode = &planNodeToRowSource{}
 
 func makePlanNodeToRowSource(
 	source planNode, params runParams, fastPath bool,
@@ -216,22 +217,22 @@ func (p *planNodeToRowSource) forwardMetadata(metadata *execinfrapb.ProducerMeta
 	p.ProcessorBase.AppendTrailingMeta(*metadata)
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (p *planNodeToRowSource) ChildCount(verbose bool) int {
-	if _, ok := p.input.(execinfra.OpNode); ok {
+	if _, ok := p.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (p *planNodeToRowSource) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (p *planNodeToRowSource) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
-		if n, ok := p.input.(execinfra.OpNode); ok {
+		if n, ok := p.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to planNodeToRowSource is not an execinfra.OpNode")
+		panic("input to planNodeToRowSource is not an execopnode.OpNode")
 	default:
 		panic(errors.AssertionFailedf("invalid index %d", nth))
 	}

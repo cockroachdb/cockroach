@@ -14,7 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -59,13 +61,13 @@ type sortedDistinct struct {
 
 var _ execinfra.Processor = &distinct{}
 var _ execinfra.RowSource = &distinct{}
-var _ execinfra.OpNode = &distinct{}
+var _ execopnode.OpNode = &distinct{}
 
 const distinctProcName = "distinct"
 
 var _ execinfra.Processor = &sortedDistinct{}
 var _ execinfra.RowSource = &sortedDistinct{}
-var _ execinfra.OpNode = &sortedDistinct{}
+var _ execopnode.OpNode = &sortedDistinct{}
 
 const sortedDistinctProcName = "sorted distinct"
 
@@ -133,7 +135,7 @@ func newDistinct(
 	// So we have to set up the account here.
 	d.arena = stringarena.Make(&d.memAcc)
 
-	if execinfra.ShouldCollectStats(ctx, flowCtx) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		d.input = newInputStatCollector(d.input)
 		d.ExecStatsForTrace = d.execStatsForTrace
 	}
@@ -359,21 +361,21 @@ func (d *distinct) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (d *distinct) ChildCount(verbose bool) int {
-	if _, ok := d.input.(execinfra.OpNode); ok {
+	if _, ok := d.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (d *distinct) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (d *distinct) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := d.input.(execinfra.OpNode); ok {
+		if n, ok := d.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to distinct is not an execinfra.OpNode")
+		panic("input to distinct is not an execopnode.OpNode")
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

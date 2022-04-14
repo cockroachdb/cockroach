@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -56,7 +57,7 @@ func NewRowBasedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 // Setup if part of the flowinfra.Flow interface.
 func (f *rowBasedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
-) (context.Context, execinfra.OpChains, error) {
+) (context.Context, execopnode.OpChains, error) {
 	var err error
 	ctx, _, err = f.FlowBase.Setup(ctx, spec, opt)
 	if err != nil {

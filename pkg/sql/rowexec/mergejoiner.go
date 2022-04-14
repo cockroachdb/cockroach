@@ -15,7 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -45,7 +47,7 @@ type mergeJoiner struct {
 
 var _ execinfra.Processor = &mergeJoiner{}
 var _ execinfra.RowSource = &mergeJoiner{}
-var _ execinfra.OpNode = &mergeJoiner{}
+var _ execopnode.OpNode = &mergeJoiner{}
 
 const mergeJoinerProcName = "merge joiner"
 
@@ -64,7 +66,7 @@ func newMergeJoiner(
 		trackMatchedRight: shouldEmitUnmatchedRow(rightSide, spec.Type) || spec.Type == descpb.RightSemiJoin,
 	}
 
-	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
+	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
 		m.leftSource = newInputStatCollector(m.leftSource)
 		m.rightSource = newInputStatCollector(m.rightSource)
 		m.ExecStatsForTrace = m.execStatsForTrace
@@ -279,29 +281,29 @@ func (m *mergeJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (m *mergeJoiner) ChildCount(verbose bool) int {
-	if _, ok := m.leftSource.(execinfra.OpNode); ok {
-		if _, ok := m.rightSource.(execinfra.OpNode); ok {
+	if _, ok := m.leftSource.(execopnode.OpNode); ok {
+		if _, ok := m.rightSource.(execopnode.OpNode); ok {
 			return 2
 		}
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (m *mergeJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (m *mergeJoiner) Child(nth int, verbose bool) execopnode.OpNode {
 	switch nth {
 	case 0:
-		if n, ok := m.leftSource.(execinfra.OpNode); ok {
+		if n, ok := m.leftSource.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("left input to mergeJoiner is not an execinfra.OpNode")
+		panic("left input to mergeJoiner is not an execopnode.OpNode")
 	case 1:
-		if n, ok := m.rightSource.(execinfra.OpNode); ok {
+		if n, ok := m.rightSource.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("right input to mergeJoiner is not an execinfra.OpNode")
+		panic("right input to mergeJoiner is not an execopnode.OpNode")
 	default:
 		panic(errors.AssertionFailedf("invalid index %d", nth))
 	}

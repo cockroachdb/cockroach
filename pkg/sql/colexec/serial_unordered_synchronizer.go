@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -38,17 +39,17 @@ type SerialUnorderedSynchronizer struct {
 
 var (
 	_ colexecop.Operator = &SerialUnorderedSynchronizer{}
-	_ execinfra.OpNode   = &SerialUnorderedSynchronizer{}
+	_ execopnode.OpNode  = &SerialUnorderedSynchronizer{}
 	_ colexecop.Closer   = &SerialUnorderedSynchronizer{}
 )
 
-// ChildCount implements the execinfra.OpNode interface.
+// ChildCount implements the execopnode.OpNode interface.
 func (s *SerialUnorderedSynchronizer) ChildCount(verbose bool) int {
 	return len(s.inputs)
 }
 
-// Child implements the execinfra.OpNode interface.
-func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
+// Child implements the execopnode.OpNode interface.
+func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.OpNode {
 	return s.inputs[nth].Root
 }
 

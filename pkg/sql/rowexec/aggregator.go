@@ -15,7 +15,9 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -94,7 +96,7 @@ func (ag *aggregatorBase) init(
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
-	if execinfra.ShouldCollectStats(ctx, flowCtx) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		input = newInputStatCollector(input)
 		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}
@@ -167,21 +169,21 @@ func (ag *aggregatorBase) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (ag *aggregatorBase) ChildCount(verbose bool) int {
-	if _, ok := ag.input.(execinfra.OpNode); ok {
+	if _, ok := ag.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (ag *aggregatorBase) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (ag *aggregatorBase) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := ag.input.(execinfra.OpNode); ok {
+		if n, ok := ag.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to aggregatorBase is not an execinfra.OpNode")
+		panic("input to aggregatorBase is not an execopnode.OpNode")
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }
@@ -223,13 +225,13 @@ type orderedAggregator struct {
 
 var _ execinfra.Processor = &hashAggregator{}
 var _ execinfra.RowSource = &hashAggregator{}
-var _ execinfra.OpNode = &hashAggregator{}
+var _ execopnode.OpNode = &hashAggregator{}
 
 const hashAggregatorProcName = "hash aggregator"
 
 var _ execinfra.Processor = &orderedAggregator{}
 var _ execinfra.RowSource = &orderedAggregator{}
-var _ execinfra.OpNode = &orderedAggregator{}
+var _ execopnode.OpNode = &orderedAggregator{}
 
 const orderedAggregatorProcName = "ordered aggregator"
 
