@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
+        "//pkg/sql/execinfra/execreleasable",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/execstats",
         "//pkg/sql/kvstreamer",

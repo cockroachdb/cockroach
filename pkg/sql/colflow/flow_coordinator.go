@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -90,7 +91,7 @@ func NewFlowCoordinator(
 
 var _ execopnode.OpNode = &FlowCoordinator{}
 var _ execinfra.Processor = &FlowCoordinator{}
-var _ execinfra.Releasable = &FlowCoordinator{}
+var _ execreleasable.Releasable = &FlowCoordinator{}
 
 // ChildCount is part of the execopnode.OpNode interface.
 func (f *FlowCoordinator) ChildCount(verbose bool) int {
@@ -229,7 +230,7 @@ func NewBatchFlowCoordinator(
 }
 
 var _ execopnode.OpNode = &BatchFlowCoordinator{}
-var _ execinfra.Releasable = &BatchFlowCoordinator{}
+var _ execreleasable.Releasable = &BatchFlowCoordinator{}
 
 func (f *BatchFlowCoordinator) init(ctx context.Context) error {
 	return colexecerror.CatchVectorizedRuntimeError(func() {

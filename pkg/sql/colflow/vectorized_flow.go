@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -157,7 +158,7 @@ type vectorizedFlow struct {
 }
 
 var _ flowinfra.Flow = &vectorizedFlow{}
-var _ execinfra.Releasable = &vectorizedFlow{}
+var _ execreleasable.Releasable = &vectorizedFlow{}
 
 var vectorizedFlowPool = sync.Pool{
 	New: func() interface{} {
@@ -448,7 +449,7 @@ type runFn func(_ context.Context, flowCtxCancel context.CancelFunc)
 // infrastructure to be run asynchronously as well as to perform some sanity
 // checks.
 type flowCreatorHelper interface {
-	execinfra.Releasable
+	execreleasable.Releasable
 	// addStreamEndpoint stores information about an inbound stream.
 	addStreamEndpoint(execinfrapb.StreamID, *colrpc.Inbox, *sync.WaitGroup)
 	// checkInboundStreamID checks that the provided stream ID has not been seen
@@ -559,7 +560,7 @@ type vectorizedFlowCreator struct {
 	operatorConcurrency bool
 	// releasables contains all components that should be released back to their
 	// pools during the flow cleanup.
-	releasables []execinfra.Releasable
+	releasables []execreleasable.Releasable
 
 	monitorRegistry colexecargs.MonitorRegistry
 	diskQueueCfg    colcontainer.DiskQueueCfg
@@ -571,7 +572,7 @@ type vectorizedFlowCreator struct {
 	numClosed  int32
 }
 
-var _ execinfra.Releasable = &vectorizedFlowCreator{}
+var _ execreleasable.Releasable = &vectorizedFlowCreator{}
 
 var vectorizedFlowCreatorPool = sync.Pool{
 	New: func() interface{} {

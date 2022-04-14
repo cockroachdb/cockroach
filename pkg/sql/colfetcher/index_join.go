@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/kvstreamer"
@@ -130,7 +131,7 @@ type ColIndexJoin struct {
 }
 
 var _ colexecop.KVReader = &ColIndexJoin{}
-var _ execinfra.Releasable = &ColIndexJoin{}
+var _ execreleasable.Releasable = &ColIndexJoin{}
 var _ colexecop.ClosableOperator = &ColIndexJoin{}
 
 // Init initializes a ColIndexJoin.

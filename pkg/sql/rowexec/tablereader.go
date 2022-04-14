@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -61,7 +62,7 @@ type tableReader struct {
 
 var _ execinfra.Processor = &tableReader{}
 var _ execinfra.RowSource = &tableReader{}
-var _ execinfra.Releasable = &tableReader{}
+var _ execreleasable.Releasable = &tableReader{}
 var _ execopnode.OpNode = &tableReader{}
 
 const tableReaderProcName = "table reader"
