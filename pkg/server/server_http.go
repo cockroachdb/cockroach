@@ -319,8 +319,12 @@ func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
 
 	// This is our base handler.
 	// Intercept all panics, log them, and return an internal server error as a response.
+	// There is an exception made for the `http.ErrAbortHandler` which the
+	// `net/http` library suppresses stacktrace printing on. Since this defer
+	// runs before the `http.Server` panic catcher, it should also ignore that
+	// specific panic.
 	defer func() {
-		if p := recover(); p != nil {
+		if p := recover(); p != nil && p != http.ErrAbortHandler {
 			// Note: use of a background context here so we can log even with the absence of a client.
 			// Assumes appropriate timeouts are used.
 			logcrash.ReportPanic(context.Background(), &s.cfg.Settings.SV, p, 1 /* depth */)
