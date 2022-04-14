@@ -22,6 +22,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// idleTimeout represents the minimum elapsed time for the forwarder to be
+// considered idle if no messages have been received from / sent to the client.
+const idleTimeout = 30 * time.Second
+
 // forwarder is used to forward pgwire messages from the client to the server,
 // and vice-versa. The forwarder instance should always be constructed through
 // the forward function, which also starts the forwarder.
@@ -48,6 +52,10 @@ type forwarder struct {
 	// channel, it is guaranteed that the forwarder and all connections will
 	// be closed.
 	errCh chan error
+
+	// timeSource is the source of the time, and uses timeutil.DefaultTimeSource
+	// by default. This is often replaced in tests.
+	timeSource timeutil.TimeSource
 
 	// While not all of these fields may need to be guarded by a mutex, we do
 	// so for consistency. Fields like clientConn and serverConn need them
@@ -88,6 +96,23 @@ type forwarder struct {
 		// potential deadlocks.
 		request  *processor // client -> server
 		response *processor // server -> client
+
+		// activity represents internal states used to detect whether the
+		// forwarder is in the active or idle state.
+		activity struct {
+			// lastRequestTransferredAt and lastResponseTransferredAt represent
+			// snapshot logical clock's values that a message was received from,
+			// or sent to the client. These values do not get updated in real
+			// time, unlike the fields in the processors, and both will be
+			// updated at the same time only if at least one of the current
+			// values differ from the previous snapshot values.
+			lastRequestTransferredAt  uint64
+			lastResponseTransferredAt uint64
+
+			// lastUpdated represents the timestamp that the lastTransferredAt
+			// fields were updated.
+			lastUpdated time.Time
+		}
 	}
 }
 
@@ -107,21 +132,35 @@ func forward(
 	metrics *metrics,
 	clientConn net.Conn,
 	serverConn net.Conn,
-) (*forwarder, error) {
+	timeSource timeutil.TimeSource,
+) (_ *forwarder, retErr error) {
+	if timeSource == nil {
+		timeSource = timeutil.DefaultTimeSource{}
+	}
+
 	ctx, cancelFn := context.WithCancel(ctx)
 	f := &forwarder{
-		ctx:       ctx,
-		ctxCancel: cancelFn,
-		errCh:     make(chan error, 1),
-		connector: connector,
-		metrics:   metrics,
+		ctx:        ctx,
+		ctxCancel:  cancelFn,
+		errCh:      make(chan error, 1),
+		connector:  connector,
+		metrics:    metrics,
+		timeSource: timeSource,
 	}
 	f.mu.clientConn = interceptor.NewPGConn(clientConn)
 	f.mu.serverConn = interceptor.NewPGConn(serverConn)
 
+	// Note that we don't obtain the f.mu lock here since the processors have
+	// not been resumed yet.
 	clockFn := makeLogicalClockFn()
 	f.mu.request = newProcessor(clockFn, f.mu.clientConn, f.mu.serverConn)  // client -> server
 	f.mu.response = newProcessor(clockFn, f.mu.serverConn, f.mu.clientConn) // server -> client
+
+	// Forwarder is considered active initially.
+	f.mu.activity.lastRequestTransferredAt = f.mu.request.lastMessageTransferredAt()
+	f.mu.activity.lastResponseTransferredAt = f.mu.response.lastMessageTransferredAt()
+	f.mu.activity.lastUpdated = f.timeSource.Now()
+
 	if err := f.resumeProcessors(); err != nil {
 		return nil, err
 	}
@@ -168,6 +207,42 @@ func (f *forwarder) ServerRemoteAddr() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.mu.serverConn.RemoteAddr().String()
+}
+
+// IsIdle returns true if the forwarder is idle, and false otherwise.
+//
+// IsIdle implements the balancer.ConnectionHandle interface.
+func (f *forwarder) IsIdle() (idle bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	reqAt := f.mu.request.lastMessageTransferredAt()
+	resAt := f.mu.response.lastMessageTransferredAt()
+	now := f.timeSource.Now()
+
+	defer func() {
+		// Only update entries if the forwarder is active. If the forwarder is
+		// idle, it has to be the case where the fields are not changed, so no
+		// updates are needed.
+		if !idle {
+			f.mu.activity.lastRequestTransferredAt = reqAt
+			f.mu.activity.lastResponseTransferredAt = resAt
+			f.mu.activity.lastUpdated = now
+		}
+	}()
+
+	hasActivity := (f.mu.activity.lastRequestTransferredAt != reqAt) ||
+		(f.mu.activity.lastResponseTransferredAt != resAt)
+
+	// If the lastTransferredAt fields got updated, the forwarder has to be
+	// active.
+	if hasActivity {
+		return false
+	}
+
+	// No activity from the forwarder. If the idle timeout hasn't elapsed, the
+	// forwarder is still considered active.
+	return now.Sub(f.mu.activity.lastUpdated) >= idleTimeout
 }
 
 // resumeProcessors starts both the request and response processors
@@ -452,4 +527,12 @@ func (p *processor) suspend(ctx context.Context) error {
 		p.mu.cond.Wait()
 	}
 	return nil
+}
+
+// lastMessageTransferredAt returns the logical clock's value that the message
+// was last transferred at.
+func (p *processor) lastMessageTransferredAt() uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.mu.lastMessageTransferredAt
 }

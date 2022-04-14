@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/jackc/pgproto3/v2"
@@ -36,7 +37,9 @@ func TestForward(t *testing.T) {
 	t.Run("closed_when_processors_error", func(t *testing.T) {
 		p1, p2 := net.Pipe()
 
-		f, err := forward(bgCtx, nil /* connector */, nil /* metrics */, p1, p2)
+		f, err := forward(
+			bgCtx, nil /* connector */, nil /* metrics */, p1, p2, nil, /* timeSource */
+		)
 		require.NoError(t, err)
 		defer f.Close()
 
@@ -62,10 +65,22 @@ func TestForward(t *testing.T) {
 		clientProxy, client := net.Pipe()
 		serverProxy, server := net.Pipe()
 
-		f, err := forward(ctx, nil /* connector */, nil /* metrics */, clientProxy, serverProxy)
+		// Use a custom time source for testing.
+		t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+		timeSource := timeutil.NewManualTime(t0)
+
+		f, err := forward(
+			ctx,
+			nil, /* connector */
+			nil, /* metrics */
+			clientProxy,
+			serverProxy,
+			timeSource,
+		)
 		require.NoError(t, err)
 		defer f.Close()
 		require.Nil(t, f.ctx.Err())
+		require.False(t, f.IsIdle())
 
 		f.mu.Lock()
 		requestProc := f.mu.request
@@ -85,14 +100,17 @@ func TestForward(t *testing.T) {
 		requestProc.mu.Unlock()
 
 		// Client writes some pgwire messages.
+		sendEventCh := make(chan struct{}, 1)
 		errChan := make(chan error, 1)
 		go func() {
+			<-sendEventCh
 			if _, err := client.Write((&pgproto3.Query{
 				String: "SELECT 1",
 			}).Encode(nil)); err != nil {
 				errChan <- err
 				return
 			}
+			<-sendEventCh
 			if _, err := client.Write((&pgproto3.Execute{
 				Portal:  "foobar",
 				MaxRows: 42,
@@ -100,6 +118,7 @@ func TestForward(t *testing.T) {
 				errChan <- err
 				return
 			}
+			<-sendEventCh
 			if _, err := client.Write((&pgproto3.Close{
 				ObjectType: 'P',
 			}).Encode(nil)); err != nil {
@@ -111,26 +130,42 @@ func TestForward(t *testing.T) {
 		// Server should receive messages in order.
 		backend := pgproto3.NewBackend(pgproto3.NewChunkReader(server), server)
 
+		// Send SELECT 1. Before we send, advance the timesource, and forwarder
+		// should be idle.
+		timeSource.Advance(idleTimeout)
+		require.True(t, f.IsIdle())
+		sendEventCh <- struct{}{}
+
 		barrierStart <- struct{}{}
 		requestProc.mu.Lock()
 		require.Equal(t, byte(pgwirebase.ClientMsgSimpleQuery), requestProc.mu.lastMessageType)
 		require.Equal(t, initialClock+1, requestProc.mu.lastMessageTransferredAt)
 		requestProc.mu.Unlock()
+		require.False(t, f.IsIdle())
 		barrierEnd <- struct{}{}
 
+		// Server should receive SELECT 1.
 		msg, err := backend.Receive()
 		require.NoError(t, err)
 		m1, ok := msg.(*pgproto3.Query)
 		require.True(t, ok)
 		require.Equal(t, "SELECT 1", m1.String)
 
+		// Send Execute message. Before we send, advance the timesource, and
+		// forwarder should be idle.
+		timeSource.Advance(idleTimeout)
+		require.True(t, f.IsIdle())
+		sendEventCh <- struct{}{}
+
 		barrierStart <- struct{}{}
 		requestProc.mu.Lock()
 		require.Equal(t, byte(pgwirebase.ClientMsgExecute), requestProc.mu.lastMessageType)
 		require.Equal(t, initialClock+2, requestProc.mu.lastMessageTransferredAt)
 		requestProc.mu.Unlock()
+		require.False(t, f.IsIdle())
 		barrierEnd <- struct{}{}
 
+		// Server receives Execute.
 		msg, err = backend.Receive()
 		require.NoError(t, err)
 		m2, ok := msg.(*pgproto3.Execute)
@@ -138,13 +173,21 @@ func TestForward(t *testing.T) {
 		require.Equal(t, "foobar", m2.Portal)
 		require.Equal(t, uint32(42), m2.MaxRows)
 
+		// Send Close message. Before we send, advance the timesource, and
+		// forwarder should be idle.
+		timeSource.Advance(idleTimeout)
+		require.True(t, f.IsIdle())
+		sendEventCh <- struct{}{}
+
 		barrierStart <- struct{}{}
 		requestProc.mu.Lock()
 		require.Equal(t, byte(pgwirebase.ClientMsgClose), requestProc.mu.lastMessageType)
 		require.Equal(t, initialClock+3, requestProc.mu.lastMessageTransferredAt)
 		requestProc.mu.Unlock()
+		require.False(t, f.IsIdle())
 		barrierEnd <- struct{}{}
 
+		// Server receives Close.
 		msg, err = backend.Receive()
 		require.NoError(t, err)
 		m3, ok := msg.(*pgproto3.Close)
@@ -167,10 +210,22 @@ func TestForward(t *testing.T) {
 		clientProxy, client := net.Pipe()
 		serverProxy, server := net.Pipe()
 
-		f, err := forward(ctx, nil /* connector */, nil /* metrics */, clientProxy, serverProxy)
+		// Use a custom time source for testing.
+		t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+		timeSource := timeutil.NewManualTime(t0)
+
+		f, err := forward(
+			ctx,
+			nil, /* connector */
+			nil, /* metrics */
+			clientProxy,
+			serverProxy,
+			timeSource,
+		)
 		require.NoError(t, err)
 		defer f.Close()
 		require.Nil(t, f.ctx.Err())
+		require.False(t, f.IsIdle())
 
 		f.mu.Lock()
 		responseProc := f.mu.response
@@ -190,8 +245,10 @@ func TestForward(t *testing.T) {
 		responseProc.mu.Unlock()
 
 		// Server writes some pgwire messages.
+		recvEventCh := make(chan struct{}, 1)
 		errChan := make(chan error, 1)
 		go func() {
+			<-recvEventCh
 			if _, err := server.Write((&pgproto3.ErrorResponse{
 				Code:    "100",
 				Message: "foobarbaz",
@@ -199,6 +256,7 @@ func TestForward(t *testing.T) {
 				errChan <- err
 				return
 			}
+			<-recvEventCh
 			if _, err := server.Write((&pgproto3.ReadyForQuery{
 				TxStatus: 'I',
 			}).Encode(nil)); err != nil {
@@ -210,13 +268,21 @@ func TestForward(t *testing.T) {
 		// Client should receive messages in order.
 		frontend := pgproto3.NewFrontend(pgproto3.NewChunkReader(client), client)
 
+		// Receive an ErrorResponse. Before we receive, advance the timesource,
+		// and forwarder should be idle.
+		timeSource.Advance(idleTimeout)
+		require.True(t, f.IsIdle())
+		recvEventCh <- struct{}{}
+
 		barrierStart <- struct{}{}
 		responseProc.mu.Lock()
 		require.Equal(t, byte(pgwirebase.ServerMsgErrorResponse), responseProc.mu.lastMessageType)
 		require.Equal(t, initialClock+1, responseProc.mu.lastMessageTransferredAt)
 		responseProc.mu.Unlock()
+		require.False(t, f.IsIdle())
 		barrierEnd <- struct{}{}
 
+		// Client receives ErrorResponse.
 		msg, err := frontend.Receive()
 		require.NoError(t, err)
 		m1, ok := msg.(*pgproto3.ErrorResponse)
@@ -224,13 +290,21 @@ func TestForward(t *testing.T) {
 		require.Equal(t, "100", m1.Code)
 		require.Equal(t, "foobarbaz", m1.Message)
 
+		// Receive a ReadyForQuery. Before we receive, advance the timesource,
+		// and forwarder should be idle.
+		timeSource.Advance(idleTimeout)
+		require.True(t, f.IsIdle())
+		recvEventCh <- struct{}{}
+
 		barrierStart <- struct{}{}
 		responseProc.mu.Lock()
 		require.Equal(t, byte(pgwirebase.ServerMsgReady), responseProc.mu.lastMessageType)
 		require.Equal(t, initialClock+2, responseProc.mu.lastMessageTransferredAt)
 		responseProc.mu.Unlock()
+		require.False(t, f.IsIdle())
 		barrierEnd <- struct{}{}
 
+		// Client receives ReadyForQuery.
 		msg, err = frontend.Receive()
 		require.NoError(t, err)
 		m2, ok := msg.(*pgproto3.ReadyForQuery)
@@ -249,9 +323,9 @@ func TestForwarder_Context(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := logtags.AddTag(context.Background(), "foo", "bar")
-
 	p1, p2 := net.Pipe()
-	f, err := forward(ctx, nil /* connector */, nil /* metrics */, p1, p2)
+
+	f, err := forward(ctx, nil /* connector */, nil /* metrics */, p1, p2, nil /* timeSource */)
 	require.NoError(t, err)
 	defer f.Close()
 
@@ -264,9 +338,10 @@ func TestForwarder_Context(t *testing.T) {
 func TestForwarder_Close(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	p1, p2 := net.Pipe()
 
-	f, err := forward(context.Background(), nil /* connector */, nil /* metrics */, p1, p2)
+	f, err := forward(ctx, nil /* connector */, nil /* metrics */, p1, p2, nil /* timeSource */)
 	require.NoError(t, err)
 	defer f.Close()
 	require.Nil(t, f.ctx.Err())
@@ -278,8 +353,10 @@ func TestForwarder_Close(t *testing.T) {
 func TestForwarder_ServerRemoteAddr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	p1, p2 := net.Pipe()
-	f, err := forward(context.Background(), nil /* connector */, nil /* metrics */, p1, p2)
+
+	f, err := forward(ctx, nil /* connector */, nil /* metrics */, p1, p2, nil /* timeSource */)
 	require.NoError(t, err)
 	defer f.Close()
 
@@ -289,9 +366,10 @@ func TestForwarder_ServerRemoteAddr(t *testing.T) {
 func TestForwarder_tryReportError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	p1, p2 := net.Pipe()
 
-	f, err := forward(context.Background(), nil /* connector */, nil /* metrics */, p1, p2)
+	f, err := forward(ctx, nil /* connector */, nil /* metrics */, p1, p2, nil /* timeSource */)
 	require.NoError(t, err)
 	defer f.Close()
 
@@ -320,12 +398,19 @@ func TestForwarder_tryReportError(t *testing.T) {
 
 func TestForwarder_replaceServerConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
 
+	ctx := context.Background()
 	clientProxy, client := net.Pipe()
 	serverProxy, server := net.Pipe()
 
-	f, err := forward(context.Background(), nil /* connector */, nil /* metrics */, clientProxy, serverProxy)
+	f, err := forward(
+		ctx,
+		nil, /* connector */
+		nil, /* metrics */
+		clientProxy,
+		serverProxy,
+		nil, /* timeSource */
+	)
 	require.NoError(t, err)
 	defer f.Close()
 
