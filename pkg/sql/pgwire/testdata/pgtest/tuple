@@ -235,22 +235,3 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: insufficient bytes reading element for binary format. elementIdx=0 bufferLength=12 bufferStartIdx=12 bufferEndIdx=13"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
-
-# negative element size
-# 00000001 - 1 element
-# 00000010 - bool OID
-# FFFFFFFE - -2 byte element size
-send
-Parse {"Name": "s_element_negative_size", "Query": "SELECT $1::record"}
-Bind {"DestinationPortal": "p_element_negative_size", "PreparedStatement": "s_element_negative_size", "ParameterFormatCodes": [1], "Parameters": [{"binary":"0000000100000010FFFFFFFE"}], "ResultFormatCodes": [0]}
-Execute {"Portal": "p_element_negative_size"}
-Sync
-----
-
-until crdb_only keepErrMessage
-ErrorResponse
-ReadyForQuery
-----
-{"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42601","Message":"error in argument for $1: integer overflow reading element for binary format. elementIdx=0 bufferLength=12 bufferStartIdx=12 bufferEndIdx=10"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
