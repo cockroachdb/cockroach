@@ -19,7 +19,7 @@ checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 12 MutationType ops
@@ -700,7 +700,7 @@ upsert descriptor #108
 write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
 create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [108]
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase
@@ -720,7 +720,7 @@ checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 8 MutationType ops
@@ -1185,7 +1185,7 @@ upsert descriptor #109
 write *eventpb.DropTable to event log for descriptor #109: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
 create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
   descriptor IDs: [109]
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase
@@ -1654,6 +1654,6 @@ delete descriptor #106
 delete descriptor #107
 deleting zone config for #104
 write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹multi_region_test_db› CASCADE
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 # end PostCommitPhase

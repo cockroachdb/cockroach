@@ -15,7 +15,7 @@ increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 7 MutationType ops
@@ -155,7 +155,7 @@ upsert descriptor #104
   +  version: "4"
 delete descriptor #106
 write *eventpb.DropSchema to event log for descriptor #106: DROP SCHEMA ‹db›.‹sc›
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 # end PostCommitPhase
 
@@ -177,7 +177,7 @@ checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 9 MutationType ops
@@ -809,7 +809,7 @@ upsert descriptor #108
 write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹db›.‹sc›.‹t›
 create job #2 (non-cancelable: true): "GC for DROP TABLE db.sc.t"
   descriptor IDs: [108]
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase
@@ -1175,7 +1175,7 @@ delete descriptor #107
 delete descriptor #109
 delete descriptor #110
 write *eventpb.DropSchema to event log for descriptor #107: DROP SCHEMA ‹db›.‹sc› CASCADE
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 # end PostCommitPhase
 
@@ -1419,7 +1419,7 @@ delete descriptor #104
 delete descriptor #105
 deleting zone config for #104
 write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹db› CASCADE
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 # end PostCommitPhase
 
@@ -5219,7 +5219,7 @@ write *eventpb.DropDatabase to event log for descriptor #111: DROP DATABASE ‹d
 delete scheduleId: <redacted>
 create job #2 (non-cancelable: true): "GC for DROP DATABASE db1 CASCADE"
   descriptor IDs: [114 115 116 117 118 111]
-update progress of schema change job #1
+update progress of schema change job #1: "all stages completed"
 commit transaction #3
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase
