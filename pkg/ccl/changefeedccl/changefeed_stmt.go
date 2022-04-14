@@ -759,6 +759,10 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		// the job gets restarted.
 		details.Opts = map[string]string{}
 	}
+	initialScanType, err := initialScanTypeFromOpts(details.Opts)
+	if err != nil {
+		return jobspb.ChangefeedDetails{}, err
+	}
 	{
 		const opt = changefeedbase.OptResolvedTimestamps
 		if o, ok := details.Opts[opt]; ok && o != `` {
@@ -820,6 +824,13 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		switch v := changefeedbase.FormatType(details.Opts[opt]); v {
 		case ``, changefeedbase.OptFormatJSON:
 			details.Opts[opt] = string(changefeedbase.OptFormatJSON)
+		case changefeedbase.OptFormatCSV:
+			if initialScanType != changefeedbase.OnlyInitialScan {
+				return jobspb.ChangefeedDetails{}, errors.Errorf(
+					`%s=%s is only usable with %s='only'`,
+					changefeedbase.OptFormat, changefeedbase.OptFormatCSV, changefeedbase.OptInitialScan)
+			}
+			details.Opts[opt] = string(changefeedbase.OptFormatCSV)
 		case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
 			// No-op.
 		default:
@@ -854,18 +865,13 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	{
-		initialScanType := details.Opts[changefeedbase.OptInitialScan]
-		_, onlyInitialScan := details.Opts[changefeedbase.OptInitialScanOnly]
-		_, endTime := details.Opts[changefeedbase.OptEndTime]
-		if endTime && onlyInitialScan {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`cannot specify both %s and %s`, changefeedbase.OptInitialScanOnly,
-				changefeedbase.OptEndTime)
-		}
-
-		if strings.ToLower(initialScanType) == `only` && endTime {
-			return jobspb.ChangefeedDetails{}, errors.Errorf(
-				`cannot specify both %s='only' and %s`, changefeedbase.OptInitialScan, changefeedbase.OptEndTime)
+		if initialScanType == changefeedbase.OnlyInitialScan {
+			for opt := range changefeedbase.InitialScanOnlyUnsupportedOptions {
+				if _, ok := details.Opts[opt]; ok {
+					return jobspb.ChangefeedDetails{}, errors.Errorf(
+						`cannot specify both %s='only' and %s`, changefeedbase.OptInitialScan, opt)
+				}
+			}
 		}
 
 		if !details.EndTime.IsEmpty() && details.EndTime.Less(details.StatementTime) {

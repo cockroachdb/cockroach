@@ -32,10 +32,11 @@ import (
 //
 // If UseCRLF is true, the Writer ends each record with \r\n instead of \n.
 type Writer struct {
-	Comma   rune // Field delimiter (set to ',' by NewWriter)
-	Escape  rune
-	UseCRLF bool // True to use \r\n as the line terminator
-	w       *bufio.Writer
+	Comma       rune // Field delimiter (set to ',' by NewWriter)
+	Escape      rune
+	UseCRLF     bool // True to use \r\n as the line terminator
+	SkipNewline bool // True to skip \n as the line terminator
+	w           *bufio.Writer
 }
 
 // NewWriter returns a new Writer that writes to w.
@@ -103,10 +104,13 @@ func (w *Writer) Write(record []string) error {
 		}
 	}
 	var err error
-	if w.UseCRLF {
-		_, err = w.w.WriteString("\r\n")
-	} else {
-		err = w.w.WriteByte('\n')
+
+	if !w.SkipNewline {
+		if w.UseCRLF {
+			_, err = w.w.WriteString("\r\n")
+		} else {
+			err = w.w.WriteByte('\n')
+		}
 	}
 	return err
 }
