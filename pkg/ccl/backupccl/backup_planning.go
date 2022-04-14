@@ -1463,12 +1463,41 @@ func getBackupDetailAndManifest(
 		}
 	}
 
+	localityKVs := make([]string, len(urisByLocalityKV))
+	i := 0
+	for k := range urisByLocalityKV {
+		localityKVs[i] = k
+		i++
+	}
+
 	for i := range prevBackups {
+		prevBackup := prevBackups[i]
 		// IDs are how we identify tables, and those are only meaningful in the
 		// context of their own cluster, so we need to ensure we only allow
 		// incremental previous backups that we created.
-		if fromCluster := prevBackups[i].ClusterID; !fromCluster.Equal(execCfg.LogicalClusterID()) {
+		if fromCluster := prevBackup.ClusterID; !fromCluster.Equal(execCfg.LogicalClusterID()) {
 			return jobspb.BackupDetails{}, BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
+		}
+
+		prevLocalityKVs := prevBackup.LocalityKVs
+
+		// Checks that each layer in the backup uses the same localities
+		// Does NOT check that each locality/layer combination is actually at the
+		// expected locations.
+		// This is complex right now, but should be easier shortly.
+		// TODO(benbardin): Support verifying actual existence of localities for
+		// each layer after deprecating TO-syntax in 22.2
+		if !setsAreEqual(localityKVs, prevLocalityKVs) {
+			// Note that this won't verify the default locality. That's not
+			// necessary, because the default locality defines the backup manifest
+			// location. If that URI isn't right, the backup chain will fail to
+			// load.
+			return jobspb.BackupDetails{}, BackupManifest{}, errors.Newf(
+				"Requested backup has localities %s, but a previous backup layer in this collection has localities %s. "+
+					"Mismatched backup layers are not supported. Please take a new full backup with the new localities, or an "+
+					"incremental backup with matching localities.",
+				localityKVs, prevLocalityKVs,
+			)
 		}
 	}
 
@@ -1500,6 +1529,22 @@ func getBackupDetailAndManifest(
 	}
 
 	return updatedDetails, backupManifest, nil
+}
+
+func setsAreEqual(first []string, second []string) bool {
+	if len(first) != len(second) {
+		return false
+	}
+	sortedFirst := first
+	sortedSecond := second
+	sort.Strings(sortedFirst)
+	sort.Strings(sortedSecond)
+	for i := range sortedFirst {
+		if sortedFirst[i] != sortedSecond[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func getTenantInfo(
