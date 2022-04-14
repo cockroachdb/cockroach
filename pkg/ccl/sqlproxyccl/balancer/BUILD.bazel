@@ -8,6 +8,7 @@ go_library(
         "conn_tracker.go",
         "metrics.go",
         "pod.go",
+        "tenant_cache.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/balancer",
     visibility = ["//visibility:public"],
@@ -32,6 +33,7 @@ go_test(
         "balancer_test.go",
         "conn_tracker_test.go",
         "pod_test.go",
+        "tenant_cache_test.go",
     ],
     embed = [":balancer"],
     deps = [
