@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -97,6 +98,7 @@ func MakeBulkAdder(
 			batchTS:                opts.BatchTimestamp,
 			writeAtBatchTS:         opts.WriteAtBatchTimestamp,
 			stats:                  ingestionPerformanceStats{sendWaitByStore: make(map[roachpb.StoreID]time.Duration)},
+			mem:                    bulkMon.MakeBoundAccount(),
 		},
 		timestamp:      timestamp,
 		maxBufferLimit: opts.MaxBufferSize,
@@ -105,6 +107,8 @@ func MakeBulkAdder(
 		initialSplits:  opts.InitialSplitsIfUnordered,
 		lastFlush:      timeutil.Now(),
 	}
+
+	b.sink.mem.Mu = &syncutil.Mutex{}
 
 	// At minimum a bulk adder needs enough space to store a buffer of
 	// curBufferSize, and a subsequent SST of SSTSize in-memory. If the memory
@@ -141,7 +145,7 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 			log.Infof(ctx, "%s adder closing; ingested nothing", b.name)
 		}
 	}
-	b.sink.Close()
+	b.sink.Close(ctx)
 
 	if b.bulkMon != nil {
 		b.memAcc.Close(ctx)
