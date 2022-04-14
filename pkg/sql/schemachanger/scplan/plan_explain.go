@@ -76,6 +76,19 @@ func (p Plan) StagesURL() (string, error) {
 	return scgraphviz.StagesURL(p.CurrentState, p.Graph, p.Stages)
 }
 
+// ExplainViz returns graphviz renderings for EXPLAIN (DDL, VIZ) statements.
+func (p Plan) ExplainViz() (stagesURL, depsURL string, err error) {
+	stagesURL, err = p.StagesURL()
+	if err != nil {
+		return "", "", err
+	}
+	depsURL, err = p.DependenciesURL()
+	if err != nil {
+		return "", "", err
+	}
+	return stagesURL, depsURL, nil
+}
+
 // ExplainCompact returns a human-readable plan rendering for
 // EXPLAIN (DDL) statements.
 func (p Plan) ExplainCompact() (string, error) {

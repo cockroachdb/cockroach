@@ -9,7 +9,7 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 ops
 DROP VIEW defaultdb.v1
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[View:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
@@ -60,6 +60,7 @@ PreCommitPhase stage 1 of 1 with 8 MutationType ops
       - 105
       JobID: 1
       NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
       Statements:
       - statement: DROP VIEW defaultdb.v1
         redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1›
@@ -425,6 +426,8 @@ PreCommitPhase stage 1 of 1 with 40 MutationType ops
       - 111
       JobID: 1
       NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 20 MutationType ops
+        pending
       Statements:
       - statement: DROP VIEW defaultdb.v1 CASCADE
         redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE

@@ -99,14 +99,26 @@ type MutationVisitorStateUpdater interface {
 	AddNewGCJobForIndex(stmt scop.StatementForDropJob, tbl catalog.TableDescriptor, index catalog.Index)
 
 	// AddNewSchemaChangerJob adds a schema changer job.
-	AddNewSchemaChangerJob(jobID jobspb.JobID, stmts []scpb.Statement, isNonCancelable bool, auth scpb.Authorization, descriptors descpb.IDs) error
+	AddNewSchemaChangerJob(
+		jobID jobspb.JobID,
+		stmts []scpb.Statement,
+		isNonCancelable bool,
+		auth scpb.Authorization,
+		descriptors descpb.IDs,
+		runningStatus string,
+	) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
 	// schema changer job.
-	UpdateSchemaChangerJob(jobID jobspb.JobID, isNonCancelable bool) error
+	UpdateSchemaChangerJob(jobID jobspb.JobID, isNonCancelable bool, runningStatus string) error
 
 	// EnqueueEvent will enqueue an event to be written to the event log.
-	EnqueueEvent(id descpb.ID, metadata scpb.TargetMetadata, details eventpb.CommonSQLEventDetails, event eventpb.EventPayload) error
+	EnqueueEvent(
+		id descpb.ID,
+		metadata scpb.TargetMetadata,
+		details eventpb.CommonSQLEventDetails,
+		event eventpb.EventPayload,
+	) error
 
 	// DeleteSchedule deletes a scheduled job.
 	DeleteSchedule(scheduleID int64)

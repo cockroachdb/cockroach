@@ -67,8 +67,10 @@ func (s Stage) Ops() []scop.Op {
 // String returns a short string representation of this stage.
 func (s Stage) String() string {
 	ops := "no ops"
-	if n := len(s.Ops()); n > 0 {
+	if n := len(s.Ops()); n > 1 {
 		ops = fmt.Sprintf("%d %s ops", n, s.Type())
+	} else if n == 1 {
+		ops = fmt.Sprintf("1 %s op", s.Type())
 	}
 	return fmt.Sprintf("%s stage %d of %d with %s",
 		s.Phase.String(), s.Ordinal, s.StagesInPhase, ops)

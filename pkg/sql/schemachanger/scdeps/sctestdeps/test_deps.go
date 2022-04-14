@@ -804,7 +804,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 	}
 	updateProgress := func(progress *jobspb.Progress) {
 		scJob.Progress = *progress.GetNewSchemaChange()
-		s.LogSideEffectf("update progress of schema change job #%d", scJob.JobID)
+		s.LogSideEffectf("update progress of schema change job #%d: %q", scJob.JobID, progress.RunningStatus)
 	}
 	setNonCancelable := func() {
 		scJob.NonCancelable = true

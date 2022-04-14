@@ -32,6 +32,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
+      RunningStatus: PostCommitPhase stage 1 of 4 with 1 MutationType op pending
       Statements:
       - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
         redactedstatement: CREATE INDEX ‹id1› ON ‹defaultdb›.public.‹t1› (‹id›, ‹name›)
@@ -48,7 +49,7 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+PostCommitPhase stage 2 of 4 with 1 BackfillType op
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
@@ -56,7 +57,7 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       IndexID: 2
       SourceIndexID: 1
       TableID: 104
-PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+PostCommitPhase stage 3 of 4 with 1 ValidationType op
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
   ops:
@@ -126,6 +127,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
+      RunningStatus: PostCommitPhase stage 1 of 4 with 1 MutationType op pending
       Statements:
       - statement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING
           (money)
@@ -143,7 +145,7 @@ PostCommitPhase stage 1 of 4 with 3 MutationType ops
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+PostCommitPhase stage 2 of 4 with 1 BackfillType op
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], WRITE_ONLY] -> BACKFILLED
   ops:
@@ -151,7 +153,7 @@ PostCommitPhase stage 2 of 4 with 1 BackfillType ops
       IndexID: 2
       SourceIndexID: 1
       TableID: 104
-PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+PostCommitPhase stage 3 of 4 with 1 ValidationType op
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
   ops:

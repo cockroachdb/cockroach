@@ -95,6 +95,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │                 DescriptorIDs:
 │                 - 106
 │                 JobID: 1
+│                 RunningStatus: PostCommitPhase stage 1 of 4 with 2 MutationType ops pending
 │                 Statements:
 │                 - statement: ALTER TABLE foo ADD COLUMN j INT8
 │                   redactedstatement: ALTER TABLE ‹test›.public.‹foo› ADD COLUMN ‹j› INT8
@@ -130,6 +131,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
+│   │             RunningStatus: PostCommitPhase stage 2 of 4 with 1 BackfillType op pending
 │   │
 │   ├── • Stage 2 of 4 in PostCommitPhase
 │   │   │
@@ -238,6 +240,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           └── • UpdateSchemaChangerJob
 │                 IsNonCancelable: true
 │                 JobID: 1
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 1 MutationType op pending
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -260,6 +263,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
@@ -290,6 +294,8 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
             └── • UpdateSchemaChangerJob
                   IsNonCancelable: true
                   JobID: 1
+                  RunningStatus: all stages completed
+
 
 statement ok
 ALTER TABLE foo ADD COLUMN j INT
@@ -622,6 +628,7 @@ EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
 │                 - 115
 │                 JobID: 1
 │                 NonCancelable: true
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP SEQUENCE sq1 CASCADE
 │                   redactedstatement: DROP SEQUENCE ‹test›.public.‹sq1› CASCADE
@@ -671,6 +678,8 @@ EXPLAIN (DDL, VERBOSE) DROP SEQUENCE sq1 CASCADE;
             └── • UpdateSchemaChangerJob
                   IsNonCancelable: true
                   JobID: 1
+                  RunningStatus: all stages completed
+
 
 # Success with cascade
 statement ok
@@ -954,7 +963,7 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
  │              ├── SetJobStateOnDescriptor {"DescriptorID":148,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":149,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":150,"Initialize":true}
- │              └── CreateSchemaChangerJob {"NonCancelable":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 11 elements transitioning toward ABSENT
@@ -990,7 +999,8 @@ Schema change plan for DROP VIEW ‹test›.public.‹v1dep› CASCADE;
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":148}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":149}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":150}
-                └── UpdateSchemaChangerJob {"IsNonCancelable":true}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
+
 
 statement error pq: cannot drop relation "v1dep" because view "v3dep" depends on it
 DROP VIEW v1Dep RESTRICT;
