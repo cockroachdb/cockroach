@@ -332,6 +332,7 @@ func (d *dev) getBasicBuildArgs(
 		args = append(args, aliased)
 		if aliased == "//pkg:all_tests" {
 			buildTargets = append(buildTargets, buildTarget{fullName: aliased, kind: "test_suite"})
+			shouldBuildWithTestConfig = true
 		} else {
 			buildTargets = append(buildTargets, buildTarget{fullName: aliased, kind: "go_binary"})
 		}
