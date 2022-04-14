@@ -2352,7 +2352,12 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 }
 
 func (c *clusterImpl) IsLocal() bool {
+	// FIXME: I think radu made local more flexible and local is a prefix?
 	return c.name == "local"
+}
+
+func (c *clusterImpl) IsSecure() bool {
+	return c.localCertsDir != ""
 }
 
 // Extend extends the cluster's expiration by d.
