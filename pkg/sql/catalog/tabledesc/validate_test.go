@@ -1304,7 +1304,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID:     1,
 				NextIndexID:      5,
 				NextConstraintID: 2,
-				Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 			}},
 		{`index "sec" cannot store virtual column "c3"`,
 			descpb.TableDescriptor{
@@ -1385,7 +1385,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 4,
 				NextFamilyID: 1,
 				NextIndexID:  5,
-				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 			}},
 		{`index "new_sec" cannot store virtual column "c3"`,
 			descpb.TableDescriptor{
@@ -1466,7 +1466,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 4,
 				NextFamilyID: 1,
 				NextIndexID:  5,
-				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 			}},
 		{`index "sec" cannot store virtual column "v"`,
 			descpb.TableDescriptor{
@@ -1886,7 +1886,7 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
-			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(security.RootUserName())
+			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(security.RootUserInfo())
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
 			err := validate.Self(clusterversion.TestingClusterVersion, desc)
@@ -2406,7 +2406,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			var cb nstree.MutableCatalog
 			cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable())
 			for _, otherDesc := range test.otherDescs {
-				otherDesc.Privileges = catpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+				otherDesc.Privileges = catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo())
 				cb.UpsertDescriptorEntry(NewBuilder(&otherDesc).BuildImmutable())
 			}
 			desc := NewBuilder(&test.desc).BuildImmutable()
@@ -2658,10 +2658,10 @@ func TestValidateConstraintID(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 				Privileges: catpb.NewPrivilegeDescriptor(
-					security.PublicRoleName(),
+					security.PublicRoleInfo(),
 					privilege.SchemaPrivileges,
 					privilege.List{},
-					security.RootUserName()),
+					security.RootUserInfo()),
 			}},
 		{`constraint id was missing for constraint: UNIQUE with name \"secondary\"`,
 			descpb.TableDescriptor{
@@ -2685,10 +2685,10 @@ func TestValidateConstraintID(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 				Privileges: catpb.NewPrivilegeDescriptor(
-					security.PublicRoleName(),
+					security.PublicRoleInfo(),
 					privilege.SchemaPrivileges,
 					privilege.List{},
-					security.RootUserName()),
+					security.RootUserInfo()),
 			}},
 		{`constraint id was missing for constraint: UNIQUE with name \"bad\"`,
 			descpb.TableDescriptor{
@@ -2708,10 +2708,10 @@ func TestValidateConstraintID(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 				Privileges: catpb.NewPrivilegeDescriptor(
-					security.PublicRoleName(),
+					security.PublicRoleInfo(),
 					privilege.SchemaPrivileges,
 					privilege.List{},
-					security.RootUserName()),
+					security.RootUserInfo()),
 			}},
 		{`constraint id was missing for constraint: CHECK with name \"bad\"`,
 			descpb.TableDescriptor{
@@ -2731,10 +2731,10 @@ func TestValidateConstraintID(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 				Privileges: catpb.NewPrivilegeDescriptor(
-					security.PublicRoleName(),
+					security.PublicRoleInfo(),
 					privilege.SchemaPrivileges,
 					privilege.List{},
-					security.RootUserName()),
+					security.RootUserInfo()),
 			}},
 	}
 	for i, test := range tests {

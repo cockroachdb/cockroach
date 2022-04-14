@@ -385,10 +385,10 @@ func TestValidateTypeDesc(t *testing.T) {
 		},
 	}).BuildImmutable())
 
-	defaultPrivileges := catpb.NewBasePrivilegeDescriptor(security.RootUserName())
-	invalidPrivileges := catpb.NewBasePrivilegeDescriptor(security.RootUserName())
+	defaultPrivileges := catpb.NewBasePrivilegeDescriptor(security.RootUserInfo())
+	invalidPrivileges := catpb.NewBasePrivilegeDescriptor(security.RootUserInfo())
 	// Make the PrivilegeDescriptor invalid by granting SELECT to a type.
-	invalidPrivileges.Grant(security.TestUserName(), privilege.List{privilege.SELECT}, false)
+	invalidPrivileges.Grant(security.TestUserInfo(), privilege.List{privilege.SELECT}, false)
 	typeDescID := descpb.ID(bootstrap.TestingUserDescID(0))
 	testData := []struct {
 		err  string
@@ -833,7 +833,7 @@ func TestTableImplicitTypeDescCannotBeSerializedOrValidated(t *testing.T) {
 		ParentID:       1,
 		ParentSchemaID: 1,
 		Kind:           descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE,
-		Privileges:     catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		Privileges:     catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 	}
 
 	desc := typedesc.NewBuilder(td).BuildImmutable()

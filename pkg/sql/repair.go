@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -105,7 +106,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 	var existingProto *descpb.Descriptor
 	var existingVersion descpb.DescriptorVersion
 	var existingModTime hlc.Timestamp
-	var previousOwner string
+	var previousOwner security.SQLUserInfo
 	var previousUserPrivileges []catpb.UserPrivileges
 	if mut != nil {
 		if mut.IsUncommittedVersion() {
@@ -115,7 +116,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 		existingProto = protoutil.Clone(mut.DescriptorProto()).(*descpb.Descriptor)
 		existingVersion = mut.GetVersion()
 		existingModTime = mut.GetModificationTime()
-		previousOwner = mut.GetPrivileges().Owner().Normalized()
+		previousOwner = mut.GetPrivileges().Owner()
 		previousUserPrivileges = mut.GetPrivileges().Users
 	}
 
@@ -260,9 +261,9 @@ func (p *planner) UnsafeUpsertDescriptor(
 	}
 
 	// Log any ownership changes.
-	newOwner := mut.GetPrivileges().Owner().Normalized()
+	newOwner := mut.GetPrivileges().Owner()
 	if previousOwner != newOwner {
-		if err := logOwnerEvents(ctx, p, newOwner, mut); err != nil {
+		if err := logOwnerEvents(ctx, p, newOwner.Username.Normalized(), mut); err != nil {
 			return err
 		}
 	}
@@ -330,12 +331,12 @@ func comparePrivileges(
 	curUserMap := make(map[string]*catpb.UserPrivileges)
 	for i := range curUserPrivileges {
 		curUser := &curUserPrivileges[i]
-		curUserMap[curUser.User().Normalized()] = curUser
+		curUserMap[curUser.User().Username.Normalized()] = curUser
 	}
 
 	for i := range prevUserPrivileges {
 		prev := &prevUserPrivileges[i]
-		username := prev.User().Normalized()
+		username := prev.User().Username.Normalized()
 		cur := curUserMap[username]
 		granted, revoked := computePrivilegeChanges(prev, cur)
 		delete(curUserMap, username)
@@ -352,7 +353,7 @@ func comparePrivileges(
 
 	// Any leftovers in the new users map indicate privileges for a new user.
 	for i := range curUserPrivileges {
-		username := curUserPrivileges[i].User().Normalized()
+		username := curUserPrivileges[i].User().Username.Normalized()
 		if _, ok := curUserMap[username]; ok {
 			granted := privilege.ListFromBitField(curUserPrivileges[i].Privileges, objectType).SortedNames()
 			if granted == nil {

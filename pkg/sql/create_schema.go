@@ -157,7 +157,7 @@ func CreateSchemaDescriptorWithPrivileges(
 		db.GetDefaultPrivilegeDescriptor(),
 		nil, /* schemaDefaultPrivilegeDescriptor */
 		db.GetID(),
-		user.Username,
+		user,
 		tree.Schemas,
 		db.GetPrivileges(),
 	)
@@ -254,7 +254,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		desc.GetID(),
 		&eventpb.CreateSchema{
 			SchemaName: qualifiedSchemaName.String(),
-			Owner:      privs.Owner().Normalized(),
+			Owner:      privs.Owner().Username.Normalized(),
 		})
 }
 

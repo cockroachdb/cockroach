@@ -76,13 +76,14 @@ func (w *walkCtx) walkRoot() {
 	privileges := w.desc.GetPrivileges()
 	w.ev(scpb.Status_PUBLIC, &scpb.Owner{
 		DescriptorID: w.desc.GetID(),
-		Owner:        privileges.Owner().Normalized(),
+		Owner:        privileges.Owner().Username.Normalized(),
 	})
 	for _, user := range privileges.Users {
 		w.ev(scpb.Status_PUBLIC, &scpb.UserPrivileges{
 			DescriptorID: w.desc.GetID(),
-			UserName:     user.User().Normalized(),
+			UserName:     user.User().Username.Normalized(),
 			Privileges:   user.Privileges,
+			UserId:       user.User().UserID,
 		})
 	}
 	// Dispatch on type.

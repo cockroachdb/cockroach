@@ -430,7 +430,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(keys.MaxSystemConfigDescID+1))
 	valAt := func(i int) *descpb.Descriptor {
 		return dbdesc.NewInitial(
-			descpb.ID(i), "foo", security.AdminRoleName(),
+			descpb.ID(i), "foo", security.AdminRoleInfo(),
 		).DescriptorProto()
 	}
 

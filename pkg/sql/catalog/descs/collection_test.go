@@ -105,7 +105,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 				Version:             descpb.LatestIndexDescriptorVersion,
 				ConstraintID:        1,
 			},
-			Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+			Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 			NextColumnID:     2,
 			NextConstraintID: 2,
 			NextFamilyID:     1,

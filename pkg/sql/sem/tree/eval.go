@@ -3264,7 +3264,7 @@ type EvalPlanner interface {
 	MemberOfWithAdminOption(
 		ctx context.Context,
 		member security.SQLUserInfo,
-	) (map[security.SQLUsername]bool, error)
+	) (map[security.SQLUserInfo]bool, error)
 
 	// ExternalReadFile reads the content from an external file URI.
 	ExternalReadFile(ctx context.Context, uri string) ([]byte, error)

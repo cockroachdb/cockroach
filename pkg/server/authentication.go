@@ -256,12 +256,17 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// table: the APIs extract the username from the session table
 	// without further normalization.
 	username, _ := security.MakeSQLUsernameFromUserInput(reqUsername, security.UsernameValidation)
+	//get user id
+	userID, err := sql.GetUserID(ctx, s.sqlServer.execCfg.InternalExecutor, nil, username)
+	if err != nil {
+		return nil, err
+	}
 
 	exists, _, canLoginDBConsole, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.execCfg,
 		s.sqlServer.execCfg.InternalExecutor,
-		username,
+		security.SQLUserInfo{Username: username, UserID: userID},
 		"", /* databaseName */
 	)
 
@@ -422,11 +427,16 @@ WHERE id = $1`
 func (s *authenticationServer) verifyPasswordDBConsole(
 	ctx context.Context, username security.SQLUsername, password string,
 ) (valid bool, expired bool, err error) {
+	//get user id
+	userID, err := sql.GetUserID(ctx, s.sqlServer.execCfg.InternalExecutor, nil, username)
+	if err != nil {
+		return false, false, err
+	}
 	exists, _, canLoginDBConsole, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.execCfg,
 		s.sqlServer.execCfg.InternalExecutor,
-		username,
+		security.SQLUserInfo{Username: username, UserID: userID},
 		"", /* databaseName */
 	)
 	if err != nil {
@@ -455,7 +465,7 @@ func (s *authenticationServer) verifyPasswordDBConsole(
 		// SCRAM-SHA-256.
 		sql.MaybeUpgradeStoredPasswordHash(ctx,
 			s.sqlServer.execCfg,
-			username,
+			security.SQLUserInfo{Username: username, UserID: userID},
 			password, hashedPassword)
 	}
 	return ok, false, err

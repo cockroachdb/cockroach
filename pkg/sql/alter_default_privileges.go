@@ -143,8 +143,8 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	} else {
 		// You can change default privileges only for objects that will be created
 		// by yourself or by roles that you are a member of.
-		for _, targetRole := range targetRoles {
-			if targetRole != params.p.User() {
+		for _, targetRole := range targetRoleInfos {
+			if targetRole != params.p.UserInfo() {
 				paramUserID, err := GetUserID(params.ctx, params.p.execCfg.InternalExecutor, params.p.txn, params.p.User())
 				if err != nil {
 					return err
@@ -156,7 +156,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 
 				if _, found := memberOf[targetRole]; !found {
 					return pgerror.Newf(pgcode.InsufficientPrivilege,
-						"must be a member of %s", targetRole.Normalized())
+						"must be a member of %s", targetRole.Username.Normalized())
 				}
 			}
 		}
@@ -170,14 +170,14 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	}
 
 	if len(n.schemaDescs) == 0 {
-		return n.alterDefaultPrivilegesForDatabase(params, targetRoles, objectType, grantees, privileges, grantOption)
+		return n.alterDefaultPrivilegesForDatabase(params, targetRoleInfos, objectType, grantees, privileges, grantOption)
 	}
-	return n.alterDefaultPrivilegesForSchemas(params, targetRoles, objectType, grantees, privileges, grantOption)
+	return n.alterDefaultPrivilegesForSchemas(params, targetRoleInfos, objectType, grantees, privileges, grantOption)
 }
 
 func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 	params runParams,
-	targetRoles []security.SQLUsername,
+	targetRoles []security.SQLUserInfo,
 	objectType tree.AlterDefaultPrivilegesTargetObject,
 	grantees tree.RoleSpecList,
 	privileges privilege.List,
@@ -206,6 +206,10 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 		}
 
 		granteeSQLUsernames, err := grantees.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
+		if err != nil {
+			return err
+		}
+		granteeSQLUserInfos, err := ToSQLUserInfos(params.ctx, params.p.execCfg.InternalExecutor, params.p.txn, granteeSQLUsernames)
 		if err != nil {
 			return err
 		}
@@ -238,11 +242,11 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 		for _, role := range roles {
 			if n.n.IsGrant {
 				defaultPrivs.GrantDefaultPrivileges(
-					role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+					role, privileges, granteeSQLUserInfos, objectType, grantOption, grantPresent || allPresent,
 				)
 			} else {
 				defaultPrivs.RevokeDefaultPrivileges(
-					role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+					role, privileges, granteeSQLUserInfos, objectType, grantOption, grantPresent || allPresent,
 				)
 			}
 
@@ -259,7 +263,7 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 			if n.n.ForAllRoles {
 				event.ForAllRoles = true
 			} else {
-				event.RoleName = role.Role.Normalized()
+				event.RoleName = role.Role.Username.Normalized()
 			}
 
 			events = append(events, eventLogEntry{
@@ -280,7 +284,7 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 
 func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	params runParams,
-	targetRoles []security.SQLUsername,
+	targetRoles []security.SQLUserInfo,
 	objectType tree.AlterDefaultPrivilegesTargetObject,
 	grantees tree.RoleSpecList,
 	privileges privilege.List,
@@ -308,6 +312,10 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 
 	var events []eventLogEntry
 	granteeSQLUsernames, err := grantees.ToSQLUsernames(params.SessionData(), security.UsernameValidation)
+	if err != nil {
+		return err
+	}
+	granteeSQLUserInfos, err := ToSQLUserInfos(params.ctx, params.p.execCfg.InternalExecutor, params.p.txn, granteeSQLUsernames)
 	if err != nil {
 		return err
 	}
@@ -341,11 +349,11 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	for _, role := range roles {
 		if n.n.IsGrant {
 			defaultPrivs.GrantDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+				role, privileges, granteeSQLUserInfos, objectType, grantOption, grantPresent || allPresent,
 			)
 		} else {
 			defaultPrivs.RevokeDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+				role, privileges, granteeSQLUserInfos, objectType, grantOption, grantPresent || allPresent,
 			)
 		}
 
@@ -362,7 +370,7 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 		if n.n.ForAllRoles {
 			event.ForAllRoles = true
 		} else {
-			event.RoleName = role.Role.Normalized()
+			event.RoleName = role.Role.Username.Normalized()
 		}
 
 		events = append(events, eventLogEntry{

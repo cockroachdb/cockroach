@@ -142,7 +142,7 @@ func (p *planner) createDatabase(
 	desc := dbdesc.NewInitial(
 		id,
 		string(database.Name),
-		owner,
+		ownerInfo,
 		dbdesc.MaybeWithDatabaseRegionConfig(regionConfig),
 		dbdesc.WithPublicSchemaID(publicSchemaID),
 	)

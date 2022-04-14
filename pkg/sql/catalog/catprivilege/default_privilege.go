@@ -12,6 +12,7 @@ package catprivilege
 
 import (
 	"fmt"
+	"github.com/lib/pq/oid"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -46,6 +47,7 @@ func MakeDefaultPrivilegeDescriptor(
 	return &catpb.DefaultPrivilegeDescriptor{
 		DefaultPrivilegesPerRole: defaultPrivilegesForRole,
 		Type:                     typ,
+		DefaultPrivilegesMap:     make(map[oid.Oid]catpb.DefaultPrivilegesForRole),
 	}
 }
 
@@ -79,7 +81,7 @@ func (d *immutable) grantOrRevokeDefaultPrivilegesHelper(
 	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
 	role catpb.DefaultPrivilegesRole,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
-	grantee security.SQLUsername,
+	grantee security.SQLUserInfo,
 	privList privilege.List,
 	withGrantOption bool,
 	isGrant bool,
@@ -114,7 +116,7 @@ func (d *immutable) grantOrRevokeDefaultPrivilegesHelper(
 func (d *Mutable) GrantDefaultPrivileges(
 	role catpb.DefaultPrivilegesRole,
 	privileges privilege.List,
-	grantees []security.SQLUsername,
+	grantees []security.SQLUserInfo,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	withGrantOption bool,
 	deprecateGrant bool,
@@ -129,7 +131,7 @@ func (d *Mutable) GrantDefaultPrivileges(
 func (d *Mutable) RevokeDefaultPrivileges(
 	role catpb.DefaultPrivilegesRole,
 	privileges privilege.List,
-	grantees []security.SQLUsername,
+	grantees []security.SQLUserInfo,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	grantOptionFor bool,
 	deprecateGrant bool,
@@ -173,14 +175,14 @@ func CreatePrivilegesFromDefaultPrivileges(
 	dbDefaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor,
 	schemaDefaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor,
 	dbID descpb.ID,
-	user security.SQLUsername,
+	user security.SQLUserInfo,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	databasePrivileges *catpb.PrivilegeDescriptor,
 ) *catpb.PrivilegeDescriptor {
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
 	if dbID == keys.SystemDatabaseID {
-		return catpb.NewBasePrivilegeDescriptor(security.NodeUserName())
+		return catpb.NewBasePrivilegeDescriptor(security.NodeUserInfo())
 	}
 
 	defaultPrivilegeDescriptors := []catalog.DefaultPrivilegeDescriptor{
@@ -201,7 +203,7 @@ func CreatePrivilegesFromDefaultPrivileges(
 			for _, user := range GetUserPrivilegesForObject(defaultPrivilegesForCreatorRole, targetObject) {
 				applyDefaultPrivileges(
 					newPrivs,
-					user.UserProto.Decode(),
+					security.SQLUserInfo{Username: user.UserProto.Decode(), UserID: user.UserId},
 					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
 					privilege.ListFromBitField(user.WithGrantOption, targetObject.ToPrivilegeObjectType()),
 				)
@@ -212,7 +214,7 @@ func CreatePrivilegesFromDefaultPrivileges(
 			for _, user := range GetUserPrivilegesForObject(*defaultPrivilegesForRole, targetObject) {
 				applyDefaultPrivileges(
 					newPrivs,
-					user.UserProto.Decode(),
+					security.SQLUserInfo{Username: user.UserProto.Decode(), UserID: user.UserId},
 					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
 					privilege.ListFromBitField(user.WithGrantOption, targetObject.ToPrivilegeObjectType()),
 				)
@@ -227,7 +229,7 @@ func CreatePrivilegesFromDefaultPrivileges(
 			for _, user := range GetUserPrivilegesForObject(*defaultPrivilegesForAllRoles, targetObject) {
 				applyDefaultPrivileges(
 					newPrivs,
-					user.UserProto.Decode(),
+					security.SQLUserInfo{Username: user.UserProto.Decode(), UserID: user.UserId},
 					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
 					privilege.ListFromBitField(user.WithGrantOption, targetObject.ToPrivilegeObjectType()),
 				)
@@ -264,6 +266,9 @@ func (d *immutable) ForEachDefaultPrivilegeForRole(
 func (d *immutable) GetDefaultPrivilegesForRole(
 	role catpb.DefaultPrivilegesRole,
 ) (*catpb.DefaultPrivilegesForRole, bool) {
+	if _, ok := d.defaultPrivilegeDescriptor.DefaultPrivilegesMap[role.Role.UserID]; !ok {
+		return nil, false
+	}
 	idx := d.defaultPrivilegeDescriptor.FindUserIndex(role)
 	if idx == -1 {
 		return nil, false
@@ -296,13 +301,13 @@ func foldPrivileges(
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
 	if targetObject == tree.Types &&
-		privileges.CheckPrivilege(security.PublicRoleName(), privilege.USAGE) {
-		publicUser, ok := privileges.FindUser(security.PublicRoleName())
+		privileges.CheckPrivilege(security.PublicRoleInfo(), privilege.USAGE) {
+		publicUser, ok := privileges.FindUser(security.PublicRoleInfo())
 		if ok {
 			if !privilege.USAGE.IsSetIn(publicUser.WithGrantOption) {
 				setPublicHasUsageOnTypes(defaultPrivilegesForRole, true)
 				privileges.Revoke(
-					security.PublicRoleName(),
+					security.PublicRoleInfo(),
 					privilege.List{privilege.USAGE},
 					privilege.Type,
 					false, /* grantOptionFor */
@@ -335,7 +340,7 @@ func expandPrivileges(
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
 	if targetObject == tree.Types && GetPublicHasUsageOnTypes(defaultPrivilegesForRole) {
-		privileges.Grant(security.PublicRoleName(), privilege.List{privilege.USAGE}, false /* withGrantOption */)
+		privileges.Grant(security.PublicRoleInfo(), privilege.List{privilege.USAGE}, false /* withGrantOption */)
 		setPublicHasUsageOnTypes(defaultPrivilegesForRole, false)
 	}
 	// ForAllRoles cannot be a grantee, nothing left to do.
@@ -343,7 +348,9 @@ func expandPrivileges(
 		return
 	}
 	if GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, targetObject) {
-		privileges.Grant(defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode(), privilege.List{privilege.ALL}, false /* withGrantOption */)
+		privileges.Grant(security.SQLUserInfo{Username: defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode(),
+			UserID: defaultPrivilegesForRole.GetExplicitRole().UserId},
+			privilege.List{privilege.ALL}, false /* withGrantOption */)
 		setRoleHasAllOnTargetObject(defaultPrivilegesForRole, false, targetObject)
 	}
 }
@@ -361,6 +368,7 @@ func GetUserPrivilegesForObject(
 		userPrivileges = append(userPrivileges, catpb.UserPrivileges{
 			UserProto:  security.PublicRoleName().EncodeProto(),
 			Privileges: privilege.USAGE.Mask(),
+			UserId:     security.PublicRoleInfo().UserID,
 		})
 	}
 	// If ForAllRoles is specified, we can return early.
@@ -369,11 +377,12 @@ func GetUserPrivilegesForObject(
 	if !p.IsExplicitRole() {
 		return userPrivileges
 	}
-	userProto := p.GetExplicitRole().UserProto
+	user := p.GetExplicitRole()
 	if GetRoleHasAllPrivilegesOnTargetObject(&p, targetObject) {
 		return append(userPrivileges, catpb.UserPrivileges{
-			UserProto:  userProto,
+			UserProto:  user.UserProto,
 			Privileges: privilege.ALL.Mask(),
+			UserId:     user.UserId,
 		})
 	}
 	return userPrivileges
@@ -427,7 +436,7 @@ func setPublicHasUsageOnTypes(
 // and the grant options being granted could be different
 func applyDefaultPrivileges(
 	p *catpb.PrivilegeDescriptor,
-	user security.SQLUsername,
+	user security.SQLUserInfo,
 	privList privilege.List,
 	grantOptionList privilege.List,
 ) {
@@ -466,6 +475,7 @@ func applyDefaultPrivileges(
 			userPriv.WithGrantOption |= grantBits
 		}
 	}
+	p.UserPrivileges[user.UserID] = *userPriv
 }
 
 func setRoleHasAllOnTargetObject(

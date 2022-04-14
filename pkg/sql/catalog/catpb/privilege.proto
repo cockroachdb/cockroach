@@ -22,6 +22,8 @@ message UserPrivileges {
   // privileges is a bitfield of 1<<Privilege values.
   optional uint32 privileges = 2 [(gogoproto.nullable) = false];
   optional uint32 with_grant_option = 3 [(gogoproto.nullable) = false];
+  optional uint32 user_id = 4 [(gogoproto.nullable) = false,
+                              (gogoproto.casttype) = "github.com/lib/pq/oid.Oid"];
 }
 
 // PrivilegeDescriptor describes a list of users and attached
@@ -33,7 +35,10 @@ message PrivilegeDescriptor {
                                    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
   optional uint32 version = 3 [(gogoproto.nullable) = false,
                               (gogoproto.casttype) = "PrivilegeDescVersion"];
-  optional uint32 owner_id = 4 [(gogoproto.nullable) = false];
+  optional uint32 owner_id = 4 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/lib/pq/oid.Oid"];
+  map<uint32, UserPrivileges> user_privileges = 5 [(gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/lib/pq/oid.Oid"];
 }
 
 // DefaultPrivilegesForRole contains the default privileges for a role.
@@ -67,6 +72,9 @@ message DefaultPrivilegesForRole {
     optional bool role_has_all_privileges_on_sequences = 6 [(gogoproto.nullable) = false];
     optional bool role_has_all_privileges_on_schemas = 7 [(gogoproto.nullable) = false];
     optional bool role_has_all_privileges_on_types = 8 [(gogoproto.nullable) = false];
+    optional uint32 user_id = 9 [(gogoproto.nullable) = false,
+                                (gogoproto.casttype) = "github.com/lib/pq/oid.Oid"];
+
   }
   // ForAllRoles represents when default privileges are defined
   // using FOR ALL ROLES.
@@ -96,4 +104,6 @@ message DefaultPrivilegeDescriptor {
     SCHEMA = 1;
   }
   optional DefaultPrivilegeDescriptorType type = 2 [(gogoproto.nullable) = false];
+  map<uint32, DefaultPrivilegesForRole> default_privileges_map = 3 [(gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/lib/pq/oid.Oid"];
 }

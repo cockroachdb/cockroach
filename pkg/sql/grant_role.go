@@ -78,20 +78,20 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 		return nil, err
 	}
 
-	for _, r := range inputRoles {
+	for _, r := range inputRoleInfos {
 		// If the user is an admin, don't check if the user is allowed to add/drop
 		// roles in the role. However, if the role being modified is the admin role, then
 		// make sure the user is an admin with the admin option.
-		if hasAdminRole && !r.IsAdminRole() {
+		if hasAdminRole && !r.Username.IsAdminRole() {
 			continue
 		}
 		if isAdmin, ok := allRoles[r]; !ok || !isAdmin {
-			if r.IsAdminRole() {
+			if r.Username.IsAdminRole() {
 				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-					"%s is not a role admin for role %s", p.User(), r)
+					"%s is not a role admin for role %s", p.User(), r.Username)
 			}
 			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"%s is not a superuser or role admin for role %s", p.User(), r)
+				"%s is not a superuser or role admin for role %s", p.User(), r.Username)
 		}
 	}
 
@@ -131,13 +131,9 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	// means checking whether we have an expanded relationship (grant.Role ∈ ... ∈ grant.Member)
 	// For each grant.Role, we lookup all the roles it is a member of.
 	// After adding a given edge (grant.Member ∈ grant.Role), we add the edge to the list as well.
-	allRoleMemberships := make(map[security.SQLUsername]map[security.SQLUsername]bool)
-	for _, r := range inputRoles {
-		rID, err := GetUserID(ctx, p.execCfg.InternalExecutor, p.txn, r)
-		if err != nil {
-			return nil, err
-		}
-		allRoles, err := p.MemberOfWithAdminOption(ctx, security.SQLUserInfo{Username: r, UserID: rID})
+	allRoleMemberships := make(map[security.SQLUserInfo]map[security.SQLUserInfo]bool)
+	for _, r := range inputRoleInfos {
+		allRoles, err := p.MemberOfWithAdminOption(ctx, r)
 		if err != nil {
 			return nil, err
 		}
@@ -146,22 +142,22 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 
 	// Since we perform no queries here, check all role/member pairs for cycles.
 	// Only if there are no errors do we proceed to write them.
-	for _, r := range inputRoles {
-		for _, m := range inputMembers {
+	for _, r := range inputRoleInfos {
+		for _, m := range inputMemberInfos {
 			if r == m {
 				// self-cycle.
-				return nil, pgerror.Newf(pgcode.InvalidGrantOperation, "%s cannot be a member of itself", m)
+				return nil, pgerror.Newf(pgcode.InvalidGrantOperation, "%s cannot be a member of itself", m.Username)
 			}
 			// Check if grant.Role ∈ ... ∈ grant.Member
 			if memberOf, ok := allRoleMemberships[r]; ok {
 				if _, ok = memberOf[m]; ok {
 					return nil, pgerror.Newf(pgcode.InvalidGrantOperation,
-						"making %s a member of %s would create a cycle", m, r)
+						"making %s a member of %s would create a cycle", m.Username, r.Username)
 				}
 			}
 			// Add the new membership. We don't care about the actual bool value.
 			if _, ok := allRoleMemberships[m]; !ok {
-				allRoleMemberships[m] = make(map[security.SQLUsername]bool)
+				allRoleMemberships[m] = make(map[security.SQLUserInfo]bool)
 			}
 			allRoleMemberships[m][r] = false
 		}

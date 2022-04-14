@@ -62,7 +62,7 @@ var validTableDesc = &descpb.Descriptor{
 			},
 			NextIndexID: 2,
 			Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
-				privilege.ReadWriteData, security.NodeUserName()),
+				privilege.ReadWriteData, security.NodeUserInfo()),
 			FormatVersion:  descpb.InterleavedFormatVersion,
 			NextMutationID: 1,
 		},

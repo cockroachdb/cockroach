@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -51,7 +52,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	granteeInfos, err := ToSQLUserInfosWithCache(ctx, p.extendedEvalCtx.ExecCfg, p.extendedEvalCtx.Descs, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, grantees)
+	granteeInfos, err := ToSQLUserInfos(ctx, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, grantees)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +63,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		targets:         n.Targets,
 		grantees:        granteeInfos,
 		desiredprivs:    n.Privileges,
-		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
+		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUserInfo) {
 			privDesc.Grant(grantee, privileges, n.WithGrantOption)
 		},
 		grantOn:          grantOn,
@@ -87,7 +88,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 	if err != nil {
 		return nil, err
 	}
-	granteeInfos, err := ToSQLUserInfosWithCache(ctx, p.extendedEvalCtx.ExecCfg, p.extendedEvalCtx.Descs, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, grantees)
+	granteeInfos, err := ToSQLUserInfos(ctx, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, grantees)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +98,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		targets:         n.Targets,
 		grantees:        granteeInfos,
 		desiredprivs:    n.Privileges,
-		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
+		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUserInfo) {
 			privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor)
 		},
 		grantOn:          grantOn,
@@ -111,7 +112,7 @@ type changePrivilegesNode struct {
 	targets         tree.TargetList
 	grantees        []security.SQLUserInfo
 	desiredprivs    privilege.List
-	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, security.SQLUsername)
+	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, security.SQLUserInfo)
 	grantOn         privilege.ObjectType
 
 	// granteesNameList is used for creating an AST node for alter default
@@ -220,19 +221,19 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			}
 
 			for _, grantee := range n.grantees {
-				n.changePrivilege(privileges, n.desiredprivs, grantee.Username)
+				n.changePrivilege(privileges, n.desiredprivs, grantee)
 
 				// TODO (sql-exp): remove the rest of this loop in 22.2.
-				granteeHasGrantPriv := privileges.CheckPrivilege(grantee.Username, privilege.GRANT)
+				granteeHasGrantPriv := privileges.CheckPrivilege(grantee, privilege.GRANT)
 
 				if granteeHasGrantPriv && n.isGrant && !n.withGrantOption && len(noticeMessage) == 0 {
 					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
 				}
 				if !n.withGrantOption && (grantPresent || allPresent || (granteeHasGrantPriv && n.isGrant)) {
 					if n.isGrant {
-						privileges.GrantPrivilegeToGrantOptions(grantee.Username, true /*isGrant*/)
+						privileges.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
 					} else {
-						privileges.GrantPrivilegeToGrantOptions(grantee.Username, false /*isGrant*/)
+						privileges.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
 					}
 				}
 			}
@@ -406,7 +407,7 @@ func (p *planner) validateRoles(
 	}
 	for i, grantee := range roles {
 		if _, ok := users[grantee]; !ok {
-			//debug.PrintStack()
+			debug.PrintStack()
 			sqlName := tree.Name(roles[i].Username.Normalized())
 			return errors.Errorf("user or role %s does not exist", &sqlName)
 		}

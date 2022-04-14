@@ -306,7 +306,7 @@ func createPostgresSequences(
 	createSeq map[schemaAndTableName]*tree.CreateSequence,
 	fks fkHandler,
 	walltime int64,
-	owner security.SQLUsername,
+	owner security.SQLUserInfo,
 	schemaNameToDesc map[string]*schemadesc.Mutable,
 	execCfg *sql.ExecutorConfig,
 ) ([]*tabledesc.Mutable, error) {
@@ -486,7 +486,7 @@ func readPostgresCreateTable(
 	walltime int64,
 	fks fkHandler,
 	max int,
-	owner security.SQLUsername,
+	owner security.SQLUserInfo,
 	unsupportedStmtLogger *unsupportedStmtLogger,
 ) ([]*tabledesc.Mutable, []*schemadesc.Mutable, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this

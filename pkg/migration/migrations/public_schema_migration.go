@@ -111,7 +111,7 @@ func createPublicSchemaDescriptor(
 	// The public role has hardcoded privileges; see comment in
 	// descpb.NewPublicSchemaPrivilegeDescriptor.
 	publicSchemaDesc.Privileges.Grant(
-		security.PublicRoleName(),
+		security.PublicRoleInfo(),
 		privilege.List{privilege.CREATE, privilege.USAGE},
 		false, /* withGrantOption */
 	)

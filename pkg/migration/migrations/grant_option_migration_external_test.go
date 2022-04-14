@@ -202,7 +202,7 @@ func TestGrantOptionMigration(t *testing.T) {
 							if u.Privileges != u.WithGrantOption {
 								return errors.Newf(
 									"grant options not updated properly for %s, Privileges: %d, Grant Option: %d",
-									u.User(), u.Privileges, u.WithGrantOption)
+									u.User().Username, u.Privileges, u.WithGrantOption)
 							}
 						}
 					}

@@ -75,7 +75,7 @@ func GetUserSessionInitInfo(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	ie *InternalExecutor,
-	username security.SQLUsername,
+	username security.SQLUserInfo,
 	databaseName string,
 ) (
 	exists bool,
@@ -88,7 +88,7 @@ func GetUserSessionInitInfo(
 ) {
 	runFn := getUserInfoRunFn(execCfg, username, "get-user-timeout")
 
-	if username.IsRootUser() {
+	if username.Username.IsRootUser() {
 		// As explained above, for root we report that the user exists
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
@@ -132,10 +132,6 @@ func GetUserSessionInitInfo(
 			ie,
 			execCfg.DB,
 			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				userID, err := GetUserID(ctx, execCfg.InternalExecutor, txn, username)
-				if err != nil {
-					return err
-				}
 
 				memberships, err := MemberOfWithAdminOption(
 					ctx,
@@ -143,12 +139,12 @@ func GetUserSessionInitInfo(
 					ie,
 					descsCol,
 					txn,
-					security.SQLUserInfo{Username: username, UserID: userID},
+					username,
 				)
 				if err != nil {
 					return err
 				}
-				_, isSuperuser = memberships[security.AdminRoleName()]
+				_, isSuperuser = memberships[security.AdminRoleInfo()]
 				return nil
 			},
 		)
@@ -183,14 +179,14 @@ func GetUserSessionInitInfo(
 }
 
 func getUserInfoRunFn(
-	execCfg *ExecutorConfig, username security.SQLUsername, opName string,
+	execCfg *ExecutorConfig, username security.SQLUserInfo, opName string,
 ) func(context.Context, func(context.Context) error) error {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&execCfg.Settings.SV)
 	// We don't like long timeouts for root.
 	// (4.5 seconds to not exceed the default 5s timeout configured in many clients.)
 	const maxRootTimeout = 4*time.Second + 500*time.Millisecond
-	if username.IsRootUser() && (timeout == 0 || timeout > maxRootTimeout) {
+	if username.Username.IsRootUser() && (timeout == 0 || timeout > maxRootTimeout) {
 		timeout = maxRootTimeout
 	}
 
@@ -207,7 +203,7 @@ func retrieveSessionInitInfoWithCache(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	ie *InternalExecutor,
-	username security.SQLUsername,
+	username security.SQLUserInfo,
 	databaseName string,
 ) (aInfo sessioninit.AuthInfo, settingsEntries []sessioninit.SettingsCacheEntry, err error) {
 	if err = func() (retErr error) {
@@ -224,7 +220,7 @@ func retrieveSessionInitInfoWithCache(
 			return retErr
 		}
 		// Avoid looking up default settings for root and non-existent users.
-		if username.IsRootUser() || !aInfo.UserExists {
+		if username.Username.IsRootUser() || !aInfo.UserExists {
 			return nil
 		}
 		settingsEntries, retErr = execCfg.SessionInitCache.GetDefaultSettings(
@@ -233,7 +229,7 @@ func retrieveSessionInitInfoWithCache(
 			ie,
 			execCfg.DB,
 			execCfg.CollectionFactory,
-			username,
+			username.Username,
 			databaseName,
 			retrieveDefaultSettings,
 		)
@@ -247,7 +243,7 @@ func retrieveSessionInitInfoWithCache(
 }
 
 func retrieveAuthInfo(
-	ctx context.Context, ie sqlutil.InternalExecutor, username security.SQLUsername,
+	ctx context.Context, ie sqlutil.InternalExecutor, username security.SQLUserInfo,
 ) (aInfo sessioninit.AuthInfo, retErr error) {
 	// Use fully qualified table name to avoid looking up "".system.users.
 	// We use a nil txn as login is not tied to any transaction state, and
@@ -257,7 +253,7 @@ func retrieveAuthInfo(
 	values, err := ie.QueryRowEx(
 		ctx, "get-hashed-pwd", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		getHashedPassword, username)
+		getHashedPassword, username.Username)
 	if err != nil {
 		return aInfo, errors.Wrapf(err, "error looking up user %s", username)
 	}
@@ -275,7 +271,7 @@ func retrieveAuthInfo(
 	}
 
 	// None of the rest of the role options are relevant for root.
-	if username.IsRootUser() {
+	if username.Username.IsRootUser() {
 		return aInfo, nil
 	}
 
@@ -287,7 +283,7 @@ func retrieveAuthInfo(
 		ctx, "get-login-dependencies", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getLoginDependencies,
-		username,
+		username.Username,
 	)
 	if err != nil {
 		return aInfo, errors.Wrapf(err, "error looking up user %s", username)
@@ -624,11 +620,11 @@ func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQ
 		return err
 	}
 	// Superusers can become anyone except root. In CRDB, admins are superusers.
-	if _, ok := memberships[security.AdminRoleName()]; ok {
+	if _, ok := memberships[security.AdminRoleInfo()]; ok {
 		return nil
 	}
 	// Otherwise, check the session user is a member of the user they will become.
-	if _, ok := memberships[becomeUser.Username]; !ok {
+	if _, ok := memberships[becomeUser]; !ok {
 		return pgerror.Newf(
 			pgcode.InsufficientPrivilege,
 			`permission denied to set role "%s"`,
@@ -651,7 +647,7 @@ func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQ
 func MaybeUpgradeStoredPasswordHash(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	username security.SQLUsername,
+	user security.SQLUserInfo,
 	cleartext string,
 	currentHash security.PasswordHash,
 ) {
@@ -669,9 +665,8 @@ func MaybeUpgradeStoredPasswordHash(
 		// No conversion happening. Nothing to do.
 		return
 	}
-
 	// The password hash was successfully converted. Store the new hash.
-	if err := updateUserPasswordHash(ctx, execCfg, username, prevHash, newHash); err != nil {
+	if err := updateUserPasswordHash(ctx, execCfg, user, prevHash, newHash); err != nil {
 		// Again, we don't want to fail with an error, because at this
 		// point authentication succeeded.
 		//
@@ -680,7 +675,7 @@ func MaybeUpgradeStoredPasswordHash(
 	} else {
 		// Inform the security audit log that the hash was upgraded.
 		log.StructuredEvent(ctx, &eventpb.PasswordHashConverted{
-			RoleName:  username.Normalized(),
+			RoleName:  user.Username.Normalized(),
 			OldMethod: currentHash.Method().String(),
 			NewMethod: newMethod,
 		})
@@ -690,10 +685,10 @@ func MaybeUpgradeStoredPasswordHash(
 func updateUserPasswordHash(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	username security.SQLUsername,
+	user security.SQLUserInfo,
 	prevHash, newHash []byte,
 ) error {
-	runFn := getUserInfoRunFn(execCfg, username, "set-hash-timeout")
+	runFn := getUserInfoRunFn(execCfg, user, "set-hash-timeout")
 
 	return runFn(ctx, func(ctx context.Context) error {
 		return DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, d *descs.Collection) error {
@@ -725,7 +720,7 @@ func updateUserPasswordHash(
 				"set-password-hash",
 				txn,
 				`UPDATE system.users SET "hashedPassword" = $3 WHERE username = $1 AND "hashedPassword" = $2`,
-				username.Normalized(),
+				user.Username.Normalized(),
 				prevHash,
 				newHash,
 			)

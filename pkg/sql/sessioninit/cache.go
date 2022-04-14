@@ -108,11 +108,11 @@ func (a *Cache) GetAuthInfo(
 	ie sqlutil.InternalExecutor,
 	db *kv.DB,
 	f *descs.CollectionFactory,
-	username security.SQLUsername,
+	username security.SQLUserInfo,
 	readFromSystemTables func(
 		ctx context.Context,
 		ie sqlutil.InternalExecutor,
-		username security.SQLUsername,
+		username security.SQLUserInfo,
 	) (AuthInfo, error),
 ) (aInfo AuthInfo, err error) {
 	if !CacheEnabled.Get(&settings.SV) {

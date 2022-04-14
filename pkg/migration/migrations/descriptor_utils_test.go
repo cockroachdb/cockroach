@@ -69,7 +69,7 @@ func TestCreateSystemTable(t *testing.T) {
 		NextIndexID: 2,
 		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
 			privilege.ReadData,
-			security.NodeUserName(),
+			security.NodeUserInfo(),
 		),
 	}
 

@@ -85,7 +85,7 @@ func TestAllocateIDs(t *testing.T) {
 				return idx
 			}(),
 		},
-		Privileges:    catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		Privileges:    catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 		FormatVersion: descpb.InterleavedFormatVersion,
 	}).BuildCreatedMutableTable()
 	if err := desc.AllocateIDs(ctx, clusterversion.TestingClusterVersion); err != nil {
@@ -149,7 +149,7 @@ func TestAllocateIDs(t *testing.T) {
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		},
-		Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 		NextColumnID:     4,
 		NextFamilyID:     1,
 		NextIndexID:      5,
@@ -300,7 +300,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+				Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserInfo()),
 			},
 			expUpgrade: true,
 			verify: func(i int, desc catalog.TableDescriptor) {
@@ -316,7 +316,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "foo"},
 				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+				Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserInfo()),
 			},
 			expUpgrade: false,
 			verify:     nil,
@@ -398,7 +398,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					Version:             descpb.LatestIndexDescriptorVersion,
 					ConstraintID:        1,
 				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+				Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserInfo()),
 			},
 		},
 		{ // 2
@@ -445,7 +445,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Version:             descpb.SecondaryIndexFamilyFormatVersion,
 					},
 				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+				Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserInfo()),
 			},
 			upgraded: nil,
 		},
@@ -584,7 +584,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 					},
 				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+				Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserInfo()),
 			},
 		},
 	}
@@ -638,7 +638,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			{Name: "c", Type: types.Int}},
 		FormatVersion: descpb.InterleavedFormatVersion,
 		Indexes:       []descpb.IndexDescriptor{makeIndexDescriptor("d", []string{"b", "a"})},
-		Privileges:    catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		Privileges:    catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 		OutboundFKs: []descpb.ForeignKeyConstraint{
 			{
 				Name:              "fk",

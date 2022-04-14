@@ -137,7 +137,12 @@ func (c *conn) handleAuthentication(
 	// Once chooseDbRole() returns, we know that the actual DB username
 	// will be present in c.sessionArgs.User.
 	dbUser := c.sessionArgs.User
-
+	dbUserID, err := sql.GetUserID(ctx, execCfg.InternalExecutor, nil, dbUser)
+	if err != nil {
+		log.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
+		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
+		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+	}
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
 	exists, canLoginSQL, _, isSuperuser, defaultSettings, pwRetrievalFn, err :=
@@ -145,7 +150,7 @@ func (c *conn) handleAuthentication(
 			ctx,
 			execCfg,
 			authOpt.ie,
-			dbUser,
+			security.SQLUserInfo{Username: dbUser, UserID: dbUserID},
 			c.sessionArgs.SessionDefaults["database"],
 		)
 	if err != nil {

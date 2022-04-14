@@ -2406,9 +2406,9 @@ func isMemberOfRole(
 	values, err := ctx.Planner.QueryRowEx(ctx.Ctx(), "isMemberOfRole", nil, sessiondata.InternalExecutorOverride{
 		User: security.RootUserName(),
 	},
-		`SELECT user_id FROM system.users WHERE username=$1`, role)
+		`SELECT user_id FROM system.users WHERE username=$1`, user)
 	if err != nil {
-		return tree.HasNoPrivilege, errors.Wrapf(err, "error looking up user %s", role)
+		return tree.HasNoPrivilege, errors.Wrapf(err, "error looking up user %s", user)
 	}
 
 	if values != nil {
@@ -2416,7 +2416,6 @@ func isMemberOfRole(
 			userID = oid.Oid(v.(*tree.DOid).DInt)
 		}
 	}
-	fmt.Println("aaaa isMemberOfRole %d", userID)
 	// Superusers have every privilege and are part of every role.
 	if isSuper, err := ctx.Planner.UserHasAdminRole(ctx.Context, security.SQLUserInfo{user, userID}); err != nil {
 		return tree.HasNoPrivilege, err
@@ -2428,7 +2427,21 @@ func isMemberOfRole(
 	if err != nil {
 		return tree.HasNoPrivilege, err
 	}
-	_, member := allRoleMemberships[role]
+	var roleID oid.Oid
+	values, err = ctx.Planner.QueryRowEx(ctx.Ctx(), "isMemberOfRole", nil, sessiondata.InternalExecutorOverride{
+		User: security.RootUserName(),
+	},
+		`SELECT user_id FROM system.users WHERE username=$1`, role)
+	if err != nil {
+		return tree.HasNoPrivilege, errors.Wrapf(err, "error looking up user %s", role)
+	}
+
+	if values != nil {
+		if v := values[0]; v != tree.DNull {
+			roleID = oid.Oid(v.(*tree.DOid).DInt)
+		}
+	}
+	_, member := allRoleMemberships[security.SQLUserInfo{Username: role, UserID: roleID}]
 	if member {
 		return tree.HasPrivilege, nil
 	}
@@ -2511,7 +2524,21 @@ func isAdminOfRole(
 	if err != nil {
 		return tree.HasNoPrivilege, err
 	}
-	if isAdmin := allRoleMemberships[role]; isAdmin {
+
+	var roleID oid.Oid
+	values, err = ctx.Planner.QueryRowEx(ctx.Context, "isAdminOfRole", ctx.Txn, sessiondata.InternalExecutorOverride{
+		User: security.RootUserName()}, query, role)
+
+	if err != nil {
+		return tree.HasNoPrivilege, errors.Wrapf(err, "error looking up user %s", role)
+	}
+
+	if values != nil {
+		if v := values[0]; v != tree.DNull {
+			roleID = oid.Oid(v.(*tree.DOid).DInt)
+		}
+	}
+	if isAdmin := allRoleMemberships[security.SQLUserInfo{Username: role, UserID: roleID}]; isAdmin {
 		return tree.HasPrivilege, nil
 	}
 	return tree.HasNoPrivilege, nil

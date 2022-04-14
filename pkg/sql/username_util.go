@@ -97,6 +97,18 @@ func GetUserIDWithCache(
 func GetUserID(
 	ctx context.Context, executor *InternalExecutor, txn *kv.Txn, role security.SQLUsername,
 ) (oid.Oid, error) {
+	if role == security.RootUserName() {
+		return security.RootUserInfo().UserID, nil
+	}
+	if role == security.AdminRoleName() {
+		return security.AdminRoleInfo().UserID, nil
+	}
+	if role == security.NodeUserName() {
+		return security.NodeUserInfo().UserID, nil
+	}
+	if role == security.PublicRoleName() {
+		return security.PublicRoleInfo().UserID, nil
+	}
 
 	var userID oid.Oid
 	query := `SELECT user_id FROM system.users WHERE username=$1`

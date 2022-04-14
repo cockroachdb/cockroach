@@ -305,7 +305,7 @@ func readMysqlCreateTable(
 	match string,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
-	owner security.SQLUsername,
+	owner security.SQLUserInfo,
 	walltime int64,
 ) ([]*tabledesc.Mutable, error) {
 	match = lexbase.NormalizeName(match)
@@ -385,7 +385,7 @@ func mysqlTableToCockroach(
 	in *mysql.TableSpec,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
-	owner security.SQLUsername,
+	owner security.SQLUserInfo,
 	walltime int64,
 ) ([]*tabledesc.Mutable, []delayedFK, error) {
 	if in == nil {

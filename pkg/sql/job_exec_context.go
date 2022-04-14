@@ -58,6 +58,7 @@ func (e *plannerJobExecContext) ExecCfg() *ExecutorConfig        { return e.p.Ex
 func (e *plannerJobExecContext) DistSQLPlanner() *DistSQLPlanner { return e.p.DistSQLPlanner() }
 func (e *plannerJobExecContext) LeaseMgr() *lease.Manager        { return e.p.LeaseMgr() }
 func (e *plannerJobExecContext) User() security.SQLUsername      { return e.p.User() }
+func (e *plannerJobExecContext) UserInfo() security.SQLUserInfo  { return e.p.UserInfo() }
 func (e *plannerJobExecContext) MigrationJobDeps() migration.JobDeps {
 	return e.p.MigrationJobDeps()
 }
@@ -83,6 +84,7 @@ type JobExecContext interface {
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
 	User() security.SQLUsername
+	UserInfo() security.SQLUserInfo
 	MigrationJobDeps() migration.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
 }

@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/security"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -110,11 +111,15 @@ func doCreateSequence(
 		return nil, err
 	}
 
+	userID, err := GetUserID(ctx, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, sessionData.User())
+	if err != nil {
+		return nil, err
+	}
 	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		dbDesc.GetDefaultPrivilegeDescriptor(),
 		scDesc.GetDefaultPrivilegeDescriptor(),
 		dbDesc.GetID(),
-		sessionData.User(),
+		security.SQLUserInfo{Username: sessionData.User(), UserID: userID},
 		tree.Sequences,
 		dbDesc.GetPrivileges(),
 	)

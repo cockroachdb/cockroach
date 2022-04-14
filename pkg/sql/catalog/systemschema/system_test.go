@@ -34,7 +34,7 @@ func TestShouldSplitAtDesc(t *testing.T) {
 		tabledesc.NewBuilder(&tbl1).BuildImmutable():          true,
 		tabledesc.NewBuilder(&tbl2).BuildImmutable():          false,
 		tabledesc.NewBuilder(&tbl3).BuildImmutable():          true,
-		dbdesc.NewInitial(42, "db", security.AdminRoleName()): false,
+		dbdesc.NewInitial(42, "db", security.AdminRoleInfo()): false,
 		typedesc.NewBuilder(&typ).BuildCreatedMutable():       false,
 		schemadesc.NewBuilder(&schema).BuildImmutable():       false,
 	} {

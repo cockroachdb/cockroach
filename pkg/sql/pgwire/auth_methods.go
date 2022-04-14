@@ -204,9 +204,14 @@ func passwordAuthenticator(
 		// This auto-conversion is a CockroachDB-specific feature, which
 		// pushes clusters upgraded from a previous version into using
 		// SCRAM-SHA-256.
+		// get user id
+		userID, err := sql.GetUserID(ctx, execCfg.InternalExecutor, nil, systemIdentity)
+		if err != nil {
+			return err
+		}
 		sql.MaybeUpgradeStoredPasswordHash(ctx,
 			execCfg,
-			systemIdentity,
+			security.SQLUserInfo{Username: systemIdentity, UserID: userID},
 			password, hashedPassword)
 	}
 

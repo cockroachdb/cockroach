@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/security"
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -168,12 +169,15 @@ func (n *createViewNode) startExec(params runParams) error {
 	if n.persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
-
+	userID, err := GetUserID(params.ctx, params.p.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, params.SessionData().User())
+	if err != nil {
+		return err
+	}
 	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		n.dbDesc.GetDefaultPrivilegeDescriptor(),
 		schema.GetDefaultPrivilegeDescriptor(),
 		n.dbDesc.GetID(),
-		params.SessionData().User(),
+		security.SQLUserInfo{Username: params.SessionData().User(), UserID: userID},
 		tree.Tables,
 		n.dbDesc.GetPrivileges(),
 	)

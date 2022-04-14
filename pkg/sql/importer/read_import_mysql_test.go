@@ -149,14 +149,14 @@ func readMysqlCreateFrom(
 		expectedParentID,
 	).Scan(&expectedSchemaID)
 	expectedParent := dbdesc.NewInitial(
-		expectedParentID, "test", security.RootUserName(),
+		expectedParentID, "test", security.RootUserInfo(),
 		dbdesc.WithPublicSchemaID(expectedSchemaID),
 	)
 
 	p := sql.FakeJobExecContext{ExecutorConfig: &execCfg}
 
 	tbl, err := readMysqlCreateTable(context.Background(), f, testEvalCtx, &p, id, expectedParent,
-		name, fks, map[descpb.ID]int64{}, security.RootUserName(), walltime)
+		name, fks, map[descpb.ID]int64{}, security.RootUserInfo(), walltime)
 	if err != nil {
 		t.Fatal(err)
 	}

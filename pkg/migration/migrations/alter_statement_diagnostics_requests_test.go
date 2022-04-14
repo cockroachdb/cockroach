@@ -149,7 +149,7 @@ func getDeprecatedStmtDiagReqsDescriptor() *descpb.TableDescriptor {
 			},
 		},
 		NextIndexID:    3,
-		Privileges:     catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, security.NodeUserName()),
+		Privileges:     catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, security.NodeUserInfo()),
 		NextMutationID: 1,
 		FormatVersion:  3,
 	}
