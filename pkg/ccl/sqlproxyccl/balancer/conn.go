@@ -29,4 +29,7 @@ type ConnectionHandle interface {
 	// (e.g. 10.15.42.36:26257). This will be used to identify which pod the
 	// connection handle is attached to.
 	ServerRemoteAddr() string
+
+	// IsIdle returns true if the connection is idle, and false otherwise.
+	IsIdle() bool
 }
