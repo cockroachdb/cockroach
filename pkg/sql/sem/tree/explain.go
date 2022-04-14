@@ -115,6 +115,7 @@ const (
 	ExplainFlagJSON
 	ExplainFlagMemo
 	ExplainFlagShape
+	ExplainFlagViz
 	numExplainFlags = iota
 )
 
@@ -126,6 +127,7 @@ var explainFlagStrings = [...]string{
 	ExplainFlagJSON:    "JSON",
 	ExplainFlagMemo:    "MEMO",
 	ExplainFlagShape:   "SHAPE",
+	ExplainFlagViz:     "VIZ",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {

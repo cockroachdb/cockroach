@@ -5,7 +5,7 @@ CREATE SEQUENCE defaultdb.SQ1
 ops
 DROP SEQUENCE defaultdb.SQ1
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[Sequence:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
@@ -41,6 +41,7 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       - 104
       JobID: 1
       NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
       Statements:
       - statement: DROP SEQUENCE defaultdb.sq1
         redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1›
@@ -83,7 +84,7 @@ CREATE TABLE defaultdb.blog_posts2 (id INT8 PRIMARY KEY, val INT8 DEFAULT nextva
 ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 1 MutationType ops
+StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[Sequence:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
@@ -145,6 +146,7 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
       - 106
       JobID: 1
       NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
       Statements:
       - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
         redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
