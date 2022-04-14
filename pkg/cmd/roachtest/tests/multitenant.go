@@ -25,7 +25,7 @@ import (
 func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
 
 	const tenantID = 123
 	{
@@ -42,6 +42,7 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 	)
 	const tenantNode = 1
 	tenant := createTenantNode(kvAddrs, tenantID, tenantNode, tenantHTTPPort, tenantSQLPort)
+	tenant.createTenantCert(ctx, t, c)
 	tenant.start(ctx, t, c, "./cockroach")
 
 	t.Status("checking that a client can connect to the tenant server")
