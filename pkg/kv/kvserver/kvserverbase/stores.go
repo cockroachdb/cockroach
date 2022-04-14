@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // StoresIterator is able to iterate over all stores on a given node.
@@ -33,7 +34,7 @@ type Store interface {
 		queue string,
 		rangeID roachpb.RangeID,
 		skipShouldQueue bool,
-	) error
+	) (tracing.Recording, error)
 
 	// SetQueueActive disables/enables the named queue.
 	SetQueueActive(active bool, queue string) error
