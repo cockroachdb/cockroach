@@ -52,6 +52,7 @@ var serverAdvertiseAddr, serverAdvertisePort string
 var serverSQLAddr, serverSQLPort string
 var serverSQLAdvertiseAddr, serverSQLAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
+var serverHTTPAdvertiseAddr, serverHTTPAdvertisePort string
 var localityAdvertiseHosts localityList
 var startBackground bool
 var storeSpecs base.StoreSpecList
@@ -71,6 +72,9 @@ func initPreFlagsDefaults() {
 
 	serverHTTPAddr = ""
 	serverHTTPPort = base.DefaultHTTPPort
+
+	serverHTTPAdvertiseAddr = ""
+	serverHTTPAdvertisePort = base.DefaultHTTPPort
 
 	localityAdvertiseHosts = localityList{}
 
@@ -409,6 +413,7 @@ func init() {
 		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
 		varFlag(f, addrSetter{&serverSQLAdvertiseAddr, &serverSQLAdvertisePort}, cliflags.SQLAdvertiseAddr)
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
+		varFlag(f, addrSetter{&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort}, cliflags.HTTPAdvertiseAddr)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
@@ -974,6 +979,7 @@ func init() {
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
 		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
+		varFlag(f, addrSetter{&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort}, cliflags.HTTPAdvertiseAddr)
 		varFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 
 		varFlag(f, &serverCfg.Locality, cliflags.Locality)
@@ -1215,6 +1221,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		serverCfg.DisableTLSForHTTP = true
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
+	serverCfg.HTTPAdvertiseAddr = net.JoinHostPort(serverHTTPAdvertiseAddr, serverHTTPAdvertisePort)
 
 	// Fill the advertise port into the locality advertise addresses.
 	for i, a := range localityAdvertiseHosts {
