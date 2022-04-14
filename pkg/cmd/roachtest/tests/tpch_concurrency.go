@@ -158,7 +158,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		// additional step to ensure that some kind of lower bound for the
 		// supported concurrency is always sustained and fail the test if it
 		// isn't.
-		minConcurrency, maxConcurrency := 32, 192
+		minConcurrency, maxConcurrency := 48, 160
 		// Run the binary search to find the largest concurrency that doesn't
 		// crash a node in the cluster. The current range is represented by
 		// [minConcurrency, maxConcurrency).
@@ -193,9 +193,9 @@ func registerTPCHConcurrency(r registry.Registry) {
 		},
 		// By default, the timeout is 10 hours which might not be sufficient
 		// given that a single iteration of checkConcurrency might take on the
-		// order of one hour, so in order to let each test run to complete we'll
-		// give it 18 hours. Successful runs typically take a lot less, around
-		// six hours.
-		Timeout: 18 * time.Hour,
+		// order of an hour and a half, so in order to let each test run to
+		// complete, we'll give it 12 hours. Successful runs typically take
+		// less, around 8 hours.
+		Timeout: 12 * time.Hour,
 	})
 }
