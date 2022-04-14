@@ -48,8 +48,6 @@ const (
 	// an unsafe transfer point). Note that each transfer attempt currently has
 	// a timeout of 15 seconds, so retrying up to 3 times may hold onto
 	// processSem up to 45 seconds for each rebalance request.
-	//
-	// TODO(jaylim-crl): Reduce transfer timeout to 5 seconds.
 	maxTransferAttempts = 3
 )
 
@@ -238,9 +236,7 @@ func (b *Balancer) processQueue(ctx context.Context) {
 
 			// Each request is retried up to maxTransferAttempts.
 			for i := 0; i < maxTransferAttempts && ctx.Err() == nil; i++ {
-				// TODO(jaylim-crl): Once the TransferConnection API accepts a
-				// destination, we could update this code, and pass along dst.
-				err := req.conn.TransferConnection( /* req.dst */ )
+				err := req.conn.TransferConnection(req.dst)
 				if err == nil || errors.Is(err, context.Canceled) ||
 					req.dst == req.conn.ServerRemoteAddr() {
 					break
