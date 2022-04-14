@@ -65,6 +65,11 @@ func (p *FakeJobExecContext) User() security.SQLUsername {
 	panic("unimplemented")
 }
 
+// UserInfo implements the JobExecContext interface.
+func (p *FakeJobExecContext) UserInfo() security.SQLUserInfo {
+	panic("unimplemented")
+}
+
 // MigrationJobDeps implements the JobExecContext interface.
 func (p *FakeJobExecContext) MigrationJobDeps() migration.JobDeps {
 	panic("unimplemented")

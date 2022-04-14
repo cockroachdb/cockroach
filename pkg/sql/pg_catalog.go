@@ -555,10 +555,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRoleMembership(ctx, p.ExecCfg().InternalExecutor, p.Txn(),
-			func(roleName, memberName security.SQLUsername, isAdmin bool) error {
+			func(roleName, memberName security.SQLUserInfo, isAdmin bool) error {
 				return addRow(
-					h.UserOid(roleName),                 // roleid
-					h.UserOid(memberName),               // member
+					h.UserOid(roleName.Username),        // roleid
+					h.UserOid(memberName.Username),      // member
 					tree.DNull,                          // grantor
 					tree.MakeDBool(tree.DBool(isAdmin)), // admin_option
 				)
@@ -580,12 +580,12 @@ https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html`,
 func getOwnerOID(desc catalog.Descriptor) tree.Datum {
 	owner := getOwnerOfDesc(desc)
 	h := makeOidHasher()
-	return h.UserOid(owner)
+	return h.UserOid(owner.Username)
 }
 
 func getOwnerName(desc catalog.Descriptor) tree.Datum {
 	owner := getOwnerOfDesc(desc)
-	return tree.NewDName(owner.Normalized())
+	return tree.NewDName(owner.Username.Normalized())
 }
 
 var (
@@ -2631,8 +2631,8 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 						pgClassOid,              // classid
 						tableOid(table.GetID()), // objid
 						pgAuthIDOid,             // refclassid
-						u.User,                  // refobjid
-						owner,
+						u.User.Username,         // refobjid
+						owner.Username,
 					); err != nil {
 						return err
 					}
@@ -2653,8 +2653,8 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 						pgDatabaseOid,     // classid
 						dbOid(db.GetID()), // objid
 						pgAuthIDOid,       // refclassid
-						u.User,            // refobjid
-						owner,
+						u.User.Username,   // refobjid
+						owner.Username,
 					); err != nil {
 						return err
 					}

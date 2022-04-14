@@ -63,7 +63,7 @@ func MakeTestingSimpleTableDescriptor(
 	fks fkHandler,
 	walltime int64,
 ) (*tabledesc.Mutable, error) {
-	db := dbdesc.NewInitial(parentID, "foo", security.RootUserName())
+	db := dbdesc.NewInitial(parentID, "foo", security.RootUserInfo())
 	var sc catalog.SchemaDescriptor
 	if !st.Version.IsActive(ctx, clusterversion.PublicSchemasWithDescriptors) && parentSchemaID == keys.PublicSchemaIDForBackup {
 		// If we're not on version PublicSchemasWithDescriptors, continue to
@@ -78,10 +78,10 @@ func MakeTestingSimpleTableDescriptor(
 			Version:  1,
 			ParentID: parentID,
 			Privileges: catpb.NewPrivilegeDescriptor(
-				security.PublicRoleName(),
+				security.PublicRoleInfo(),
 				privilege.SchemaPrivileges,
 				privilege.List{},
-				security.RootUserName(),
+				security.RootUserInfo(),
 			),
 		}).BuildCreatedMutableSchema()
 	}
@@ -187,7 +187,7 @@ func MakeSimpleTableDescriptor(
 		tableID,
 		nil, /* regionConfig */
 		hlc.Timestamp{WallTime: walltime},
-		catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		catpb.NewBasePrivilegeDescriptor(security.AdminRoleInfo()),
 		affected,
 		semaCtx,
 		&evalCtx,

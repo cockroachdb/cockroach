@@ -350,6 +350,7 @@ message UserPrivileges {
   uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string user_name = 2;
   uint32 privileges = 3;
+  uint32 user_id = 4 [(gogoproto.casttype) = "github.com/lib/pq/oid.Oid"];
 }
 
 message TableLocalityGlobal {

@@ -83,7 +83,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		const junkDescriptorID = 42
 		junkDescriptorKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, junkDescriptorID)
 		junkDescriptor := dbdesc.NewInitial(
-			junkDescriptorID, "junk", security.AdminRoleName())
+			junkDescriptorID, "junk", security.AdminRoleInfo())
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return txn.Put(ctx, junkDescriptorKey, junkDescriptor.DescriptorProto())
 		}))

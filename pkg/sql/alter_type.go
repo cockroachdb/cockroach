@@ -429,7 +429,7 @@ func (p *planner) alterTypeOwner(
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner.Username == oldOwner {
+	if newOwner == oldOwner {
 		return nil
 	}
 

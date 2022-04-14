@@ -107,12 +107,12 @@ func (a *Cache) GetAuthInfo(
 	ie sqlutil.InternalExecutor,
 	db *kv.DB,
 	f *descs.CollectionFactory,
-	username security.SQLUsername,
+	username security.SQLUserInfo,
 	readFromSystemTables func(
 		ctx context.Context,
 		txn *kv.Txn,
 		ie sqlutil.InternalExecutor,
-		username security.SQLUsername,
+		username security.SQLUserInfo,
 	) (AuthInfo, error),
 ) (aInfo AuthInfo, err error) {
 	if !CacheEnabled.Get(&settings.SV) {
@@ -152,7 +152,7 @@ func (a *Cache) GetAuthInfo(
 
 		// Check version and maybe clear cache while holding the mutex.
 		var found bool
-		aInfo, found = a.readAuthInfoFromCache(ctx, usersTableVersion, roleOptionsTableVersion, username)
+		aInfo, found = a.readAuthInfoFromCache(ctx, usersTableVersion, roleOptionsTableVersion, username.Username)
 
 		if found {
 			return nil
@@ -163,7 +163,7 @@ func (a *Cache) GetAuthInfo(
 		// versions are also part of the request key so that we don't read data
 		// from an old version of either table.
 		val, err := a.loadCacheValue(
-			ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
+			ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Username.Normalized(), usersTableVersion, roleOptionsTableVersion),
 			func(loadCtx context.Context) (interface{}, error) {
 				return readFromSystemTables(loadCtx, txn, ie, username)
 			})
@@ -178,7 +178,7 @@ func (a *Cache) GetAuthInfo(
 			usersTableVersion,
 			roleOptionsTableVersion,
 			aInfo,
-			username,
+			username.Username,
 		)
 		return nil
 	})

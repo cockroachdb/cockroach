@@ -35,11 +35,11 @@ func TestFixPrivileges(t *testing.T) {
 		privilege.CONNECT,
 	}
 
-	type userPrivileges map[security.SQLUsername]privilege.List
+	type userPrivileges map[security.SQLUserInfo]privilege.List
 
-	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
-	bazUser := security.MakeSQLUsernameFromPreNormalizedString("baz")
+	fooUser := security.MakeSQLUserInfoFromPreNormalizedString("foo", 51)
+	barUser := security.MakeSQLUserInfoFromPreNormalizedString("bar", 52)
+	bazUser := security.MakeSQLUserInfoFromPreNormalizedString("baz", 53)
 
 	testCases := []struct {
 		name     string
@@ -54,8 +54,8 @@ func TestFixPrivileges(t *testing.T) {
 			userPrivileges{},
 			true,
 			userPrivileges{
-				security.RootUserName():  systemPrivs,
-				security.AdminRoleName(): systemPrivs,
+				security.RootUserInfo():  systemPrivs,
+				security.AdminRoleInfo(): systemPrivs,
 			},
 		},
 		{
@@ -63,14 +63,14 @@ func TestFixPrivileges(t *testing.T) {
 			// Valid requirements for system ID.
 			systemDatabaseName,
 			userPrivileges{
-				security.RootUserName():  systemPrivs,
-				security.AdminRoleName(): systemPrivs,
+				security.RootUserInfo():  systemPrivs,
+				security.AdminRoleInfo(): systemPrivs,
 				barUser:                  privilege.List{privilege.CONNECT},
 			},
 			false,
 			userPrivileges{
-				security.RootUserName():  systemPrivs,
-				security.AdminRoleName(): systemPrivs,
+				security.RootUserInfo():  systemPrivs,
+				security.AdminRoleInfo(): systemPrivs,
 				barUser:                  privilege.List{privilege.CONNECT},
 			},
 		},
@@ -79,15 +79,15 @@ func TestFixPrivileges(t *testing.T) {
 			// Too many privileges for system ID.
 			systemDatabaseName,
 			userPrivileges{
-				security.RootUserName():  privilege.List{privilege.ALL},
-				security.AdminRoleName(): privilege.List{privilege.ALL},
+				security.RootUserInfo():  privilege.List{privilege.ALL},
+				security.AdminRoleInfo(): privilege.List{privilege.ALL},
 				fooUser:                  privilege.List{privilege.ALL},
 				barUser:                  privilege.List{privilege.CONNECT, privilege.UPDATE},
 			},
 			true,
 			userPrivileges{
-				security.RootUserName():  systemPrivs,
-				security.AdminRoleName(): systemPrivs,
+				security.RootUserInfo():  systemPrivs,
+				security.AdminRoleInfo(): systemPrivs,
 				fooUser:                  privilege.List{},
 				barUser:                  privilege.List{privilege.CONNECT},
 			},
@@ -99,8 +99,8 @@ func TestFixPrivileges(t *testing.T) {
 			userPrivileges{},
 			true,
 			userPrivileges{
-				security.RootUserName():  userPrivs,
-				security.AdminRoleName(): userPrivs,
+				security.RootUserInfo():  userPrivs,
+				security.AdminRoleInfo(): userPrivs,
 			},
 		},
 		{
@@ -108,15 +108,15 @@ func TestFixPrivileges(t *testing.T) {
 			// Valid requirements for non-system ID.
 			userDatabaseName,
 			userPrivileges{
-				security.RootUserName():  userPrivs,
-				security.AdminRoleName(): userPrivs,
+				security.RootUserInfo():  userPrivs,
+				security.AdminRoleInfo(): userPrivs,
 				barUser:                  privilege.List{privilege.GRANT},
 				bazUser:                  privilege.List{privilege.GRANT},
 			},
 			false,
 			userPrivileges{
-				security.RootUserName():  userPrivs,
-				security.AdminRoleName(): userPrivs,
+				security.RootUserInfo():  userPrivs,
+				security.AdminRoleInfo(): userPrivs,
 				barUser:                  privilege.List{privilege.GRANT},
 				bazUser:                  privilege.List{privilege.GRANT},
 			},
@@ -130,8 +130,8 @@ func TestFixPrivileges(t *testing.T) {
 			},
 			true,
 			userPrivileges{
-				security.RootUserName():  privilege.List{privilege.ALL},
-				security.AdminRoleName(): privilege.List{privilege.ALL},
+				security.RootUserInfo():  privilege.List{privilege.ALL},
+				security.AdminRoleInfo(): privilege.List{privilege.ALL},
 				fooUser:                  privilege.List{privilege.ALL},
 			},
 		},
@@ -174,11 +174,11 @@ func TestFixPrivileges(t *testing.T) {
 // be ZONECONFIG privilege and should be updated.
 func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 
-	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
-	bazUser := security.MakeSQLUsernameFromPreNormalizedString("baz")
+	fooUser := security.MakeSQLUserInfoFromPreNormalizedString("foo", 51)
+	barUser := security.MakeSQLUserInfoFromPreNormalizedString("bar", 52)
+	bazUser := security.MakeSQLUserInfoFromPreNormalizedString("baz", 53)
 
-	type userPrivileges map[security.SQLUsername]privilege.List
+	type userPrivileges map[security.SQLUserInfo]privilege.List
 
 	testCases := []struct {
 		input           userPrivileges
@@ -406,10 +406,10 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 // TestMaybeFixSchemaPrivileges ensures that invalid privileges are removed
 // from a schema's privilege descriptor.
 func TestMaybeFixSchemaPrivileges(t *testing.T) {
-	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
+	fooUser := security.MakeSQLUserInfoFromPreNormalizedString("foo", 51)
+	barUser := security.MakeSQLUserInfoFromPreNormalizedString("bar", 52)
 
-	type userPrivileges map[security.SQLUsername]privilege.List
+	type userPrivileges map[security.SQLUserInfo]privilege.List
 
 	testCases := []struct {
 		input  userPrivileges

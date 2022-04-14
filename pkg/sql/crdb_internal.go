@@ -326,9 +326,9 @@ CREATE TABLE crdb_internal.databases (
 				}
 
 				return addRow(
-					tree.NewDInt(tree.DInt(db.GetID())),            // id
-					tree.NewDString(db.GetName()),                  // name
-					tree.NewDName(getOwnerOfDesc(db).Normalized()), // owner
+					tree.NewDInt(tree.DInt(db.GetID())),                     // id
+					tree.NewDString(db.GetName()),                           // name
+					tree.NewDName(getOwnerOfDesc(db).Username.Normalized()), // owner
 					primaryRegion,                        // primary_region
 					regions,                              // regions
 					survivalGoal,                         // survival_goal
@@ -4684,7 +4684,7 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 				// https://github.com/cockroachdb/cockroach/issues/35572
 				populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
 				for _, u := range privs {
-					userNameStr := tree.NewDString(u.User.Normalized())
+					userNameStr := tree.NewDString(u.User.Username.Normalized())
 					for _, priv := range u.Privileges {
 						var isGrantable tree.Datum
 						if populateGrantOption {
@@ -5015,7 +5015,7 @@ CREATE TABLE crdb_internal.default_privileges (
 									role,
 									forAllRoles,
 									tree.NewDString(objectType.String()),
-									tree.NewDString(userPrivs.User().Normalized()),
+									tree.NewDString(userPrivs.User().Username.Normalized()),
 									tree.NewDString(priv.String()),
 								); err != nil {
 									return err
@@ -5073,7 +5073,7 @@ CREATE TABLE crdb_internal.default_privileges (
 				}
 				if err := forEachRole(ctx, p, func(username security.SQLUserInfo, isRole bool, options roleOptions, settings tree.Datum) error {
 					role := catpb.DefaultPrivilegesRole{
-						Role: username.Username,
+						Role: username,
 					}
 					return addRowForRole(role)
 				}); err != nil {

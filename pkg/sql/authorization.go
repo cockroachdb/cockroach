@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -101,7 +100,7 @@ type AuthorizationAccessor interface {
 
 	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
 	// of and returns a map of role -> isAdmin.
-	MemberOfWithAdminOption(ctx context.Context, member security.SQLUserInfo) (map[security.SQLUsername]bool, error)
+	MemberOfWithAdminOption(ctx context.Context, member security.SQLUserInfo) (map[security.SQLUserInfo]bool, error)
 
 	// HasRoleOption converts the roleoption to its SQL column name and checks if
 	// the user belongs to a role where the option has value true. Requires a
@@ -140,12 +139,12 @@ func (p *planner) CheckPrivilegeForUser(
 	privs := descriptor.GetPrivileges()
 
 	// Check if the 'public' pseudo-role has privileges.
-	if privs.CheckPrivilege(security.PublicRoleName(), privilege) {
+	if privs.CheckPrivilege(security.PublicRoleInfo(), privilege) {
 		return nil
 	}
 
 	hasPriv, err := p.checkRolePredicate(ctx, user, func(role security.SQLUserInfo) bool {
-		return IsOwner(descriptor, role) || privs.CheckPrivilege(role.Username, privilege)
+		return IsOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
 	})
 	if err != nil {
 		return err
@@ -215,18 +214,18 @@ func (p *planner) CheckGrantOptionsForUser(
 	)
 }
 
-func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {
+func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUserInfo {
 	// Descriptors created prior to 20.2 do not have owners set.
 	owner := desc.GetPrivileges().Owner()
-	if owner.Undefined() {
+	if owner.Username.Undefined() {
 		// If the descriptor is ownerless and the descriptor is part of the system db,
 		// node is the owner.
 		if catalog.IsSystemDescriptor(desc) {
-			owner = security.NodeUserName()
+			owner = security.NodeUserInfo()
 		} else {
 			// This check is redundant in this case since admin already has privilege
 			// on all non-system objects.
-			owner = security.AdminRoleName()
+			owner = security.AdminRoleInfo()
 		}
 	}
 	return owner
@@ -234,7 +233,7 @@ func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {
 
 // IsOwner returns if the role has ownership on the descriptor.
 func IsOwner(desc catalog.Descriptor, role security.SQLUserInfo) bool {
-	return role.Username == getOwnerOfDesc(desc)
+	return role == getOwnerOfDesc(desc)
 }
 
 // HasOwnership returns if the role or any role the role is a member of
@@ -266,7 +265,7 @@ func (p *planner) checkRolePredicate(
 		return false, err
 	}
 	for role := range memberOf {
-		if ok := predicate(security.SQLUserInfo{role, 0}); ok {
+		if ok := predicate(role); ok {
 			return ok, nil
 		}
 	}
@@ -291,12 +290,12 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 	}
 
 	// Check if 'user' itself has privileges.
-	if privs.AnyPrivilege(user) {
+	if privs.AnyPrivilege(userInfo) {
 		return nil
 	}
 
 	// Check if 'public' has privileges.
-	if privs.AnyPrivilege(security.PublicRoleName()) {
+	if privs.AnyPrivilege(security.PublicRoleInfo()) {
 		return nil
 	}
 
@@ -354,7 +353,7 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user security.SQLUserInf
 	}
 
 	// Check is 'user' is a member of role 'admin'.
-	if _, ok := memberOf[security.AdminRoleName()]; ok {
+	if _, ok := memberOf[security.AdminRoleInfo()]; ok {
 		return true, nil
 	}
 
@@ -385,9 +384,8 @@ func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 
 // MemberOfWithAdminOption is a wrapper around the MemberOfWithAdminOption
 // method.
-func (p *planner) MemberOfWithAdminOption(
-	ctx context.Context, member security.SQLUserInfo,
-) (map[security.SQLUsername]bool, error) {
+func (p *planner) MemberOfWithAdminOption(ctx context.Context, member security.SQLUserInfo) (map[security.SQLUserInfo]bool, error) {
+
 	return MemberOfWithAdminOption(
 		ctx,
 		p.execCfg,
@@ -402,14 +400,7 @@ func (p *planner) MemberOfWithAdminOption(
 // returns a map of "role" -> "isAdmin".
 // The "isAdmin" flag applies to both direct and indirect members.
 // Requires a valid transaction to be open.
-func MemberOfWithAdminOption(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	ie sqlutil.InternalExecutor,
-	descsCol *descs.Collection,
-	txn *kv.Txn,
-	member security.SQLUserInfo,
-) (map[security.SQLUsername]bool, error) {
+func MemberOfWithAdminOption(ctx context.Context, execCfg *ExecutorConfig, ie sqlutil.InternalExecutor, descsCol *descs.Collection, txn *kv.Txn, member security.SQLUserInfo) (map[security.SQLUserInfo]bool, error) {
 	if txn == nil || !txn.IsOpen() {
 		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
 	}
@@ -429,7 +420,7 @@ func MemberOfWithAdminOption(
 
 	tableVersion := tableDesc.GetVersion()
 	if tableDesc.IsUncommittedVersion() {
-		return resolveMemberOfWithAdminOption(ctx, member, ie, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+		return resolveMemberOfWithAdminOption(ctx, member, execCfg, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
 	}
 
 	// Check version and maybe clear cache while holding the mutex.
@@ -472,18 +463,18 @@ func MemberOfWithAdminOption(
 				logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
 			defer cancel()
 			return resolveMemberOfWithAdminOption(
-				ctx, member, ie, txn,
+				ctx, member, execCfg, txn,
 				useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
 			)
 		},
 	)
-	var memberships map[security.SQLUsername]bool
+	var memberships map[security.SQLUserInfo]bool
 	select {
 	case res := <-ch:
 		if res.Err != nil {
 			return nil, res.Err
 		}
-		memberships = res.Val.(map[security.SQLUsername]bool)
+		memberships = res.Val.(map[security.SQLUserInfo]bool)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -527,21 +518,16 @@ var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
 ).WithPublic()
 
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
-func resolveMemberOfWithAdminOption(
-	ctx context.Context,
-	member security.SQLUserInfo,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
-	singleQuery bool,
-) (map[security.SQLUsername]bool, error) {
-	ret := map[security.SQLUsername]bool{}
+func resolveMemberOfWithAdminOption(ctx context.Context, member security.SQLUserInfo, execCfg *ExecutorConfig, txn *kv.Txn, singleQuery bool) (map[security.SQLUserInfo]bool, error) {
+	ie := execCfg.InternalExecutor
+	ret := map[security.SQLUserInfo]bool{}
 	if singleQuery {
 		type membership struct {
-			role    security.SQLUsername
+			role    security.SQLUserInfo
 			isAdmin bool
 		}
-		memberToRoles := make(map[security.SQLUsername][]membership)
-		if err := forEachRoleMembership(ctx, ie, txn, func(role, member security.SQLUsername, isAdmin bool) error {
+		memberToRoles := make(map[security.SQLUserInfo][]membership)
+		if err := forEachRoleMembership(ctx, ie, txn, func(role, member security.SQLUserInfo, isAdmin bool) error {
 			memberToRoles[member] = append(memberToRoles[member], membership{role, isAdmin})
 			return nil
 		}); err != nil {
@@ -549,8 +535,8 @@ func resolveMemberOfWithAdminOption(
 		}
 
 		// Recurse through all roles associated with the member.
-		var recurse func(u security.SQLUsername)
-		recurse = func(u security.SQLUsername) {
+		var recurse func(u security.SQLUserInfo)
+		recurse = func(u security.SQLUserInfo) {
 			for _, membership := range memberToRoles[u] {
 				// If the parent role was seen before, we still might need to update
 				// the isAdmin flag for that role, but there's no need to recurse
@@ -562,10 +548,9 @@ func resolveMemberOfWithAdminOption(
 				}
 			}
 		}
-		recurse(member.Username)
+		recurse(member)
 		return ret, nil
 	}
-
 	// Keep track of members we looked up.
 	visited := map[security.SQLUserInfo]struct{}{}
 	toVisit := []security.SQLUserInfo{member}
@@ -596,7 +581,7 @@ func resolveMemberOfWithAdminOption(
 
 			// system.role_members storeFs pre-normalized usernames.
 			role := security.MakeSQLUserInfoFromPreNormalizedString(string(roleName), roleID)
-			ret[role.Username] = bool(*isAdmin)
+			ret[role] = bool(*isAdmin)
 
 			// We need to expand this role. Let the "pop" worry about already-visited elements.
 			toVisit = append(toVisit, role)
@@ -631,15 +616,17 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		// Superusers have all role privileges.
 		return true, nil
 	}
+	var hasRolePrivilege tree.Datums
 
 	roleID, _ := GetUserID(ctx, p.ExecCfg().InternalExecutor, nil, user)
 
-	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryRowEx(
+	hasRolePrivilege, err = p.ExecCfg().InternalExecutor.QueryRowEx(
 		ctx, "has-role-option", p.Txn(),
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
 			`SELECT 1 from %s WHERE option = '%s' AND username = $1 AND user_id = $2 LIMIT 1`,
 			sessioninit.RoleOptionsTableName, roleOption.String()), user.Normalized(), roleID)
+
 	if err != nil {
 		return false, err
 	}
@@ -773,7 +760,7 @@ func (p *planner) checkCanAlterToNewOwner(
 		return err
 	}
 	if !roleExists {
-		return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newOwner)
+		return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newOwner.Username)
 	}
 
 	// If the user is a superuser, skip privilege checks.
@@ -817,10 +804,10 @@ func (p *planner) checkCanAlterToNewOwner(
 	if err != nil {
 		return err
 	}
-	if _, ok := memberOf[newOwner.Username]; ok {
+	if _, ok := memberOf[newOwner]; ok {
 		return nil
 	}
-	return pgerror.Newf(pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
+	return pgerror.Newf(pgcode.InsufficientPrivilege, "must be member of role %q", newOwner.Username)
 }
 
 // HasOwnershipOnSchema checks if the current user has ownership on the schema.

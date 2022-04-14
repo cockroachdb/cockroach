@@ -138,7 +138,7 @@ func getDeprecatedProtectedTimestampRecordsDescriptor() *descpb.TableDescriptor 
 			},
 		},
 		NextIndexID:    2,
-		Privileges:     catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, security.NodeUserName()),
+		Privileges:     catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, security.NodeUserInfo()),
 		NextMutationID: 1,
 		FormatVersion:  3,
 	}

@@ -246,17 +246,17 @@ func populateRoleHierarchy(
 	}
 	return forEachRoleMembership(
 		ctx, p.ExecCfg().InternalExecutor, p.Txn(),
-		func(role, member security.SQLUsername, isAdmin bool) error {
+		func(role, member security.SQLUserInfo, isAdmin bool) error {
 			// The ADMIN OPTION is inherited through the role hierarchy, and grantee
 			// is supposed to be the role that has the ADMIN OPTION. The current user
 			// inherits all the ADMIN OPTIONs of its ancestors.
-			isRole := member == p.User()
+			isRole := member == p.UserInfo()
 			_, hasRole := allRoles[member]
 			if (hasRole || isRole) && (!onlyIsAdmin || isAdmin) {
 				if err := addRow(
-					tree.NewDString(member.Normalized()), // grantee
-					tree.NewDString(role.Normalized()),   // role_name
-					yesOrNoDatum(isAdmin),                // is_grantable
+					tree.NewDString(member.Username.Normalized()), // grantee
+					tree.NewDString(role.Username.Normalized()),   // role_name
+					yesOrNoDatum(isAdmin),                         // is_grantable
 				); err != nil {
 					return err
 				}
@@ -375,14 +375,14 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 					if priv.Mask()&u.Privileges != 0 {
 						for _, cd := range table.PublicColumns() {
 							if err := addRow(
-								tree.DNull,                             // grantor
-								tree.NewDString(u.User().Normalized()), // grantee
-								dbNameStr,                              // table_catalog
-								scNameStr,                              // table_schema
-								tree.NewDString(table.GetName()),       // table_name
-								tree.NewDString(cd.GetName()),          // column_name
-								tree.NewDString(priv.String()),         // privilege_type
-								tree.DNull,                             // is_grantable
+								tree.DNull, // grantor
+								tree.NewDString(u.User().Username.Normalized()), // grantee
+								dbNameStr,                        // table_catalog
+								scNameStr,                        // table_schema
+								tree.NewDString(table.GetName()), // table_name
+								tree.NewDString(cd.GetName()),    // column_name
+								tree.NewDString(priv.String()),   // privilege_type
+								tree.DNull,                       // is_grantable
 							); err != nil {
 								return err
 							}
@@ -606,7 +606,7 @@ https://www.postgresql.org/docs/9.5/infoschema-enabled-roles.html`,
 
 		for roleName := range memberMap {
 			if err := addRow(
-				tree.NewDString(roleName.Normalized()), // role_name
+				tree.NewDString(roleName.Username.Normalized()), // role_name
 			); err != nil {
 				return err
 			}
@@ -1030,7 +1030,7 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 					// https://github.com/cockroachdb/cockroach/issues/35572
 					privs := typeDesc.GetPrivileges().Show(privilege.Type)
 					for _, u := range privs {
-						userNameStr := tree.NewDString(u.User.Normalized())
+						userNameStr := tree.NewDString(u.User.Username.Normalized())
 						for _, priv := range u.Privileges {
 							var isGrantable tree.Datum
 							if populateGrantOption {
@@ -1072,7 +1072,7 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 					// https://github.com/cockroachdb/cockroach/issues/35572
 					populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
 					for _, u := range privs {
-						userNameStr := tree.NewDString(u.User.Normalized())
+						userNameStr := tree.NewDString(u.User.Username.Normalized())
 						for _, priv := range u.Privileges {
 							var isGrantable tree.Datum
 							if populateGrantOption {
@@ -1373,7 +1373,7 @@ func populateTablePrivileges(
 			// https://github.com/cockroachdb/cockroach/issues/35572
 			populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
 			for _, u := range table.GetPrivileges().Show(privilege.Table) {
-				granteeNameStr := tree.NewDString(u.User.Normalized())
+				granteeNameStr := tree.NewDString(u.User.Username.Normalized())
 				for _, priv := range u.Privileges {
 					var isGrantable tree.Datum
 					if populateGrantOption {
@@ -2638,7 +2638,7 @@ func forEachRole(
 			return errors.Errorf("roleOptionJson should be a JSON value, found %s instead", row[3].ResolvedType())
 		}
 		options := roleOptions{roleOptionsJSON}
-		userID := row[4].(*tree.DOid).String()
+		userID := oid.Oid(row[4].(*tree.DOid).DInt)
 
 		// system tables already contain normalized usernames.
 		username := security.MakeSQLUserInfoFromPreNormalizedString(string(usernameS), userID)
@@ -2654,9 +2654,10 @@ func forEachRoleMembership(
 	ctx context.Context,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
-	fn func(role, member security.SQLUsername, isAdmin bool) error,
+	fn func(role, member security.SQLUserInfo, isAdmin bool) error,
 ) (retErr error) {
-	const query = `SELECT "role", "member", "isAdmin" FROM system.role_members`
+	// version-gaf
+	const query = `SELECT "role", "member", "isAdmin", "role_id", "member_id" FROM system.role_members`
 	it, err := ie.QueryIterator(ctx, "read-members", txn, query)
 	if err != nil {
 		return err
@@ -2671,11 +2672,13 @@ func forEachRoleMembership(
 		roleName := tree.MustBeDString(row[0])
 		memberName := tree.MustBeDString(row[1])
 		isAdmin := row[2].(*tree.DBool)
+		roleID := oid.Oid(tree.MustBeDOid(row[3]).DInt)
+		memberID := oid.Oid(tree.MustBeDOid(row[4]).DInt)
 
 		// The names in the system tables are already normalized.
 		if err := fn(
-			security.MakeSQLUsernameFromPreNormalizedString(string(roleName)),
-			security.MakeSQLUsernameFromPreNormalizedString(string(memberName)),
+			security.MakeSQLUserInfoFromPreNormalizedString(string(roleName), roleID),
+			security.MakeSQLUserInfoFromPreNormalizedString(string(memberName), memberID),
 			bool(*isAdmin)); err != nil {
 			return err
 		}

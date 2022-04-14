@@ -583,7 +583,7 @@ func backupShowerDefault(
 					}
 					if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
 						row = append(row, tree.NewDString(showPrivileges(descriptor)))
-						owner := desc.GetPrivileges().Owner().SQLIdentifier()
+						owner := desc.GetPrivileges().Owner().Username.SQLIdentifier()
 						row = append(row, tree.NewDString(owner))
 					}
 					if _, shouldShowIDs := opts[backupOptWithDebugIDs]; shouldShowIDs {
@@ -697,7 +697,7 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 		privStringBuilder.WriteString(" ON ")
 		privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
 		privStringBuilder.WriteString(" TO ")
-		privStringBuilder.WriteString(userPriv.User.SQLIdentifier())
+		privStringBuilder.WriteString(userPriv.User.Username.SQLIdentifier())
 		privStringBuilder.WriteString("; ")
 	}
 

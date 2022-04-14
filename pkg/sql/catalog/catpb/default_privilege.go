@@ -11,6 +11,7 @@
 package catpb
 
 import (
+	github_com_lib_pq_oid "github.com/lib/pq/oid"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -25,7 +26,7 @@ import (
 //     role should be populated
 //     forAllRoles should be true.
 type DefaultPrivilegesRole struct {
-	Role        security.SQLUsername
+	Role        security.SQLUserInfo
 	ForAllRoles bool
 }
 
@@ -34,7 +35,7 @@ type DefaultPrivilegesRole struct {
 func (p *DefaultPrivilegesForRole) toDefaultPrivilegesRole() DefaultPrivilegesRole {
 	if p.IsExplicitRole() {
 		return DefaultPrivilegesRole{
-			Role: p.GetExplicitRole().UserProto.Decode(),
+			Role: security.SQLUserInfo{Username: p.GetExplicitRole().UserProto.Decode(), UserID: p.GetExplicitRole().UserId},
 		}
 	}
 	return DefaultPrivilegesRole{
@@ -56,7 +57,7 @@ func (r DefaultPrivilegesRole) lessThan(other DefaultPrivilegesRole) bool {
 		return true
 	}
 
-	return r.Role.LessThan(other.Role)
+	return r.Role.Username.LessThan(other.Role.Username)
 }
 
 // FindUserIndex looks for a given user and returns its
@@ -78,6 +79,12 @@ func (p *DefaultPrivilegeDescriptor) FindUserIndex(role DefaultPrivilegesRole) i
 func (p *DefaultPrivilegeDescriptor) FindOrCreateUser(
 	role DefaultPrivilegesRole,
 ) *DefaultPrivilegesForRole {
+	if p.DefaultPrivilegesMap == nil {
+		p.DefaultPrivilegesMap = make(map[github_com_lib_pq_oid.Oid]DefaultPrivilegesForRole)
+	}
+	if _, ok := p.DefaultPrivilegesMap[role.Role.UserID]; !ok {
+		p.DefaultPrivilegesMap[role.Role.UserID] = InitDefaultPrivilegesForRole(role, p.Type)
+	}
 	idx := sort.Search(len(p.DefaultPrivilegesPerRole), func(i int) bool {
 		return !p.DefaultPrivilegesPerRole[i].toDefaultPrivilegesRole().lessThan(role)
 	})
@@ -119,7 +126,8 @@ func InitDefaultPrivilegesForRole(
 	if defaultPrivilegeDescType == DefaultPrivilegeDescriptor_DATABASE {
 		defaultPrivilegesRole = &DefaultPrivilegesForRole_ExplicitRole_{
 			ExplicitRole: &DefaultPrivilegesForRole_ExplicitRole{
-				UserProto:                       role.Role.EncodeProto(),
+				UserProto:                       role.Role.Username.EncodeProto(),
+				UserId:                          role.Role.UserID,
 				PublicHasUsageOnTypes:           true,
 				RoleHasAllPrivilegesOnTables:    true,
 				RoleHasAllPrivilegesOnSequences: true,
@@ -132,7 +140,8 @@ func InitDefaultPrivilegesForRole(
 		// defaults set.
 		defaultPrivilegesRole = &DefaultPrivilegesForRole_ExplicitRole_{
 			ExplicitRole: &DefaultPrivilegesForRole_ExplicitRole{
-				UserProto: role.Role.EncodeProto(),
+				UserProto: role.Role.Username.EncodeProto(),
+				UserId:    role.Role.UserID,
 			},
 		}
 	}
@@ -144,6 +153,9 @@ func InitDefaultPrivilegesForRole(
 
 // RemoveUser looks for a given user in the list and removes it if present.
 func (p *DefaultPrivilegeDescriptor) RemoveUser(role DefaultPrivilegesRole) {
+	if _, ok := p.DefaultPrivilegesMap[role.Role.UserID]; ok {
+		delete(p.DefaultPrivilegesMap, role.Role.UserID)
+	}
 	idx := p.FindUserIndex(role)
 	if idx == -1 {
 		// Not found.
@@ -173,7 +185,7 @@ func (p *DefaultPrivilegeDescriptor) Validate() error {
 			valid, u, remaining := defaultPrivileges.IsValidPrivilegesForObjectType(privilegeObjectType)
 			if !valid {
 				return errors.AssertionFailedf("user %s must not have %s privileges on %s",
-					u.User(), privilege.ListFromBitField(remaining, privilege.Any), privilegeObjectType)
+					u.User().Username, privilege.ListFromBitField(remaining, privilege.Any), privilegeObjectType)
 			}
 		}
 	}

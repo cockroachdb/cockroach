@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/lib/pq/oid"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -424,16 +425,18 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		return nil
 	}
 
-	roleID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.extendedEvalCtx.Txn, roleName)
+	var roleID oid.Oid
+	var deleteQuery, upsertQuery string
+	roleID, err = GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.extendedEvalCtx.Txn, roleName)
 	if err != nil {
 		return err
 	}
 
-	var deleteQuery = fmt.Sprintf(
+	deleteQuery = fmt.Sprintf(
 		`DELETE FROM %s WHERE database_id = $1 AND role_name = $2 AND role_id = $3`,
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
-	var upsertQuery = fmt.Sprintf(
+	upsertQuery = fmt.Sprintf(
 		`UPSERT INTO %s (database_id, role_name, settings, role_id) VALUES ($1, $2, $3, $4)`,
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
@@ -467,6 +470,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				roleID,
 			)
 		}
+
 		if internalExecErr != nil {
 			return internalExecErr
 		}

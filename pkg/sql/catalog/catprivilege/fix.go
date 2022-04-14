@@ -89,7 +89,7 @@ func MaybeFixPrivileges(
 
 	changed := false
 
-	fixSuperUser := func(user security.SQLUsername) {
+	fixSuperUser := func(user security.SQLUserInfo) {
 		privs := p.FindOrCreateUser(user)
 		oldPrivilegeBits := privs.Privileges
 		if oldPrivilegeBits != allowedPrivilegesBits {
@@ -103,8 +103,8 @@ func MaybeFixPrivileges(
 	}
 
 	// Check "root" user and "admin" role.
-	fixSuperUser(security.RootUserName())
-	fixSuperUser(security.AdminRoleName())
+	fixSuperUser(security.RootUserInfo())
+	fixSuperUser(security.AdminRoleInfo())
 
 	if objectType == privilege.Table || objectType == privilege.Database {
 		changed = MaybeFixUsagePrivForTablesAndDBs(&p) || changed
@@ -113,7 +113,7 @@ func MaybeFixPrivileges(
 	for i := range p.Users {
 		// Users is a slice of values, we need pointers to make them mutable.
 		u := &p.Users[i]
-		if u.User().IsRootUser() || u.User().IsAdminRole() {
+		if u.User().Username.IsRootUser() || u.User().Username.IsAdminRole() {
 			// we've already checked super users.
 			continue
 		}
@@ -124,7 +124,7 @@ func MaybeFixPrivileges(
 		u.Privileges &= allowedPrivilegesBits
 	}
 
-	if p.Owner().Undefined() {
+	if p.Owner().Username.Undefined() {
 		if systemPrivs != nil {
 			p.SetOwner(security.NodeUserInfo())
 		} else {

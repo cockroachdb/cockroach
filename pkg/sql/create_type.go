@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/security"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -340,12 +341,15 @@ func CreateEnumTypeDesc(
 			Capability:             descpb.TypeDescriptor_EnumMember_ALL,
 		}
 	}
-
+	userID, err := GetUserID(params.ctx, params.p.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, params.SessionData().User())
+	if err != nil {
+		return nil, err
+	}
 	privs := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		dbDesc.GetDefaultPrivilegeDescriptor(),
 		schema.GetDefaultPrivilegeDescriptor(),
 		dbDesc.GetID(),
-		params.SessionData().User(),
+		security.SQLUserInfo{Username: params.SessionData().User(), UserID: userID},
 		tree.Types,
 		dbDesc.GetPrivileges(),
 	)

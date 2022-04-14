@@ -40,7 +40,7 @@ func GetIngestingDescriptorPrivileges(
 	txn *kv.Txn,
 	descsCol *descs.Collection,
 	desc catalog.Descriptor,
-	user security.SQLUsername,
+	user security.SQLUserInfo,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
 ) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
@@ -90,7 +90,7 @@ func getIngestingPrivilegesForTableOrSchema(
 	txn *kv.Txn,
 	descsCol *descs.Collection,
 	desc catalog.Descriptor,
-	user security.SQLUsername,
+	user security.SQLUserInfo,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
 	privilegeType privilege.ObjectType,

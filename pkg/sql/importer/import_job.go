@@ -570,7 +570,7 @@ func prepareNewTablesForIngestion(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := ingesting.WriteDescriptors(ctx, p.ExecCfg().Codec, txn, p.User(), descsCol,
+	if err := ingesting.WriteDescriptors(ctx, p.ExecCfg().Codec, txn, p.UserInfo(), descsCol,
 		nil /* databases */, nil, /* schemas */
 		tableDescs, nil, tree.RequestedDescriptors, seqValKVs, "" /* inheritParentName */); err != nil {
 		return nil, errors.Wrapf(err, "creating importTables")
@@ -763,8 +763,13 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		var err error
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
+		ownerID, err := sql.GetUserID(ctx, p.ExecCfg().InternalExecutor, nil, owner)
+		if err != nil {
+			return err
+		}
+
 		if tableDescs, schemaDescs, err = parseAndCreateBundleTableDescs(
-			ctx, p, details, seqVals, skipFKs, dbDesc, files, format, walltime, owner,
+			ctx, p, details, seqVals, skipFKs, dbDesc, files, format, walltime, security.SQLUserInfo{Username: owner, UserID: ownerID},
 			r.job.ID()); err != nil {
 			return err
 		}
@@ -836,7 +841,7 @@ func parseAndCreateBundleTableDescs(
 	files []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
-	owner security.SQLUsername,
+	owner security.SQLUserInfo,
 	jobID jobspb.JobID,
 ) ([]*tabledesc.Mutable, []*schemadesc.Mutable, error) {
 

@@ -89,6 +89,7 @@ type PlanHookState interface {
 		ctx context.Context, opts tree.KVOptions, optsValidate map[string]KVStringOptValidate,
 	) (func() (map[string]string, error), error)
 	User() security.SQLUsername
+	UserInfo() security.SQLUserInfo
 	AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.
 	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.

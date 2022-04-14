@@ -91,7 +91,7 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 	}
 
 	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwnerInfo.Username == oldOwner {
+	if newOwnerInfo == oldOwner {
 		return nil
 	}
 

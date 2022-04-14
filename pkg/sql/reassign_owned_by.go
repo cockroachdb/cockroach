@@ -47,7 +47,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	if err != nil {
 		return nil, err
 	}
-	oldRolesInfos, err := ToSQLUserInfosWithCache(ctx, p.extendedEvalCtx.ExecCfg, p.extendedEvalCtx.Descs, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, normalizedOldRoles)
+	oldRolesInfos, err := ToSQLUserInfos(ctx, p.extendedEvalCtx.ExecCfg.InternalExecutor, p.txn, normalizedOldRoles)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 			return nil, err
 		}
 		if !roleExists {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", oldRole)
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", oldRole.Username)
 		}
 	}
 	newRole, err := n.NewRole.ToSQLUsername(p.SessionData(), security.UsernameValidation)
@@ -97,7 +97,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 			return nil, err
 		}
 		if p.User() != newRole {
-			if _, ok := memberOf[newRole]; !ok {
+			if _, ok := memberOf[newRolesInfo]; !ok {
 				return nil, errors.WithHint(
 					pgerror.Newf(pgcode.InsufficientPrivilege,
 						"permission denied to reassign objects"),
@@ -106,7 +106,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 		}
 		for _, oldRole := range oldRolesInfos {
 			if p.User() != oldRole.Username {
-				if _, ok := memberOf[oldRole.Username]; !ok {
+				if _, ok := memberOf[oldRole]; !ok {
 					return nil, errors.WithHint(
 						pgerror.Newf(pgcode.InsufficientPrivilege,
 							"permission denied to reassign objects"),

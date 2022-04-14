@@ -47,7 +47,7 @@ func WriteDescriptors(
 	ctx context.Context,
 	codec keys.SQLCodec,
 	txn *kv.Txn,
-	user security.SQLUsername,
+	user security.SQLUserInfo,
 	descsCol *descs.Collection,
 	databases []catalog.DatabaseDescriptor,
 	schemas []catalog.SchemaDescriptor,

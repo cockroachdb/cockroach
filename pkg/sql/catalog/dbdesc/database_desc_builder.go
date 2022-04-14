@@ -145,7 +145,7 @@ func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
 
 		defaultPrivilegesForUser := tableDefaultPrivilegesForAllRoles.FindOrCreateUser(user.User())
 		defaultPrivilegesForUser.Privileges |= incompatiblePrivileges
-
+		tableDefaultPrivilegesForAllRoles.UserPrivileges[user.UserId] = *defaultPrivilegesForUser
 		role.DefaultPrivilegesPerObject[tree.Tables] = tableDefaultPrivilegesForAllRoles
 	}
 
@@ -253,7 +253,7 @@ func WithPublicSchemaID(publicSchemaID descpb.ID) NewInitialOption {
 // NewInitial constructs a new Mutable for an initial version from an id and
 // name with default privileges.
 func NewInitial(
-	id descpb.ID, name string, owner security.SQLUsername, options ...NewInitialOption,
+	id descpb.ID, name string, owner security.SQLUserInfo, options ...NewInitialOption,
 ) *Mutable {
 	return newInitialWithPrivileges(
 		id,
