@@ -38,6 +38,7 @@ import (
 
 const (
 	applicationTypeJSON = `application/json`
+	applicationTypeCSV  = `text/csv`
 	authorizationHeader = `Authorization`
 	defaultConnTimeout  = 3 * time.Second
 )
@@ -58,6 +59,7 @@ type webhookSink struct {
 	retryCfg    retry.Options
 	batchCfg    batchConfig
 	ts          timeutil.TimeSource
+	format      changefeedbase.FormatType
 
 	// Webhook destination.
 	url        sinkURL
@@ -95,7 +97,7 @@ type encodedPayload struct {
 	mvcc     hlc.Timestamp
 }
 
-func encodePayloadWebhook(messages []messagePayload) (encodedPayload, error) {
+func encodePayloadJSONWebhook(messages []messagePayload) (encodedPayload, error) {
 	result := encodedPayload{
 		emitTime: timeutil.Now(),
 	}
@@ -122,6 +124,27 @@ func encodePayloadWebhook(messages []messagePayload) (encodedPayload, error) {
 	}
 	result.data = j
 	return result, err
+}
+
+func encodePayloadCSVWebhook(messages []messagePayload) (encodedPayload, error) {
+	result := encodedPayload{
+		emitTime: timeutil.Now(),
+	}
+
+	var mergedMsgs []byte
+	for _, m := range messages {
+		result.alloc.Merge(&m.alloc)
+		mergedMsgs = append(mergedMsgs, m.val...)
+		if m.emitTime.Before(result.emitTime) {
+			result.emitTime = m.emitTime
+		}
+		if result.mvcc.IsEmpty() || m.mvcc.Less(result.mvcc) {
+			result.mvcc = m.mvcc
+		}
+	}
+
+	result.data = mergedMsgs
+	return result, nil
 }
 
 type messagePayload struct {
@@ -256,9 +279,13 @@ func makeWebhookSink(
 	}
 	u.Scheme = strings.TrimPrefix(u.Scheme, `webhook-`)
 
+	var formatType changefeedbase.FormatType
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
+	// only JSON and CSV supported at this time for webhook sink
 	case changefeedbase.OptFormatJSON:
-	// only JSON supported at this time for webhook sink
+		formatType = changefeedbase.OptFormatJSON
+	case changefeedbase.OptFormatCSV:
+		formatType = changefeedbase.OptFormatCSV
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
@@ -297,6 +324,7 @@ func makeWebhookSink(
 	sink := &webhookSink{
 		workerCtx:   ctx,
 		authHeader:  opts[changefeedbase.OptWebhookAuthHeader],
+		format:      formatType,
 		exitWorkers: cancel,
 		parallelism: parallelism,
 		ts:          source,
@@ -571,7 +599,14 @@ func (s *webhookSink) workerLoop(workerIndex int) {
 				continue
 			}
 
-			encoded, err := encodePayloadWebhook(msgs)
+			var encoded encodedPayload
+			var err error
+			switch s.format {
+			case changefeedbase.OptFormatJSON:
+				encoded, err = encodePayloadJSONWebhook(msgs)
+			case changefeedbase.OptFormatCSV:
+				encoded, err = encodePayloadCSVWebhook(msgs)
+			}
 			if err != nil {
 				s.exitWorkersWithError(err)
 				return
@@ -599,7 +634,13 @@ func (s *webhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", applicationTypeJSON)
+	switch s.format {
+	case changefeedbase.OptFormatJSON:
+		req.Header.Set("Content-Type", applicationTypeJSON)
+	case changefeedbase.OptFormatCSV:
+		req.Header.Set("Content-Type", applicationTypeCSV)
+	}
+
 	if s.authHeader != "" {
 		req.Header.Set(authorizationHeader, s.authHeader)
 	}
