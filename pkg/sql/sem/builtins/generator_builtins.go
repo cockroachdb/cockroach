@@ -469,6 +469,7 @@ The output can be used to recreate a database.'
 			tree.VolatilityVolatile,
 		),
 	),
+	// TODO(alex): shouldn't this be probe_ranges? It's not like this probes a single range.
 	"crdb_internal.probe_range": makeBuiltin(
 		tree.FunctionProperties{
 			Class: tree.GeneratorClass,
@@ -480,7 +481,25 @@ The output can be used to recreate a database.'
 			},
 			probeRangeGeneratorType,
 			makeProbeRangeGenerator,
+			// TODO(alex): improve this help text and add some useful examples like:
+			// - number of failed write probes
+			//   select count(1) from crdb_internal.probe_range(INTERVAL '1000ms', true) where error != '';
+			// - 50 slowest probes
+			// `select range_id, error, end_to_end_latency_ms from crdb_internal.probe_range(INTERVAL '1000ms', true) order by end_to_end_latency_ms desc limit 50`.
 			`Returns rows of range data that have been received from the prober`,
+			// TODO(alex): think about whether a probe that fails should emit a MaxInt64 latency, so that they naturally sort
+			// above all other latencies. Seems useful. If we make it so, document it.
+			// TODO(alex): note also that a read probe is cheaper. If you ran a write probe, there's no point also running
+			// a read probe, the write probe effectively probes reads as well.
+			// TODO(alex): should we preemptively make the `true` parameter an enum `{read,write}` instead? I think that is
+			// both easier to use and more forward-looking. If we add a third type of probe and have the bool, we have to
+			// change the signature and that sucks. So let's use an enum right away.
+			// TODO(alex): add unit tests of this via a LogicTest. Make sure that the test doesn't verify anything that changes
+			// randomly in the output. I think we should verify
+			// - count(1) where err != '' comes back as zero for both probe types
+			// - for the write probe for r1, the trace matches the string `proposing command` (which basically verifies that
+			// we get trace events from the kvserver write path; the tracing was broken when I worked on this PR with all
+			// traces coming back empty)
 			tree.VolatilityVolatile,
 		),
 	),
@@ -2374,7 +2393,10 @@ func makeShowCreateAllTypesGenerator(
 }
 
 // probeRangeTypesGenerator supports the execution of
-// crdb_internal.probe_range(timeout).
+// crdb_internal.probe_range(timeout, type).
+
+// TODO(alex): move this to a new file generator_probe_range.go.
+// The current file is already gigantic.
 
 var probeRangeGeneratorLabels = []string{"range_id", "error", "end_to_end_latency_ms", "verbose_trace"}
 
@@ -2384,7 +2406,7 @@ var probeRangeGeneratorType = types.MakeLabeledTuple(
 )
 
 type probeRangeRow struct {
-	rangeID      int
+	rangeID      int64
 	error        string
 	latency      time.Duration
 	verboseTrace string
@@ -2395,13 +2417,10 @@ type probeRangeGenerator struct {
 	timeout time.Duration
 	isWrite bool
 	tracer  *tracing.Tracer
-	ranges  []kv.KeyValue
-
-	// The following variables are updated during
-	// calls to Next() and change throughout the lifecycle of
+	// The below are updated during calls to Next() throughout the lifecycle of
 	// probeRangeGenerator.
-	curr     probeRangeRow
-	rangeIdx int
+	curr   probeRangeRow
+	ranges []kv.KeyValue
 }
 
 func makeProbeRangeGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
@@ -2427,12 +2446,11 @@ func makeProbeRangeGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.Valu
 		return nil, err
 	}
 	return &probeRangeGenerator{
-		db:       ctx.DB,
-		timeout:  timeout,
-		isWrite:  isWrite,
-		tracer:   ctx.Tracer,
-		ranges:   ranges,
-		rangeIdx: 0,
+		db:      ctx.DB,
+		timeout: timeout,
+		isWrite: isWrite,
+		tracer:  ctx.Tracer,
+		ranges:  ranges,
 	}, nil
 }
 
@@ -2448,46 +2466,57 @@ func (p *probeRangeGenerator) Start(_ context.Context, _ *kv.Txn) error {
 
 // Next implements the tree.ValueGenerator interface.
 func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
-	if p.rangeIdx == len(p.ranges) {
+	if len(p.ranges) == 0 {
 		return false, nil
 	}
+	rawKV := p.ranges[0]
+	p.ranges = p.ranges[1:]
+	p.curr = probeRangeRow{}
+
 	var opName string
 	if p.isWrite {
 		opName = "write probe"
 	} else {
 		opName = "read probe"
 	}
-	probeCtx, sp := tracing.EnsureChildSpan(
+	ctx, sp := tracing.EnsureChildSpan(
 		ctx, p.tracer, opName,
 		tracing.WithForceRealSpan(),
 	)
 	sp.SetRecordingType(tracing.RecordingVerbose)
-	defer sp.Finish()
-	r := p.ranges[p.rangeIdx]
-	var desc roachpb.RangeDescriptor
-	if err := r.ValueProto(&desc); err != nil {
-		return false, err
-	}
+	defer func() {
+		p.curr.verboseTrace = sp.FinishAndGetConfiguredRecording().String()
+	}()
+
 	ops := &kvprober.ProberOps{}
 	tBegin := timeutil.Now()
-	err := contextutil.RunWithTimeout(probeCtx, opName, p.timeout, func(_ context.Context) error {
-		if p.isWrite {
-			ops.Write(r.Key)
-		} else {
-			ops.Read(r.Key)
+	err := contextutil.RunWithTimeout(ctx, opName, p.timeout, func(ctx context.Context) error {
+		var desc roachpb.RangeDescriptor
+		if err := rawKV.ValueProto(&desc); err != nil {
+			// NB: on error, p.curr.rangeID == 0.
+			return err
 		}
-		return nil
+		p.curr.rangeID = int64(desc.RangeID)
+
+		op := ops.Read
+		if p.isWrite {
+			op = ops.Write
+		}
+
+		key := desc.StartKey.AsRawKey()
+		if desc.RangeID == 1 {
+			// The first range starts at KeyMin, but the replicated keyspace starts only at keys.LocalMax,
+			// so there is a special case here.
+			key = keys.LocalMax
+		}
+		// NB: intentionally using a separate txn per probe to avoid undesirable cross-probe effects.
+		return p.db.Txn(ctx, op(key))
 	})
 	if err != nil {
 		p.curr.error = err.Error()
-	} else {
-		p.curr.error = ""
 	}
-	p.rangeIdx++
 
-	p.curr.rangeID = int(desc.RangeID)
 	p.curr.latency = timeutil.Since(tBegin)
-	p.curr.verboseTrace = sp.GetRecording(tracing.RecordingVerbose).String()
 
 	return true, nil
 }
