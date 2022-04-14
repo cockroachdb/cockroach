@@ -127,7 +127,7 @@ func (s *httpServer) setupRoutes(
 
 	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
 	// if not disabled by configuration.
-	var authenticatedHandler http.Handler = handleRequestsUnauthenticated
+	var authenticatedHandler = handleRequestsUnauthenticated
 	if s.cfg.RequireWebSession() {
 		authenticatedHandler = newAuthenticationMux(authnServer, authenticatedHandler)
 	}

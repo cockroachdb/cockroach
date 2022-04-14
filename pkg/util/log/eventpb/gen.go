@@ -121,7 +121,7 @@ func run() error {
 	}
 	tmpl, err := template.New(tmplName).Funcs(tmplFuncs).Parse(tmplSrc)
 	if err != nil {
-		return errors.Wrap(err, tmplName)
+		return errors.Wrapf(err, "failed to parse template %q", tmplName)
 	}
 
 	// Read the input .proto file.

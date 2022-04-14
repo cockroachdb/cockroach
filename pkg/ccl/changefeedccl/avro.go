@@ -796,9 +796,6 @@ func tableToAvroSchema(
 	}
 
 	for _, col := range tableDesc.PublicColumns() {
-		if err != nil {
-			return nil, err
-		}
 		_, inFamily := include[col.GetID()]
 		virtual := col.IsVirtual() && virtualColumnVisibility == string(changefeedbase.OptVirtualColumnsNull)
 		if inFamily || virtual {
