@@ -15,16 +15,18 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 )
 
 type ingestionPerformanceStats struct {
-	dataSize sz
+	dataSizeAtomic int64
 
 	bufferFlushes     int // number of buffer flushes.
 	flushesDueToSize  int // number of buffer flushes due to buffer size.
@@ -36,21 +38,26 @@ type ingestionPerformanceStats struct {
 	splits, scatters int // number of splits/scatters sent.
 	scatterMoved     sz  // total size moved by scatter calls.
 
-	fillWait    time.Duration // time spent between buffer flushes.
-	sortWait    time.Duration // time spent sorting buffers.
-	flushWait   time.Duration // time spent flushing buffers.
-	batchWait   time.Duration // time spent flushing batches (inc split/scatter/send).
-	sendWait    time.Duration // time spent sending batches (addsstable+retries)
-	splitWait   time.Duration // time spent splitting.
-	scatterWait time.Duration // time spent scattering.
-	commitWait  time.Duration // time spent waiting for commit timestamps.
-
-	sendWaitByStore map[roachpb.StoreID]time.Duration
+	fillWait        time.Duration // time spent between buffer flushes.
+	sortWait        time.Duration // time spent sorting buffers.
+	flushWait       time.Duration // time spent flushing buffers.
+	batchWaitAtomic int64         // time spent flushing batches (inc split/scatter/send).
+	sendWaitAtomic  int64         // time spent sending batches (addsstable+retries)
+	splitWait       time.Duration // time spent splitting.
+	scatterWait     time.Duration // time spent scattering.
+	commitWait      time.Duration // time spent waiting for commit timestamps.
 
 	// span tracks the total span into which this batcher has flushed. It is
 	// only maintained if log.V(1), so if vmodule is upped mid-ingest it may be
 	// incomplete.
 	span roachpb.Span
+
+	*sendWaitByStore
+}
+
+type sendWaitByStore struct {
+	syncutil.Mutex
+	timings map[roachpb.StoreID]time.Duration
 }
 
 func (s ingestionPerformanceStats) LogTimings(ctx context.Context, name, action string) {
@@ -58,12 +65,12 @@ func (s ingestionPerformanceStats) LogTimings(ctx context.Context, name, action 
 		"%s adder %s; ingested %s: %s filling; %v sorting; %v / %v flushing; %v sending; %v splitting; %d; %v scattering, %d, %v; %v commit-wait",
 		name,
 		redact.Safe(action),
-		s.dataSize,
+		sz(atomic.LoadInt64(&s.dataSizeAtomic)),
 		timing(s.fillWait),
 		timing(s.sortWait),
 		timing(s.flushWait),
-		timing(s.batchWait),
-		timing(s.sendWait),
+		timing(atomic.LoadInt64(&s.batchWaitAtomic)),
+		timing(atomic.LoadInt64(&s.sendWaitAtomic)),
 		timing(s.splitWait),
 		s.splits,
 		timing(s.scatterWait),
@@ -91,12 +98,15 @@ func (s ingestionPerformanceStats) LogFlushes(
 	)
 }
 
-func (s ingestionPerformanceStats) LogPerStoreTimings(ctx context.Context, name string) {
-	if len(s.sendWaitByStore) == 0 {
+func (s *sendWaitByStore) LogPerStoreTimings(ctx context.Context, name string) {
+	s.Lock()
+	defer s.Unlock()
+
+	if len(s.timings) == 0 {
 		return
 	}
-	ids := make(roachpb.StoreIDSlice, 0, len(s.sendWaitByStore))
-	for i := range s.sendWaitByStore {
+	ids := make(roachpb.StoreIDSlice, 0, len(s.timings))
+	for i := range s.timings {
 		ids = append(ids, i)
 	}
 	sort.Sort(ids)
@@ -106,10 +116,10 @@ func (s ingestionPerformanceStats) LogPerStoreTimings(ctx context.Context, name 
 		// Hack: fill the map with placeholder stores if we haven't seen the store
 		// with ID below K for all but lowest K, so that next time we print a zero.
 		if i > 0 && ids[i-1] != id-1 {
-			s.sendWaitByStore[id-1] = 0
+			s.timings[id-1] = 0
 			fmt.Fprintf(&sb, "%d: %s;", id-1, timing(0))
 		}
-		fmt.Fprintf(&sb, "%d: %s;", id, timing(s.sendWaitByStore[id]))
+		fmt.Fprintf(&sb, "%d: %s;", id, timing(s.timings[id]))
 
 	}
 	log.Infof(ctx, "%s waited on sending to: %s", name, redact.Safe(sb.String()))
