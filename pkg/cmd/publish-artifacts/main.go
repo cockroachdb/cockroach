@@ -124,6 +124,14 @@ func run(svc s3putter, flags runFlags, execFn release.ExecFn) {
 
 		buildOneCockroach(svc, o, execFn)
 	}
+	// We build workload only for Linux.
+	var o opts
+	o.Platform = release.PlatformLinux
+	o.PkgDir = flags.pkgDir
+	o.BucketName = flags.bucketName
+	o.Branch = flags.branch
+	o.VersionStr = flags.sha
+	buildOneWorkload(svc, o, execFn)
 }
 
 func buildOneCockroach(svc s3putter, o opts, execFn release.ExecFn) {
@@ -137,6 +145,27 @@ func buildOneCockroach(svc s3putter, o opts, execFn release.ExecFn) {
 	}
 
 	putNonRelease(svc, o, release.MakeCRDBLibraryNonReleaseFiles(o.PkgDir, o.Platform, o.VersionStr)...)
+}
+
+func buildOneWorkload(svc s3putter, o opts, execFn release.ExecFn) {
+	defer func() {
+		log.Printf("done building workload: %s", pretty.Sprint(o))
+	}()
+
+	if err := release.MakeWorkload(release.BuildOptions{ExecFn: execFn}, o.PkgDir); err != nil {
+		log.Fatal(err)
+	}
+	o.AbsolutePath = filepath.Join(o.PkgDir, "bin", "workload")
+	release.PutNonRelease(
+		svc,
+		release.PutNonReleaseOptions{
+			Branch:     o.Branch,
+			BucketName: o.BucketName,
+			Files: []release.NonReleaseFile{
+				release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr),
+			},
+		},
+	)
 }
 
 type opts struct {
