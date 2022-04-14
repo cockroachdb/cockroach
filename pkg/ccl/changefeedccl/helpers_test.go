@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -664,4 +666,21 @@ func forceTableGC(
 	if err := tsi.ForceTableGC(context.Background(), database, table, tsi.Clock().Now()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func checkS3Credentials(t *testing.T) (bucket string, accessKey string, secretKey string) {
+	accessKey = os.Getenv("AWS_ACCESS_KEY_ID")
+	if accessKey == "" {
+		skip.IgnoreLint(t, "AWS_ACCESS_KEY_ID env var must be set")
+	}
+	secretKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	if secretKey == "" {
+		skip.IgnoreLint(t, "AWS_SECRET_ACCESS_KEY env var must be set")
+	}
+	bucket = os.Getenv("AWS_S3_BUCKET")
+	if bucket == "" {
+		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
+	}
+
+	return bucket, accessKey, secretKey
 }

@@ -323,3 +323,21 @@ func TestAntagonisticS3Read(t *testing.T) {
 
 	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)
 }
+
+func TestNewClientErrorsOnBucketRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	_, err := session.NewSession()
+	if err != nil {
+		skip.IgnoreLint(t, "No AWS credentials")
+	}
+
+	testSettings := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	cfg := s3ClientConfig{
+		bucket: "bucket-does-not-exist-v1i3m",
+		auth:   cloud.AuthParamImplicit,
+	}
+	_, _, err = newClient(ctx, cfg, testSettings)
+	require.Regexp(t, "could not find s3 bucket's region", err)
+}
