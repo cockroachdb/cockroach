@@ -132,6 +132,7 @@ create job #1 (non-cancelable: true): "DROP SCHEMA db.sc"
   descriptor IDs: [104 106]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -490,6 +491,7 @@ create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
   descriptor IDs: [108]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -804,6 +806,7 @@ create job #2 (non-cancelable: true): "GC for DROP TABLE db.sc.t"
   descriptor IDs: [108]
 update progress of schema change job #1
 commit transaction #3
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase
 
 test
@@ -1140,6 +1143,7 @@ create job #1 (non-cancelable: true): "DROP SCHEMA db.sc CASCADE"
   descriptor IDs: [104 107 109 110]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -1393,6 +1397,7 @@ create job #1 (non-cancelable: true): "DROP DATABASE db CASCADE"
   descriptor IDs: [104 105]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -4081,6 +4086,7 @@ create job #1 (non-cancelable: true): "DROP DATABASE db1 CASCADE"
   descriptor IDs: [111 112 113 114 115 116 117 118 119 120 121 122 123 124 125]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -5183,4 +5189,5 @@ create job #2 (non-cancelable: true): "GC for DROP DATABASE db1 CASCADE"
   descriptor IDs: [114 115 116 117 118 111]
 update progress of schema change job #1
 commit transaction #3
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase

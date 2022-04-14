@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -95,11 +96,12 @@ func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 
 // WithTxnInJob implements the scrun.JobRunDependencies interface.
 func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) error {
+	var createdJobs []jobspb.JobID
 	err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		pl := d.job.Payload()
-		return fn(ctx, &execDeps{
+		ed := &execDeps{
 			txnDeps: txnDeps{
 				txn:                txn,
 				codec:              d.codec,
@@ -123,13 +125,18 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			clock:                   NewConstantClock(timeutil.FromUnixMicros(pl.StartedMicros)),
 			commentUpdaterFactory:   d.commentUpdaterFactory,
 			sessionData:             d.sessionData,
-		})
+		}
+		if err := fn(ctx, ed); err != nil {
+			return err
+		}
+		createdJobs = ed.CreatedJobs()
+		return nil
 	})
 	if err != nil {
 		return err
 	}
-	// TODO(ajwerner): Rework the job registry dependency to capture the set of
-	// jobs which were created to more efficiently notify and wait for jobs here.
-	d.jobRegistry.NotifyToAdoptJobs()
+	if len(createdJobs) > 0 {
+		d.jobRegistry.NotifyToResume(ctx, createdJobs...)
+	}
 	return nil
 }
