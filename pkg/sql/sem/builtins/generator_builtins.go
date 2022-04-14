@@ -2468,7 +2468,7 @@ func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 	if err := r.ValueProto(&desc); err != nil {
 		return false, err
 	}
-	ops := &kvprober.ProberOpsImpl{}
+	ops := &kvprober.ProberOps{}
 	tBegin := timeutil.Now()
 	err := contextutil.RunWithTimeout(probeCtx, opName, p.timeout, func(_ context.Context) error {
 		if p.isWrite {
