@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -98,10 +99,10 @@ type NewColOperatorResult struct {
 	// all other stats collectors since it requires special handling.
 	Columnarizer colexecop.VectorizedStatsCollector
 	ColumnTypes  []*types.T
-	Releasables  []execinfra.Releasable
+	Releasables  []execreleasable.Releasable
 }
 
-var _ execinfra.Releasable = &NewColOperatorResult{}
+var _ execreleasable.Releasable = &NewColOperatorResult{}
 
 // TestCleanupNoError releases the resources associated with this result and
 // asserts that no error is returned. It should only be used in tests.

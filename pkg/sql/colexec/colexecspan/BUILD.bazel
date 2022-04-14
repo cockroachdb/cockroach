@@ -20,7 +20,7 @@ go_library(
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colmem",  # keep
-        "//pkg/sql/execinfra",  # keep
+        "//pkg/sql/execinfra/execreleasable",
         "//pkg/sql/rowenc",  # keep
         "//pkg/sql/rowenc/keyside",  # keep
         "//pkg/sql/sem/tree",  # keep
@@ -97,5 +97,6 @@ disallowed_imports_test(
         "//pkg/sql/colexec/colexecprojconst",
         "//pkg/sql/colexec/colexecsel",
         "//pkg/sql/colexec/colexecwindow",
+        "//pkg/sql/execinfra",
     ],
 )

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -217,7 +218,7 @@ func newMaterializerInternal(
 
 var _ execopnode.OpNode = &Materializer{}
 var _ execinfra.Processor = &Materializer{}
-var _ execinfra.Releasable = &Materializer{}
+var _ execreleasable.Releasable = &Materializer{}
 
 // ChildCount is part of the execopnode.OpNode interface.
 func (m *Materializer) ChildCount(verbose bool) int {
