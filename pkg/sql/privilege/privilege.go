@@ -31,18 +31,20 @@ type Kind uint32
 // Do not change values of privileges. These correspond to the position
 // of the privilege in a bit field and are expected to stay constant.
 const (
-	ALL        Kind = 1
-	CREATE     Kind = 2
-	DROP       Kind = 3
-	GRANT      Kind = 4
-	SELECT     Kind = 5
-	INSERT     Kind = 6
-	DELETE     Kind = 7
-	UPDATE     Kind = 8
-	USAGE      Kind = 9
-	ZONECONFIG Kind = 10
-	CONNECT    Kind = 11
-	RULE       Kind = 12
+	ALL                  Kind = 1
+	CREATE               Kind = 2
+	DROP                 Kind = 3
+	GRANT                Kind = 4
+	SELECT               Kind = 5
+	INSERT               Kind = 6
+	DELETE               Kind = 7
+	UPDATE               Kind = 8
+	USAGE                Kind = 9
+	ZONECONFIG           Kind = 10
+	CONNECT              Kind = 11
+	RULE                 Kind = 12
+	MODIFYCLUSTERSETTING Kind = 13
+	VIEWCLUSTERSETTING   Kind = 14
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
@@ -72,6 +74,8 @@ const (
 	Type ObjectType = "type"
 	// Sequence represents a sequence object.
 	Sequence ObjectType = "sequence"
+	// System represents system privileges.
+	System ObjectType = "system"
 )
 
 // Predefined sets of privileges.
@@ -88,6 +92,7 @@ var (
 	// certain privileges unavailable after upgrade migration.
 	// Note that "CREATE, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
 	SequencePrivileges = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, GRANT, INSERT, DELETE, ZONECONFIG}
+	SystemPrivileges   = List{ALL, MODIFYCLUSTERSETTING, VIEWCLUSTERSETTING}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -107,18 +112,20 @@ var ByValue = [...]Kind{
 
 // ByName is a map of string -> kind value.
 var ByName = map[string]Kind{
-	"ALL":        ALL,
-	"CONNECT":    CONNECT,
-	"CREATE":     CREATE,
-	"DROP":       DROP,
-	"GRANT":      GRANT,
-	"SELECT":     SELECT,
-	"INSERT":     INSERT,
-	"DELETE":     DELETE,
-	"UPDATE":     UPDATE,
-	"ZONECONFIG": ZONECONFIG,
-	"USAGE":      USAGE,
-	"RULE":       RULE,
+	"ALL":                  ALL,
+	"CONNECT":              CONNECT,
+	"CREATE":               CREATE,
+	"DROP":                 DROP,
+	"GRANT":                GRANT,
+	"SELECT":               SELECT,
+	"INSERT":               INSERT,
+	"DELETE":               DELETE,
+	"UPDATE":               UPDATE,
+	"ZONECONFIG":           ZONECONFIG,
+	"USAGE":                USAGE,
+	"RULE":                 RULE,
+	"MODIFYCLUSTERSETTING": MODIFYCLUSTERSETTING,
+	"VIEWCLUSTERSETTING":   VIEWCLUSTERSETTING,
 }
 
 // List is a list of privileges.
@@ -277,6 +284,8 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 		return TypePrivileges
 	case Sequence:
 		return SequencePrivileges
+	case System:
+		return SystemPrivileges
 	case Any:
 		return AllPrivileges
 	default:

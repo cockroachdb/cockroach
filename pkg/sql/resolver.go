@@ -269,7 +269,7 @@ func (p *planner) HasAnyPrivilege(
 					return eval.HasNoPrivilege, err
 				}
 			} else {
-				if err := p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, user, true /* isGrant */); err != nil {
+				if err := p.CheckGrantOptionsForUser(ctx, *desc.GetPrivileges(), desc, []privilege.Kind{priv.Kind}, user, true /* isGrant */); err != nil {
 					if pgerror.GetPGCode(err) == pgcode.WarningPrivilegeNotGranted {
 						continue
 					}
@@ -401,6 +401,13 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		Required:       required,
 		AvoidLeased:    p.skipDescriptorCache,
 		RequireMutable: true,
+	}
+	if targets.System {
+		sysDB, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, keys.SystemDatabaseID)
+		if err != nil {
+			return nil, err
+		}
+		return []catalog.Descriptor{sysDB}, nil
 	}
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {

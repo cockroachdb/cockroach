@@ -39,6 +39,8 @@ type TargetList struct {
 	Types     []*UnresolvedObjectName
 	// If the target is for all sequences in a set of schemas.
 	AllSequencesInSchema bool
+	// If the target is system.
+	System bool
 	// If the target is for all tables in a set of schemas.
 	AllTablesInSchema bool
 	// Whether the target is only system users and roles_members table
@@ -89,8 +91,13 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 // Format implements the NodeFormatter interface.
 func (node *Grant) Format(ctx *FmtCtx) {
 	ctx.WriteString("GRANT ")
+	if node.Targets.System {
+		ctx.WriteString(" SYSTEM ")
+	}
 	node.Privileges.Format(&ctx.Buffer)
-	ctx.WriteString(" ON ")
+	if !node.Targets.System {
+		ctx.WriteString(" ON ")
+	}
 	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" TO ")
 	ctx.FormatNode(&node.Grantees)

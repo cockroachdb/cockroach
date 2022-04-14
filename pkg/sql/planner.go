@@ -859,6 +859,7 @@ func (p *planner) QueryRowEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
+	p.Descriptors()
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
 	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }

@@ -29,8 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -53,6 +56,16 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	grantOnSystem := n.Targets.System
+	if grantOnSystem {
+		return &changeSystemPrivilegesNode{
+			isGrant:         true,
+			withGrantOption: n.WithGrantOption,
+			grantees:        grantees,
+			desiredprivs:    n.Privileges,
+		}, nil
 	}
 
 	return &changePrivilegesNode{
@@ -95,6 +108,17 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 	if err != nil {
 		return nil, err
 	}
+
+	grantOnSystem := n.Targets.System
+	if grantOnSystem {
+		return &changeSystemPrivilegesNode{
+			isGrant:         false,
+			withGrantOption: false,
+			grantees:        grantees,
+			desiredprivs:    n.Privileges,
+		}, nil
+	}
+
 	return &changePrivilegesNode{
 		isGrant:         false,
 		withGrantOption: n.GrantOptionFor,
@@ -135,6 +159,13 @@ type changePrivilegesNode struct {
 	// privileges inside changePrivilegesNode's startExec.
 	// This is required for getting the pre-normalized name to construct the AST.
 	granteesNameList tree.RoleSpecList
+}
+
+type changeSystemPrivilegesNode struct {
+	isGrant         bool
+	withGrantOption bool
+	grantees        []username.SQLUsername
+	desiredprivs    privilege.List
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -205,7 +236,6 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				return err
 			}
 		}
-
 		// descPrivsChanged is true if any privileges are changed on `descriptor` as a result of
 		// the `GRANT` or `REVOKE` query. This allows us to no-op the `GRANT` or `REVOKE` if
 		// it does not actually result in any privilege change.
@@ -240,7 +270,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 			noticeMessage := ""
 			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-				err := p.CheckGrantOptionsForUser(ctx, descriptor, n.desiredprivs, p.User(), n.isGrant)
+				err := p.CheckGrantOptionsForUser(ctx, *descriptor.GetPrivileges(), descriptor, n.desiredprivs, p.User(), n.isGrant)
 				if err != nil {
 					return err
 				}
@@ -402,6 +432,8 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 						SchemaName:                     d.Name, // FIXME
 					}})
 			}
+		default:
+			panic(errors.AssertionFailedf("unknown descriptor type"))
 		}
 	}
 
@@ -444,6 +476,8 @@ func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privi
 	case targets.Types != nil:
 		incIAMFunc(sqltelemetry.OnType)
 		return privilege.Type
+	case targets.System:
+		return privilege.System
 	default:
 		if targets.Tables.IsSequence {
 			incIAMFunc(sqltelemetry.OnSequence)
@@ -474,4 +508,154 @@ func (p *planner) validateRoles(
 	}
 
 	return nil
+}
+
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because GRANT/REVOKE performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *changeSystemPrivilegesNode) ReadingOwnWrites() {}
+
+func (n *changeSystemPrivilegesNode) startExec(params runParams) error {
+	// The public role is not allowed to have grant options.
+	if n.isGrant && n.withGrantOption {
+		for _, grantee := range n.grantees {
+			if grantee.IsPublicRole() {
+				return pgerror.Newf(
+					pgcode.InvalidGrantOperation,
+					"grant options cannot be granted to %q role",
+					username.PublicRoleName(),
+				)
+			}
+		}
+	}
+
+	syntheticPrivDesc, err := synthesizePrivilegeDescriptorFromSystemPrivileges(params)
+	if err != nil {
+		return err
+	}
+
+	err = params.p.CheckGrantOptionsForUser(params.ctx, syntheticPrivDesc, nil /* descriptor */, n.desiredprivs, params.p.User(), n.isGrant)
+	if err != nil {
+		return err
+	}
+
+	const systemPrivilegeObjectID = 1
+	const systemPrivilegeObjectType = "system"
+
+	if n.isGrant {
+		// Privileges are valid, write them to the system.privileges table.
+		for _, user := range n.grantees {
+			syntheticPrivDesc.Grant(user, n.desiredprivs, false)
+
+			userPrivs, found := syntheticPrivDesc.FindUser(user)
+			if !found {
+				return errors.AssertionFailedf("user %s not found", user)
+			}
+			insertStmt := fmt.Sprintf(`UPSERT INTO system.%s VALUES ($1, $2, $3, $4, $5)`, catconstants.SystemPrivilegeTableName)
+			_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+				params.ctx,
+				`insert-system-privilege`,
+				params.p.txn,
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				insertStmt,
+				user,
+				systemPrivilegeObjectType,
+				systemPrivilegeObjectID,
+				bitarray.MakeBitArrayFromInt64(64, int64(userPrivs.Privileges), 64),
+				bitarray.MakeZeroBitArray(64),
+			)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Handle revoke case.
+	for _, user := range n.grantees {
+		syntheticPrivDesc.Revoke(user, n.desiredprivs, privilege.System, false)
+		userPrivs, found := syntheticPrivDesc.FindUser(user)
+		if !found {
+			deleteStmt := fmt.Sprintf(
+				`DELETE FROM system.%s VALUES WHERE username = $1 AND object_type = $2 AND object_id = $3`,
+				catconstants.SystemPrivilegeTableName,
+			)
+			_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+				params.ctx,
+				`delete-system-privilege`,
+				params.p.txn,
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				deleteStmt,
+				user,
+				systemPrivilegeObjectType,
+				systemPrivilegeObjectID,
+			)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		insertStmt := fmt.Sprintf(`UPSERT INTO system.%s VALUES ($1, $2, $3, $4, $5)`, catconstants.SystemPrivilegeTableName)
+		_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			params.ctx,
+			`insert-system-privilege`,
+			params.p.txn,
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			insertStmt,
+			user,
+			systemPrivilegeObjectType,
+			systemPrivilegeObjectID,
+			bitarray.MakeBitArrayFromInt64(64, int64(userPrivs.Privileges), 64),
+			bitarray.MakeZeroBitArray(64),
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (*changeSystemPrivilegesNode) Next(runParams) (bool, error) { return false, nil }
+func (*changeSystemPrivilegesNode) Values() tree.Datums          { return tree.Datums{} }
+func (*changeSystemPrivilegesNode) Close(context.Context)        {}
+
+func synthesizePrivilegeDescriptorFromSystemPrivileges(
+	params runParams,
+) (catpb.PrivilegeDescriptor, error) {
+	it, err := params.p.QueryIteratorEx(params.ctx, `get-system-privileges`, sessiondata.InternalExecutorOverride{
+		User: username.RootUserName(),
+	}, fmt.Sprintf(
+		`SELECT username, privileges FROM system.%s WHERE object_type = 'system' AND object_id=1`,
+		catconstants.SystemPrivilegeTableName))
+	if err != nil {
+		return catpb.PrivilegeDescriptor{}, err
+	}
+
+	privileges := catpb.PrivilegeDescriptor{}
+	for {
+		ok, err := it.Next(params.ctx)
+		if err != nil {
+			return catpb.PrivilegeDescriptor{}, err
+		}
+		if !ok {
+			break
+		}
+
+		user := tree.MustBeDString(it.Cur()[0])
+		privBits := tree.MustBeDBitArray(it.Cur()[1])
+		privIntVal := privBits.BitArray.AsUInt64()
+
+		privs := privilege.PrivilegesFromBitFields(uint32(privIntVal), 0, privilege.System)
+
+		for _, p := range privs {
+			privileges.Grant(
+				username.MakeSQLUsernameFromPreNormalizedString(string(user)),
+				privilege.List{p.Kind},
+				false,
+			)
+		}
+	}
+
+	return privileges, nil
 }

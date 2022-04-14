@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -174,6 +175,7 @@ func (p *planner) CheckPrivilege(
 // options are inherited from parent roles.
 func (p *planner) CheckGrantOptionsForUser(
 	ctx context.Context,
+	privileges catpb.PrivilegeDescriptor,
 	descriptor catalog.Descriptor,
 	privList privilege.List,
 	user username.SQLUsername,
@@ -189,6 +191,9 @@ func (p *planner) CheckGrantOptionsForUser(
 
 	privs := descriptor.GetPrivileges()
 	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) bool {
+		if descriptor == nil {
+			return privileges.CheckGrantOptions(role, privList)
+		}
 		return IsOwner(descriptor, role) || privs.CheckGrantOptions(role, privList)
 	})
 	if err != nil {

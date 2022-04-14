@@ -676,6 +676,16 @@ CREATE TABLE system.span_count (
 	CONSTRAINT single_row CHECK (singleton),
 	FAMILY "primary" (singleton, span_count)
 );`
+
+	SystemPrivilegeTableSchema = `
+CREATE TABLE system.privileges (
+	username STRING NOT NULL,
+	object_type STRING NOT NULL,
+	object_id INT NOT NULL,
+	privileges VARBIT NOT NULL,
+	grant_options VARBIT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (username, object_type, object_id)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -2395,6 +2405,38 @@ var (
 				ColumnIDs: []descpb.ColumnID{1},
 			}}
 		},
+	)
+
+	SystemPrivilegeTable = registerSystemTable(
+		SystemPrivilegeTableSchema,
+		systemTable(
+			catconstants.SystemPrivilegeTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "username", ID: 1, Type: types.String},
+				{Name: "object_type", ID: 2, Type: types.String},
+				{Name: "object_id", ID: 3, Type: types.Int},
+				{Name: "privileges", ID: 4, Type: types.VarBit},
+				{Name: "grant_options", ID: 5, Type: types.VarBit},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					DefaultColumnID: 5,
+					ColumnNames:     []string{"username", "object_type", "object_id", "privileges", "grant_options"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"username", "object_type", "object_id"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
+			},
+		),
 	)
 )
 

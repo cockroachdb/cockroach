@@ -204,6 +204,21 @@ func (d BitArray) AsInt64(nbits uint) int64 {
 	return signExtended
 }
 
+// AsUInt64 returns the uint64 constituted from the rightmost bits in the
+// bit array.
+func (d BitArray) AsUInt64() uint64 {
+	if len(d.words) == 0 {
+		return 0
+	}
+
+	lowPart := d.words[len(d.words)-1] >> (numBitsPerWord - d.lastBitsUsed)
+	highPart := word(0)
+	if len(d.words) > 1 {
+		highPart = d.words[len(d.words)-2] << d.lastBitsUsed
+	}
+	return lowPart | highPart
+}
+
 // LeftShiftAny performs a logical left shift, with a possible
 // negative count.
 // The number of bits to shift can be arbitrarily large (i.e. possibly
