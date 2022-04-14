@@ -257,7 +257,12 @@ func newProxyHandler(
 	// Create the connection tracker and balancer components.
 	balancerMetrics := balancer.NewMetrics()
 	registry.AddMetricStruct(balancerMetrics)
-	handler.connTracker = balancer.NewConnTracker()
+
+	handler.connTracker, err = balancer.NewConnTracker(ctx, stopper, nil /* timeSource */)
+	if err != nil {
+		return nil, err
+	}
+
 	handler.balancer, err = balancer.NewBalancer(
 		ctx, stopper, balancerMetrics, handler.directoryCache, handler.connTracker,
 	)

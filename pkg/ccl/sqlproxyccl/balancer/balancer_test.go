@@ -262,15 +262,16 @@ func TestRebalancer_rebalanceLoop(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	metrics := NewMetrics()
-	directoryCache := newTestDirectoryCache()
-	connTracker := NewConnTracker()
-
 	// Use a custom time source for testing.
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	timeSource := timeutil.NewManualTime(t0)
 
-	_, err := NewBalancer(
+	metrics := NewMetrics()
+	directoryCache := newTestDirectoryCache()
+	connTracker, err := NewConnTracker(ctx, stopper, timeSource)
+	require.NoError(t, err)
+
+	_, err = NewBalancer(
 		ctx,
 		stopper,
 		metrics,
@@ -313,13 +314,14 @@ func TestRebalancer_rebalance(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	metrics := NewMetrics()
-	directoryCache := newTestDirectoryCache()
-	connTracker := NewConnTracker()
-
 	// Use a custom time source for testing.
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	timeSource := timeutil.NewManualTime(t0)
+
+	metrics := NewMetrics()
+	directoryCache := newTestDirectoryCache()
+	connTracker, err := NewConnTracker(ctx, stopper, timeSource)
+	require.NoError(t, err)
 
 	b, err := NewBalancer(
 		ctx,
@@ -358,7 +360,8 @@ func TestRebalancer_rebalance(t *testing.T) {
 		t.Helper()
 
 		directoryCache = newTestDirectoryCache()
-		connTracker = NewConnTracker()
+		connTracker, err = NewConnTracker(ctx, stopper, timeSource)
+		require.NoError(t, err)
 		b.directoryCache = directoryCache
 		b.connTracker = connTracker
 
