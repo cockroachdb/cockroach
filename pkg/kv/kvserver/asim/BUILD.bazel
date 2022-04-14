@@ -4,6 +4,7 @@ go_library(
     name = "asim",
     srcs = [
         "asim.go",
+        "config_loader.go",
         "workload.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim",
@@ -20,6 +21,7 @@ go_test(
     name = "asim_test",
     srcs = [
         "asim_test.go",
+        "config_loader_test.go",
         "workload_test.go",
     ],
     embed = [":asim"],
