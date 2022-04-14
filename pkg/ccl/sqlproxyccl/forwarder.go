@@ -29,6 +29,10 @@ const idleTimeout = 30 * time.Second
 // forwarder is used to forward pgwire messages from the client to the server,
 // and vice-versa. The forwarder instance should always be constructed through
 // the forward function, which also starts the forwarder.
+//
+// WARNING: The forwarder implements balancer.ConnectionHandle, and one has to
+// ensure that implemented methods that hold locks do not end up calling methods
+// within the balancer package, or else a deadlock may occur.
 type forwarder struct {
 	// ctx is a single context used to control all goroutines spawned by the
 	// forwarder. An exception to this is that if the goroutines are blocked
