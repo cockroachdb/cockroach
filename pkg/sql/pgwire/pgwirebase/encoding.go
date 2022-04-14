@@ -994,7 +994,7 @@ const tupleHeaderSize, oidSize, elementSize = 4, 4, 4
 
 func decodeBinaryTuple(evalCtx *tree.EvalContext, b []byte) (tree.Datum, error) {
 
-	bufferLength := int32(len(b))
+	bufferLength := len(b)
 	if bufferLength < tupleHeaderSize {
 		return nil, pgerror.Newf(
 			pgcode.Syntax,
@@ -1002,7 +1002,7 @@ func decodeBinaryTuple(evalCtx *tree.EvalContext, b []byte) (tree.Datum, error) 
 			tupleHeaderSize, bufferLength)
 	}
 
-	bufferStartIdx := int32(0)
+	bufferStartIdx := 0
 	bufferEndIdx := bufferStartIdx + tupleHeaderSize
 	numberOfElements := int32(binary.BigEndian.Uint32(b[bufferStartIdx:bufferEndIdx]))
 	if numberOfElements < 0 {
@@ -1029,8 +1029,7 @@ func decodeBinaryTuple(evalCtx *tree.EvalContext, b []byte) (tree.Datum, error) 
 
 	for elementIdx < numberOfElements {
 
-		bytesToRead := int32(oidSize)
-		bufferEndIdx = bufferStartIdx + bytesToRead
+		bufferEndIdx = bufferStartIdx + oidSize
 		if bufferEndIdx < bufferStartIdx {
 			return nil, getSyntaxError("integer overflow reading element OID for binary format. ")
 		}
@@ -1046,8 +1045,7 @@ func decodeBinaryTuple(evalCtx *tree.EvalContext, b []byte) (tree.Datum, error) 
 		typs[elementIdx] = elementType
 		bufferStartIdx = bufferEndIdx
 
-		bytesToRead = int32(elementSize)
-		bufferEndIdx = bufferStartIdx + bytesToRead
+		bufferEndIdx = bufferStartIdx + elementSize
 		if bufferEndIdx < bufferStartIdx {
 			return nil, getSyntaxError("integer overflow reading element size for binary format. ")
 		}
@@ -1055,12 +1053,12 @@ func decodeBinaryTuple(evalCtx *tree.EvalContext, b []byte) (tree.Datum, error) 
 			return nil, getSyntaxError("insufficient bytes reading element size for binary format. ")
 		}
 
-		bytesToRead = int32(binary.BigEndian.Uint32(b[bufferStartIdx:bufferEndIdx]))
+		bytesToRead := binary.BigEndian.Uint32(b[bufferStartIdx:bufferEndIdx])
 		bufferStartIdx = bufferEndIdx
-		if bytesToRead == -1 {
+		if int32(bytesToRead) == -1 {
 			datums[elementIdx] = tree.DNull
 		} else {
-			bufferEndIdx = bufferStartIdx + bytesToRead
+			bufferEndIdx = bufferStartIdx + int(bytesToRead)
 			if bufferEndIdx < bufferStartIdx {
 				return nil, getSyntaxError("integer overflow reading element for binary format. ")
 			}
