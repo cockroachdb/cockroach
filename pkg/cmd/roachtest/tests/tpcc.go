@@ -194,7 +194,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 
 	var ep *tpccChaosEventProcessor
-	promCfg, cleanupFunc := setupPrometheus(ctx, t, c, opts, workloadInstances)
+	promCfg, cleanupFunc := setupPrometheus(ctx, t, c, opts.PrometheusConfig, opts.DisablePrometheus, workloadInstances)
 	defer cleanupFunc()
 	if opts.ChaosEventsProcessor != nil {
 		if promCfg == nil {
@@ -1423,16 +1423,16 @@ func setupPrometheus(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
-	opts tpccOptions,
+	cfg *prometheus.Config,
+	promDisabled bool,
 	workloadInstances []workloadInstance,
 ) (*prometheus.Config, func()) {
-	cfg := opts.PrometheusConfig
 	if cfg == nil {
 		// Avoid setting prometheus automatically up for local clusters.
 		if c.IsLocal() {
 			return nil, func() {}
 		}
-		if opts.DisablePrometheus {
+		if promDisabled {
 			return nil, func() {}
 		}
 		workloadNode := c.Node(c.Spec().NodeCount)
@@ -1448,7 +1448,7 @@ func setupPrometheus(
 			},
 		}
 	}
-	if opts.DisablePrometheus {
+	if promDisabled {
 		t.Fatal("test has PrometheusConfig but DisablePrometheus was on")
 	}
 	if c.IsLocal() {
