@@ -113,6 +113,10 @@ type TransactionalJobRegistry interface {
 	// id which was assigned to that job, or an error otherwise.
 	CreateJob(ctx context.Context, record jobs.Record) error
 
+	// CreatedJobs is the set of jobs created thus far in the current
+	// transaction.
+	CreatedJobs() []jobspb.JobID
+
 	// CheckPausepoint returns a PauseRequestError if the named pause-point is
 	// set.
 	//

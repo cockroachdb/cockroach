@@ -106,6 +106,7 @@ create job #1 (non-cancelable: false): "CREATE INDEX idx1 ON defaultdb.public.t 
   descriptor IDs: [104]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
