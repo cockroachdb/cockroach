@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "asim.go",
         "workload.go",
+        "config_loader.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim",
     visibility = ["//visibility:public"],
@@ -21,6 +22,7 @@ go_test(
     srcs = [
         "asim_test.go",
         "workload_test.go",
+        "config_loader_test.go",
     ],
     embed = [":asim"],
     deps = [
