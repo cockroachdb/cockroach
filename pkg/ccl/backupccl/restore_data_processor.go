@@ -440,7 +440,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	if err != nil {
 		return summary, err
 	}
-	defer batcher.Close()
+	defer batcher.Close(ctx)
 
 	var keyScratch, valueScratch []byte
 
