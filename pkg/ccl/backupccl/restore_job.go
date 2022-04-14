@@ -2075,9 +2075,6 @@ func (r *restoreResumer) dropDescriptors(
 		tableToDrop.DropTime = dropTime
 		b.Del(catalogkeys.EncodeNameKey(codec, tableToDrop))
 		descsCol.AddDeletedDescriptor(tableToDrop.GetID())
-		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, tableToDrop, b); err != nil {
-			return errors.Wrap(err, "writing dropping table to batch")
-		}
 	}
 
 	// Drop the type descriptors that this restore created.
@@ -2097,9 +2094,6 @@ func (r *restoreResumer) dropDescriptors(
 
 		b.Del(catalogkeys.EncodeNameKey(codec, typDesc))
 		mutType.SetDropped()
-		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, mutType, b); err != nil {
-			return errors.Wrap(err, "writing dropping type to batch")
-		}
 		// Remove the system.descriptor entry.
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, typDesc.ID))
 		descsCol.AddDeletedDescriptor(mutType.GetID())
@@ -2255,6 +2249,16 @@ func (r *restoreResumer) dropDescriptors(
 		b.Del(nameKey)
 		descsCol.AddDeletedDescriptor(db.GetID())
 		deletedDBs[db.GetID()] = struct{}{}
+	}
+
+	// Avoid telling the descriptor collection about the mutated descriptors
+	// until after all relevant relations have been retrieved to avoid a
+	// scenario whereby we make a descriptor invalid too early.
+	const kvTrace = false
+	for _, t := range mutableTables {
+		if err := descsCol.WriteDescToBatch(ctx, kvTrace, t, b); err != nil {
+			return errors.Wrap(err, "writing dropping table to batch")
+		}
 	}
 
 	if err := txn.Run(ctx, b); err != nil {

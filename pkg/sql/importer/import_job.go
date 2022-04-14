@@ -1509,6 +1509,7 @@ func (r *importResumer) dropTables(
 
 	b := txn.NewBatch()
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
+	toWrite := make([]*tabledesc.Mutable, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
 		newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
 		if err != nil {
@@ -1530,9 +1531,13 @@ func (r *importResumer) dropTables(
 			// IMPORT did not create this table, so we should not drop it.
 			newTableDesc.SetPublic()
 		}
-		if err := descsCol.WriteDescToBatch(
-			ctx, false /* kvTrace */, newTableDesc, b,
-		); err != nil {
+		// Accumulate the changes before adding them to the batch to avoid
+		// making any table invalid before having read it.
+		toWrite = append(toWrite, newTableDesc)
+	}
+	for _, d := range toWrite {
+		const kvTrace = false
+		if err := descsCol.WriteDescToBatch(ctx, kvTrace, d, b); err != nil {
 			return err
 		}
 	}

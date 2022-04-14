@@ -1113,7 +1113,8 @@ func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id
 		p.txn,
 		descpb.ID(id),
 		tree.DatabaseLookupFlags{
-			Required: true,
+			Required:    true,
+			AvoidLeased: true,
 		},
 	)
 	if err != nil {
