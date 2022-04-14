@@ -1009,6 +1009,84 @@ func TestClientConnSettings(t *testing.T) {
 	}
 }
 
+func TestHttpAdvertiseAddrFlagValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer initCLIDefaults()
+
+	// Prepare some reference strings that will be checked in the
+	// test below.
+	hostname, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f := startCmd.Flags()
+	for i, tc := range []struct {
+		args                        []string
+		expected                    string
+		expectedAfterAddrValidation string
+		tlsEnabled                  bool
+	}{
+		{[]string{"start"},
+			":" + base.DefaultHTTPPort,
+			hostname + ":" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--http-addr", "example.com"},
+			"example.com:" + base.DefaultHTTPPort,
+			"example.com:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--advertise-addr", "adv.example.com", "--http-addr", "http.example.com"},
+			"adv.example.com:" + base.DefaultHTTPPort,
+			"adv.example.com:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--advertise-addr", "adv.example.com:2345", "--http-addr", "http.example.com:1234"},
+			"adv.example.com:1234",
+			"adv.example.com:1234", true},
+		{[]string{"start", "--advertise-addr", "example.com"},
+			"example.com:" + base.DefaultHTTPPort,
+			"example.com:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--advertise-http-addr", "example.com"},
+			"example.com:" + base.DefaultHTTPPort,
+			"example.com:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--http-addr", "http.example.com", "--advertise-http-addr", "example.com"},
+			"example.com:" + base.DefaultHTTPPort,
+			"example.com:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--advertise-addr", "adv.example.com", "--advertise-http-addr", "example.com"},
+			"example.com:" + base.DefaultHTTPPort,
+			"example.com:" + base.DefaultHTTPPort, true},
+		{[]string{"start", "--advertise-addr", "adv.example.com:1234", "--http-addr", "http.example.com:2345", "--advertise-http-addr", "example.com:3456"},
+			"example.com:3456",
+			"example.com:3456", true},
+	} {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			initCLIDefaults()
+			require.NoError(t, f.Parse(tc.args))
+
+			err := extraServerFlagInit(startCmd)
+			require.NoError(t, err)
+
+			exp := "http"
+			if tc.tlsEnabled {
+				exp = "https"
+			}
+			require.Equal(t, tc.expected, serverCfg.HTTPAdvertiseAddr,
+				"serverCfg.HTTPAdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
+				tc.expected, serverCfg.HTTPAdvertiseAddr, tc.args)
+			require.Equal(t, exp, serverCfg.HTTPRequestScheme(),
+				"TLS config expected %s, got %s. td.args was '%#v'.", exp, serverCfg.HTTPRequestScheme(), tc.args)
+
+			ctx := context.Background()
+			err = serverCfg.ValidateAddrs(ctx)
+			if err != nil {
+				// Don't care about resolution failures
+				if !strings.Contains(err.Error(), "invalid --http-addr") {
+					t.Errorf("unexpected error: %s", err)
+				}
+			}
+			require.Equal(t, tc.expectedAfterAddrValidation, serverCfg.HTTPAdvertiseAddr, "after validation")
+		})
+	}
+}
+
 func TestHttpHostFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
