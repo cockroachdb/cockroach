@@ -176,24 +176,28 @@ func SharedLibraryExtensionFromPlatform(platform Platform) string {
 	}
 }
 
-// MakeWorkload makes the bin/workload binary.
-func MakeWorkload(pkgDir string) error {
+// MakeWorkload makes the bin/workload binary. It is only ever built in the
+// crosslinux configuration.
+func MakeWorkload(opts BuildOptions, pkgDir string) error {
+	if opts.Release {
+		return errors.Newf("cannot build workload in Release mode")
+	}
 	// NB: workload doesn't need anything stamped so we can use `crosslinux`
 	// rather than `crosslinuxbase`.
-	cmd := exec.Command("bazel", "build", "//pkg/cmd/workload", "--config=crosslinux", "--config=ci")
+	cmd := exec.Command("bazel", "build", "//pkg/cmd/workload", "-c", "opt", "--config=crosslinux", "--config=ci")
 	cmd.Dir = pkgDir
-	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	log.Printf("%s", cmd.Args)
-	err := cmd.Run()
+	stdoutBytes, err := opts.ExecFn.Run(cmd)
+	if err != nil {
+		return errors.Wrapf(err, "failed to run %s: %s", cmd.Args, string(stdoutBytes))
+	}
+
+	bazelBin, err := getPathToBazelBin(opts.ExecFn, pkgDir, []string{"-c", "opt", "--config=crosslinux", "--config=ci"})
 	if err != nil {
 		return err
 	}
-	bazelBin, err := getPathToBazelBin(ExecFn{}, pkgDir, []string{"--config=crosslinux", "--config=ci"})
-	if err != nil {
-		return err
-	}
-	return stageBinary("//pkg/cmd/workload", PlatformLinux, bazelBin, filepath.Join(pkgDir, "bin"))
+	return stageBinary("//pkg/cmd/workload", PlatformLinux, bazelBin, filepath.Join(pkgDir, "bin"), false)
 }
 
 // MakeRelease makes the release binary and associated files.
@@ -227,11 +231,11 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 	if err != nil {
 		return err
 	}
-	if err := stageBinary("//pkg/cmd/cockroach", platform, bazelBin, pkgDir); err != nil {
+	if err := stageBinary("//pkg/cmd/cockroach", platform, bazelBin, pkgDir, true); err != nil {
 		return err
 	}
 	// TODO: strip the bianry
-	if err := stageBinary("//pkg/cmd/cockroach-sql", platform, bazelBin, pkgDir); err != nil {
+	if err := stageBinary("//pkg/cmd/cockroach-sql", platform, bazelBin, pkgDir, true); err != nil {
 		return err
 	}
 	if err := stageLibraries(platform, bazelBin, filepath.Join(pkgDir, "lib")); err != nil {
@@ -627,14 +631,19 @@ func getPathToBazelBin(execFn ExecFn, pkgDir string, configArgs []string) (strin
 	return strings.TrimSpace(string(stdoutBytes)), nil
 }
 
-func stageBinary(target string, platform Platform, bazelBin string, dir string) error {
+func stageBinary(
+	target string, platform Platform, bazelBin string, dir string, includePlatformSuffix bool,
+) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 	rel := bazelutil.OutputOfBinaryRule(target, platform == PlatformWindows)
 	src := filepath.Join(bazelBin, rel)
 	dstBase, _ := TrimDotExe(filepath.Base(rel))
-	suffix := SuffixFromPlatform(platform)
+	suffix := ""
+	if includePlatformSuffix {
+		suffix = SuffixFromPlatform(platform)
+	}
 	dstBase = dstBase + suffix
 	dst := filepath.Join(dir, dstBase)
 	srcF, err := os.Open(src)
