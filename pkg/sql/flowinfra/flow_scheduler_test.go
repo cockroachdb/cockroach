@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -58,7 +59,7 @@ func newMockFlow(flowID uuid.UUID, waitCb func()) *mockFlow {
 
 func (m *mockFlow) Setup(
 	_ context.Context, _ *execinfrapb.FlowSpec, _ FuseOpt,
-) (context.Context, execinfra.OpChains, error) {
+) (context.Context, execopnode.OpChains, error) {
 	panic("not implemented")
 }
 

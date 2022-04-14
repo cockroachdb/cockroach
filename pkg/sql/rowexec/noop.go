@@ -14,7 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/errors"
 )
@@ -30,7 +32,7 @@ type noopProcessor struct {
 
 var _ execinfra.Processor = &noopProcessor{}
 var _ execinfra.RowSource = &noopProcessor{}
-var _ execinfra.OpNode = &noopProcessor{}
+var _ execopnode.OpNode = &noopProcessor{}
 
 const noopProcName = "noop"
 
@@ -55,7 +57,7 @@ func newNoopProcessor(
 		return nil, err
 	}
 	ctx := flowCtx.EvalCtx.Ctx()
-	if execinfra.ShouldCollectStats(ctx, flowCtx) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		n.input = newInputStatCollector(n.input)
 		n.ExecStatsForTrace = n.execStatsForTrace
 	}
@@ -103,21 +105,21 @@ func (n *noopProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (n *noopProcessor) ChildCount(bool) int {
-	if _, ok := n.input.(execinfra.OpNode); ok {
+	if _, ok := n.input.(execopnode.OpNode); ok {
 		return 1
 	}
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (n *noopProcessor) Child(nth int, _ bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (n *noopProcessor) Child(nth int, _ bool) execopnode.OpNode {
 	if nth == 0 {
-		if n, ok := n.input.(execinfra.OpNode); ok {
+		if n, ok := n.input.(execopnode.OpNode); ok {
 			return n
 		}
-		panic("input to noop is not an execinfra.OpNode")
+		panic("input to noop is not an execopnode.OpNode")
 	}
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

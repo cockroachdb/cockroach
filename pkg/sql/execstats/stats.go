@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package execstats
 
 import (
 	"context"
@@ -23,10 +23,10 @@ import (
 
 // ShouldCollectStats is a helper function used to determine if a processor
 // should collect stats. The two requirements are that tracing must be enabled
-// (to be able to output the stats somewhere), and that the flowCtx.CollectStats
-// flag was set by the gateway node.
-func ShouldCollectStats(ctx context.Context, flowCtx *FlowCtx) bool {
-	return tracing.SpanFromContext(ctx) != nil && flowCtx.CollectStats
+// (to be able to output the stats somewhere), and that the collectStats is true
+// (flowCtx.CollectStats flag set by the gateway node).
+func ShouldCollectStats(ctx context.Context, collectStats bool) bool {
+	return collectStats && tracing.SpanFromContext(ctx) != nil
 }
 
 // GetCumulativeContentionTime is a helper function to calculate the cumulative
@@ -34,7 +34,7 @@ func ShouldCollectStats(ctx context.Context, flowCtx *FlowCtx) bool {
 // found in the trace are included.
 func GetCumulativeContentionTime(ctx context.Context) time.Duration {
 	var cumulativeContentionTime time.Duration
-	recording := GetTraceData(ctx)
+	recording := tracing.SpanFromContext(ctx).GetConfiguredRecording()
 	if recording == nil {
 		return cumulativeContentionTime
 	}
@@ -84,7 +84,7 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 // GetScanStats is a helper function to calculate scan stats from the tracing
 // span from the context.
 func GetScanStats(ctx context.Context) (ss ScanStats) {
-	recording := GetTraceData(ctx)
+	recording := tracing.SpanFromContext(ctx).GetConfiguredRecording()
 	if recording == nil {
 		return ScanStats{}
 	}

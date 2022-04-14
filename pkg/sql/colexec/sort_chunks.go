@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -70,7 +70,7 @@ func (c *sortChunksOp) ChildCount(verbose bool) int {
 	return 1
 }
 
-func (c *sortChunksOp) Child(nth int, verbose bool) execinfra.OpNode {
+func (c *sortChunksOp) Child(nth int, verbose bool) execopnode.OpNode {
 	if nth == 0 {
 		return c.input
 	}

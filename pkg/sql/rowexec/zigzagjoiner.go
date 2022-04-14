@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -246,7 +248,7 @@ type zigzagJoiner struct {
 	rowAlloc           rowenc.EncDatumRowAlloc
 	fetchedInititalRow bool
 
-	scanStats execinfra.ScanStats
+	scanStats execstats.ScanStats
 }
 
 // zigzagJoinerBatchSize is a parameter which determines how many rows should
@@ -261,7 +263,7 @@ var zigzagJoinerBatchSize = rowinfra.RowLimit(util.ConstantWithMetamorphicTestVa
 
 var _ execinfra.Processor = &zigzagJoiner{}
 var _ execinfra.RowSource = &zigzagJoiner{}
-var _ execinfra.OpNode = &zigzagJoiner{}
+var _ execopnode.OpNode = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
 
@@ -315,7 +317,7 @@ func newZigzagJoiner(
 	z.infos = make([]zigzagJoinerInfo, z.numTables)
 
 	collectingStats := false
-	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
+	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
 		collectingStats = true
 		z.ExecStatsForTrace = z.execStatsForTrace
 	}
@@ -824,13 +826,13 @@ func (z *zigzagJoiner) ConsumerClosed() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
-	z.scanStats = execinfra.GetScanStats(z.Ctx)
+	z.scanStats = execstats.GetScanStats(z.Ctx)
 
 	kvStats := execinfrapb.KVStats{
 		BytesRead:      optional.MakeUint(uint64(z.getBytesRead())),
-		ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(z.Ctx)),
+		ContentionTime: optional.MakeTimeValue(execstats.GetCumulativeContentionTime(z.Ctx)),
 	}
-	execinfra.PopulateKVMVCCStats(&kvStats, &z.scanStats)
+	execstats.PopulateKVMVCCStats(&kvStats, &z.scanStats)
 	for i := range z.infos {
 		fis, ok := getFetcherInputStats(z.infos[i].fetcher)
 		if !ok {
@@ -873,12 +875,12 @@ func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	return trailingMeta
 }
 
-// ChildCount is part of the execinfra.OpNode interface.
+// ChildCount is part of the execopnode.OpNode interface.
 func (z *zigzagJoiner) ChildCount(verbose bool) int {
 	return 0
 }
 
-// Child is part of the execinfra.OpNode interface.
-func (z *zigzagJoiner) Child(nth int, verbose bool) execinfra.OpNode {
+// Child is part of the execopnode.OpNode interface.
+func (z *zigzagJoiner) Child(nth int, verbose bool) execopnode.OpNode {
 	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

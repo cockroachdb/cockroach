@@ -244,7 +244,7 @@ querying next range at /Table/109/1/0/0
 querying next range at /Table/109/1/10/0
 
 # Regression test for #46123 (rowexec.TableReader not implementing
-# execinfra.OpNode interface).
+# execopnode.OpNode interface).
 statement ok
 CREATE TABLE t46123(c0 INT)
 

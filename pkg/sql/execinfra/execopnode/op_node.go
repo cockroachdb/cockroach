@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package execinfra
+package execopnode
 
 // OpNode is an interface to operator-like structures with children.
 type OpNode interface {
