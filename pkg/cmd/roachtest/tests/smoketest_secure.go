@@ -12,13 +12,17 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,4 +44,70 @@ func registerSecure(r registry.Registry) {
 			},
 		})
 	}
+	r.Add(registry.TestSpec{
+		Name:    "smoketest/secure/multitenant",
+		Owner:   registry.OwnerServer,
+		Cluster: r.MakeClusterSpec(2),
+		Run:     multitenantSmokeTest,
+	})
+}
+
+func multitenantSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster) {
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	settings := install.MakeClusterSettings(install.SecureOption(true))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(1))
+
+	// make sure connections to kvserver work
+	db := c.Conn(ctx, t.L(), 1)
+	defer db.Close()
+	_, err := db.QueryContext(ctx, `SELECT 1`)
+	require.NoError(t, err)
+
+	kvAddrs, err := c.ExternalAddr(ctx, t.L(), c.Node(1))
+	require.NoError(t, err)
+	tenID := 11
+	ten := createTenantNode(kvAddrs, tenID, 2, 8011, 9011)
+	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), 1))
+	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenID)
+	ten.start(ctx, t, c, "./cockroach")
+
+	// this doesn't work yet, roachprod knows nothing about tenants
+	// db = c.Conn(ctx, t.L(), 2)
+	// defer db.Close()
+
+	tdb, err := gosql.Open("postgres", ten.pgURL)
+	_, err = tdb.QueryContext(ctx, `SELECT 1`)
+	require.NoError(t, err)
+
+	// init kv and check new database was done right
+	cmd := fmt.Sprintf("./cockroach workload init kv %s", ten.pgURL)
+	err = c.RunE(ctx, c.Node(1), cmd)
+	require.NoError(t, err)
+	time.Sleep(1 * time.Second)
+
+	cnt := 0
+	// The appearance of the tenant in the range system table isn't immediate.
+	if err := retry.ForDuration(time.Minute, func() error {
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case err := <-ten.errCh:
+			t.Fatal(err)
+		default:
+		}
+
+		rows, err := db.Query(fmt.Sprintf("SELECT start_pretty FROM crdb_internal.ranges WHERE start_pretty LIKE '/Tenant/%d/%%'", tenID))
+		if err == nil {
+			for rows.Next() {
+				cnt++
+			}
+			if cnt == 0 {
+				return fmt.Errorf("no results")
+			}
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	require.Greater(t, cnt, 0)
 }
