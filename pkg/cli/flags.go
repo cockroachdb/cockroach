@@ -51,6 +51,7 @@ var serverAdvertiseAddr, serverAdvertisePort string
 var serverSQLAddr, serverSQLPort string
 var serverSQLAdvertiseAddr, serverSQLAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
+var serverHTTPAdvertiseAddr, serverHTTPAdvertisePort string
 var localityAdvertiseHosts localityList
 var startBackground bool
 
@@ -69,6 +70,12 @@ func initPreFlagsDefaults() {
 
 	serverHTTPAddr = ""
 	serverHTTPPort = base.DefaultHTTPPort
+
+	serverHTTPAdvertiseAddr = ""
+	// We do not set `base.DefaultHTTPPort` on the advertise flag because
+	// we want to override it with the `serverHTTPPort` if it's unset by
+	// the user.
+	serverHTTPAdvertisePort = ""
 
 	localityAdvertiseHosts = localityList{}
 
@@ -388,6 +395,7 @@ func init() {
 		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
 		varFlag(f, addrSetter{&serverSQLAdvertiseAddr, &serverSQLAdvertisePort}, cliflags.SQLAdvertiseAddr)
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
+		varFlag(f, addrSetter{&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort}, cliflags.HTTPAdvertiseAddr)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
@@ -947,6 +955,7 @@ func init() {
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
 		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
+		varFlag(f, addrSetter{&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort}, cliflags.HTTPAdvertiseAddr)
 		varFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 
 		varFlag(f, &serverCfg.Stores, cliflags.Store)
@@ -1182,6 +1191,22 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		serverCfg.DisableTLSForHTTP = true
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
+
+	if serverHTTPAdvertiseAddr == "" {
+		if advSpecified {
+			serverHTTPAdvertiseAddr = serverAdvertiseAddr
+		} else {
+			serverHTTPAdvertiseAddr = serverHTTPAddr
+		}
+	}
+	if serverHTTPAdvertisePort == "" {
+		// We do not include the `if advSpecified` clause to mirror the
+		// logic above for `SQLAdvertiseAddr` which overrides the port from
+		// `serverAdvertisePort` because that port is *never* correct here,
+		// since it refers to SQL/gRPC connections.
+		serverHTTPAdvertisePort = serverHTTPPort
+	}
+	serverCfg.HTTPAdvertiseAddr = net.JoinHostPort(serverHTTPAdvertiseAddr, serverHTTPAdvertisePort)
 
 	// Fill the advertise port into the locality advertise addresses.
 	for i, a := range localityAdvertiseHosts {
