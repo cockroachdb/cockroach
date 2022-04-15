@@ -924,7 +924,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		p.makeMetricEtcEventListener(ctx),
 	)
 	p.eventListener = &cfg.Opts.EventListener
-	p.wrappedIntentWriter = wrapIntentWriter(ctx, p)
+	p.wrappedIntentWriter = wrapIntentWriter(p)
 
 	// Read the current store cluster version.
 	storeClusterVersion, err := getMinVersion(unencryptedFS, cfg.Dir)
@@ -1303,6 +1303,45 @@ func (p *Pebble) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails
 	// No-op. Logical logging disabled.
 }
 
+// localTimestampsEnabled controls whether local timestamps are written in MVCC
+// values. A true setting is also gated on clusterversion.LocalTimestamps. After
+// all nodes in a cluster are at or beyond clusterversion.LocalTimestamps,
+// different nodes will see the version state transition at different times.
+// Nodes that have not yet seen the transition may remove the local timestamp
+// from an intent that has one during intent resolution. This will not cause
+// problems.
+//
+// TODO(nvanbenschoten): remove this cluster setting and its associated plumbing
+// when removing the cluster version, once we're confident in the efficacy and
+// stability of local timestamps.
+var localTimestampsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"storage.transaction.local_timestamps.enabled",
+	"if enabled, MVCC keys will be written with local timestamps",
+	true,
+)
+
+func shouldWriteLocalTimestamps(ctx context.Context, settings *cluster.Settings) bool {
+	if !localTimestampsEnabled.Get(&settings.SV) {
+		// Not enabled.
+		return false
+	}
+	ver := settings.Version.ActiveVersionOrEmpty(ctx)
+	if ver == (clusterversion.ClusterVersion{}) {
+		// Some tests fail to configure settings. In these cases, assume that it
+		// is safe to write local timestamps.
+		return true
+	}
+	return ver.IsActive(clusterversion.LocalTimestamps)
+}
+
+// ShouldWriteLocalTimestamps implements the Writer interface.
+func (p *Pebble) ShouldWriteLocalTimestamps(ctx context.Context) bool {
+	// This is not fast. Pebble should not be used by writers that want
+	// performance. They should use pebbleBatch.
+	return shouldWriteLocalTimestamps(ctx, p.settings)
+}
+
 // Attrs implements the Engine interface.
 func (p *Pebble) Attrs() roachpb.Attributes {
 	return p.attrs
@@ -1539,7 +1578,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */)
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings)
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1549,7 +1588,7 @@ func (p *Pebble) NewReadOnly(durability DurabilityRequirement) ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly)
+	return newPebbleBatch(p.db, p.db.NewBatch(), writeOnly, p.settings)
 }
 
 // NewSnapshot implements the Engine interface.
@@ -2110,6 +2149,10 @@ func (p *pebbleReadOnly) LogData(data []byte) error {
 }
 
 func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ShouldWriteLocalTimestamps(ctx context.Context) bool {
 	panic("not implemented")
 }
 
