@@ -15,21 +15,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
-
-// MakeTrigramsDatum returns the output of MakeTrigrams in a string array Datum.
-func MakeTrigramsDatum(s string) tree.Datum {
-	arr := MakeTrigrams(s, true /* pad */)
-	ret := tree.NewDArray(types.String)
-	ret.Array = make(tree.Datums, len(arr))
-	for i := range arr {
-		ret.Array[i] = tree.NewDString(arr[i])
-	}
-	return ret
-}
 
 // Trigrams are calculated per word. Words are made up of alphanumeric
 // characters. Note that this doesn't include _, so we can't just use \w.
@@ -83,4 +69,31 @@ func MakeTrigrams(s string, pad bool) []string {
 	output = output[:lastUniqueIdx+1]
 
 	return output
+}
+
+// Similarity returns a trigram similarity measure between two strings. 1.0
+// means the trigrams are identical, 0.0 means no trigrams were shared.
+func Similarity(l string, r string) float64 {
+	lTrigrams, rTrigrams := MakeTrigrams(l, true /* pad */), MakeTrigrams(r, true /* pad */)
+
+	// To calculate the similarity, we count the number of shared trigrams
+	// in the strings, and divide by the number of non-shared trigrams.
+	// See the CALCSML macro in Postgres contrib/pg_trgm/trgm.h.
+
+	i, j := 0, 0
+	nShared := 0
+	for i < len(lTrigrams) && j < len(rTrigrams) {
+		lTrigram, rTrigram := lTrigrams[i], rTrigrams[j]
+		if lTrigram < rTrigram {
+			i++
+		} else if lTrigram > rTrigram {
+			j++
+		} else {
+			nShared++
+			i++
+			j++
+		}
+	}
+	shared := float64(nShared)
+	return shared / (float64(len(lTrigrams)+len(rTrigrams)) - shared)
 }
