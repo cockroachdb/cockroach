@@ -5,8 +5,4 @@ go_library(
     srcs = ["trigram.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/trigram",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/sql/sem/tree",
-        "//pkg/sql/types",
-    ],
 )

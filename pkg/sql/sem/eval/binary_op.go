@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/errors"
 )
 
@@ -999,6 +1000,14 @@ func (e *evaluator) EvalModIntOp(_ *tree.ModIntOp, left, right tree.Datum) (tree
 		return nil, tree.ErrDivByZero
 	}
 	return tree.NewDInt(tree.MustBeDInt(left) % r), nil
+}
+
+func (e *evaluator) EvalModStringOp(
+	_ *tree.ModStringOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	l, r := tree.MustBeDString(left), tree.MustBeDString(right)
+	f := trigram.Similarity(string(l), string(r))
+	return tree.MakeDBool(f >= e.ctx().SessionData().TrigramSimilarityThreshold), nil
 }
 
 func (e *evaluator) EvalMultDecimalIntOp(

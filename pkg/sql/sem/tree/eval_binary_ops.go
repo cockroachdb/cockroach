@@ -286,6 +286,8 @@ type (
 	ModIntDecimalOp struct{}
 	// ModIntOp is a BinaryEvalOp.
 	ModIntOp struct{}
+	// ModStringOp is a BinaryEvalOp.
+	ModStringOp struct{}
 )
 
 type (

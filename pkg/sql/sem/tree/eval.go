@@ -1102,6 +1102,22 @@ var BinOps = map[treebin.BinaryOperatorSymbol]binOpOverload{
 			EvalOp:     &ModIntDecimalOp{},
 			Volatility: volatility.Immutable,
 		},
+		&BinOp{
+			// The string % string operator returns whether the two strings have a
+			// greater or equal trigram similarity() than the threshold in
+			// pg_trgm.similarity_threshold.
+			// TODO (jordan): we shouldn't implement this here - we should implement
+			// this as a normalization that returns the expanded predicate
+			// 1 - (string <-> string) > pg_trgm.similarity_threshold. That way we
+			// don't have to ship similarity_threshold across the DistSQL network.
+			LeftType:   types.String,
+			RightType:  types.String,
+			ReturnType: types.Bool,
+			EvalOp:     &ModStringOp{},
+			// This operator is only stable because its result depends on the value
+			// of the pg_trgm.similarity_threshold session setting.
+			Volatility: volatility.Stable,
+		},
 	},
 
 	treebin.Concat: {
