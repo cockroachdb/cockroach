@@ -1597,7 +1597,11 @@ func mvccPutInternal(
 		}
 		buf.newMeta.Txn = txnMeta
 		buf.newMeta.Timestamp = writeTimestamp.ToLegacyTimestamp()
-		buf.newMeta.SetLocalTimestamp(localTimestamp, &buf.newLocalTs)
+		if writer.ShouldWriteLocalTimestamps(ctx) {
+			buf.newMeta.SetLocalTimestamp(localTimestamp, &buf.newLocalTs)
+		} else {
+			buf.newMeta.LocalTimestamp = nil
+		}
 	}
 	newMeta := &buf.newMeta
 
@@ -3084,9 +3088,13 @@ func mvccResolveWriteIntent(
 		// resolver provides a clock observation from this node that was captured
 		// while the transaction was still pending, in which case it can be advanced
 		// to the observed timestamp.
-		localTs := latestKey.LocalTimestamp
-		localTs.Forward(intent.ClockWhilePending.Timestamp)
-		buf.newMeta.SetLocalTimestamp(localTs, &buf.newLocalTs)
+		if rw.ShouldWriteLocalTimestamps(ctx) {
+			localTs := latestKey.LocalTimestamp
+			localTs.Forward(intent.ClockWhilePending.Timestamp)
+			buf.newMeta.SetLocalTimestamp(localTs, &buf.newLocalTs)
+		} else {
+			buf.newMeta.LocalTimestamp = nil
+		}
 
 		// Update or remove the metadata key.
 		var metaKeySize, metaValSize int64
