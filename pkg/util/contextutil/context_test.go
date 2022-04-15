@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRunWithTimeout(t *testing.T) {
@@ -31,14 +32,13 @@ func TestRunWithTimeout(t *testing.T) {
 	}
 
 	err = RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(15 * time.Millisecond)
 		return ctx.Err()
 	})
-	baseExpectedMsg := "operation \"foo\" timed out after 1ns"
+	require.Error(t, err)
+	baseExpectedMsg := "operation \"foo\" timed out after ..ms \\(given timeout 1ns\\)"
 	expectedMsg := baseExpectedMsg + ": context deadline exceeded"
-	if err.Error() != expectedMsg {
-		t.Fatalf("expected %s, actual %s", expectedMsg, err.Error())
-	}
+	require.Regexp(t, expectedMsg, err.Error())
 	var netError net.Error
 	if !errors.As(err, &netError) {
 		t.Fatal("RunWithTimeout should return a net.Error")
@@ -51,13 +51,12 @@ func TestRunWithTimeout(t *testing.T) {
 	}
 
 	err = RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(15 * time.Millisecond)
 		return errors.Wrap(ctx.Err(), "custom error")
 	})
+	require.Error(t, err)
 	expExtended := baseExpectedMsg + ": custom error: context deadline exceeded"
-	if err.Error() != expExtended {
-		t.Fatalf("expected %q, actual %q", expExtended, err.Error())
-	}
+	require.Regexp(t, expExtended, err.Error())
 	if !errors.As(err, &netError) {
 		t.Fatal("RunWithTimeout should return a net.Error")
 	}
@@ -92,6 +91,19 @@ func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
 		t.Fatalf("RunWithTimeout should return an error caused by the underlying " +
 			"returned error")
 	}
+}
+
+func TestRunWithTimeoutAfterDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	err := RunWithTimeout(ctx, "test", time.Second, func(ctx context.Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	require.Error(t, err)
+	require.Regexp(t,
+		`operation "test" timed out after \d+m?s \(given timeout 1s\): context deadline exceeded`,
+		err.Error())
 }
 
 func TestCancelWithReason(t *testing.T) {
