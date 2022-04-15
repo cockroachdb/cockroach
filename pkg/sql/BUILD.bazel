@@ -186,6 +186,7 @@ go_library(
         "sequence.go",
         "sequence_select.go",
         "serial.go",
+        "services.go",
         "session_revival_token.go",
         "session_state.go",
         "set_cluster_setting.go",

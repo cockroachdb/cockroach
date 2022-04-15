@@ -1019,6 +1019,18 @@ func (e *distSQLSpecExecFactory) ConstructCreateTableAs(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create table")
 }
 
+func (e *distSQLSpecExecFactory) ConstructCreateService(
+	input exec.Node, options []exec.KVOption, ct *tree.CreateService,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create service")
+}
+
+func (e *distSQLSpecExecFactory) ConstructAlterService(
+	input exec.Node, options []exec.KVOption, ct *tree.AlterService,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter service")
+}
+
 func (e *distSQLSpecExecFactory) ConstructCreateView(
 	schema cat.Schema,
 	viewName *cat.DataSourceName,

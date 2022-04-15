@@ -1,0 +1,76 @@
+build
+CREATE SERVICE abc
+----
+create-service
+ └── values
+
+build
+CREATE SERVICE abc WITH DEFAULT OPTIONS (a = b)
+----
+create-service
+ ├── values
+ └── k-v-options
+      └── k-v-options-item a
+           └── 'b'
+
+build
+CREATE SERVICE abc USING RULES FROM SELECT 1, 2
+----
+create-service
+ └── project
+      ├── columns: "?column?":1!null "?column?":2!null
+      ├── values
+      │    └── ()
+      └── projections
+           ├── 1 [as="?column?":1]
+           └── 2 [as="?column?":2]
+
+build
+CREATE SERVICE abc WITH DEFAULT OPTIONS (a = b) USING RULES FROM SELECT 1, 2
+----
+create-service
+ ├── project
+ │    ├── columns: "?column?":1!null "?column?":2!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         ├── 1 [as="?column?":1]
+ │         └── 2 [as="?column?":2]
+ └── k-v-options
+      └── k-v-options-item a
+           └── 'b'
+
+build
+ALTER SERVICE abc REFRESH
+----
+alter-service
+ └── values
+
+build
+ALTER SERVICE abc SET DEFAULT OPTIONS (a = b)
+----
+alter-service
+ ├── values
+ └── k-v-options
+      └── k-v-options-item a
+           └── 'b'
+
+
+build
+ALTER SERVICE abc USING RULES FROM SELECT 1, 2
+----
+alter-service
+ └── project
+      ├── columns: "?column?":1!null "?column?":2!null
+      ├── values
+      │    └── ()
+      └── projections
+           ├── 1 [as="?column?":1]
+           └── 2 [as="?column?":2]
+
+
+build
+ALTER SERVICE abc DROP RULES
+----
+alter-service
+ └── values

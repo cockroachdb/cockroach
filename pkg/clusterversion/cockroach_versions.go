@@ -373,6 +373,10 @@ const (
 	// MVCCRangeTombstones enables the use of MVCC range tombstones.
 	MVCCRangeTombstones
 
+	// Services.
+	Services
+	ServiceRules
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -656,6 +660,15 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     MVCCRangeTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
+	},
+
+	{
+		Key:     Services,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
+	},
+	{
+		Key:     ServiceRules,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
 	},
 
 	// *************************************************

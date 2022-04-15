@@ -1,0 +1,193 @@
+parse
+CREATE SERVICE abc
+----
+CREATE SERVICE abc
+CREATE SERVICE abc -- fully parenthesized
+CREATE SERVICE abc -- literals removed
+CREATE SERVICE _ -- identifiers removed
+
+parse
+CREATE SERVICE abc WITH DEFAULT OPTIONS (a = b)
+----
+CREATE SERVICE abc WITH DEFAULT OPTIONS (a = 'b') -- normalized!
+CREATE SERVICE abc WITH DEFAULT OPTIONS (a = ('b')) -- fully parenthesized
+CREATE SERVICE abc WITH DEFAULT OPTIONS (a = '_') -- literals removed
+CREATE SERVICE _ WITH DEFAULT OPTIONS (_ = 'b') -- identifiers removed
+
+parse
+CREATE SERVICE abc USING RULES FROM TABLE cde
+----
+CREATE SERVICE abc USING RULES FROM TABLE cde
+CREATE SERVICE abc USING RULES FROM TABLE cde -- fully parenthesized
+CREATE SERVICE abc USING RULES FROM TABLE cde -- literals removed
+CREATE SERVICE _ USING RULES FROM TABLE _ -- identifiers removed
+
+parse
+CREATE SERVICE abc WITH DEFAULT OPTIONS (a = b) USING RULES FROM TABLE cde
+----
+CREATE SERVICE abc WITH DEFAULT OPTIONS (a = 'b') USING RULES FROM TABLE cde -- normalized!
+CREATE SERVICE abc WITH DEFAULT OPTIONS (a = ('b')) USING RULES FROM TABLE cde -- fully parenthesized
+CREATE SERVICE abc WITH DEFAULT OPTIONS (a = '_') USING RULES FROM TABLE cde -- literals removed
+CREATE SERVICE _ WITH DEFAULT OPTIONS (_ = 'b') USING RULES FROM TABLE _ -- identifiers removed
+
+parse
+CREATE SERVICE IF NOT EXISTS abc
+----
+CREATE SERVICE IF NOT EXISTS abc
+CREATE SERVICE IF NOT EXISTS abc -- fully parenthesized
+CREATE SERVICE IF NOT EXISTS abc -- literals removed
+CREATE SERVICE IF NOT EXISTS _ -- identifiers removed
+
+parse
+CREATE SERVICE IF NOT EXISTS abc WITH DEFAULT OPTIONS (a = b)
+----
+CREATE SERVICE IF NOT EXISTS abc WITH DEFAULT OPTIONS (a = 'b') -- normalized!
+CREATE SERVICE IF NOT EXISTS abc WITH DEFAULT OPTIONS (a = ('b')) -- fully parenthesized
+CREATE SERVICE IF NOT EXISTS abc WITH DEFAULT OPTIONS (a = '_') -- literals removed
+CREATE SERVICE IF NOT EXISTS _ WITH DEFAULT OPTIONS (_ = 'b') -- identifiers removed
+
+parse
+CREATE SERVICE IF NOT EXISTS abc USING RULES FROM TABLE cde
+----
+CREATE SERVICE IF NOT EXISTS abc USING RULES FROM TABLE cde
+CREATE SERVICE IF NOT EXISTS abc USING RULES FROM TABLE cde -- fully parenthesized
+CREATE SERVICE IF NOT EXISTS abc USING RULES FROM TABLE cde -- literals removed
+CREATE SERVICE IF NOT EXISTS _ USING RULES FROM TABLE _ -- identifiers removed
+
+parse
+CREATE SERVICE IF NOT EXISTS abc WITH DEFAULT OPTIONS (a = b) USING RULES FROM TABLE cde
+----
+CREATE SERVICE IF NOT EXISTS abc WITH DEFAULT OPTIONS (a = 'b') USING RULES FROM TABLE cde -- normalized!
+CREATE SERVICE IF NOT EXISTS abc WITH DEFAULT OPTIONS (a = ('b')) USING RULES FROM TABLE cde -- fully parenthesized
+CREATE SERVICE IF NOT EXISTS abc WITH DEFAULT OPTIONS (a = '_') USING RULES FROM TABLE cde -- literals removed
+CREATE SERVICE IF NOT EXISTS _ WITH DEFAULT OPTIONS (_ = 'b') USING RULES FROM TABLE _ -- identifiers removed
+
+parse
+ALTER SERVICE abc RENAME TO cde
+----
+ALTER SERVICE abc RENAME TO cde
+ALTER SERVICE abc RENAME TO cde -- fully parenthesized
+ALTER SERVICE abc RENAME TO cde -- literals removed
+ALTER SERVICE _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER SERVICE IF EXISTS abc RENAME TO cde
+----
+ALTER SERVICE IF EXISTS abc RENAME TO cde
+ALTER SERVICE IF EXISTS abc RENAME TO cde -- fully parenthesized
+ALTER SERVICE IF EXISTS abc RENAME TO cde -- literals removed
+ALTER SERVICE IF EXISTS _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER SERVICE abc OWNER TO cde
+----
+ALTER SERVICE abc OWNER TO cde
+ALTER SERVICE abc OWNER TO cde -- fully parenthesized
+ALTER SERVICE abc OWNER TO cde -- literals removed
+ALTER SERVICE _ OWNER TO _ -- identifiers removed
+
+parse
+ALTER SERVICE IF EXISTS abc OWNER TO cde
+----
+ALTER SERVICE IF EXISTS abc OWNER TO cde
+ALTER SERVICE IF EXISTS abc OWNER TO cde -- fully parenthesized
+ALTER SERVICE IF EXISTS abc OWNER TO cde -- literals removed
+ALTER SERVICE IF EXISTS _ OWNER TO _ -- identifiers removed
+
+
+parse
+ALTER SERVICE abc REFRESH
+----
+ALTER SERVICE abc REFRESH
+ALTER SERVICE abc REFRESH -- fully parenthesized
+ALTER SERVICE abc REFRESH -- literals removed
+ALTER SERVICE _ REFRESH -- identifiers removed
+
+parse
+ALTER SERVICE IF EXISTS abc REFRESH
+----
+ALTER SERVICE IF EXISTS abc REFRESH
+ALTER SERVICE IF EXISTS abc REFRESH -- fully parenthesized
+ALTER SERVICE IF EXISTS abc REFRESH -- literals removed
+ALTER SERVICE IF EXISTS _ REFRESH -- identifiers removed
+
+parse
+ALTER SERVICE abc SET DEFAULT OPTIONS (a = b)
+----
+ALTER SERVICE abc SET DEFAULT OPTIONS (a = 'b') -- normalized!
+ALTER SERVICE abc SET DEFAULT OPTIONS (a = ('b')) -- fully parenthesized
+ALTER SERVICE abc SET DEFAULT OPTIONS (a = '_') -- literals removed
+ALTER SERVICE _ SET DEFAULT OPTIONS (_ = 'b') -- identifiers removed
+
+parse
+ALTER SERVICE abc DROP DEFAULT OPTIONS
+----
+ALTER SERVICE abc DROP DEFAULT OPTIONS
+ALTER SERVICE abc DROP DEFAULT OPTIONS -- fully parenthesized
+ALTER SERVICE abc DROP DEFAULT OPTIONS -- literals removed
+ALTER SERVICE _ DROP DEFAULT OPTIONS -- identifiers removed
+
+
+parse
+ALTER SERVICE IF EXISTS abc SET DEFAULT OPTIONS (a = b)
+----
+ALTER SERVICE IF EXISTS abc SET DEFAULT OPTIONS (a = 'b') -- normalized!
+ALTER SERVICE IF EXISTS abc SET DEFAULT OPTIONS (a = ('b')) -- fully parenthesized
+ALTER SERVICE IF EXISTS abc SET DEFAULT OPTIONS (a = '_') -- literals removed
+ALTER SERVICE IF EXISTS _ SET DEFAULT OPTIONS (_ = 'b') -- identifiers removed
+
+parse
+ALTER SERVICE IF EXISTS abc DROP DEFAULT OPTIONS
+----
+ALTER SERVICE IF EXISTS abc DROP DEFAULT OPTIONS
+ALTER SERVICE IF EXISTS abc DROP DEFAULT OPTIONS -- fully parenthesized
+ALTER SERVICE IF EXISTS abc DROP DEFAULT OPTIONS -- literals removed
+ALTER SERVICE IF EXISTS _ DROP DEFAULT OPTIONS -- identifiers removed
+
+parse
+ALTER SERVICE abc USING RULES FROM TABLE cde
+----
+ALTER SERVICE abc USING RULES FROM TABLE cde
+ALTER SERVICE abc USING RULES FROM TABLE cde -- fully parenthesized
+ALTER SERVICE abc USING RULES FROM TABLE cde -- literals removed
+ALTER SERVICE _ USING RULES FROM TABLE _ -- identifiers removed
+
+parse
+ALTER SERVICE IF EXISTS abc USING RULES FROM TABLE cde
+----
+ALTER SERVICE IF EXISTS abc USING RULES FROM TABLE cde
+ALTER SERVICE IF EXISTS abc USING RULES FROM TABLE cde -- fully parenthesized
+ALTER SERVICE IF EXISTS abc USING RULES FROM TABLE cde -- literals removed
+ALTER SERVICE IF EXISTS _ USING RULES FROM TABLE _ -- identifiers removed
+
+parse
+ALTER SERVICE abc DROP RULES
+----
+ALTER SERVICE abc DROP RULES
+ALTER SERVICE abc DROP RULES -- fully parenthesized
+ALTER SERVICE abc DROP RULES -- literals removed
+ALTER SERVICE _ DROP RULES -- identifiers removed
+
+parse
+ALTER SERVICE IF EXISTS abc DROP RULES
+----
+ALTER SERVICE IF EXISTS abc DROP RULES
+ALTER SERVICE IF EXISTS abc DROP RULES -- fully parenthesized
+ALTER SERVICE IF EXISTS abc DROP RULES -- literals removed
+ALTER SERVICE IF EXISTS _ DROP RULES -- identifiers removed
+
+parse
+DROP SERVICE abc, cde
+----
+DROP SERVICE abc, cde
+DROP SERVICE abc, cde -- fully parenthesized
+DROP SERVICE abc, cde -- literals removed
+DROP SERVICE _, _ -- identifiers removed
+
+parse
+DROP SERVICE IF EXISTS abc, cde
+----
+DROP SERVICE IF EXISTS abc, cde
+DROP SERVICE IF EXISTS abc, cde -- fully parenthesized
+DROP SERVICE IF EXISTS abc, cde -- literals removed
+DROP SERVICE IF EXISTS _, _ -- identifiers removed

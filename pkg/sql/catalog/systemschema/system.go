@@ -650,6 +650,27 @@ CREATE TABLE system.span_configurations (
     FAMILY "primary" (start_key, end_key, config)
 )`
 
+	ServicesTableSchema = `
+CREATE TABLE system.services (
+  service_name    STRING NOT NULL,
+  owner           STRING NOT NULL,
+  rules_id        INT8 NOT NULL,
+  default_options JSONB NOT NULL,
+  rules_query     STRING NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (service_name),
+  FAMILY "primary" (service_name, owner, rules_id),
+  FAMILY "config" (default_options, rules_query)
+)`
+
+	ServiceRulesTableSchema = `
+CREATE TABLE system.service_rules (
+  rules_id     INT8 NOT NULL,
+  route        STRING NOT NULL,
+  options      JSONB NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (rules_id, route),
+  FAMILY "primary" (rules_id, route, options)
+)`
+
 	TenantSettingsTableSchema = `
 CREATE TABLE system.tenant_settings (
 	-- A non-zero tenant_id indicates that this is a setting specific to that
@@ -2329,6 +2350,71 @@ var (
 			}}
 		},
 	)
+
+	// ServicesTable is the descriptor for the service table.
+	// It contains the top level list of services.
+	ServicesTable = registerSystemTable(
+		ServicesTableSchema,
+		systemTable(
+			catconstants.ServicesTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "service_name", ID: 1, Type: types.String},
+				{Name: "owner", ID: 2, Type: types.String}, // TODO(knz): use user ID when that is implemented.
+				{Name: "rules_id", ID: 3, Type: types.Int},
+				{Name: "default_options", ID: 4, Type: types.Jsonb},
+				{Name: "rules_query", ID: 5, Type: types.String},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "fam_0_service_name_rules_id",
+					ID:          0,
+					ColumnNames: []string{"service_name", "owner", "rules_id"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				},
+				{
+					Name:        "fam_1_default_options_rules_query",
+					ID:          1,
+					ColumnNames: []string{"default_options", "rules_query"},
+					ColumnIDs:   []descpb.ColumnID{4, 5},
+				},
+			},
+			pk("service_name"),
+		))
+
+	// ServiceRulesTable is the descriptor for the service rules table.
+	// It contains the current active rules for the services.
+	ServiceRulesTable = registerSystemTable(
+		ServiceRulesTableSchema,
+		systemTable(
+			catconstants.ServiceRulesTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "rules_id", ID: 1, Type: types.Int},
+				{Name: "route", ID: 2, Type: types.String},
+				{Name: "options", ID: 3, Type: types.Jsonb},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "fam_0_rules_id_route_options",
+					ID:          0,
+					ColumnNames: []string{"rules_id", "route", "options"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"rules_id", "route"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+				Version:      descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+		))
 
 	// TenantSettingsTable is the descriptor for the tenant settings table.
 	// It contains overrides for cluster settings for tenants.

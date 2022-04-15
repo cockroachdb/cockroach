@@ -193,6 +193,10 @@ func getResultColumns(
 		// These operations produce no columns.
 		return nil, nil
 
+	case createServiceOp, alterServiceOp:
+		// These operations produce no columns.
+		return nil, nil
+
 	default:
 		return nil, errors.AssertionFailedf("unhandled op %d", op)
 	}

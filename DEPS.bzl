@@ -6186,6 +6186,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_open2b_scriggo",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/open2b/scriggo",
+        sha256 = "8b40054c57ebdc52b2805e4a8a13c104792f172142403b72049bc57841d66e29",
+        strip_prefix = "github.com/open2b/scriggo@v0.53.5",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/open2b/scriggo/com_github_open2b_scriggo-v0.53.5.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_opencontainers_go_digest",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/opencontainers/go-digest",

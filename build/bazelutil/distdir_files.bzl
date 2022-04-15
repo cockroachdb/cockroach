@@ -639,6 +639,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/onsi/ginkgo/com_github_onsi_ginkgo-v1.14.0.zip": "adfa06497641d0609d7b6e72a6087f898a0912cae0c2e86da90dace1b62045d4",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/onsi/gomega/com_github_onsi_gomega-v1.10.3.zip": "2c3224f2611b61f9b966394ebb39ef3244c3419c813fe87fd1a80f60e94a6872",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/op/go-logging/com_github_op_go_logging-v0.0.0-20160315200505-970db520ece7.zip": "c506eace74028656eb28677a4c162f9c023ce2f9c0207354ba80cca89f11b461",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/open2b/scriggo/com_github_open2b_scriggo-v0.53.5.zip": "8b40054c57ebdc52b2805e4a8a13c104792f172142403b72049bc57841d66e29",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/opencontainers/go-digest/com_github_opencontainers_go_digest-v1.0.0.zip": "615efb31ff6cd71035b8aa38c3659d8b4da46f3cd92ac807cb50449adfe37c86",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/opencontainers/image-spec/com_github_opencontainers_image_spec-v1.0.1.zip": "ebb2dca711a137fbfb717158b0368792f834000f4308d9ea259d06c6804c677c",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/opencontainers/runc/com_github_opencontainers_runc-v1.0.0-rc93.zip": "a93e8183c3abf68deec3958c5c88382c7dfc9403b8ba6fe3467b6456373864a3",

@@ -377,6 +377,15 @@ func (*AlterSchema) StatementTag() string { return "ALTER SCHEMA" }
 func (*AlterSchema) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterService) StatementReturnType() StatementReturnType { return RowsAffected }
+
+// StatementType implements the Statement interface.
+func (*AlterService) StatementType() StatementType { return TypeDCL }
+
+// StatementTag implements the Statement interface.
+func (*AlterService) StatementTag() string { return "ALTER SERVICE" }
+
+// StatementReturnType implements the Statement interface.
 func (*AlterTenantSetClusterSetting) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
@@ -681,6 +690,15 @@ func (n *CreateSchema) StatementTag() string {
 func (*CreateSchema) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
+func (*CreateService) StatementReturnType() StatementReturnType { return RowsAffected }
+
+// StatementType implements the Statement interface.
+func (*CreateService) StatementType() StatementType { return TypeDCL }
+
+// StatementTag implements the Statement interface.
+func (*CreateService) StatementTag() string { return "CREATE SERVICE" }
+
+// StatementReturnType implements the Statement interface.
 func (n *CreateTable) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -823,6 +841,15 @@ func (*DropView) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropView) StatementTag() string { return "DROP VIEW" }
+
+// StatementReturnType implements the Statement interface.
+func (*DropService) StatementReturnType() StatementReturnType { return RowsAffected }
+
+// StatementType implements the Statement interface.
+func (*DropService) StatementType() StatementType { return TypeDCL }
+
+// StatementTag implements the Statement interface.
+func (*DropService) StatementTag() string { return "DROP SERVICE" }
 
 // StatementReturnType implements the Statement interface.
 func (*DropSequence) StatementReturnType() StatementReturnType { return DDL }
@@ -1796,6 +1823,7 @@ func (n *AlterDatabaseDropSuperRegion) String() string   { return AsString(n) }
 func (n *AlterDatabaseAlterSuperRegion) String() string  { return AsString(n) }
 func (n *AlterDefaultPrivileges) String() string         { return AsString(n) }
 func (n *AlterSchema) String() string                    { return AsString(n) }
+func (n *AlterService) String() string                   { return AsString(n) }
 func (n *AlterTable) String() string                     { return AsString(n) }
 func (n *AlterTableCmds) String() string                 { return AsString(n) }
 func (n *AlterTableAddColumn) String() string            { return AsString(n) }
@@ -1842,6 +1870,7 @@ func (n *CreateIndex) String() string                    { return AsString(n) }
 func (n *CreateRole) String() string                     { return AsString(n) }
 func (n *CreateTable) String() string                    { return AsString(n) }
 func (n *CreateSchema) String() string                   { return AsString(n) }
+func (n *CreateService) String() string                  { return AsString(n) }
 func (n *CreateSequence) String() string                 { return AsString(n) }
 func (n *CreateStats) String() string                    { return AsString(n) }
 func (n *CreateView) String() string                     { return AsString(n) }
@@ -1852,6 +1881,7 @@ func (n *DropDatabase) String() string                   { return AsString(n) }
 func (n *DropIndex) String() string                      { return AsString(n) }
 func (n *DropOwnedBy) String() string                    { return AsString(n) }
 func (n *DropSchema) String() string                     { return AsString(n) }
+func (n *DropService) String() string                    { return AsString(n) }
 func (n *DropSequence) String() string                   { return AsString(n) }
 func (n *DropTable) String() string                      { return AsString(n) }
 func (n *DropType) String() string                       { return AsString(n) }

@@ -273,6 +273,7 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 
 var nodeNames = [...]string{
 	alterRangeRelocateOp:   "relocate range",
+	alterServiceOp:         "alter service",
 	alterTableRelocateOp:   "relocate table",
 	alterTableSplitOp:      "split",
 	alterTableUnsplitAllOp: "unsplit all",
@@ -283,6 +284,7 @@ var nodeNames = [...]string{
 	cancelSessionsOp:       "cancel sessions",
 	controlJobsOp:          "control jobs",
 	controlSchedulesOp:     "control schedules",
+	createServiceOp:        "create service",
 	createStatisticsOp:     "create statistics",
 	createTableOp:          "create table",
 	createTableAsOp:        "create table as",
@@ -867,6 +869,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		explainOptOp,
 		explainOp,
 		showTraceOp,
+		createServiceOp,
+		alterServiceOp,
 		createTableOp,
 		createTableAsOp,
 		createViewOp,
