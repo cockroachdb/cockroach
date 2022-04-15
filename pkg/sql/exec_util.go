@@ -3245,6 +3245,10 @@ func (m *sessionDataMutator) SetTestingOptimizerRandomCostSeed(val int64) {
 	m.data.TestingOptimizerRandomCostSeed = val
 }
 
+func (m *sessionDataMutator) SetTrigramSimilarityThreshold(val float32) {
+	m.data.TrigramSimilarityThreshold = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
