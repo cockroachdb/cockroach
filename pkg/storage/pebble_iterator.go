@@ -35,9 +35,13 @@ type pebbleIterator struct {
 	// Reusable buffer for MVCCKey or EngineKey encoding.
 	keyBuf []byte
 	// Buffers for copying iterator bounds to. Note that the underlying memory
-	// is not GCed upon Close(), to reduce the number of overall allocations.
-	lowerBoundBuf []byte
-	upperBoundBuf []byte
+	// is not GCed upon Close(), to reduce the number of overall allocations. We
+	// use two slices for each of the bounds since this caller should not change
+	// the slice holding the current bounds, that the callee (pebble.MVCCIterator)
+	// is currently using, until after the caller has made the SetOptions call.
+	lowerBoundBuf [2][]byte
+	upperBoundBuf [2][]byte
+	curBuf        int
 
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC/Engine key when true.
@@ -140,9 +144,6 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 
 	// Omit setting the options if there's nothing to change, since calling
 	// pebble.Iterator.SetOptions() can make the next seek more expensive.
-	//
-	// We don't generate a pebble.Options for comparison, because we want to reuse
-	// the byte slices of the existing p.options for any key encoding.
 	optsChanged := p.options.OnlyReadGuaranteedDurable != (durability == GuaranteedDurability) ||
 		// NB: Don't be tempted to omit SetOptions() if only the prefix option
 		// changes. This check has the side-effect of ensuring newly cloned
@@ -174,6 +175,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	}
 	p.prefix = opts.Prefix
 
+	p.curBuf = 1 - p.curBuf
 	if opts.LowerBound != nil {
 		// This is the same as
 		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[0][:0], MVCCKey{Key: opts.LowerBound})
@@ -181,15 +183,15 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		// Since we are encoding keys with an empty version anyway, we can just
 		// append the NUL byte instead of calling the above encode functions which
 		// will do the same thing.
-		p.lowerBoundBuf = append(p.lowerBoundBuf[:0], opts.LowerBound...)
-		p.lowerBoundBuf = append(p.lowerBoundBuf, 0x00)
-		p.options.LowerBound = p.lowerBoundBuf
+		p.lowerBoundBuf[p.curBuf] = append(p.lowerBoundBuf[p.curBuf][:0], opts.LowerBound...)
+		p.lowerBoundBuf[p.curBuf] = append(p.lowerBoundBuf[p.curBuf], 0x00)
+		p.options.LowerBound = p.lowerBoundBuf[p.curBuf]
 	}
 	if opts.UpperBound != nil {
 		// Same as above.
-		p.upperBoundBuf = append(p.upperBoundBuf[:0], opts.UpperBound...)
-		p.upperBoundBuf = append(p.upperBoundBuf, 0x00)
-		p.options.UpperBound = p.upperBoundBuf
+		p.upperBoundBuf[p.curBuf] = append(p.upperBoundBuf[p.curBuf][:0], opts.UpperBound...)
+		p.upperBoundBuf[p.curBuf] = append(p.upperBoundBuf[p.curBuf], 0x00)
+		p.options.UpperBound = p.upperBoundBuf[p.curBuf]
 	}
 
 	if opts.MaxTimestampHint.IsSet() {
