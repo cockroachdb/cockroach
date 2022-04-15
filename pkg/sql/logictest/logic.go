@@ -171,6 +171,8 @@ import (
 // The options are:
 // - allow-zone-configs-for-secondary-tenants: If specified, secondary tenants
 // are allowed to alter their zone configurations.
+// - allow-multi-region-abstractions-for-secondary-tenants: If specified,
+// secondary tenants are allowed to make use of multi-region abstractions.
 //
 //
 // ###########################################
@@ -1855,6 +1857,22 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 		}
+
+		if clusterSettingOverrideArgs.overrideMultiTenantMultiRegionAbstractionsAllowed {
+			conn := t.cluster.ServerConn(0)
+			// Allow secondary tenants to make use of multi-region abstractions if the
+			// configuration indicates as such. As this is a tenant read-only cluster
+			// setting, only the operator is allowed to set it.
+			if _, err := conn.Exec(
+				fmt.Sprintf(
+					"ALTER TENANT $1 SET CLUSTER SETTING %s = true",
+					sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+				),
+				serverutils.TestTenantID().ToUint64(),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	var randomWorkmem int
@@ -1963,40 +1981,58 @@ func (t *logicTest) newCluster(
 	}
 
 	if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
-		// Wait until all tenant servers are aware of the setting override.
-		testutils.SucceedsSoon(t.rootT, func() error {
-			for i := 0; i < len(t.tenantAddrs); i++ {
-				pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(security.RootUser))
-				defer cleanup()
-				if params.ServerArgs.Insecure {
-					pgURL.RawQuery = "sslmode=disable"
-				}
-				db, err := gosql.Open("postgres", pgURL.String())
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer db.Close()
-
-				var val string
-				err = db.QueryRow(
-					"SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled",
-				).Scan(&val)
-				if err != nil {
-					t.Fatal(errors.Wrapf(err, "%d", i))
-				}
-				if val == "false" {
-					return errors.Errorf("tenant server %d is still waiting zone config cluster setting update",
-						i,
-					)
-				}
-			}
-			return nil
-		})
+		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
+			"sql.zone_configs.allow_for_secondary_tenant.enabled", "true", params.ServerArgs.Insecure,
+		)
+	}
+	if clusterSettingOverrideArgs.overrideMultiTenantMultiRegionAbstractionsAllowed {
+		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
+			sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+			"true",
+			params.ServerArgs.Insecure,
+		)
 	}
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(security.RootUser, 0 /* nodeIdxOverride */))
+}
+
+// waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal waits until all tenant
+// servers are aware about the supplied setting's expected value. Fatal's if
+// this doesn't happen within the SucceedsSoonDuration.
+func (t *logicTest) waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
+	settingName string, expValue string, insecure bool,
+) {
+	// Wait until all tenant servers are aware of the setting override.
+	testutils.SucceedsSoon(t.rootT, func() error {
+		for i := 0; i < len(t.tenantAddrs); i++ {
+			pgURL, cleanup := sqlutils.PGUrl(t.rootT, t.tenantAddrs[0], "Tenant", url.User(security.RootUser))
+			defer cleanup()
+			if insecure {
+				pgURL.RawQuery = "sslmode=disable"
+			}
+			db, err := gosql.Open("postgres", pgURL.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+
+			var val string
+			err = db.QueryRow(
+				fmt.Sprintf("SHOW CLUSTER SETTING %s", settingName),
+			).Scan(&val)
+			if err != nil {
+				t.Fatal(errors.Wrapf(err, "%d", i))
+			}
+			if val != expValue {
+				return errors.Errorf("tenant server %d is still waiting zone config cluster setting update",
+					i,
+				)
+			}
+		}
+		return nil
+	})
 }
 
 // shutdownCluster performs the necessary cleanup to shutdown the current test
@@ -2211,10 +2247,15 @@ func readTestFileConfigs(
 }
 
 type tenantClusterSettingOverrideArgs struct {
-	// if set, the sql.zone_configs.allow_for_secondary_tenant.enabled defaults
+	// If set, the sql.zone_configs.allow_for_secondary_tenant.enabled default
 	// is set to true by the host. This is allows logic tests that run on
 	// secondary tenants to use zone configurations.
 	overrideMultiTenantZoneConfigsAllowed bool
+	// If set, the
+	// sql.multi_region.allow_abstractions_for_secondary_tenants.enabled default
+	// is set to true by the host. This allows logic tests that run on secondary
+	// tenants to make use of multi-region abstractions.
+	overrideMultiTenantMultiRegionAbstractionsAllowed bool
 }
 
 // tenantClusterSettingOverrideOpt is implemented by options for configuring
@@ -2222,6 +2263,19 @@ type tenantClusterSettingOverrideArgs struct {
 // tenant, these options have no effect.
 type tenantClusterSettingOverrideOpt interface {
 	apply(*tenantClusterSettingOverrideArgs)
+}
+
+// tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed
+// corresponds to the allow-multi-region-abstractions-for-secondary-tenants
+// directive.
+type tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed struct{}
+
+var _ tenantClusterSettingOverrideOpt = &tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed{}
+
+func (t tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed) apply(
+	args *tenantClusterSettingOverrideArgs,
+) {
+	args.overrideMultiTenantMultiRegionAbstractionsAllowed = true
 }
 
 // tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed corresponds to
@@ -2352,6 +2406,8 @@ func readTenantClusterSettingOverrideArgs(
 		switch opt {
 		case "allow-zone-configs-for-secondary-tenants":
 			res = append(res, tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{})
+		case "allow-multi-region-abstractions-for-secondary-tenants":
+			res = append(res, tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}
