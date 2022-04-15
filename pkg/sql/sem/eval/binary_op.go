@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/errors"
 )
 
@@ -999,6 +1000,20 @@ func (e *evaluator) EvalModIntOp(_ *tree.ModIntOp, left, right tree.Datum) (tree
 		return nil, tree.ErrDivByZero
 	}
 	return tree.NewDInt(tree.MustBeDInt(left) % r), nil
+}
+
+func (e *evaluator) EvalModStringOp(
+	_ *tree.ModStringOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	// The string % string operator returns whether the two strings have a
+	// greater or equal trigram similarity() than the threshold in
+	// pg_trgm.similarity_threshold.
+	// TODO (jordan): we could implement this as a normalization that returns the
+	// expanded predicate 1 - (string <-> string) > pg_trgm.similarity_threshold
+	// to avoid shipping similarity_threshold across the DistSQL network.
+	l, r := tree.MustBeDString(left), tree.MustBeDString(right)
+	f := trigram.Similarity(string(l), string(r))
+	return tree.MakeDBool(f >= e.ctx().SessionData().TrigramSimilarityThreshold), nil
 }
 
 func (e *evaluator) EvalMultDecimalIntOp(

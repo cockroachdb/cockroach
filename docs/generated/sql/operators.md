@@ -22,6 +22,7 @@
 <tr><td><a href="float.html">float</a> <code>%</code> <a href="float.html">float</a></td><td><a href="float.html">float</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>%</code> <a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>%</code> <a href="int.html">int</a></td><td><a href="int.html">int</a></td></tr>
+<tr><td><a href="string.html">string</a> <code>%</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
 <tr><td><code>&</code></td><td>Return</td></tr>
