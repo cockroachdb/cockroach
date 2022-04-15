@@ -82,6 +82,7 @@ go_library(
         "schema_feature_name.go",
         "scrub.go",
         "select.go",
+        "services.go",
         "set.go",
         "show.go",
         "split.go",

@@ -948,6 +948,10 @@ func reportServerInfo(
 		redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
 	buf.Printf("webui:\t%s\n", serverCfg.AdminURL())
 
+	if serverCfg.EnableServices {
+		buf.Printf("services:\t%s\n", serverCfg.ServicesURL())
+	}
+
 	// (Re-)compute the client connection URL. We cannot do this
 	// earlier (e.g. above, in the runStart function) because
 	// at this time the address and port have not been resolved yet.

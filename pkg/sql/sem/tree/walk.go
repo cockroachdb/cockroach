@@ -1113,6 +1113,63 @@ func (stmt *CreateTable) walkStmt(v Visitor) Statement {
 }
 
 // copyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *CreateService) copyNode() *CreateService {
+	stmtCopy := *stmt
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (stmt *CreateService) walkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.Rules != nil {
+		rules, changed := walkStmt(v, stmt.Rules)
+		if changed {
+			ret = stmt.copyNode()
+			ret.Rules = rules.(*Select)
+		}
+	}
+	{
+		opts, changed := walkKVOptions(v, stmt.DefaultOptions)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.DefaultOptions = opts
+		}
+	}
+
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *AlterService) copyNode() *AlterService {
+	stmtCopy := *stmt
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (stmt *AlterService) walkStmt(v Visitor) Statement {
+	ret := stmt
+	switch t := stmt.Cmd.(type) {
+	case *AlterServiceRules:
+		if t.Rules != nil {
+			rules, changed := walkStmt(v, t.Rules)
+			if changed {
+				ret = stmt.copyNode()
+				ret.Cmd = &AlterServiceRules{Rules: rules.(*Select)}
+			}
+		}
+	case *AlterServiceSetDefaults:
+		opts, changed := walkKVOptions(v, t.Opts)
+		if changed {
+			ret = stmt.copyNode()
+			ret.Cmd = &AlterServiceSetDefaults{Opts: opts}
+		}
+	}
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *CancelQueries) copyNode() *CancelQueries {
 	stmtCopy := *stmt
 	return &stmtCopy
@@ -1658,7 +1715,9 @@ func (stmt *BeginTransaction) walkStmt(v Visitor) Statement {
 }
 
 var _ walkableStmt = &AlterTenantSetClusterSetting{}
+var _ walkableStmt = &AlterService{}
 var _ walkableStmt = &CreateTable{}
+var _ walkableStmt = &CreateService{}
 var _ walkableStmt = &Backup{}
 var _ walkableStmt = &Delete{}
 var _ walkableStmt = &Explain{}

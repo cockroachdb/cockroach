@@ -82,6 +82,24 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 		return invalidFlagErr(err, cliflags.ListenHTTPAddr)
 	}
 	cfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
+
+	// Validate the HTTP services advertise address. Use the provided advertise
+	// addr as default.
+	advsvcHTTPHost, advsvcHTTPPort, err := validateAdvertiseAddr(ctx,
+		cfg.ServicesAdvertiseAddr, cfg.ServicesAddr, advHost, cliflags.ListenServicesAddr)
+	if err != nil {
+		return errors.Wrap(err, "cannot compute public HTTP service address")
+	}
+	cfg.ServicesAdvertiseAddr = net.JoinHostPort(advsvcHTTPHost, advsvcHTTPPort)
+
+	// Validate the HTTP service address -- use the resolved listen addr
+	// as default.
+	svcHost, svcPort, err := validateListenAddr(ctx, cfg.ServicesAddr, listenHost)
+	if err != nil {
+		return invalidFlagErr(err, cliflags.ListenServicesAddr)
+	}
+	cfg.ServicesAddr = net.JoinHostPort(svcHost, svcPort)
+
 	return nil
 }
 

@@ -79,6 +79,8 @@ const (
 	TenantUsageTableName                   SystemTableName = "tenant_usage"
 	SQLInstancesTableName                  SystemTableName = "sql_instances"
 	SpanConfigurationsTableName            SystemTableName = "span_configurations"
+	ServicesTableName                      SystemTableName = "services"
+	ServiceRulesTableName                  SystemTableName = "service_rules"
 	TenantSettingsTableName                SystemTableName = "tenant_settings"
 	SpanCountTableName                     SystemTableName = "span_count"
 )

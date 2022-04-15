@@ -1481,6 +1481,16 @@ func (b *logicalPropsBuilder) buildCreateTableProps(ct *CreateTableExpr, rel *pr
 	BuildSharedProps(ct, &rel.Shared, b.evalCtx)
 }
 
+func (b *logicalPropsBuilder) buildCreateServiceProps(
+	cs *CreateServiceExpr, rel *props.Relational,
+) {
+	BuildSharedProps(cs, &rel.Shared, b.evalCtx)
+}
+
+func (b *logicalPropsBuilder) buildAlterServiceProps(as *AlterServiceExpr, rel *props.Relational) {
+	BuildSharedProps(as, &rel.Shared, b.evalCtx)
+}
+
 func (b *logicalPropsBuilder) buildCreateViewProps(cv *CreateViewExpr, rel *props.Relational) {
 	BuildSharedProps(cv, &rel.Shared, b.evalCtx)
 }

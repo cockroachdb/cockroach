@@ -137,6 +137,18 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		sampledStmtDiagReqsMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"add the system.services table",
+		toCV(clusterversion.Services),
+		NoPrecondition,
+		servicesTableMigration,
+	),
+	upgrade.NewTenantUpgrade(
+		"add the system.service_rules table",
+		toCV(clusterversion.ServiceRules),
+		NoPrecondition,
+		serviceRulesTableMigration,
+	),
 }
 
 func init() {

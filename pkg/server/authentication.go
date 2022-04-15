@@ -566,7 +566,7 @@ const webSessionUserKeyStr = "websessionuser"
 const webSessionIDKeyStr = "websessionid"
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	username, cookie, err := am.getSession(w, req)
+	username, cookie, err := am.server.getSession(w, req)
 	if err == nil {
 		ctx := req.Context()
 		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
@@ -611,7 +611,7 @@ func makeCookieWithValue(value string, forHTTPSOnly bool) *http.Cookie {
 // getSession decodes the cookie from the request, looks up the corresponding session, and
 // returns the logged in user name. If there's an error, it returns an error value and the
 // HTTP error code.
-func (am *authenticationMux) getSession(
+func (as *authenticationServer) getSession(
 	w http.ResponseWriter, req *http.Request,
 ) (string, *serverpb.SessionCookie, error) {
 	ctx := req.Context()
@@ -639,7 +639,7 @@ func (am *authenticationMux) getSession(
 		return "", nil, http.ErrNoCookie
 	}
 
-	valid, username, err := am.server.verifySession(req.Context(), cookie)
+	valid, username, err := as.verifySession(req.Context(), cookie)
 	if err != nil {
 		err := apiInternalError(req.Context(), err)
 		return "", nil, err

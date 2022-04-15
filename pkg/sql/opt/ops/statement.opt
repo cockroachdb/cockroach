@@ -317,3 +317,47 @@ define AlterRangeRelocatePrivate {
     # Props stores the required physical properties for the input expression.
     Props PhysProps
 }
+
+# CreateService represents a CREATE SERVICE statement.
+[Relational, Mutation]
+define CreateService {
+    # Input is only used if the USING RULES clause was used in the CREATE SERVICE
+    # statement. If it was not used, then the Input is a dummy zero row, zero
+    # column Values expression (and nil inputs are not allowed).
+    Input RelExpr
+    Options KVOptionsExpr
+    _ CreateServicePrivate
+}
+
+[Private]
+define CreateServicePrivate {
+    # InputCols gives the ordering and naming of input columns. It is only
+    # defined when the USING RULES clause was used in the CREATE SERVICE statement.
+    InputCols Presentation
+
+    # Syntax is the CREATE SERVICE AST node. All data sources inside Rules are
+    # fully qualified.
+    Syntax CreateService
+}
+
+# AlterService represents an ALTER SERVICE statement.
+[Relational, Mutation]
+define AlterService {
+    # Input is only used if the USING RULES clause was used in the ALTER SERVICE
+    # statement. If it was not used, then the Input is a dummy zero row, zero
+    # column Values expression (and nil inputs are not allowed).
+    Input RelExpr
+    Options KVOptionsExpr
+    _ AlterServicePrivate
+}
+
+[Private]
+define AlterServicePrivate {
+    # InputCols gives the ordering and naming of input columns. It is only
+    # defined when the USING RULES clause was used in the ALTER SERVICE statement.
+    InputCols Presentation
+
+    # Syntax is the ALTER SERVICE AST node. All data sources inside Rules are
+    # fully qualified.
+    Syntax AlterService
+}

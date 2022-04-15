@@ -2087,6 +2087,28 @@ func (ef *execFactory) ConstructExplain(
 	return n, nil
 }
 
+// ConstructCreateService is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCreateService(
+	input exec.Node, options []exec.KVOption, cs *tree.CreateService,
+) (exec.Node, error) {
+	return &createServiceNode{
+		n:          cs,
+		options:    options,
+		sourcePlan: input.(planNode),
+	}, nil
+}
+
+// ConstructAlterService is part of the exec.Factory interface.
+func (ef *execFactory) ConstructAlterService(
+	input exec.Node, options []exec.KVOption, as *tree.AlterService,
+) (exec.Node, error) {
+	return &alterServiceNode{
+		n:          as,
+		options:    options,
+		sourcePlan: input.(planNode),
+	}, nil
+}
+
 // renderBuilder encapsulates the code to build a renderNode.
 type renderBuilder struct {
 	r   *renderNode

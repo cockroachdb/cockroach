@@ -121,6 +121,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *valuesNode:
 	case *scanNode:
 
+	case *createServiceNode:
+		n.sourcePlan = v.visit(n.sourcePlan)
+
 	case *filterNode:
 		n.source.plan = v.visit(n.source.plan)
 
@@ -345,6 +348,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterDatabaseAlterSuperRegion{}):    "alter database drop super region",
 	reflect.TypeOf(&alterDefaultPrivilegesNode{}):       "alter default privileges",
 	reflect.TypeOf(&alterIndexNode{}):                   "alter index",
+	reflect.TypeOf(&alterServiceNode{}):                 "alter service",
 	reflect.TypeOf(&alterSequenceNode{}):                "alter sequence",
 	reflect.TypeOf(&alterSchemaNode{}):                  "alter schema",
 	reflect.TypeOf(&alterTableNode{}):                   "alter table",
@@ -371,6 +375,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&createDatabaseNode{}):               "create database",
 	reflect.TypeOf(&createExtensionNode{}):              "create extension",
 	reflect.TypeOf(&createIndexNode{}):                  "create index",
+	reflect.TypeOf(&createServiceNode{}):                "create service",
 	reflect.TypeOf(&createSequenceNode{}):               "create sequence",
 	reflect.TypeOf(&createSchemaNode{}):                 "create schema",
 	reflect.TypeOf(&createStatsNode{}):                  "create statistics",
@@ -386,6 +391,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropIndexNode{}):                    "drop index",
 	reflect.TypeOf(&dropSequenceNode{}):                 "drop sequence",
 	reflect.TypeOf(&dropSchemaNode{}):                   "drop schema",
+	reflect.TypeOf(&dropServiceNode{}):                  "drop service",
 	reflect.TypeOf(&dropTableNode{}):                    "drop table",
 	reflect.TypeOf(&dropTypeNode{}):                     "drop type",
 	reflect.TypeOf(&DropRoleNode{}):                     "drop user/role",

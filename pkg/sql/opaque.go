@@ -172,6 +172,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropSchema(ctx, n)
 	case *tree.DropSequence:
 		return p.DropSequence(ctx, n)
+	case *tree.DropService:
+		return p.DropService(ctx, n)
 	case *tree.DropTable:
 		return p.DropTable(ctx, n)
 	case *tree.DropType:
@@ -298,6 +300,7 @@ func init() {
 		&tree.DropOwnedBy{},
 		&tree.DropRole{},
 		&tree.DropSchema{},
+		&tree.DropService{},
 		&tree.DropSequence{},
 		&tree.DropTable{},
 		&tree.DropType{},

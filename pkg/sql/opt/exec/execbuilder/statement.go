@@ -374,6 +374,50 @@ func (b *Builder) buildExport(export *memo.ExportExpr) (execPlan, error) {
 	return planWithColumns(node, export.Columns), nil
 }
 
+func (b *Builder) buildCreateService(cs *memo.CreateServiceExpr) (execPlan, error) {
+	// Construct USING RULES input to CREATE SERVICE.
+	input, err := b.buildRelational(cs.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	scalarCtx := buildScalarCtx{}
+	opts := make([]exec.KVOption, len(cs.Options))
+	for i, o := range cs.Options {
+		opts[i].Key = o.Key
+		var err error
+		opts[i].Value, err = b.buildScalar(&scalarCtx, o.Value)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+
+	root, err := b.factory.ConstructCreateService(input.root, opts, cs.Syntax)
+	return execPlan{root: root}, err
+}
+
+func (b *Builder) buildAlterService(as *memo.AlterServiceExpr) (execPlan, error) {
+	// Construct USING RULES input to ALTER SERVICE.
+	input, err := b.buildRelational(as.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	scalarCtx := buildScalarCtx{}
+	opts := make([]exec.KVOption, len(as.Options))
+	for i, o := range as.Options {
+		opts[i].Key = o.Key
+		var err error
+		opts[i].Value, err = b.buildScalar(&scalarCtx, o.Value)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+
+	root, err := b.factory.ConstructAlterService(input.root, opts, as.Syntax)
+	return execPlan{root: root}, err
+}
+
 // planWithColumns creates an execPlan for a node which has a fixed output
 // schema.
 func planWithColumns(node exec.Node, cols opt.ColList) execPlan {

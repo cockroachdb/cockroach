@@ -402,6 +402,12 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.SpanCountTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.ServicesTable.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup,
+	},
+	systemschema.ServiceRulesTable.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup,
+	},
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that

@@ -750,3 +750,17 @@ define AlterRangeRelocate {
     toStoreID tree.TypedExpr
     fromStoreID tree.TypedExpr
 }
+
+# CreateService implements a CREATE SERVICE statement.
+define CreateService {
+  Input exec.Node
+  Options []exec.KVOption
+  Cs *tree.CreateService
+}
+
+# AlterService implements an ALTER SERVICE statement.
+define AlterService {
+  Input exec.Node
+  Options []exec.KVOption
+  As *tree.AlterService
+}

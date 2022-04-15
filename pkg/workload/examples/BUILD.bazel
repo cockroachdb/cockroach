@@ -4,6 +4,7 @@ go_library(
     name = "examples",
     srcs = [
         "intro.go",
+        "service.go",
         "startrek.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/examples",

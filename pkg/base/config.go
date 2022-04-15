@@ -41,10 +41,15 @@ const (
 	// The default port for HTTP-for-humans.
 	DefaultHTTPPort = "8080"
 
+	// The default port for HTTP-for-services.
+	DefaultServicesPort = "14464"
+
 	// NB: net.JoinHostPort is not a constant.
 	defaultAddr     = ":" + DefaultPort
 	defaultSQLAddr  = ":" + DefaultPort
 	defaultHTTPAddr = ":" + DefaultHTTPPort
+
+	defaultServicesAddr = ":" + DefaultServicesPort
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
@@ -215,6 +220,16 @@ type Config struct {
 	// This is computed from HTTPAddr if specified otherwise Addr.
 	HTTPAdvertiseAddr string
 
+	// EnableServices indicates whether to enable web services.
+	EnableServices bool
+
+	// ServicesAddr is the configured HTTP listen address for services.
+	ServicesAddr string
+
+	// ServicesAdvertiseAddr is the advertised HTTP address for services.
+	// This is computed from ServicesAddr if specified otherwise Addr.
+	ServicesAdvertiseAddr string
+
 	// RPCHeartbeatInterval controls how often a Ping request is sent on peer
 	// connections to determine connection health and update the local view
 	// of remote clocks.
@@ -271,6 +286,10 @@ func (cfg *Config) InitDefaults() {
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
 	cfg.AcceptSQLWithoutTLS = false
+
+	cfg.EnableServices = false
+	cfg.ServicesAddr = defaultServicesAddr
+	cfg.ServicesAdvertiseAddr = ""
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of
@@ -287,6 +306,14 @@ func (cfg *Config) AdminURL() *url.URL {
 	return &url.URL{
 		Scheme: cfg.HTTPRequestScheme(),
 		Host:   cfg.HTTPAdvertiseAddr,
+	}
+}
+
+// ServicesURL returns the URL for the services endpoint.
+func (cfg *Config) ServicesURL() *url.URL {
+	return &url.URL{
+		Scheme: cfg.HTTPRequestScheme(), // TODO(knz): be smarter here.
+		Host:   cfg.ServicesAdvertiseAddr,
 	}
 }
 
