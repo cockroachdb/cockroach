@@ -52,7 +52,6 @@ func registerAcceptance(r registry.Registry) {
 			},
 			{
 				name: "version-upgrade",
-				skip: "WIP: unskip when version checks are added to local_timestamp writes",
 				fn: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runVersionUpgrade(ctx, t, c)
 				},
