@@ -10,11 +10,10 @@
     "karma": "karma start",
     "karma:watch": "karma start --no-single-run --auto-watch",
     "storybook": "start-storybook -p 9009",
-    "cypress": "./opt/node_modules/.bin/cypress",
-    "cypress:open": "yarn cypress open",
-    "cypress:run": "yarn cypress run --browser chrome",
-    "cypress:run-visual-regression": "yarn cypress run --browser chrome --spec 'cypress/integration/**/*.visual.spec.ts'",
-    "cypress:update-snapshots": "yarn cypress run --env updateSnapshots=true --spec 'cypress/integration/**/*.visual.spec.ts'"
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run --browser chrome",
+    "cypress:run-visual-regression": "cypress run --browser chrome --spec 'cypress/integration/**/*.visual.spec.ts'",
+    "cypress:update-snapshots": "cypress run --env updateSnapshots=true --spec 'cypress/integration/**/*.visual.spec.ts'"
   },
   "dependencies": {
     "@cockroachlabs/cluster-ui": "link:../cluster-ui",

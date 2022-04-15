@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
-    "strict": true,
-    "allowJs": true,
     "target": "es6",
-    "module": "es6",
-    "lib": ["es5", "dom"],
-    "jsx": "react",
+    "lib": ["es6", "dom"],
     "types": ["cypress", "@testing-library/cypress"]
   },
   "include": ["**/*.ts"]

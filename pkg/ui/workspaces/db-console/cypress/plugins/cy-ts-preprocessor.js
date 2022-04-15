@@ -8,8 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 const path = require('path');
-const requireOpt = require("./requireOptModule");
-const wp = requireOpt("@cypress/webpack-preprocessor");
+const wp = require("@cypress/webpack-preprocessor");
 
 const webpackOptions = {
   resolve: {
