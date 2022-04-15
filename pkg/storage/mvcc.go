@@ -1599,7 +1599,7 @@ func mvccPutInternal(
 	versionValue := MVCCValue{}
 	versionValue.Value = value
 	versionValue.LocalTimestamp = localTimestamp
-	if !versionValue.LocalTimestampNeeded(versionKey) {
+	if !versionValue.LocalTimestampNeeded(versionKey) || !writer.ShouldWriteLocalTimestamps(ctx) {
 		versionValue.LocalTimestamp = hlc.ClockTimestamp{}
 	}
 
@@ -3135,7 +3135,7 @@ func mvccResolveWriteIntent(
 			// to the observed timestamp.
 			newValue.LocalTimestamp = meta.GetLocalTimestamp()
 			newValue.LocalTimestamp.Forward(intent.ClockWhilePending.Timestamp)
-			if !newValue.LocalTimestampNeeded(newKey) {
+			if !newValue.LocalTimestampNeeded(newKey) || !rw.ShouldWriteLocalTimestamps(ctx) {
 				newValue.LocalTimestamp = hlc.ClockTimestamp{}
 			}
 
