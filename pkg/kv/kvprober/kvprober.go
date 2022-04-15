@@ -178,10 +178,15 @@ func (p *proberOpsImpl) Read(key interface{}) func(context.Context, *kv.Txn) err
 // GC will clean it up.
 func (p *proberOpsImpl) Write(key interface{}) func(context.Context, *kv.Txn) error {
 	return func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.Put(ctx, key, putValue); err != nil {
-			return err
-		}
-		return txn.Del(ctx, key)
+		// Use a single batch so that the entire txn requires a single pass
+		// through Raft. It's not strictly necessary that we Put before we
+		// Del the key, because a Del is blind and leaves a tombstone even
+		// when the key is not live, but this is not guaranteed by the API,
+		// so we avoid depending on a subtlety of the implementation.
+		b := txn.NewBatch()
+		b.Put(key, putValue)
+		b.Del(key)
+		return txn.CommitInBatch(ctx, b)
 	}
 }
 
