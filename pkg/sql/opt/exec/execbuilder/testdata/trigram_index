@@ -118,3 +118,114 @@ vectorized: true
       missing stats
       table: a@a_pkey
       spans: FULL SCAN
+
+# Test that trigram indexes can't support searches with no constant args.
+# columns.
+query T
+EXPLAIN SELECT * FROM a WHERE b LIKE b
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b LIKE b
+│
+└── • scan
+      missing stats
+      table: a@a_pkey
+      spans: FULL SCAN
+
+# Test that trigram indexes accelerate the % operator.
+query T
+EXPLAIN SELECT * FROM a WHERE b % 'foo'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b % 'foo'
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • scan
+          missing stats
+          table: a@a_b_idx
+          spans: 1 span
+
+# Test that trigram indexes accelerate the % operator with an OR if the
+# constant has more than one trigram.
+query T
+EXPLAIN SELECT * FROM a WHERE b % 'foob'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b % 'foob'
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: a@a_b_idx
+              spans: 2 spans
+
+# Test that trigram indexes can't accelerate the % operator if there are fewer
+# than 3 characters in the constant.
+query T
+EXPLAIN SELECT * FROM a WHERE b % 'fo'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b % 'fo'
+│
+└── • scan
+      missing stats
+      table: a@a_pkey
+      spans: FULL SCAN
+
+# Test that trigram indexes can accelerate the % operator in reverse order.
+query T
+EXPLAIN SELECT * FROM a WHERE 'blah' % b
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: 'blah' % b
+│
+└── • index join
+    │ table: a@a_pkey
+    │
+    └── • inverted filter
+        │ inverted column: b_inverted_key
+        │ num spans: 2
+        │
+        └── • scan
+              missing stats
+              table: a@a_b_idx
+              spans: 2 spans
+
+# Test that trigram indexes can't accelerate the % operator with no constant
+# columns.
+query T
+EXPLAIN SELECT * FROM a WHERE b % b
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b % b
+│
+└── • scan
+      missing stats
+      table: a@a_pkey
+      spans: FULL SCAN
