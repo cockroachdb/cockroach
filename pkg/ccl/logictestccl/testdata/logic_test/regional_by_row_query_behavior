@@ -2465,7 +2465,7 @@ FROM
 statement ok
 SET vectorize = "on"
 
-statement ok nodeidx=0
+statement ok
 SET database = multi_region_test_db;
 SET TRACING = "on", kv, results;
 SELECT

@@ -98,7 +98,7 @@ SELECT 1::INT2, s COLLATE en FROM t66306;
 
 # Sanity check that the wrapped processor is planned for the query above. If it
 # no longer is, we should adjust the query here and above.
-query T
+query T nodeidx=0
 EXPLAIN (VEC) SELECT 1::INT2, s COLLATE en FROM t66306;
 ----
 │
