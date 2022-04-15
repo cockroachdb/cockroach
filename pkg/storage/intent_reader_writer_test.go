@@ -200,7 +200,7 @@ func TestIntentDemuxWriter(t *testing.T) {
 				// This is a low-level test that explicitly wraps the writer, so it
 				// doesn't matter how the original call to createTestPebbleEngine
 				// behaved in terms of separated intents config.
-				w = wrapIntentWriter(context.Background(), &pw)
+				w = wrapIntentWriter(&pw)
 				return ""
 			case "put-intent":
 				pw.reset()

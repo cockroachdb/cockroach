@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -99,17 +98,15 @@ func TestMVCCHistories(t *testing.T) {
 
 	datadriven.Walk(t, testutils.TestDataPath(t, "mvcc_histories"), func(t *testing.T, path string) {
 		// We start from a clean slate in every test file.
-		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */),
-			func(cfg *engineConfig) error {
-				// Latest cluster version, since these tests are not ones where we
-				// are examining differences related to separated intents.
-				cfg.Settings = cluster.MakeTestingClusterSettings()
-				return nil
-			})
+		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer engine.Close()
+
+		if strings.Contains(path, "_disable_local_timestamps") {
+			localTimestampsEnabled.Override(ctx, &engine.settings.SV, false)
+		}
 
 		reportDataEntries := func(buf *redact.StringBuilder) error {
 			hasData := false

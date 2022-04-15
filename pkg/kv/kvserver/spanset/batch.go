@@ -662,6 +662,10 @@ func (s spanSetWriter) LogLogicalOp(
 	s.w.LogLogicalOp(op, details)
 }
 
+func (s spanSetWriter) ShouldWriteLocalTimestamps(ctx context.Context) bool {
+	return s.w.ShouldWriteLocalTimestamps(ctx)
+}
+
 // ReadWriter is used outside of the spanset package internally, in ccl.
 type ReadWriter struct {
 	spanSetReader

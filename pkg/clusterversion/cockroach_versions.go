@@ -349,6 +349,14 @@ const (
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
 
+	// v22.2 versions.
+	//
+	// Start22_2 demarcates work towards CockroachDB v22.2.
+	Start22_2
+
+	// LocalTimestamps enables the use of local timestamps in MVCC values.
+	LocalTimestamps
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -602,6 +610,16 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     V22_1,
 		Version: roachpb.Version{Major: 22, Minor: 1},
+	},
+
+	// v22.2 versions. Internal versions must be even.
+	{
+		Key:     Start22_2,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 2},
+	},
+	{
+		Key:     LocalTimestamps,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 4},
 	},
 
 	// *************************************************
