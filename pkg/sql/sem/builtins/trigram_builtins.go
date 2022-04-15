@@ -38,28 +38,8 @@ var trigramBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Float),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				l, r := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
-				lTrigrams, rTrigrams := trigram.MakeTrigrams(l, true /* pad */), trigram.MakeTrigrams(r, true /* pad */)
-
-				// To calculate the similarity, we count the number of shared trigrams
-				// in the strings, and divide by the number of non-shared trigrams.
-				// See the CALCSML macro in Postgres contrib/pg_trgm/trgm.h.
-
-				i, j := 0, 0
-				nShared := 0
-				for i < len(lTrigrams) && j < len(rTrigrams) {
-					lTrigram, rTrigram := lTrigrams[i], rTrigrams[j]
-					if lTrigram < rTrigram {
-						i++
-					} else if lTrigram > rTrigram {
-						j++
-					} else {
-						nShared++
-						i++
-						j++
-					}
-				}
-				shared := float32(nShared)
-				return tree.NewDFloat(tree.DFloat(shared / (float32(len(lTrigrams)+len(rTrigrams)) - shared))), nil
+				f := trigram.Similarity(l, r)
+				return tree.NewDFloat(tree.DFloat(f)), nil
 			},
 			Info: "Returns a number that indicates how similar the two arguments" +
 				" are. The range of the result is zero (indicating that the two strings are" +
@@ -75,7 +55,13 @@ var trigramBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.StringArray),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
-				return trigram.MakeTrigramsDatum(s), nil
+				arr := trigram.MakeTrigrams(s, true /* pad */)
+				ret := tree.NewDArray(types.String)
+				ret.Array = make(tree.Datums, len(arr))
+				for i := range arr {
+					ret.Array[i] = tree.NewDString(arr[i])
+				}
+				return ret, nil
 			},
 			Info:       "Returns an array of all the trigrams in the given string.",
 			Volatility: volatility.Immutable,
